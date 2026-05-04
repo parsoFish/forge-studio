@@ -1,0 +1,47 @@
+node_modules/
+dist/
+
+# Runtime state — not source. Ignore contents but keep .gitkeep so structure
+# is preserved in git.
+_logs/*
+!_logs/.gitkeep
+!_logs/README.md
+_queue/pending/*
+!_queue/pending/.gitkeep
+_queue/in-flight/*
+!_queue/in-flight/.gitkeep
+_queue/ready-for-review/*
+!_queue/ready-for-review/.gitkeep
+_queue/done/*
+!_queue/done/.gitkeep
+_queue/failed/*
+!_queue/failed/.gitkeep
+
+# Per-run benchmark output is runtime, not source
+benchmarks/*/results/
+
+# Managed projects are auto-discovered, not committed to forge
+projects/*
+!projects/README.md
+!projects/.gitkeep
+
+# Worktrees the scheduler creates
+_worktrees/
+
+# Forge's own runtime config (per-machine)
+forge.config.json
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Obsidian vault config (per-user)
+brain/.obsidian/
+
+# Logs from local runs
+*.log
+npm-debug.log*

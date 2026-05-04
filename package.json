@@ -1,0 +1,32 @@
+{
+  "name": "forge",
+  "version": "2.0.0-alpha.0",
+  "description": "Idea machine for one human across many side projects. Autonomous multi-agent system.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "node --test --experimental-strip-types orchestrator/*.test.ts loops/ralph/*.test.ts",
+    "bench:brain": "node --experimental-strip-types benchmarks/brain/score.ts",
+    "bench:architect": "node --experimental-strip-types benchmarks/architect/score.ts",
+    "bench:project-manager": "node --experimental-strip-types benchmarks/project-manager/score.ts",
+    "bench:developer-loop": "node --experimental-strip-types benchmarks/developer-loop/score.ts",
+    "bench:review-loop": "node --experimental-strip-types benchmarks/review-loop/score.ts",
+    "bench:reflection": "node --experimental-strip-types benchmarks/reflection/score.ts",
+    "lint": "echo 'TODO: pick a linter; v2 stays minimal until a need appears'",
+    "forge": "node --experimental-strip-types orchestrator/cli.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "globby": "^14.1.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
