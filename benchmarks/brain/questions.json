@@ -1,1 +1,213 @@
-[]
+[
+  {
+    "id": "Q1",
+    "question": "What does forge use as the developer-loop runtime, and what does it run on top of?",
+    "expected_sources": [
+      "brain/forge/themes/ralph-loop-pattern.md",
+      "brain/forge/themes/claude-agent-sdk.md"
+    ],
+    "expected_keywords": ["ralph", "claude-agent-sdk", "loop", "iteration"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q2",
+    "question": "How does forge structure the brain wiki and why?",
+    "expected_sources": [
+      "brain/forge/themes/karpathy-three-layer-wiki.md",
+      "brain/forge/themes/theme-page-format.md",
+      "brain/forge/themes/wiki-over-truncated-context.md"
+    ],
+    "expected_keywords": ["karpathy", "three layer", "raw", "themes", "indexes", "obsidian"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q3",
+    "question": "What is the LLM Council pattern and where in forge is it used?",
+    "expected_sources": [
+      "brain/forge/themes/llm-council-pattern.md",
+      "brain/forge/themes/gstack-conventions.md"
+    ],
+    "expected_keywords": ["council", "critic", "ceo", "design", "autoplan", "architect"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q4",
+    "question": "Why does forge mandate brain-query as every skill's first action?",
+    "expected_sources": [
+      "brain/forge/themes/brain-first-research.md",
+      "brain/forge/themes/brain-gap-feedback-loop.md",
+      "brain/forge/themes/episodic-not-cumulative-learnings.md"
+    ],
+    "expected_keywords": ["brain-query", "first action", "gaps", "self-improving", "principle 4"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q5",
+    "question": "How does the unattended scheduler claim and run initiatives, and how does it survive a crash?",
+    "expected_sources": [
+      "brain/forge/themes/unattended-scheduler.md",
+      "brain/forge/themes/file-based-state-machine.md",
+      "brain/forge/themes/crash-recovery-heartbeat.md"
+    ],
+    "expected_keywords": ["forge serve", "_queue", "atomic mv", "worktree", "heartbeat", "stale"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q6",
+    "question": "Why is squash-merging stacked PRs forbidden, and what concrete failure happened in v1?",
+    "expected_sources": [
+      "brain/forge/themes/squash-merge-stacked-prs.md",
+      "brain/forge/themes/layered-merge-order.md",
+      "brain/forge/themes/health-check-protocol.md"
+    ],
+    "expected_keywords": ["squash", "stacked", "trafficGame", "90 test failures", "Cycle 2", "layered merge"],
+    "scope": null,
+    "category": "antipattern"
+  },
+  {
+    "id": "Q7",
+    "question": "What stop conditions does Ralph have, and which one defends against non-converging loops?",
+    "expected_sources": [
+      "brain/forge/themes/ralph-loop-pattern.md",
+      "brain/forge/themes/wedged-loop-detector.md",
+      "brain/forge/themes/quality-gates-orchestrator-verified.md",
+      "brain/forge/themes/agent-stuck-no-detection.md"
+    ],
+    "expected_keywords": ["wedged", "iteration budget", "quality gates", "no progress", "stuck", "stop condition"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q8",
+    "question": "What model should forge use for the architect, the developer loop, and brain-query, and what's the cost evidence?",
+    "expected_sources": [
+      "brain/forge/themes/cost-aware-model-routing.md",
+      "brain/forge/themes/minimal-runtime-config.md",
+      "brain/forge/themes/prompt-caching-strategy.md"
+    ],
+    "expected_keywords": ["opus", "sonnet", "haiku", "87%", "92%", "cache", "models", "per-skill"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q9",
+    "question": "What are the alternative loop runtimes forge could swap to, and why were they not adopted at scaffold time?",
+    "expected_sources": [
+      "brain/forge/themes/alternative-loop-runtimes.md"
+    ],
+    "expected_keywords": ["aider", "openhands", "openclaw", "hermes", "_adapters", "shape"],
+    "scope": null,
+    "category": "reference"
+  },
+  {
+    "id": "Q10",
+    "question": "What were the key infrastructure differences between forge v1 and v2 — what got replaced and what was kept?",
+    "expected_sources": [
+      "brain/forge/themes/v1-vs-v2-key-differences.md",
+      "brain/forge/themes/avoid-hand-rolling-tools.md",
+      "brain/forge/themes/simplicity-as-architecture.md"
+    ],
+    "expected_keywords": ["job queue", "worker pool", "git worktree", "skills", "ralph", "scheduler", "principle"],
+    "scope": null,
+    "category": "reference"
+  },
+  {
+    "id": "Q11",
+    "question": "Why is the planner / project-manager phase the highest-leverage point in the system, and what concrete data supports this?",
+    "expected_sources": [
+      "brain/forge/themes/design-is-the-bottleneck.md",
+      "brain/forge/themes/work-item-completion-by-domain.md",
+      "brain/forge/themes/spec-driven-development.md"
+    ],
+    "expected_keywords": ["planner", "design", "bottleneck", "trafficGame", "48%", "domain complexity", "109 items"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q12",
+    "question": "How should forge handle stacked PRs to avoid the v1 trafficGame failure?",
+    "expected_sources": [
+      "brain/forge/themes/layered-merge-order.md",
+      "brain/forge/themes/health-check-protocol.md",
+      "brain/forge/themes/squash-merge-stacked-prs.md"
+    ],
+    "expected_keywords": ["layer 0", "health check", "merge train", "stacked", "GitWeave"],
+    "scope": null,
+    "category": "pattern"
+  },
+  {
+    "id": "Q13",
+    "question": "What constraints must any new feature initiative on env-optimiser respect?",
+    "expected_sources": [
+      "brain/projects/env-optimiser/profile.md",
+      "brain/projects/env-optimiser/themes/local-first-no-network.md",
+      "brain/projects/env-optimiser/themes/redaction-before-storage.md"
+    ],
+    "expected_keywords": ["local-first", "zero network", "constitution", "redaction", "secrets", "specify"],
+    "scope": "env-optimiser",
+    "category": null
+  },
+  {
+    "id": "Q14",
+    "question": "Why do work items on simplarr come in pairs?",
+    "expected_sources": [
+      "brain/projects/simplarr/profile.md",
+      "brain/projects/simplarr/themes/dual-language-parity.md"
+    ],
+    "expected_keywords": ["bash", "powershell", "parity", "dual-language", "configurator", "paired"],
+    "scope": "simplarr",
+    "category": null
+  },
+  {
+    "id": "Q15",
+    "question": "What's the algorithm-heavy items lesson from trafficGame, and what's the planning implication?",
+    "expected_sources": [
+      "brain/projects/trafficGame/profile.md",
+      "brain/projects/trafficGame/themes/algorithm-heavy-items.md",
+      "brain/projects/trafficGame/themes/canvas-bpr-flow-tests.md"
+    ],
+    "expected_keywords": ["steiner", "graph colouring", "48%", "decompose", "multi-file", "Playwright", "visual"],
+    "scope": "trafficGame",
+    "category": null
+  },
+  {
+    "id": "Q16",
+    "question": "What separates simplarr's scope from healarr's scope?",
+    "expected_sources": [
+      "brain/projects/simplarr/themes/no-monitoring-bundle.md",
+      "brain/projects/healarr/profile.md"
+    ],
+    "expected_keywords": ["set up", "watch", "remediation", "monitoring", "tier", "separate repos"],
+    "scope": null,
+    "category": null
+  },
+  {
+    "id": "Q17",
+    "question": "How does healarr keep agent costs bounded?",
+    "expected_sources": [
+      "brain/projects/healarr/profile.md",
+      "brain/projects/healarr/themes/triage-deterministic-no-llm.md",
+      "brain/projects/healarr/themes/tier-coded-tool-boundaries.md"
+    ],
+    "expected_keywords": ["triage", "deterministic", "rule engine", "agent stage", "tier", "approval"],
+    "scope": "healarr",
+    "category": null
+  },
+  {
+    "id": "Q18",
+    "question": "What discipline does GitWeave enforce on every change-introducing CLI?",
+    "expected_sources": [
+      "brain/projects/GitWeave/profile.md",
+      "brain/projects/GitWeave/themes/local-dry-run-required.md",
+      "brain/projects/GitWeave/themes/control-repo-centricity.md"
+    ],
+    "expected_keywords": ["gw:plan", "dry-run", "terraform", "plan-then-apply", "control repo"],
+    "scope": "GitWeave",
+    "category": null
+  }
+]

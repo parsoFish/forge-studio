@@ -19,6 +19,8 @@ _queue/failed/*
 
 # Per-run benchmark output is runtime, not source
 benchmarks/*/results/
+benchmarks/*/results-negatives/
+benchmarks/*/results-judged/
 
 # Managed projects are auto-discovered, not committed to forge
 projects/*

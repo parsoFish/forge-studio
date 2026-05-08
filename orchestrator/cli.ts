@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
  * forge CLI. Subcommands:
- *   forge serve [--once]            run the scheduler
- *   forge cycle <initiative-id>     run one initiative end-to-end (foreground)
- *   forge enqueue <project> <spec>  drop a manifest into _queue/pending/
- *   forge enqueue --fixture         drop a smoke-test fixture
- *   forge status [--watch]          print queue + in-flight snapshot
- *   forge metrics [<cycle-id>]      print per-cycle aggregates (or all)
- *   forge bench <phase>             run a phase's benchmark suite
- *   forge brain query "..."         stub: invoke brain-query skill
+ *   forge serve [--once]                    run the scheduler
+ *   forge cycle <initiative-id>             run one initiative end-to-end (foreground)
+ *   forge enqueue <project> <spec>          drop a manifest into _queue/pending/
+ *   forge enqueue --from-manifest <path>    validate + drop a pre-formed manifest
+ *   forge enqueue --fixture                 drop a smoke-test fixture
+ *   forge status [--watch]                  print queue + in-flight snapshot
+ *   forge metrics [<cycle-id>]              print per-cycle aggregates (or all)
+ *   forge bench <phase>                     run a phase's benchmark suite
+ *   forge brain query "..."                 stub: invoke brain-query skill
+ *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  */
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
@@ -19,6 +21,8 @@ import { serve, status as schedulerStatus } from './scheduler.ts';
 import { snapshot, render } from './visualise.ts';
 import { summariseCycle, summariseAll } from './metrics.ts';
 import { getPaths } from './queue.ts';
+import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
+import { loadBrainIndex } from './brain-index.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -58,14 +62,16 @@ function cmdHelp(): void {
     `forge — autonomous multi-agent orchestrator
 
 Usage:
-  forge serve [--once]              Start the unattended scheduler
-  forge cycle <initiative-id>       Run one initiative end-to-end (foreground)
-  forge enqueue <project> <spec>    Drop an initiative manifest into _queue/pending/
-  forge enqueue --fixture           Drop a smoke-test fixture into _queue/pending/
-  forge status [--watch]            Print queue + in-flight snapshot
-  forge metrics [<cycle-id>]        Per-cycle aggregates (or all cycles)
-  forge bench <phase>               Run a phase's benchmark suite (alias for npm run bench:<phase>)
-  forge brain query "<question>"    Query the brain (skeleton)
+  forge serve [--once]                    Start the unattended scheduler
+  forge cycle <initiative-id>             Run one initiative end-to-end (foreground)
+  forge enqueue <project> <spec>          Drop an initiative manifest into _queue/pending/
+  forge enqueue --from-manifest <path>    Validate + drop a pre-formed manifest
+  forge enqueue --fixture                 Drop a smoke-test fixture into _queue/pending/
+  forge status [--watch]                  Print queue + in-flight snapshot
+  forge metrics [<cycle-id>]              Per-cycle aggregates (or all cycles)
+  forge bench <phase>                     Run a phase's benchmark suite (alias for npm run bench:<phase>)
+  forge brain query "<question>"          Query the brain (skeleton)
+  forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
@@ -103,6 +109,27 @@ async function cmdCycle(rest: string[]): Promise<void> {
 function cmdEnqueue(rest: string[]): void {
   const paths = getPaths();
   if (!existsSync(paths.pending)) mkdirSync(paths.pending, { recursive: true });
+
+  if (rest[0] === '--from-manifest') {
+    const src = rest[1];
+    if (!src) {
+      console.error('forge enqueue --from-manifest: missing <path>');
+      process.exit(2);
+    }
+    if (!existsSync(src)) {
+      console.error(`forge enqueue --from-manifest: file not found: ${src}`);
+      process.exit(2);
+    }
+    const manifest = parseManifest(readFileSync(src, 'utf8'));
+    const errors = validateManifest(manifest);
+    if (errors.length > 0) {
+      console.error(`forge enqueue --from-manifest: invalid manifest:\n  - ${errors.join('\n  - ')}`);
+      process.exit(2);
+    }
+    const out = writeManifest(manifest);
+    console.log(`enqueued: ${out}`);
+    return;
+  }
 
   if (rest[0] === '--fixture') {
     // Bootstrap a tiny throwaway git repo at projects/fixture/ so the scheduler
@@ -199,11 +226,20 @@ function cmdBench(rest: string[]): void {
 
 function cmdBrain(rest: string[]): void {
   const sub = rest[0];
-  if (sub !== 'query') {
-    console.error('forge brain: only `query` is implemented (skeleton)');
-    process.exit(2);
-  }
-  const question = rest.slice(1).join(' ');
+  if (sub === 'index') return cmdBrainIndex(rest.slice(1));
+  if (sub === 'query') return cmdBrainQueryStub(rest.slice(1));
+  console.error('forge brain: subcommands: index, query');
+  process.exit(2);
+}
+
+function cmdBrainIndex(rest: string[]): void {
+  const scopeIdx = rest.indexOf('--scope');
+  const scope = scopeIdx >= 0 ? rest[scopeIdx + 1] ?? null : null;
+  process.stdout.write(loadBrainIndex({ scope }) + '\n');
+}
+
+function cmdBrainQueryStub(rest: string[]): void {
+  const question = rest.join(' ');
   console.log(`(skeleton) brain-query: "${question}"`);
   console.log('Wire the brain-query skill via @anthropic-ai/claude-agent-sdk to make this real.');
 }

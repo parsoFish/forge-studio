@@ -84,7 +84,10 @@ forge/
 ## Status of the scaffold
 
 - ✅ Directory structure + ADRs + phase docs + skill stubs.
-- ⏳ Brain seeding (Pass A, then Pass B) — see [`docs/seeding-plan.md`](./docs/seeding-plan.md).
-- ⏳ Phase implementations — each phase doc has a "TODO" section near the bottom.
-- ⏳ Ralph runner is a skeleton; needs the `@anthropic-ai/claude-agent-sdk` wired in fully.
-- ⏳ Benchmarks are wired-but-empty; cases land per phase as that phase is built.
+- ✅ Brain seeding **Pass A + Pass B** — 50 forge-level themes + 15 project-level themes (across 5 sub-wikis) + 37 raw sources + 18 benchmark questions; structural lint green. The 4 original "next sessions" from the seeding plan (Pass A → SDK wiring → architect + council → Pass B) are all landed.
+- ✅ Ralph runner wired to Claude Agent SDK via [`loops/ralph/claude-agent.ts`](./loops/ralph/claude-agent.ts) (`createClaudeAgent` factory; SDK `query` injectable for tests).
+- ✅ Architect + LLM Council support code — typed manifest module ([`orchestrator/manifest.ts`](./orchestrator/manifest.ts), with depends_on cycle detection, budget validation, `writeManifest`), council critic-chain runner ([`skills/architect-llm-council/council.ts`](./skills/architect-llm-council/council.ts), with structured-output critics and de-duplicated escalations), and `forge enqueue --from-manifest <path>` CLI integration. The SKILL.md prompts are the user-facing interactive layer.
+- ⏳ Per-phase benchmark cases — wired-but-empty harnesses; cases land as each phase is built.
+- ⏳ `cycle.ts` end-to-end integration — orchestrator → PM → developer-loop → review-prep wiring.
+- ⏳ Live `score.ts` for `bench:brain` — currently stub-scored; needs SDK invocation against `brain-query`.
+- ⏳ PM, reviewer, reflector skills past their `SKILL.md` prompt + the support code listed above.

@@ -59,11 +59,14 @@ Primary owner of [`benchmarks/brain/`](../../benchmarks/brain/) — `questions.j
    - **High:** ≥ 2 corroborating sources, all on-topic.
    - **Medium:** 1 source on-topic, or multiple loosely related.
    - **Low / gap:** no good source, or only off-topic matches. Mark `gap: true` and log.
-5. Return.
+5. **Gap-flagging rule (load-bearing):** if your synthesised answer says **any** of the following — "the brain does not contain X", "no documentation on X", "doesn't have X", "no specific guidance", "X is not in the brain", "outside the scope" — **set `gap: true`**, even if you cited 1–2 themes for context. Naming-the-absence is itself a gap; the brain-gap-feedback-loop only fires on `gap: true`. A correct answer that says "we don't have X" without setting the flag is the most damaging failure mode (the gap is real but invisible to ingest).
+6. Return.
 
 ## Constraints
 
 - **Cite, don't paraphrase deeply.** The caller can read the linked file. Synthesis is a one-paragraph answer + source list, not a full essay.
+- **Cite theme pages and project profiles only.** Valid `sources` entries are `brain/forge/themes/<slug>.md` and `brain/projects/<name>/{profile.md,themes/<slug>.md}`. Never cite `brain/_raw/*` (those are inputs to synthesis, not citations) or category indexes (`brain/forge/{patterns,antipatterns,decisions,operations,reference}.md`, `brain/forge/themes/README.md`, `brain/INDEX.md`) — they're navigation, not knowledge.
+- **Be exhaustive on theme coverage.** If a question spans multiple themes (e.g. a pattern + its antipattern + the operation that prevents it), cite all of them. The benchmark scores recall (did you find every expected theme), so under-citing is the failure mode to avoid. Citing 1–2 extras is acceptable; missing the corrective antipattern is not.
 - **Fast model by default.** Haiku is the default; per-skill override via the calling skill's frontmatter if a question genuinely needs more.
 - **Gaps are logged, not silently failed.** If the brain doesn't know, the brain learns by the next ingest pass.
 - **No web fallback in this skill.** Broader research is the *calling* skill's responsibility (after this skill's gap event is logged); separation of concerns.

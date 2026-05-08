@@ -61,6 +61,9 @@ Collaborate with the user during ideation sessions to update the project's roadm
 
 ## TODO (post-scaffold)
 
-- [ ] Implement the LLM Council critic chain in the council skill.
+- [x] Implement the LLM Council critic chain in the council skill — done via [`skills/architect-llm-council/council.ts`](../../skills/architect-llm-council/council.ts) (`runCouncil()` + `defaultCritics()`).
+- [x] Initiative-manifest writer + validator — done via [`orchestrator/manifest.ts`](../../orchestrator/manifest.ts) (typed schema, depends_on cycle detection, budget validation, `writeManifest()`).
+- [x] CLI integration — `forge enqueue --from-manifest <path>` validates and enqueues a pre-formed manifest.
 - [ ] Populate `benchmarks/architect/prompts.json` with 5-10 sample ideas spanning different project types.
 - [ ] Decide on the canonical roadmap-markdown format (header, status keys, link conventions).
+- [ ] Wire the architect skill's actual interactive loop in a Claude Code session (the SKILL.md is the prompt; the skill becomes invocable as `/architect` once registered with Claude Code's skill loader).

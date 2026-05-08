@@ -2,7 +2,7 @@
 
 > The brain is forge's persistent memory. This is the navigation hub: from here, drill into a category index → a theme page → the raw sources behind it.
 
-**Status:** empty (scaffold). Seeding happens in two passes per [`docs/seeding-plan.md`](../docs/seeding-plan.md).
+**Status:** Pass A + Pass B complete. The brain holds **48 forge-level theme pages**, **15 project-level theme pages** (across 5 sub-wikis), **37 raw sources** (`_raw/docs/`, `_raw/web/`, `_raw/v1-wiki/`), and a benchmark question set. See [`docs/seeding-plan.md`](../docs/seeding-plan.md) and [`log.md`](./log.md).
 
 ## How to use this wiki
 
@@ -18,10 +18,17 @@
 - [Antipatterns](./forge/antipatterns.md) — proven approaches that don't.
 - [Decisions](./forge/decisions.md) — ADRs and the reasoning behind durable choices.
 - [Operations](./forge/operations.md) — how to run / monitor / recover the system.
+- [Reference](./forge/reference.md) — system overviews, profiles, comparisons, glossaries.
 
 ## Per-project sub-wikis
 
-> Empty until Pass B seeds them and cycles populate them. Each project gets its own folder under `projects/<name>/` with a `profile.md` (who/what/taste) and `themes/`.
+Each project has a `profile.md` (who / what / taste / hard-constraints) and a `themes/` directory with project-specific patterns, antipatterns, and decisions.
+
+- [trafficGame](./projects/trafficGame/profile.md) — TypeScript/Vite traffic-simulation game with campaign mode.
+- [env-optimiser](./projects/env-optimiser/profile.md) — WSL2 dev-environment optimiser; local-first, constitutional principles.
+- [simplarr](./projects/simplarr/profile.md) — Plex/*arr media-stack setup tooling (Bash + PowerShell parity).
+- [GitWeave](./projects/GitWeave/profile.md) — GitHub-org control repo / platform-as-code (Terraform + Actions).
+- [healarr](./projects/healarr/profile.md) — self-healing agent for Plex/*arr stacks (deterministic triage + tier-coded agent).
 
 ## Conventions
 

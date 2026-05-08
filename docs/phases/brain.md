@@ -28,16 +28,35 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 
 ## Success signals
 
-- **Recall:** `benchmarks/brain/questions.json` accuracy ≥80% with correct source-page citations.
-- **Coverage:** `brain-gaps.jsonl` rate-of-new-gaps decreases over consecutive cycles.
+The brain phase is judged on **two axes** — a cheap deterministic metric (per-cycle) plus a periodic LLM-judge validation (every N cycles).
+
+**Deterministic metric** (cheap, run every cycle):
+
+- **Recall:** `benchmarks/brain/questions.json` accuracy ≥80% under the recall-weighted rubric (`0.4 × source_recall + 0.6 × keyword_match`, threshold 0.65, hallucinated paths force 0). See [`benchmarks/brain/README.md`](../../benchmarks/brain/README.md).
+- **Hallucination rate:** ≤ 5% of cases cite a path that doesn't exist on disk.
+- **Gap detection:** `benchmarks/brain/negatives.json` pass rate ≥ 80% — out-of-scope and forge-adjacent-bait questions correctly flagged with `gap: true` and bounded citations.
 - **Integrity:** `brain-lint` reports zero structural issues (orphans, malformed frontmatter, duplicate themes).
-- **Latency:** `brain-query` p95 response time under 5s with the default model (Haiku).
+- **Latency:** `brain-query` p95 response time ≤ 15s with the default model (Haiku) under the agentic SKILL.md. The original 5s target was incompatible with the documented grep-and-read process; revised after May 2026 measurement.
+
+**LLM-judge metric** (validating, run every cycle worthwhile or on rubric drift):
+
+- **Judge agreement:** Opus judge (`bench:brain:judge`) agrees with the deterministic metric on ≥ 85% of cases. Disagreement flags either rubric drift (deterministic too harsh / lenient) or a content-grounding failure the deterministic metric can't see (Q15-shape).
+- **Judge pass rate:** ≥ 90% of cases pass the judge's "factually correct + grounded + complete + reasonable citations" criteria.
+
+**Coverage signal:**
+
+- `brain-gaps.jsonl` rate-of-new-gaps decreases over consecutive cycles. The gap-flagging rule in [`skills/brain-query/SKILL.md`](../../skills/brain-query/SKILL.md) is load-bearing here — answers that name an absence MUST set `gap: true`.
 
 ## Benchmark suite
 
 [`benchmarks/brain/`](../../benchmarks/brain/)
-- `questions.json` — Q→expected-source-pages
-- `score.ts` — runs queries, scores accuracy + latency + source-correctness
+- `questions.json` — Q→expected-source-pages (primary recall suite, 18 cases)
+- `negatives.json` — gap-detection suite (out-of-scope / forge-adjacent-bait / partial-match, 10 cases)
+- `score.ts` — primary runner (recall + keyword + hallucination check)
+- `score-negatives.ts` — gap-detection runner
+- `score-judged.ts` — Opus LLM-judge over the latest primary result (validates the deterministic metric)
+- `judge.ts` — judge invocation logic (reusable for other phases)
+- Run via: `npm run bench:brain`, `npm run bench:brain:negatives`, `npm run bench:brain:judge`
 
 ## Known failure modes (to defend against)
 

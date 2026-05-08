@@ -27,6 +27,7 @@ The pattern is *brute repetition with institutional memory*. Each iteration:
 ## Files
 
 - [`runner.ts`](./runner.ts) — the driver implementing the `LoopInput`/`LoopResult` interface from [`loops/README.md`](../README.md).
+- [`claude-agent.ts`](./claude-agent.ts) — `createClaudeAgent(opts)` factory; the SDK-backed `AgentInvocation` the runner accepts. Reads `PROMPT.md`, calls `query()` with `cwd=worktree` and `permissionMode='acceptEdits'`, surfaces files-changed via `tool_use` events and cost via the final `result` message.
 - [`stop-conditions.ts`](./stop-conditions.ts) — quality-gates-pass | iteration-budget | wedged-detector.
 - [`PROMPT.md.tmpl`](./PROMPT.md.tmpl) — template stamped per work item.
 - [`AGENT.md.tmpl`](./AGENT.md.tmpl) — institutional-memory template, populated initially from brain-query results.
@@ -50,4 +51,23 @@ The loop exits when **any one** condition fires:
 
 ## Status
 
-Skeleton (scaffold). The Claude Agent SDK wiring, real stop conditions, and full per-iteration commit/log discipline land in subsequent sessions per the developer-loop phase doc.
+- ✅ Driver + stop conditions + templates wired end-to-end.
+- ✅ Claude Agent SDK wiring via [`claude-agent.ts`](./claude-agent.ts) (`createClaudeAgent` factory; SDK `query` is dependency-injectable for unit tests).
+- ⏳ Per-iteration commit discipline (`git add -A && git commit -m`) — currently the agent is instructed to commit in the prompt; orchestrator-side enforcement lands when `cycle.ts` integrates with the runner end-to-end.
+- ⏳ Per-iteration JSONL event-log emission — once `cycle.ts` is wired, every iteration writes a `developer-ralph.iteration` event referencing the work-item path and the iteration's filesChanged.
+
+## Wiring example
+
+```ts
+import { run } from './runner.ts';
+import { createClaudeAgent } from './claude-agent.ts';
+
+const agent = createClaudeAgent({
+  model: 'claude-sonnet-4-6',
+  maxTurnsPerIteration: 30,
+  maxBudgetUsdPerIteration: 1.0,
+  permissionMode: 'acceptEdits',
+});
+
+const result = await run(input, agent);
+```

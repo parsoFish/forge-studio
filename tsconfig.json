@@ -21,7 +21,8 @@
   "include": [
     "orchestrator/**/*.ts",
     "loops/**/*.ts",
-    "benchmarks/**/*.ts"
+    "benchmarks/**/*.ts",
+    "skills/**/*.ts"
   ],
   "exclude": [
     "node_modules",

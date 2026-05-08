@@ -59,10 +59,13 @@ Each critic is invoked as a sub-agent via the Claude Agent SDK. Order matters:
 ## Process
 
 1. Brain query first.
-2. Run critics in order. Each critic emits `flags: []` (mechanical issues to auto-resolve) and `escalations: []` (taste decisions for the user).
-3. Apply auto-resolutions. Re-run the affected critic to confirm the fix.
-4. Aggregate escalations. De-dup. Order by severity (CEO > Eng > DX > Design by default; adjust per project).
-5. Return revised spec + escalation list to the calling architect skill.
+2. Run critics in order via [`runCouncil()`](./council.ts) — each critic is invoked as an SDK subagent with its own perspective prompt, `permissionMode: 'plan'` (no file modifications), and a `json_schema` `outputFormat` that returns `{ flags, escalations }`.
+3. The runner aggregates `flags` (mechanical) for auto-application and de-duplicates `escalations` (taste) by `(critic, question)`.
+4. Apply auto-resolutions to the draft based on the returned `flags[].appliedFix` descriptions (the calling architect skill writes them).
+5. Order escalations by severity (CEO > Eng > DX > Design by default; adjust per project).
+6. Return `{ flags, escalations, totalCostUsd, perCritic }` to the calling architect skill.
+
+The council's TypeScript helper lives at [`council.ts`](./council.ts). Default critics + their prompts come from `defaultCritics()`. The SDK's `query` is dependency-injectable via `queryFn` for unit tests.
 
 ## Constraints
 

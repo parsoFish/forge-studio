@@ -53,7 +53,8 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## TODO (post-scaffold)
 
-- [ ] Wire the Claude Agent SDK in `runner.ts` past skeleton.
-- [ ] Implement quality-gates-pass stop condition (delegates to per-project `npm test` / `npm run lint` / `gh pr checks`).
-- [ ] Implement wedged-detector (no-progress heuristic).
+- [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent.
+- [x] Implement wedged-detector (no-progress heuristic) — done in [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) (default 3 iterations no-progress).
+- [ ] Implement quality-gates-pass stop condition (delegates to per-project `npm test` / `npm run lint` / `gh pr checks`). Currently shells `npm test --silent` in the worktree; project-specific gate composition lands when `cycle.ts` integrates per-project quality-gate config.
+- [ ] Per-iteration commit discipline + JSONL event emission — wires when `cycle.ts` integrates the runner.
 - [ ] Populate `benchmarks/developer-loop/work-items/` with 5-10 reference fixtures of varying difficulty.

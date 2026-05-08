@@ -50,11 +50,12 @@ Record the response in your working notes. Log a brain-gap event for any questio
 
 1. **Brain query first** (mandatory).
 2. **Listen.** Reflect the user's idea back in your own words and confirm understanding before proposing structure.
-3. **Invoke `architect-llm-council`** to apply the chained critics (CEO/eng/design/DX). The council resolves mechanical questions and surfaces only taste decisions to the user.
+3. **Invoke `architect-llm-council`** via [`runCouncil()`](../architect-llm-council/council.ts) to apply CEO/eng/design/DX critics. The council resolves mechanical issues (`flags`) and surfaces only taste decisions (`escalations`) to the user.
 4. **Iterate** with the user on the surfaced decisions. Stay terse — the user's time at the keyboard is the scarce resource.
 5. **Emit initiatives.** For each confirmed initiative:
-   - Generate `INIT-<YYYYMMDD>-<slug>` ID.
-   - Write the manifest to `_queue/pending/<id>.md`.
+   - Generate the ID as `INIT-<YYYY-MM-DD>-<slug>` (matches the manifest schema's `INIT-\d{4}-\d{2}-\d{2}-<slug>` pattern).
+   - Build the manifest as a typed [`InitiativeManifest`](../../orchestrator/manifest.ts): `initiative_id`, `project`, `project_repo_path`, `created_at` (ISO-8601), `iteration_budget`, `cost_budget_usd`, `phase: 'pending'`, `features[]` (each with `feature_id`, `title`, `depends_on`), and the spec body.
+   - Write via `writeManifest(manifest)` from `orchestrator/manifest.ts` — it validates depends_on edges, rejects cycles, requires positive budgets, and writes to `_queue/pending/<id>.md`. If writing the markdown directly via the Write tool, run `forge enqueue --from-manifest <path>` afterward to validate.
    - Update `projects/<name>/roadmap.md` with a link to the initiative.
 6. **Log everything** to the event log.
 7. **Tell the user** what's queued, what the next human touch will be (review on completion), and how to monitor (`forge status`).
