@@ -30,7 +30,7 @@ Record the response in your working notes. Log a brain-gap event for any questio
 
 ## Outputs
 
-- Updated `projects/<name>/roadmap.md` — confirmed with the user.
+- Updated `projects/<name>/roadmap.md` — confirmed with the user. Schema in [ADR 014](../../docs/decisions/014-roadmap-format.md): YAML frontmatter (`project`, `updated_at`), a `## Current phase` section, an `## Initiatives` table (`ID | Title | Status | Manifest | Depends on`), and a `## Backlog` list. Status keys are exactly `pending | active | blocked | done`. Append/update rows; do not rewrite the file unless the Current Phase is changing.
 - One or more `_queue/pending/<initiative-id>.md` — manifests with frontmatter (per [`docs/phases/architect.md`](../../docs/phases/architect.md)) and a markdown initiative spec body.
 
 ## Event-log entries to emit
@@ -56,7 +56,7 @@ Record the response in your working notes. Log a brain-gap event for any questio
    - Generate the ID as `INIT-<YYYY-MM-DD>-<slug>` (matches the manifest schema's `INIT-\d{4}-\d{2}-\d{2}-<slug>` pattern).
    - Build the manifest as a typed [`InitiativeManifest`](../../orchestrator/manifest.ts): `initiative_id`, `project`, `project_repo_path`, `created_at` (ISO-8601), `iteration_budget`, `cost_budget_usd`, `phase: 'pending'`, `features[]` (each with `feature_id`, `title`, `depends_on`), and the spec body.
    - Write via `writeManifest(manifest)` from `orchestrator/manifest.ts` — it validates depends_on edges, rejects cycles, requires positive budgets, and writes to `_queue/pending/<id>.md`. If writing the markdown directly via the Write tool, run `forge enqueue --from-manifest <path>` afterward to validate.
-   - Update `projects/<name>/roadmap.md` with a link to the initiative.
+   - Update `projects/<name>/roadmap.md` per [ADR 014](../../docs/decisions/014-roadmap-format.md): bump `updated_at`, add or update the row in the `## Initiatives` table (`ID | Title | Status | Manifest | Depends on`), and refresh `## Current phase` only if the phase is changing.
 6. **Log everything** to the event log.
 7. **Tell the user** what's queued, what the next human touch will be (review on completion), and how to monitor (`forge status`).
 

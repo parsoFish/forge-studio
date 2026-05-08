@@ -9,13 +9,13 @@ Collaborate with the user during ideation sessions to update the project's roadm
 ## Inputs
 
 - The user's free-form idea / brief / pain point.
-- The project's existing roadmap (`projects/<name>/roadmap.md`).
+- The project's existing roadmap (`projects/<name>/roadmap.md`) — schema in [ADR 014](../decisions/014-roadmap-format.md).
 - Brain knowledge (queried via `brain-query`).
 - Past initiatives + retros for the project (`brain/projects/<name>/themes/`).
 
 ## Outputs
 
-- Updated `projects/<name>/roadmap.md`.
+- Updated `projects/<name>/roadmap.md` — schema in [ADR 014](../decisions/014-roadmap-format.md).
 - One or more `_queue/pending/<initiative-id>.md` manifests with frontmatter:
   ```yaml
   ---
@@ -65,5 +65,5 @@ Collaborate with the user during ideation sessions to update the project's roadm
 - [x] Initiative-manifest writer + validator — done via [`orchestrator/manifest.ts`](../../orchestrator/manifest.ts) (typed schema, depends_on cycle detection, budget validation, `writeManifest()`).
 - [x] CLI integration — `forge enqueue --from-manifest <path>` validates and enqueues a pre-formed manifest.
 - [ ] Populate `benchmarks/architect/prompts.json` with 5-10 sample ideas spanning different project types.
-- [ ] Decide on the canonical roadmap-markdown format (header, status keys, link conventions).
+- [x] Decide on the canonical roadmap-markdown format — done via [ADR 014](../decisions/014-roadmap-format.md).
 - [ ] Wire the architect skill's actual interactive loop in a Claude Code session (the SKILL.md is the prompt; the skill becomes invocable as `/architect` once registered with Claude Code's skill loader).
