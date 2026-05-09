@@ -4,10 +4,12 @@
  * Implements the LoopInput / LoopResult interface declared in loops/README.md.
  * One run = one work item driven to a stop condition.
  *
- * STATUS: skeleton. Wires the shape end-to-end with a stub agent call so the
- * scaffold compiles and the smoke tests pass. Replacing the stub with a real
- * Claude Agent SDK query() call lands in a subsequent session per the
- * developer-loop phase doc.
+ * Wired end-to-end. The Claude Agent SDK adapter lives in claude-agent.ts; the
+ * runner accepts any AgentInvocation (default = stubAgent for tests; pass
+ * createClaudeAgent() for production). Per-fixture quality-gate commands are
+ * injectable via LoopInput.qualityGate; the bench harness uses this to run
+ * pytest / bats / node:test as appropriate. Live cycle leaves it undefined and
+ * gets the default `npm test --silent`.
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -27,6 +29,13 @@ export type LoopInput = {
   brainQueryResults: string;
   cycleId: string;
   initiativeId: string;
+  /**
+   * Per-cycle quality-gate function. Called between iterations; a return of
+   * true exits the loop with status 'complete'. Defaults to
+   * `() => defaultQualityGates(worktreePath)` (shells `npm test --silent`).
+   * The bench harness injects per-fixture commands (pytest / bats / etc.).
+   */
+  qualityGate?: () => boolean;
 };
 
 export type LoopResult = {
@@ -35,6 +44,8 @@ export type LoopResult = {
   cost_usd: number;
   duration_ms: number;
   artifacts: { agentMdPath: string; fixPlanPath: string };
+  filesChanged: string[];
+  stop_reason: StopCondition['kind'];
 };
 
 export type AgentInvocation = (params: {
@@ -50,14 +61,31 @@ const stubAgent: AgentInvocation = async () => {
   return { filesChanged: [], costUsd: 0 };
 };
 
-export async function run(input: LoopInput, agent: AgentInvocation = stubAgent): Promise<LoopResult> {
-  const startedAt = Date.now();
+export type DevWorkspacePaths = {
+  promptPath: string;
+  agentMdPath: string;
+  fixPlanPath: string;
+};
+
+/**
+ * Stamp PROMPT.md / AGENT.md / fix_plan.md into the worktree from templates if
+ * they don't exist yet, and return their absolute paths. Idempotent — already-
+ * stamped files are left alone (a re-entrant cycle inherits prior state).
+ *
+ * Exported so the bench harness and the live cycle wiring can prepare a
+ * workspace without going through `run()` (e.g., for inspection in tests).
+ */
+export function prepareWorkspace(input: LoopInput): DevWorkspacePaths {
+  const promptPath = join(input.worktreePath, 'PROMPT.md');
   const agentMdPath = join(input.worktreePath, 'AGENT.md');
   const fixPlanPath = join(input.worktreePath, 'fix_plan.md');
-  const promptPath = join(input.worktreePath, 'PROMPT.md');
-
-  // Stamp PROMPT.md and AGENT.md from templates if they don't exist yet.
   ensureScaffolded(input, promptPath, agentMdPath, fixPlanPath);
+  return { promptPath, agentMdPath, fixPlanPath };
+}
+
+export async function run(input: LoopInput, agent: AgentInvocation = stubAgent): Promise<LoopResult> {
+  const startedAt = Date.now();
+  const { promptPath, agentMdPath, fixPlanPath } = prepareWorkspace(input);
 
   const conditions: StopCondition[] = [
     { kind: 'quality-gates-pass' },
@@ -65,6 +93,8 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     { kind: 'cost-budget', maxUsd: input.initiativeBudget.usd },
     { kind: 'wedged', noProgressIterations: 3 },
   ];
+
+  const qualityGate = input.qualityGate ?? (() => defaultQualityGates(input.worktreePath));
 
   const state: LoopState = {
     worktreePath: input.worktreePath,
@@ -75,7 +105,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
   };
 
   for (;;) {
-    const stop = checkStopConditions(state, conditions, () => defaultQualityGates(input.worktreePath));
+    const stop = checkStopConditions(state, conditions, qualityGate);
     if (stop.stop) {
       return finalize(state, startedAt, stop.condition, agentMdPath, fixPlanPath);
     }
@@ -129,7 +159,7 @@ function ensureScaffolded(
 function finalize(
   state: LoopState,
   startedAt: number,
-  stopReason: string,
+  stopReason: StopCondition['kind'],
   agentMdPath: string,
   fixPlanPath: string,
 ): LoopResult {
@@ -139,13 +169,24 @@ function finalize(
       : stopReason === 'wedged'
         ? 'wedged'
         : 'failed';
+  const filesChanged = uniqueFiles(state.filesChangedHistory);
   return {
     status,
     iterations: state.iteration,
     cost_usd: state.costUsdSoFar,
     duration_ms: Date.now() - startedAt,
     artifacts: { agentMdPath, fixPlanPath },
+    filesChanged,
+    stop_reason: stopReason,
   };
+}
+
+function uniqueFiles(history: string[][]): string[] {
+  const seen = new Set<string>();
+  for (const iter of history) {
+    for (const f of iter) seen.add(f);
+  }
+  return [...seen].sort();
 }
 
 function basename(p: string, ext: string): string {

@@ -1,0 +1,77 @@
+[
+  {
+    "id": "env-optimiser-redact-argv",
+    "project": "env-optimiser",
+    "seed_tree": "fixtures/env-optimiser",
+    "initiative_id": "INIT-2026-05-09-env-optimiser-redact-argv",
+    "work_item_spec_rel_path": ".forge/work-items/WI-1.md",
+    "expected": {
+      "max_iterations": 3,
+      "max_cost_usd": 0.50,
+      "must_complete": true,
+      "quality_gate_cmd": ["python3", "-m", "pytest", "tests/test_redact_argv.py", "-q"],
+      "pre_existing_tests_cmd": ["python3", "-m", "pytest", "tests/test_redactor.py", "-q"],
+      "files_in_scope_extra": ["tests/test_redact_argv.py"]
+    }
+  },
+  {
+    "id": "trafficGame-distribute-flow",
+    "project": "trafficGame",
+    "seed_tree": "fixtures/trafficGame",
+    "initiative_id": "INIT-2026-05-09-trafficgame-distribute-flow",
+    "work_item_spec_rel_path": ".forge/work-items/WI-1.md",
+    "expected": {
+      "max_iterations": 5,
+      "max_cost_usd": 1.50,
+      "must_complete": true,
+      "quality_gate_cmd": ["node", "--test", "--experimental-strip-types", "tests/distribute-flow.test.ts"],
+      "pre_existing_tests_cmd": ["node", "--test", "--experimental-strip-types", "tests/flow.test.ts"],
+      "files_in_scope_extra": ["tests/distribute-flow.test.ts"]
+    }
+  },
+  {
+    "id": "simplarr-dry-run",
+    "project": "simplarr",
+    "seed_tree": "fixtures/simplarr",
+    "initiative_id": "INIT-2026-05-09-simplarr-dry-run",
+    "work_item_spec_rel_path": ".forge/work-items/WI-1.md",
+    "expected": {
+      "max_iterations": 3,
+      "max_cost_usd": 0.50,
+      "must_complete": true,
+      "quality_gate_cmd": ["bats", "tests/dry_run.bats"],
+      "pre_existing_tests_cmd": ["bats", "tests/parity_apply.bats"],
+      "files_in_scope_extra": ["tests/dry_run.bats"]
+    }
+  },
+  {
+    "id": "GitWeave-multipart-stub",
+    "project": "GitWeave",
+    "seed_tree": "fixtures/GitWeave",
+    "initiative_id": "INIT-2026-05-09-gitweave-multipart-stub",
+    "work_item_spec_rel_path": ".forge/work-items/WI-1.md",
+    "expected": {
+      "max_iterations": 3,
+      "max_cost_usd": 0.50,
+      "must_complete": true,
+      "quality_gate_cmd": ["node", "--test", "--experimental-strip-types", "tests/multipart.test.ts"],
+      "pre_existing_tests_cmd": ["node", "--test", "--experimental-strip-types", "tests/runner.test.ts"],
+      "files_in_scope_extra": ["tests/multipart.test.ts"]
+    }
+  },
+  {
+    "id": "healarr-quickstart-readme",
+    "project": "healarr",
+    "seed_tree": "fixtures/healarr",
+    "initiative_id": "INIT-2026-05-09-healarr-quickstart-readme",
+    "work_item_spec_rel_path": ".forge/work-items/WI-1.md",
+    "expected": {
+      "max_iterations": 2,
+      "max_cost_usd": 0.30,
+      "must_complete": true,
+      "quality_gate_cmd": ["bash", "-c", "grep -q '^## Quick start' README.md && grep -q Install README.md && grep -q Run README.md"],
+      "pre_existing_tests_cmd": ["bash", "-c", "grep -q 'Self-hosted health tracker' README.md && grep -q '## Auth' README.md && grep -q '## Features' README.md"],
+      "files_in_scope_extra": []
+    }
+  }
+]

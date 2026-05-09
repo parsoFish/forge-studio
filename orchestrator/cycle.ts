@@ -28,9 +28,23 @@ import {
   type PmToolUseSummary,
 } from './pm-invocation.ts';
 import {
+  DEV_ALLOWED_TOOLS,
+  DEV_DISALLOWED_TOOLS,
+  DEV_MODEL,
+  buildDevSystemPrompt,
+  prepareDevWorkspace,
+  tallyToolUse as tallyDevToolUse,
+  type DevToolUseSummary,
+} from './dev-invocation.ts';
+import {
   readWorkItemsFromDir,
+  topologicalOrder,
   validateWorkItemSet,
+  writeWorkItemStatus,
+  type WorkItem,
 } from './work-item.ts';
+import { createClaudeAgent, type QueryFn } from '../loops/ralph/claude-agent.ts';
+import { run as runRalph, type LoopResult } from '../loops/ralph/runner.ts';
 
 export type CycleInput = {
   initiativeId: string;
@@ -278,25 +292,204 @@ async function runProjectManager(input: CycleInput, logger: EventLogger): Promis
   }
 }
 
+/**
+ * Defaults for the live Ralph loop. Higher per-iteration USD cap than the bench
+ * (live worktrees are richer); the bench tightens to 0.30 USD / 3 iterations
+ * per fixture to surface efficiency regressions quickly.
+ */
+const DEV_LIVE_DEFAULT_ITERATIONS_PER_WI = 5;
+const DEV_LIVE_DEFAULT_USD_PER_WI = 1.0;
+const DEV_LIVE_MAX_TURNS_PER_ITERATION = 25;
+const DEV_LIVE_MAX_BUDGET_USD_PER_ITERATION = 0.50;
+
 async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise<void> {
+  const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'developer-loop',
     skill: 'developer-ralph',
     event_type: 'start',
-    input_refs: [resolve(input.worktreePath, '.forge/work-items/')],
+    input_refs: [workItemsDir],
     output_refs: [],
   });
-  // TODO: for each work item, invoke skills/developer-ralph which calls loops/ralph/runner.ts.
+
+  const { items, parseErrors } = readWorkItemsFromDir(workItemsDir);
+  if (Object.keys(parseErrors).length > 0) {
+    throw new Error(
+      `developer-loop: parse errors: ${Object.entries(parseErrors).map(([f, e]) => `${f}: ${e}`).join('; ')}`,
+    );
+  }
+  if (items.length === 0) {
+    throw new Error(`developer-loop: no work items found at ${workItemsDir}`);
+  }
+  const { setErrors } = validateWorkItemSet(items);
+  if (setErrors.length > 0) {
+    throw new Error(`developer-loop: invalid WI set: ${setErrors.join('; ')}`);
+  }
+
+  const ordered = topologicalOrder(items);
+  const forgeRoot = resolve(import.meta.dirname, '..');
+  const systemPrompt = buildDevSystemPrompt(forgeRoot);
+  const sdkQueryFn = sdkQuery as unknown as QueryFn;
+
+  const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null }> = [];
+
+  for (const wi of ordered) {
+    const wiStart = logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'log',
+      input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
+      output_refs: [],
+      message: 'ralph.start',
+      metadata: { work_item_id: wi.work_item_id, feature_id: wi.feature_id },
+    });
+
+    if (prerequisiteFailed(wi, wiOutcomes)) {
+      writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
+        output_refs: [],
+        message: 'ralph.skipped',
+        metadata: { work_item_id: wi.work_item_id, reason: 'prerequisite-failed' },
+      });
+      wiOutcomes.push({ id: wi.work_item_id, status: 'failed', result: null });
+      continue;
+    }
+
+    const specPath = resolve(workItemsDir, `${wi.work_item_id}.md`);
+    const wiToolUse: DevToolUseSummary = { reads: 0, writes: 0, bashCalls: 0, testRuns: 0 };
+
+    prepareDevWorkspace({
+      initiativeId: input.initiativeId,
+      workItemSpecPath: specPath,
+      workItemSpecRelPath: `.forge/work-items/${wi.work_item_id}.md`,
+      worktreePath: input.worktreePath,
+      iterationBudget: wi.estimated_iterations > 0
+        ? Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI)
+        : DEV_LIVE_DEFAULT_ITERATIONS_PER_WI,
+      costBudgetUsd: DEV_LIVE_DEFAULT_USD_PER_WI,
+    });
+
+    const tallyingQueryFn: QueryFn = ({ prompt, options }) => {
+      const inner = sdkQueryFn({ prompt, options });
+      return (async function* () {
+        for await (const msg of inner) {
+          const m = msg as { type?: string; message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> } };
+          if (m.type === 'assistant') tallyDevToolUse(m.message, wiToolUse);
+          yield msg;
+        }
+      })();
+    };
+
+    const agent = createClaudeAgent({
+      model: DEV_MODEL,
+      allowedTools: [...DEV_ALLOWED_TOOLS],
+      disallowedTools: [...DEV_DISALLOWED_TOOLS],
+      permissionMode: 'acceptEdits',
+      systemPrompt,
+      maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
+      maxBudgetUsdPerIteration: DEV_LIVE_MAX_BUDGET_USD_PER_ITERATION,
+      queryFn: tallyingQueryFn,
+    });
+
+    let result: LoopResult | null = null;
+    let runnerError: { kind: string; message: string } | undefined;
+    try {
+      result = await runRalph(
+        {
+          workItemSpecPath: specPath,
+          worktreePath: input.worktreePath,
+          initiativeBudget: {
+            iterations: Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI),
+            usd: DEV_LIVE_DEFAULT_USD_PER_WI,
+          },
+          brainQueryResults: '',
+          cycleId: logger.cycleId,
+          initiativeId: input.initiativeId,
+        },
+        agent,
+      );
+    } catch (err) {
+      runnerError = {
+        kind: 'agent_threw',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    const finalStatus: WorkItem['status'] = result?.status === 'complete'
+      ? 'complete'
+      : 'failed';
+    writeWorkItemStatus(specPath, finalStatus);
+
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: wiStart.event_id,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'end',
+      input_refs: [specPath],
+      output_refs: result ? result.filesChanged : [],
+      cost_usd: result?.cost_usd ?? 0,
+      duration_ms: result?.duration_ms ?? 0,
+      message: 'ralph.end',
+      metadata: {
+        work_item_id: wi.work_item_id,
+        status: finalStatus,
+        iterations: result?.iterations ?? 0,
+        stop_reason: result?.stop_reason ?? 'crashed',
+        tool_use: wiToolUse,
+        runner_error: runnerError,
+      },
+    });
+
+    wiOutcomes.push({ id: wi.work_item_id, status: finalStatus, result });
+  }
+
+  const completeCount = wiOutcomes.filter((o) => o.status === 'complete').length;
+  const totalCost = wiOutcomes.reduce((acc, o) => acc + (o.result?.cost_usd ?? 0), 0);
+
   logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'developer-loop',
     skill: 'developer-ralph',
     event_type: 'end',
-    input_refs: [resolve(input.worktreePath, '.forge/work-items/')],
+    input_refs: [workItemsDir],
     output_refs: [input.worktreePath],
+    cost_usd: totalCost,
+    metadata: {
+      work_item_count: items.length,
+      complete: completeCount,
+      failed: items.length - completeCount,
+    },
   });
+
+  if (completeCount < items.length) {
+    throw new Error(
+      `developer-loop: ${items.length - completeCount}/${items.length} work items did not complete`,
+    );
+  }
+}
+
+function prerequisiteFailed(
+  wi: WorkItem,
+  outcomes: Array<{ id: string; status: WorkItem['status'] }>,
+): boolean {
+  if (wi.depends_on.length === 0) return false;
+  const byId = new Map(outcomes.map((o) => [o.id, o.status] as const));
+  for (const dep of wi.depends_on) {
+    const status = byId.get(dep);
+    if (status === 'failed') return true;
+  }
+  return false;
 }
 
 async function runReviewPrep(input: CycleInput, logger: EventLogger): Promise<void> {

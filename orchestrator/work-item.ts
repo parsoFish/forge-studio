@@ -240,6 +240,21 @@ export function writeWorkItem(w: WorkItem, worktreeDir: string, opts: WriteWorkI
 }
 
 /**
+ * Update the `status` field in an existing work-item file's YAML frontmatter,
+ * leaving every other field and the markdown body byte-identical (round-trip
+ * via gray-matter). Used by the developer-loop runner to mark each WI
+ * complete | failed after the Ralph loop returns.
+ */
+export function writeWorkItemStatus(specPath: string, status: WorkItemStatus): void {
+  if (!WORK_ITEM_STATUSES.includes(status)) {
+    throw new Error(`invalid status: ${status}`);
+  }
+  const w = parseWorkItem(readFileSync(specPath, 'utf8'));
+  const updated: WorkItem = { ...w, status };
+  writeFileSync(specPath, serializeWorkItem(updated));
+}
+
+/**
  * Find pairs of work items that share a file in `files_in_scope` but are not
  * connected by any directed dependency edge in either direction (transitively).
  *
@@ -319,6 +334,62 @@ export function detectHiddenCoupling(items: WorkItem[]): CouplingPair[] {
     }
   }
   return [...pairs.values()];
+}
+
+/**
+ * Return work items in dependency order: every WI's prerequisites appear
+ * before it. Items with `depends_on` references that don't resolve in `items`
+ * are treated as roots (orphan dependency = upstream-validation responsibility).
+ * Throws if a cycle is present — callers should run `validateWorkItemSet`
+ * first if they want a structured error.
+ */
+export function topologicalOrder(items: WorkItem[]): WorkItem[] {
+  const cycle = detectCycle(items);
+  if (cycle) {
+    throw new Error(`cannot topo-sort: dependency cycle ${cycle.join(' → ')}`);
+  }
+  const byId = new Map(items.map((i) => [i.work_item_id, i] as const));
+  const indegree = new Map<string, number>();
+  for (const item of items) indegree.set(item.work_item_id, 0);
+  for (const item of items) {
+    for (const dep of item.depends_on) {
+      if (byId.has(dep)) {
+        indegree.set(item.work_item_id, (indegree.get(item.work_item_id) ?? 0) + 1);
+      }
+    }
+  }
+  const ready = items
+    .filter((i) => (indegree.get(i.work_item_id) ?? 0) === 0)
+    .map((i) => i.work_item_id)
+    .sort();
+  const out: WorkItem[] = [];
+  while (ready.length > 0) {
+    const id = ready.shift()!;
+    const item = byId.get(id);
+    if (!item) continue;
+    out.push(item);
+    for (const other of items) {
+      if (other.depends_on.includes(id)) {
+        const next = (indegree.get(other.work_item_id) ?? 0) - 1;
+        indegree.set(other.work_item_id, next);
+        if (next === 0) {
+          insertSorted(ready, other.work_item_id);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function insertSorted(list: string[], value: string): void {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid]! < value) lo = mid + 1;
+    else hi = mid;
+  }
+  list.splice(lo, 0, value);
 }
 
 // ---------- helpers ----------

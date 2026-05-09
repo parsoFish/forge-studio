@@ -28,6 +28,8 @@ export type ClaudeAgentOptions = {
   model?: string;
   /** Tool allowlist. Defaults to the read/write/exec set Ralph needs. */
   allowedTools?: string[];
+  /** Tool denylist. SDK treats this as "block even if allowedTools includes it". */
+  disallowedTools?: string[];
   /** Cap turns per iteration (one Ralph iteration = one query() call). */
   maxTurnsPerIteration?: number;
   /** Cap USD spend per iteration. */
@@ -54,6 +56,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
       allowedTools: opts.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
       permissionMode: opts.permissionMode ?? 'acceptEdits',
     };
+    if (opts.disallowedTools !== undefined) options.disallowedTools = opts.disallowedTools;
     if (opts.model !== undefined) options.model = opts.model;
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;

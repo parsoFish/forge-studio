@@ -32,10 +32,11 @@ The brain query result becomes part of the initial `AGENT.md` content (instituti
 ## Outputs
 
 - Commits in the worktree (one per acceptance criterion where possible).
-- `<worktree>/AGENT.md` — final institutional memory.
-- `<worktree>/fix_plan.md` — list of remaining issues if the loop didn't complete.
-- Update `<worktree>/.forge/work-items/WI-<n>.md` frontmatter: `status: complete | failed`.
+- `<worktree>/AGENT.md` — final institutional memory (loop bookkeeping; the agent updates this each iteration).
+- `<worktree>/fix_plan.md` — checklist showing remaining work if the loop didn't complete (loop bookkeeping; the agent ticks items each iteration).
 - Iteration events to the event log.
+
+> **Status frontmatter is owned by the orchestrator, not the agent.** Do not edit `<worktree>/.forge/work-items/WI-<n>.md` — the orchestrator writes `status: complete | failed` after `run()` returns. The agent's job is the code change, not the bookkeeping.
 
 ## Event-log entries to emit
 
@@ -57,8 +58,7 @@ The brain query result becomes part of the initial `AGENT.md` content (instituti
 4. Stamp `loops/ralph/AGENT.md.tmpl` with the brain-query results → `<worktree>/AGENT.md`.
 5. Initialise `<worktree>/fix_plan.md` with the acceptance criteria as a checklist.
 6. Invoke `loops/ralph/runner.ts` with the worktree path and stop-condition config (from initiative manifest's `iteration_budget` and `cost_budget_usd`).
-7. The runner returns: `{ status: 'complete' | 'failed' | 'wedged', iterations: n, cost: usd }`.
-8. Update the work-item spec's frontmatter `status` accordingly.
+7. The runner returns: `{ status: 'complete' | 'failed' | 'wedged', iterations: n, cost: usd }`. The orchestrator writes `status` back to the WI spec — the skill does not.
 
 ## Constraints
 

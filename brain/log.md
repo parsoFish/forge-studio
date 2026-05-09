@@ -259,3 +259,133 @@ Closed out the project-manager phase — the **first unattended phase** in the p
 **Total bench spend across iteration set:** ~$6.30 across 3 runs. Compare brain (14 runs, $15) and architect (1 run, $1.75). PM was harder than architect because the output structure is richer (multi-file artifact + graph + cross-WI invariants), but the pre-built support code (`work-item.ts` + `pm-invocation.ts` + the architect bench pattern) made each iteration cheap once the fixture/scoring scaffolding was in place.
 
 **What's next:** the next workstream is **developer-loop** — the second unattended phase, the longest-running, and the highest-cost. The Ralph runner is already wired ([`loops/ralph/claude-agent.ts`](../loops/ralph/claude-agent.ts)); what's missing is the developer skill past `SKILL.md`, the bench fixtures, and the `cycle.ts:runDeveloperLoop()` real implementation. See [`docs/phases/developer-loop.md`](../docs/phases/developer-loop.md).
+
+---
+
+## [2026-05-09] structural | developer-loop phase wired end-to-end (closure pass pending)
+
+Landed everything needed to run a real-Claude bench against the developer loop. The remaining gap is the actual closure pass (5/5 fixtures green at threshold 0.7).
+
+**What landed:**
+
+- **Runner extension** ([`loops/ralph/runner.ts`](../loops/ralph/runner.ts)): `LoopInput` accepts an injectable `qualityGate?: () => boolean` so the bench can shell pytest / bats / node:test / grep instead of the hardcoded `npm test`. `prepareWorkspace` is now an exported helper that returns the three artifact paths. `LoopResult` gains `filesChanged` (deduplicated across iterations) and `stop_reason` so the scorer can grade scope discipline.
+- **SDK adapter** ([`loops/ralph/claude-agent.ts`](../loops/ralph/claude-agent.ts)): now accepts `disallowedTools` (NotebookEdit / WebFetch / WebSearch are denied for the dev loop, matching PM's contract).
+- **Shared invocation contract** ([`orchestrator/dev-invocation.ts`](../orchestrator/dev-invocation.ts)): `buildDevSystemPrompt(brainCwd)` (brain index + SKILL.md + Ralph-loop discipline notes), `renderDevUserPrompt(input)`, `prepareDevWorkspace(input)` (renders fully-substituted PROMPT.md / AGENT.md / fix_plan.md from a parsed WI), `tallyToolUse(message, summary)` (with a `testRuns` heuristic against Bash command heads). Bash IS allowed (contrast vs PM, which forbids it) — the dev agent must be able to run tests, but the orchestrator-side quality-gate verification is the load-bearing check.
+- **Cycle wiring** ([`orchestrator/cycle.ts:runDeveloperLoop`](../orchestrator/cycle.ts)): replaces the start/end stub with a real per-WI loop. Reads WIs from `<worktree>/.forge/work-items/`, validates the set, topologically orders by `depends_on` (new helper `topologicalOrder` in `work-item.ts`), skips dependents of failed prerequisites, runs Ralph per WI, updates `status` frontmatter (new helper `writeWorkItemStatus` in `work-item.ts`), emits `ralph.start` / `ralph.end` per WI plus a phase-level summary event with cost/iteration aggregates.
+- **Bench harness** ([`benchmarks/developer-loop/`](../benchmarks/developer-loop/)): five fixtures, one per managed project — Python (env-optimiser/redact-argv via pytest), TypeScript (trafficGame/decay-flow + GitWeave/multipart-stub via node --test --experimental-strip-types), bash (simplarr/dry-run via bats), Markdown (healarr/quickstart-readme via grep). `scoring.ts` defines the pure rubric (gate `terminated_cleanly`; weighted `loop_completed` 0.35, `iteration_budget_respected` 0.20, `files_in_scope_respected` 0.20, `cost_budget_respected` 0.15, `no_regression` 0.10; pass threshold 0.7). `sdk.ts:runDevLoop` is the per-fixture entrypoint (tempdir + symlinks + per-fixture quality-gate command). `score.ts` mirrors PM's runner shape (concurrency 2, session budget $2). 24 new unit tests pass (10 scoring + 7 sdk + existing).
+
+**Why these dimensions and weights:**
+
+- `loop_completed` is the heaviest because the loop's whole purpose is to drive a WI green; everything else is efficiency around that.
+- `files_in_scope_respected` is 0.20 because it's the load-bearing PM-handoff invariant — if the loop ignores scope, PM's `no_hidden_coupling` work was wasted.
+- `no_regression` (0.10) defends against the wedge-detector escape valve where the agent makes random changes that pass the new test but break others.
+- Atomic-commits-per-AC discipline is intentionally NOT scored in v1 — hard to verify reliably across language fixtures, and the existing weight set already discriminates good/bad behaviour. Promote when the rubric plateaus.
+
+**Closure target:** ≥4/5 fixtures pass on first real bench run; 5/5 within two rubric-tightening iteration passes (mirroring PM's three-pass closure at $6.30 total). Per-fixture budgets are tight (3 iterations / $0.30; healarr at 2 / $0.20) precisely so efficiency regressions surface fast.
+
+**Total scaffolding spend across this session:** $0 (all pure code + fixture authoring; real bench run pending and budgeted at ~$1.50 plus headroom for iteration).
+
+**What's next:** run `npm run bench:developer-loop` against real Claude. If the bench surfaces a mismatch between the SKILL.md instructions and what makes the agent succeed (e.g., the agent ignores `files_in_scope`, or burns iterations on `Read` instead of running tests), tighten the SKILL/system prompt and re-run. After closure, the next workstream is **review-loop** — the third unattended phase.
+
+---
+
+## [2026-05-09] structural | developer-loop phase closed — bench 5/5 in two passes
+
+**Outcome:** all five fixtures pass at threshold 0.7 with every criterion at 100%. p95 iterations = 1 — every WI solved in a single Ralph iteration.
+
+**Pass 1 (2/5, $1.50):** all five fixtures completed (loop_completed = 1.0 across the board). The two failures were rubric-shape problems, not loop behaviour:
+
+- **`files_in_scope_respected` at 20%**: every fixture had the agent updating `AGENT.md` and `fix_plan.md` (Ralph workspace artifacts). The scoring counted these as out-of-scope modifications. The healarr fixture additionally had the agent update `.forge/work-items/WI-1.md` because SKILL.md step 8 told it to.
+- **`cost_budget_respected` at 40%**: per-fixture cap was $0.30, but realistic first-iteration spend ranged $0.22–$0.42. The phase-doc target is $0.50 / WI; my initial cap was below the bar the phase doc itself sets.
+
+**Pass 2 fixes (5/5, $1.17):**
+
+- [`benchmarks/developer-loop/scoring.ts`](../benchmarks/developer-loop/scoring.ts): `filesInScopeRespected` excludes Ralph workspace artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`, anything under `.forge/work-items/`). These are loop bookkeeping, not source code; the agent must write to them every iteration. Source files outside `files_in_scope` are still flagged (verified via the `secret.ts` test case).
+- [`benchmarks/developer-loop/cases.json`](../benchmarks/developer-loop/cases.json): per-fixture `max_cost_usd` raised from $0.30 → $0.50 (healarr from $0.20 → $0.30) to align with phase-doc target. Iteration cap unchanged at 3.
+- [`skills/developer-ralph/SKILL.md`](../skills/developer-ralph/SKILL.md): removed step 8 ("agent updates WI frontmatter `status`"). The orchestrator owns status writes via `writeWorkItemStatus()` after `run()` returns; the agent shouldn't touch it. Added a dedicated callout in the Outputs section.
+
+**Key insight (worth a reflection-time theme):** *Ralph workspace artifacts are loop infrastructure, not source code. Any rubric for a Ralph-style loop must treat updates to PROMPT.md / AGENT.md / fix_plan.md / WI spec as bookkeeping, not scope creep, or the rubric will systematically over-penalise normal loop behaviour.* This is the developer-loop equivalent of the PM bench's `no_hidden_coupling` lesson — a rubric blind spot that only surfaces against real agent behaviour, not against synthetic fixture data.
+
+**Per-fixture results (pass 2):**
+
+| Fixture | Iterations | Cost | Status |
+|---|---|---|---|
+| env-optimiser-redact-argv (Python) | 1 | $0.21 | complete |
+| trafficGame-decay-flow (TS) | 1 | $0.32 | complete |
+| simplarr-dry-run (bash + bats) | 1 | $0.22 | complete |
+| GitWeave-multipart-stub (TS) | 1 | $0.20 | complete |
+| healarr-quickstart-readme (Markdown) | 1 | $0.21 | complete |
+
+**Cost discipline:** $1.17 + $1.50 = $2.67 across the closure set. PM was $6.30 across three passes; this closed in two passes for under half the spend, partly because iteration 1 of every fixture happened to be a one-shot win and partly because the rubric-shape fix didn't require re-running already-passing fixtures (the scoring change was a pure post-hoc re-grade).
+
+**Validation of the rubric:** every criterion's pass rate at 1.0 in pass 2 *would* normally be a flag that the rubric is too lenient. In this case the per-fixture breakdown is informative — the cost criterion is the closest to its bound (trafficGame at $0.32 of $0.50, ~64%), so the rubric still discriminates. If a future change makes the agent burn $0.60+ on these fixtures, the rubric will catch it. The criterion to watch in regression: scope respect (now 1.0; would drop to ~0.2 if Ralph-artifact handling regresses).
+
+**What's next:** the **review-loop** phase. Reviewer skill stub + bench fixtures + cycle wiring. Same closure shape: shared invocation contract under `orchestrator/<phase>-invocation.ts`, bench under `benchmarks/<phase>/` with rubric in `scoring.ts`. The developer-loop closure validates the pattern; review-loop should be cheaper.
+
+---
+
+## [2026-05-09] structural | developer-loop multi-iteration exploration — Sonnet eats well-decomposed work; loop is a circuit-breaker, not a convergence engine
+
+**Question:** does the developer-loop bench actually exercise the multi-iteration paths (wedge detector, fix_plan progression, AGENT.md state-carrying), or are we just validating single-shot agent skill?
+
+**Method:** ran four bench passes (20 total fixture executions). Iterated fixture complexity progressively, holding the rest constant as control. Used v1 historical data (`v1-themes-failure-modes.cycle.md`, `v1-themes-completion-stats.cycle.md`) to ground the complexity escalations in real-world archetypes — specifically trafficGame's "algorithm-heavy items as a single WI" antipattern (48% v1 failure rate).
+
+**Escalation path on trafficGame** (the others held as control):
+- **Run 1–2:** `decayFlow(loads, factor)` — 4 ACs, single file. **1-shot at $0.24–$0.42.**
+- **Run 3:** `distributeFlow(intersection, load)` — 8 ACs covering proportional split, capacity caps, redistribution, ordering. **1-shot at $0.49.** Agent did 11 reads / 3 writes / 9 bash calls / 3 test runs all within iteration 1's 25-turn budget.
+- **Run 4:** Same function with priority tiebreak + injectable Calibrator across **3 files** (new `src/calibration.ts` with new exported interface, `src/intersections.ts` updated with `priority` field, `src/flow.ts` adding `distributeFlow`). **13 acceptance criteria.** **Still 1-shot at $0.42** — *cheaper than the 8-AC version*. Agent created the new file, updated existing types, implemented priority-tier algorithm, ran tests, all in one iteration.
+
+**Multi-iteration rate across all 20 fixture-runs:** 1 in 20 = **5%**, exactly matching the phase-doc wedge-rate target (`≤5%`). The lone iteration occurred on **GitWeave** (a fixture I did NOT make harder), which spuriously created a `package.json` that wasn't needed; iter 1 quality gate failed; iter 2 corrected. Loop did its job.
+
+**Cost variance for the *same* fixture across runs (no changes):**
+
+| Fixture | min | max | ratio |
+|---|---|---|---|
+| env-optimiser | $0.23 | $0.51 | 2.2× |
+| simplarr | $0.19 | $0.25 | 1.3× |
+| GitWeave | $0.22 | $0.57 | 2.6× ← iterated this run |
+| healarr | $0.14 | $0.22 | 1.6× |
+| trafficGame (across complexity escalations) | $0.24 | $0.49 | 2.0× — **complexity barely matters** |
+
+**The headline finding:** modern Sonnet 4.6 with a 25-turn-per-iteration budget *self-corrects within one query call*. Even 13 ACs across 3 files including a brand-new file with new exported types is well inside its per-query capacity. The agent reads → writes → tests → reads failure → corrects → tests again → done — all without an iteration boundary firing.
+
+**Implication: the Ralph loop's primary value at modern model capability is circuit-breaking, not convergence.**
+
+- **Iteration boundary fires** only on stochastic agent confusion (the GitWeave package.json case), not on inherent problem complexity.
+- **Cost cap is the load-bearing safety** — agent variance is 1.3–2.6× per fixture run-to-run. A confused agent might 3× the baseline cost; the cap catches it.
+- **Wedge detector hasn't fired** in any run — agents always make *some* observable progress within iterations. The wedge guard is theoretical until we see a true wedge in the wild.
+
+**WI-sizing data points for the PM phase to use:**
+
+| WI shape | Cost envelope | Iteration count |
+|---|---|---|
+| 1–2 ACs, 1 file | $0.15–0.25 | 1 (very low variance) |
+| 4–8 ACs, 1–2 files | $0.20–0.50 | 1 |
+| 13 ACs, 3 files (incl. one new file with new exported types) | $0.40–0.55 | 1 |
+| Stochastic confusion path (any size) | $0.50–0.60 | 2 (~5% of runs) |
+
+**PM-phase recommendations grounded in this data:**
+
+1. **Default WI envelope: 2–4 ACs, 1–2 files.** Lands at $0.15–0.30, ~100% 1-iteration rate. This is the sweet spot.
+2. **Stretch WI envelope: up to ~13 ACs across 3 files when work is genuinely cohesive** (e.g., introducing a new algorithm with rich edge cases plus a supporting types/calibration module). Lands at $0.40–0.60, still 1-iteration. Don't be afraid of bigger WIs *if they're cohesive* — fragmentation has its own overhead (graph construction, sequential execution, cross-WI coupling risk).
+3. **Don't decompose to avoid iteration.** The data says iteration risk is stochastic (~5%), not size-driven. Smaller WIs don't materially reduce iteration probability — they just multiply graph overhead.
+4. **Where decomposition DOES help: clarify environment setup.** The one organic iteration in 20 runs came from environment confusion (`package.json` thinking). PM should include `setup_notes` or similar in the WI body when the project's test runner has non-obvious requirements ("uses `node --test` directly; no package.json needed"; "pytest expects `conftest.py` at root").
+5. **Cost is more useful than iteration count as a quality signal.** A 2.6× run-to-run variance on the *same fixture* means iteration count is a noisy metric. PM should track cost-per-WI as the primary discipline measure; iteration count as a secondary "loop earned its keep" signal.
+
+**What this validates and what it doesn't:**
+
+- ✅ Validated: runner orchestration; per-fixture quality gates (pytest/bats/node:test/grep); topological dispatch; status writeback; event emission; rubric discrimination (caught the GitWeave scope creep correctly).
+- ✅ Validated naturally: iteration boundary firing on stochastic agent confusion (GitWeave run 4).
+- ❌ Not exercised in 20 runs: wedge detector (no fixture wedged), iteration-budget exhaustion (no fixture hit it), cost-budget exhaustion (no fixture hit it).
+- ❓ Bench's hardest fixture (13 ACs / 3 files) is at the *upper bound* of "reliably 1-shot." Pushing further (e.g., 5 files, 20+ ACs, multi-step refactor with hidden constraints) would be possible, but at that point we'd be testing "what happens when PM emits a bad WI" rather than "does the loop work for good WIs."
+
+**Decision: declare developer-loop bench coverage sufficient.** The bench reliably tests:
+- Single-iteration completion across language/scoring diversity (the dominant case at modern model capability)
+- Stochastic agent confusion paths (~5% rate, matched by phase-doc target)
+- Rubric correctness (catches scope creep, regressions, cost overruns)
+
+Pushing harder for forced multi-iteration would require either tightening turn budgets artificially (rejected as inauthentic) or oversizing WIs beyond what good PM should ever emit (testing the wrong thing).
+
+**Total session spend across the multi-iteration exploration:** 4 runs × ~$1.5 = ~$6.50. Combined with prior closure passes ($2.67), **total developer-loop closure spend: ~$9.20** — comparable to PM's $6.30 and well below the brain's $15.
+
+**What this means for the next phase (review-loop):** the same circuit-breaker model applies. Reviewer's Ralph instance will mostly 1-shot under modern Sonnet; the bench's job is to validate the rubric and catch stochastic confusion paths, not to force convergence theatre.

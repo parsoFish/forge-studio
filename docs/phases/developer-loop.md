@@ -40,9 +40,12 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## Benchmark suite
 
-[`benchmarks/developer-loop/`](../../benchmarks/developer-loop/)
-- `work-items/<n>/` — spec + reference implementation + tests.
-- `score.ts` — runs the Ralph loop against each fixture, scores iterations / cost / gate pass.
+[`benchmarks/developer-loop/`](../../benchmarks/developer-loop/) — five fixtures, one per managed project.
+- `fixtures/<id>/` — seed worktree (source files + tests) plus `.forge/work-items/WI-1.md` (the WI spec) plus a failing acceptance test.
+- `cases.json` — catalogue with per-fixture `quality_gate_cmd` + `pre_existing_tests_cmd` + budgets.
+- `scoring.ts` — pure rubric (gate `terminated_cleanly`; weighted criteria for `loop_completed`, `iteration_budget_respected`, `cost_budget_respected`, `files_in_scope_respected`, `no_regression`; pass threshold 0.7).
+- `sdk.ts` — per-fixture tempdir + runDevLoop entrypoint (shared with the live cycle via `orchestrator/dev-invocation.ts`).
+- `score.ts` — runs the Ralph loop against each fixture, scores, writes `results/<iso>.json`.
 
 ## Known failure modes (to defend against)
 
@@ -55,6 +58,6 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 - [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent.
 - [x] Implement wedged-detector (no-progress heuristic) — done in [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) (default 3 iterations no-progress).
-- [ ] Implement quality-gates-pass stop condition (delegates to per-project `npm test` / `npm run lint` / `gh pr checks`). Currently shells `npm test --silent` in the worktree; project-specific gate composition lands when `cycle.ts` integrates per-project quality-gate config.
-- [ ] Per-iteration commit discipline + JSONL event emission — wires when `cycle.ts` integrates the runner.
-- [ ] Populate `benchmarks/developer-loop/work-items/` with 5-10 reference fixtures of varying difficulty.
+- [x] Implement quality-gates-pass stop condition with per-fixture commands — done. `LoopInput.qualityGate` is now injectable; the bench harness wires per-fixture commands (pytest / bats / node:test / grep). Live cycle still defaults to `npm test --silent` until per-project quality-gate config lands.
+- [x] Per-iteration commit discipline + JSONL event emission — done. `orchestrator/cycle.ts:runDeveloperLoop` walks WIs in topological order, emits `ralph.start` / `ralph.end` per WI plus a phase-level summary.
+- [x] Populate `benchmarks/developer-loop/fixtures/` with reference fixtures — five fixtures landed, one per managed project (env-optimiser, trafficGame, simplarr, GitWeave, healarr). Catalogue in [`benchmarks/developer-loop/cases.json`](../../benchmarks/developer-loop/cases.json).

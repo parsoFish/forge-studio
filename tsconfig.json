@@ -29,6 +29,8 @@
     "dist",
     "projects",
     "_logs",
-    "_queue"
+    "_queue",
+    "benchmarks/*/fixtures/projects",
+    "benchmarks/developer-loop/fixtures"
   ]
 }
