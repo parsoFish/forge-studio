@@ -1,23 +1,21 @@
 ---
 name: reviewer
-description: Verify the post-developer-loop initiative branch is functional, record a video demo, and draft a PR description. Stage 2 (interactive human review + send-back loop) is implemented separately.
+description: Ralph-style review loop on the initiative branch. Each iteration prepares (or refines) a video demo + PR draft. The orchestrator runs the verdict gate between iterations; on send-back the agent reads new ACs from fix_plan.md and addresses them next iteration. Runs until approved (loop stops) or iteration cap exhausted.
 phase: review-loop
 surface: unattended
 model: claude-sonnet-4-6
 ---
 
-# Reviewer — Stage 1 (Review-prep)
+# Reviewer (Ralph-loop)
 
 ## Single responsibility
 
-Take a post-developer-loop worktree (every work item at `status: complete`), and emit two artefacts to the worktree:
+Drive a post-developer-loop initiative branch to **approved + merged**. The agent runs as a Ralph loop on the initiative worktree:
 
-1. **A video demo bundle** at `<worktree>/.forge/demos/<initiative-id>/` (source script + recording + README).
-2. **A PR description draft** at `<worktree>/.forge/pr-description.md`.
+- **Iteration 1** (empty `fix_plan.md`): prepare the initial demo bundle + PR draft from scratch.
+- **Iterations 2+** (fix_plan.md contains `## Round N send-back` items): edit the project code to satisfy each unchecked AC, re-record the demo, refresh the PR draft.
 
-The orchestrator handles all side-effecting work after this skill exits — `gh pr create`, queue movement to `_queue/ready-for-review/`, and the desktop notification per [ADR 013](../../docs/decisions/013-notifications.md). Do **not** call `gh pr create`, do **not** move queue files, do **not** fire notifications.
-
-> **Stage 2 (human review + send-back loop) is NOT implemented in this skill.** That is a separate plan that runs after stage 1 closes. The contract here is review-prep only: produce a demo and a PR draft, gated by quality-gate health.
+The orchestrator owns the verdict gate between iterations — it re-runs the project quality command, asks the verdict-provider (human in production; simulator agent in bench), and either stops the loop on `approve` or appends the new feedback ACs to fix_plan.md on `send-back`.
 
 ## Required first action
 
@@ -30,125 +28,81 @@ Invoke `brain-query` with:
 Always-relevant brain themes:
 
 - [`brain/forge/themes/squash-merge-stacked-prs.md`](../../brain/forge/themes/squash-merge-stacked-prs.md) — v1 lesson, squash-merging stacked PRs produces lost-source-files cascades.
-- [`brain/forge/themes/layered-merge-order.md`](../../brain/forge/themes/layered-merge-order.md) — merge layer 0 first with health-check, then layer 1; reviewer enforces this.
+- [`brain/forge/themes/layered-merge-order.md`](../../brain/forge/themes/layered-merge-order.md) — merge layer 0 first with health-check, then layer 1.
 - [`brain/forge/themes/markdown-artifact-flow.md`](../../brain/forge/themes/markdown-artifact-flow.md) — every cross-phase artefact is greppable markdown.
 
-Then read `brain/projects/<project>/profile.md` and any project-specific reviewer themes.
+Then read `brain/projects/<project>/profile.md` and any project-specific reviewer themes. **Record the brain query results in AGENT.md** so iterations 2+ don't re-do the queries.
 
 ## Inputs
 
-- `_queue/in-flight/<initiative-id>.md` — initiative manifest (with feature list; all work items completed).
-- `<worktree>/` — the project at the developer-loop's final commit.
-- `<worktree>/.forge/work-items/WI-*.md` — completed work items, each with `acceptance_criteria` (Given-When-Then). The demo source must reference each WI's `then`-clause keywords (greppable evidence the demo exercises the criteria).
-- `_logs/<cycle-id>/events.jsonl` — to extract notable decisions for the PR's "How" section.
+- `_queue/in-flight/<initiative-id>.md` — initiative manifest.
+- `<worktree>/` — the initiative branch with the dev-loop's commits.
+- `<worktree>/.forge/work-items/WI-*.md` — completed work items.
+- `<worktree>/PROMPT.md` — the per-iteration brief (stamped by `prepareReviewerWorkspace`).
+- `<worktree>/AGENT.md` — institutional memory + verdict history.
+- `<worktree>/fix_plan.md` — iteration backlog. Empty on iter 1; populated by the verdict gate on send-back.
 
-## Outputs
+## Outputs (every iteration)
 
-### 1. PR description draft — `<worktree>/.forge/pr-description.md`
-
-Plain markdown (no frontmatter). Required sections, in this order:
-
-```markdown
-## Why
-
-<1-3 paragraphs explaining the initiative's goal and what problem it solves. Cite the manifest's
-intent. Why ≥ 50 chars. This is the load-bearing section — the diff shows what; this explains why.>
-
-## What
-
-<bullet list, one bullet per feature in the manifest. Each bullet ≤ 140 chars.>
-
-## How
-
-<1-2 paragraphs covering key decisions made during the cycle. Reference event-log entries
-(`brain-query` results, architecture choices, antipattern mitigations applied).>
-
-## Demo
-
-<markdown link to the recording in `.forge/demos/<initiative-id>/`. State the tool used (VHS or
-Playwright) and any prereqs (e.g., "Run `npx playwright show-trace .forge/demos/.../recording.trace.zip`
-to play").>
-```
-
-If the PR is part of a stacked sequence (parent PRs must merge first), include a `Parents:` block listing parent PR numbers or branch names. If `Parents:` is present, the orchestrator's `gh pr merge` call will use `--merge` not `--squash` (per [ADR 016](../../docs/decisions/016-demo-recording-tooling.md) and the squash-merge-stacked-prs antipattern).
-
-Body length floor: 300 chars total. Three-line PR descriptions are rejected by the bench.
-
-### 2. Demo bundle — `<worktree>/.forge/demos/<initiative-id>/`
-
-Layout locked in [ADR 016](../../docs/decisions/016-demo-recording-tooling.md):
-
-```
-<worktree>/.forge/demos/<initiative-id>/
-├── source.<tape|spec.ts>                # declarative source — greppable
-├── recording.<mp4|webm|gif|trace.zip>   # the rendered artefact
-└── README.md                            # one-paragraph context + prereqs
-```
-
-**Tool selection rule** (no exceptions other than browser/canvas):
-
-- **Browser / canvas / DOM rendering** → Playwright. Write `source.spec.ts`. Run `npx playwright test source.spec.ts --reporter=list --trace=on` (or `video: 'on'` in config). Output is `recording.trace.zip` or `recording.webm`.
-- **Everything else** (Python lib, bash CLI, TS lib, REST via curl, terminal apps) → VHS. Write `source.tape`. Run `vhs source.tape -o recording.mp4` (or `.gif`, `.webm`). The `.tape` declarative DSL has `Type`, `Enter`, `Sleep`, `Show` directives — see VHS docs.
-
-**Greppable acceptance-criteria evidence.** The demo source must reference each work-item's acceptance-criterion `then`-clause keywords as commands, expected output, or assertion text. The bench scores this as `demo_exercises_acceptance_criteria` (heuristic keyword presence). A 5-second video of a black canvas will fail the rubric.
-
-**`README.md` content** (one paragraph):
-- One sentence on what the demo shows.
-- One sentence on prereqs to re-record (e.g., "needs `vhs` v0.7+ and `python -m env_optimiser` on PATH").
-- One sentence on the expected outcome.
+- `<worktree>/.forge/demos/<initiative-id>/source.<tape|spec.ts>` — declarative source.
+- `<worktree>/.forge/demos/<initiative-id>/recording.<mp4|webm|gif|trace.zip>` — rendered artefact (≥ 50 KB, valid magic bytes).
+- `<worktree>/.forge/demos/<initiative-id>/README.md` — one-paragraph context + prereqs.
+- `<worktree>/.forge/pr-description.md` — PR body draft.
+- Commits on the initiative branch (one per concern, conventional-commits messages).
+- Updated `AGENT.md` (institutional memory).
+- Ticked items in `fix_plan.md` (when iteration N satisfies a send-back AC).
 
 ## Hard rules
 
-- **Quality gates first.** Before writing `pr-description.md`, run the project's quality gate command (`npm test`, `pytest`, `bats tests/`, etc.). If gates fail, STOP. Do not write `pr-description.md`. Update `<worktree>/AGENT.md` with the failing-gate state and exit. The bench scores `pr-description.md` written + gates red as score = 0 (the `pr_only_when_green` second gate).
-- **Demo source greppably exercises the ACs.** Each WI's `then`-clause keywords appear in `source.<tape|spec.ts>`. The demo should walk the human through each AC's observable outcome, not the implementation.
-- **No `gh pr create`.** The orchestrator owns it. The agent only drafts `pr-description.md`.
-- **No queue mutation.** Do not touch `_queue/`. The orchestrator moves the manifest after this skill exits.
-- **No notifications.** The orchestrator fires them.
-- **Squash-merge stacked PRs is forbidden.** If `Parents:` is in your PR description, the merge will be `--merge`, not `--squash`. The bench's `merge_strategy_respected` criterion checks this.
-- **Single-purpose tool whitelist.** You have `Read`, `Grep`, `Glob`, `Write`, `Edit`, `Bash`. No `WebFetch`/`WebSearch` — the brain has documentation. If you need information, query the brain.
+- **Read AGENT.md and fix_plan.md FIRST every iteration.** This tells you whether to prep (iter 1, empty fix_plan) or refine (iter 2+, fix_plan has unchecked items).
+- **Quality gates before pr-description.md.** Run the project quality gate command; fix the project code until it passes. Only then refresh `pr-description.md`. The orchestrator re-runs the gate between iterations and won't ask for a verdict if it's red.
+- **Demo source must reference each WI's acceptance-criterion `then`-clause keywords textually**, plus any send-back ACs from fix_plan.md. The bench scores keyword presence (`demo_exercises_acceptance_criteria` criterion).
+- **Demo tool selection.** Browser/canvas/DOM rendering → Playwright (write `source.spec.ts`, run `npx playwright test --trace=on`). Everything else → VHS (write `source.tape`, run `vhs source.tape -o recording.mp4`).
+- **PR description sections (in this order, all required):** `## Why` (≥ 50 chars), `## What`, `## How`, `## Demo` (markdown link to recording). Total body ≥ 300 chars.
+- **Squash-merge stacked PRs is forbidden** (brain theme `squash-merge-stacked-prs`). Include a `Parents:` block if stacked.
+- **No `gh pr create`, no `gh pr merge`.** The orchestrator owns those. You write the artifacts; the orchestrator opens and merges the PR after the verdict.
+- **No queue mutation.** `_queue/` is read-only for you.
+- **No WI-spec edits.** `.forge/work-items/WI-*.md` are the dev-loop's contract. Send-back feedback lives in `fix_plan.md`, not WI specs.
+- **No `WebFetch`/`WebSearch`.** Brain has documentation.
+- **Single-purpose tool whitelist.** `Read`, `Grep`, `Glob`, `Write`, `Edit`, `Bash`. Bash is for: quality-gate runs, `git`, `vhs`, `npx playwright`, `git diff` for the "What" section.
 
-## Event-log entries to emit
+## Event-log entries to emit (orchestrator-side)
 
-- `reviewer.start`
-- `reviewer.brain-query` (one per query)
-- `reviewer.quality-gates-checked` (with pass/fail + command + exit code)
-- `reviewer.demo-recorded` (with tool, source path, recording path, file size)
-- `reviewer.pr-description-emitted` (with section count, body length)
-- `reviewer.end`
+- `reviewer.start` — review-Ralph initiated.
+- `reviewer.brain-query` — every brain query (one per).
+- `reviewer.iteration` — one event per iteration with iteration number, cost, duration, files touched.
+- `reviewer.quality-gates-checked` — orchestrator's gate-run result + command + exit code.
+- `reviewer.demo-recorded` — agent emitted a recording.
+- `reviewer.pr-description-emitted` — agent emitted/refreshed pr-description.md.
+- `reviewer.verdict` — verdict-provider returned a verdict (approve | send-back).
+- `reviewer.send-back-dispatched` — verdict was send-back; feedback appended to fix_plan.md.
+- `reviewer.merged` — verdict was approve; orchestrator merged + moved manifest to `_queue/done/`.
+- `reviewer.send-back-cap-exhausted` — iteration budget hit before approval.
+- `reviewer.end` — loop complete.
 
 ## Benchmark suite
 
-[`benchmarks/review-loop/`](../../benchmarks/review-loop/) — five fixtures (one per managed project), seven weighted criteria + two gates, pass threshold 0.7. Rubric locked in [`benchmarks/review-loop/scoring.ts`](../../benchmarks/review-loop/scoring.ts).
+Two benchmarks exercise this skill:
 
-Gates (either failing → score = 0):
-- `quality_gates_pass` — orchestrator-verified, never trust the agent's claim.
-- `pr_only_when_green` — `pr-description.md` exists but gates failed → score = 0.
+- [`benchmarks/review-loop/`](../../benchmarks/review-loop/) — phase-internal bench. Tests one iteration of the loop in isolation: agent produces demo + PR draft against a synthetic post-dev-loop fixture; bench scores the artefacts. Stage 2 is mocked (default-approve gate) — this bench validates the agent's output, not the verdict loop.
+- [`benchmarks/e2e/`](../../benchmarks/e2e/) — integration bench. Drives the full cycle (PM → dev-loop → review-Ralph → merge) with a human-simulator agent providing verdicts. Validates the verdict loop end-to-end, including send-back convergence.
 
-Weighted (sum = 1.0):
-- `demo_recording_present` (0.15) — file exists, valid magic bytes, size > floor.
-- `demo_exercises_acceptance_criteria` (0.20) — AC keyword presence in source.
-- `pr_description_why_not_what` (0.20) — Why/What/How/Demo sections; Why ≥ 50 chars.
-- `pr_description_length_floor` (0.10) — body > 300 chars.
-- `pr_links_demo` (0.10) — markdown link to `.forge/demos/<id>/`.
-- `merge_strategy_respected` (0.15) — stacked-PR squash detection.
-- `brain_consulted` (0.10) — ≥ 1 brain read in tool-use telemetry.
+## Iteration-N body
 
-## Process
-
-1. **Brain query first.** Always-relevant themes plus project-specific reviewer themes.
-2. Read the manifest and every WI in `<worktree>/.forge/work-items/`. Confirm all are at `status: complete`. If any is not, STOP and emit a `reviewer.end` with `result_subtype: incomplete`.
-3. Run the project's quality gate command. Capture the exit code.
-4. **If gates fail:** update `<worktree>/AGENT.md` with the failure state and exit. Do not write `pr-description.md`. Do not record a demo. Emit `reviewer.end` with `result_subtype: gates-red`.
-5. **If gates pass:**
-   a. Decide the demo tool: browser/canvas → Playwright; otherwise → VHS.
-   b. Write `<worktree>/.forge/demos/<initiative-id>/source.<tape|spec.ts>`. Make sure each WI's AC `then`-clause keywords appear textually in the source.
-   c. Run the recorder to produce `recording.<mp4|webm|gif|trace.zip>` in the same directory.
-   d. Write `README.md` with the one-paragraph context.
-   e. Compose `<worktree>/.forge/pr-description.md` per the section template above.
-6. Emit `reviewer.end` with `output_refs: [pr-description.md, demos/<id>/]`.
+1. Read `PROMPT.md`, `AGENT.md`, `fix_plan.md`.
+2. **Iteration 1** (empty fix_plan.md): brain query, record in AGENT.md.
+   **Iterations 2+**: read `## Round N send-back` items in fix_plan.md.
+3. **If send-back items exist:** edit project code to satisfy each AC. Add tests if the AC is testable. Tick fix_plan.md items as resolved.
+4. Run the project quality gate. Fix until green.
+5. Re-record (or record for the first time) the demo. Source must reference all current ACs (manifest ACs + any send-back ACs). Run the recorder.
+6. Refresh `pr-description.md` to reflect the current state — Why/What/How/Demo with a link to the recording.
+7. Commit changes with conventional-commits messages.
+8. Append a one-paragraph entry to AGENT.md describing what this iteration did.
+9. Stop. The orchestrator runs the verdict gate next.
 
 ## Constraints
 
-- **Self-sufficient demo.** A human running the recording (or a CI replay) should reproduce the demo without consulting the agent. The `README.md` carries the prereqs; the source script carries the steps.
-- **Stage 2 is deferred.** This skill does not handle interactive human review, send-back loops, or developer-loop re-dispatch. That is a separate plan.
-- **Demos prove behaviour, not implementation.** The recording walks the human through observable acceptance-criteria outcomes — not the code path.
+- **Self-sufficient demo.** A human running the recording should reproduce the demo without consulting you. The README carries prereqs; the source script carries the steps.
+- **Verdict feedback ≠ contract change.** Send-back ACs appended to fix_plan.md are loop state, NOT changes to the WI specs (which are the dev-loop's input contract from PM time).
+- **Iteration budget is hard.** The orchestrator caps the loop at 3 iterations (1 prep + ≤2 send-back rounds). Hit the cap → `send-back-cap-exhausted` failure.
+- **Wedged-detector applies.** No progress (no fix_plan ticks, no commits) for 3 iterations → loop exits as wedged.

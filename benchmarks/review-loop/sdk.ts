@@ -32,14 +32,13 @@
  */
 
 import {
-  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -52,11 +51,12 @@ import {
   REVIEWER_DISALLOWED_TOOLS,
   REVIEWER_MODEL,
   buildReviewerSystemPrompt,
-  renderReviewerUserPrompt,
+  prepareReviewerWorkspace,
   tallyToolUse,
   type ReviewerToolUseSummary,
 } from '../../orchestrator/reviewer-invocation.ts';
 import { readWorkItemsFromDir, type WorkItem } from '../../orchestrator/work-item.ts';
+import { writeRecorderShims } from '../_lib/recorder-shims.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -150,114 +150,13 @@ export function setupTempdir(input: RunReviewerInput): string {
   mkdirSync(queueDir, { recursive: true });
   cpSync(input.manifestPath, resolve(queueDir, `${input.initiativeId}.md`));
 
+  // PATH shims: gh (rejects), vhs (stub mp4/webm/gif), npx (handles playwright).
+  // Source: benchmarks/_lib/recorder-shims.ts. See that module for the rationale.
   const binDir = resolve(dir, 'bin');
-  mkdirSync(binDir, { recursive: true });
-
-  // gh stub: defense-in-depth against an agent that ignores the prompt rule
-  // and tries to open a real PR. The stub exits non-zero; the agent's prompt
-  // already says "do NOT call gh pr create".
-  const ghStub = resolve(binDir, 'gh');
-  writeFileSync(
-    ghStub,
-    '#!/bin/sh\necho "[bench] gh disabled — orchestrator owns gh pr create" >&2\nexit 1\n',
-  );
-  chmodSync(ghStub, 0o755);
-
-  // vhs shim: parses `vhs <tape> -o <out>` (or `vhs <tape>` -> output.gif by
-  // default) and writes a valid stub mp4/gif/webm with proper magic bytes,
-  // padded to ≥ 60 KB so the size floor passes. Does NOT actually render the
-  // .tape — bench tests workflow, not rendering fidelity.
-  const vhsShim = resolve(binDir, 'vhs');
-  writeFileSync(vhsShim, VHS_SHIM_SCRIPT);
-  chmodSync(vhsShim, 0o755);
-
-  // playwright shim: handles `npx playwright test ...` indirectly via npx.
-  // We override `npx` to detect "playwright" subcommands and write a stub
-  // trace.zip / video file accordingly. Other npx invocations fall through.
-  const npxShim = resolve(binDir, 'npx');
-  writeFileSync(npxShim, NPX_SHIM_SCRIPT);
-  chmodSync(npxShim, 0o755);
+  writeRecorderShims(binDir);
 
   return dir;
 }
-
-/**
- * The shims are tiny node scripts that write binary headers correctly using
- * Buffer literals — sh `printf` with `\x` escapes is non-portable across
- * /bin/sh implementations (dash skips them silently). Node is already a
- * dependency since forge runs on it.
- */
-const VHS_SHIM_SCRIPT = `#!/usr/bin/env node
-// vhs shim for forge review-loop bench. Writes a stub recording with valid
-// magic bytes, ≥ 60 KB, in the cwd or -o location. Does not render.
-// Usage: vhs <tape> [-o <output>]
-const fs = require('node:fs');
-const path = require('node:path');
-const argv = process.argv.slice(2);
-let tape = '';
-let out = '';
-for (let i = 0; i < argv.length; i++) {
-  const a = argv[i];
-  if (a === '-o' || a === '--output') { out = argv[++i] ?? ''; continue; }
-  if (a === '-t' || a === '--theme' || a === '-q' || a === '--quiet') {
-    if (a !== '-q' && a !== '--quiet') i += 1;
-    continue;
-  }
-  if (a.startsWith('-')) continue;
-  if (!tape) tape = a;
-}
-if (!tape) { process.stderr.write('vhs shim: missing tape argument\\n'); process.exit(2); }
-if (!out) out = path.join(process.cwd(), 'out.gif');
-if (!path.isAbsolute(out)) out = path.resolve(process.cwd(), out);
-fs.mkdirSync(path.dirname(out), { recursive: true });
-const ext = out.toLowerCase();
-let header;
-if (ext.endsWith('.mp4') || ext.endsWith('.m4v')) {
-  // ftyp box at offset 0; size=32, type='ftyp', major_brand='isom'
-  header = Buffer.concat([
-    Buffer.from([0x00, 0x00, 0x00, 0x20]),
-    Buffer.from('ftypisom', 'ascii'),
-    Buffer.from([0x00, 0x00, 0x02, 0x00]),
-    Buffer.from('isomiso2avc1mp41', 'ascii'),
-  ]);
-} else if (ext.endsWith('.webm')) {
-  header = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
-} else {
-  // default: gif
-  header = Buffer.from('GIF89a', 'ascii');
-}
-const padding = Buffer.alloc(65536, 0xaa);
-fs.writeFileSync(out, Buffer.concat([header, padding]));
-process.stderr.write(\`[vhs shim] recorded \${tape} -> \${out}\\n\`);
-process.exit(0);
-`;
-
-const NPX_SHIM_SCRIPT = `#!/usr/bin/env node
-// npx shim for forge review-loop bench. Recognises Playwright invocations and
-// emits a stub trace.zip in the agent's cwd; everything else exits non-zero
-// (the bench has no other npx use case).
-const fs = require('node:fs');
-const path = require('node:path');
-const argv = process.argv.slice(2);
-const isPlaywright = argv.some((a) => a.includes('playwright'));
-if (!isPlaywright) {
-  process.stderr.write('[npx shim] only playwright subcommands supported in bench\\n');
-  process.exit(1);
-}
-// Default output path: <cwd>/recording.trace.zip
-const out = path.resolve(process.cwd(), 'recording.trace.zip');
-fs.mkdirSync(path.dirname(out), { recursive: true });
-// PK\\x03\\x04 (zip local file header) + minimal padding to clear size floor.
-const header = Buffer.from([
-  0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-]);
-const padding = Buffer.alloc(65536, 0xaa);
-fs.writeFileSync(out, Buffer.concat([header, padding]));
-process.stderr.write(\`[npx shim] playwright recording -> \${out}\\n\`);
-process.exit(0);
-`;
 
 export function cleanupTempdir(tempdir: string): void {
   try {
@@ -358,16 +257,25 @@ export async function runReviewer(input: RunReviewerInput): Promise<RunReviewerR
 
   const queryFn: ReviewerQueryFn = input.queryFn ?? (sdkQuery as unknown as ReviewerQueryFn);
 
-  const systemPrompt = buildReviewerSystemPrompt(tempdir);
-  const prompt = renderReviewerUserPrompt({
+  // Stamp the Ralph workspace (PROMPT.md / AGENT.md / fix_plan.md) inside the
+  // worktree so the agent has the same context as the live cycle. The phase
+  // bench tests one iteration of the review-Ralph in isolation — no verdict
+  // gate, no send-back rounds. The agent reads the iteration-1 prompt and
+  // produces the demo bundle + PR draft.
+  const { promptPath } = prepareReviewerWorkspace({
     initiativeId: input.initiativeId,
     manifestRelPath,
     worktreeRelPath,
+    worktreePath,
     projectName: input.projectName,
     projectType: input.projectType,
     qualityGateCmd: input.qualityGateCmd.join(' '),
     isStackedPr: input.isStackedPr,
+    workItems,
   });
+
+  const systemPrompt = buildReviewerSystemPrompt(tempdir);
+  const prompt = readFileSync(promptPath, 'utf8');
 
   const options: Record<string, unknown> = {
     cwd: tempdir,

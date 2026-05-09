@@ -1,0 +1,9 @@
+{
+  "name": "slugifier",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test --experimental-strip-types 'tests/**/*.test.ts'"
+  }
+}

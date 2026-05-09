@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -42,10 +42,15 @@ import {
   REVIEWER_DISALLOWED_TOOLS,
   REVIEWER_MODEL,
   buildReviewerSystemPrompt,
-  renderReviewerUserPrompt,
+  prepareReviewerWorkspace,
   tallyToolUse as tallyReviewerToolUse,
   type ReviewerToolUseSummary,
 } from './reviewer-invocation.ts';
+import {
+  makeReviewerQualityGate,
+  type GetVerdict,
+  type ReviewerGateState,
+} from './reviewer-stage2.ts';
 import { moveTo as moveQueueItem } from './queue.ts';
 import { notify } from './notify.ts';
 import {
@@ -65,12 +70,32 @@ export type CycleInput = {
   worktreePath: string;
   cycleId?: string;
   dryRun?: boolean;
+  /**
+   * Verdict provider for the review-Ralph loop. Production: stdin-prompt
+   * adapter (deferred). Bench: simulator agent. When absent, the review-loop
+   * uses a default that approves on the first call — appropriate for the
+   * per-phase review-loop bench (which only tests stage 1) but NOT for
+   * end-to-end runs (the e2e bench supplies a real simulator).
+   */
+  getVerdict?: GetVerdict;
+  /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
+  qualityGateCmd?: string[];
+  /**
+   * Cap on review-Ralph iterations. 1 prep + N send-back rounds. Default 3
+   * (1 prep + 2 send-backs) per the phase-doc target.
+   */
+  reviewIterationCap?: number;
+  /**
+   * Per-iteration USD cap for the review-Ralph. Default 1.0. The full
+   * Ralph budget = reviewIterationCap × this.
+   */
+  reviewIterationBudgetUsd?: number;
 };
 
 export type CycleResult = {
   cycle_id: string;
   initiative_id: string;
-  status: 'ready-for-review' | 'failed';
+  status: 'merged' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
   duration_ms: number;
   log_path: string;
 };
@@ -90,17 +115,18 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     message: input.dryRun ? 'cycle.start (dry run)' : 'cycle.start',
   });
 
+  let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
   try {
     if (!input.dryRun) {
       await runProjectManager(input, logger);
       await runDeveloperLoop(input, logger);
-      await runReviewer(input, logger);
+      reviewerOutcome = await runReviewer(input, logger);
     }
 
     const result: CycleResult = {
       cycle_id: cycleId,
       initiative_id: input.initiativeId,
-      status: 'ready-for-review',
+      status: reviewerOutcome,
       duration_ms: Date.now() - started,
       log_path: logger.logFilePath,
     };
@@ -505,58 +531,42 @@ function prerequisiteFailed(
 }
 
 /**
- * Defaults for the live reviewer (stage 1, review-prep). One-shot SDK call —
- * the agent reads completed WIs, records a demo, and drafts a PR description.
- * The orchestrator runs the quality gate, opens the real PR via `gh`, moves
- * the manifest to ready-for-review, and fires the notification.
- *
- * Higher per-fixture USD cap than the bench (live worktrees are richer); the
- * bench tightens to 0.6 USD / 50 turns to surface efficiency regressions.
+ * Defaults for the live reviewer Ralph loop. The agent runs as a Ralph loop
+ * on the initiative branch; the orchestrator's quality-gate function calls
+ * `getVerdict` between iterations. On `approve`, the orchestrator merges +
+ * moves the manifest to `_queue/done/` + fires the notification. On
+ * `send-back`, the gate appends feedback to fix_plan.md and the loop
+ * continues. Cap: 3 iterations (1 prep + 2 send-back rounds).
  */
-const REVIEWER_LIVE_MAX_TURNS = 60;
-const REVIEWER_LIVE_MAX_BUDGET_USD = 1.0;
-const PR_DESCRIPTION_REL_PATH = '.forge/pr-description.md';
-const DEMO_DIR_REL_PATH = '.forge/demos';
+const REVIEWER_LIVE_DEFAULT_ITERATIONS = 3;
+const REVIEWER_LIVE_DEFAULT_USD_PER_ITERATION = 1.0;
+const REVIEWER_LIVE_MAX_TURNS_PER_ITERATION = 40;
+const REVIEWER_LIVE_MAX_BUDGET_USD_PER_ITERATION = 0.6;
+
+export type ReviewerOutcome = 'merged' | 'ready-for-review' | 'send-back-cap-exhausted';
 
 /**
  * Infer project type from the worktree contents. Used to give the reviewer
- * agent the right demo-tool default in its user prompt.
+ * agent the right demo-tool default in its iteration prompt.
  */
 function inferProjectType(worktreePath: string): 'browser' | 'cli' | 'lib' | 'rest' {
-  if (existsSync(resolve(worktreePath, 'playwright.config.ts')) ||
-      existsSync(resolve(worktreePath, 'playwright.config.js'))) {
+  if (
+    existsSync(resolve(worktreePath, 'playwright.config.ts')) ||
+    existsSync(resolve(worktreePath, 'playwright.config.js'))
+  ) {
     return 'browser';
   }
   if (existsSync(resolve(worktreePath, 'index.html'))) return 'browser';
-  if (existsSync(resolve(worktreePath, 'openapi.yaml')) ||
-      existsSync(resolve(worktreePath, 'openapi.json'))) {
+  if (
+    existsSync(resolve(worktreePath, 'openapi.yaml')) ||
+    existsSync(resolve(worktreePath, 'openapi.json'))
+  ) {
     return 'rest';
   }
-  if (existsSync(resolve(worktreePath, 'bin')) ||
-      existsSync(resolve(worktreePath, 'cmd'))) {
+  if (existsSync(resolve(worktreePath, 'bin')) || existsSync(resolve(worktreePath, 'cmd'))) {
     return 'cli';
   }
   return 'lib';
-}
-
-/**
- * Run the project's quality gate command. The reviewer agent's claim of
- * "tests pass" is not trusted — the orchestrator re-runs the gate post-agent
- * and refuses to open the PR if it fails. Mirrors the developer-loop's
- * `quality-gates-orchestrator-verified` discipline.
- *
- * Returns true iff the command exits 0 in the worktree.
- */
-function runReviewerQualityGate(worktreePath: string, cmd: string[]): boolean {
-  if (cmd.length === 0) return false;
-  const [head, ...rest] = cmd;
-  if (!head) return false;
-  try {
-    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -578,7 +588,42 @@ function openPullRequest(worktreePath: string, prDescriptionPath: string): strin
   }
 }
 
-async function runReviewer(input: CycleInput, logger: EventLogger): Promise<void> {
+/**
+ * Best-effort `gh pr merge` for the approved PR. Returns true on success.
+ * The PR-create + PR-merge split lets bench-mode use a `gh` shim that
+ * records the operations locally without touching real GitHub.
+ */
+function mergePullRequest(worktreePath: string): boolean {
+  try {
+    execFileSync('gh', ['pr', 'merge', '--merge', '--delete-branch'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+    return true;
+  } catch (err) {
+    // Surface the stderr for diagnostic visibility — the orchestrator's
+    // event-log captures this via the merge-failed event_type.
+    const e = err as { stderr?: Buffer | string };
+    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
+    if (stderr) process.stderr.write(`[mergePullRequest] ${stderr}\n`);
+    return false;
+  }
+}
+
+/**
+ * Default verdict-provider used when CycleInput.getVerdict is omitted. The
+ * per-phase review-loop bench (which only tests stage 1) omits getVerdict —
+ * we approve immediately so the loop terminates after iteration 1, matching
+ * the prior closure's behaviour. Production / e2e bench supplies a real
+ * verdict-provider.
+ */
+const defaultGetVerdict: GetVerdict = async () => ({
+  kind: 'approve',
+  rationale:
+    'default verdict-provider — supply CycleInput.getVerdict to drive stage 2 properly.',
+});
+
+async function runReviewer(input: CycleInput, logger: EventLogger): Promise<ReviewerOutcome> {
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'review-loop',
@@ -590,99 +635,139 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<void
 
   const forgeRoot = resolve(import.meta.dirname, '..');
   const projectType = inferProjectType(input.worktreePath);
-  // Default quality gate: prefer `npm test` if package.json present, else
-  // a no-op `true` so the reviewer at least drafts the PR. Operators wire
-  // project-specific gates in the future via initiative-manifest metadata.
   const qualityGateCmd =
-    existsSync(resolve(input.worktreePath, 'package.json'))
-      ? ['npm', 'test']
-      : ['true'];
+    input.qualityGateCmd ??
+    (existsSync(resolve(input.worktreePath, 'package.json')) ? ['npm', 'test'] : ['true']);
+  const iterationCap = input.reviewIterationCap ?? REVIEWER_LIVE_DEFAULT_ITERATIONS;
+  const usdBudget =
+    input.reviewIterationBudgetUsd ?? REVIEWER_LIVE_DEFAULT_USD_PER_ITERATION;
 
-  const systemPrompt = buildReviewerSystemPrompt(forgeRoot);
-  const prompt = renderReviewerUserPrompt({
+  // Read the completed work items the reviewer will be reviewing.
+  const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
+  const { items: workItems } = readWorkItemsFromDir(workItemsDir);
+
+  // Wipe the dev-loop's leftover PROMPT.md / AGENT.md / fix_plan.md before
+  // stamping the reviewer's. The dev-loop's stamps are per-WI scratch state
+  // for THAT phase; the review-Ralph is a different mission with a different
+  // iteration prompt. Without this, prepareReviewerWorkspace's idempotency
+  // would leave the agent reading stale dev-loop content and hallucinating
+  // its role.
+  for (const f of ['PROMPT.md', 'AGENT.md', 'fix_plan.md']) {
+    const p = resolve(input.worktreePath, f);
+    if (existsSync(p)) {
+      try {
+        unlinkSync(p);
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
+  // Stamp PROMPT.md / AGENT.md / fix_plan.md into the worktree.
+  const { promptPath, agentMdPath, fixPlanPath } = prepareReviewerWorkspace({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
     worktreeRelPath: input.worktreePath,
+    worktreePath: input.worktreePath,
     projectName: basename(input.worktreePath),
     projectType,
     qualityGateCmd: qualityGateCmd.join(' '),
     isStackedPr: false,
+    workItems,
   });
 
-  const options: Record<string, unknown> = {
-    cwd: forgeRoot,
-    systemPrompt,
-    model: REVIEWER_MODEL,
-    permissionMode: 'acceptEdits',
-    allowedTools: REVIEWER_ALLOWED_TOOLS,
-    disallowedTools: REVIEWER_DISALLOWED_TOOLS,
-    maxTurns: REVIEWER_LIVE_MAX_TURNS,
-    maxBudgetUsd: REVIEWER_LIVE_MAX_BUDGET_USD,
-  };
-
+  // Build the SDK agent invocation closure that Ralph calls each iteration.
   const toolUseSummary: ReviewerToolUseSummary = {
     brainReads: 0,
     writes: 0,
     bashCalls: 0,
     recorderInvocations: 0,
   };
-  let costUsd = 0;
-  let durationMs = 0;
-  let resultSubtype: string | undefined;
 
-  for await (const msg of sdkQuery({ prompt, options }) as AsyncIterable<unknown>) {
-    if (typeof msg !== 'object' || msg === null) continue;
-    const m = msg as {
-      type?: string;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
-      subtype?: string;
-      total_cost_usd?: number;
-      duration_ms?: number;
-    };
-    if (m.type === 'assistant') {
-      tallyReviewerToolUse(m.message, toolUseSummary);
-      continue;
-    }
-    if (m.type !== 'result') continue;
-    if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
-    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
-    resultSubtype = m.subtype ?? 'success';
-    break;
-  }
-
-  for (let i = 0; i < toolUseSummary.brainReads; i++) {
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'review-loop',
-      skill: 'reviewer',
-      event_type: 'tool_use',
-      input_refs: ['brain/'],
-      output_refs: [],
-      message: 'reviewer.brain-query',
-    });
-  }
-
-  // Orchestrator-verified quality gate. The reviewer's claim is not trusted.
-  const qualityGatesPassed = runReviewerQualityGate(input.worktreePath, qualityGateCmd);
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'review-loop',
-    skill: 'reviewer',
-    event_type: 'log',
-    input_refs: [input.worktreePath],
-    output_refs: [],
-    message: 'reviewer.quality-gates-checked',
-    metadata: { passed: qualityGatesPassed, command: qualityGateCmd.join(' ') },
+  const systemPrompt = buildReviewerSystemPrompt(forgeRoot);
+  const tallyingQueryFn: QueryFn = ({ prompt, options }) => {
+    const inner = sdkQuery({ prompt, options }) as AsyncIterable<unknown>;
+    return (async function* () {
+      for await (const msg of inner) {
+        const m = msg as {
+          type?: string;
+          message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        };
+        if (m.type === 'assistant') {
+          tallyReviewerToolUse(m.message, toolUseSummary);
+        }
+        yield msg;
+      }
+    })();
+  };
+  const agent = createClaudeAgent({
+    model: REVIEWER_MODEL,
+    allowedTools: [...REVIEWER_ALLOWED_TOOLS],
+    disallowedTools: [...REVIEWER_DISALLOWED_TOOLS],
+    permissionMode: 'acceptEdits',
+    systemPrompt,
+    maxTurnsPerIteration: REVIEWER_LIVE_MAX_TURNS_PER_ITERATION,
+    maxBudgetUsdPerIteration: REVIEWER_LIVE_MAX_BUDGET_USD_PER_ITERATION,
+    queryFn: tallyingQueryFn,
   });
 
-  const prDescriptionPath = resolve(input.worktreePath, PR_DESCRIPTION_REL_PATH);
-  const demoDir = resolve(input.worktreePath, DEMO_DIR_REL_PATH, input.initiativeId);
-  const prDraftWritten = existsSync(prDescriptionPath);
-  const demoBundlePresent = existsSync(demoDir);
+  // Build the orchestrator-side verdict gate.
+  const gateState: ReviewerGateState = {
+    invocations: 0,
+    verdicts: [],
+    qualityGateResults: [],
+  };
+  const qualityGate = makeReviewerQualityGate(
+    {
+      initiativeId: input.initiativeId,
+      worktreePath: input.worktreePath,
+      manifestPath: input.manifestPath,
+      workItems,
+      fixPlanPath,
+      agentMdPath,
+      qualityGateCmd,
+    },
+    input.getVerdict ?? defaultGetVerdict,
+    gateState,
+  );
 
-  if (prDraftWritten) {
+  // Drive the review-Ralph loop. workItemSpecPath is unused by reviewer-Ralph
+  // (we don't have a single WI; the manifest references the whole set), so we
+  // hand promptPath as a stand-in — Ralph's runner only reads it for
+  // template-stamping fallbacks, and prepareReviewerWorkspace already stamped
+  // PROMPT.md so the runner's fallback path won't be taken.
+  let loopResult: LoopResult;
+  try {
+    loopResult = await runRalph(
+      {
+        workItemSpecPath: promptPath, // unused; PROMPT.md already exists
+        worktreePath: input.worktreePath,
+        initiativeBudget: { iterations: iterationCap, usd: usdBudget * iterationCap },
+        brainQueryResults:
+          '_(seeded by skill step 1; v1 leaves this empty — the agent has the brain index in its system prompt and can Read themes itself during iteration 1.)_',
+        cycleId: 'live',
+        initiativeId: input.initiativeId,
+        qualityGate,
+      },
+      agent,
+    );
+  } catch (err) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'reviewer',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'reviewer.crashed',
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+    throw err;
+  }
+
+  // Emit per-verdict events post-loop.
+  for (const verdict of gateState.verdicts) {
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -690,51 +775,73 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<void
       skill: 'reviewer',
       event_type: 'log',
       input_refs: [input.worktreePath],
-      output_refs: [prDescriptionPath],
-      message: 'reviewer.pr-description-emitted',
-      metadata: { bytes: statSync(prDescriptionPath).size },
-    });
-  }
-  if (demoBundlePresent) {
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'review-loop',
-      skill: 'reviewer',
-      event_type: 'log',
-      input_refs: [input.worktreePath],
-      output_refs: [demoDir],
-      message: 'reviewer.demo-recorded',
+      output_refs: [],
+      message: verdict.kind === 'approve' ? 'reviewer.verdict.approve' : 'reviewer.verdict.send-back',
+      metadata: {
+        rationale: verdict.rationale,
+        feedback_count: verdict.kind === 'send-back' ? verdict.feedback.length : 0,
+      },
     });
   }
 
-  // Side-effecting work — only proceeds when both gates are green AND a PR
-  // draft was written. Anything else is a failed review-prep.
-  const failed = !qualityGatesPassed || !prDraftWritten;
+  const lastVerdict = gateState.verdicts.at(-1);
+  const approved = lastVerdict?.kind === 'approve' && loopResult.status === 'complete';
+
+  let outcome: ReviewerOutcome;
   let prUrl: string | null = null;
 
-  if (!failed) {
+  if (approved) {
+    // Open the PR (best-effort) and immediately merge.
+    const prDescriptionPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
     prUrl = openPullRequest(input.worktreePath, prDescriptionPath);
-    if (prUrl) {
+    const merged = mergePullRequest(input.worktreePath);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'reviewer',
+      event_type: merged ? 'log' : 'error',
+      input_refs: [prDescriptionPath],
+      output_refs: prUrl ? [prUrl] : [],
+      message: merged ? 'reviewer.merged' : 'reviewer.merge-failed',
+      metadata: { url: prUrl, merged, pr_created: prUrl !== null },
+    });
+
+    if (!merged) {
+      // gh merge failed — leave the manifest in in-flight, treat as ready-for-review.
+      // Operator can pick up via the production CLI (or a follow-up cycle).
+      try {
+        moveQueueItem(basename(input.manifestPath), 'ready-for-review');
+      } catch {
+        /* best-effort */
+      }
       logger.emit({
         initiative_id: input.initiativeId,
         parent_event_id: start.event_id,
         phase: 'review-loop',
         skill: 'reviewer',
-        event_type: 'log',
-        input_refs: [prDescriptionPath],
-        output_refs: [prUrl],
-        message: 'reviewer.pr-opened',
-        metadata: { url: prUrl },
+        event_type: 'end',
+        input_refs: [input.worktreePath],
+        output_refs: prUrl ? [prUrl] : [],
+        duration_ms: loopResult.duration_ms,
+        cost_usd: loopResult.cost_usd,
+        metadata: {
+          outcome: 'ready-for-review',
+          iterations: loopResult.iterations,
+          stop_reason: loopResult.stop_reason,
+          gate_invocations: gateState.invocations,
+          verdicts_summary: gateState.verdicts.map((v) => v.kind),
+          tool_use: toolUseSummary,
+          pr_url: prUrl,
+          merge_failed: true,
+        },
       });
+      return 'ready-for-review';
     }
 
-    // Move manifest from in-flight to ready-for-review and fire the
-    // notification (per ADR 013). Best-effort — failures here surface in the
-    // event log rather than blocking the cycle.
+    // Move manifest to _queue/done/ and fire notification.
     try {
-      const manifestFilename = basename(input.manifestPath);
-      moveQueueItem(manifestFilename, 'ready-for-review');
+      moveQueueItem(basename(input.manifestPath), 'done');
     } catch (err) {
       logger.emit({
         initiative_id: input.initiativeId,
@@ -754,24 +861,38 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<void
         {
           type: 'review-ready',
           title: input.initiativeId,
-          body: prUrl ? `PR ready: ${prUrl}` : 'PR draft ready in .forge/pr-description.md',
+          body: prUrl ? `Merged: ${prUrl}` : 'Initiative merged to main',
           url: prUrl ?? undefined,
-          metadata: { initiative_id: input.initiativeId },
+          metadata: { initiative_id: input.initiativeId, outcome: 'merged' },
         },
         { desktop: true, webhook_url: null },
       );
-      logger.emit({
-        initiative_id: input.initiativeId,
-        parent_event_id: start.event_id,
-        phase: 'review-loop',
-        skill: 'reviewer',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'reviewer.notify-sent',
-      });
     } catch {
-      // notify() is already best-effort; nothing to do.
+      /* best-effort */
+    }
+    outcome = 'merged';
+  } else if (loopResult.stop_reason === 'iteration-budget') {
+    outcome = 'send-back-cap-exhausted';
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'reviewer',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'reviewer.send-back-cap-exhausted',
+      metadata: { rounds: gateState.invocations },
+    });
+  } else {
+    // Loop ended without approval AND not via iteration budget — wedged or
+    // another stop condition. Treat as ready-for-review (PR draft exists but
+    // not approved); operator can pick up manually.
+    outcome = 'ready-for-review';
+    try {
+      moveQueueItem(basename(input.manifestPath), 'ready-for-review');
+    } catch {
+      /* best-effort */
     }
   }
 
@@ -780,30 +901,28 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<void
     parent_event_id: start.event_id,
     phase: 'review-loop',
     skill: 'reviewer',
-    event_type: failed ? 'error' : 'end',
+    event_type: outcome === 'send-back-cap-exhausted' ? 'error' : 'end',
     input_refs: [input.worktreePath],
-    output_refs: prUrl ? [prUrl, demoDir] : [demoDir],
-    duration_ms: durationMs,
-    cost_usd: costUsd,
+    output_refs: prUrl ? [prUrl] : [input.worktreePath],
+    duration_ms: loopResult.duration_ms,
+    cost_usd: loopResult.cost_usd,
     metadata: {
-      result_subtype: resultSubtype,
+      outcome,
+      iterations: loopResult.iterations,
+      stop_reason: loopResult.stop_reason,
+      gate_invocations: gateState.invocations,
+      verdicts_summary: gateState.verdicts.map((v) => v.kind),
       tool_use: toolUseSummary,
-      quality_gates_passed: qualityGatesPassed,
-      pr_draft_written: prDraftWritten,
-      demo_bundle_present: demoBundlePresent,
       pr_url: prUrl,
     },
   });
 
-  if (failed) {
-    const reasons = [
-      !qualityGatesPassed ? `quality gates failed (${qualityGateCmd.join(' ')})` : null,
-      !prDraftWritten ? 'pr-description.md not written' : null,
-    ]
-      .filter((s): s is string => s !== null)
-      .join('; ');
-    throw new Error(`reviewer phase failed: ${reasons}`);
+  if (outcome === 'send-back-cap-exhausted') {
+    throw new Error(
+      `reviewer phase failed: send-back cap exhausted after ${gateState.invocations} rounds`,
+    );
   }
+  return outcome;
 }
 
 function newCycleId(initiativeId: string): string {

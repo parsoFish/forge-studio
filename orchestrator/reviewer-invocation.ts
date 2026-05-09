@@ -14,10 +14,11 @@
  * review + send-back loop) is implemented separately.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { loadBrainIndex } from './brain-index.ts';
+import type { WorkItem } from './work-item.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'reviewer', 'SKILL.md');
@@ -78,23 +79,41 @@ export function buildReviewerSystemPrompt(brainCwd: string): string {
     '',
     '---',
     '',
-    '# Reviewer discipline (stage 1 only)',
+    '# Review-loop Ralph discipline',
     '',
-    'You are running non-interactively in stage 1 (review-prep). Your job has exactly two outputs:',
+    'You are inside a **Ralph loop** running on the initiative branch. Each call to you is **one iteration**. The loop carries state via three worktree files you must read at the start of every iteration:',
     '',
-    '1. A demo bundle at `<worktree>/.forge/demos/<initiative-id>/` (source script + recording + README).',
-    '2. A PR description draft at `<worktree>/.forge/pr-description.md`.',
+    '- **`PROMPT.md`** — the per-iteration brief (initiative ID, manifest path, demo tool, iteration counter).',
+    '- **`AGENT.md`** — institutional memory across iterations and prior verdicts (each round\'s verdict appended). Read first, update last.',
+    '- **`fix_plan.md`** — checklist of work for *this* iteration. **Iteration 1**: empty (your job is to prepare the demo + PR draft from scratch). **Iterations 2+**: contains a `## Round N send-back` section the previous reviewer-verdict appended — you must address every unchecked item under that header.',
     '',
-    'You do **not** call `gh pr create`, you do **not** move queue files, you do **not** fire notifications. Those are orchestrator-side actions that run after you exit.',
+    '**Iteration N body:**',
+    '1. Read `PROMPT.md`, `AGENT.md`, `fix_plan.md`.',
+    '2. **If fix_plan.md has unchecked send-back items**: edit the code to satisfy them. Run quality gates. Re-record the demo (the source script may need new lines exercising the new ACs). Re-draft `pr-description.md` to reflect the new state. Tick the items.',
+    '3. **If fix_plan.md is empty (iteration 1)**: prepare the initial demo bundle + `pr-description.md`. Run quality gates first; do NOT write `pr-description.md` if gates fail.',
+    '4. Commit changes with conventional-commits messages.',
+    '5. Update `AGENT.md` with what you tried this iteration.',
     '',
-    'Hard rules (enforced by the bench):',
-    '- **Quality gates first.** Run the project quality gate command before drafting `pr-description.md`. If gates fail, do NOT write `pr-description.md`. Update `AGENT.md` with the failure state and exit. The bench fails any run that ships a PR draft against red gates.',
-    '- **Demo tool selection.** Browser/canvas/DOM rendering → Playwright (write `source.spec.ts`, run `npx playwright test --trace=on` to produce `recording.trace.zip`). Everything else (Python lib, bash, REST via curl, terminal apps) → VHS (write `source.tape`, run `vhs source.tape -o recording.mp4`). VHS is the default; Playwright is the exception.',
-    '- **Demo source must reference each WI\'s acceptance-criterion `then`-clause keywords textually.** A 5-second video of a black canvas fails the rubric. The bench greps the source file for AC keywords; make those keywords appear as commands, expected output, or assertion text.',
-    '- **PR description sections (in this order, all required):** `## Why` (≥ 50 chars, the load-bearing section), `## What`, `## How`, `## Demo`. Total body length ≥ 300 chars. Three-line PR descriptions are rejected.',
-    '- **Squash-merge stacked PRs is forbidden** ([brain theme](brain/forge/themes/squash-merge-stacked-prs.md)). If your PR has parent PRs, include a `Parents:` block in the body — the orchestrator will use `--merge`, not `--squash`.',
-    '- **Brain-first.** Query the brain before researching elsewhere. The brain has documentation on demo recording tools, PR descriptions, merge strategy, and project-specific conventions.',
-    '- **No web tools.** `WebFetch` and `WebSearch` are disabled. If you need information, the brain has it.',
+    'Outputs (every iteration):',
+    '- Demo bundle at `<worktree>/.forge/demos/<initiative-id>/` (source script + recording + README.md)',
+    '- PR draft at `<worktree>/.forge/pr-description.md` (Why / What / How / Demo sections; body ≥ 300 chars; Why ≥ 50 chars)',
+    '',
+    '**The orchestrator decides when to stop, not you.** Between your iterations the orchestrator:',
+    '1. Re-runs the project quality gate (orchestrator-verified — never trusts your claim).',
+    '2. Asks the reviewer (human in production; simulator agent in bench) for a verdict: `approve` | `send-back: <feedback>`.',
+    '3. On `approve` → loop ends, orchestrator merges + moves manifest to `_queue/done/`.',
+    '4. On `send-back` → feedback is appended to `fix_plan.md` as new unchecked ACs; you start the next iteration.',
+    '',
+    'Hard rules:',
+    '- **Quality gates first.** Run the project quality gate command before drafting/refreshing `pr-description.md`. If gates fail, fix them in this iteration; do NOT write `pr-description.md` until they pass.',
+    '- **Demo tool selection.** Browser/canvas/DOM rendering → Playwright (write `source.spec.ts`, run `npx playwright test --trace=on`). Everything else → VHS (write `source.tape`, run `vhs source.tape -o recording.mp4`). VHS is the default; Playwright is the exception.',
+    '- **Demo source must reference each WI\'s acceptance-criterion `then`-clause keywords textually**, plus any send-back ACs from `fix_plan.md`.',
+    '- **PR description sections (in this order, all required):** `## Why` (≥ 50 chars), `## What`, `## How`, `## Demo`. Total body ≥ 300 chars.',
+    '- **Squash-merge stacked PRs is forbidden** (brain theme `squash-merge-stacked-prs`). Include a `Parents:` block if stacked.',
+    '- **Brain-first.** Query the brain before researching elsewhere.',
+    '- **No `gh pr create`, no `gh pr merge`.** The orchestrator owns those. You write the artifacts; the orchestrator opens and merges the PR after the verdict.',
+    '- **No queue mutation.** `_queue/` is read-only for you. The orchestrator moves the manifest after approval.',
+    '- **No web tools.** `WebFetch` and `WebSearch` are disabled.',
   ].join('\n');
 }
 
@@ -118,9 +137,9 @@ export type ReviewerUserPromptInput = {
 };
 
 /**
- * Render the per-cycle / per-fixture user prompt the SDK sends to the agent.
- * Tells the agent the cwd-relative paths, the quality gate command, and
- * reiterates the stage-1 contract.
+ * Render the per-iteration prompt body the agent reads at the start of each
+ * Ralph iteration (stamped into PROMPT.md on iteration 1; the runner re-reads
+ * it each iteration). Iteration 1 = prep work; iterations 2+ react to fix_plan.md.
  */
 export function renderReviewerUserPrompt(input: ReviewerUserPromptInput): string {
   const demoTool = input.projectType === 'browser' ? 'Playwright' : 'VHS';
@@ -133,43 +152,152 @@ export function renderReviewerUserPrompt(input: ReviewerUserPromptInput): string
       : 'vhs source.tape -o recording.mp4';
 
   return [
-    '# Reviewer invocation — stage 1 (review-prep)',
+    '# Review-loop iteration brief',
     '',
-    `## Initiative: ${input.initiativeId}`,
-    `## Project: ${input.projectName} (\`${input.projectType}\`)`,
+    `> Initiative: **${input.initiativeId}** · Project: **${input.projectName}** (\`${input.projectType}\`) · Demo tool: **${demoTool}**`,
     '',
     '## Inputs',
     '',
     `- Initiative manifest: \`${input.manifestRelPath}\` (read this first, after the brain queries).`,
-    `- Worktree: \`${input.worktreeRelPath}/\` — every work item should be at \`status: complete\`. Read \`${input.worktreeRelPath}/.forge/work-items/WI-*.md\` for acceptance criteria; the demo source must reference each WI's \`then\`-clause keywords.`,
+    `- Worktree: \`${input.worktreeRelPath}/\` — every WI in \`.forge/work-items/\` should be at \`status: complete\`.`,
     `- Quality gate command: \`${input.qualityGateCmd}\` (run from the worktree).`,
+    '- `fix_plan.md` — your iteration backlog. **Iteration 1**: empty (no send-back yet). **Iterations 2+**: contains a `## Round N send-back` section with unchecked ACs you must address.',
+    '- `AGENT.md` — institutional memory + prior round verdicts.',
     '',
-    '## Step-by-step',
+    '## What to do this iteration',
     '',
-    '1. **Brain query first.** Always-relevant themes: `squash-merge-stacked-prs`, `layered-merge-order`, `markdown-artifact-flow`. Then read the project-specific reviewer themes under `brain/projects/<project>/`.',
-    `2. Confirm every WI in \`${input.worktreeRelPath}/.forge/work-items/\` is at \`status: complete\`. If any is not, stop and report — do not proceed.`,
-    `3. Run the quality gate: \`${input.qualityGateCmd}\`. Capture the exit code.`,
-    '4. **If gates fail:** update `AGENT.md` with the failure, do NOT write `pr-description.md`, do NOT record a demo, exit. The bench will score this run as gates-red.',
-    '5. **If gates pass:**',
-    `   a. Decide the demo tool. This project is \`${input.projectType}\` → use **${demoTool}**.`,
-    `   b. Write \`${input.worktreeRelPath}/.forge/demos/${input.initiativeId}/${sourceFile}\`. Reference each WI's acceptance-criterion \`then\`-clause keywords textually (as commands, expected output, or assertions).`,
-    `   c. Run the recorder: \`cd ${input.worktreeRelPath}/.forge/demos/${input.initiativeId} && ${recordCmd}\` to produce \`${recordingFile}\`.`,
-    `   d. Write \`${input.worktreeRelPath}/.forge/demos/${input.initiativeId}/README.md\` (one paragraph: what the demo shows, prereqs to re-record, expected outcome).`,
-    `   e. Compose \`${input.worktreeRelPath}/.forge/pr-description.md\` with all four required sections (\`## Why\`, \`## What\`, \`## How\`, \`## Demo\`). Why ≥ 50 chars; total body ≥ 300 chars. The Demo section must include a markdown link to the recording file.`,
+    '1. **Read AGENT.md and fix_plan.md first.** This tells you whether you\'re prepping (iter 1) or refining (iter 2+).',
+    '2. **Brain query** if you haven\'t already (results recorded in AGENT.md). Always-relevant themes: `squash-merge-stacked-prs`, `layered-merge-order`, `markdown-artifact-flow`.',
+    '3. **If fix_plan.md has unchecked send-back items** (iteration 2+): edit the project code to satisfy each item. Tests for the new ACs go alongside existing ones. After fixing, tick the items in fix_plan.md.',
+    `4. **Run the quality gate**: \`${input.qualityGateCmd}\`. If it fails, fix the project code until green. Do NOT skip this — the orchestrator re-runs it between iterations and won\'t ask for a verdict if it\'s red.`,
+    '5. **Record / re-record the demo.**',
+    `   - Source: \`${input.worktreeRelPath}/.forge/demos/${input.initiativeId}/${sourceFile}\`.`,
+    `   - The source MUST textually reference each WI\'s acceptance-criterion \`then\`-clause keywords AND any send-back ACs from fix_plan.md (commands, expected output, or assertion text).`,
+    `   - Run \`${recordCmd}\` from the demo directory to produce \`${recordingFile}\` (≥ 50 KB).`,
+    `   - Write/refresh the demo \`README.md\` (one paragraph: what the demo shows, prereqs, expected outcome).`,
+    `6. **Draft / refresh \`${input.worktreeRelPath}/.forge/pr-description.md\`.** All four sections required: \`## Why\` (≥ 50 chars), \`## What\`, \`## How\`, \`## Demo\` (markdown link to the recording). Total body ≥ 300 chars.`,
     input.isStackedPr
-      ? '   f. **This is a stacked PR.** Include a `Parents:` block in the PR body listing parent PR/branch names. The orchestrator will merge with `--merge`, not `--squash`.'
+      ? '   - **Stacked PR**: include a `Parents:` block in the body listing parent PR/branch names.'
       : '',
+    '7. **Commit** any code/demo/PR-description changes with conventional-commits messages.',
+    '8. **Update AGENT.md** with what you tried this iteration (one paragraph max).',
     '',
     '## Constraints',
     '',
-    '- Do **not** call `gh pr create`. The orchestrator does that after you exit.',
+    '- Do **not** call `gh pr create` or `gh pr merge`. The orchestrator owns those.',
     '- Do **not** move queue files in `_queue/`. Read-only for you.',
-    '- Do **not** fire notifications. Orchestrator-side.',
-    '- Do **not** modify `<worktree>/.forge/work-items/WI-*.md` — they are the developer-loop\'s output, you read them.',
-    '- Stop after writing the demo bundle and `pr-description.md`. There is no further loop.',
+    '- Do **not** modify WI specs in `.forge/work-items/` (those are the developer-loop\'s contract; review feedback lives in fix_plan.md instead).',
+    '- After completing this iteration, **stop**. The orchestrator runs the gate, asks for a verdict, and either stops the loop or schedules iteration N+1 with new fix_plan.md content.',
   ]
     .filter((line) => line !== '')
     .join('\n');
+}
+
+// ---------- Ralph workspace setup ----------
+
+export type PrepareReviewerWorkspaceInput = {
+  initiativeId: string;
+  /** Worktree-relative manifest path used in the iteration prompt header. */
+  manifestRelPath: string;
+  /** Worktree-relative worktree path (usually '.'). */
+  worktreeRelPath: string;
+  /** Absolute path to the worktree the agent runs in. */
+  worktreePath: string;
+  projectName: string;
+  projectType: 'browser' | 'cli' | 'lib' | 'rest';
+  qualityGateCmd: string;
+  isStackedPr: boolean;
+  /** Already-completed work items the reviewer is reviewing. */
+  workItems: WorkItem[];
+  /** Brain-query results to seed AGENT.md with. v1 leaves this empty. */
+  brainQueryResults?: string;
+};
+
+export type PreparedReviewerWorkspace = {
+  promptPath: string;
+  agentMdPath: string;
+  fixPlanPath: string;
+};
+
+/**
+ * Stamp PROMPT.md, AGENT.md, and fix_plan.md into the worktree from the
+ * reviewer iteration template. Idempotent — does not overwrite already-stamped
+ * files. Mirrors `prepareDevWorkspace()` in dev-invocation.ts.
+ *
+ * fix_plan.md starts empty (no send-back yet); the orchestrator's
+ * verdict-gate appends `## Round N send-back` sections between iterations.
+ */
+export function prepareReviewerWorkspace(
+  input: PrepareReviewerWorkspaceInput,
+): PreparedReviewerWorkspace {
+  const promptPath = join(input.worktreePath, 'PROMPT.md');
+  const agentMdPath = join(input.worktreePath, 'AGENT.md');
+  const fixPlanPath = join(input.worktreePath, 'fix_plan.md');
+
+  if (!existsSync(promptPath)) {
+    const prompt = renderReviewerUserPrompt({
+      initiativeId: input.initiativeId,
+      manifestRelPath: input.manifestRelPath,
+      worktreeRelPath: input.worktreeRelPath,
+      projectName: input.projectName,
+      projectType: input.projectType,
+      qualityGateCmd: input.qualityGateCmd,
+      isStackedPr: input.isStackedPr,
+    });
+    writeFileSync(promptPath, prompt);
+  }
+
+  if (!existsSync(agentMdPath)) {
+    const brainBlock =
+      (input.brainQueryResults ?? '').trim() ||
+      '_(no brain context seeded — read theme files yourself if needed; the system prompt has the navigation index.)_';
+    const wiSummary = input.workItems
+      .map(
+        (wi) =>
+          `- **${wi.work_item_id}** (${wi.status}): ${wi.acceptance_criteria.length} acceptance criteria; files in scope: ${wi.files_in_scope.map((f) => `\`${f}\``).join(', ')}`,
+      )
+      .join('\n');
+    writeFileSync(
+      agentMdPath,
+      [
+        `# Review-Loop Agent Memory — ${input.initiativeId}`,
+        '',
+        '> Institutional memory across review-Ralph iterations. Read at the start of every iteration; updated at the end. Verdict outcomes are appended automatically by the orchestrator after each round.',
+        '',
+        '## Brain context (loaded at iteration 1)',
+        '',
+        brainBlock,
+        '',
+        '## Work items being reviewed',
+        '',
+        wiSummary || '_(no work items found — investigate)_',
+        '',
+        '## What I tried',
+        '',
+        '_(updated by each iteration — most recent at the top)_',
+        '',
+        '## Verdicts',
+        '',
+        '_(appended by the orchestrator after each round)_',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  if (!existsSync(fixPlanPath)) {
+    writeFileSync(
+      fixPlanPath,
+      [
+        '# Fix Plan — review-loop iterations',
+        '',
+        '> Iteration 1: empty (your job is to prepare the demo + PR draft from scratch).',
+        '> Iterations 2+: the orchestrator appends `## Round N send-back` sections here after a send-back verdict; address every unchecked AC under those headers.',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  return { promptPath, agentMdPath, fixPlanPath };
 }
 
 /** Tool-use telemetry surfaced by both the bench and the live cycle. */

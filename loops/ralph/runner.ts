@@ -31,11 +31,13 @@ export type LoopInput = {
   initiativeId: string;
   /**
    * Per-cycle quality-gate function. Called between iterations; a return of
-   * true exits the loop with status 'complete'. Defaults to
-   * `() => defaultQualityGates(worktreePath)` (shells `npm test --silent`).
-   * The bench harness injects per-fixture commands (pytest / bats / etc.).
+   * true exits the loop with status 'complete'. May be sync or async — the
+   * review-loop's gate calls a verdict-provider that may invoke an SDK call.
+   * Defaults to `() => defaultQualityGates(worktreePath)` (shells `npm test
+   * --silent`). The bench harness injects per-fixture commands (pytest / bats
+   * / etc.).
    */
-  qualityGate?: () => boolean;
+  qualityGate?: () => boolean | Promise<boolean>;
 };
 
 export type LoopResult = {
@@ -105,7 +107,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
   };
 
   for (;;) {
-    const stop = checkStopConditions(state, conditions, qualityGate);
+    const stop = await checkStopConditions(state, conditions, qualityGate);
     if (stop.stop) {
       return finalize(state, startedAt, stop.condition, agentMdPath, fixPlanPath);
     }

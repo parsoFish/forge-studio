@@ -1,0 +1,22 @@
+{
+  "manifest_ac_command": ["npm", "test", "--silent"],
+  "non_functional_checks": [
+    {
+      "description": "edge case: empty input handled in tests",
+      "command": ["bash", "-c", "grep -i -E '(empty|\\\"\\\"|\\\\(\\\\)\\\\.eq|return \\\"\\\")' tests/slugify.test.ts >/dev/null"]
+    },
+    {
+      "description": "edge case: emoji or non-Latin scripts handled in tests",
+      "command": ["bash", "-c", "grep -i -E '(emoji|non.?latin|unicode|cyrillic|chinese|🎉|你)' tests/slugify.test.ts >/dev/null"]
+    },
+    {
+      "description": "implementation collapses consecutive separators",
+      "command": ["bash", "-c", "grep -i -E '(consecutive|repeated|collapse|/-+/g|/-{2,}/g|/[^a-z0-9]+/g)' src/slugify.ts >/dev/null"]
+    },
+    {
+      "description": "implementation normalises Latin accents",
+      "command": ["bash", "-c", "grep -i -E '(normalize|nfd|nfkd|diacritic|accent|combining)' src/slugify.ts >/dev/null"]
+    }
+  ],
+  "required_pr_signals": ["why", "edge case", "demo"]
+}

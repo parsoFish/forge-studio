@@ -14,6 +14,79 @@ Types: `ingest`, `create-theme`, `update-theme`, `lint`, `structural`, `seed`.
 
 ---
 
+## [2026-05-09] structural | review-loop closed end-to-end (Ralph-shaped) + e2e bench landed (1/1 pass)
+
+**Outcome:** stages 1+2 of the review-loop now run as a single Ralph loop on the initiative branch, with a verdict-gate-based stop condition. The autonomous portion of the pipeline (PM → developer-loop → review-Ralph → merge) has its first integration bench, scored 1/1 on a `slugifier-basic` fixture. Total iteration spend: **~$10.57** across 7 passes (+ a per-phase review-loop re-run at $2.55 to verify no regression).
+
+**Architecture shift:** the prior closure shipped review stage 1 as a one-shot SDK call. Per the user's reframe, stage 1 + stage 2 collapse into a single review-Ralph runner — same generic `loops/ralph/runner.ts` that the dev-loop uses, parameterised by:
+- **System prompt** = reviewer SKILL.md + Ralph-discipline notes
+- **Iteration body** = "if `fix_plan.md` has unchecked send-back items, fix code & re-record demo & refresh PR; else (iter 1) prepare initial demo + PR draft"
+- **Quality gate** = orchestrator-verified project gate **+** a verdict-provider call (`getVerdict`)
+- **Iteration cap** = 3 (1 prep + ≤2 send-back rounds)
+
+The verdict-provider is an injectable function — production: stdin prompt (deferred CLI); bench: simulator agent. Send-back feedback lands in `fix_plan.md` (Ralph-style state), NOT appended to WI specs (those are the dev-loop's contract from PM time).
+
+**Suites & runners:**
+- [`orchestrator/reviewer-stage2.ts`](../orchestrator/reviewer-stage2.ts) — stage-2 building blocks. `Verdict` / `VerdictContext` / `GetVerdict` types, `appendSendBackFeedback()` (writes Round-N blocks to fix_plan.md), `makeReviewerQualityGate()` (gate factory; runs project gate, asks getVerdict, dispatches feedback). 11 unit tests.
+- [`orchestrator/reviewer-invocation.ts`](../orchestrator/reviewer-invocation.ts) — extended with `prepareReviewerWorkspace()` (mirror of `prepareDevWorkspace`), Ralph-aware iteration prompt, system-prompt notes about iteration discipline.
+- [`skills/reviewer/SKILL.md`](../skills/reviewer/SKILL.md) — rewritten from "stage 1 only" to Ralph-loop reviewer.
+- [`orchestrator/cycle.ts:runReviewer()`](../orchestrator/cycle.ts) — replaced one-shot SDK call with `runRalph` invocation. Wipes leftover dev-loop PROMPT.md/AGENT.md/fix_plan.md before stamping reviewer's (the dev-loop and review-Ralph share the same workspace files; without the wipe, the reviewer reads stale dev-loop content).
+- [`benchmarks/_lib/recorder-shims.ts`](../benchmarks/_lib/recorder-shims.ts) — extracted VHS/NPX shim writers from review-loop SDK so the e2e bench reuses them.
+- [`benchmarks/e2e/score.ts`](../benchmarks/e2e/score.ts) — fixture runner. Concurrency 1, session budget $25.
+- [`benchmarks/e2e/scoring.ts`](../benchmarks/e2e/scoring.ts) — pure rubric. Gate `cycle_completed`; weighted: `merged` 0.40, `converged_within_budget` 0.25, `spec_satisfied` 0.20, `cost_within_budget` 0.10, `no_regression` 0.05. 12 unit tests.
+- [`benchmarks/e2e/sdk.ts`](../benchmarks/e2e/sdk.ts) — tempdir setup. Real `git init` of the seed tree (main + initiative branch), recorder shims, **smart `gh` shim** that handles `pr create` (records `_pr-metadata.json`) and `pr merge` (`git reset --hard` + `git clean -fdx --exclude=node_modules` + `git checkout main` + `git merge --ff-only`). 7 unit tests.
+- [`benchmarks/e2e/simulator.ts`](../benchmarks/e2e/simulator.ts) — human-simulator agent. Spec-driven verdict: pre-computed orchestrator-verified spec results are fed into the simulator's prompt, the simulator outputs `approve | send-back: feedback` as fenced JSON. Tools: Read only — never runs commands itself. 12 unit tests.
+- [`benchmarks/e2e/cases.json`](../benchmarks/e2e/cases.json) + [`fixtures/slugifier-basic/`](../benchmarks/e2e/fixtures/slugifier-basic/) — single fixture for first pass (TS lib that converts strings to URL-safe slugs).
+- 42 new unit tests across this phase (11 stage2 + 12 simulator + 7 e2e-sdk + 12 e2e-scoring). Full suite 284/284 green.
+
+**Result on pass 7** (`benchmarks/e2e/results/2026-05-09T11-34-28-376Z.json`):
+- 1/1 passed at score **1.0**.
+- Every criterion at 1.0; rounds = 1 (simulator approved on first review).
+- Cost: $1.18; elapsed 4.9 min.
+- gh shim recorded: `created: true, merged: true, mergedBranch: initiative-INIT-2026-05-09-slugifier-basic`.
+- Post-merge spec checks: 4/4 non-functional pass, manifest_acs_pass true, all 3 PR signals present (`why`, `edge case`, `demo`).
+
+**Iteration trajectory** (7 runs, ~$10.57 across all runs):
+
+| Run | Score | Outcome | What changed |
+|---|---|---|---|
+| 1 | 0.6 | merged-but-not-merged | First bench run with `maxTurns: 30` review-Ralph. Cycle returned `outcome: 'merged'` but gh shim's `merged: false` — orchestrator's outcome-vs-actual-merge was lying. |
+| 2 | 0.6 | rounds=2, merge failed | Bumped maxTurns to 50 (no longer; the issue was the orchestrator). `gh pr merge` rejected because the verdict gate appends to AGENT.md after the agent's last commit, leaving a dirty working tree that blocks `git checkout main`. |
+| 3 | 0 (early fail) | rounds=0, gh shim gates merge | Fixed gh shim: `git reset --hard HEAD && git clean -fdx --exclude=node_modules` before checkout. Also fixed the orchestrator to surface merge failures in the outcome enum. New failure: PM emitted 0 work items (transient API hiccup). |
+| 4 | 0.15 | cap exhausted | PM came back. Dev-loop wrote `src/index.ts` (not `src/slugify.ts`). Spec checks looked for literal `src/slugify.ts` and found nothing — simulator kept sending back. Actual implementation was correct but spec greps were too strict. |
+| 5 | 0 (early fail) | spec checks all red | Loosened spec-check globs to `src/` / `tests/` recursive. Dev-loop's quality gate (`npm test` against an empty `tests/` directory) wedged WI-1 because node:test errors when given an empty directory. |
+| 6 | 0 (early fail) | dev-loop 3/3 wedged | Same root cause re-confirmed — added a placeholder test to the seed and changed `npm test` to glob `tests/**/*.test.ts` instead of bare `tests/`. |
+| 7 | **1.0** | merged on round 1 | Clean run. PM produced 3 WIs, dev-loop completed all three, reviewer approved on first iteration. **All criteria at 1.0**. |
+
+**Architectural decisions taken during the iteration set:**
+- **Review-loop as Ralph (locked).** Same `loops/ralph/runner.ts` infrastructure as the dev-loop; the difference is the system prompt, the iteration prompt template (in `reviewer-invocation.ts`), and the gate function (in `reviewer-stage2.ts`). The runner's `qualityGate` was widened from `() => boolean` to `() => boolean | Promise<boolean>` to support async verdict-providers.
+- **Send-back feedback lives in fix_plan.md, not WI specs.** WIs are the dev-loop's input contract (PM-time decisions). Review feedback is loop state. Putting it in fix_plan.md is consistent with how Ralph already works (count_open_fix_plan_items drives wedge-detection; the Ralph runner already reads/writes that file across iterations).
+- **Verdict-provider abstraction.** `GetVerdict = (ctx) => Promise<Verdict>` separates verdict policy from mechanics. Production: stdin (deferred CLI). Bench: simulator. The orchestrator-side gate factory `makeReviewerQualityGate()` consumes any GetVerdict and handles project-gate-running + AGENT.md/fix_plan.md mutation uniformly.
+- **Simulator never runs commands itself.** The bench harness pre-runs every spec check and feeds the structured results into the simulator's prompt. The simulator's job is the verdict (approve | send-back), not the verification — keeps it grounded in orchestrator-verified ground truth, not its own claim. Mirrors the orchestrator-verified-gates pattern.
+- **PR create/merge split for bench-vs-live.** The agent never calls `gh`. The orchestrator calls `gh pr create --body-file` and `gh pr merge --merge --delete-branch` after the loop completes. In bench mode, the smart `gh` shim handles both locally (writes `_pr-metadata.json`, fast-forwards initiative branch into main). Bench tests workflow + merge correctness; production hits real GitHub.
+- **Workspace-file wipe between phases.** `runReviewer` deletes leftover `PROMPT.md`/`AGENT.md`/`fix_plan.md` from the dev-loop before calling `prepareReviewerWorkspace` (which is idempotent per Ralph convention). Without the wipe, the reviewer reads stale dev-loop content and hallucinates its role — caught in pass 4.
+- **Fixture seed must satisfy quality gate from the start.** The dev-loop's first WI runs `npm test` between iterations. If `tests/` is empty, `node --test tests/` errors and the WI wedges before any code is written. Fix: include a placeholder test in the seed; use a glob (`tests/**/*.test.ts`) instead of a bare directory in `package.json`'s test script. Caught in passes 5–6.
+
+**What the bench didn't catch (acknowledged limitations):**
+- **Single-fixture coverage.** Only `slugifier-basic` runs in this bench — TS lib, single feature. Adding Python lib / bash CLI / web-canvas fixtures is future work. With one fixture, every-criterion-at-1.0 is suggestive but not proof of rubric calibration.
+- **Hallucinated demo content.** Same caveat as the per-phase review-loop bench — the simulator's keyword check is a heuristic, not a proof, and the simulator can be deceived by a plausible-looking PR description that doesn't match the diff.
+- **Send-back path under-exercised on the passing run.** The simulator approved on round 1, so the send-back→fix→re-review path (which is the load-bearing addition over stage 1) wasn't exercised in pass 7. Earlier passes (run 2, run 4) DID exercise it: send-back fired, dev-loop fixed, simulator approved on round 2 (run 2) or kept sending back to cap exhaustion (run 4 — caused by spec-check bug). The path works; the rubric correctly handles cap-exhaustion (`converged_within_budget = 0`). Future fixtures should be deliberately tuned to reliably fail-on-round-1 to keep the path exercised.
+- **No real GitHub integration tested.** Every `gh` call is shimmed locally. Real `gh` integration is a separate test path (manual, not in CI).
+
+**Discriminator note.** Pass 7 has every criterion at 1.0, which would normally be a flag the rubric is too lenient. The pass-1-through-6 results validate that the rubric *does* discriminate:
+- Pass 1: `merged = 0` (orchestrator merge failed) → score 0.6
+- Pass 2: `merged = 0` (gh checkout failed) → score 0.6
+- Pass 4: `converged_within_budget = 0`, `merged = 0`, `spec_satisfied = 0` → score 0.15
+- Each gate/criterion fired correctly when violated. The rubric works.
+
+**Total bench spend across iteration set:** ~$10.57 across 7 e2e runs + $2.55 for the per-phase review-loop re-verification = **~$13.12 total**. Sits below the $15–30 budget.
+
+**Per-phase bench regression check.** The Ralph-loop reviewer rewrite required updating `benchmarks/review-loop/sdk.ts` to use `prepareReviewerWorkspace` + read `PROMPT.md` (instead of inlining `renderReviewerUserPrompt`). Re-ran the per-phase bench: 5/5 still pass at $2.55 with similar criterion pass-rates (one criterion — `pr_links_demo` — dropped to 0.8, an actually-better-discriminating outcome than the prior all-100% pass).
+
+**What's next:** the **reflector** phase. Same closure shape as this one: SKILL.md rewrite + `orchestrator/reflector-invocation.ts` + `cycle.ts:runReflector()` real implementation + `benchmarks/reflection/` bench fixtures + closure log entry. The reflector consumes merged initiative outputs (the `_queue/done/` manifest + the merged main branch + the cycle's event log) and emits brain updates. After reflector lands, we have the full PRINCIPLES.md cycle: ideate → decompose → develop → review-merge → reflect → ingest. Future e2e expansion: more fixtures (Python lib, bash CLI, browser/canvas via Playwright), production CLI (`forge review <id>`), and architect-bench-output → e2e-fixture-manifest piping.
+
+---
+
 ## [2026-05-09] structural | review-loop phase (stage 1) closed — bench 5/5 in two passes
 
 **Outcome:** all five fixtures pass at threshold 0.7 with every weighted criterion at 100% on pass 2. Total spend across the iteration set: **$3.92** ($1.89 pass 1 + $2.03 pass 2). The review-prep stage of the review-loop is now wired end-to-end — bench, shared invocation contract, and live cycle integration. Stage 2 (interactive human review + send-back) is deliberately deferred to a separate closure.

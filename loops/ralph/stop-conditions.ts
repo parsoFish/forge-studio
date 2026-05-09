@@ -28,26 +28,26 @@ export type StopResult =
   | { stop: false }
   | { stop: true; reason: string; condition: StopCondition['kind'] };
 
-export function checkStopConditions(
+export async function checkStopConditions(
   state: LoopState,
   conditions: StopCondition[],
-  qualityGates: () => boolean,
-): StopResult {
+  qualityGates: () => boolean | Promise<boolean>,
+): Promise<StopResult> {
   for (const condition of conditions) {
-    const result = checkOne(state, condition, qualityGates);
+    const result = await checkOne(state, condition, qualityGates);
     if (result.stop) return result;
   }
   return { stop: false };
 }
 
-function checkOne(
+async function checkOne(
   state: LoopState,
   condition: StopCondition,
-  qualityGates: () => boolean,
-): StopResult {
+  qualityGates: () => boolean | Promise<boolean>,
+): Promise<StopResult> {
   switch (condition.kind) {
     case 'quality-gates-pass':
-      if (qualityGates()) {
+      if (await qualityGates()) {
         return { stop: true, reason: 'quality gates pass', condition: 'quality-gates-pass' };
       }
       return { stop: false };
