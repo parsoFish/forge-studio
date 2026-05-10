@@ -13,7 +13,7 @@
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  */
 
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { runCycle } from './cycle.ts';
@@ -97,6 +97,42 @@ async function cmdServe(rest: string[]): Promise<void> {
   const once = rest.includes('--once');
   console.log(once ? 'forge serve --once: claiming one initiative…' : 'forge serve: starting…');
   await serve({ mode: once ? 'once' : 'forever' });
+  if (once) {
+    // Once-mode is the showcase / debug entry point — surface the most
+    // recent cycle's report path as a breadcrumb. The forever-mode
+    // operator's monitor (or `forge metrics`) is the right place for
+    // ongoing visibility, so we only print this for `--once`.
+    printLatestReportHint();
+  }
+}
+
+function printLatestReportHint(): void {
+  const logsRoot = resolve('_logs');
+  if (!existsSync(logsRoot)) return;
+  let newest: { cycleId: string; mtimeMs: number } | null = null;
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(logsRoot);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    const reportPath = join(logsRoot, name, 'report.md');
+    if (!existsSync(reportPath)) continue;
+    try {
+      const st = statSync(reportPath);
+      if (!newest || st.mtimeMs > newest.mtimeMs) {
+        newest = { cycleId: name, mtimeMs: st.mtimeMs };
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  if (!newest) return;
+  const reportPath = resolve(logsRoot, newest.cycleId, 'report.md');
+  console.log('');
+  console.log(`📄 Cycle report: ${reportPath}`);
+  console.log(`   View: forge report ${newest.cycleId}`);
 }
 
 async function cmdCycle(rest: string[]): Promise<void> {
@@ -120,6 +156,9 @@ async function cmdCycle(rest: string[]): Promise<void> {
     dryRun,
   });
   console.log(JSON.stringify(result, null, 2));
+  // Same breadcrumb as `forge serve --once`: surface the report path so
+  // the operator doesn't have to know the cycle-id naming convention.
+  printLatestReportHint();
 }
 
 function cmdEnqueue(rest: string[]): void {

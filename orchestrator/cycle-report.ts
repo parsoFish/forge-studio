@@ -440,14 +440,26 @@ function renderVerification(
     }
   }
 
-  // Demo bundle from snapshot.
+  // Demo bundle from snapshot. Print absolute paths AND how-to-view commands
+  // so the bundle is discoverable from the markdown alone — `_logs/` is
+  // gitignored and most IDEs hide gitignored files from the file tree, so
+  // a relative markdown link alone is often invisible to operators.
   const demoDir = join(cycleLogDir, 'demo');
   if (existsSync(demoDir)) {
     lines.push('');
     lines.push('### Demo bundle');
     lines.push('');
-    const files = readdirSync(demoDir).map((f) => `- [\`${f}\`](demo/${f})`);
-    lines.push(...files);
+    lines.push(`Bundle directory: \`${demoDir}\``);
+    lines.push('');
+    const files = readdirSync(demoDir);
+    for (const f of files) {
+      const abs = join(demoDir, f);
+      lines.push(`- **\`${f}\`** — \`${abs}\``);
+      const howToView = describeDemoFile(f, abs);
+      if (howToView) lines.push(`  - ${howToView}`);
+    }
+    lines.push('');
+    lines.push(`> Note: \`_logs/\` is gitignored, so files here may not appear in your IDE file tree. Use the absolute paths above (or open the bundle dir directly).`);
   }
 
   // PR description draft from snapshot.
@@ -559,6 +571,34 @@ function renderAppendix(
 function extractFirstHeading(markdown: string): string | null {
   const match = markdown.match(/^#+\s+(.+)$/m);
   return match ? match[1].trim() : null;
+}
+
+/**
+ * Per-file viewing hint for demo bundle entries. Different recorder formats
+ * need different invocations to render — Playwright traces need
+ * `playwright show-trace`, VHS recordings are mp4/gif and just need a
+ * media player, etc. Returns null when no specific hint applies.
+ */
+function describeDemoFile(filename: string, absolutePath: string): string | null {
+  if (filename.endsWith('.trace.zip')) {
+    return `View with: \`npx playwright show-trace ${absolutePath}\` (opens an interactive trace viewer in your browser)`;
+  }
+  if (filename.endsWith('.mp4') || filename.endsWith('.webm')) {
+    return `Open with any video player (e.g., \`xdg-open ${absolutePath}\` on Linux, \`open\` on macOS).`;
+  }
+  if (filename.endsWith('.gif')) {
+    return `Open with any image viewer or browser.`;
+  }
+  if (filename === 'README.md') {
+    return `Demo overview — open in your editor: \`${absolutePath}\``;
+  }
+  if (filename === 'source.tape') {
+    return `VHS tape source. Re-record with: \`vhs ${absolutePath} -o recording.mp4\``;
+  }
+  if (filename === 'source.spec.ts' || filename.endsWith('.spec.ts')) {
+    return `Playwright spec source. Replay with: \`npx playwright test ${absolutePath} --trace=on\``;
+  }
+  return null;
 }
 
 function extractFrontmatter(markdown: string): Record<string, string> {
