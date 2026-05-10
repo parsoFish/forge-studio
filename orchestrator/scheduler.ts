@@ -10,7 +10,7 @@
  * and exits — used in tests and for one-shot runs.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { setInterval, clearInterval } from 'node:timers';
 import {
@@ -302,6 +302,40 @@ function makeProgressTee(): (entry: EventLogEntry) => void {
   };
 }
 
+/**
+ * F-24: link gitignored dependency directories from the source repo into the
+ * worktree so `npm test` / `pytest` etc. can actually resolve their imports.
+ * Symlinks (not copies) keep this fast — install once at the project level,
+ * every cycle's worktree shares it. Idempotent; missing source is a no-op
+ * (the project may not use that dep system).
+ *
+ * Currently links Node's `node_modules`. Generalise here when forge picks up
+ * Python (`.venv`) or Rust (`target`) projects that need similar.
+ */
+function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
+  for (const dir of ['node_modules']) {
+    const src = resolve(projectRepoPath, dir);
+    const dst = resolve(worktreePath, dir);
+    if (!existsSync(src)) continue;
+    // Skip if `git worktree add` somehow already produced this path (shouldn't,
+    // since it's gitignored, but defend against it). lstatSync, not statSync,
+    // so an existing symlink doesn't follow.
+    let alreadyExists = false;
+    try {
+      lstatSync(dst);
+      alreadyExists = true;
+    } catch {
+      /* missing — proceed */
+    }
+    if (alreadyExists) continue;
+    try {
+      symlinkSync(src, dst, 'dir');
+    } catch {
+      /* best-effort — a project that doesn't need deps shouldn't break the cycle */
+    }
+  }
+}
+
 function formatDur(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 1000);
@@ -364,6 +398,12 @@ async function runOne(
       worktreesRoot: cfg.worktreesRoot,
       initiativeId: manifest.initiativeId,
     });
+    // F-24: link the project's installed dependencies into the worktree.
+    // `git worktree add` only checks out tracked files, but `node_modules/`
+    // is gitignored — without this, `npm test` fails at module resolution
+    // before any test runs, and the dev-loop wedges trying to "fix" what
+    // looks like a broken codebase. Idempotent — missing source is a no-op.
+    linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
     annotateManifest(manifestPath, { worktree_path: wtHandle.path });
 
     const result = await runCycle({
