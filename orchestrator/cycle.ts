@@ -47,6 +47,15 @@ import {
   type ReviewerToolUseSummary,
 } from './reviewer-invocation.ts';
 import {
+  REFLECTOR_ALLOWED_TOOLS,
+  REFLECTOR_DISALLOWED_TOOLS,
+  REFLECTOR_MODEL,
+  buildReflectorSystemPrompt,
+  renderReflectorUserPrompt,
+  tallyToolUse as tallyReflectorToolUse,
+  type ReflectorToolUseSummary,
+} from './reflector-invocation.ts';
+import {
   makeReviewerQualityGate,
   type GetVerdict,
   type ReviewerGateState,
@@ -92,10 +101,22 @@ export type CycleInput = {
   reviewIterationBudgetUsd?: number;
 };
 
+export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
+
 export type CycleResult = {
   cycle_id: string;
   initiative_id: string;
   status: 'merged' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
+  /**
+   * Outcome of the reflection phase. Reflection runs after a successful merge
+   * and is log-and-continue: a failed reflector does not change the merge
+   * outcome (`status`). Surfaced as separate telemetry, not a cycle gate.
+   *
+   * - `closed`   — reflection ran to completion.
+   * - `failed`   — reflection ran but threw.
+   * - `skipped`  — reflection was not invoked (no merge, or dry run).
+   */
+  reflection_status?: ReflectionStatus;
   duration_ms: number;
   log_path: string;
 };
@@ -116,6 +137,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   });
 
   let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
+  let reflectionStatus: ReflectionStatus = 'skipped';
   try {
     if (!input.dryRun) {
       await runProjectManager(input, logger);
@@ -129,12 +151,21 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       // are excluded by `git add` automatically.
       commitDevLoopBoundary(input.worktreePath, logger, input.initiativeId);
       reviewerOutcome = await runReviewer(input, logger);
+
+      // Reflection: only fires after a successful merge. Log-and-continue —
+      // a thrown reflector does not change the cycle's `status` (the merge
+      // already happened; reflection cannot un-merge). Surface as separate
+      // `reflection_status` telemetry instead.
+      if (reviewerOutcome === 'merged') {
+        reflectionStatus = await runReflector(input, logger);
+      }
     }
 
     const result: CycleResult = {
       cycle_id: cycleId,
       initiative_id: input.initiativeId,
       status: reviewerOutcome,
+      reflection_status: reflectionStatus,
       duration_ms: Date.now() - started,
       log_path: logger.logFilePath,
     };
@@ -148,7 +179,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       output_refs: [logger.logFilePath],
       duration_ms: result.duration_ms,
       message: 'cycle.end',
-      metadata: { status: result.status },
+      metadata: { status: result.status, reflection_status: result.reflection_status },
     });
 
     return result;
@@ -166,6 +197,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       cycle_id: cycleId,
       initiative_id: input.initiativeId,
       status: 'failed',
+      reflection_status: reflectionStatus,
       duration_ms: Date.now() - started,
       log_path: logger.logFilePath,
     };
@@ -937,6 +969,156 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<Revi
     );
   }
   return outcome;
+}
+
+/**
+ * Defaults for the live reflector invocation. The reflector is a one-shot SDK
+ * call (not a Ralph loop) that consumes the cycle's event log + manifest +
+ * merged tree and emits brain theme writes. The bench's 5-fixture median is
+ * ~$0.74/run; the live cap gives 2x headroom for richer real cycles.
+ */
+const REFLECTOR_LIVE_MAX_TURNS = 60;
+const REFLECTOR_LIVE_MAX_BUDGET_USD = 1.5;
+
+/**
+ * Reflection phase. Runs after a successful merge to extract patterns from the
+ * cycle's event log + merged tree into brain themes. Closes the learning loop.
+ *
+ * Failure mode: log-and-continue. A thrown reflector returns `'failed'`
+ * but does not propagate — the merge already happened in `runReviewer`,
+ * and reflection cannot un-merge.
+ *
+ * Live invocation contract is shared with the bench via
+ * orchestrator/reflector-invocation.ts (single source of truth).
+ */
+async function runReflector(
+  input: CycleInput,
+  logger: EventLogger,
+): Promise<ReflectionStatus> {
+  const start = logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'reflection',
+    skill: 'reflector',
+    event_type: 'start',
+    input_refs: [input.manifestPath, logger.logFilePath],
+    output_refs: [],
+    message: 'reflector.start',
+  });
+
+  const forgeRoot = resolve(import.meta.dirname, '..');
+  const cycleId = logger.cycleId;
+  const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
+
+  let projectName: string;
+  try {
+    const manifest = parseManifest(readFileSync(input.manifestPath, 'utf8'));
+    projectName = manifest.project;
+  } catch (err) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'error',
+      input_refs: [input.manifestPath],
+      output_refs: [],
+      message: 'reflector.manifest-unreadable',
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+    return 'failed';
+  }
+
+  const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
+  const prompt = renderReflectorUserPrompt({
+    initiativeId: input.initiativeId,
+    cycleId,
+    manifestRelPath: input.manifestPath,
+    eventLogRelPath: logger.logFilePath,
+    brainGapsRelPath: resolve(cycleLogDir, 'brain-gaps.jsonl'),
+    mergedTreeRelPath: input.projectRepoPath,
+    projectName,
+    userQuestionsRelPath: resolve(cycleLogDir, 'user-questions.md'),
+    userFeedbackRelPath: resolve(cycleLogDir, 'user-feedback.md'),
+    retroRelPath: resolve(cycleLogDir, 'retro.md'),
+    cycleArchiveRelPath: resolve(forgeRoot, 'brain', '_raw', 'cycles', `${cycleId}.md`),
+    themesDirRelPath: resolve(forgeRoot, 'brain', 'projects', projectName, 'themes'),
+  });
+
+  const options: Record<string, unknown> = {
+    cwd: forgeRoot,
+    systemPrompt,
+    model: REFLECTOR_MODEL,
+    permissionMode: 'acceptEdits',
+    allowedTools: [...REFLECTOR_ALLOWED_TOOLS],
+    disallowedTools: [...REFLECTOR_DISALLOWED_TOOLS],
+    maxTurns: REFLECTOR_LIVE_MAX_TURNS,
+    maxBudgetUsd: REFLECTOR_LIVE_MAX_BUDGET_USD,
+  };
+
+  const toolUseSummary: ReflectorToolUseSummary = {
+    brainReads: 0,
+    themeWrites: 0,
+    retroWrites: 0,
+    bashCalls: 0,
+  };
+  let costUsd = 0;
+  let durationMs = 0;
+  let resultSubtype: string | undefined;
+
+  try {
+    for await (const msg of sdkQuery({ prompt, options }) as AsyncIterable<unknown>) {
+      if (typeof msg !== 'object' || msg === null) continue;
+      const m = msg as {
+        type?: string;
+        message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        subtype?: string;
+        total_cost_usd?: number;
+        duration_ms?: number;
+      };
+      if (m.type === 'assistant') {
+        tallyReflectorToolUse(m.message, toolUseSummary);
+        continue;
+      }
+      if (m.type !== 'result') continue;
+      if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
+      if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+      resultSubtype = m.subtype ?? 'success';
+      break;
+    }
+  } catch (err) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'error',
+      input_refs: [logger.logFilePath],
+      output_refs: [],
+      message: 'reflector.crashed',
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+    return 'failed';
+  }
+
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'reflection',
+    skill: 'reflector',
+    event_type: 'end',
+    input_refs: [logger.logFilePath, input.manifestPath],
+    output_refs: [resolve(cycleLogDir, 'retro.md')],
+    cost_usd: costUsd,
+    duration_ms: durationMs,
+    message: 'reflector.end',
+    metadata: {
+      status: 'closed',
+      project: projectName,
+      result_subtype: resultSubtype,
+      tool_use: toolUseSummary,
+    },
+  });
+  return 'closed';
 }
 
 function newCycleId(initiativeId: string): string {

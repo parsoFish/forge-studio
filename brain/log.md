@@ -14,6 +14,79 @@ Types: `ingest`, `create-theme`, `update-theme`, `lint`, `structural`, `seed`.
 
 ---
 
+## [2026-05-10] structural | reflection phase closed — bench 5/5 in one pass; pass-1 closure of all six phases
+
+**Outcome:** the reflection phase is closed end-to-end. Bench at **5/5 (100%)** on the **first** real run, every gate (`manifest_provided` / `log_parseable` / `retro_emitted` / `brain_consulted` / `no_brain_corruption`) and every weighted criterion (`themes_emitted` / `themes_evidence_grounded` / `theme_categories_balanced` / `cycle_archived` / `retro_three_sections` / `brain_gaps_addressed`) passing at 100%. Total spend **$3.68/run**; p95 cost $1.04, p95 elapsed 442s. With this closure, **all six phases of forge v2 (brain → architect → project-manager → developer-loop → review-loop → reflection) are closed for pass 1.**
+
+**Suites & runners:**
+
+- [`benchmarks/reflection/score.ts`](../benchmarks/reflection/score.ts) — 5 cases, concurrency 2, per-case cap $1.0–$1.5, session cap $8. ~$3.68/run. Diagnostic snapshot of emitted artifacts on each case (`log_dir_files`, `themes_dir_files`, `raw_cycles_dir_files`); `FORGE_BENCH_KEEP_TEMPDIR=1` retains tempdirs for inspection.
+- [`benchmarks/reflection/scoring.ts`](../benchmarks/reflection/scoring.ts) — pure rubric. **Five** gates, **six** weighted criteria summing to 1.0, pass threshold 0.7. 41 unit tests in `scoring.test.ts` cover every gate + criterion + threshold edge case.
+- [`benchmarks/reflection/sdk.ts`](../benchmarks/reflection/sdk.ts) — DI harness: tempdir + layered brain (mask `brain/projects/<project>/themes/` + `brain/_raw/cycles/` + `brain/log.md` as fresh writable; symlink everything else). 11 unit tests in `sdk.test.ts`.
+- [`benchmarks/reflection/simulator.ts`](../benchmarks/reflection/simulator.ts) — file-based human-feedback shim (writes `user-feedback.md` from fixture canon; reads `user-questions.md` for diagnostic telemetry). 11 unit tests in `simulator.test.ts`.
+- [`orchestrator/reflector-invocation.ts`](../orchestrator/reflector-invocation.ts) — shared system + user prompt builders, tool whitelist, `tallyToolUse`. Single source of truth for both bench and live cycle.
+- [`orchestrator/cycle.ts:runReflector()`](../orchestrator/cycle.ts) — real SDK invocation. Fires after `runReviewer` returns `'merged'`; **log-and-continue** failure mode (a thrown reflector returns `'failed'` but does not change cycle's `status`; `CycleResult.reflection_status: 'closed' | 'failed' | 'skipped'` surfaces the outcome separately).
+- [`skills/reflector/SKILL.md`](../skills/reflector/SKILL.md) — rewritten for direct-write brain (replaces the "via brain-ingest" language), event-name fixes (`user-question-emitted`, `theme-emitted`), file-based stage-2/3 handoff, and explicit "no queue mutation" constraint (the reviewer already moved the manifest).
+- 63 new unit tests across this phase (41 scoring + 11 sdk + 11 simulator).
+
+**Result on pass 1** (`benchmarks/reflection/results/2026-05-09T15-20-56-338Z.json`):
+
+| Fixture | Score | Cost | Elapsed | Themes emitted | Notes |
+|---|---|---|---|---|---|
+| `slugifier-merged` | 1.0 | $0.71 | 226s | 3 (1 antipattern, 2 patterns) | Real e2e cycle log replayed; multi-feature with 1 send-back. |
+| `send-back-loop-bash` | 1.0 | – | – | ≥1 antipattern under `simplarr/themes/` | Cross-project path resolution (non-TS). |
+| `wedge-recovery` | 1.0 | – | – | ≥2 (antipattern + pattern) | Dev-loop wedge then fresh-context recovery. |
+| `brain-gap-heavy` | 1.0 | – | – | ≥2 covering 4 gap-ids | Every gap-id resolved. |
+| `clean-single-feature` | 1.0 | – | – | ≥1 pattern under `healarr/themes/` | Baseline healthy-cycle reference. |
+
+(Per-case cost split not surfaced in the summary; total $3.68 across all five with concurrency 2.)
+
+**Iteration trajectory** (1 pass; $3.68 total):
+
+| Run | Pass rate | Criteria | What changed |
+|---|---|---|---|
+| 1 | **5/5** | every gate + criterion at 100% | First run after cases.json finalised. No iteration needed. |
+
+(Pre-pass-1 development: one fixture-1-only smoke run at $0.69 hit `error_max_budget_usd` at $0.6 cap; bumped per-case cap to $1.0–$1.5 and re-ran with all five fixtures. Single-fixture smoke also exposed an early-cleanup-of-tempdir issue — added `FORGE_BENCH_KEEP_TEMPDIR=1` env flag for diagnostic runs.)
+
+**Architectural decisions locked during this closure:**
+
+- **Reflection runs only after `runReviewer` returns `'merged'`.** Skipping on `'ready-for-review'` or `'send-back-cap-exhausted'` means the cycle's `reflection_status` stays `'skipped'`. Reflection has nothing to reflect on without a merge.
+- **Log-and-continue failure mode.** A thrown reflector cannot un-merge — the reviewer already moved the manifest to `_queue/done/`. Surfacing `reflection_status` separately keeps `CycleResult.status` load-bearing on the merge outcome (which operator alerting trees key on); reflection is observable telemetry, not a cycle gate.
+- **The reviewer owns the queue move; the reflector does NOT.** Earlier SKILL.md said the reflector moves the manifest to `_queue/done/`; that was wrong. By the time reflection fires the manifest is already there. SKILL.md updated.
+- **File-based handoff for stages 2 + 3.** The reflector writes structured questions to `_logs/<cycle-id>/user-questions.md`, then reads pre-populated `user-feedback.md`. Bench: simulator pre-writes feedback; production: human writes feedback before next cycle. No `AskUserQuestion`, no stdin transport — both are deferred to a future closure.
+- **Direct file writes, not `brain-ingest` round-trip.** Reflector writes theme markdown directly with required frontmatter. The bench's `no_brain_corruption` gate enforces a subset of `brain/LINT.md` rules inline (frontmatter present + valid `category` + ≥ 1 resolvable evidence path). A future closure may switch to `brain-ingest` once that path is production-validated.
+- **Evidence grounding is `existsSync`-verified, not keyword-grep.** Every theme's `## Sources` section must list ≥ 1 path that resolves to either `_logs/<cycle-id>/...` or `brain/_raw/cycles/<cycle-id>.md`. This is the load-bearing anti-vague-retro defence. Themes that can't cite resolvable evidence fail.
+- **`theme_categories_balanced` enforces an antipattern when warranted, not always.** If `events.jsonl` contains a wedge or send-back signal, ≥ 1 theme must carry `category: antipattern`. Clean cycles auto-pass. Catches "everything labelled `pattern`" failure mode without punishing topic discovery on healthy cycles.
+- **`brain_gaps_addressed` auto-passes empty gaps.** Fixtures with `brain-gaps.jsonl: []` don't get penalised for a non-existent gap-id. Only the brain-gap-heavy fixture has the criterion bite.
+- **Brain isolation in the bench: layered tempdir.** Live `brain/` is symlinked into the tempdir read-through; the target project's `themes/` directory and `brain/_raw/cycles/` and `brain/log.md` are masked as fresh writable copies. Theme writes land in the tempdir; reads of unchanged files (INDEX, navigation indexes, prior themes for context) pass through. Fixed mid-closure: `brain/log.md` was initially symlinked through, so an early bench run leaked an entry into the live log. Now masked.
+- **5-fixture diversity.** Real-cycle replay (`slugifier-merged`) + cross-project (bash via `simplarr`) + wedge signal (`wedge-recovery`) + gap stress (`brain-gap-heavy`) + healthy baseline (`clean-single-feature`). Each exercises a different rubric path; the rubric being green on all five is the discriminator that the bench measures distinct things.
+
+**Why this phase landed in one bench pass when others took 2–7:** the rubric was specified upfront with the lessons of the prior closures (orchestrator-verified evidence checks, gate-then-criteria split, bench-vs-live shared invocation contract). The reflector's task — read events, write themes — is also the cleanest one-shot agent work in the pipeline (no Ralph loop, no quality gate, no PR mechanics). The agent's first-pass output was high-quality (concrete event-line citations, evidence-grounded themes, valid frontmatter).
+
+**Cost summary across all six phase benches (pass 1):**
+
+| Phase | Total iteration spend | Per-run cost | Notes |
+|---|---|---|---|
+| Brain | – | – | Seeding-driven, not cycle-driven. |
+| Architect | – | – | 8/8 first run; small budget. |
+| Project Manager | $6.30 | – | 3 passes. |
+| Developer Loop | $2.67 | – | 2 passes; p95 iterations = 1. |
+| Review Loop (per-phase) | $3.92 | $2.03 | 2 passes. |
+| E2E integration | ~$30 | $2.35 | 14 passes (multi-feature expansion). |
+| **Reflection** | **$3.68** | **$3.68** | **1 pass.** |
+
+**What's next:** the closure of all six phases marks the end of pass 1. Future workstreams identified during the closure:
+
+- **Stdin / CLI transport for stages 2 + 3.** Currently file-based only; production users must write `user-feedback.md` between cycles. A `forge reflect <cycle-id>` CLI with stdin prompts (mirror of the deferred reviewer-verdict CLI) would close the interactive loop.
+- **`brain-ingest` sub-skill round-trip.** Switch direct-write to a nested `brain-ingest` invocation per theme. More architecturally pure (matches the original SKILL.md spec); requires `brain-ingest` to be production-validated and a way to invoke nested skills via the Agent SDK.
+- **`brain-lint` script.** A real CLI for `brain-lint` (currently a SKILL only). The reflection bench's `no_brain_corruption` gate would shell out to it instead of inlining a subset of LINT rules.
+- **More fixtures.** Browser/canvas project, multi-cycle continuity (does theme N+1 reinforce or contradict theme N?), pure-failure cycle (reviewer rejected, no merge → reflection skipped — exercise that path explicitly).
+- **Cross-cycle pattern reuse.** With 5 phases × N cycles producing themes, validate that subsequent cycles' brain-queries find and cite prior themes. This is the core hypothesis of the project: pass-2 cycles should be cheaper / fewer iterations / fewer wedges than pass-1 cycles. The metric is the brain itself getting smarter.
+- **Production pipeline.** Pass 1 is closed; pass 2 starts when a real (non-bench) initiative runs through all six phases unattended end-to-end. The pipeline is ready.
+
+---
+
 ## [2026-05-10] structural | e2e bench expanded to multi-feature scope — full initiative shape (3 features, 6 WIs)
 
 **Outcome:** the e2e bench's `slugifier-basic` fixture now exercises a complete initiative shape — 3 features, 6 work items spanning a real DAG (FEAT-1 core → FEAT-2 batch helpers + FEAT-3 options as parallel branches). Pass at score **1.0**, 1/1, $2.35, 2 rounds (1 send-back + approve). Prior closure had only single-feature decomposition; this expansion validates the full architect→PM→dev-loop→reviewer contract with realistic multi-feature parallelism.
@@ -510,6 +583,34 @@ Landed everything needed to run a real-Claude bench against the developer loop. 
 **Validation of the rubric:** every criterion's pass rate at 1.0 in pass 2 *would* normally be a flag that the rubric is too lenient. In this case the per-fixture breakdown is informative — the cost criterion is the closest to its bound (trafficGame at $0.32 of $0.50, ~64%), so the rubric still discriminates. If a future change makes the agent burn $0.60+ on these fixtures, the rubric will catch it. The criterion to watch in regression: scope respect (now 1.0; would drop to ~0.2 if Ralph-artifact handling regresses).
 
 **What's next:** the **review-loop** phase. Reviewer skill stub + bench fixtures + cycle wiring. Same closure shape: shared invocation contract under `orchestrator/<phase>-invocation.ts`, bench under `benchmarks/<phase>/` with rubric in `scoring.ts`. The developer-loop closure validates the pattern; review-loop should be cheaper.
+
+---
+
+## [2026-05-09] reflection | healarr stub-multipart cycle retro + 3 theme pages created
+
+**Cycle:** `CY-2026-05-09-healarr-stub-multipart` · **Project:** healarr · **Outcome:** merged, PR https://bench.local/pr/5
+
+Retro written to `_logs/CY-2026-05-09-healarr-stub-multipart/retro.md`. Cycle archive at `brain/_raw/cycles/CY-2026-05-09-healarr-stub-multipart.md`. Three theme pages created under `brain/projects/healarr/themes/`:
+
+- `2026-05-09-healarr-healthy-floor.md` (reference) — 1 PM + 1 dev + 1 review iteration at $0.77 with 0 wedges / 0 send-backs / 0 brain-gaps is the lower-bound reference for a correctly-scoped healarr initiative.
+- `2026-05-09-single-feature-clean-cycle.md` (pattern) — tight single-feature initiatives with small explicit AC lists (≤5 boundary cases) converge in one round per phase with no send-backs.
+- `2026-05-09-stub-scope-prevents-rework.md` (pattern) — limiting a WI to a stub implementation with explicit boundary cases reaches first-pass quality gates without reviewer send-back.
+
+Key metrics: 1 WI / 1 feature / $0.77 total (PM $0.12 + dev $0.22 + review $0.43). Zero wedges, zero send-backs, zero brain gaps. First-ever healarr cycle; establishes the healthy-floor baseline. Review phase was 56% of total cost ($0.43) — the expected dominant cost in single-iteration approval cycles.
+
+---
+
+## [2026-05-09] reflection | reflector closed — slugifier-basic cycle retro + 3 theme pages + slugifier project profile created
+
+**Cycle:** `2026-05-09T12-31-27_INIT-2026-05-09-slugifier-basic` · **Project:** slugifier · **Outcome:** merged, PR https://bench.local/pr/1
+
+Retro written to `_logs/2026-05-09T12-31-27_INIT-2026-05-09-slugifier-basic/retro.md`. Cycle archive at `brain/_raw/cycles/2026-05-09T12-31-27_INIT-2026-05-09-slugifier-basic.md`. Slugifier project profile created at `brain/projects/slugifier/profile.md`. Three theme pages created under `brain/projects/slugifier/themes/`:
+
+- `2026-05-09-tight-acs-zero-iteration-dev-loop.md` (pattern) — tight AC granularity + pure-function domain → 0 Ralph iterations per WI. Calibration baseline for utility-library initiatives.
+- `2026-05-09-demo-must-cover-optional-config.md` (antipattern) — demo script omitting optional-config exercises (e.g. `maxLength`) causes reviewer send-back even when code and tests are correct.
+- `2026-05-09-pr-description-feature-id-signals.md` (antipattern) — each feature ID (`feat-1`, `feat-2`, etc.) must appear literally in the PR description to pass the reviewer's `pr_signals_present` check.
+
+Key metrics: 6 WIs / 3 features / $1.71 total ($0.44 PM + $0 dev-loop + $1.28 reviewer). One reviewer send-back (PR description + demo gap). `brainReads: 0` in both PM and reviewer — brain-first pattern not exercised by those skills this cycle.
 
 ---
 
