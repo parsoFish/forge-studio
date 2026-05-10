@@ -354,7 +354,15 @@ async function runProjectManager(input: CycleInput, logger: EventLogger): Promis
   });
 
   const options: Record<string, unknown> = {
-    cwd: forgeRoot,
+    // F-37: PM runs with cwd = the worktree, NOT forgeRoot. Previously
+    // the PM agent's `Glob({pattern: 'src/**'})` resolved against forge's
+    // own root (which has no src/ directory) — getting zero results, then
+    // fabricating plausible paths from training-data priors (e.g.,
+    // src/engine/physics.test.ts on a project that has no src/engine/).
+    // With cwd at the worktree, every relative-path tool call sees the
+    // actual project. The system prompt's brain content is captured at
+    // build time so it's unaffected by the cwd switch.
+    cwd: input.worktreePath,
     systemPrompt,
     model: PM_MODEL,
     permissionMode: 'acceptEdits',
