@@ -616,6 +616,17 @@ async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise
     const specPath = resolve(workItemsDir, `${wi.work_item_id}.md`);
     const wiToolUse: DevToolUseSummary = { reads: 0, brainReads: 0, writes: 0, bashCalls: 0, testRuns: 0 };
 
+    // F-40: wipe AGENT.md / fix_plan.md / PROMPT.md between WIs. The dev-loop
+    // runs N WIs sequentially against the same worktree; without this, WI-2's
+    // agent inherits WI-1's institutional memory and ticked-off fix_plan,
+    // looks at the satisfied checklist, and exits immediately with "all ACs
+    // verified" — never reading its own WI.md. Reviewer already calls
+    // wipeRalphScratch for the same reason (different role, different state);
+    // the dev-loop needs the same treatment per WI. Diagnosed from the
+    // 2026-05-10T21:32 cycle where WI-2..7 had 0 writes each because the
+    // agent read WI-1.md, not WI-2.md.
+    wipeRalphScratch(input.worktreePath);
+
     prepareDevWorkspace({
       initiativeId: input.initiativeId,
       workItemSpecPath: specPath,
