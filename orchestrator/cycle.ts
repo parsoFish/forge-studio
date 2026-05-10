@@ -73,7 +73,7 @@ import {
 } from './work-item.ts';
 import { createClaudeAgent, type QueryFn } from '../loops/ralph/claude-agent.ts';
 import { run as runRalph, type LoopResult } from '../loops/ralph/runner.ts';
-import { makeQualityGateFromCmd } from '../loops/ralph/stop-conditions.ts';
+import { makeQualityGateFromCmd, type GateRunInfo } from '../loops/ralph/stop-conditions.ts';
 import { writeCycleReport } from './cycle-report.ts';
 
 export type CycleInput = {
@@ -635,12 +635,16 @@ async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise
           // populated it from manifest or a Node-repo default), the runner
           // uses the exact same command the reviewer will use.
           qualityGate: input.qualityGateCmd && input.qualityGateCmd.length > 0
-            ? makeQualityGateFromCmd(input.worktreePath, input.qualityGateCmd)
+            ? makeQualityGateFromCmd(
+                input.worktreePath,
+                input.qualityGateCmd,
+                (gateInfo) => emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo),
+              )
             : undefined,
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
-          // can aggregate iteration counts. Without this, `iterations_total`
-          // was structurally always 0 even though the schema declared the
-          // event_type.
+          // can aggregate iteration counts. F-23 enriches the metadata so
+          // post-mortems can see what the agent actually did per iteration
+          // (which tools, which bash commands, last assistant text, tokens).
           onIteration: (iteration, info) => {
             logger.emit({
               initiative_id: input.initiativeId,
@@ -652,7 +656,14 @@ async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise
               input_refs: [specPath],
               output_refs: info.filesChanged,
               cost_usd: info.costUsd,
-              metadata: { work_item_id: wi.work_item_id },
+              tokens_in: info.tokensIn,
+              tokens_out: info.tokensOut,
+              metadata: {
+                work_item_id: wi.work_item_id,
+                tools_used: info.toolsUsed,
+                bash_commands: info.bashCommands,
+                last_assistant_text: info.lastAssistantText,
+              },
             });
           },
         },
@@ -1011,6 +1022,7 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<Revi
         initiativeId: input.initiativeId,
         qualityGate,
         // F-14: emit per-iteration events for the reviewer-Ralph as well.
+        // F-23: include rich tool-use + agent-text observability fields.
         onIteration: (iteration, info) => {
           logger.emit({
             initiative_id: input.initiativeId,
@@ -1022,6 +1034,13 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<Revi
             input_refs: [input.worktreePath],
             output_refs: info.filesChanged,
             cost_usd: info.costUsd,
+            tokens_in: info.tokensIn,
+            tokens_out: info.tokensOut,
+            metadata: {
+              tools_used: info.toolsUsed,
+              bash_commands: info.bashCommands,
+              last_assistant_text: info.lastAssistantText,
+            },
           });
         },
       },
@@ -1427,6 +1446,41 @@ async function runReflector(
 function newCycleId(initiativeId: string): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `${ts}_${initiativeId}`;
+}
+
+/**
+ * F-23: emit a `gate` event with the captured stdout/stderr/exit details from
+ * a quality-gate run. The dev-loop's prior visibility into the gate was a
+ * single boolean per iteration, swallowing the actual reason for failure;
+ * this surfaces the truncated output so post-mortems can answer "why did the
+ * gate fail" without re-running the worktree.
+ */
+function emitGateEvent(
+  logger: EventLogger,
+  initiativeId: string,
+  parentEventId: string,
+  workItemId: string,
+  info: GateRunInfo,
+): void {
+  logger.emit({
+    initiative_id: initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'developer-loop',
+    skill: 'developer-ralph',
+    event_type: info.passed ? 'log' : 'error',
+    input_refs: [],
+    output_refs: [],
+    duration_ms: info.durationMs,
+    message: info.passed ? 'gate.pass' : 'gate.fail',
+    metadata: {
+      work_item_id: workItemId,
+      gate_passed: info.passed,
+      gate_exit_code: info.exitCode,
+      gate_command: info.command,
+      gate_stdout_tail: info.stdoutTail,
+      gate_stderr_tail: info.stderrTail,
+    },
+  });
 }
 
 /**

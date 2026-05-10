@@ -45,11 +45,38 @@ export type LoopInput = {
    * orchestrator uses this to emit `event_type: 'iteration'` events so
    * downstream metrics aggregation has per-iteration cost + file-change
    * data, not just the LoopResult totals.
+   *
+   * F-23: rich-info fields (`toolsUsed`, `bashCommands`, `lastAssistantText`,
+   * `tokensIn`, `tokensOut`) are populated by `createClaudeAgent` so cycle
+   * post-mortems can see what the agent actually did per iteration. Stub /
+   * test agents may omit them; `onIteration` callers should treat them as
+   * optional.
    */
   onIteration?: (
     iteration: number,
-    info: { filesChanged: string[]; costUsd: number },
+    info: AgentIterationInfo,
   ) => void | Promise<void>;
+};
+
+/**
+ * F-23: per-iteration agent observability payload. All rich fields are
+ * optional so stub / test agents that only return `filesChanged + costUsd`
+ * continue to type-check.
+ */
+export type AgentIterationInfo = {
+  filesChanged: string[];
+  costUsd: number;
+  toolsUsed?: ToolUseDetail[];
+  bashCommands?: string[];
+  lastAssistantText?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+};
+
+export type ToolUseDetail = {
+  name: string;
+  /** Truncated JSON of the tool's input — enough to identify the call without bloating logs. */
+  inputSummary: string;
 };
 
 export type LoopResult = {
@@ -68,7 +95,7 @@ export type AgentInvocation = (params: {
   fixPlanPath: string;
   worktreePath: string;
   iteration: number;
-}) => Promise<{ filesChanged: string[]; costUsd: number }>;
+}) => Promise<AgentIterationInfo>;
 
 /** Stub agent invocation — replace with @anthropic-ai/claude-agent-sdk query() call. */
 const stubAgent: AgentInvocation = async () => {
@@ -136,10 +163,10 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     state.filesChangedHistory.push(result.filesChanged);
     state.fixPlanItemsHistory.push(countOpenFixPlanItems(input.worktreePath));
     if (input.onIteration) {
-      await input.onIteration(state.iteration, {
-        filesChanged: result.filesChanged,
-        costUsd: result.costUsd,
-      });
+      // F-23: forward all rich-info fields the agent populated. Plain assignment
+      // (no field-by-field copy) keeps onIteration backward compatible with the
+      // narrow `{ filesChanged, costUsd }` shape used by stub/test agents.
+      await input.onIteration(state.iteration, result);
     }
   }
 }
