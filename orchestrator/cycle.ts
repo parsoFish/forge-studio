@@ -636,11 +636,6 @@ async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise
           brainQueryResults: '',
           cycleId: logger.cycleId,
           initiativeId: input.initiativeId,
-          // F-32: WI's expected file outputs flow into the runner so the
-          // noop-completion guard knows whether the agent's writes count as
-          // engagement. Empty array (e.g., a verification-only WI) disables
-          // the guard.
-          filesInScope: wi.files_in_scope,
           // F-04: thread the per-project quality-gate command into the
           // runner. When absent, runner falls back to its default
           // (`npm test --silent`); when present (resolveQualityGateCmd
@@ -688,26 +683,14 @@ async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise
       };
     }
 
-    // F-13: brain-first gate per WI. The dev-loop's per-WI try/catch above
-    // already produces partial-failure semantics; mirror that here — record
-    // the gate violation, mark the WI failed, let the cycle continue (other
-    // independent WIs may still succeed; total dev-loop failure is checked
-    // at the bottom of the loop).
-    if (
-      !runnerError &&
-      !recordBrainGateResult('developer-loop', 'developer-ralph', wiToolUse.brainReads, {
-        initiativeId: input.initiativeId,
-        logger,
-        parentEventId: wiStart.event_id,
-        subject: wi.work_item_id,
-      })
-    ) {
-      runnerError = {
-        kind: 'brain-skipped',
-        message: 'brain-first mandate not honoured for this WI (0 brain-query calls)',
-      };
-    }
-
+    // F-34b: brain-first runtime gate REMOVED from the dev-loop. Brain
+    // context is for design (architect / PM / reflector); the dev agent's
+    // job is to make the WI's acceptance criteria observable using
+    // files_in_scope and existing project code. Forcing the agent to read
+    // brain themes was making it anchor on cross-cutting forge-system
+    // patterns instead of focusing on the WI, producing trivial-pass exits
+    // (see WI-2 of the 12:01 simplification-tests cycle). brainReads are
+    // still TALLIED for telemetry — just no longer gated.
     const finalStatus: WorkItem['status'] = runnerError
       ? 'failed'
       : result?.status === 'complete'

@@ -26,7 +26,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
-import { loadBrainIndex } from './brain-index.ts';
 import { parseWorkItem, type WorkItem } from './work-item.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
@@ -54,31 +53,23 @@ function loadSkillText(): string {
   return cachedSkillText;
 }
 
-let cachedBrainIndex: string | null = null;
-function loadBrainNavigation(cwd: string): string {
-  if (cachedBrainIndex !== null) return cachedBrainIndex;
-  cachedBrainIndex = loadBrainIndex({ cwd });
-  return cachedBrainIndex;
-}
-
 /**
- * Build the developer-loop system prompt: brain navigation index + the
- * SKILL.md contract + Ralph-loop discipline notes that don't change across
- * iterations.
+ * Build the developer-loop system prompt: the SKILL.md contract + Ralph-loop
+ * discipline notes that don't change across iterations.
  *
- * @param brainCwd - directory containing `brain/`. For the bench this is the
- *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
+ * F-34 strip-back: previously this loaded the entire brain navigation index
+ * (~17 KB) and mandated brain-first reads on every iteration. In practice the
+ * brain context is for design (architect / PM / reflector); the dev agent's
+ * job is to make code true to the WI's acceptance criteria, full stop. The
+ * architect / PM have already encoded relevant brain themes into the WI body.
+ * Stripping the navigation index + the mandate cut ~17 KB of context the
+ * agent was anchoring on instead of focusing on the WI.
+ *
+ * @param _brainCwd - kept for signature compatibility with the bench harness;
+ *   no longer used since the brain navigation index is no longer loaded.
  */
-export function buildDevSystemPrompt(brainCwd: string): string {
+export function buildDevSystemPrompt(_brainCwd: string): string {
   return [
-    '# Brain navigation index',
-    '',
-    "Below are the brain's category indexes — every theme in scope, with a one-line description. Use these descriptions to identify candidate theme pages, then read those files in full to verify and extract precise terminology, project names, and patterns. The indexes ARE the retrieval index; you should rarely need grep.",
-    '',
-    loadBrainNavigation(brainCwd),
-    '',
-    '---',
-    '',
     '# developer-ralph skill contract',
     '',
     loadSkillText(),
@@ -98,7 +89,7 @@ export function buildDevSystemPrompt(brainCwd: string): string {
     '**The orchestrator decides when to stop, not you.** It runs the project\'s quality gates between your iterations. Your job is to make incremental progress every iteration; the orchestrator exits the loop when gates pass, when the iteration / cost budget is exhausted, or when no progress is detected for several iterations (wedged).',
     '',
     'Hard rules:',
-    '- **Brain-first (REQUIRED, mandatory).** Your first tool calls in iteration 1 of any work item MUST be one or more `Read`/`Grep`/`Glob` against `brain/...` paths. The orchestrator records `tool_use.brainReads` and **fails the WI if zero brain reads are recorded**. The brain navigation index is in this system prompt — pick the most relevant `brain/forge/themes/*.md` and `brain/projects/<project>/themes/*.md` files and Read them in full before drafting code. This is not "when unsure" — it is unconditional. Skipping is a hard fail.',
+    '- **Anchor on the WI\'s acceptance criteria.** Your job is to make each AC\'s `then` clause observable. Read the WI spec FIRST. Read `files_in_scope` SECOND. Then write code. Do not browse `brain/`, the project README, or unrelated files — the WI body already cites everything you need.',
     '- **Files-in-scope.** The work item lists `files_in_scope`. Edit those files (and the test files explicitly listed). Do not modify unrelated files; flag scope-creep candidates in `AGENT.md` for the reflector to capture.',
     '- **No shortcuts.** Don\'t skip tests, don\'t `--no-verify`, don\'t disable lint rules to pass.',
     '- **No hallucinated test passes.** If you claim tests pass, prove it by running them via `Bash`. The orchestrator re-runs them anyway and will exit `failed` if your claim was wrong.',
@@ -153,13 +144,14 @@ export function renderDevUserPrompt(input: DevUserPromptInput): string {
     '',
     '## Your task this iteration',
     '',
-    '0. **Brain queries (REQUIRED, before any other tool call on iteration 1).** `Read` at least one `brain/forge/themes/*.md` (relevant patterns / antipatterns) AND at least one `brain/projects/<project>/themes/*.md` (or `profile.md`) for project taste. The orchestrator gates on this — zero `brain/...` reads = WI failure regardless of test status. Unconditional, not "when unsure". Cite the paths you read in `AGENT.md`\'s "Brain context" section.',
     '1. Read `AGENT.md` and `fix_plan.md`.',
-    '2. Make progress on the highest-priority unchecked item in `fix_plan.md`.',
-    '3. Run the project\'s quality gates with `Bash`. Don\'t claim a pass without running them.',
-    '4. Commit your changes with a conventional-commits message.',
-    '5. Update `fix_plan.md` to reflect what\'s done and what\'s left.',
-    '6. Update `AGENT.md` with anything you learned that the next iteration should know.',
+    `2. Read \`${input.workItemSpecRelPath}\` for the full WI body (acceptance criteria + rationale).`,
+    '3. Read each path in **Files in scope** above to understand current state.',
+    '4. Make progress on the highest-priority unchecked acceptance criterion. Write code in `files_in_scope` until that AC\'s `then` clause is observably true.',
+    '5. Run the project\'s quality gates with `Bash`. Don\'t claim a pass without running them.',
+    '6. Commit your changes with a conventional-commits message.',
+    '7. Update `fix_plan.md` to reflect what\'s done and what\'s left.',
+    '8. Update `AGENT.md` with anything you learned that the next iteration should know.',
   ].join('\n');
 }
 
