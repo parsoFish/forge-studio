@@ -67,7 +67,6 @@ import {
   detectHiddenCoupling,
   readWorkItemsFromDir,
   topologicalOrder,
-  validateFilesInScopeAgainstWorktree,
   validateWorkItemSet,
   writeWorkItemStatus,
   type WorkItem,
@@ -468,24 +467,31 @@ async function runProjectManager(input: CycleInput, logger: EventLogger): Promis
   // sees the structural cause rather than a generic "PM phase failed".
   const couplingViolations = items.length > 0 ? detectHiddenCoupling(items) : [];
 
-  // F-36: catch PM hallucination at the cheapest point. If a WI references
-  // a `files_in_scope` path that doesn't exist in the worktree AND its ACs
-  // don't describe creating the file, the PM almost certainly fabricated
-  // the path from generic project priors. Surface as a typed error so the
-  // operator (or auto-retry layer) sees "pm-hallucinated-paths" rather
-  // than a downstream dev-loop wedge that's expensive to diagnose.
-  const fabricatedPaths =
-    items.length > 0
-      ? validateFilesInScopeAgainstWorktree(items, input.worktreePath, existsSync)
-      : [];
+  // F-39: F-36 path validation REMOVED. The original failure mode (PM
+  // fabricating `src/engine/` directories that don't exist) was caused by
+  // PM running with cwd=forgeRoot — F-37 fixed that structurally by moving
+  // PM into the worktree. With cwd=worktree, the PM can no longer easily
+  // fabricate non-existent paths because it's globbing the real project.
+  //
+  // The F-36 validator was kept as belt-and-suspenders, but at trafficGame
+  // scale it produces too many false positives: legitimate WIs that create
+  // new test files describe behaviour in their THEN clauses ("tests assert
+  // flowEfficiency is 100...") rather than re-listing the filename. The
+  // validator couldn't tell apart fabrication from legitimate new-file
+  // creation and was blocking real work.
+  //
+  // The function is kept in work-item.ts for the unit tests + future use;
+  // it's just no longer called from the cycle. If a path is genuinely
+  // wrong, the dev-loop will fail naturally when the agent can't operate
+  // on it — and we have F-23 telemetry + F-27 classification to diagnose
+  // that downstream failure cleanly.
 
   const failed =
     items.length === 0 ||
     Object.keys(parseErrors).length > 0 ||
     setErrors.length > 0 ||
     itemErrorCount > 0 ||
-    couplingViolations.length > 0 ||
-    fabricatedPaths.length > 0;
+    couplingViolations.length > 0;
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -516,7 +522,6 @@ async function runProjectManager(input: CycleInput, logger: EventLogger): Promis
       set_errors: setErrors,
       per_item_error_count: itemErrorCount,
       hidden_coupling_violations: couplingViolations,
-      fabricated_paths: fabricatedPaths,
     },
   });
 

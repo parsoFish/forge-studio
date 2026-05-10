@@ -125,7 +125,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '## Inputs',
     '',
     `- Initiative manifest: \`${input.manifestRelPath}\` (read this AFTER the brain queries AND after the structural Globs). Note this path is absolute or forge-root-relative — adjust if needed.`,
-    `- Worktree: your current directory. Already enumerated in Step 0.5. Read individual files (key src/* modules, README, package.json scripts) before deciding the file-by-file scope of each WI. The orchestrator validates every \`files_in_scope\` path post-emission and FAILS the cycle if you reference a path that doesn't exist and isn't being created — fabrication is detected.`,
+    `- Worktree: your current directory. Already enumerated in Step 0.5. Read individual files (key src/* modules, README, package.json scripts) before deciding the file-by-file scope of each WI. \`files_in_scope\` paths can be existing files (that the WI edits/moves) OR new files (that the WI creates) — both are fine; the dev-loop handles each.`,
     '',
     '## Output requirements',
     '',
