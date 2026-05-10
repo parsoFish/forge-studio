@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -103,6 +103,12 @@ export type CycleInput = {
    * Ralph budget = reviewIterationCap × this.
    */
   reviewIterationBudgetUsd?: number;
+  /**
+   * Optional sink invoked after every event-log emit. The scheduler uses this
+   * to render live progress to stdout in `forge serve` interactive mode.
+   * Threaded straight through to `createLogger`'s `tee`.
+   */
+  eventTee?: (entry: import('./logging.ts').EventLogEntry) => void;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
@@ -128,7 +134,7 @@ export type CycleResult = {
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();
   const cycleId = input.cycleId ?? newCycleId(input.initiativeId);
-  const logger = createLogger(cycleId);
+  const logger = createLogger(cycleId, '_logs', { tee: input.eventTee });
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -310,6 +316,18 @@ async function runProjectManager(input: CycleInput, logger: EventLogger): Promis
     input_refs: [input.manifestPath],
     output_refs: [],
   });
+
+  // F-21: wipe any stale `.forge/work-items/` inherited from the project's
+  // base branch. The dev-loop's pre-review boundary snapshot historically
+  // committed cycle scratch into project repos; without this wipe, the PM
+  // agent sees pre-existing WI files and emits stale content (wrong
+  // initiative_id, wrong work) instead of starting from a clean canvas.
+  // Idempotent — missing dir is fine; gitignore is the structural fix,
+  // this is the runtime backstop.
+  const stalePmScratch = resolve(input.worktreePath, '.forge', 'work-items');
+  if (existsSync(stalePmScratch)) {
+    rmSync(stalePmScratch, { recursive: true, force: true });
+  }
 
   const manifest = parseManifest(readFileSync(input.manifestPath, 'utf8'));
   const featureCountByFeatureId = new Map<string, number>();

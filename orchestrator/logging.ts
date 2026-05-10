@@ -48,7 +48,20 @@ export type EventLogger = {
   logFilePath: string;
 };
 
-export function createLogger(cycleId: string, logsDir = '_logs'): EventLogger {
+export type LoggerOptions = {
+  /**
+   * Optional sink invoked synchronously after each `emit()` with the entry that
+   * was just written to disk. Used by the scheduler to render live progress to
+   * stdout. Throws are swallowed so a misbehaving tee can't break logging.
+   */
+  tee?: (entry: EventLogEntry) => void;
+};
+
+export function createLogger(
+  cycleId: string,
+  logsDir = '_logs',
+  opts: LoggerOptions = {},
+): EventLogger {
   const dir = resolve(logsDir, cycleId);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const logFilePath = join(dir, 'events.jsonl');
@@ -64,6 +77,13 @@ export function createLogger(cycleId: string, logsDir = '_logs'): EventLogger {
         ...partial,
       } as EventLogEntry;
       appendFileSync(logFilePath, JSON.stringify(entry) + '\n');
+      if (opts.tee) {
+        try {
+          opts.tee(entry);
+        } catch {
+          /* tee is best-effort — never break logging */
+        }
+      }
       return entry;
     },
   };

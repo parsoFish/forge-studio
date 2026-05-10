@@ -25,6 +25,7 @@ import {
 } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { runCycle } from './cycle.ts';
+import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig, type NotifyEvent } from './notify.ts';
 import { makeFileVerdict } from './file-verdict.ts';
 import { loadConfig } from './config.ts';
@@ -110,6 +111,13 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   const inFlight = new Map<string, Promise<void>>();
   let stop = false;
 
+  // F-22: live stdout in interactive mode. The scheduler-level `notify` calls
+  // already print cycle-boundary events; the per-cycle event tee surfaces
+  // intra-cycle progress (PM start/end, per-WI dev-loop start/end, review,
+  // reflection). Quiet enough to leave running, loud enough to trust.
+  // Enabled in both modes — once-mode is the typical validation entry point.
+  const tee = makeProgressTee();
+
   const tick = async (): Promise<boolean> => {
     while (inFlight.size < cfg.maxConcurrentInitiatives) {
       const pending = listPending(getPaths(cfg.queueRoot));
@@ -117,7 +125,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
       const filename = pending[0];
       const claimed = claim(filename, getPaths(cfg.queueRoot));
       if (!claimed) continue;
-      const promise = runOne(claimed, filename, cfg).finally(() => {
+      const promise = runOne(claimed, filename, cfg, tee).finally(() => {
         inFlight.delete(filename);
       });
       inFlight.set(filename, promise);
@@ -132,6 +140,46 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     return;
   }
 
+  // F-22: signal handlers wire the existing `stop` flag so Ctrl+C drains
+  // in-flight cycles cleanly instead of hard-killing the Node process. A
+  // second signal force-exits — recovers the operator's intent if the drain
+  // hangs (e.g., a wedged SDK call). Heartbeat + queue state is recoverable
+  // either way thanks to the recovery sweep, but a clean drain is cheaper.
+  const startedAt = Date.now();
+  let signalCount = 0;
+  const onSignal = (sig: NodeJS.Signals): void => {
+    signalCount += 1;
+    if (signalCount === 1) {
+      stop = true;
+      const n = inFlight.size;
+      console.log(
+        `\n[serve] received ${sig} — ${n === 0 ? 'idle, exiting' : `draining ${n} in-flight cycle(s); send ${sig} again to force-quit`}`,
+      );
+    } else {
+      console.log(`[serve] received second ${sig} — force-quitting`);
+      process.exit(130);
+    }
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
+  // F-22: idle tick — once a minute, print a one-liner showing queue depth
+  // and uptime so the operator knows the process is alive when nothing is
+  // happening. Suppressed when stdout isn't a TTY (CI, file capture) so we
+  // don't spam log files.
+  const showIdle = process.stdout.isTTY && cfg.mode === 'forever';
+  const idleTimer = showIdle
+    ? setInterval(() => {
+        if (stop) return;
+        if (inFlight.size > 0) return; // not idle if work is in flight
+        const c = counts(getPaths(cfg.queueRoot));
+        const upMins = Math.floor((Date.now() - startedAt) / 60_000);
+        console.log(
+          `[idle] ${inFlight.size} in-flight · ${c.pending} pending · uptime ${upMins}m`,
+        );
+      }, 60_000)
+    : null;
+
   // F-08 / ADR 012: periodic crash-recovery sweep. The startup sweep above
   // catches state from prior crashes; this catches mid-run loss (a worktree
   // that vanishes, a heartbeat that goes stale because runOne is wedged).
@@ -139,6 +187,10 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   const recoverTimer = setInterval(() => {
     void runRecoverySweep(cfg);
   }, cfg.recoverIntervalMs);
+
+  console.log(
+    `[serve] forever-mode · maxConcurrent=${cfg.maxConcurrentInitiatives} · poll=${cfg.pollIntervalMs}ms · Ctrl+C to drain`,
+  );
 
   try {
     // Forever loop.
@@ -153,12 +205,110 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     }
   } finally {
     clearInterval(recoverTimer);
+    if (idleTimer) clearInterval(idleTimer);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
   }
 
+  if (inFlight.size > 0) {
+    console.log(`[serve] waiting on ${inFlight.size} in-flight cycle(s) before exit…`);
+  }
   await Promise.allSettled(inFlight.values());
-  // Stop is set by signal handlers (SIGINT/SIGTERM); not reachable in current
-  // skeleton, but kept for future expansion.
-  void stop;
+  console.log('[serve] exited cleanly');
+}
+
+/**
+ * Build a tee function that prints interesting cycle events to stdout. Filters
+ * the firehose down to phase-transition + per-WI signals — enough to know what
+ * the system is doing, not so much that it drowns the terminal.
+ */
+function makeProgressTee(): (entry: EventLogEntry) => void {
+  return (e) => {
+    const ts = new Date(e.started_at).toISOString().slice(11, 19);
+    const id = e.initiative_id;
+    const md = (e.metadata ?? {}) as Record<string, unknown>;
+    const cost =
+      typeof e.cost_usd === 'number' && e.cost_usd > 0 ? ` · $${e.cost_usd.toFixed(2)}` : '';
+    const dur =
+      typeof e.duration_ms === 'number' && e.duration_ms > 0
+        ? ` · ${formatDur(e.duration_ms)}`
+        : '';
+
+    // Cycle boundary
+    if (e.phase === 'orchestrator' && e.skill === 'cycle') {
+      if (e.event_type === 'start') console.log(`[${ts}] ${id} · cycle started`);
+      else if (e.event_type === 'error')
+        console.log(`[${ts}] ${id} · cycle ERROR: ${e.message ?? '(no message)'}`);
+      return;
+    }
+
+    // PM phase
+    if (e.phase === 'project-manager' && e.skill === 'project-manager') {
+      if (e.event_type === 'start') console.log(`[${ts}] ${id} · PM started`);
+      else if (e.event_type === 'error')
+        console.log(
+          `[${ts}] ${id} · PM FAILED${cost}${dur} · subtype=${md.result_subtype ?? '?'} · WIs=${md.work_item_count ?? '?'}`,
+        );
+      else if (e.message === 'pm.feature-decomposed') {
+        // Skip per-feature noise — covered by the end summary.
+      }
+      return;
+    }
+
+    // Developer-loop per-WI Ralph
+    if (e.phase === 'developer-loop' && e.skill === 'developer-ralph') {
+      const wi = md.work_item_id ?? '?';
+      if (e.message === 'ralph.start') console.log(`[${ts}] ${id} · ${wi} dev started`);
+      else if (e.message === 'ralph.skipped')
+        console.log(`[${ts}] ${id} · ${wi} dev skipped (${md.reason ?? '?'})`);
+      else if (e.message === 'ralph.end') {
+        const status = md.status ?? '?';
+        const iters = md.iterations ?? '?';
+        const reason = md.stop_reason ? ` · ${md.stop_reason}` : '';
+        console.log(`[${ts}] ${id} · ${wi} dev ${status}${cost} · iters=${iters}${reason}`);
+      }
+      return;
+    }
+
+    // Developer-loop phase summary
+    if (e.phase === 'developer-loop' && e.event_type === 'end' && md.work_item_count) {
+      console.log(
+        `[${ts}] ${id} · dev-loop summary · ${md.complete}/${md.work_item_count} complete · ${md.failed} failed${cost}${dur}`,
+      );
+      return;
+    }
+
+    // Review phase
+    if (e.phase === 'review-loop') {
+      if (e.event_type === 'start') console.log(`[${ts}] ${id} · review started`);
+      else if (e.event_type === 'end')
+        console.log(
+          `[${ts}] ${id} · review ${md.verdict ?? md.status ?? 'done'}${cost}${dur}`,
+        );
+      else if (e.event_type === 'error')
+        console.log(`[${ts}] ${id} · review ERROR: ${e.message ?? '(no message)'}`);
+      return;
+    }
+
+    // Reflection phase
+    if (e.phase === 'reflection') {
+      if (e.event_type === 'start') console.log(`[${ts}] ${id} · reflection started`);
+      else if (e.event_type === 'end')
+        console.log(`[${ts}] ${id} · reflection done${cost}${dur}`);
+      else if (e.event_type === 'error')
+        console.log(`[${ts}] ${id} · reflection FAILED: ${e.message ?? '(no message)'}`);
+      return;
+    }
+  };
+}
+
+function formatDur(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r === 0 ? `${m}m` : `${m}m${r}s`;
 }
 
 /**
@@ -196,6 +346,7 @@ async function runOne(
   manifestPath: string,
   filename: string,
   cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig },
+  tee: ((entry: EventLogEntry) => void) | undefined,
 ): Promise<void> {
   const paths = getPaths(cfg.queueRoot);
   const heartbeat = setInterval(() => {
@@ -206,6 +357,7 @@ async function runOne(
   let wtHandle: worktree.WorktreeHandle | null = null;
   try {
     const manifest = parseManifest(manifestPath);
+    if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
     wtHandle = worktree.add({
       projectRepoPath: manifest.projectRepoPath,
       branch: `forge/${manifest.initiativeId}`,
@@ -219,6 +371,7 @@ async function runOne(
       manifestPath,
       projectRepoPath: manifest.projectRepoPath,
       worktreePath: wtHandle.path,
+      eventTee: tee,
       // File-based verdict provider — writes a prompt file next to the
       // manifest in `_queue/in-flight/`, polls for the operator's response.
       // Replaces the prior auto-approving default that silently merged every
@@ -230,6 +383,7 @@ async function runOne(
       }),
     });
 
+    if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
     await dispatchTerminalStatus(
       {
         filename,
