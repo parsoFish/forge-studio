@@ -240,17 +240,18 @@ test('validateFilesInScopeAgainstWorktree: real path → no error', () => {
   }
 });
 
-test('validateFilesInScopeAgainstWorktree: hallucinated path → error', () => {
+test('validateFilesInScopeAgainstWorktree: hallucinated path (only in given, not in then) → error', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-fis-'));
   try {
     const item = fixture({
       files_in_scope: ['src/engine/physics.test.ts'],
-      // ACs reference the file as a precondition (Given), not as something being created.
+      // Path is referenced as a precondition (given) but not as a postcondition
+      // (then). Then clause references a different file.
       acceptance_criteria: [
         {
           given: 'the file src/engine/physics.test.ts exists in the worktree',
           when: 'WI runs',
-          then: 'it is moved to tests/_legacy/',
+          then: 'tests/_legacy/somewhere-else.test.ts contains the moved content',
         },
       ],
     });
@@ -263,7 +264,7 @@ test('validateFilesInScopeAgainstWorktree: hallucinated path → error', () => {
   }
 });
 
-test('validateFilesInScopeAgainstWorktree: non-existent BUT explicitly created → no error', () => {
+test('validateFilesInScopeAgainstWorktree: path in THEN clause as creation target → no error', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-fis-'));
   try {
     const item = fixture({
@@ -271,8 +272,52 @@ test('validateFilesInScopeAgainstWorktree: non-existent BUT explicitly created �
       acceptance_criteria: [
         {
           given: 'no behaviour-layer scoring tests exist',
-          when: 'unified.test.ts is written under tests/scoring/',
-          then: 'a new file unified.test.ts exists with at least 5 tests covering UnifiedScore',
+          when: 'the WI runs',
+          then: 'tests/scoring/unified.test.ts contains at least 5 tests covering UnifiedScore',
+        },
+      ],
+    });
+    const errs = validateFilesInScopeAgainstWorktree([item], dir, existsSync);
+    assert.deepEqual(errs, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('validateFilesInScopeAgainstWorktree: path in THEN clause as move destination → no error (no "create" verb required)', () => {
+  // F-38 fix: the original regex required creation verbs (create/write/author)
+  // and missed legitimate move destinations like "moved into tests/_legacy/".
+  const dir = mkdtempSync(join(tmpdir(), 'forge-fis-'));
+  try {
+    const item = fixture({
+      files_in_scope: ['tests/_legacy'],
+      acceptance_criteria: [
+        {
+          given: 'the existing tests/ directory has subdirectories',
+          when: 'WI-1 work completes',
+          then: 'each subdirectory has been moved verbatim into tests/_legacy/',
+        },
+      ],
+    });
+    const errs = validateFilesInScopeAgainstWorktree([item], dir, existsSync);
+    assert.deepEqual(errs, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('validateFilesInScopeAgainstWorktree: basename match catches abbreviated AC references', () => {
+  // PM sometimes writes "X.test.ts" in the AC then-clause when files_in_scope
+  // has the full path "tests/integration/X.test.ts". Basename match catches it.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-fis-'));
+  try {
+    const item = fixture({
+      files_in_scope: ['tests/integration/legacy-preserved.test.ts'],
+      acceptance_criteria: [
+        {
+          given: 'legacy assertions identified',
+          when: 'they are re-implemented in legacy-preserved.test.ts',
+          then: 'legacy-preserved.test.ts passes',
         },
       ],
     });
