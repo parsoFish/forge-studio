@@ -1100,23 +1100,15 @@ async function runReviewer(input: CycleInput, logger: EventLogger): Promise<Revi
     throw err;
   }
 
-  // F-13: brain-first gate. The reviewer is supposed to consult brain themes
-  // for PR/demo conventions and project review gotchas before drafting.
-  // A skipped consultation is a hard fail UNLESS the loop also exhausted
-  // its iteration budget — in that case the agent ran out of rounds while
-  // working (a PR draft and demo do exist), so the F-11 cap-exhausted path
-  // should still move the manifest to `ready-for-review/` for operator
-  // pickup. The brain-skipped event is recorded for visibility either way.
-  const brainOk = recordBrainGateResult('review-loop', 'reviewer', toolUseSummary.brainReads, {
-    initiativeId: input.initiativeId,
-    logger,
-    parentEventId: start.event_id,
-  });
-  if (!brainOk && loopResult.stop_reason !== 'iteration-budget') {
-    throw new Error(
-      'review-loop phase failed: brain-first mandate not honoured (0 brain-query calls). The reviewer must read project themes before drafting the demo + PR.',
-    );
-  }
+  // F-41c: brain-first runtime gate REMOVED from the review-loop. Same
+  // reasoning as F-34 for dev: the reviewer's job is verify + write-PR
+  // anchored on the git log / diff / spec already in the worktree. Brain
+  // themes about PR conventions (squash-merge-stacked-prs, etc.) are
+  // forge-system patterns the orchestrator already enforces — the agent
+  // doesn't need to read them every iteration. Diagnosed in the 22:17
+  // cycle: reviewer re-read the same 4 brain themes in all 6 iterations,
+  // burning $0.10-0.20 per iter before doing real PR work, then panicked
+  // about budget. brainReads tally remains for telemetry; just not gated.
 
   // Emit per-verdict events post-loop.
   for (const verdict of gateState.verdicts) {
