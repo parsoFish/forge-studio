@@ -25,6 +25,7 @@ export type FailureMode =
   | 'pm-stale-context'          // PM emitted WIs with the wrong initiative_id (legacy bug, gitignore-fixed)
   | 'pm-budget-exhausted'       // PM phase hit its USD cap
   | 'pm-hallucinated-paths'     // F-36: PM emitted files_in_scope paths that don't exist + aren't being created
+  | 'pm-hidden-coupling'        // F-43: two WIs share files_in_scope with no depends_on edge between them
   | 'gate-missing-script'       // npm run X failed with "missing script: X"
   | 'worktree-no-deps'          // gate stderr matched "Cannot find module" / module-resolution
   | 'agent-rate-limited'        // SDK threw rate_limit_error
@@ -53,6 +54,7 @@ const RECOVERABLE_MODES = new Set<FailureMode>([
   'brain-skipped',
   'agent-rate-limited',
   'pm-hallucinated-paths',
+  'pm-hidden-coupling',
 ]);
 
 const RECOMMENDATIONS: Record<FailureMode, string> = {
@@ -66,6 +68,8 @@ const RECOMMENDATIONS: Record<FailureMode, string> = {
     'PM phase hit its USD cap before producing valid WIs. Increase iteration_budget / cost_budget_usd in the manifest.',
   'pm-hallucinated-paths':
     'PM emitted files_in_scope paths that don\'t exist in the worktree and aren\'t being created by any acceptance criterion. Auto-retry with the F-35 mandatory Glob enumeration; the second attempt should anchor on real paths. Persistent fabrication after retry signals a deeper prompt issue — surface for human review.',
+  'pm-hidden-coupling':
+    'Two or more WIs share files_in_scope without a depends_on edge between them — they would conflict at merge time. PM correctly identified the decomposition shape but forgot to serialise siblings that touch the same file. Auto-retry; the PM prompt explicitly covers this rule and the retry usually adds the missing edge.',
   'gate-missing-script':
     'quality_gate_cmd referenced an npm script that does not exist in the project. Manifest bug — fix the script name; auto-retry will not help.',
   'worktree-no-deps':
@@ -104,6 +108,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let pmStaleContext = false;
   let pmBudgetExhausted = false;
   let pmHallucinatedPaths = false;
+  let pmHiddenCoupling = false;
   let gateMissingScript = false;
   let worktreeNoDeps = false;
   let rateLimited = false;
@@ -161,6 +166,17 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       pushEvidence(e);
     }
 
+    // F-43 pm-hidden-coupling: PM end event carries non-empty hidden_coupling_violations.
+    if (
+      e.phase === 'project-manager' &&
+      e.event_type === 'error' &&
+      Array.isArray(md.hidden_coupling_violations) &&
+      md.hidden_coupling_violations.length > 0
+    ) {
+      pmHiddenCoupling = true;
+      pushEvidence(e);
+    }
+
     // gate-missing-script / worktree-no-deps: read gate.fail event stderr_tail.
     if (msg === 'gate.fail') {
       const stderr = typeof md.gate_stderr_tail === 'string' ? md.gate_stderr_tail : '';
@@ -210,6 +226,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   else if (worktreeNoDeps) mode = 'worktree-no-deps';
   else if (pmStaleContext) mode = 'pm-stale-context';
   else if (pmHallucinatedPaths) mode = 'pm-hallucinated-paths';
+  else if (pmHiddenCoupling) mode = 'pm-hidden-coupling';
   else if (pmBudgetExhausted) mode = 'pm-budget-exhausted';
   else if (trivialPass) mode = 'trivial-pass';
   else if (brainSkipped) mode = 'brain-skipped';
