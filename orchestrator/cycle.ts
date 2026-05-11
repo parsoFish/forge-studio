@@ -312,7 +312,16 @@ function writeCycleReportSafely(cycleId: string): void {
  * turns to keep iteration cheap.
  */
 const PM_LIVE_MAX_TURNS = 50;
-const PM_LIVE_MAX_BUDGET_USD = 1.0;
+// F-42: PM budget bumped from $1.00 → $2.50. The 22:17 simplification-source
+// cycle hit $1.01 and emitted 0 WIs (pm-budget-exhausted). At trafficGame's
+// scale (251 files; source-extraction WIs need to read ~2,600 LOC across 5
+// large modules before emitting reasonable files_in_scope), $1.00 wasn't
+// enough headroom. $2.50 is generous for the biggest projects without being
+// open-ended; PM rarely uses more than $1.50 even at scale (Phase 1 averaged
+// $0.70-1.00). Also raised because PM now runs with cwd=worktree (F-37),
+// which means it correctly globs real project trees — more useful tool calls
+// means slightly higher cost per cycle, in exchange for not fabricating.
+const PM_LIVE_MAX_BUDGET_USD = 2.5;
 
 async function runProjectManager(input: CycleInput, logger: EventLogger): Promise<void> {
   const start = logger.emit({
