@@ -36,6 +36,7 @@ import {
   type DemoCheckpoint,
   type DemoComparisonModel,
   type DemoBuildStatus,
+  type HarnessMetricRow,
 } from './demo-html.ts';
 import {
   DEMO_SCRIPT_ALLOWED_TOOLS,
@@ -134,13 +135,137 @@ export type CheckpointSpec = {
   /**
    * `screenshot` (default) — static UI state. `video` — dynamic/temporal
    * behaviour (a running simulation, an animation): a single still of a
-   * moving system cannot demonstrate parity, so these are clips.
+   * moving system cannot demonstrate parity, so these are clips. `harness`
+   * — behaviour only measurable at the Node/test layer; the orchestrator
+   * reruns the manifest's `harness` command in each tree and renders the
+   * scraped metrics as a before/after table + parity verdict.
    */
-  kind?: 'screenshot' | 'video';
+  kind?: 'screenshot' | 'video' | 'harness';
   caption: string;
   beforeNote?: string;
   afterNote?: string;
 };
+
+/**
+ * Declares how to produce measured before/after metrics by *reusing the
+ * project's own measurement test* (e.g. a headless flow/simulation test)
+ * rather than re-deriving it. The orchestrator runs `command` in each
+ * worktree (cwd = worktree root) and scrapes stdout+stderr with each
+ * `metrics[].pattern` (one capture group). It stays project-agnostic: the
+ * demo-author — which already reads the project — supplies the command and
+ * the regexes by reading that test's emitted output.
+ */
+export type DemoMetricSpec = {
+  label: string;
+  /** Regex (string form) with ONE capture group, applied to stdout+stderr. */
+  pattern: string;
+  /** `float` (default) | `int` | `string`. Drives Δ% + parity computation. */
+  kind?: 'float' | 'int' | 'string';
+  unit?: string;
+  /** Numeric parity tolerance (|Δ%| ≤ this ⇒ within). Default 5. Ignored for strings. */
+  deltaTolerancePct?: number;
+};
+
+export type DemoHarnessSpec = {
+  /** Shell command run in each worktree root (e.g. an un-skipped flow test). */
+  command: string;
+  /** Extra env merged over process.env (e.g. a flag that un-skips the test). */
+  env?: Record<string, string>;
+  /** Hard timeout per tree. Default 600_000 ms (flow sims are long-running). */
+  timeoutMs?: number;
+  metrics: DemoMetricSpec[];
+};
+
+const DEFAULT_HARNESS_TIMEOUT_MS = 600_000;
+
+/**
+ * Run the harness command in one worktree and scrape its metrics. Tolerant:
+ * a non-zero exit or an unmatched pattern yields `null` for that metric, never
+ * throws — a harness checkpoint must degrade to an "incomplete" row, not
+ * fail the whole demo. Returns raw scraped strings keyed by metric label.
+ */
+export function runHarness(
+  worktreePath: string,
+  spec: DemoHarnessSpec,
+): Record<string, string | null> {
+  let out = '';
+  try {
+    out = execFileSync('bash', ['-lc', spec.command], {
+      cwd: worktreePath,
+      env: { ...process.env, ...(spec.env ?? {}) },
+      stdio: 'pipe',
+      encoding: 'utf8',
+      timeout: spec.timeoutMs ?? DEFAULT_HARNESS_TIMEOUT_MS,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (e) {
+    // Capture partial output even on non-zero exit / timeout — the metric
+    // lines are often printed before a late assertion fails.
+    const err = e as { stdout?: Buffer | string; stderr?: Buffer | string };
+    out = `${err.stdout ?? ''}\n${err.stderr ?? ''}`;
+  }
+  const result: Record<string, string | null> = {};
+  for (const m of spec.metrics) {
+    try {
+      const match = new RegExp(m.pattern).exec(out);
+      result[m.label] = match && match[1] !== undefined ? match[1].trim() : null;
+    } catch {
+      result[m.label] = null; // a bad author regex degrades that row only
+    }
+  }
+  return result;
+}
+
+/** Pair scraped before/after metric maps into rendered rows (pure). */
+export function pairHarnessMetrics(
+  specMetrics: DemoMetricSpec[],
+  before: Record<string, string | null>,
+  after: Record<string, string | null>,
+): HarnessMetricRow[] {
+  return specMetrics.map((m) => {
+    const b = before[m.label] ?? null;
+    const a = after[m.label] ?? null;
+    const kind = m.kind ?? 'float';
+    if (b === null || a === null) {
+      return { label: m.label, unit: m.unit, before: b, after: a, deltaPct: null, parity: 'incomplete' };
+    }
+    if (kind === 'string') {
+      return {
+        label: m.label,
+        unit: m.unit,
+        before: b,
+        after: a,
+        deltaPct: null,
+        parity: b === a ? 'match' : 'diverged',
+      };
+    }
+    const bn = Number(b);
+    const an = Number(a);
+    if (!Number.isFinite(bn) || !Number.isFinite(an)) {
+      return {
+        label: m.label,
+        unit: m.unit,
+        before: b,
+        after: a,
+        deltaPct: null,
+        parity: b === a ? 'match' : 'diverged',
+      };
+    }
+    if (bn === an) {
+      return { label: m.label, unit: m.unit, before: b, after: a, deltaPct: 0, parity: 'match' };
+    }
+    const deltaPct = bn === 0 ? (an === 0 ? 0 : 100) : ((an - bn) / Math.abs(bn)) * 100;
+    const tol = m.deltaTolerancePct ?? 5;
+    return {
+      label: m.label,
+      unit: m.unit,
+      before: b,
+      after: a,
+      deltaPct,
+      parity: Math.abs(deltaPct) <= tol ? 'within' : 'diverged',
+    };
+  });
+}
 
 const VIDEO_EXTS = new Set(['.webm', '.mp4']);
 
@@ -154,10 +279,23 @@ const VIDEO_EXTS = new Set(['.webm', '.mp4']);
  * spec entry are appended (filename as caption) so nothing is silently
  * dropped.
  */
+/** Read a `<dir>/<label>.metrics.json` map written by runHarness; {} if absent. */
+function readMetricsJson(dir: string, label: string): Record<string, string | null> {
+  const p = join(dir, `${label}.metrics.json`);
+  if (!existsSync(p)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(p, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export function pairCheckpoints(
   beforeDir: string,
   afterDir: string,
   specs: CheckpointSpec[],
+  harness?: DemoHarnessSpec,
 ): DemoCheckpoint[] {
   const listBy = (dir: string, exts: Set<string>): Map<string, string> => {
     const m = new Map<string, string>();
@@ -201,6 +339,26 @@ export function pairCheckpoints(
   for (const s of specs) {
     consumed.add(s.label);
     const kind = s.kind ?? 'screenshot';
+    if (kind === 'harness') {
+      const rows = harness
+        ? pairHarnessMetrics(
+            harness.metrics,
+            readMetricsJson(beforeDir, s.label),
+            readMetricsJson(afterDir, s.label),
+          )
+        : [];
+      out.push({
+        label: s.label,
+        kind: 'harness',
+        caption: s.caption,
+        beforeImage: null,
+        afterImage: null,
+        metrics: rows,
+        beforeNote: s.beforeNote,
+        afterNote: s.afterNote,
+      });
+      continue;
+    }
     out.push({ ...mk(s.label, kind), caption: s.caption, beforeNote: s.beforeNote, afterNote: s.afterNote });
   }
   // Captures with no spec entry — surface rather than drop. Infer kind from
@@ -222,6 +380,8 @@ export type DemoManifest = {
   title: string;
   checkpoints: CheckpointSpec[];
   acceptanceCriteria?: string[];
+  /** Present iff any checkpoint is `kind: 'harness'`. */
+  harness?: DemoHarnessSpec;
 };
 
 /**
@@ -236,11 +396,18 @@ export function loadDemoManifest(demoWorkDir: string, fallbackTitle: string): De
     try {
       const parsed = JSON.parse(readFileSync(p, 'utf8')) as Partial<DemoManifest>;
       if (parsed && typeof parsed.essence === 'string' && Array.isArray(parsed.checkpoints)) {
+        const harness =
+          parsed.harness &&
+          typeof parsed.harness.command === 'string' &&
+          Array.isArray(parsed.harness.metrics)
+            ? parsed.harness
+            : undefined;
         return {
           essence: parsed.essence,
           title: parsed.title ?? fallbackTitle,
           checkpoints: parsed.checkpoints,
           acceptanceCriteria: parsed.acceptanceCriteria,
+          harness,
         };
       }
     } catch {
@@ -283,7 +450,12 @@ export function buildComparisonModel(input: BuildComparisonModelInput): DemoComp
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     baselineBuild: input.baselineBuild,
     changedBuild: input.changedBuild,
-    checkpoints: pairCheckpoints(input.beforeDir, input.afterDir, input.manifest.checkpoints),
+    checkpoints: pairCheckpoints(
+      input.beforeDir,
+      input.afterDir,
+      input.manifest.checkpoints,
+      input.manifest.harness,
+    ),
     beforeVideo: input.beforeVideo ?? null,
     afterVideo: input.afterVideo ?? null,
     diffStat: input.diffStat,
@@ -850,6 +1022,12 @@ export async function generateComparisonDemo(
     const videoLabels = manifest.checkpoints
       .filter((c) => c.kind === 'video')
       .map((c) => c.label);
+    const harnessLabels = manifest.checkpoints
+      .filter((c) => c.kind === 'harness')
+      .map((c) => c.label);
+    const hasMediaCheckpoints = manifest.checkpoints.some(
+      (c) => (c.kind ?? 'screenshot') !== 'harness',
+    );
 
     // Run baseline then changed (sequential — frees the port between runs).
     for (const [wt, capDir, which] of [
@@ -860,30 +1038,51 @@ export async function generateComparisonDemo(
       if (which === 'baseline') baselineBuild = status;
       else changedBuild = status;
       if (!status.ok) continue; // renderer shows the build banner + no captures
-      const server = await startServer(wt.path);
-      if (!server) {
-        const msg = 'server did not start';
-        if (which === 'baseline') baselineBuild = { ok: false, detail: msg };
-        else changedBuild = { ok: false, detail: msg };
-        continue;
+
+      const noteParts: string[] = [status.detail ?? 'ok'];
+
+      // Harness: rerun the project's own measurement test in this tree and
+      // persist the scraped metrics per harness checkpoint. Independent of
+      // the dev server (it's a test command). Tolerant by construction.
+      if (manifest.harness && harnessLabels.length > 0) {
+        const scraped = runHarness(wt.path, manifest.harness);
+        for (const label of harnessLabels) {
+          writeFileSync(join(capDir, `${label}.metrics.json`), JSON.stringify(scraped, null, 2));
+        }
+        const got = Object.values(scraped).filter((v) => v !== null).length;
+        noteParts.push(`harness scraped ${got}/${manifest.harness.metrics.length} metric(s)`);
       }
-      try {
-        const cap = runSpec(wt.path, demoWorkDir, server.url, capDir, videoLabels);
-        const shots = existsSync(capDir)
-          ? readdirSync(capDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)).length
-          : 0;
-        const captured = `${shots} screenshot(s) + ${cap.videos} video(s)`;
-        const note =
-          shots + cap.videos > 0
-            ? `${status.detail}; captured ${captured}`
-            : `${status.detail}; demo spec produced NO captures (playwright ${
-                cap.ok ? 'exited 0' : 'failed'
-              }: ${cap.tail.replace(/\s+/g, ' ').slice(-240)})`;
-        if (which === 'baseline') baselineBuild = { ok: status.ok, detail: note };
-        else changedBuild = { ok: status.ok, detail: note };
-      } finally {
-        await server.stop();
+
+      // Media checkpoints need the dev server + Playwright spec. A
+      // harness-only manifest skips this entirely.
+      if (hasMediaCheckpoints) {
+        const server = await startServer(wt.path);
+        if (!server) {
+          const msg = 'server did not start';
+          if (which === 'baseline') baselineBuild = { ok: false, detail: msg };
+          else changedBuild = { ok: false, detail: msg };
+          continue;
+        }
+        try {
+          const cap = runSpec(wt.path, demoWorkDir, server.url, capDir, videoLabels);
+          const shots = existsSync(capDir)
+            ? readdirSync(capDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)).length
+            : 0;
+          noteParts.push(
+            shots + cap.videos > 0
+              ? `captured ${shots} screenshot(s) + ${cap.videos} video(s)`
+              : `demo spec produced NO captures (playwright ${
+                  cap.ok ? 'exited 0' : 'failed'
+                }: ${cap.tail.replace(/\s+/g, ' ').slice(-240)})`,
+          );
+        } finally {
+          await server.stop();
+        }
       }
+
+      const note = noteParts.join('; ');
+      if (which === 'baseline') baselineBuild = { ok: status.ok, detail: note };
+      else changedBuild = { ok: status.ok, detail: note };
     }
 
     const model = buildComparisonModel({
@@ -907,4 +1106,9 @@ export async function generateComparisonDemo(
 }
 
 // Re-export the renderer's types so callers depend on one module surface.
-export type { DemoComparisonModel, DemoCheckpoint, DemoBuildStatus } from './demo-html.ts';
+export type {
+  DemoComparisonModel,
+  DemoCheckpoint,
+  DemoBuildStatus,
+  HarnessMetricRow,
+} from './demo-html.ts';

@@ -18,6 +18,28 @@
  * builder, so this renderer is trivially testable.
  */
 
+/**
+ * One measured metric, paired before vs after, for a `kind: 'harness'`
+ * checkpoint. Values are the raw scraped strings (null = not captured on
+ * that side). `deltaPct` is computed only for numeric metrics. `parity` is
+ * the per-row verdict the renderer colours.
+ */
+export type HarnessMetricRow = {
+  label: string;
+  unit?: string;
+  before: string | null;
+  after: string | null;
+  /** (after-before)/|before|*100, numeric metrics only; null otherwise. */
+  deltaPct: number | null;
+  /**
+   * `match` — equal (numeric exact, or string identical).
+   * `within` — numeric, differs but |Δ%| ≤ tolerance.
+   * `diverged` — numeric over tolerance, or string mismatch.
+   * `incomplete` — missing on one side.
+   */
+  parity: 'match' | 'within' | 'diverged' | 'incomplete';
+};
+
 export type DemoCheckpoint = {
   /** Stable identifier; pairs the before capture with the after one. */
   label: string;
@@ -27,9 +49,15 @@ export type DemoCheckpoint = {
    * (referenced as a sibling file under `before/` / `after/`, too large to
    * inline). Choose video for anything time-dependent (a running
    * simulation, an animation): a single still of a moving system cannot
-   * demonstrate parity. Default `screenshot`.
+   * demonstrate parity. `harness` — behaviour only measurable at the
+   * Node/test layer (a headless simulation): the orchestrator reruns the
+   * project's own measurement test in each tree and this checkpoint renders
+   * the scraped metrics as a before/after table + parity verdict, NOT
+   * imagery. Default `screenshot`.
    */
-  kind: 'screenshot' | 'video';
+  kind: 'screenshot' | 'video' | 'harness';
+  /** For `kind: 'harness'` — paired metric rows; null/empty otherwise. */
+  metrics?: HarnessMetricRow[] | null;
   /**
    * Agent-authored caption: what behaviour this checkpoint demonstrates
    * (e.g. "Selecting a node opens the inspector panel"). Describes the
@@ -146,10 +174,61 @@ function mediaCell(cp: DemoCheckpoint, side: 'before' | 'after'): string {
     : `<div class="missing">no capture</div>`;
 }
 
+/** Overall harness verdict from the per-row parities. */
+function harnessVerdict(
+  rows: HarnessMetricRow[],
+): { word: string; cls: string } {
+  if (rows.length === 0) return { word: 'NO METRICS', cls: 'incomplete' };
+  if (rows.some((r) => r.parity === 'incomplete'))
+    return { word: 'INCOMPLETE', cls: 'incomplete' };
+  if (rows.some((r) => r.parity === 'diverged'))
+    return { word: 'DIVERGED', cls: 'diverged' };
+  return { word: 'PARITY', cls: 'within' };
+}
+
+function harnessTable(cp: DemoCheckpoint): string {
+  const rows = cp.metrics ?? [];
+  const v = harnessVerdict(rows);
+  const body = rows
+    .map((r) => {
+      const unit = r.unit ? ` <span class="muted">${esc(r.unit)}</span>` : '';
+      const d =
+        r.deltaPct === null
+          ? r.parity === 'match'
+            ? '='
+            : '—'
+          : `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%`;
+      return `<tr class="p-${r.parity}"><td>${esc(r.label)}</td><td>${
+        r.before === null ? '<span class="muted">—</span>' : esc(r.before)
+      }${unit}</td><td>${
+        r.after === null ? '<span class="muted">—</span>' : esc(r.after)
+      }${unit}</td><td>${esc(d)}</td><td class="verdict-cell">${r.parity}</td></tr>`;
+    })
+    .join('');
+  return `<table class="harness">
+      <thead><tr><th>metric</th><th>before</th><th>after</th><th>Δ</th><th>parity</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="verdict v-${v.cls}">Verdict: <strong>${v.word}</strong></p>`;
+}
+
 function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
   const beforeNote = cp.beforeNote ? `<p class="note">${esc(cp.beforeNote)}</p>` : '';
   const afterNote = cp.afterNote ? `<p class="note">${esc(cp.afterNote)}</p>` : '';
-  const kindBadge = cp.kind === 'video' ? '<span class="kind">video</span>' : '';
+  const kindBadge =
+    cp.kind === 'video'
+      ? '<span class="kind">video</span>'
+      : cp.kind === 'harness'
+        ? '<span class="kind">harness</span>'
+        : '';
+  if (cp.kind === 'harness') {
+    return `
+  <section class="checkpoint">
+    <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
+    ${harnessTable(cp)}
+    ${beforeNote}${afterNote}
+  </section>`;
+  }
   return `
   <section class="checkpoint">
     <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
@@ -226,6 +305,18 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   figcaption { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .4rem; }
   img, video { width: 100%; height: auto; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; display: block; background: #0001; }
   .missing { display: grid; place-items: center; min-height: 160px; border: 1px dashed color-mix(in srgb, currentColor 30%, transparent); border-radius: 6px; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .85rem; }
+  table.harness { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .2rem 0 .6rem; }
+  table.harness th, table.harness td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  table.harness th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.harness td:nth-child(n+2) { font-variant-numeric: tabular-nums; }
+  table.harness .verdict-cell { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  tr.p-diverged { background: color-mix(in srgb, #e0584a 16%, transparent); }
+  tr.p-within { background: color-mix(in srgb, #3fae6a 12%, transparent); }
+  tr.p-incomplete { background: color-mix(in srgb, #e0a800 16%, transparent); }
+  .verdict { font-size: .95rem; margin: .2rem 0 0; padding: .5rem .8rem; border-radius: 6px; display: inline-block; }
+  .verdict.v-within { background: color-mix(in srgb, #3fae6a 20%, transparent); }
+  .verdict.v-diverged { background: color-mix(in srgb, #e0584a 22%, transparent); }
+  .verdict.v-incomplete { background: color-mix(in srgb, #e0a800 22%, transparent); }
   .note { font-size: .82rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
   .appendix { margin: 1.4rem 0; }
   .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }

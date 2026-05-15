@@ -69,6 +69,15 @@ screenshot "before vs after" of dynamic behaviour proves nothing.
 - `kind: "video"` — **dynamic/temporal** behaviour. Record the action over
   time (e.g. start the simulation, let vehicles flow for a few seconds).
   The before/after pair is two clips the reviewer can watch.
+- `kind: "harness"` — behaviour that is **only measurable at the Node/test
+  layer** (a headless simulation, a throughput/flow figure computed in unit
+  tests, not the browser). A video of a browser-unreachable system would be
+  empty or fabricated; instead the orchestrator **reruns the project's own
+  measurement test** in both trees and renders the scraped numbers as a
+  before/after table + parity verdict. **Reuse the existing test — never
+  re-derive the measurement.** Pair it with a `screenshot` "settled state"
+  checkpoint when a still adds visual confirmation that the same network
+  resolved.
 
 **Never fabricate a visual checkpoint for a non-visual change.** An internal
 API removal, a refactor with no rendered difference, a type change — these
@@ -111,18 +120,30 @@ identical or meaningless.
   "essence": "<2–3 sentences: what behaviour changed and why it matters, framed prior→new. State any non-visual delta here, not as a fake checkpoint.>",
   "checkpoints": [
     { "label": "<= the test() title and the capture filename stem>",
-      "kind": "screenshot | video",
+      "kind": "screenshot | video | harness",
       "caption": "<what behaviour this checkpoint shows>",
       "beforeNote": "<optional: clarify the prior-behaviour state>",
       "afterNote": "<optional: clarify the new-behaviour state>" }
   ],
+  "harness": {
+    "command": "<shell cmd run in each worktree root that runs the project's own measurement test, e.g. an un-skipped flow test>",
+    "env": { "<OPTIONAL_FLAG_THAT_UNSKIPS_THE_TEST>": "1" },
+    "timeoutMs": 600000,
+    "metrics": [
+      { "label": "<metric name>", "pattern": "<regex with ONE capture group, read off that test's printed output>",
+        "kind": "float | int | string", "unit": "<optional>", "deltaTolerancePct": 5 }
+    ]
+  },
   "acceptanceCriteria": ["<the ACs this demo is grounded in>"]
 }
 ```
 
 - `checkpoints` order = the narrative order in the report.
-- Every `label` MUST equal a `test()` title; screenshot labels map to
-  `<label>.png`, video labels to a harvested `<label>.webm`.
+- Screenshot/video `label` MUST equal a `test()` title; screenshot labels
+  map to `<label>.png`, video labels to a harvested `<label>.webm`. A
+  `harness` checkpoint has NO `test()` and NO capture file — its data comes
+  from the manifest-level `harness` block, run by the orchestrator in both
+  trees. Include `harness` **only** if some checkpoint is `kind: "harness"`.
 - `kind` defaults to `screenshot` if omitted — but set it explicitly.
 - Captions describe **behaviour shown**, not "before/after" (the report
   supplies the before/after framing) and never "broken/fixed".

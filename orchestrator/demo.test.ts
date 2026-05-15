@@ -30,6 +30,8 @@ import {
   computeDiffStat,
   writeComparisonBundle,
   imageToDataUri,
+  runHarness,
+  pairHarnessMetrics,
 } from './demo.ts';
 
 // A 1x1 transparent PNG.
@@ -199,6 +201,134 @@ test('loadDemoManifest: reads a valid manifest; falls back when absent/malformed
     assert.equal(partial2.checkpoints.length, 0);
   } finally {
     rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('loadDemoManifest: parses a valid harness block; drops a malformed one', () => {
+  const d = mkdtempSync(join(tmpdir(), 'forge-demo-harness-man-'));
+  try {
+    writeFileSync(
+      join(d, 'demo-manifest.json'),
+      JSON.stringify({
+        essence: 'Flow parity through the refactor.',
+        title: 'Flow parity',
+        checkpoints: [{ label: 'flow', kind: 'harness', caption: 'sim' }],
+        harness: {
+          command: 'npx vitest run tests/Flow.test.ts',
+          env: { RUN_FLOW: '1' },
+          metrics: [{ label: 'throughput', pattern: 'Simulated:\\s*([\\d.]+)', kind: 'float' }],
+        },
+      }),
+    );
+    const m = loadDemoManifest(d, 'FB');
+    assert.equal(m.harness?.command, 'npx vitest run tests/Flow.test.ts');
+    assert.equal(m.harness?.metrics[0].label, 'throughput');
+
+    // malformed harness (no metrics array) → harness dropped, rest intact
+    writeFileSync(
+      join(d, 'demo-manifest.json'),
+      JSON.stringify({
+        essence: 'x',
+        title: 'T',
+        checkpoints: [{ label: 'a', caption: 'b' }],
+        harness: { command: 'echo hi' },
+      }),
+    );
+    const m2 = loadDemoManifest(d, 'FB');
+    assert.equal(m2.harness, undefined);
+    assert.equal(m2.title, 'T');
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('runHarness: scrapes metrics by regex; tolerant of non-zero exit + bad regex', () => {
+  const d = mkdtempSync(join(tmpdir(), 'forge-demo-harness-run-'));
+  try {
+    // Command prints metric lines then exits non-zero (like a flow test
+    // whose late assertion fails) — partial stdout must still be scraped.
+    const scraped = runHarness(d, {
+      command: 'echo "Simulated: 0.812 v/s"; echo "Vehicles completed: 149"; exit 1',
+      metrics: [
+        { label: 'throughput', pattern: 'Simulated:\\s*([\\d.]+)', kind: 'float' },
+        { label: 'completed', pattern: 'Vehicles completed:\\s*(\\d+)', kind: 'int' },
+        { label: 'missing', pattern: 'NeverPrinted:\\s*(\\d+)' },
+        { label: 'badRegex', pattern: '([unclosed' },
+      ],
+    });
+    assert.equal(scraped.throughput, '0.812');
+    assert.equal(scraped.completed, '149');
+    assert.equal(scraped.missing, null);
+    assert.equal(scraped.badRegex, null);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('pairHarnessMetrics: numeric within/diverged/match, string compare, incomplete', () => {
+  const rows = pairHarnessMetrics(
+    [
+      { label: 'within', pattern: '', kind: 'float', deltaTolerancePct: 5 },
+      { label: 'diverged', pattern: '', kind: 'float', deltaTolerancePct: 5 },
+      { label: 'exact', pattern: '', kind: 'int' },
+      { label: 'str', pattern: '', kind: 'string' },
+      { label: 'strdiff', pattern: '', kind: 'string' },
+      { label: 'half', pattern: '', kind: 'float' },
+      { label: 'nonnum', pattern: '', kind: 'float' },
+    ],
+    {
+      within: '100',
+      diverged: '100',
+      exact: '150',
+      str: 'all-complete',
+      strdiff: 'all-complete',
+      half: '0.80',
+      nonnum: 'NaNish',
+    },
+    {
+      within: '103',
+      diverged: '140',
+      exact: '150',
+      str: 'all-complete',
+      strdiff: 'stall-timeout',
+      half: null,
+      nonnum: 'NaNish',
+    },
+  );
+  const by = Object.fromEntries(rows.map((r) => [r.label, r]));
+  assert.equal(by.within.parity, 'within');
+  assert.equal(Math.round(by.within.deltaPct!), 3);
+  assert.equal(by.diverged.parity, 'diverged');
+  assert.equal(by.exact.parity, 'match');
+  assert.equal(by.exact.deltaPct, 0);
+  assert.equal(by.str.parity, 'match');
+  assert.equal(by.strdiff.parity, 'diverged');
+  assert.equal(by.half.parity, 'incomplete');
+  // numeric-kind value that doesn't parse → falls back to string compare
+  assert.equal(by.nonnum.parity, 'match');
+});
+
+test('pairCheckpoints: a harness checkpoint reads <dir>/<label>.metrics.json', () => {
+  const before = mkdtempSync(join(tmpdir(), 'forge-h-before-'));
+  const after = mkdtempSync(join(tmpdir(), 'forge-h-after-'));
+  try {
+    writeFileSync(join(before, 'flow.metrics.json'), JSON.stringify({ tp: '0.80' }));
+    writeFileSync(join(after, 'flow.metrics.json'), JSON.stringify({ tp: '0.81' }));
+    const cps = pairCheckpoints(
+      before,
+      after,
+      [{ label: 'flow', kind: 'harness', caption: 'flow sim' }],
+      { command: 'x', metrics: [{ label: 'tp', pattern: '', kind: 'float', unit: 'v/s' }] },
+    );
+    assert.equal(cps.length, 1);
+    assert.equal(cps[0].kind, 'harness');
+    assert.equal(cps[0].metrics?.[0].label, 'tp');
+    assert.equal(cps[0].metrics?.[0].unit, 'v/s');
+    assert.equal(cps[0].metrics?.[0].parity, 'within');
+    assert.equal(cps[0].beforeImage, null);
+  } finally {
+    rmSync(before, { recursive: true, force: true });
+    rmSync(after, { recursive: true, force: true });
   }
 });
 

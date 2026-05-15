@@ -79,6 +79,82 @@ test('renderComparisonHtml: every checkpoint renders a before AND after figure',
   assert.equal(imgs.length, 4);
 });
 
+test('renderComparisonHtml: harness checkpoint renders a metric table + parity verdict, no media', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow-parity',
+          kind: 'harness',
+          caption: '150-vehicle scoring sim on straight-highway',
+          beforeImage: null,
+          afterImage: null,
+          metrics: [
+            { label: 'vehiclesCompleted', before: '148', after: '149', deltaPct: 0.7, parity: 'within' },
+            { label: 'throughput', unit: 'v/s', before: '0.812', after: '0.815', deltaPct: 0.4, parity: 'within' },
+            { label: 'endReason', before: 'all-complete', after: 'all-complete', deltaPct: null, parity: 'match' },
+          ],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /<table class="harness">/);
+  assert.match(html, /<span class="kind">harness<\/span>/);
+  assert.match(html, /vehiclesCompleted/);
+  assert.match(html, /<td>148<\/td>/);
+  assert.match(html, /\+0\.7%/);
+  assert.match(html, /class="verdict v-within">Verdict: <strong>PARITY<\/strong>/);
+  // A harness checkpoint emits no <img> and no <video>.
+  assert.ok(!html.includes('<img '), 'harness checkpoint has no <img>');
+  assert.ok(!html.includes('<video'), 'harness checkpoint has no <video>');
+});
+
+test('renderComparisonHtml: a diverged metric drives a DIVERGED verdict; missing → INCOMPLETE', () => {
+  const diverged = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow', kind: 'harness', caption: 'flow', beforeImage: null, afterImage: null,
+          metrics: [
+            { label: 'throughput', before: '0.80', after: '0.50', deltaPct: -37.5, parity: 'diverged' },
+            { label: 'completed', before: '150', after: '150', deltaPct: 0, parity: 'match' },
+          ],
+        },
+      ],
+    }),
+  );
+  assert.match(diverged, /class="verdict v-diverged">Verdict: <strong>DIVERGED<\/strong>/);
+  assert.match(diverged, /tr class="p-diverged"/);
+
+  const incomplete = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow', kind: 'harness', caption: 'flow', beforeImage: null, afterImage: null,
+          metrics: [{ label: 'throughput', before: null, after: '0.81', deltaPct: null, parity: 'incomplete' }],
+        },
+      ],
+    }),
+  );
+  assert.match(incomplete, /class="verdict v-incomplete">Verdict: <strong>INCOMPLETE<\/strong>/);
+});
+
+test('renderComparisonHtml: harness metric strings are HTML-escaped', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'x', kind: 'harness', caption: 'x', beforeImage: null, afterImage: null,
+          metrics: [{ label: '<b>m</b>', before: 'a&b', after: '"<x>"', deltaPct: null, parity: 'diverged' }],
+        },
+      ],
+    }),
+  );
+  assert.ok(!html.includes('<b>m</b>'), 'metric label escaped');
+  assert.match(html, /&lt;b&gt;m&lt;\/b&gt;/);
+  assert.match(html, /a&amp;b/);
+});
+
 test('renderComparisonHtml: video checkpoint renders <video> sibling pair, not inlined, with a kind badge', () => {
   const html = renderComparisonHtml(model());
   assert.match(html, /<video controls preload="metadata" playsinline src="before\/sim-flow\.webm">/);
