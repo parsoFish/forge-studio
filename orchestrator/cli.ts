@@ -61,6 +61,8 @@ process.chdir(FORGE_ROOT);
       return cmdReview(args.slice(1));
     case 'report':
       return cmdReport(args.slice(1));
+    case 'demo':
+      return await cmdDemo(args.slice(1));
     case 'bench':
       return cmdBench(args.slice(1));
     case 'brain':
@@ -93,6 +95,8 @@ Usage:
   forge metrics [<cycle-id>]              Per-cycle aggregates (or all cycles)
   forge review <initiative-id>            Print the open verdict prompt and the response file's path
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
+  forge demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]
+                                          Generate a self-contained before/after comparison demo (HTML)
   forge bench <phase>                     Run a phase's benchmark suite (alias for npm run bench:<phase>)
   forge brain query "<question>"          Query the brain (skeleton)
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
@@ -500,6 +504,62 @@ function cmdReport(rest: string[]): void {
     process.exit(1);
   }
   process.stdout.write(readFileSync(reportPath, 'utf8'));
+}
+
+function flagValue(rest: string[], flag: string): string | undefined {
+  const i = rest.indexOf(flag);
+  if (i < 0) return undefined;
+  const v = rest[i + 1];
+  // A flag immediately followed by another --flag (or nothing) means the
+  // value was omitted — treat as absent rather than silently consuming the
+  // next flag's name as the value.
+  if (v === undefined || v.startsWith('--')) {
+    console.error(`forge demo: ${flag} expects a value`);
+    process.exit(2);
+  }
+  return v;
+}
+
+async function cmdDemo(rest: string[]): Promise<void> {
+  const [project, baseRef, changedRef] = rest;
+  if (!project || !baseRef || !changedRef) {
+    console.error('forge demo: usage: demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]');
+    process.exit(2);
+  }
+  const projectRepoPath = resolve('projects', project);
+  if (!existsSync(join(projectRepoPath, '.git'))) {
+    console.error(`forge demo: ${projectRepoPath} is not a git repo (clone the project into projects/${project}/ first)`);
+    process.exit(2);
+  }
+  const initiativeId = flagValue(rest, '--initiative');
+  const out = flagValue(rest, '--out') ?? join('_logs', 'demos', `${project}-${Date.now()}`);
+  const briefFile = flagValue(rest, '--brief');
+  const brief = briefFile && existsSync(briefFile) ? readFileSync(briefFile, 'utf8') : undefined;
+  const build = rest.includes('--build');
+
+  console.log(`forge demo: ${project}  ${baseRef} → ${changedRef}  (out: ${resolve(out)})`);
+  const { generateComparisonDemo } = await import('./demo.ts');
+  try {
+    const res = await generateComparisonDemo({
+      projectRepoPath,
+      project,
+      baseRef,
+      changedRef,
+      outDir: out,
+      initiativeId,
+      brief,
+      build,
+    });
+    console.log('');
+    console.log(`✅ before/after demo: ${res.htmlPath}`);
+    console.log(`   open: xdg-open ${res.htmlPath}`);
+    console.log(`   baseline build: ${res.baselineBuild.ok ? 'ok' : 'FAILED — ' + res.baselineBuild.detail}`);
+    console.log(`   changed  build: ${res.changedBuild.ok ? 'ok' : 'FAILED — ' + res.changedBuild.detail}`);
+    console.log(`   agent cost: $${res.agentCostUsd.toFixed(2)}`);
+  } catch (err) {
+    console.error(`forge demo: failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
 
 function cmdMetrics(rest: string[]): void {
