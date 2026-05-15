@@ -12,9 +12,10 @@ model: claude-sonnet-4-6
 
 Write exactly two files into the demo working directory:
 
-1. **`demo.spec.ts`** — a single Playwright spec that drives the running app
-   and captures named screenshots at the checkpoints that make the
-   initiative's behavioural change visible.
+1. **`demo.spec.ts`** — a single Playwright spec (one `test()` per
+   checkpoint, test title = checkpoint label) that drives the running app
+   and captures each checkpoint as a screenshot (static UI) or a video
+   (dynamic behaviour) — whichever actually demonstrates the change.
 2. **`demo-manifest.json`** — metadata the orchestrator uses to compose the
    before/after HTML.
 
@@ -55,31 +56,63 @@ Then read, in this order:
 - Ground every checkpoint in an acceptance criterion or a concrete code
   change from the diff. No speculative "might be nice to show" steps.
 
+## Screenshot vs video — choose per checkpoint (load-bearing)
+
+A single still **cannot** demonstrate parity of anything time-dependent: a
+running simulation, an animation, vehicle flow, a physics loop. Two stills
+of a moving system differ even between two runs of the *same* build, so a
+screenshot "before vs after" of dynamic behaviour proves nothing.
+
+- `kind: "screenshot"` — a **static** UI state that has settled (title
+  screen, a loaded map at rest, a panel that just opened). The before/after
+  pair is a meaningful visual diff.
+- `kind: "video"` — **dynamic/temporal** behaviour. Record the action over
+  time (e.g. start the simulation, let vehicles flow for a few seconds).
+  The before/after pair is two clips the reviewer can watch.
+
+**Never fabricate a visual checkpoint for a non-visual change.** An internal
+API removal, a refactor with no rendered difference, a type change — these
+are NOT screenshots or videos. Do not invent an on-screen "API overlay" or
+re-shoot an unrelated screen to manufacture a checkpoint. State the
+non-visual delta in `essence` (and a checkpoint `afterNote` if it rides
+along a visible one); do not create a checkpoint whose two captures would be
+identical or meaningless.
+
 ## `demo.spec.ts` contract
 
 - One spec file, Playwright `@playwright/test`.
 - Base URL comes from `process.env.DEMO_BASE_URL` (the orchestrator starts a
   server per tree and sets this). Never hard-code a port.
-- Screenshot dir comes from `process.env.DEMO_SCREENSHOT_DIR`. Write each
-  checkpoint as `${process.env.DEMO_SCREENSHOT_DIR}/<label>.png` where
-  `<label>` is the stable checkpoint id (matches `demo-manifest.json`).
-- **Tolerance**: wrap every checkpoint's interaction so that if an element
-  the changed tree introduces is absent in the baseline tree, the step
-  still captures whatever IS on screen (the prior behaviour) and continues
-  — e.g. `try { await page.click(sel, { timeout: 4000 }); } catch {}` then
-  screenshot unconditionally. A checkpoint must never throw the spec.
-- Deterministic: prefer role/text selectors and explicit waits over sleeps.
-  No randomness, no network to third parties.
-- Keep it short. 3–5 checkpoints. One `test()` is fine.
+- **One `test()` per checkpoint, and the test title MUST equal the
+  checkpoint `label`.** (The orchestrator harvests each video by matching
+  the test title; screenshot checkpoints rely on the path you write.)
+- **Screenshot checkpoint**: in its `test('<label>', …)`, after the UI has
+  settled, write exactly `${process.env.DEMO_SCREENSHOT_DIR}/<label>.png`
+  via `page.screenshot(...)`.
+- **Video checkpoint**: in its `test('<label>', …)`, perform the timed
+  action (navigate, start the behaviour, `waitForTimeout` long enough to
+  show it — typically 4–8 s). Do **NOT** call `page.screenshot` for a video
+  checkpoint; Playwright records the whole test as the clip automatically
+  and the orchestrator harvests it as `<label>.webm`.
+- **Tolerance**: wrap interactions so a control that exists only in the
+  changed tree being absent in the baseline does not throw — e.g.
+  `try { await page.click(sel, { timeout: 4000 }); } catch {}` then proceed.
+  A checkpoint test must never hard-fail the run; it captures whatever IS
+  on screen (the prior behaviour).
+- Deterministic: prefer role/text selectors and explicit waits over blind
+  sleeps where a state is observable. No randomness, no third-party network.
+- Keep it tight: 3–5 checkpoints total.
 
 ## `demo-manifest.json` contract
 
 ```json
 {
   "title": "<one-line headline — the essence>",
-  "essence": "<2–3 sentences: what behaviour changed and why it matters, framed prior→new>",
+  "essence": "<2–3 sentences: what behaviour changed and why it matters, framed prior→new. State any non-visual delta here, not as a fake checkpoint.>",
   "checkpoints": [
-    { "label": "<matches a screenshot filename>", "caption": "<what behaviour this checkpoint shows>",
+    { "label": "<= the test() title and the capture filename stem>",
+      "kind": "screenshot | video",
+      "caption": "<what behaviour this checkpoint shows>",
       "beforeNote": "<optional: clarify the prior-behaviour state>",
       "afterNote": "<optional: clarify the new-behaviour state>" }
   ],
@@ -88,7 +121,9 @@ Then read, in this order:
 ```
 
 - `checkpoints` order = the narrative order in the report.
-- Every `label` MUST equal a `<label>.png` your spec writes.
+- Every `label` MUST equal a `test()` title; screenshot labels map to
+  `<label>.png`, video labels to a harvested `<label>.webm`.
+- `kind` defaults to `screenshot` if omitted — but set it explicitly.
 - Captions describe **behaviour shown**, not "before/after" (the report
   supplies the before/after framing) and never "broken/fixed".
 

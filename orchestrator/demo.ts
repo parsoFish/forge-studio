@@ -19,6 +19,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -128,65 +129,88 @@ export function imageToDataUri(file: string): string | null {
 }
 
 export type CheckpointSpec = {
-  /** Stable label; the spec names screenshots `<label>.png`. */
+  /** Stable label; the spec names screenshots `<label>.png`, videos `<label>.webm`. */
   label: string;
+  /**
+   * `screenshot` (default) — static UI state. `video` — dynamic/temporal
+   * behaviour (a running simulation, an animation): a single still of a
+   * moving system cannot demonstrate parity, so these are clips.
+   */
+  kind?: 'screenshot' | 'video';
   caption: string;
   beforeNote?: string;
   afterNote?: string;
 };
 
+const VIDEO_EXTS = new Set(['.webm', '.mp4']);
+
 /**
- * Pair screenshots captured under `beforeDir` and `afterDir` by filename.
- * `specs` provides agent-authored captions/notes and, crucially, the
- * canonical order + the full set of expected checkpoints (so a checkpoint
- * captured in only one run still renders, with a "no capture" placeholder
- * on the missing side).
- *
- * A screenshot file `foo.png` pairs to the checkpoint whose label is `foo`.
- * Unknown screenshots (no matching spec) are appended in filename order with
- * the filename as the caption, so nothing is silently dropped.
+ * Pair captures under `beforeDir` / `afterDir` by filename stem. Screenshots
+ * (`<label>.png`) inline as data URIs (self-contained); videos
+ * (`<label>.webm`) reference the sibling file relatively (too large to
+ * inline). `specs` provides the canonical order, captions, and per-checkpoint
+ * `kind`; a checkpoint captured on only one side still renders with a
+ * "no capture" placeholder on the missing side. Captures with no matching
+ * spec entry are appended (filename as caption) so nothing is silently
+ * dropped.
  */
 export function pairCheckpoints(
   beforeDir: string,
   afterDir: string,
   specs: CheckpointSpec[],
 ): DemoCheckpoint[] {
-  const listImages = (dir: string): Map<string, string> => {
+  const listBy = (dir: string, exts: Set<string>): Map<string, string> => {
     const m = new Map<string, string>();
     if (!existsSync(dir)) return m;
     for (const f of readdirSync(dir).sort()) {
       const lower = f.toLowerCase();
       const dot = lower.lastIndexOf('.');
-      if (dot < 0 || !IMAGE_EXTS.has(lower.slice(dot))) continue;
-      m.set(f.slice(0, dot), join(dir, f));
+      if (dot < 0 || !exts.has(lower.slice(dot))) continue;
+      m.set(f.slice(0, dot), f);
     }
     return m;
   };
-  const before = listImages(beforeDir);
-  const after = listImages(afterDir);
+  const beforeImg = listBy(beforeDir, IMAGE_EXTS);
+  const afterImg = listBy(afterDir, IMAGE_EXTS);
+  const beforeVid = listBy(beforeDir, VIDEO_EXTS);
+  const afterVid = listBy(afterDir, VIDEO_EXTS);
+
+  const mk = (label: string, kind: 'screenshot' | 'video'): DemoCheckpoint => {
+    if (kind === 'video') {
+      return {
+        label,
+        kind: 'video',
+        caption: label,
+        beforeImage: null,
+        afterImage: null,
+        beforeVideoSrc: beforeVid.has(label) ? `before/${beforeVid.get(label)!}` : null,
+        afterVideoSrc: afterVid.has(label) ? `after/${afterVid.get(label)!}` : null,
+      };
+    }
+    return {
+      label,
+      kind: 'screenshot',
+      caption: label,
+      beforeImage: beforeImg.has(label) ? imageToDataUri(join(beforeDir, beforeImg.get(label)!)) : null,
+      afterImage: afterImg.has(label) ? imageToDataUri(join(afterDir, afterImg.get(label)!)) : null,
+    };
+  };
 
   const out: DemoCheckpoint[] = [];
   const consumed = new Set<string>();
   for (const s of specs) {
     consumed.add(s.label);
-    out.push({
-      label: s.label,
-      caption: s.caption,
-      beforeImage: before.has(s.label) ? imageToDataUri(before.get(s.label)!) : null,
-      afterImage: after.has(s.label) ? imageToDataUri(after.get(s.label)!) : null,
-      beforeNote: s.beforeNote,
-      afterNote: s.afterNote,
-    });
+    const kind = s.kind ?? 'screenshot';
+    out.push({ ...mk(s.label, kind), caption: s.caption, beforeNote: s.beforeNote, afterNote: s.afterNote });
   }
-  // Any captured screenshot with no spec entry — surface it rather than drop.
-  const extras = new Set<string>([...before.keys(), ...after.keys()].filter((k) => !consumed.has(k)));
-  for (const label of [...extras].sort()) {
-    out.push({
-      label,
-      caption: label,
-      beforeImage: before.has(label) ? imageToDataUri(before.get(label)!) : null,
-      afterImage: after.has(label) ? imageToDataUri(after.get(label)!) : null,
-    });
+  // Captures with no spec entry — surface rather than drop. Infer kind from
+  // which capture set the label appears in (video wins if a clip exists).
+  const allLabels = new Set<string>([
+    ...beforeImg.keys(), ...afterImg.keys(), ...beforeVid.keys(), ...afterVid.keys(),
+  ]);
+  for (const label of [...allLabels].filter((l) => !consumed.has(l)).sort()) {
+    const isVideo = beforeVid.has(label) || afterVid.has(label);
+    out.push(mk(label, isVideo ? 'video' : 'screenshot'));
   }
   return out;
 }
@@ -542,13 +566,16 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: 'line',
-  timeout: 60000,
+  timeout: 90000,
   outputDir: ${JSON.stringify(join(pwDir, '_pw-output'))},
   use: {
     baseURL: process.env.DEMO_BASE_URL,
     headless: true,
     screenshot: 'off',
-    video: 'off',
+    // Record a video per test. Screenshot checkpoints ignore it; video
+    // checkpoints (one test() each, titled = label) get harvested by the
+    // orchestrator from outputDir into <captureDir>/<label>.webm.
+    video: { mode: 'on', size: { width: 1280, height: 720 } },
     trace: 'off',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
@@ -564,15 +591,68 @@ export default defineConfig({
  * status + a log tail (the orchestrator surfaces this — a green build with
  * a red capture is otherwise invisible).
  */
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/** Recursively collect every `*.webm` under `dir`. */
+function findWebms(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const e of readdirSync(dir)) {
+    const abs = join(dir, e);
+    let isDir = false;
+    try {
+      isDir = lstatSync(abs).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (isDir) out.push(...findWebms(abs));
+    else if (e.toLowerCase().endsWith('.webm')) out.push(abs);
+  }
+  return out;
+}
+
+/**
+ * Map Playwright's per-test videos (in `outputDir`) to the video
+ * checkpoints. Playwright names the artifact dir from the test title; the
+ * SKILL mandates one `test()` per checkpoint titled exactly the label, so
+ * the slug of the label appears in the video's path. Best-effort: copy the
+ * first path-slug match to `<captureDir>/<label>.webm`; if exactly one
+ * video and one label, map it unconditionally.
+ */
+function harvestVideos(pwOutputDir: string, captureDir: string, videoLabels: string[]): number {
+  if (videoLabels.length === 0) return 0;
+  const webms = findWebms(pwOutputDir);
+  if (webms.length === 0) return 0;
+  mkdirSync(captureDir, { recursive: true });
+  let copied = 0;
+  for (const label of videoLabels) {
+    const sl = slug(label);
+    let match = webms.find((w) => slug(w).includes(sl));
+    if (!match && webms.length === 1 && videoLabels.length === 1) match = webms[0];
+    if (match) {
+      try {
+        copyFileSync(match, join(captureDir, `${label}.webm`));
+        copied += 1;
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+  return copied;
+}
+
 function runSpec(
   treePath: string,
   demoWorkDir: string,
   baseUrl: string,
   screenshotDir: string,
-): { ok: boolean; tail: string } {
+  videoLabels: string[],
+): { ok: boolean; tail: string; videos: number } {
   mkdirSync(screenshotDir, { recursive: true });
   const specSrc = join(demoWorkDir, 'demo.spec.ts');
-  if (!existsSync(specSrc)) return { ok: false, tail: 'demo.spec.ts missing' };
+  if (!existsSync(specSrc)) return { ok: false, tail: 'demo.spec.ts missing', videos: 0 };
   const pwDir = join(treePath, '.pw-demo');
   rmSync(pwDir, { recursive: true, force: true });
   mkdirSync(pwDir, { recursive: true });
@@ -581,6 +661,7 @@ function runSpec(
   writeFileSync(configPath, demoPlaywrightConfig(pwDir));
   // Ensure a browser is present (idempotent, cached after first install).
   sh('npx', ['--yes', 'playwright', 'install', 'chromium'], treePath, 300_000);
+  let result: { ok: boolean; tail: string };
   try {
     const out = execFileSync(
       'npx',
@@ -598,10 +679,15 @@ function runSpec(
         },
       },
     );
-    return { ok: true, tail: out.slice(-800) };
+    result = { ok: true, tail: out.slice(-800) };
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string };
-    return { ok: false, tail: ((e.stderr || e.stdout || '') as string).slice(-800) };
+    result = { ok: false, tail: ((e.stderr || e.stdout || '') as string).slice(-800) };
+  }
+  // Harvest videos BEFORE the scratch dir is removed below.
+  const videos = harvestVideos(join(pwDir, '_pw-output'), screenshotDir, videoLabels);
+  try {
+    return { ...result, videos };
   } finally {
     // Never leave the scratch dir in the project tree.
     rmSync(pwDir, { recursive: true, force: true });
@@ -756,6 +842,15 @@ export async function generateComparisonDemo(
       throw new Error('demo-author did not produce demo.spec.ts');
     }
 
+    // Load the manifest up front so we know which checkpoints are video
+    // (their clips must be harvested from Playwright's outputDir before the
+    // scratch dir is cleaned). Reused for the model after the runs.
+    const fallbackTitle = `${input.project} — ${input.baseRef} → ${input.changedRef}`;
+    const manifest = loadDemoManifest(demoWorkDir, fallbackTitle);
+    const videoLabels = manifest.checkpoints
+      .filter((c) => c.kind === 'video')
+      .map((c) => c.label);
+
     // Run baseline then changed (sequential — frees the port between runs).
     for (const [wt, capDir, which] of [
       [baselineWt, beforeDir, 'baseline'],
@@ -773,14 +868,15 @@ export async function generateComparisonDemo(
         continue;
       }
       try {
-        const cap = runSpec(wt.path, demoWorkDir, server.url, capDir);
+        const cap = runSpec(wt.path, demoWorkDir, server.url, capDir, videoLabels);
         const shots = existsSync(capDir)
           ? readdirSync(capDir).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)).length
           : 0;
+        const captured = `${shots} screenshot(s) + ${cap.videos} video(s)`;
         const note =
-          shots > 0
-            ? `${status.detail}; captured ${shots} screenshot(s)`
-            : `${status.detail}; demo spec produced NO screenshots (playwright ${
+          shots + cap.videos > 0
+            ? `${status.detail}; captured ${captured}`
+            : `${status.detail}; demo spec produced NO captures (playwright ${
                 cap.ok ? 'exited 0' : 'failed'
               }: ${cap.tail.replace(/\s+/g, ' ').slice(-240)})`;
         if (which === 'baseline') baselineBuild = { ok: status.ok, detail: note };
@@ -790,8 +886,6 @@ export async function generateComparisonDemo(
       }
     }
 
-    const fallbackTitle = `${input.project} — ${input.baseRef} → ${input.changedRef}`;
-    const manifest = loadDemoManifest(demoWorkDir, fallbackTitle);
     const model = buildComparisonModel({
       manifest,
       project: input.project,

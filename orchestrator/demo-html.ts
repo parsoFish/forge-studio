@@ -19,17 +19,37 @@
  */
 
 export type DemoCheckpoint = {
-  /** Stable identifier; pairs the before screenshot with the after one. */
+  /** Stable identifier; pairs the before capture with the after one. */
   label: string;
+  /**
+   * `screenshot` — a static UI state (inlined as a base64 data URI; truly
+   * self-contained). `video` — a dynamic/temporal behaviour clip
+   * (referenced as a sibling file under `before/` / `after/`, too large to
+   * inline). Choose video for anything time-dependent (a running
+   * simulation, an animation): a single still of a moving system cannot
+   * demonstrate parity. Default `screenshot`.
+   */
+  kind: 'screenshot' | 'video';
   /**
    * Agent-authored caption: what behaviour this checkpoint demonstrates
    * (e.g. "Selecting a node opens the inspector panel"). Describes the
    * behaviour, not "what's broken".
    */
   caption: string;
-  /** PNG bytes as a `data:image/png;base64,...` URI, or null if not captured. */
+  /**
+   * For `kind: 'screenshot'` — PNG bytes as `data:image/png;base64,...`,
+   * or null if not captured. Unused for video checkpoints.
+   */
   beforeImage: string | null;
   afterImage: string | null;
+  /**
+   * For `kind: 'video'` — relative sibling path (e.g. `before/<label>.webm`),
+   * or null if not captured. Unused for screenshot checkpoints. Must be a
+   * relative path, never a scheme-bearing URL (esc() neutralises HTML
+   * delimiters but does not validate URL schemes).
+   */
+  beforeVideoSrc?: string | null;
+  afterVideoSrc?: string | null;
   /**
    * Optional one-liner clarifying the baseline state at this checkpoint —
    * e.g. "This control did not exist yet" — phrased as prior behaviour,
@@ -109,30 +129,39 @@ function buildBanner(model: DemoComparisonModel): string {
   return `<div class="banner">${parts.join('<hr>')}</div>`;
 }
 
-function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
+function mediaCell(cp: DemoCheckpoint, side: 'before' | 'after'): string {
   // src is esc()'d defensively: in-tree callers always pass base64 data
-  // URIs (safe), but renderComparisonHtml is exported and a hand-built
-  // DemoCheckpoint could carry an attribute-breaking string.
-  const beforeCell = cp.beforeImage
-    ? `<img src="${esc(cp.beforeImage)}" alt="before: ${esc(cp.label)}" loading="lazy">`
+  // URIs / relative sibling paths (safe), but renderComparisonHtml is
+  // exported and a hand-built DemoCheckpoint could carry an
+  // attribute-breaking string.
+  if (cp.kind === 'video') {
+    const src = side === 'before' ? cp.beforeVideoSrc : cp.afterVideoSrc;
+    return src
+      ? `<video controls preload="metadata" playsinline src="${esc(src)}"></video>`
+      : `<div class="missing">no capture</div>`;
+  }
+  const img = side === 'before' ? cp.beforeImage : cp.afterImage;
+  return img
+    ? `<img src="${esc(img)}" alt="${side}: ${esc(cp.label)}" loading="lazy">`
     : `<div class="missing">no capture</div>`;
-  const afterCell = cp.afterImage
-    ? `<img src="${esc(cp.afterImage)}" alt="after: ${esc(cp.label)}" loading="lazy">`
-    : `<div class="missing">no capture</div>`;
+}
+
+function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
   const beforeNote = cp.beforeNote ? `<p class="note">${esc(cp.beforeNote)}</p>` : '';
   const afterNote = cp.afterNote ? `<p class="note">${esc(cp.afterNote)}</p>` : '';
+  const kindBadge = cp.kind === 'video' ? '<span class="kind">video</span>' : '';
   return `
   <section class="checkpoint">
-    <h3><span class="step">${i + 1}</span> ${esc(cp.caption)}</h3>
+    <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
     <div class="pair">
       <figure>
         <figcaption>Before — baseline behaviour</figcaption>
-        ${beforeCell}
+        ${mediaCell(cp, 'before')}
         ${beforeNote}
       </figure>
       <figure>
         <figcaption>After — this initiative</figcaption>
-        ${afterCell}
+        ${mediaCell(cp, 'after')}
         ${afterNote}
       </figure>
     </div>
@@ -190,6 +219,8 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   .checkpoint { margin: 2.4rem 0; }
   .checkpoint h3 { font-size: 1.05rem; margin: 0 0 .8rem; display: flex; align-items: center; gap: .6rem; }
   .step { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); font-size: .85rem; font-weight: 600; }
+  .kind { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #4a9eff 30%, transparent); vertical-align: middle; }
+  .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   figure { margin: 0; }
   figcaption { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .4rem; }

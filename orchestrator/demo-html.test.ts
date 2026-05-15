@@ -28,17 +28,29 @@ function model(overrides: Partial<DemoComparisonModel> = {}): DemoComparisonMode
     checkpoints: [
       {
         label: 'select-node',
+        kind: 'screenshot',
         caption: 'Clicking a node selects it',
         beforeImage: PNG_DATA_URI,
         afterImage: PNG_DATA_URI,
       },
       {
         label: 'inspector',
+        kind: 'screenshot',
         caption: 'The inspector panel after selection',
         beforeImage: PNG_DATA_URI,
         afterImage: PNG_DATA_URI,
         beforeNote: 'No inspector panel in the prior behaviour — selection only highlighted.',
         afterNote: 'Inspector shows the node grade.',
+      },
+      {
+        label: 'sim-flow',
+        kind: 'video',
+        caption: 'Simulation runs — vehicles flow on the map',
+        beforeImage: null,
+        afterImage: null,
+        beforeVideoSrc: 'before/sim-flow.webm',
+        afterVideoSrc: 'after/sim-flow.webm',
+        afterNote: 'Flow continues identically under the new timing model.',
       },
     ],
     acceptanceCriteria: [
@@ -62,15 +74,48 @@ test('renderComparisonHtml: every checkpoint renders a before AND after figure',
   const html = renderComparisonHtml(model());
   assert.match(html, /Before — baseline behaviour/);
   assert.match(html, /After — this initiative/);
-  // Two checkpoints × (before+after) = 4 data-URI <img> + 0 video here.
+  // 2 screenshot checkpoints × (before+after) = 4 data-URI <img>.
   const imgs = html.match(/<img src="data:image\/png;base64,/g) ?? [];
   assert.equal(imgs.length, 4);
+});
+
+test('renderComparisonHtml: video checkpoint renders <video> sibling pair, not inlined, with a kind badge', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /<video controls preload="metadata" playsinline src="before\/sim-flow\.webm">/);
+  assert.match(html, /<video controls preload="metadata" playsinline src="after\/sim-flow\.webm">/);
+  assert.match(html, /<span class="kind">video<\/span>/);
+  // The video checkpoint contributes no inlined <img>.
+  const imgs = html.match(/<img /g) ?? [];
+  assert.equal(imgs.length, 4, 'only the 2 screenshot checkpoints emit <img>');
+});
+
+test('renderComparisonHtml: a video checkpoint with no clip degrades to a placeholder', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'sim',
+          kind: 'video',
+          caption: 'sim',
+          beforeImage: null,
+          afterImage: null,
+          beforeVideoSrc: null,
+          afterVideoSrc: null,
+        },
+      ],
+    }),
+  );
+  assert.match(html, /class="missing"/);
+  assert.ok(!html.includes('<video'), 'no <video> tag when src is null');
 });
 
 test('renderComparisonHtml: screenshots are inlined as data URIs (self-contained)', () => {
   const html = renderComparisonHtml(model());
   assert.ok(html.includes(PNG_DATA_URI), 'screenshot data URI inlined verbatim');
-  assert.ok(!html.includes('src="before/'), 'no external screenshot file refs');
+  // Screenshots must be inlined (no <img src="before/...">); videos
+  // legitimately reference siblings, so only assert on <img>.
+  assert.ok(!/<img src="before\//.test(html), 'no external screenshot file refs');
+  assert.ok(!/<img src="after\//.test(html), 'no external screenshot file refs');
 });
 
 test('renderComparisonHtml: happy path carries no error/regression framing', () => {
@@ -100,7 +145,7 @@ test('renderComparisonHtml: missing capture degrades to a placeholder, not a cra
   const html = renderComparisonHtml(
     model({
       checkpoints: [
-        { label: 'x', caption: 'only after captured', beforeImage: null, afterImage: PNG_DATA_URI },
+        { label: 'x', kind: 'screenshot', caption: 'only after captured', beforeImage: null, afterImage: PNG_DATA_URI },
       ],
     }),
   );
