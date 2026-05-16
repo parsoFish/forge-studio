@@ -25,7 +25,7 @@
 | G3-f | no stale assertBrainConsulted refs | grep-absent | `assertBrainConsulted :: orchestrator loops skills` | fast |
 | G3-g | no brain-gate threat in templates | grep-absent | `brain-first gate :: loops/ralph` | fast |
 | G12-a | no bespoke e2e rubric | file-absent | `benchmarks/e2e/scoring.ts` | fast |
-| G4 | single coupling authority (detectHiddenCoupling only) | grep-present | `detectHiddenCoupling( :: orchestrator/cycle.ts` | fast |
+| G4 | single coupling authority (detectHiddenCoupling only) | grep-present | `detectHiddenCoupling( :: orchestrator/phases/project-manager.ts` | fast |
 | G9 | no auto-merge reachable unattended | pending | phase-6 | full |
 | SIMPL-LOC | no source file > 800 LOC | loc-max | `800 :: orchestrator loops` | fast |
 | CLI-1 | brain-query stub verb removed | grep-absent | `(skeleton) brain-query :: orchestrator/cli.ts` | fast |

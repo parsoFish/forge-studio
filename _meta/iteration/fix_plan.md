@@ -33,7 +33,7 @@
 - [x] 3.1 extract PR/merge from `runReviewer` → `orchestrator/pr.ts`
 - [x] 3.2 one notify sink (thread resolved NotifyConfig through `runReviewer`)
 - [x] 3.3 verify single coupling authority (`detectHiddenCoupling`)
-- [ ] 3.4 split files >800 LOC (`cycle.ts`, `demo.ts`, `scheduler.ts`) behaviour-preserving
+- [x] 3.4 split files >800 LOC (`cycle.ts`, `demo.ts`, `scheduler.ts`) behaviour-preserving
 - [x] 3.5 retire `pm-stale-context` (verify unreachable → delete)
 
 ## Phase 4 — benchmark fidelity — US-6.1, G11
