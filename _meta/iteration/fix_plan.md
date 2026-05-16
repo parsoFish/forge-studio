@@ -47,11 +47,11 @@
 - [x] 5.3 assert no chained-only rubric/fixture exists
 
 ## Phase 6 — review-phase redesign — US-1.3/3.2/5.2/5.3, C6, G1/G8/G9/G10
-- [ ] 6.1 dev-loop pushes initiative branch to origin per WI; invariant origin==local, main==merge-base
-- [ ] 6.2 remove auto-merge from unattended path; `mergePullRequest` unreachable w/o operator action
-- [ ] 6.3 review = holistic intent gate that may spawn dev-loops; produces demo-embedded PR then stops
-- [ ] 6.4 reflection only on GitHub-confirmed merge; `done/`⇒MERGED; partial merges flagged
-- [ ] 6.5 closure aligns local↔remote (ff main, prune branch)
+- [x] 6.1 dev-loop pushes initiative branch to origin per WI; invariant origin==local, main==merge-base
+- [x] 6.2 remove auto-merge from unattended path; `mergePullRequest` unreachable w/o operator action
+- [x] 6.3 review = holistic intent gate that may spawn dev-loops; produces demo-embedded PR then stops
+- [x] 6.4 reflection only on GitHub-confirmed merge; `done/`⇒MERGED; partial merges flagged
+- [x] 6.5 closure aligns local↔remote (ff main, prune branch)
 
 ## Phase 7 — human interaction as slash commands — US-3.1, Q4 resolved
 - [ ] 7.1 create `/forge-architect`, `/forge-review <id>`, `/forge-reflect <id>` (own session, file handoff)
