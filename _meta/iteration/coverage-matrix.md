@@ -35,7 +35,7 @@
 | US-7.1-notify | one notify sink (no hardcoded literal) | grep-absent | `desktop: true, webhook_url: null :: orchestrator/cycle.ts` | fast |
 | US-1.3-pr | PR/merge extracted to orchestrator/pr.ts | file-present | `orchestrator/pr.ts` | fast |
 | G11 | per-phase benches, no false-colour | pending | phase-4 | full |
-| G12-b | chained bench scores via existing rubrics only | pending | phase-5 | full |
+| G12-b | chained bench owns no rubric (scores via existing per-phase caseScore only) | file-absent | `benchmarks/chained/scoring.ts` | full |
 | G1 | done/ ⇒ PR MERGED | pending | phase-6 | full |
 | G8 | dev-loop close: origin==local, main==merge-base | pending | phase-6 | full |
 | G10 | reflection only on confirmed merge | pending | phase-6 | full |

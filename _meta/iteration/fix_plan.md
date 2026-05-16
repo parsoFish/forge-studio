@@ -18,7 +18,7 @@
 - [x] 1.3 remove dead `event_type:'cost'` (`orchestrator/logging.ts`; check `metrics.ts`)
 - [x] 1.4 delete `loops/_adapters/` entirely
 - [x] 1.5 remove unread `ForgeConfig.models` (+ `forge.config.json.example`, ADR-009 mention)
-- [ ] 1.6 delete `benchmarks/e2e/scoring.ts` + e2e fixture-as-scored-unit; keep only plumbing
+- [x] 1.6 delete `benchmarks/e2e/scoring.ts` + e2e fixture-as-scored-unit; keep only plumbing
 - [x] 1.7 remove CLI stub verbs `forge brain query`, `forge bench` (+ help text)
 
 ## Phase 2 — doc/code parity & brain-read policy — G3, G7, US-2.*
@@ -42,9 +42,9 @@
 - [ ] 4.3 re-run all per-phase benches; record in `brain/log.md`; assert no false-colour
 
 ## Phase 5 — chained benchmark — US-6.2, G12
-- [ ] 5.1 lift `layerBrain`→`benchmarks/_lib/brain-mask.ts`; move gh-shim + `reconstructGateStateFromEventLog` to `_lib`
-- [ ] 5.2 `benchmarks/chained/` sequencer: seed→architect-bench→cpSync→runCycle→fan-out to existing per-phase `caseScore`; `--source=chained`; pre-merge `.forge/` snapshot
-- [ ] 5.3 assert no chained-only rubric/fixture exists
+- [x] 5.1 lift `layerBrain`→`benchmarks/_lib/brain-mask.ts`; move gh-shim + `reconstructGateStateFromEventLog` to `_lib`
+- [x] 5.2 `benchmarks/chained/` sequencer: seed→architect-bench→cpSync→runCycle→fan-out to existing per-phase `caseScore`; `--source=chained`; pre-merge `.forge/` snapshot
+- [x] 5.3 assert no chained-only rubric/fixture exists
 
 ## Phase 6 — review-phase redesign — US-1.3/3.2/5.2/5.3, C6, G1/G8/G9/G10
 - [ ] 6.1 dev-loop pushes initiative branch to origin per WI; invariant origin==local, main==merge-base
