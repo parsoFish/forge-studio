@@ -19,6 +19,7 @@
 - [`claude-sdk-subagents`](./themes/claude-sdk-subagents.md) — Inline-declared subagents with isolated context, per-agent tools/model/budget.
 - [`claude-sdk-hooks-system`](./themes/claude-sdk-hooks-system.md) — PreToolUse / PostToolUse / SessionStart / UserPromptSubmit lifecycle hooks.
 - [`ralph-loop-pattern`](./themes/ralph-loop-pattern.md) — ~30-line loop where iteration lives in the loop, not the orchestrator.
+- [`objective-gate-autonomous-closure`](./themes/objective-gate-autonomous-closure.md) — Autonomous closure works when the stop condition is an objective script, not the agent's judgement; fresh-context subagents + gate-every-commit.
 - [`ralph-stop-hook-vs-bash-loop`](./themes/ralph-stop-hook-vs-bash-loop.md) — Two Ralph implementations: outer bash loop vs Stop-hook in single session.
 - [`declarative-specs-vs-imperative`](./themes/declarative-specs-vs-imperative.md) — Describe desired state; let the agent iterate. Bad specs → mediocre results.
 - [`skills-as-agent-surface`](./themes/skills-as-agent-surface.md) — Every "agent" is a Claude Code skill (SKILL.md).

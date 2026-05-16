@@ -1,0 +1,51 @@
+---
+title: Human interaction points run in the operator's own Claude session via slash commands
+description: The three deliberate human moments (roadmap/architect, review feedback & merge, reflection feedback) must be undertaken in the operator's own Claude session (CLI / VSCode extension), not a forge-spawned agent. Implement as slash commands. Forge must never simulate these in production.
+category: decision
+keywords: [human-interaction, slash-commands, own-session, architect, review, reflection, path-b, no-simulation, three-moments, file-handoff]
+created_at: 2026-05-16T00:00:00Z
+updated_at: 2026-05-16T00:00:00Z
+related_themes: [review-phase-target-design, forge-current-architecture-as-built, human-directed-work-as-initiatives, six-phases-of-forge]
+---
+
+# Human interaction points run in the operator's own session
+
+Forge has exactly **three deliberate human interaction moments**. The
+operator's direction: each is performed in the operator's **own Claude
+session** (CLI or VSCode extension) — not a forge-spawned sub-agent and
+not a bench simulator standing in for production. The cleanest
+implementation is a **slash command** per moment.
+
+| Moment | Slash command | Reads | Writes / effect |
+|---|---|---|---|
+| Roadmap / architect | `/forge-architect` | brain, `projects/<name>/roadmap.md`, prior initiatives | `_queue/pending/INIT-*.md` + roadmap rows |
+| Review feedback & merge | `/forge-review <id>` | the project-repo PR + initiative branch | PR feedback for the review agent to process, OR the operator merges the PR in GitHub (which closes review) |
+| Reflection feedback | `/forge-reflect <id>` | `_logs/<id>/user-questions.md` | `_logs/<id>/user-feedback.md` |
+
+Why this matters: the trafficGame arc blurred autonomous forge with
+hand-directed work because the human moments had no clean surface — the
+architect was hand-loaded "Path-B", review verdict defaulted to
+auto-approve, and reflection feedback was a file the operator had to
+know to write. Slash commands make each moment **explicit, in the
+operator's context, and impossible to silently auto-satisfy**. The
+production system must therefore have NO auto-approve verdict path and
+NO bench-simulator wired into a live cycle; simulators belong only to
+benchmarks.
+
+This composes with [[review-phase-target-design]] (the PR is the review
+surface; `/forge-review` is how the operator engages it) and turns the
+"architect is out-of-cycle, hand-run" honest-finding into a *designed*
+property rather than an accident. It does not wire the architect into
+`runCycle` — keeping it a human moment is the intent; the slash command
+is its first-class home.
+
+## Sources
+
+- [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: blurred-lines + auto-approve footgun evidence.
+- [`architecture.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/architecture.md) — §A out-of-cycle architect, §G operator-driven PR, §H simplification candidate 7.
+
+## Related
+
+- [Theme: Review-phase target design](./review-phase-target-design.md) — `/forge-review` engages the PR surface defined there.
+- [Theme: Hand-directed work as initiatives](./human-directed-work-as-initiatives.md) — the failure mode clean human surfaces prevent.
+- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — turns the out-of-cycle architect into a designed property.

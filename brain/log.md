@@ -694,3 +694,61 @@ Pushing harder for forced multi-iteration would require either tightening turn b
 - New theme (reference): `brain/projects/trafficGame/themes/2026-05-10-review-overhead-dominates-trivial-cycles.md` — review loop = 53% of total cycle cost for trivial initiatives.
 
 **Key numbers:** 2 WIs, 1 complete (WI-1), 1 failed (WI-2 brain-skip), 0 wedge events, 0 brain gaps, total cost ~$2.31 (~15 min).
+
+---
+
+## [2026-05-16] structural | meta-reflection: the trafficGame arc (12 cycles + F-24…F-44)
+
+**Scope:** holistic reflection over the whole trafficGame arc — not one cycle. Consumed `_review/00..04`, 12 `_logs/<cycle>/` dirs, ~20 serve logs, git F-24…F-44, and the 7 hand-authored 2026-05-10 snapshot themes.
+
+**Headline:** loop is reliable PM→dev→reviewer-approve (feature initiatives: 0 send-backs); it breaks at the **merge boundary** — of 12 cycles only PR #47 truly merged; approved feature initiatives stranded unmerged in `_queue/done/`. `done/` ≠ merged.
+
+**Brain deltas:**
+- New raw source: `brain/_raw/cycles/2026-05-16_trafficgame-arc-reflection.md`.
+- New theme (antipattern): `forge/themes/merge-boundary-stacked-initiative-failure.md`.
+- New theme (antipattern): `forge/themes/reactive-constraint-stripback-arc.md`.
+- New theme (antipattern): `forge/themes/human-directed-work-as-initiatives.md`.
+- New theme (decision): `forge/themes/forge-project-onboarding-contract.md` — the C1–C6 contract; ADR-017 candidate.
+- New theme (reference): `forge/themes/forge-current-architecture-as-built.md` — honest as-built snapshot.
+- New theme (reference): `projects/trafficGame/themes/2026-05-16-structural-prerequisites-for-autonomy.md`.
+- Category indexes updated: `forge/antipatterns.md` (+3), `forge/decisions.md` (+1), `forge/reference.md` (+1).
+
+**Retro + closure goals:** `_logs/2026-05-16_trafficgame-arc-reflection/retro.md` defines findings I1–I6 and testable closure goals G1–G7 (G1/G3/G4/G5/G7 mechanically testable now; G2/G6 need a C1–C5 preflight + a manifest `origin` field).
+
+## [2026-05-16] structural | addendum: deep architecture viz + review-phase redesign
+
+Operator follow-up to the trafficGame-arc meta-reflection.
+
+- New artifact: `_logs/2026-05-16_trafficgame-arc-reflection/architecture.md` — deep as-built visualization (Mermaid: macro flow, subsystem map, per-phase internals, queue state machine, failure-classifier flow, brain topology) + §G the review-phase target redesign with delta table + §H gaps/simplification candidates.
+- New theme (decision): `forge/themes/review-phase-target-design.md` — initiative branch synced local↔remote, holistic intent gate that may spawn dev-loops, demo-embedded PR as the human feedback/merge surface, no auto-merge, closure aligns local↔remote. Resolves contract clause C6 + finding I1. Indexed in `forge/decisions.md`.
+- retro.md updated: C6 marked RESOLVED, user-question 3 resolved, closure goals G8 (local↔remote invariant), G9 (no auto-merge), G10 (reflection on confirmed merge) added.
+
+## [2026-05-16] structural | addendum 2: project snapshot, user stories, policy decisions, bench design
+
+Second operator follow-up to the trafficGame-arc reflection.
+
+- Project doc: `docs/architecture/as-built-snapshot-2026-05-16.md` — the deep as-built visualization saved into the repo (was only in gitignored `_logs/`); ARCHITECTURE.md remains the narrative/ideal, this is the honest as-built.
+- Project doc: `docs/forge-user-stories.md` — holistic minimal user stories (7 epics) capturing forge intent incl. brain-read policy, human-interaction model, contract, review redesign, simplicity-as-constraint.
+- New theme (decision): `forge/themes/brain-read-policy.md` — planner reads brain; dev-loop/reviewer don't; index-guarded reads.
+- New theme (decision): `forge/themes/human-interaction-via-own-session.md` — 3 human moments as slash commands in the operator's own session; no production simulation.
+- New theme (decision): `forge/themes/chained-phase-benchmarks.md` — keep isolated benches + chain them; 3 drift corrections (PM cwd/budget false-red, review brainConsulted false-red, review one-shot false-green).
+- Artifact: `_logs/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md` — full drift table + chained-bench design + closure goals G11/G12.
+- `forge/decisions.md` index updated (+3 themes).
+
+## [2026-05-16] update-theme | correction: e2e is a seed, not a standalone benchmark
+
+Operator clarified the chained-bench intent. Correction applied:
+
+- `forge/themes/chained-phase-benchmarks.md` rewritten — an e2e test is a SEED fed into the front of the chain; the chain purely ties the EXISTING per-phase benches together (each phase's generated output → next phase's input, scored by that phase's existing pure rubric). NO standalone e2e fixture/rubric.
+- Decision: **delete `benchmarks/e2e/scoring.ts`** and the e2e fixture-as-scored-unit; keep only its plumbing (gh-shim, recorder shims, `reconstructGateStateFromEventLog`, brain-mask) relocated to `benchmarks/_lib/`. `runCycle` is the sequencing engine, contributes no rubric.
+- `_logs/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md` §C/§D rewritten; `docs/forge-user-stories.md` US-6.2 corrected; G12 reworded ("chained = existing benches only").
+- Supersedes the prior addendum-2 framing that said "e2e already IS the chain, keep it".
+
+## [2026-05-17] structural | forge self-closure arc — autonomous loop drove Phases 0–9 to a green gate
+
+Confirmed `_meta/iteration/PLAN.md` executed by an in-session loop + fresh-context subagents, gate-every-commit. closure-check fast 2/22→25/25 (GREEN); full 30/31 (only G11, the operator-gated live bench re-run, honestly pending — not gamed). cycle.ts 1753→330; review redesign landed (no auto-merge; G1/G8/G9/G10); forge↔project preflight (ADR-017); brain-read policy reconciled; chained benchmark. Unit suite 388→466, 0 regressions.
+
+**Brain deltas:**
+- New raw source: `brain/_raw/cycles/2026-05-17_forge-self-closure-arc.md`.
+- New theme (pattern): `forge/themes/objective-gate-autonomous-closure.md` (indexed in `forge/patterns.md`).
+- Also commits the foundational 2026-05-16 trafficGame-arc reflection knowledge (themes + cycle archive + category-index updates) that this arc executed against.
