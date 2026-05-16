@@ -24,7 +24,6 @@ export type FailureMode =
   | 'brain-skipped'             // agent never read brain/ — F-13 gate (architect / PM only post-F-34)
   | 'pm-stale-context'          // PM emitted WIs with the wrong initiative_id (legacy bug, gitignore-fixed)
   | 'pm-budget-exhausted'       // PM phase hit its USD cap
-  | 'pm-hallucinated-paths'     // F-36: PM emitted files_in_scope paths that don't exist + aren't being created
   | 'pm-hidden-coupling'        // F-43: two WIs share files_in_scope with no depends_on edge between them
   | 'gate-missing-script'       // npm run X failed with "missing script: X"
   | 'worktree-no-deps'          // gate stderr matched "Cannot find module" / module-resolution
@@ -53,7 +52,6 @@ const RECOVERABLE_MODES = new Set<FailureMode>([
   'trivial-pass',
   'brain-skipped',
   'agent-rate-limited',
-  'pm-hallucinated-paths',
   'pm-hidden-coupling',
 ]);
 
@@ -66,8 +64,6 @@ const RECOMMENDATIONS: Record<FailureMode, string> = {
     'PM emitted WIs with wrong initiative_id (legacy bug). Gitignore + rmSync should prevent recurrence; if seen again, investigate worktree pollution.',
   'pm-budget-exhausted':
     'PM phase hit its USD cap before producing valid WIs. Increase iteration_budget / cost_budget_usd in the manifest.',
-  'pm-hallucinated-paths':
-    'PM emitted files_in_scope paths that don\'t exist in the worktree and aren\'t being created by any acceptance criterion. Auto-retry with the F-35 mandatory Glob enumeration; the second attempt should anchor on real paths. Persistent fabrication after retry signals a deeper prompt issue — surface for human review.',
   'pm-hidden-coupling':
     'Two or more WIs share files_in_scope without a depends_on edge between them — they would conflict at merge time. PM correctly identified the decomposition shape but forgot to serialise siblings that touch the same file. Auto-retry; the PM prompt explicitly covers this rule and the retry usually adds the missing edge.',
   'gate-missing-script':
@@ -107,7 +103,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let brainSkipped = false;
   let pmStaleContext = false;
   let pmBudgetExhausted = false;
-  let pmHallucinatedPaths = false;
   let pmHiddenCoupling = false;
   let gateMissingScript = false;
   let worktreeNoDeps = false;
@@ -152,17 +147,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // pm-budget-exhausted: PM result_subtype.
     if (e.phase === 'project-manager' && md.result_subtype === 'error_max_budget_usd') {
       pmBudgetExhausted = true;
-      pushEvidence(e);
-    }
-
-    // F-36 pm-hallucinated-paths: PM end event carries non-empty fabricated_paths.
-    if (
-      e.phase === 'project-manager' &&
-      e.event_type === 'error' &&
-      Array.isArray(md.fabricated_paths) &&
-      md.fabricated_paths.length > 0
-    ) {
-      pmHallucinatedPaths = true;
       pushEvidence(e);
     }
 
@@ -225,7 +209,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (gateMissingScript) mode = 'gate-missing-script';
   else if (worktreeNoDeps) mode = 'worktree-no-deps';
   else if (pmStaleContext) mode = 'pm-stale-context';
-  else if (pmHallucinatedPaths) mode = 'pm-hallucinated-paths';
   else if (pmHiddenCoupling) mode = 'pm-hidden-coupling';
   else if (pmBudgetExhausted) mode = 'pm-budget-exhausted';
   else if (trivialPass) mode = 'trivial-pass';

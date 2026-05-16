@@ -41,14 +41,12 @@ test('loadConfig: parses a valid full config', () => {
       path,
       JSON.stringify({
         projectsDir: '~/work/projects',
-        models: { default: 'claude-sonnet-4-6', architect: 'claude-opus-4-7' },
         scheduler: { maxConcurrentInitiatives: 3 },
         notify: { desktop: true, webhook_url: 'https://hooks.slack.com/services/...' },
       }),
     );
     const cfg = loadConfig(path);
     assert.equal(cfg.projectsDir, '~/work/projects');
-    assert.equal(cfg.models?.architect, 'claude-opus-4-7');
     assert.equal(cfg.scheduler?.maxConcurrentInitiatives, 3);
     assert.equal(cfg.notify?.webhook_url, 'https://hooks.slack.com/services/...');
   } finally {

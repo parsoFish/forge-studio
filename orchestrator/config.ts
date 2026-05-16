@@ -16,12 +16,6 @@ import { resolve } from 'node:path';
 export type ForgeConfig = {
   /** Where managed projects are cloned/symlinked. Defaults to `./projects`. */
   projectsDir?: string;
-  /**
-   * Per-skill model override. Values are SDK model IDs
-   * (`claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5`, etc.).
-   * Unrecognised skill keys are ignored.
-   */
-  models?: { default?: string; [skill: string]: string | undefined };
   /** Scheduler tuning. Currently only `maxConcurrentInitiatives` is honoured. */
   scheduler?: {
     maxConcurrentInitiatives?: number;

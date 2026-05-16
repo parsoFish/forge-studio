@@ -8,8 +8,6 @@
  *   forge enqueue --fixture                 drop a smoke-test fixture
  *   forge status [--watch]                  print queue + in-flight snapshot
  *   forge metrics [<cycle-id>]              print per-cycle aggregates (or all)
- *   forge bench <phase>                     run a phase's benchmark suite
- *   forge brain query "..."                 stub: invoke brain-query skill
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  */
 
@@ -63,8 +61,6 @@ process.chdir(FORGE_ROOT);
       return cmdReport(args.slice(1));
     case 'demo':
       return await cmdDemo(args.slice(1));
-    case 'bench':
-      return cmdBench(args.slice(1));
     case 'brain':
       return cmdBrain(args.slice(1));
     case '--help':
@@ -97,8 +93,6 @@ Usage:
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
   forge demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]
                                           Generate a self-contained before/after comparison demo (HTML)
-  forge bench <phase>                     Run a phase's benchmark suite (alias for npm run bench:<phase>)
-  forge brain query "<question>"          Query the brain (skeleton)
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
@@ -570,20 +564,10 @@ function cmdMetrics(rest: string[]): void {
   }
 }
 
-function cmdBench(rest: string[]): void {
-  const phase = rest[0];
-  if (!phase) {
-    console.error('forge bench: usage: bench <phase>');
-    process.exit(2);
-  }
-  console.log(`Run via: npm run bench:${phase}`);
-}
-
 function cmdBrain(rest: string[]): void {
   const sub = rest[0];
   if (sub === 'index') return cmdBrainIndex(rest.slice(1));
-  if (sub === 'query') return cmdBrainQueryStub(rest.slice(1));
-  console.error('forge brain: subcommands: index, query');
+  console.error('forge brain: subcommands: index');
   process.exit(2);
 }
 
@@ -591,10 +575,4 @@ function cmdBrainIndex(rest: string[]): void {
   const scopeIdx = rest.indexOf('--scope');
   const scope = scopeIdx >= 0 ? rest[scopeIdx + 1] ?? null : null;
   process.stdout.write(loadBrainIndex({ scope }) + '\n');
-}
-
-function cmdBrainQueryStub(rest: string[]): void {
-  const question = rest.join(' ');
-  console.log(`(skeleton) brain-query: "${question}"`);
-  console.log('Wire the brain-query skill via @anthropic-ai/claude-agent-sdk to make this real.');
 }

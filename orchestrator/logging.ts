@@ -16,7 +16,7 @@ export type Phase =
   | 'review-loop'
   | 'reflection';
 
-export type EventType = 'start' | 'end' | 'log' | 'error' | 'cost' | 'tool_use' | 'iteration';
+export type EventType = 'start' | 'end' | 'log' | 'error' | 'tool_use' | 'iteration';
 
 export type EventLogEntry = {
   event_id: string;

@@ -14,11 +14,6 @@ V1's `forge.config.json` accumulated knobs: model overrides, concurrency setting
 ```jsonc
 {
   "projectsDir": "~/forge/projects",      // where managed projects live
-  "models": {                              // optional per-skill model override
-    "default": "claude-sonnet-4-6",
-    "architect": "claude-opus-4-7",        // example: pin a specific skill higher
-    "brain-query": "claude-haiku-4-5"
-  },
   "scheduler": {
     "maxConcurrentInitiatives": 2          // single static knob
   },
@@ -28,6 +23,12 @@ V1's `forge.config.json` accumulated knobs: model overrides, concurrency setting
   }
 }
 ```
+
+> Per-skill model override was specified here originally but never wired
+> into the SDK invocation contracts. Per the simplification mandate it
+> was **removed** (not plumbed-but-unread). Models are pinned in the
+> `*-invocation.ts` contracts; reintroduce a config override only when a
+> user story requires it.
 
 Everything else lives in:
 - **ADRs** — durable architectural knobs.

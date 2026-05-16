@@ -3,13 +3,6 @@
 
   "projectsDir": "./projects",
 
-  "models": {
-    "_comment": "Per-skill model overrides. Default model is claude-sonnet-4-6.",
-    "default": "claude-sonnet-4-6",
-    "architect": "claude-opus-4-7",
-    "brain-query": "claude-haiku-4-5"
-  },
-
   "scheduler": {
     "_comment": "Concurrency cap for `forge serve`. 1-2 typical; higher = more parallel cycles but more API spend.",
     "maxConcurrentInitiatives": 2

@@ -199,63 +199,6 @@ export function validateWorkItemSet(items: WorkItem[], opts: Omit<ValidateOption
   return { perItem, setErrors };
 }
 
-/**
- * F-36 (revised by F-38): post-emission validation that every `files_in_scope`
- * path either (a) exists in the worktree, or (b) is referenced in any
- * acceptance criterion's `then` clause — meaning the WI's postconditions
- * mention it, so it's an OUTPUT of the WI (created, moved into, written,
- * relocated, etc.). The original v1 heuristic used a regex of creation
- * verbs which produced false positives on perfectly legitimate WIs:
- *
- *   - "moved into tests/_legacy/" — destination of a move (no "create")
- *   - "re-implemented in tests/integration/X.test.ts" — file is authored
- *     but the verb is "re-implemented"
- *
- * The simpler "does the path appear in any then?" rule is more robust
- * because the THEN clause is by definition where the WI describes what it
- * produces. If a path isn't in any THEN clause AND doesn't exist on disk,
- * then either it's a precondition the PM got wrong (hallucination), or
- * it's listed in scope without justification (also a problem).
- *
- * Returns one error string per offending path. Empty result = all paths
- * are either real or legitimately produced.
- */
-export function validateFilesInScopeAgainstWorktree(
-  items: WorkItem[],
-  worktreePath: string,
-  fsExists: (p: string) => boolean,
-): string[] {
-  const errors: string[] = [];
-  for (const item of items) {
-    for (const rel of item.files_in_scope) {
-      // Resolve path relative to the worktree.
-      const cleaned = rel.replace(/^\/+/, '');
-      const abs = `${worktreePath}/${cleaned}`;
-      if (fsExists(abs)) continue;
-
-      // Path doesn't exist. Check if it (or its basename) is referenced in
-      // any AC's `then` clause — the place where postconditions / outputs
-      // are described. If yes, the WI legitimately produces this path.
-      const lastSlash = cleaned.lastIndexOf('/');
-      const basename = lastSlash >= 0 ? cleaned.slice(lastSlash + 1) : cleaned;
-      const isOutput = item.acceptance_criteria.some((ac) => {
-        const then = ac.then;
-        // Match either the full relative path or just the basename. Basename
-        // alone catches cases where the AC abbreviates (e.g., "X.test.ts"
-        // when files_in_scope says "tests/integration/X.test.ts"). Full-path
-        // match catches the inverse.
-        return then.includes(cleaned) || then.includes(basename);
-      });
-      if (isOutput) continue;
-
-      errors.push(
-        `${item.work_item_id}: files_in_scope path \`${rel}\` does not exist in the worktree, and no acceptance criterion's THEN clause references it. Likely PM hallucination — either the path is a fabricated precondition, or the WI is missing an AC that describes producing this file. Re-run PM with the actual project tree enumerated, or amend the WI's ACs to explicitly state this path as a postcondition.`,
-      );
-    }
-  }
-  return errors;
-}
-
 export function readWorkItemsFromDir(dir: string): {
   items: WorkItem[];
   parseErrors: Record<string, string>;
