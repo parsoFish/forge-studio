@@ -59,9 +59,9 @@
 - [x] 7.3 document architect as intentionally out-of-cycle (not a gap)
 
 ## Phase 8 — contract preflight + origin tagging — US-4.1, C1–C6, G6, closes I6
-- [ ] 8.1 implement C1–C6 preflight (decline with failing clause named)
-- [ ] 8.2 manifest `origin: architect|human-directed`; metrics + reflector separate cohorts
-- [ ] 8.3 write ADR-017 (forge↔project contract)
+- [x] 8.1 implement C1–C6 preflight (decline with failing clause named)
+- [x] 8.2 manifest `origin: architect|human-directed`; metrics + reflector separate cohorts
+- [x] 8.3 write ADR-017 (forge↔project contract)
 
 ## Phase 9 — closure + human presentation
 - [ ] 9.1 regenerate as-built Mermaid snapshot from changed code; consistency check
