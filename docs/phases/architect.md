@@ -2,6 +2,17 @@
 
 > *Human-in-the-loop.* Turns ideas into initiatives via interactive Claude Code skills.
 
+> **Intentionally out-of-cycle — a designed property, not a gap.** The
+> architect is **not** wired into `runCycle` and is never auto-invoked.
+> It is a deliberate human moment the operator runs in their own Claude
+> session via the **`/forge-architect`** slash command
+> ([`.claude/commands/forge-architect.md`](../../.claude/commands/forge-architect.md)).
+> Its only handoff to forge is the files it writes
+> (`_queue/pending/INIT-*.md` + roadmap rows), which the scheduler picks
+> up unattended. Design of record:
+> [`brain/forge/themes/human-interaction-via-own-session.md`](../../brain/forge/themes/human-interaction-via-own-session.md)
+> (resolves retro Q4; US-3.1 / US-1.0).
+
 ## Purpose
 
 Collaborate with the user during ideation sessions to update the project's roadmap and emit one or more **initiatives** — coherent, dependency-ordered collections of features that move a project to a desired state. Once an initiative is confirmed, it's queued for unattended execution; the next human touch is the review loop.

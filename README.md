@@ -24,6 +24,22 @@ Brain ──► Architect ──► Project Manager ──► Developer Loop ─
 
 The architecture is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md). The non-negotiable principles are in [`PRINCIPLES.md`](./PRINCIPLES.md). Every load-bearing decision has an ADR in [`docs/decisions/`](./docs/decisions/).
 
+## The three human moments (operator slash commands)
+
+Forge pauses at exactly three deliberate human interaction points. Each
+is a **Claude Code project slash command** the operator invokes in
+**their own Claude session** (CLI or VSCode extension) — never a
+forge-spawned agent and never a bench simulator in production. The
+command files live in [`.claude/commands/`](./.claude/commands/):
+
+| Command | Moment | File handoff |
+|---|---|---|
+| [`/forge-architect`](./.claude/commands/forge-architect.md) | Vision → queued initiatives (out-of-cycle; not wired into `runCycle`) | writes `_queue/pending/INIT-*.md` + roadmap rows |
+| [`/forge-review <id>`](./.claude/commands/forge-review.md) | Engage the open PR — feedback or merge in GitHub | verdict-response file, or merge the PR on GitHub |
+| [`/forge-reflect <id>`](./.claude/commands/forge-reflect.md) | Supply stage-3 reflection feedback | writes `_logs/<id>/user-feedback.md` |
+
+Design of record: [`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md) (US-3.1 / US-3.2).
+
 ## Quickstart
 
 > **Status:** scaffold only. Most phases are stubs — see `docs/phases/` for what's there and what's planned.

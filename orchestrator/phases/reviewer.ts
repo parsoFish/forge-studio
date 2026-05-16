@@ -53,10 +53,12 @@ import type { CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 /**
  * Defaults for the live reviewer Ralph loop. The agent runs as a Ralph loop
  * on the initiative branch; the orchestrator's quality-gate function calls
- * `getVerdict` between iterations. On `approve`, the orchestrator merges +
- * moves the manifest to `_queue/done/` + fires the notification. On
- * `send-back`, the gate appends feedback to fix_plan.md and the loop
- * continues. Cap: 3 iterations (1 prep + 2 send-back rounds).
+ * `getVerdict` between iterations. On `approve` the review GATE passes —
+ * the orchestrator opens the demo-embedded PR and STOPS (Phase 6 / G9: an
+ * approve verdict NEVER merges; the GitHub PR is the operator's merge
+ * surface, and closure decides `merged` only from a GitHub-confirmed
+ * merge). On `send-back`, the gate appends feedback to fix_plan.md and the
+ * loop continues. Cap: 3 iterations (1 prep + 2 send-back rounds).
  */
 const REVIEWER_LIVE_DEFAULT_ITERATIONS = 3;
 const REVIEWER_LIVE_DEFAULT_USD_PER_ITERATION = 1.0;
@@ -88,16 +90,25 @@ function inferProjectType(worktreePath: string): 'browser' | 'cli' | 'lib' | 're
 }
 
 /**
- * Default verdict-provider used when CycleInput.getVerdict is omitted. The
- * per-phase review-loop bench (which only tests stage 1) omits getVerdict —
- * we approve immediately so the loop terminates after iteration 1, matching
- * the prior closure's behaviour. Production / e2e bench supplies a real
- * verdict-provider.
+ * Default verdict-provider used ONLY when CycleInput.getVerdict is omitted —
+ * which in practice is the per-phase review-loop bench (it tests stage 1
+ * only). It approves immediately so the loop terminates after iteration 1.
+ *
+ * This is SAFE in production by construction (Phase 6 / G9): an `approve`
+ * verdict no longer merges anything — it only releases the review gate, and
+ * `runReviewer` then opens the PR and STOPS. The merge decision is made
+ * solely by `closure.ts` from a GitHub-confirmed merge (`gh pr view --json
+ * state == MERGED`). It is also unreachable on the product path regardless:
+ * the scheduler ALWAYS supplies a real file-based operator verdict-provider
+ * (`makeFileVerdict`, scheduler.ts) and the chained bench supplies its
+ * simulator — `CycleInput.getVerdict` is never actually omitted at runtime.
+ * No production code path auto-supplies a verdict that causes a merge or
+ * auto-advances a human moment; bench simulators stay bench-only.
  */
 const defaultGetVerdict: GetVerdict = async () => ({
   kind: 'approve',
   rationale:
-    'default verdict-provider — supply CycleInput.getVerdict to drive stage 2 properly.',
+    'default verdict-provider — supply CycleInput.getVerdict to drive stage 2 properly. (Phase 6: approve does NOT merge; closure decides merge from a confirmed GitHub merge.)',
 });
 
 export async function runReviewer(input: CycleInput, logger: EventLogger): Promise<ReviewerOutcome> {

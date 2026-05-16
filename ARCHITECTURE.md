@@ -87,6 +87,17 @@ Critically, the architect uses the **LLM Council pattern** ([`skills/architect-l
 
 Once the user confirms the initiative, the architect knows it will be worked on entirely by agents until the review loop — that's the *next* human interaction point.
 
+**Intentionally out-of-cycle (by design, not a gap).** The architect is
+**not** wired into `runCycle` and is **not** auto-invoked: it is a
+deliberate human moment the operator runs in their own Claude session
+via the **`/forge-architect`** slash command
+([`.claude/commands/forge-architect.md`](./.claude/commands/forge-architect.md)).
+Its only handoff to forge is the files it writes
+(`_queue/pending/INIT-*.md` + roadmap rows); the scheduler picks those
+up unattended. Design of record:
+[`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md)
+(resolves retro Q4; US-3.1 / US-1.0).
+
 ### 3. Project Manager *(unattended)*
 
 Responsibility: break initiative features into **work items** with explicit dependencies and acceptance criteria.
@@ -148,7 +159,18 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 
 ### Unattended operation
 
-Three human interaction points: Architect, Review, Reflection. Everything else runs unattended for arbitrary durations via:
+Three human interaction points, each run in the **operator's own Claude
+session** as a slash command — never a forge-spawned agent and never a
+bench simulator in production
+([`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md)):
+
+| Moment | Command | File handoff |
+|---|---|---|
+| Architect *(out-of-cycle — not wired into `runCycle`)* | [`/forge-architect`](./.claude/commands/forge-architect.md) | writes `_queue/pending/INIT-*.md` + roadmap rows |
+| Review *(engage the open PR)* | [`/forge-review <id>`](./.claude/commands/forge-review.md) | verdict-response file, or merge the PR in GitHub |
+| Reflection *(stage-3 feedback)* | [`/forge-reflect <id>`](./.claude/commands/forge-reflect.md) | writes `_logs/<id>/user-feedback.md` |
+
+Everything else runs unattended for arbitrary durations via:
 
 - **`_queue/` state-machine directories** (`pending → in-flight → ready-for-review → done | failed`).
 - **`orchestrator/scheduler.ts`** (~150-line persistent loop) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.

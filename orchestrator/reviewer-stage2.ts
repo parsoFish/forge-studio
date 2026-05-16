@@ -7,10 +7,15 @@
  *   2. Between iterations, the orchestrator's quality-gate function:
  *      a. Re-runs the project quality gate command (orchestrator-verified;
  *         never trusts the agent's claim).
- *      b. Calls `getVerdict(ctx)` — production: stdin prompt; bench: simulator.
- *      c. On `approve`: gate returns true → Ralph stops with `status: complete`.
- *         The orchestrator then merges, moves the manifest to `_queue/done/`,
- *         and fires the notification.
+ *      b. Calls `getVerdict(ctx)` — production: file-based operator prompt
+ *         (`makeFileVerdict`); bench: simulator. NEVER an auto-approver in
+ *         production (Phase 6 / G9).
+ *      c. On `approve`: the review GATE passes — gate returns true → Ralph
+ *         stops with `status: complete`. The orchestrator then opens the
+ *         demo-embedded PR and STOPS (it does NOT merge). The GitHub PR is
+ *         the operator's merge surface; `closure.ts` decides `merged` only
+ *         from a GitHub-confirmed merge (`gh pr view --json state ==
+ *         MERGED`), and only that fires reflection + the `_queue/done/` move.
  *      d. On `send-back`: gate appends the feedback ACs to fix_plan.md (so the
  *         next iteration sees them) and returns false → Ralph continues.
  *
