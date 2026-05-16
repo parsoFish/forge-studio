@@ -15,9 +15,12 @@
  * `runReviewer` then uses its `defaultGetVerdict` (approve on the first call)
  * — which is *designed for exactly this bench* (see `defaultGetVerdict` in
  * `orchestrator/phases/reviewer.ts`): the loop terminates after iteration 1's
- * prep, the orchestrator opens + merges the PR, and the bench scores the
- * resulting demo bundle + PR description with the unchanged
- * `scoring.ts:caseScore` rubric.
+ * prep. Phase 6 (review redesign / G9): an approve verdict NO LONGER merges
+ * — the reviewer opens the demo-embedded PR and STOPS (returns `pr-open`).
+ * This bench drives `runReviewer` directly (not `runCycle`), so there is no
+ * closure step and no merge; it scores the resulting demo bundle + PR
+ * description with the unchanged `scoring.ts:caseScore` rubric (whose gate
+ * is the orchestrator-re-run quality gate, not the merge state).
  *
  * Tempdir layout (mirrors the live forge root the orchestrator expects):
  *   <tempdir>/
@@ -33,14 +36,16 @@
  *     _pr-metadata.json                     ← gh shim records PR state here
  *
  * Why the smart `gh` shim (vs the reject-everything shim from
- * recorder-shims.ts): live `runReviewer` calls `openPullRequest` +
- * `mergePullRequest` after an approve verdict. The shim handles `pr create`
- * (records metadata + outputs a fake URL) and `pr merge` (fast-forwards the
- * initiative branch into main locally + marks metadata merged) so the real
- * orchestrator path completes in bench mode without touching GitHub. Unlike
- * the e2e shim it deliberately does NOT `git clean -fdX` after the merge:
- * the review-loop fixtures have no `.gitignore`, and the rubric must still
- * find `.forge/pr-description.md` + `.forge/demos/` in the worktree post-run.
+ * recorder-shims.ts): Phase 6 / G9 — live `runReviewer` calls
+ * `openPullRequest` and then STOPS (it never merges). The shim handles
+ * `pr create` (records metadata + outputs a fake URL) so the real
+ * orchestrator path completes in bench mode without touching GitHub. The
+ * shim's `pr merge` path exists for the shim-mechanics unit tests below
+ * (and for harnesses that model the operator merging) but the reviewer
+ * itself no longer invokes it. The shim deliberately does NOT
+ * `git clean -fdX` after a merge: the review-loop fixtures have no
+ * `.gitignore`, and the rubric must still find `.forge/pr-description.md`
+ * + `.forge/demos/` in the worktree post-run.
  * (The proper durable fix — a pre-merge `.forge/` snapshot — is Phase 5
  * plumbing; a bench shim's housekeeping is bench plumbing, not orchestrator
  * behaviour.)

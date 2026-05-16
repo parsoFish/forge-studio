@@ -44,13 +44,22 @@ export function forgeSnapshotDir(tempdir: string): string {
 }
 
 /**
- * The `gh` shim handles two subcommands:
+ * The `gh` shim handles three subcommands:
  *   `gh pr create --body-file <path> --title <title>` → records the PR
  *     metadata to `<tempdir>/_pr-metadata.json` and prints a fake URL.
  *   `gh pr merge --merge [--delete-branch]` → snapshots `.forge/`, commits
  *     any pending work (NOT `git reset --hard` — that would wipe the
  *     reviewer's uncommitted source files), fast-forwards the initiative
  *     branch into main, optionally `git clean`s, marks metadata merged.
+ *     Phase 6: the orchestrator NEVER calls this (no auto-merge / G9) —
+ *     it models the OPERATOR clicking "merge". The chained harness invokes
+ *     it from its injected `confirmMerge` hook (the simulated operator),
+ *     so the chain exercises closure + reflection end-to-end while
+ *     `mergePullRequest` stays unreachable from every product path.
+ *   `gh pr view --json state` → prints `{"state":"MERGED"}` iff the
+ *     metadata records a merge, else `{"state":"OPEN"}`. This is the
+ *     signal `orchestrator/pr.ts:confirmPrMerged` reads (G10/G1): the
+ *     closure step (and reflection) only proceed on a confirmed MERGED.
  *
  * Anything else exits non-zero with a stderr message. Implemented as a node
  * script so it can use child_process.execFileSync for the git plumbing.
@@ -89,6 +98,19 @@ function flag(name) {
 }
 
 try {
+  if (sub === 'pr' && argv[1] === 'view' && argv.includes('--json')) {
+    // G10/G1: orchestrator/pr.ts:confirmPrMerged reads this. MERGED iff a
+    // merge was recorded (the simulated operator ran 'gh pr merge'); OPEN
+    // otherwise. A missing PR → exit 1 (gh's real behaviour), which
+    // confirmPrMerged treats as "not merged".
+    const meta = loadMeta();
+    if (!meta || !meta.created) {
+      process.stderr.write('[gh shim] no pull requests found for the current branch\\n');
+      process.exit(1);
+    }
+    console.log(JSON.stringify({ state: meta.merged ? 'MERGED' : 'OPEN' }));
+    process.exit(0);
+  }
   if (sub === 'pr' && argv[1] === 'create') {
     const bodyFile = flag('--body-file');
     const title = flag('--title') ?? 'PR';

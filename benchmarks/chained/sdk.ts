@@ -51,6 +51,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runCycle, type CycleInput, type CycleResult } from '../../orchestrator/cycle.ts';
+import { confirmPrMerged } from '../../orchestrator/pr.ts';
 import { parseManifest } from '../../orchestrator/manifest.ts';
 import { layerBrain } from '../_lib/brain-mask.ts';
 import {
@@ -450,6 +451,30 @@ export async function runChain(input: RunChainInput): Promise<ChainArtifacts> {
     getVerdict: async (ctx) => {
       const preComputedSpecResults = runSpecChecks(ctx.worktreePath, seed.spec);
       return simulatorVerdict({ ctx, spec: seed.spec, preComputedSpecResults });
+    },
+    // Phase 6 operator-merge model. The reviewer no longer auto-merges
+    // (G9) — it produces the PR and STOPS. The closure step calls this
+    // hook to learn whether the operator has merged. In production this
+    // defaults to `confirmPrMerged` and is false right after the PR is
+    // created (the operator hasn't merged), so the unattended cycle ends
+    // at `pr-open`. The chained bench models the operator clicking
+    // "merge": it runs `gh pr merge` via the shim (the operator action —
+    // bench-side, NOT the orchestrator) then confirms via the same
+    // `gh pr view --json state` the production `confirmPrMerged` reads.
+    // This keeps the chain exercising closure + reflection end-to-end
+    // while `mergePullRequest` stays unreachable from every product path.
+    confirmMerge: (worktreePath: string): boolean => {
+      try {
+        execFileSync('gh', ['pr', 'merge', '--merge'], {
+          cwd: worktreePath,
+          stdio: 'pipe',
+        });
+      } catch {
+        // No PR / merge conflict → the operator could not merge; closure
+        // treats the unconfirmed state as NOT merged (stays pr-open).
+        return false;
+      }
+      return confirmPrMerged(worktreePath);
     },
   };
 

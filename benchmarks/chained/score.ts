@@ -244,8 +244,12 @@ const results = await mapConcurrent(seeds, CONCURRENCY, async (s): Promise<CaseR
           min_pr_body_chars: s.expected.review_loop.min_pr_body_chars,
           min_why_chars: s.expected.review_loop.min_why_chars,
         },
-        // The cycle merged only if the review-Ralph + gate passed; use that
-        // as the orchestrator-verified gate signal for the rubric's gate 1.
+        // Phase 6: the reviewer no longer auto-merges. `artifacts.merged`
+        // is true iff the simulated-operator merge (the chained harness's
+        // `confirmMerge` hook) succeeded — which only happens when the
+        // review-Ralph reached an approved verdict AND produced the PR
+        // (i.e. the gate passed). Still a valid orchestrator-verified
+        // signal for the rubric's gate 1.
         qualityGatesPassed: artifacts.merged,
       }),
     );
