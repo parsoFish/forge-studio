@@ -52,7 +52,11 @@ forge.config.json
 .DS_Store
 .vscode/
 .idea/
-.claude/
+# Local Claude Code state (settings, transcripts) is per-machine noise — but
+# .claude/commands/ holds the operator-facing slash-command SOURCE (the three
+# human-interaction moments; Phase 7 / US-3.1) and IS committed.
+.claude/*
+!.claude/commands/
 *.swp
 *.swo
 *~
