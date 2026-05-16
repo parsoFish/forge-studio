@@ -18,7 +18,6 @@
     "bench:project-manager": "node --experimental-strip-types benchmarks/project-manager/score.ts",
     "bench:developer-loop": "node --experimental-strip-types benchmarks/developer-loop/score.ts",
     "bench:review-loop": "node --experimental-strip-types benchmarks/review-loop/score.ts",
-    "bench:e2e": "node --experimental-strip-types benchmarks/e2e/score.ts",
     "bench:reflection": "node --experimental-strip-types benchmarks/reflection/score.ts",
     "lint": "echo 'TODO: pick a linter; v2 stays minimal until a need appears'",
     "forge": "node --experimental-strip-types orchestrator/cli.ts"

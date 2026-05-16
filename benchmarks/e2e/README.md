@@ -1,60 +1,42 @@
-# benchmarks/e2e/ — End-to-End Integration Bench
+# benchmarks/e2e/ — chain SEED + human-simulator (NOT a standalone bench)
 
-Drives the full autonomous-loop cycle (PM → developer-loop → review-Ralph → merge) against a sample initiative, with a **human-simulator agent** providing the verdict at each review round.
+> **There is no e2e rubric and no standalone e2e benchmark.** An end-to-end
+> test is **a seed fed into the front of the chain** — see
+> `benchmarks/chained/` and brain theme `chained-phase-benchmarks`.
 
-This is the integration test layer that sits above the per-phase benches. The per-phase benches (`benchmarks/{architect,project-manager,developer-loop,review-loop}/`) verify each agent does its job in isolation; this bench verifies the orchestration glue end-to-end and exercises stage 2 of the review-loop authentically.
+This directory no longer owns a fixture-as-scored-unit or a bespoke rubric.
+The former `score.ts` / `scoring.ts` / `cases.json` / `sdk.ts` (the
+standalone `runCycle` wiring + a bespoke gate + merged/converged/spec/cost
+rubric) were the isolated-e2e-with-its-own-benchmarks anti-pattern and were
+deleted (Phase 5 / 1.6). What the old criteria wanted is already covered by
+the per-phase rubrics run on chained (generated) inputs.
 
-## Layout
+What survives here is reusable plumbing only:
 
 ```
 benchmarks/e2e/
-├── score.ts                      # runner — invokes runCycle once per fixture
-├── scoring.ts                    # pure rubric (gate + 5 weighted criteria)
-├── sdk.ts                        # tempdir setup, real git init, gh PR shim
-├── simulator.ts                  # human-simulator agent (SDK call)
-├── *.test.ts                     # unit tests
-├── cases.json                    # fixture entries
-├── fixtures/<id>/
-│   ├── branch-state/             # seed worktree (initial main branch)
-│   ├── manifest.md               # initiative manifest (PM input)
-│   └── target-spec.json          # simulator's evaluation criteria
-└── results/                      # per-run output (gitignored)
+├── simulator.ts        # human-simulator agent (the chained harness's
+│                       #   getVerdict provider) + runSpecChecks + TargetSpec
+├── simulator.test.ts   # unit tests for the simulator
+└── fixtures/
+    └── slugifier-basic/  # seed reused by the chained harness
+        ├── branch-state/   # seed worktree (initial main branch)
+        ├── manifest.md     # an architect-shaped initiative manifest
+        └── target-spec.json
 ```
 
-## Rubric
+The smart `gh` shim, `reconstructGateStateFromEventLog`, the brain-mask, and
+the recorder shims were lifted to `benchmarks/_lib/` (`gh-shim.ts`,
+`brain-mask.ts`, `recorder-shims.ts`) so the chained sequencer shares them.
 
-Gate: `cycle_completed` — `runCycle` returned without throwing.
+## How an e2e test runs now
 
-Weighted (sum = 1.0; pass threshold 0.7):
+The chained harness (`benchmarks/chained/`) takes one **seed** (an
+architect-level prompt), runs the architect bench → `runCycle`
+(PM → dev-loop → review-Ralph → merge → reflection), and scores each phase's
+**generated** output with that phase's **existing** `scoring.ts:caseScore`.
+The `slugifier-basic` intent is one such seed; the `simulator.ts` here is
+the verdict provider injected into `runCycle` for the review rounds.
 
-| Criterion | Weight | Check |
-|---|---|---|
-| `merged` | 0.40 | `gh` shim recorded `pr merge` success (initiative branch fast-forwarded into `main`) |
-| `converged_within_budget` | 0.25 | Review-Ralph rounds ≤ `expected.max_rounds` (default 2) |
-| `spec_satisfied` | 0.20 | Every target-spec check passes against the merged worktree |
-| `cost_within_budget` | 0.10 | Total cycle cost ≤ `expected.max_cost_usd` |
-| `no_regression` | 0.05 | `expected.pre_existing_tests_cmd` exits 0 post-merge (default true) |
-
-## How a fixture is run
-
-1. **Setup**: tempdir gets the standard symlinks (`brain/`, `skills/`, `docs/`, `orchestrator/`, `loops/`), the seed tree is `cpSync`'d into `projects/<name>/`, `git init`'d, committed to `main`, then a fresh `initiative-<id>` branch is checked out.
-2. **Manifest** is dropped into `_queue/in-flight/<initiative-id>.md`.
-3. **PATH shims** are written to `<tempdir>/bin/`: `gh` (smart — handles `pr create` + `pr merge` locally via `_pr-metadata.json` + a `git merge --ff-only`), `vhs`, and `npx playwright`. Real GitHub is never touched.
-4. **`runCycle`** is invoked with `getVerdict` injected to call the simulator. The cycle runs PM → dev-loop → review-Ralph; the review-Ralph's quality-gate function calls the simulator for a verdict each round.
-5. **Post-merge spec checks** run against the merged worktree (orchestrator-verified ground truth, independent of the simulator's verdict).
-6. **Scoring** combines the cycle outcome, round count, cost, and spec results.
-
-## Cost budget
-
-Single fixture = 1 full cycle ≈ $5–10 with up to 2 send-back rounds. Session budget is set to $25 to give 2–3 attempts at the same fixture per run during prompt iteration.
-
-## Adding fixtures
-
-Drop a new `fixtures/<id>/` directory with `branch-state/` (seed), `manifest.md`, `target-spec.json`. Add an entry to `cases.json`. The `target-spec.json` shape matches `simulator.ts:TargetSpec`.
-
-## What this bench does NOT cover
-
-- **Architect phase**: out of scope. The architect bench produces validated manifests; e2e fixtures consume one. Architect bench output → e2e fixture manifest piping is future work.
-- **Reflection phase**: out of scope until reflection lands.
-- **Production CLI** (`forge review <id>` for human-driven verdicts): the orchestrator-side verdict-provider abstraction supports it; the CLI adapter is future work.
-- **Real GitHub integration**: every `gh` call is locally shimmed. Real `gh` integration is a separate test path (manual, not in CI/bench).
+Adding an e2e case = adding a **seed** to `benchmarks/chained/`, never a
+rubric or a fixture here.
