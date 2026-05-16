@@ -28,6 +28,7 @@ import { writeCycleReport } from './cycle-report.ts';
 export type {
   CycleInput,
   CycleResult,
+  CycleOutcome,
   ReflectionStatus,
   ReviewerOutcome,
 } from './cycle-context.ts';
@@ -37,8 +38,8 @@ export { recordBrainGateResult } from './cycle-context.ts';
 import type {
   CycleInput,
   CycleResult,
+  CycleOutcome,
   ReflectionStatus,
-  ReviewerOutcome,
 } from './cycle-context.ts';
 import { resolveQualityGateCmd } from './cycle-context.ts';
 
@@ -49,6 +50,8 @@ import { runProjectManager } from './phases/project-manager.ts';
 import { runDeveloperLoop } from './phases/developer-loop.ts';
 import { runReviewer } from './phases/reviewer.ts';
 import { runReflector } from './phases/reflector.ts';
+import { runClosure } from './phases/closure.ts';
+import { assertLocalRemoteSynced, pushInitiativeBranch } from './pr.ts';
 export { computeAdaptiveReviewIterationCap } from './phases/reviewer.ts';
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
@@ -77,7 +80,9 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const effectiveQualityGateCmd = resolveQualityGateCmd(input);
   const inputWithGate: CycleInput = { ...input, qualityGateCmd: effectiveQualityGateCmd };
 
-  let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
+  // Final cycle outcome. `merged` is reachable ONLY via the closure step
+  // (a GitHub-confirmed merge) — never from the reviewer (G9).
+  let cycleOutcome: CycleOutcome = 'ready-for-review';
   let reflectionStatus: ReflectionStatus = 'skipped';
   try {
     if (!input.dryRun) {
@@ -85,19 +90,34 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       await runDeveloperLoop(inputWithGate, logger);
       // Safety net: commit any uncommitted dev-loop work before the reviewer
       // starts. The dev-loop's prompt tells the agent to commit per
-      // iteration, but if it skips, the reviewer's gh-shim does
-      // `git reset --hard HEAD` and the source files vanish. This
-      // boundary commit catches any drift. Files matching .gitignore
+      // iteration, but if it skips, source files would not reach the PR.
+      // This boundary commit catches any drift. Files matching .gitignore
       // (Ralph scratch: PROMPT.md / AGENT.md / fix_plan.md, node_modules)
       // are excluded by `git add` automatically.
       commitDevLoopBoundary(inputWithGate.worktreePath, logger, inputWithGate.initiativeId);
-      reviewerOutcome = await runReviewer(inputWithGate, logger);
+      // G8: the boundary commit may have added a commit on top of the
+      // dev-loop's last per-WI push, so push once more and then assert the
+      // local↔remote invariant. This is the precondition the review
+      // redesign depends on: at dev-loop close `origin/<branch>` == local
+      // HEAD and `main` == merge-base (no divergence). A violation throws
+      // and is classified — the branch is not in a reviewable state.
+      enforceDevLoopCloseInvariant(inputWithGate.worktreePath, logger, inputWithGate.initiativeId);
 
-      // Reflection: only fires after a successful merge. Log-and-continue —
-      // a thrown reflector does not change the cycle's `status` (the merge
-      // already happened; reflection cannot un-merge). Surface as separate
-      // `reflection_status` telemetry instead.
-      if (reviewerOutcome === 'merged') {
+      // Review phase: assess the branch holistically vs intent, refine
+      // (may spawn a dev-loop), produce the demo-embedded PR, then STOP.
+      // No auto-merge (G9) — the GitHub PR is the operator's merge surface.
+      const reviewerOutcome = await runReviewer(inputWithGate, logger);
+
+      // Closure: reflection fires ONLY on a GitHub-confirmed merge (G10),
+      // and `_queue/done/` ⇒ the PR is MERGED (G1). The closure step asks
+      // GitHub `gh pr view --json state`; on MERGED it aligns local↔remote
+      // (ff main, prune the initiative branch) and moves the manifest to
+      // `done/`; otherwise the manifest stays in `ready-for-review/`
+      // flagged and reflection is skipped. The operator merging the PR in
+      // GitHub is what closes the review phase — nothing here auto-merges.
+      const closure = await runClosure(inputWithGate, logger, reviewerOutcome);
+      cycleOutcome = closure.outcome;
+      if (closure.merged) {
         reflectionStatus = await runReflector(inputWithGate, logger);
       }
     }
@@ -111,7 +131,6 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       output_refs: [],
       message: err instanceof Error ? err.message : String(err),
     });
-    reviewerOutcome = 'ready-for-review'; // sentinel; overridden below to 'failed'
     // F-27: classify the failure mode from the event log so the scheduler
     // (and humans reading the cycle report) can see a concrete diagnosis
     // instead of grepping events.jsonl. The classifier reads the log we
@@ -143,7 +162,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const result: CycleResult = {
     cycle_id: cycleId,
     initiative_id: input.initiativeId,
-    status: reviewerOutcome,
+    status: cycleOutcome,
     reflection_status: reflectionStatus,
     duration_ms: Date.now() - started,
     log_path: logger.logFilePath,
@@ -327,4 +346,51 @@ function commitDevLoopBoundary(
   } catch {
     // Not a git repo, or no changes to commit, or git failed — non-fatal.
   }
+}
+
+/**
+ * G8: enforce the local↔remote invariant at dev-loop close. Pushes once
+ * more (the boundary commit may have added a commit on top of the
+ * dev-loop's last per-WI push), then asserts:
+ *   - `origin/<branch>` == local HEAD  (branch fully published)
+ *   - `main` == merge-base(main, branch)  (main did not diverge)
+ *
+ * On violation this THROWS — a diverged / unpublished branch is not a
+ * reviewable state, and the failure-classifier surfaces it. The branch
+ * sync is the precondition the review-phase redesign depends on
+ * (architecture.md §G / brain theme `review-phase-target-design`).
+ */
+function enforceDevLoopCloseInvariant(
+  worktreePath: string,
+  logger: EventLogger,
+  initiativeId: string,
+): void {
+  const push = pushInitiativeBranch(worktreePath);
+  logger.emit({
+    initiative_id: initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: push.pushed ? 'log' : 'error',
+    input_refs: [worktreePath],
+    output_refs: [],
+    message: push.pushed ? 'cycle.dev-close-pushed' : 'cycle.dev-close-push-failed',
+    metadata: push.pushed ? { branch: push.branch } : { reason: push.reason },
+  });
+  const inv = assertLocalRemoteSynced(worktreePath);
+  logger.emit({
+    initiative_id: initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: 'log',
+    input_refs: [worktreePath],
+    output_refs: [],
+    message: 'cycle.dev-close-invariant-ok',
+    metadata: {
+      branch: inv.branch,
+      local_head: inv.localHead,
+      origin_head: inv.originHead,
+      main_head: inv.mainHead,
+      merge_base: inv.mergeBase,
+    },
+  });
 }

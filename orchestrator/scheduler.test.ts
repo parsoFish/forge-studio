@@ -1,10 +1,18 @@
 /**
  * Tests for the scheduler's terminal-status dispatch. Covers F-01 (scheduler
  * mishandles `merged` and `send-back-cap-exhausted` as failures) and the
- * matching reviewer/cycle contract:
+ * Phase-6 reviewer/closure/cycle contract:
  *
- *   - 'merged'                  → cycle already moved manifest to done/; no
+ *   - 'merged'                  → closure already confirmed the GitHub
+ *                                 merge + moved the manifest to done/; no
  *                                 move; notify type 'merged'.
+ *   - 'pr-open'                 → review gate passed; demo-embedded PR open
+ *                                 awaiting the operator's merge (the
+ *                                 reviewer moved the manifest to
+ *                                 ready-for-review/). No move; notify
+ *                                 'review-ready'. This is the expected
+ *                                 unattended terminal state — NOT a failure
+ *                                 and NOT an auto-merge (G9).
  *   - 'ready-for-review'        → cycle already moved; no move; notify
  *                                 'review-ready'.
  *   - 'send-back-cap-exhausted' → reviewer already moved manifest to
@@ -53,7 +61,10 @@ function makeInput(status: DispatchInput['result']['status']): DispatchInput {
 test('dispatchTerminalStatus: merged → no move, notify "merged"', async () => {
   const { dir, paths } = setupQueue();
   try {
-    // Cycle already moved to done/ — simulate that.
+    // Phase 6: the CLOSURE step (not the reviewer) moves the manifest to
+    // done/, and ONLY after a GitHub-confirmed merge (G1). By the time
+    // dispatch sees 'merged' the manifest is already in done/ — simulate
+    // that. Dispatch must not move it again; it only notifies.
     writeFileSync(join(paths.done, 'INIT-test.md'), 'manifest');
 
     const calls: NotifyEvent[] = [];
@@ -88,6 +99,35 @@ test('dispatchTerminalStatus: ready-for-review → no move, notify "review-ready
     assert.equal(out.notified, 'review-ready');
     assert.equal(calls[0].type, 'review-ready');
     assert.ok(existsSync(join(paths.readyForReview, 'INIT-test.md')));
+    assert.ok(!existsSync(join(paths.failed, 'INIT-test.md')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('dispatchTerminalStatus: pr-open → no move (reviewer moved to ready-for-review/), notify "review-ready", NOT failed', async () => {
+  // Phase 6 / G9: the review gate passed and the demo-embedded PR is open
+  // awaiting the operator's merge. The reviewer already moved the manifest
+  // to ready-for-review/ (closure promotes to done/ only on a confirmed
+  // merge). This is the expected unattended terminal state — dispatch must
+  // NOT treat it as a failure and must NOT move the manifest.
+  const { dir, paths } = setupQueue();
+  try {
+    writeFileSync(join(paths.readyForReview, 'INIT-test.md'), 'manifest');
+    const calls: NotifyEvent[] = [];
+    const out = await dispatchTerminalStatus(makeInput('pr-open'), {
+      paths,
+      notifyFn: async (e) => { calls.push(e); },
+    });
+
+    assert.equal(out.moved, null);
+    assert.equal(out.notified, 'review-ready');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].type, 'review-ready');
+    assert.match(calls[0].title, /merge/i);
+    assert.ok(existsSync(join(paths.readyForReview, 'INIT-test.md')));
+    // Critically: NOT moved to done/ (no auto-merge) and NOT failed/.
+    assert.ok(!existsSync(join(paths.done, 'INIT-test.md')));
     assert.ok(!existsSync(join(paths.failed, 'INIT-test.md')));
   } finally {
     rmSync(dir, { recursive: true, force: true });

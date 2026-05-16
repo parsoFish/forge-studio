@@ -25,13 +25,42 @@ export type CycleInput = {
   cycleId?: string;
   dryRun?: boolean;
   /**
-   * Verdict provider for the review-Ralph loop. Production: stdin-prompt
-   * adapter (deferred). Bench: simulator agent. When absent, the review-loop
-   * uses a default that approves on the first call — appropriate for the
-   * per-phase review-loop bench (which only tests stage 1) but NOT for
-   * end-to-end runs (the e2e bench supplies a real simulator).
+   * Verdict provider for the review-Ralph loop. Production: file-based
+   * operator adapter (`makeFileVerdict`). Bench: simulator agent. When
+   * absent, the review-loop uses a default that approves on the first call
+   * — appropriate for the per-phase review-loop bench (which only tests
+   * stage 1) but NOT for end-to-end runs (the chained bench supplies a
+   * real simulator). NOTE (Phase 6 / G9): an `approve` verdict no longer
+   * causes a merge — it means the review gate passed and the PR is
+   * produced. The GitHub PR is the operator's merge surface.
    */
   getVerdict?: GetVerdict;
+  /**
+   * Operator-merge confirmation hook (Phase 6 / G9 / G10). The review
+   * phase NEVER merges; the operator merges the PR in GitHub. The closure
+   * step calls this to learn whether the operator has merged yet.
+   *
+   * Production (scheduler): omitted → defaults to `confirmPrMerged`
+   * (`gh pr view --json state` == MERGED). Right after the PR is created
+   * this is false (the operator hasn't merged), so the unattended cycle
+   * stops at `ready-for-review` and reflection is skipped; a later
+   * re-trigger re-checks and proceeds once the operator has merged.
+   *
+   * Bench: the chained harness injects a hook that models the operator
+   * clicking "merge" (drives its gh-shim) so the chain exercises closure
+   * + reflection end-to-end. This keeps `mergePullRequest` unreachable
+   * from any product path — only the bench's injected hook merges.
+   */
+  confirmMerge?: (worktreePath: string) => Promise<boolean> | boolean;
+  /**
+   * US-1.3 opt-in: when the holistic intent gate finds the whole branch
+   * misaligned, spawn a targeted developer-loop (reusing `runDeveloperLoop`)
+   * to refine/fix/align before the review-Ralph produces the PR. Default
+   * OFF — the unattended path uses the review-Ralph's send-back loop as the
+   * primary gap-filler; the spawned alignment dev-loop is the structural
+   * hook for the holistic refinement described in the review-phase redesign.
+   */
+  spawnAlignmentDevLoop?: boolean;
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**
@@ -57,7 +86,24 @@ export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
 export type CycleResult = {
   cycle_id: string;
   initiative_id: string;
-  status: 'merged' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
+  /**
+   * Terminal cycle status. Post-Phase-6 (review redesign):
+   * - `merged`                 — the operator merged the PR in GitHub, the
+   *                              merge was confirmed (`gh pr view` == MERGED),
+   *                              local was aligned to remote, and the
+   *                              manifest moved to `_queue/done/`. Only this
+   *                              status fires reflection.
+   * - `pr-open`                — the review gate passed and the demo-embedded
+   *                              PR is open, awaiting the operator's merge.
+   *                              Manifest in `_queue/ready-for-review/`.
+   *                              NOT a failure — the expected unattended
+   *                              terminal state until the operator merges.
+   * - `ready-for-review`       — review did not fully converge / PR not
+   *                              produced; operator picks up the worktree.
+   * - `send-back-cap-exhausted`— send-back cap hit before convergence.
+   * - `failed`                 — a phase threw.
+   */
+  status: 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
   /**
    * Outcome of the reflection phase. Reflection runs after a successful merge
    * and is log-and-continue: a failed reflector does not change the merge
@@ -72,7 +118,24 @@ export type CycleResult = {
   log_path: string;
 };
 
-export type ReviewerOutcome = 'merged' | 'ready-for-review' | 'send-back-cap-exhausted';
+/**
+ * Outcome of `runReviewer` (Phase 6: the reviewer no longer merges).
+ * - `pr-open`                — review gate passed, demo-embedded PR created;
+ *                              control returns to the closure step (which
+ *                              decides `merged` vs `pr-open` based on whether
+ *                              the operator has merged). The reviewer itself
+ *                              never produces `merged`.
+ * - `ready-for-review`       — review did not converge / PR creation failed.
+ * - `send-back-cap-exhausted`— send-back cap hit.
+ */
+export type ReviewerOutcome = 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted';
+
+/**
+ * Final cycle outcome after the closure step folds in the operator-merge
+ * confirmation. `merged` is reachable ONLY here (never from the reviewer)
+ * and ONLY when `gh pr view --json state` == MERGED.
+ */
+export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted';
 
 /**
  * Brain-first runtime gate. CLAUDE.md and every SKILL.md require each phase's

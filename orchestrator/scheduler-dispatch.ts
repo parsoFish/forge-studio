@@ -18,7 +18,7 @@ export type DispatchInput = {
   filename: string;
   manifest: { initiativeId: string; project: string };
   result: {
-    status: 'merged' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
+    status: 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
     log_path: string;
   };
 };
@@ -78,6 +78,20 @@ export async function dispatchTerminalStatus(
         body: `${manifest.project} — see ${result.log_path}`,
       });
       return { moved: null, notified: 'merged' };
+    }
+    case 'pr-open': {
+      // Phase 6 / G9: the review gate passed and a demo-embedded PR is
+      // open, awaiting the operator's merge in GitHub. The reviewer
+      // already moved the manifest to `ready-for-review/` (closure
+      // promotes it to `done/` only on a confirmed merge). This is the
+      // expected unattended terminal state — NOT a failure. Notify the
+      // operator that their merge decision is the next step.
+      await notifyFn({
+        type: 'review-ready',
+        title: `PR open — your merge closes it: ${manifest.initiativeId}`,
+        body: `${manifest.project} — review gate passed; merge the PR in GitHub to close the review phase. See ${result.log_path}`,
+      });
+      return { moved: null, notified: 'review-ready' };
     }
     case 'ready-for-review': {
       await notifyFn({

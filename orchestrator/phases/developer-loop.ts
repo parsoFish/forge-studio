@@ -31,6 +31,7 @@ import {
 import { createClaudeAgent, type QueryFn } from '../../loops/ralph/claude-agent.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
+import { pushInitiativeBranch } from '../pr.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -247,6 +248,27 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
         tool_use: wiToolUse,
         runner_error: runnerError,
       },
+    });
+
+    // G8: push the initiative branch to origin after every WI so local ==
+    // remote throughout the dev-loop (no divergence → no stacked-PR merge
+    // conflict at the review boundary). The agent's per-iteration commit
+    // (backstopped by commitDevLoopBoundary) is already on the branch;
+    // publishing it now keeps origin in lock-step. Best-effort by return
+    // value — the hard invariant is asserted once at close (below).
+    const push = pushInitiativeBranch(input.worktreePath);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: wiStart.event_id,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: push.pushed ? 'log' : 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: push.pushed ? 'dev-loop.branch-pushed' : 'dev-loop.branch-push-failed',
+      metadata: push.pushed
+        ? { work_item_id: wi.work_item_id, branch: push.branch }
+        : { work_item_id: wi.work_item_id, reason: push.reason },
     });
 
     wiOutcomes.push({ id: wi.work_item_id, status: finalStatus, result });

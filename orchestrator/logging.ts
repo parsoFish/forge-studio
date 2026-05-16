@@ -14,6 +14,7 @@ export type Phase =
   | 'project-manager'
   | 'developer-loop'
   | 'review-loop'
+  | 'closure'
   | 'reflection';
 
 export type EventType = 'start' | 'end' | 'log' | 'error' | 'tool_use' | 'iteration';

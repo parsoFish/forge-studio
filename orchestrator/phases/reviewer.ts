@@ -1,11 +1,24 @@
 /**
- * Review-loop phase runner. Extracted from cycle.ts (Phase 3.4c step 5).
+ * Review-loop phase runner.
  *
- * Drives the reviewer as a Ralph loop on the initiative branch, calling the
- * orchestrator-side verdict gate between iterations and, on approval, opening
- * + merging the PR. Behaviour is identical to the prior in-cycle
- * implementation — this module only relocates the code so the orchestration
- * spine stays thin.
+ * Phase 6 (review-phase redesign) — the review phase is now a holistic
+ * intent gate that ends at a demo-embedded PR and STOPS. It NO LONGER
+ * merges (G9): the GitHub PR is the operator's merge + feedback surface.
+ *
+ * Flow:
+ *   1. Holistic intent assessment of the WHOLE initiative branch vs the
+ *      initiative intent (manifest + work items), not isolated WIs.
+ *   2. If the branch is misaligned (bugs / drift / gaps) the gate MAY
+ *      spawn a targeted developer-loop to refine/fix/align before review
+ *      (reuses `runDeveloperLoop`; see `maybeSpawnAlignmentDevLoop`).
+ *   3. Review-Ralph prepares (or refines via send-back) the demo + PR
+ *      draft on the initiative branch; the orchestrator-side verdict gate
+ *      runs between iterations.
+ *   4. On an approved verdict (review gate passed — NOT a merge signal)
+ *      the demo-embedded PR is created on the project repo and the phase
+ *      returns `pr-open`. The closure step (cycle.ts → phases/closure.ts)
+ *      decides `merged` vs `pr-open` strictly from a GitHub-confirmed
+ *      merge. Nothing here auto-merges.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -31,10 +44,10 @@ import {
 } from '../reviewer-stage2.ts';
 import { moveTo as moveQueueItem } from '../queue.ts';
 import { notify } from '../notify.ts';
-import { readWorkItemsFromDir } from '../work-item.ts';
+import { readWorkItemsFromDir, type WorkItem } from '../work-item.ts';
 import { createClaudeAgent, type QueryFn } from '../../loops/ralph/claude-agent.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
-import { openPullRequest, mergePullRequest } from '../pr.ts';
+import { openPullRequest } from '../pr.ts';
 import { resolveNotifyConfig } from '../config.ts';
 import type { CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
@@ -116,6 +129,19 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
   // Read the completed work items the reviewer will be reviewing.
   const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
   const { items: workItems } = readWorkItemsFromDir(workItemsDir);
+
+  // US-1.3: holistic intent assessment. BEFORE the review-Ralph, assess
+  // the WHOLE initiative branch against the initiative intent (manifest +
+  // every WI's acceptance criteria) — not isolated WIs. The orchestrator-
+  // verified signal is the project quality gate run against the whole
+  // merged branch (truth, never the agent's claim). If the branch is
+  // misaligned the gate MAY spawn a targeted developer-loop to refine /
+  // fix / align before review (reuses runDeveloperLoop — no new engine).
+  await assessIntentHolisticallyAndMaybeRefine(input, logger, {
+    parentEventId: start.event_id,
+    workItems,
+    qualityGateCmd,
+  });
 
   // F-15: wipe the dev-loop's leftover PROMPT.md / AGENT.md / fix_plan.md
   // before stamping the reviewer's. The dev-loop's stamps are per-WI scratch
@@ -286,7 +312,10 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
   let prUrl: string | null = null;
 
   if (approved) {
-    // Open the PR (best-effort) and immediately merge.
+    // G9: the review gate passed. Create the demo-embedded PR on the
+    // project repo and STOP. The reviewer NEVER merges — the GitHub PR is
+    // the operator's merge + feedback surface. The closure step decides
+    // `merged` vs `pr-open` strictly from a GitHub-confirmed merge.
     const prDescriptionPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
     // Prefer a human-readable PR title pulled from the PR description's
     // first heading. Falls back to the initiative ID when the description
@@ -294,83 +323,46 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
     // initiative — better than the worktree's basename).
     const prTitle = extractPrTitle(prDescriptionPath, input.initiativeId);
     prUrl = openPullRequest(input.worktreePath, prDescriptionPath, prTitle);
-    const merged = mergePullRequest(input.worktreePath);
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'review-loop',
       skill: 'reviewer',
-      event_type: merged ? 'log' : 'error',
+      event_type: prUrl ? 'log' : 'error',
       input_refs: [prDescriptionPath],
       output_refs: prUrl ? [prUrl] : [],
-      message: merged ? 'reviewer.merged' : 'reviewer.merge-failed',
-      metadata: { url: prUrl, merged, pr_created: prUrl !== null },
+      message: prUrl ? 'reviewer.pr-opened' : 'reviewer.pr-open-failed',
+      metadata: { url: prUrl, pr_created: prUrl !== null },
     });
 
-    if (!merged) {
-      // gh merge failed — leave the manifest in in-flight, treat as ready-for-review.
-      // Operator can pick up via the production CLI (or a follow-up cycle).
-      try {
-        moveQueueItem(basename(input.manifestPath), 'ready-for-review');
-      } catch {
-        /* best-effort */
-      }
-      logger.emit({
-        initiative_id: input.initiativeId,
-        parent_event_id: start.event_id,
-        phase: 'review-loop',
-        skill: 'reviewer',
-        event_type: 'end',
-        input_refs: [input.worktreePath],
-        output_refs: prUrl ? [prUrl] : [],
-        duration_ms: loopResult.duration_ms,
-        cost_usd: loopResult.cost_usd,
-        metadata: {
-          outcome: 'ready-for-review',
-          iterations: loopResult.iterations,
-          stop_reason: loopResult.stop_reason,
-          gate_invocations: gateState.invocations,
-          verdicts_summary: gateState.verdicts.map((v) => v.kind),
-          tool_use: toolUseSummary,
-          pr_url: prUrl,
-          merge_failed: true,
-        },
-      });
-      return 'ready-for-review';
-    }
-
-    // Move manifest to _queue/done/ and fire notification.
+    // Whether or not `gh pr create` succeeded, the review phase is done:
+    // the manifest moves to `ready-for-review/` (the operator surface —
+    // the PR awaits their merge; closure promotes to `done/` on a
+    // confirmed merge). If the PR was created → `pr-open`; if PR creation
+    // failed → `ready-for-review` (operator opens it manually / re-runs).
     try {
-      moveQueueItem(basename(input.manifestPath), 'done');
-    } catch (err) {
-      logger.emit({
-        initiative_id: input.initiativeId,
-        parent_event_id: start.event_id,
-        phase: 'review-loop',
-        skill: 'reviewer',
-        event_type: 'error',
-        input_refs: [input.manifestPath],
-        output_refs: [],
-        message: 'reviewer.queue-move-failed',
-        metadata: { error: err instanceof Error ? err.message : String(err) },
-      });
+      moveQueueItem(basename(input.manifestPath), 'ready-for-review');
+    } catch {
+      /* best-effort — manifest may already have been moved */
     }
+    outcome = prUrl ? 'pr-open' : 'ready-for-review';
 
     try {
       await notify(
         {
           type: 'review-ready',
           title: input.initiativeId,
-          body: prUrl ? `Merged: ${prUrl}` : 'Initiative merged to main',
+          body: prUrl
+            ? `Review gate passed — PR open, awaiting your merge: ${prUrl}`
+            : 'Review gate passed but PR creation failed — open it manually',
           url: prUrl ?? undefined,
-          metadata: { initiative_id: input.initiativeId, outcome: 'merged' },
+          metadata: { initiative_id: input.initiativeId, outcome },
         },
         resolveNotifyConfig(),
       );
     } catch {
       /* best-effort */
     }
-    outcome = 'merged';
   } else if (loopResult.stop_reason === 'iteration-budget') {
     // F-11: send-back cap exhausted is NOT a phantom value any more. Move the
     // manifest to `ready-for-review/` so the operator can pick up via
@@ -445,6 +437,148 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
   // status as a failed-with-PR-draft case (operator picks up via
   // `forge review <id>`).
   return outcome;
+}
+
+/**
+ * Run the project quality gate against the WHOLE initiative branch (truth,
+ * never the agent's claim). The same command the dev-loop and review-Ralph
+ * use; here it is the holistic, branch-level alignment signal.
+ */
+function runHolisticGate(worktreePath: string, cmd: string[]): boolean {
+  if (cmd.length === 0) return false;
+  const [head, ...rest] = cmd;
+  if (!head) return false;
+  try {
+    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * US-1.3 — holistic intent gate (+ optional spawned alignment dev-loop).
+ *
+ * Assesses the WHOLE initiative branch against the initiative intent
+ * (manifest + every WI's acceptance criteria), not isolated WIs. The
+ * orchestrator-verified alignment signal is the project quality gate run
+ * against the whole branch. When the branch is misaligned, the gate MAY
+ * spawn a targeted developer-loop to refine / fix / align before the
+ * review-Ralph produces the PR — reusing `runDeveloperLoop` (no new
+ * engine, per the redesign + brain theme `review-phase-target-design`).
+ *
+ * MINIMAL by design: the structural hook + the orchestrator-verified gate
+ * are fully wired. The LLM-driven synthesis of *which* targeted WIs to
+ * regenerate from a holistic misalignment is the remaining seam — see
+ * `maybeSpawnAlignmentDevLoop`. G8/G9/G10/G1 do not depend on that seam.
+ */
+async function assessIntentHolisticallyAndMaybeRefine(
+  input: CycleInput,
+  logger: EventLogger,
+  ctx: { parentEventId: string; workItems: WorkItem[]; qualityGateCmd: string[] },
+): Promise<void> {
+  const aligned = runHolisticGate(input.worktreePath, ctx.qualityGateCmd);
+  const totalAcs = ctx.workItems.reduce((n, wi) => n + wi.acceptance_criteria.length, 0);
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: ctx.parentEventId,
+    phase: 'review-loop',
+    skill: 'reviewer',
+    event_type: aligned ? 'log' : 'error',
+    input_refs: [input.worktreePath, input.manifestPath],
+    output_refs: [],
+    message: aligned
+      ? 'reviewer.holistic-intent-aligned'
+      : 'reviewer.holistic-intent-misaligned',
+    metadata: {
+      gate_command: ctx.qualityGateCmd.join(' '),
+      gate_passed: aligned,
+      work_item_count: ctx.workItems.length,
+      acceptance_criteria_count: totalAcs,
+      assessed: 'whole-branch-vs-intent',
+    },
+  });
+  if (!aligned) {
+    await maybeSpawnAlignmentDevLoop(input, logger, {
+      parentEventId: ctx.parentEventId,
+      reason: 'holistic quality gate failed against the whole branch',
+    });
+  }
+}
+
+/**
+ * Structural hook: spawn a targeted developer-loop to align the branch to
+ * intent, reusing the existing `runDeveloperLoop` runner (no new engine).
+ *
+ * Opt-in via `CycleInput.spawnAlignmentDevLoop` (default OFF): the
+ * unattended path keeps the review-Ralph's send-back loop as the primary
+ * gap-filler. When enabled, this re-runs the dev-loop over the existing
+ * WI set so any WI whose acceptance criteria regressed is re-driven to
+ * green before the PR is produced.
+ *
+ * SEAM (intentionally left, per the Phase-6 spec's MINIMAL allowance):
+ * a richer implementation would have the reviewer LLM synthesise *new*
+ * targeted WIs describing the specific holistic misalignment (cross-WI
+ * integration bugs the per-WI ACs cannot express) and the dev-loop would
+ * run those. That LLM-driven WI synthesis is deferred — it needs a
+ * live-cycle bench to tune (API cost) and G8/G9/G10/G1 do not depend on
+ * it. The hook below is the real structural integration point so wiring
+ * the synthesis later is a localized change, not a re-architecture.
+ */
+async function maybeSpawnAlignmentDevLoop(
+  input: CycleInput,
+  logger: EventLogger,
+  ctx: { parentEventId: string; reason: string },
+): Promise<void> {
+  if (!input.spawnAlignmentDevLoop) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: ctx.parentEventId,
+      phase: 'review-loop',
+      skill: 'reviewer',
+      event_type: 'log',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'reviewer.alignment-dev-loop-skipped',
+      metadata: {
+        reason: ctx.reason,
+        note: 'spawnAlignmentDevLoop disabled — review-Ralph send-back loop is the gap-filler',
+      },
+    });
+    return;
+  }
+  // Lazy import to avoid a static reviewer→developer-loop module cycle
+  // (cycle.ts wires both; the phases must not hard-depend on each other).
+  const { runDeveloperLoop } = await import('./developer-loop.ts');
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: ctx.parentEventId,
+    phase: 'review-loop',
+    skill: 'reviewer',
+    event_type: 'log',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: 'reviewer.alignment-dev-loop-spawned',
+    metadata: { reason: ctx.reason },
+  });
+  try {
+    await runDeveloperLoop(input, logger);
+  } catch (err) {
+    // A failed alignment dev-loop is NOT fatal to the review phase — the
+    // review-Ralph + send-back loop is still the convergence path, and
+    // the operator sees the result on the PR. Log and continue.
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: ctx.parentEventId,
+      phase: 'review-loop',
+      skill: 'reviewer',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'reviewer.alignment-dev-loop-failed',
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+  }
 }
 
 /**

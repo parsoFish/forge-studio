@@ -490,13 +490,19 @@ async function runOne(
     });
 
     if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
-    // F-28: any cycle outcome that ends with the manifest in `ready-for-review/`
-    // means a human will look at the work next. Deleting the worktree + branch
-    // here would erase the only copy of the changes (the report has the diff
-    // text but not a working tree). Preserve in those states; cleanup happens
-    // when the human resolves via `forge review --approve / --abandon`.
+    // F-28 + Phase 6: any cycle outcome that ends with the manifest in
+    // `ready-for-review/` means a human will look at the work next.
+    // Deleting the worktree + branch here would erase the only copy of the
+    // changes (the report has the diff text but not a working tree).
+    // Preserve in those states; cleanup happens when the operator merges
+    // the PR (closure aligns local↔remote) or resolves via the review CLI.
+    // `pr-open` (G9: review gate passed, PR awaiting the operator's merge)
+    // MUST preserve — the operator needs the branch/worktree until they
+    // merge in GitHub; the next cycle re-trigger confirms + aligns.
     preserveWorktree =
-      result.status === 'ready-for-review' || result.status === 'send-back-cap-exhausted';
+      result.status === 'pr-open' ||
+      result.status === 'ready-for-review' ||
+      result.status === 'send-back-cap-exhausted';
     await dispatchTerminalStatus(
       {
         filename,
