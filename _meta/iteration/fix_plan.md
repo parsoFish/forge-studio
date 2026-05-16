@@ -30,11 +30,11 @@
 - [x] 2.6 reconcile `ARCHITECTURE.md` to as-built; link the snapshot
 
 ## Phase 3 — consolidation/simplification — US-7.1, §H
-- [ ] 3.1 extract PR/merge from `runReviewer` → `orchestrator/pr.ts`
-- [ ] 3.2 one notify sink (thread resolved NotifyConfig through `runReviewer`)
-- [ ] 3.3 verify single coupling authority (`detectHiddenCoupling`)
+- [x] 3.1 extract PR/merge from `runReviewer` → `orchestrator/pr.ts`
+- [x] 3.2 one notify sink (thread resolved NotifyConfig through `runReviewer`)
+- [x] 3.3 verify single coupling authority (`detectHiddenCoupling`)
 - [ ] 3.4 split files >800 LOC (`cycle.ts`, `demo.ts`, `scheduler.ts`) behaviour-preserving
-- [ ] 3.5 retire `pm-stale-context` (verify unreachable → delete)
+- [x] 3.5 retire `pm-stale-context` (verify unreachable → delete)
 
 ## Phase 4 — benchmark fidelity — US-6.1, G11
 - [ ] 4.1 PM bench `sdk.ts`: cwd→worktree, budget 0.75→2.5

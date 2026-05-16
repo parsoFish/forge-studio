@@ -22,7 +22,6 @@ import type { EventLogEntry } from './logging.ts';
 export type FailureMode =
   | 'trivial-pass'              // Ralph completed with iterations=0 — gate was passing before any work
   | 'brain-skipped'             // agent never read brain/ — F-13 gate (architect / PM only post-F-34)
-  | 'pm-stale-context'          // PM emitted WIs with the wrong initiative_id (legacy bug, gitignore-fixed)
   | 'pm-budget-exhausted'       // PM phase hit its USD cap
   | 'pm-hidden-coupling'        // F-43: two WIs share files_in_scope with no depends_on edge between them
   | 'gate-missing-script'       // npm run X failed with "missing script: X"
@@ -60,8 +59,6 @@ const RECOMMENDATIONS: Record<FailureMode, string> = {
     'Gate passed before any agent work. After F-26 the runner forces ≥1 iteration; auto-retry is safe.',
   'brain-skipped':
     'Agent skipped brain/ reads. Often a one-off; auto-retry once. Persistent skips suggest a system-prompt regression — escalate after retry exhausts.',
-  'pm-stale-context':
-    'PM emitted WIs with wrong initiative_id (legacy bug). Gitignore + rmSync should prevent recurrence; if seen again, investigate worktree pollution.',
   'pm-budget-exhausted':
     'PM phase hit its USD cap before producing valid WIs. Increase iteration_budget / cost_budget_usd in the manifest.',
   'pm-hidden-coupling':
@@ -101,7 +98,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // explicit at the bottom (the if/else chain that picks a winner).
   let trivialPass = false;
   let brainSkipped = false;
-  let pmStaleContext = false;
   let pmBudgetExhausted = false;
   let pmHiddenCoupling = false;
   let gateMissingScript = false;
@@ -129,18 +125,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // brain-skipped: explicit error from F-13 gate.
     if (e.event_type === 'error' && (msg.includes('brain-skipped') || msg.includes('brain-first mandate'))) {
       brainSkipped = true;
-      pushEvidence(e);
-    }
-
-    // pm-stale-context: PM phase end with per-item validation errors AND
-    // metadata indicates set_errors that mention initiative_id mismatch.
-    if (
-      e.phase === 'project-manager' &&
-      e.event_type === 'error' &&
-      Array.isArray(md.set_errors) &&
-      md.set_errors.some((s) => typeof s === 'string' && s.toLowerCase().includes('initiative_id'))
-    ) {
-      pmStaleContext = true;
       pushEvidence(e);
     }
 
@@ -208,7 +192,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let mode: FailureMode;
   if (gateMissingScript) mode = 'gate-missing-script';
   else if (worktreeNoDeps) mode = 'worktree-no-deps';
-  else if (pmStaleContext) mode = 'pm-stale-context';
   else if (pmHiddenCoupling) mode = 'pm-hidden-coupling';
   else if (pmBudgetExhausted) mode = 'pm-budget-exhausted';
   else if (trivialPass) mode = 'trivial-pass';
