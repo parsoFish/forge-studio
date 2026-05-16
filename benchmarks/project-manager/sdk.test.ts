@@ -55,8 +55,15 @@ function fakeQueryFn(messages: unknown[], onCall?: (cwd: string) => void): PmQue
   };
 }
 
-function writeWorkItemFile(cwd: string, projectName: string, id: string, body: string): void {
-  const dir = resolve(cwd, 'projects', projectName, '.forge', 'work-items');
+// Phase 4.1 (drift correction): the PM agent now runs with `cwd = worktree`
+// (`projects/<name>`), matching live forge. The simulated agent therefore
+// writes work items to `.forge/work-items/` relative to its cwd (the
+// worktree), exactly as the real agent does — NOT `projects/<name>/.forge/...`
+// relative to the tempdir root. `projectName` is retained in the signature for
+// call-site readability but is no longer part of the path (cwd IS the
+// worktree).
+function writeWorkItemFile(cwd: string, _projectName: string, id: string, body: string): void {
+  const dir = resolve(cwd, '.forge', 'work-items');
   mkdirSync(dir, { recursive: true });
   writeFileSync(resolve(dir, `${id}.md`), body);
 }
@@ -111,7 +118,7 @@ test('runProjectManager: reads back work items the agent wrote in tempdir', asyn
     (cwd) => {
       writeWorkItemFile(cwd, 'demo', 'WI-1', makeWiContent('WI-1'));
       writeWorkItemFile(cwd, 'demo', 'WI-2', makeWiContent('WI-2', { depends_on: ['WI-1'], files: ['src/y.ts'] }));
-      const graphPath = resolve(cwd, 'projects/demo/.forge/work-items/_graph.md');
+      const graphPath = resolve(cwd, '.forge/work-items/_graph.md');
       writeFileSync(graphPath, '```mermaid\ngraph TD\n  WI-1["one"]\n  WI-2["two"]\n  WI-1 --> WI-2\n```\n');
     },
   );

@@ -173,14 +173,26 @@ export async function runProjectManager(input: RunPmInput): Promise<RunPmResult>
   });
 
   const options: Record<string, unknown> = {
-    cwd: tempdir,
+    // Phase 4.1 (drift correction): match live forge. The live
+    // `runProjectManager` (orchestrator/phases/project-manager.ts, F-37) runs
+    // the PM agent with `cwd = the worktree`, NOT the forge root / tempdir
+    // root — so the agent's relative-path tool calls (Glob, Read) resolve
+    // against the real project tree instead of fabricating plausible paths.
+    // The bench must mirror this or it's strictly harder than prod
+    // (HIGH false-red): the shared prompt even tells the agent its cwd is the
+    // worktree. `worktreeRelPath` = `projects/<name>` = the project tree
+    // setupTempdir() copies the fixture into.
+    cwd: resolve(tempdir, worktreeRelPath),
     systemPrompt,
     model: PM_MODEL,
     permissionMode: 'acceptEdits',
     allowedTools: PM_ALLOWED_TOOLS,
     disallowedTools: PM_DISALLOWED_TOOLS,
     maxTurns: 40,
-    maxBudgetUsd: 0.75,
+    // Phase 4.1 (drift correction): match live `PM_LIVE_MAX_BUDGET_USD = 2.5`
+    // (F-42). At 0.75 multi-feature fixtures can budget-fail in the bench but
+    // pass in prod (MED false-red).
+    maxBudgetUsd: 2.5,
   };
 
   let durationMs = 0;
