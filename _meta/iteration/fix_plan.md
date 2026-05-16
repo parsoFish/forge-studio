@@ -54,9 +54,9 @@
 - [x] 6.5 closure aligns local↔remote (ff main, prune branch)
 
 ## Phase 7 — human interaction as slash commands — US-3.1, Q4 resolved
-- [ ] 7.1 create `/forge-architect`, `/forge-review <id>`, `/forge-reflect <id>` (own session, file handoff)
-- [ ] 7.2 remove production auto-approve `defaultGetVerdict`; simulators bench-only
-- [ ] 7.3 document architect as intentionally out-of-cycle (not a gap)
+- [x] 7.1 create `/forge-architect`, `/forge-review <id>`, `/forge-reflect <id>` (own session, file handoff)
+- [x] 7.2 remove production auto-approve `defaultGetVerdict`; simulators bench-only
+- [x] 7.3 document architect as intentionally out-of-cycle (not a gap)
 
 ## Phase 8 — contract preflight + origin tagging — US-4.1, C1–C6, G6, closes I6
 - [ ] 8.1 implement C1–C6 preflight (decline with failing clause named)

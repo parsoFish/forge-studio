@@ -41,7 +41,7 @@
 | G8 | dev-loop close: local↔remote invariant asserted (origin==local HEAD, main==merge-base) | grep-present | `assertLocalRemoteSynced( :: orchestrator/cycle.ts` | fast |
 | G8-rt | local↔remote invariant catches divergence at runtime (push + assert primitives) | cmd | `npx tsx --test orchestrator/pr.test.ts` | full |
 | G10 | reflection gated on a gh-pr-view==MERGED confirmation (runReflector nested under closure.merged ⟸ confirmPrMerged ⟸ gh pr view --json state ⟸ MERGED) | cmd | `perl -0777 -ne 'exit(($_ =~ /if \(closure\.merged\) \{\s*reflectionStatus = await runReflector\(/) ? 0 : 1)' orchestrator/cycle.ts && grep -q "gh pr view --json state" orchestrator/pr.ts && grep -q confirmPrMerged orchestrator/phases/closure.ts && grep -q MERGED orchestrator/pr.ts` | fast |
-| US-3.1 | three slash commands exist | pending | phase-7 | fast |
+| US-3.1 | three operator slash commands exist (.claude/commands/) | cmd | `test -f .claude/commands/forge-architect.md && test -f .claude/commands/forge-review.md && test -f .claude/commands/forge-reflect.md` | fast |
 | US-4.1 | C1–C6 preflight implemented | pending | phase-8 | fast |
 | G6 | manifest origin tag + cohort split | pending | phase-8 | fast |
 | ARCH-FRESH | as-built snapshot regenerated & consistent | pending | phase-9 | full |
