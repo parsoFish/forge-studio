@@ -2,19 +2,22 @@
 
 > This document is the **narrative / intended** architecture. For the
 > **honest as-built** (what the code actually does, with Mermaid graphs)
-> see [`docs/architecture/as-built-snapshot-2026-05-16.md`](./docs/architecture/as-built-snapshot-2026-05-16.md);
+> see [`docs/architecture/as-built-snapshot-2026-05-17.md`](./docs/architecture/as-built-snapshot-2026-05-17.md);
 > where the two differ, the snapshot is the truth. ADRs in
 > [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
 >
-> **Reconciled 2026-05-16** with the as-built. Key divergences from the
-> idealised description below: (a) **5 phases are wired into `runCycle`;
-> the architect is a deliberate out-of-cycle human moment** (slash
-> command, not a wired phase); (b) **brain-first is narrowed** — the
-> planner and reflector read the brain; the dev-loop and reviewer do
-> not (see [ADR 010](./docs/decisions/010-brain-first.md) +
-> `brain/forge/themes/brain-read-policy.md`); (c) the **review phase is
-> being redesigned** (no auto-merge; PR is the human surface;
-> `brain/forge/themes/review-phase-target-design.md`).
+> **Reconciled 2026-05-16**, refreshed **2026-05-17** post-closure. Key
+> divergences from the idealised description below: (a) **5 phases are
+> wired into `runCycle`; the architect is a deliberate out-of-cycle
+> human moment** (slash command, not a wired phase); (b) **brain-first
+> is narrowed** — the planner and reflector read the brain; the dev-loop
+> and reviewer do not (see [ADR 010](./docs/decisions/010-brain-first.md)
+> + `brain/forge/themes/brain-read-policy.md`); (c) the **review-phase
+> redesign has LANDED** — no auto-merge; the GitHub PR is the operator's
+> surface; `closure.ts` is the single terminal-move authority and
+> reflection fires only on a confirmed merge
+> (`brain/forge/themes/review-phase-target-design.md`; the snapshot's §G
+> is now the as-built, not a target).
 
 ## Overview
 
@@ -138,10 +141,12 @@ Responsibility: closeout of an initiative back to main.
 The verdict gate (`orchestrator/reviewer-stage2.ts`) runs between iterations and:
 
 1. **Re-runs the project quality gate** (orchestrator-verified — never trusts the agent's claim).
-2. **Asks the verdict provider** — production: file-based handoff (`_queue/in-flight/<id>.verdict-prompt.md` written by the orchestrator; `_queue/in-flight/<id>.verdict-response.md` written by the operator via `forge review <id>`). Bench: simulator agent.
-3. **On approve** → loop stops, orchestrator merges + moves manifest to `_queue/done/`. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
+2. **Asks the verdict provider** — production: file-based handoff written by the operator via the **`/forge-review <id>`** slash command (the operator's own Claude session). Bench: simulator agent.
+3. **On approve** → the review *gate* is released (this is **not** a merge — Phase 6 / G9): `runReviewer` opens a demo-embedded PR on the project repo and **STOPS**. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
 
-Cap: 3 iterations (1 prep + ≤2 send-back rounds). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
+**No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (or via `/forge-review`); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), aligns local↔remote (fast-forwards `main`, prunes the branch), moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
+
+Cap: 3 iterations (1 prep + ≤2 send-back rounds), scaled up for very large diffs (`computeAdaptiveReviewIterationCap`). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
 Like the architect, the review loop is best implemented as **Claude Code skills the user invokes**, so it benefits directly from agentic-wrapper improvements.
 
