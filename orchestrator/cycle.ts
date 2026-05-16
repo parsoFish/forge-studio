@@ -19,6 +19,7 @@ import type { EventLogger } from './logging.ts';
 import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
+import { readManifestOrigin } from './manifest.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
 // phase runners import them from there, never from this module — keeps the
@@ -59,6 +60,12 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const cycleId = input.cycleId ?? newCycleId(input.initiativeId);
   const logger = createLogger(cycleId, '_logs', { tee: input.eventTee });
 
+  // G6: tag the cohort on the cycle's first event so `forge metrics` (which
+  // reconstructs everything from the JSONL log) and the reflector can
+  // separate autonomous-progress cycles from hand-directed project surgery.
+  // Single read of the manifest's `origin` field; defaults to `architect`.
+  const origin = readManifestOrigin(input.manifestPath);
+
   logger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
@@ -67,6 +74,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     input_refs: [input.manifestPath],
     output_refs: [],
     message: input.dryRun ? 'cycle.start (dry run)' : 'cycle.start',
+    metadata: { origin },
   });
 
   // F-04 / F-06: derive the effective quality-gate command once per cycle so

@@ -11,6 +11,14 @@ import type { EventLogEntry, Phase } from './logging.ts';
 export type CycleMetrics = {
   cycle_id: string;
   initiatives: string[];
+  /**
+   * G6: autonomous-vs-hand-directed cohort, read from the `cycle.start`
+   * event's `origin` metadata (defaults to `architect` for legacy logs
+   * without the tag). This lets a metrics consumer answer "did forge get
+   * more autonomous" by filtering to `origin === 'architect'` rather than
+   * conflating it with hand-directed project surgery.
+   */
+  origin: 'architect' | 'human-directed';
   total_cost_usd: number;
   total_tokens_in: number;
   total_tokens_out: number;
@@ -63,6 +71,11 @@ function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
   const initiatives = new Set<string>();
   for (const e of events) {
     initiatives.add(e.initiative_id);
+    // G6: the cohort tag rides on the orchestrator's `cycle.start` event.
+    if (e.skill === 'cycle' && e.event_type === 'start') {
+      const o = (e.metadata as { origin?: unknown } | undefined)?.origin;
+      if (o === 'human-directed' || o === 'architect') m.origin = o;
+    }
     m.total_cost_usd += e.cost_usd ?? 0;
     m.total_tokens_in += e.tokens_in ?? 0;
     m.total_tokens_out += e.tokens_out ?? 0;
@@ -88,6 +101,7 @@ function emptyCycle(cycleId: string): CycleMetrics {
   return {
     cycle_id: cycleId,
     initiatives: [],
+    origin: 'architect',
     total_cost_usd: 0,
     total_tokens_in: 0,
     total_tokens_out: 0,

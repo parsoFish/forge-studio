@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +15,7 @@ import {
   serializeManifest,
   validateManifest,
   writeManifest,
+  readManifestOrigin,
   type InitiativeManifest,
 } from './manifest.ts';
 
@@ -27,6 +28,7 @@ function fixture(): InitiativeManifest {
     iteration_budget: 50,
     cost_budget_usd: 25,
     phase: 'pending',
+    origin: 'architect',
     features: [
       { feature_id: 'FEAT-1', title: 'Login', depends_on: [] },
       { feature_id: 'FEAT-2', title: 'Profile', depends_on: ['FEAT-1'] },
@@ -47,6 +49,7 @@ test('serializeManifest → parseManifest round-trips fields and body', () => {
   assert.equal(parsed.project, m.project);
   assert.equal(parsed.iteration_budget, 50);
   assert.equal(parsed.cost_budget_usd, 25);
+  assert.equal(parsed.origin, 'architect');
   assert.equal(parsed.features.length, 2);
   assert.deepEqual(parsed.features[1]!.depends_on, ['FEAT-1']);
   assert.match(parsed.body, /# Demo initiative/);
@@ -189,4 +192,71 @@ test('validateManifest: accepts a well-formed quality_gate_cmd', () => {
   const m = { ...fixture(), quality_gate_cmd: ['npm', 'test'] };
   const errors = validateManifest(m);
   assert.equal(errors.length, 0, `unexpected errors: ${errors.join('; ')}`);
+});
+
+// ---------- G6: origin cohort tag (closes I6) ----------
+
+test('parseManifest: origin defaults to architect when frontmatter omits it', () => {
+  // A legacy manifest authored before the `origin` field existed.
+  const legacy = [
+    '---',
+    'initiative_id: INIT-2026-05-04-legacy',
+    'project: demo',
+    'created_at: 2026-05-04T18:00:00Z',
+    'iteration_budget: 10',
+    'cost_budget_usd: 2',
+    'phase: pending',
+    '---',
+    '',
+    '# Legacy initiative',
+  ].join('\n');
+  const parsed = parseManifest(legacy);
+  assert.equal(parsed.origin, 'architect');
+  // ...and validates clean (the default is a valid value).
+  assert.deepEqual(validateManifest(parsed), []);
+});
+
+test('parseManifest: explicit human-directed origin is preserved', () => {
+  const m = { ...fixture(), origin: 'human-directed' as const };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.origin, 'human-directed');
+});
+
+test('serializeManifest: always writes origin (legacy manifest gains the tag on round-trip)', () => {
+  // Round-tripping a manifest that defaulted origin must persist the tag
+  // so the cohort split is unambiguous on disk, not inferred forever.
+  const legacy = [
+    '---',
+    'initiative_id: INIT-2026-05-04-legacy',
+    'project: demo',
+    'created_at: 2026-05-04T18:00:00Z',
+    'iteration_budget: 10',
+    'cost_budget_usd: 2',
+    'phase: pending',
+    '---',
+    '',
+    '# Legacy initiative',
+  ].join('\n');
+  const serialised = serializeManifest(parseManifest(legacy));
+  assert.match(serialised, /origin: architect/);
+});
+
+test('validateManifest: rejects an unrecognised origin', () => {
+  const m = { ...fixture(), origin: 'sideloaded' as unknown as 'architect' };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /origin must be one of/i.test(e)), errors.join('; '));
+});
+
+test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-origin-'));
+  try {
+    const hd = join(dir, 'hd.md');
+    const m = { ...fixture(), initiative_id: 'INIT-2026-05-04-hd', origin: 'human-directed' as const };
+    writeFileSync(hd, serializeManifest(m));
+    assert.equal(readManifestOrigin(hd), 'human-directed');
+    // Missing file → default (telemetry must never throw).
+    assert.equal(readManifestOrigin(join(dir, 'nope.md')), 'architect');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

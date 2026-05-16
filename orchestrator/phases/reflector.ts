@@ -74,9 +74,14 @@ export async function runReflector(
   const manifestPath = resolveCurrentManifestPath(input.manifestPath, forgeRoot);
 
   let projectName: string;
+  let origin: 'architect' | 'human-directed' = 'architect';
   try {
     const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
     projectName = manifest.project;
+    // G6: carry the cohort tag onto reflector.end so a reflection-cohort
+    // reader (autonomous vs hand-directed) can split retros the same way
+    // `forge metrics` splits cycles.
+    origin = manifest.origin;
   } catch (err) {
     logger.emit({
       initiative_id: input.initiativeId,
@@ -211,6 +216,7 @@ export async function runReflector(
     metadata: {
       status: 'closed',
       project: projectName,
+      origin,
       result_subtype: resultSubtype,
       tool_use: toolUseSummary,
     },

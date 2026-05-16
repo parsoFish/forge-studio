@@ -8,7 +8,7 @@
  * Per ADR 007 (markdown artifacts) and ADR 011 (file-based queue).
  */
 
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
@@ -20,6 +20,29 @@ export type Feature = {
 
 export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
 
+/**
+ * G6 (closes finding I6): every initiative declares whether forge produced
+ * it autonomously (`architect` — the out-of-cycle architect decomposed a
+ * vision into right-sized initiatives) or the operator hand-directed the
+ * work through the pipeline (`human-directed` — deliberate structural
+ * surgery routed through forge, e.g. the trafficGame
+ * `simplification-{tests,source,arch}` initiatives).
+ *
+ * The two modes have *different* success criteria: autonomous cycles are
+ * judged on convergence-without-intervention; hand-directed cycles on
+ * whether the specified work landed. Recording them identically pollutes
+ * the autonomy signal (brain theme `human-directed-work-as-initiatives`).
+ * Metrics and the reflector separate the cohorts on this field so "did
+ * forge get more autonomous" stays answerable.
+ *
+ * Defaults to `architect` when absent (back-compat for manifests authored
+ * before this field existed — NOT a feature flag, just a schema default).
+ */
+export type InitiativeOrigin = 'architect' | 'human-directed';
+
+const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed'];
+const DEFAULT_ORIGIN: InitiativeOrigin = 'architect';
+
 export type InitiativeManifest = {
   initiative_id: string;       // INIT-<YYYY-MM-DD>-<slug>
   project: string;
@@ -28,6 +51,11 @@ export type InitiativeManifest = {
   iteration_budget: number;    // > 0
   cost_budget_usd: number;     // > 0
   phase: ManifestPhase;
+  /**
+   * G6: autonomous-vs-hand-directed cohort tag. Defaults to `architect`
+   * when the frontmatter omits it (legacy manifests).
+   */
+  origin: InitiativeOrigin;
   features: Feature[];
   /**
    * F-25: initiative-level dependencies. Each entry is another initiative_id
@@ -86,6 +114,12 @@ export function parseManifest(content: string): InitiativeManifest {
   const iteration_budget = numberField(data, 'iteration_budget', true);
   const cost_budget_usd = numberField(data, 'cost_budget_usd', true);
   const phase = (stringField(data, 'phase', false) ?? 'pending') as ManifestPhase;
+  // G6: default to `architect` when the frontmatter omits `origin` so
+  // pre-existing manifests round-trip unchanged. An unrecognised value is
+  // preserved verbatim here and rejected by validateManifest (fail-fast at
+  // the boundary rather than silently coercing).
+  const rawOrigin = stringField(data, 'origin', false);
+  const origin = (rawOrigin ? rawOrigin : DEFAULT_ORIGIN) as InitiativeOrigin;
 
   const rawFeatures = Array.isArray(data.features) ? (data.features as unknown[]) : [];
   const features: Feature[] = rawFeatures.map((f, i) => parseFeature(f, i));
@@ -98,6 +132,7 @@ export function parseManifest(content: string): InitiativeManifest {
     iteration_budget,
     cost_budget_usd,
     phase,
+    origin,
     features,
     body: parsed.content.replace(/^\n+/, ''),
   };
@@ -129,6 +164,10 @@ export function serializeManifest(m: InitiativeManifest): string {
     iteration_budget: m.iteration_budget,
     cost_budget_usd: m.cost_budget_usd,
     phase: m.phase,
+    // G6: always serialise origin (default `architect`) so a round-tripped
+    // legacy manifest gains the explicit tag — the cohort split must be
+    // unambiguous on disk, not inferred at read time forever.
+    origin: m.origin ?? DEFAULT_ORIGIN,
   };
   if (m.claimed_at) data.claimed_at = m.claimed_at;
   if (m.claimed_by) data.claimed_by = m.claimed_by;
@@ -167,6 +206,9 @@ export function validateManifest(m: InitiativeManifest): string[] {
   if (!m.created_at) errors.push('created_at is required');
   if (!(m.iteration_budget > 0)) errors.push(`iteration_budget must be > 0: got ${m.iteration_budget}`);
   if (!(m.cost_budget_usd > 0)) errors.push(`cost_budget_usd must be > 0: got ${m.cost_budget_usd}`);
+  if (!INITIATIVE_ORIGINS.includes(m.origin)) {
+    errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
+  }
   if (m.quality_gate_cmd !== undefined) {
     if (!Array.isArray(m.quality_gate_cmd) || m.quality_gate_cmd.length === 0) {
       errors.push('quality_gate_cmd must be a non-empty array of strings when set');
@@ -225,6 +267,25 @@ export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): s
   const out = join(pending, `${m.initiative_id}.md`);
   writeFileSync(out, serializeManifest(m));
   return out;
+}
+
+/**
+ * G6: best-effort origin reader for telemetry. Reads a manifest file and
+ * returns its cohort tag, defaulting to `architect` when the file is
+ * missing/unparseable (dry-runs, test fixtures) or the value is
+ * unrecognised. Never throws — telemetry must not break the cycle.
+ *
+ * This is the single point metrics/reflector use to learn a cycle's
+ * cohort, so the autonomous-vs-hand-directed split is read the same way
+ * everywhere.
+ */
+export function readManifestOrigin(manifestPath: string): InitiativeOrigin {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return INITIATIVE_ORIGINS.includes(m.origin) ? m.origin : DEFAULT_ORIGIN;
+  } catch {
+    return DEFAULT_ORIGIN;
+  }
 }
 
 // ---------- helpers ----------
