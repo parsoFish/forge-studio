@@ -216,14 +216,32 @@ that read *only* that log, so that I can watch, debug, and reflect.
 
 ## Traceability
 
-| Story | Durable record |
-|---|---|
-| US-1.0 | brain `human-interaction-via-own-session`; arch §A (out-of-cycle architect) |
-| US-1.3, US-3.2, US-5.2, US-5.3 | brain `review-phase-target-design`; arch §G; retro C6/G8–G10 |
-| US-2.* | brain `brain-read-policy` |
-| US-3.* | brain `human-interaction-via-own-session` |
-| US-4.1 | brain `forge-project-onboarding-contract`; retro §3 C1–C6 |
-| US-5.1, US-5.4, US-5.5 | arch §E (classifier); ADR-011/012; retro G5 |
-| US-6.* | brain `chained-phase-benchmarks`; `_logs/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md` |
-| US-7.1, US-7.2 | brain `reactive-constraint-stripback-arc`; PRINCIPLES.md P1/P2; arch §H |
-| US-8.1 | PRINCIPLES.md P5; ADR-008; arch §B |
+> Every story is **LANDED** (the Phases 1–8 closure arc). Each row maps
+> to its durable record (brain theme / ADR / arch section) **and** the
+> code module that implements it; the coverage matrix
+> (`_meta/iteration/coverage-matrix.md`) carries the objective check
+> (closure-check id in the last column).
+
+| Story | Durable record | Landed in (code) | Matrix |
+|---|---|---|---|
+| US-1.0 | brain `human-interaction-via-own-session`; snapshot §A (out-of-cycle architect) | `.claude/commands/forge-architect.md` (not wired into `runCycle`) | US-3.1 |
+| US-1.1 | snapshot §C.1; ADR-015 work-item format | `orchestrator/phases/project-manager.ts`, `work-item.ts` | G4 |
+| US-1.2 | snapshot §C.2; ADR-002 Ralph | `orchestrator/phases/developer-loop.ts`, `loops/ralph/runner.ts` | TEST/SIMPL-LOC |
+| US-1.3 | brain `review-phase-target-design`; snapshot §G (now as-built) | `orchestrator/phases/reviewer.ts` (holistic gate; no auto-merge) | US-1.3-pr |
+| US-1.4 | snapshot §C.5; retro G10 | `orchestrator/phases/reflector.ts` (gated on `closure.merged`) | G10 |
+| US-2.1, US-2.2 | brain `brain-read-policy`; ADR-010; PRINCIPLES P4 | `cycle-context.ts:recordBrainGateResult` (PM/reflector only) | G3-f/G3-g |
+| US-2.3 | brain `brain-read-policy`; snapshot §F (cache caveat) | `orchestrator/pm-invocation.ts` (documented staleness window) | US-2.3 |
+| US-2.4 | brain `episodic-not-cumulative-learnings`; PRINCIPLES P3 | `orchestrator/phases/reflector.ts` (direct brain writes) | G10 |
+| US-3.1 | brain `human-interaction-via-own-session` | `.claude/commands/forge-{architect,review,reflect}.md` | US-3.1 |
+| US-3.2 | brain `review-phase-target-design`; retro C6 | `orchestrator/phases/closure.ts`, `pr.ts:confirmPrMerged` | G1/G9 |
+| US-4.1 | brain `forge-project-onboarding-contract`; ADR-017; retro §3 C1–C6 | `orchestrator/preflight.ts` + `forge preflight` verb | US-4.1 |
+| US-5.1 | snapshot §E (classifier); retro G5 | `failure-classifier.ts`, `scheduler-dispatch.ts:decideAutoRetry` | TEST |
+| US-5.2 | brain `review-phase-target-design`; retro G1 | `orchestrator/phases/closure.ts` (`done/` ⇒ MERGED) | G1 |
+| US-5.3 | retro G8 | `orchestrator/pr.ts:assertLocalRemoteSynced` (dev-loop close) | G8 |
+| US-5.4 | ADR-002/011 | `loops/ralph/stop-conditions.ts` (iter/cost/wedge caps) | TEST |
+| US-5.5 | ADR-012; retro G5 | `orchestrator/queue.ts:recover`, `worktree.ts` cleanup | TEST |
+| US-6.1 | brain `phase-isolation-benchmarks`; ADR-005 | `benchmarks/<phase>/scoring.ts` (no false-colour) | G11 (operator-gated) |
+| US-6.2 | brain `chained-phase-benchmarks` | `benchmarks/chained/` (seed→runCycle→per-phase caseScore) | G12-a/G12-b |
+| US-7.1 | brain `reactive-constraint-stripback-arc`; PRINCIPLES P1/P2; snapshot §H | thin `cycle.ts` + `phases/*` + one notify sink + `pr.ts` | SIMPL-LOC/US-7.1-notify |
+| US-7.2 | brain `avoid-hand-rolling-tools`; PRINCIPLES P1 | SDK / Ralph / `gh` / `git` / `notify-send` delegation; dead code deleted | G3-a..G3-e |
+| US-8.1 | PRINCIPLES P5; ADR-008; snapshot §B | `orchestrator/logging.ts`, `metrics.ts`, `visualise.ts` (read log only) | G3-c |
