@@ -31,10 +31,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -50,6 +48,7 @@ import {
   tallyToolUse,
   type ReflectorToolUseSummary,
 } from '../../orchestrator/reflector-invocation.ts';
+import { layerBrain } from '../_lib/brain-mask.ts';
 import { prepareUserFeedback } from './simulator.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
@@ -172,75 +171,6 @@ export function setupTempdir(input: RunReflectorInput): string {
   });
 
   return dir;
-}
-
-/**
- * Layer brain/ in the tempdir so:
- *   - top-level files (INDEX.md, LINT.md, etc.) are symlinked to the live brain
- *   - top-level dirs (forge/, projects/) are mostly symlinked
- *   - EXCEPT: the target project's themes/ directory is a fresh empty dir in
- *     the tempdir (so theme writes land there, not in the live brain)
- *   - EXCEPT: brain/_raw/cycles/ is a fresh empty dir in the tempdir (so the
- *     cycle archive write lands there)
- *
- * The symlinks are read-through: the agent's `Read brain/forge/patterns.md`
- * resolves to the live file. Writes to a masked-out path land in the tempdir.
- */
-function layerBrain(tempdir: string, projectName: string): void {
-  const liveBrain = resolve(FORGE_ROOT, 'brain');
-  const benchBrain = resolve(tempdir, 'brain');
-  mkdirSync(benchBrain, { recursive: true });
-
-  // Symlink top-level entries except `projects/`, `_raw/`, and `log.md`
-  // (the reflector appends to log.md per its SKILL.md; isolating it
-  // prevents the bench run from polluting the live operations log).
-  for (const entry of readdirSync(liveBrain, { withFileTypes: true })) {
-    if (entry.name === 'projects' || entry.name === '_raw' || entry.name === 'log.md') continue;
-    symlinkSync(resolve(liveBrain, entry.name), resolve(benchBrain, entry.name));
-  }
-  // Mask brain/log.md as a fresh empty file in the tempdir.
-  writeFileSync(resolve(benchBrain, 'log.md'), '# Brain — Operations Log (bench tempdir)\n\n');
-
-  // brain/projects/: layer per-project, masking the target project's themes/.
-  const benchProjects = resolve(benchBrain, 'projects');
-  mkdirSync(benchProjects, { recursive: true });
-  const liveProjects = resolve(liveBrain, 'projects');
-  if (existsSync(liveProjects)) {
-    for (const entry of readdirSync(liveProjects, { withFileTypes: true })) {
-      if (entry.name === projectName) {
-        // Mask: write a layered project dir. Symlink everything except
-        // themes/, which is a fresh empty dir.
-        const benchProj = resolve(benchProjects, projectName);
-        mkdirSync(benchProj, { recursive: true });
-        const liveProj = resolve(liveProjects, projectName);
-        for (const sub of readdirSync(liveProj, { withFileTypes: true })) {
-          if (sub.name === 'themes') continue;
-          symlinkSync(resolve(liveProj, sub.name), resolve(benchProj, sub.name));
-        }
-        // Fresh themes/ dir in the tempdir.
-        mkdirSync(resolve(benchProj, 'themes'), { recursive: true });
-      } else {
-        // Other projects: pass through.
-        symlinkSync(resolve(liveProjects, entry.name), resolve(benchProjects, entry.name));
-      }
-    }
-  }
-  // If the target project doesn't exist in the live brain, create it fresh.
-  if (!existsSync(resolve(benchProjects, projectName))) {
-    mkdirSync(resolve(benchProjects, projectName, 'themes'), { recursive: true });
-  }
-
-  // brain/_raw/: layer so cycles/ is fresh; pass through other subdirs.
-  const benchRaw = resolve(benchBrain, '_raw');
-  mkdirSync(benchRaw, { recursive: true });
-  const liveRaw = resolve(liveBrain, '_raw');
-  if (existsSync(liveRaw)) {
-    for (const entry of readdirSync(liveRaw, { withFileTypes: true })) {
-      if (entry.name === 'cycles') continue;
-      symlinkSync(resolve(liveRaw, entry.name), resolve(benchRaw, entry.name));
-    }
-  }
-  mkdirSync(resolve(benchRaw, 'cycles'), { recursive: true });
 }
 
 export function cleanupTempdir(tempdir: string): void {
