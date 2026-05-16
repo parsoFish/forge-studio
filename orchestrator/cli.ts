@@ -8,6 +8,7 @@
  *   forge enqueue --fixture                 drop a smoke-test fixture
  *   forge status [--watch]                  print queue + in-flight snapshot
  *   forge metrics [<cycle-id>]              print per-cycle aggregates (or all)
+ *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  */
 
@@ -21,6 +22,7 @@ import { summariseCycle, summariseAll } from './metrics.ts';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { loadBrainIndex } from './brain-index.ts';
+import { runPreflight, formatPreflightReport } from './preflight.ts';
 import { fileVerdictPaths } from './file-verdict.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -55,6 +57,8 @@ process.chdir(FORGE_ROOT);
       return cmdStatus(args.slice(1));
     case 'metrics':
       return cmdMetrics(args.slice(1));
+    case 'preflight':
+      return cmdPreflight(args.slice(1));
     case 'review':
       return cmdReview(args.slice(1));
     case 'report':
@@ -89,6 +93,7 @@ Usage:
   forge enqueue --fixture                 Drop a smoke-test fixture into _queue/pending/
   forge status [--watch]                  Print queue + in-flight snapshot
   forge metrics [<cycle-id>]              Per-cycle aggregates (or all cycles)
+  forge preflight <project>               Check the C1–C6 forge↔project contract (declines, naming the failing clause)
   forge review <initiative-id>            Print the open verdict prompt and the response file's path
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
   forge demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]
@@ -554,6 +559,36 @@ async function cmdDemo(rest: string[]): Promise<void> {
     console.error(`forge demo: failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
+}
+
+/**
+ * US-4.1 / ADR-017: check the C1–C6 forge↔project contract. The argument
+ * is a project name (resolved under `projects/<name>/`) or an explicit
+ * path. Prints a per-clause PASS/FAIL/WARN report and exits non-zero iff a
+ * HARD clause (C1/C2/C4) fails — so an unattended caller can gate on it.
+ */
+function cmdPreflight(rest: string[]): void {
+  const target = rest[0];
+  if (!target) {
+    console.error('forge preflight: missing <project>');
+    console.error('Usage: forge preflight <project-name | path>');
+    process.exit(2);
+  }
+  // Accept either an explicit path or a managed-project name.
+  const asPath = resolve(target);
+  const asManaged = resolve('projects', target);
+  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory()
+    ? asPath
+    : asManaged;
+  if (!existsSync(projectDir)) {
+    console.error(`forge preflight: project directory not found: ${projectDir}`);
+    console.error('Pass a directory under projects/ or an absolute path.');
+    process.exit(2);
+  }
+  const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT });
+  console.log(formatPreflightReport(report));
+  // Hard-clause failure ⇒ forge declines (non-zero so callers can gate).
+  process.exit(report.ok ? 0 : 1);
 }
 
 function cmdMetrics(rest: string[]): void {
