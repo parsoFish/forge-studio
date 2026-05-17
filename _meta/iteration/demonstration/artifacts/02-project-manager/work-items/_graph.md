@@ -1,40 +1,38 @@
-# Work-item dependency graph — INIT-2025-07-14-slugifier
+# Work-item dependency graph — INIT-2025-05-17-slugifier-package
 
 ```mermaid
 graph TD
-    WI-1["WI-1: Core slugify function (src/slugify.ts)"]
+    WI-1["WI-1: Core slugify implementation (src/slugify.ts)"]
     WI-2["WI-2: Core slugify tests (tests/slugify.test.ts)"]
-    WI-3["WI-3: Batch helpers implementation (src/batch.ts)"]
-    WI-4["WI-4: Batch helpers tests (tests/batch.test.ts)"]
-    WI-5["WI-5: Configurable options — extend src/slugify.ts"]
-    WI-6["WI-6: Options tests (tests/slugify-options.test.ts)"]
-    WI-1 --> WI-2
+    WI-3["WI-3: Batch helpers (src/batch.ts + tests/batch.test.ts)"]
+    WI-4["WI-4: Options extension (src/slugify.ts)"]
+    WI-5["WI-5: Option tests appended (tests/slugify.test.ts)"]
     WI-1 --> WI-3
-    WI-1 --> WI-5
-    WI-3 --> WI-4
-    WI-5 --> WI-6
+    WI-1 --> WI-4
+    WI-2 --> WI-5
+    WI-4 --> WI-5
 ```
 
 ## Parallelism summary
 
-| Wave | Work items | Can run in parallel? |
-|------|-----------|----------------------|
-| 0 | WI-1 | Yes (no deps) |
-| 1 | WI-2, WI-3, WI-5 | Yes (all depend only on WI-1; no shared files between them) |
-| 2 | WI-4, WI-6 | Yes (WI-4 depends on WI-3; WI-6 depends on WI-5; no shared files) |
+| WI | Feature | Depends on | Can start immediately? |
+|----|---------|------------|----------------------|
+| WI-1 | FEAT-1 | — | ✅ Yes |
+| WI-2 | FEAT-1 | — | ✅ Yes |
+| WI-3 | FEAT-2 | WI-1 | After WI-1 |
+| WI-4 | FEAT-3 | WI-1 | After WI-1 |
+| WI-5 | FEAT-3 | WI-2, WI-4 | After WI-2 and WI-4 |
 
-- **3 of 6 WIs (50%) can run with no predecessor** once WI-1 is merged (WI-2, WI-3, WI-5 are parallel) — exceeds the 30% floor.
-- WI-3 and WI-5 are parallel (FEAT-2 and FEAT-3 have no dependency edge in the manifest; this graph honours that).
-- WI-4 and WI-6 are parallel (different test files, no shared files).
+**Independent at start:** WI-1, WI-2 (2/5 = 40% — above the 30% floor ✅)
 
-## Hidden-coupling audit
+**Feature parallelism inherited from manifest:** FEAT-2 and FEAT-3 both depend on FEAT-1 but not on each other. WI-3 (FEAT-2) and WI-4/WI-5 (FEAT-3) are independent of each other. ✅
 
-| File | WIs touching it | Dependency edge? |
-|------|----------------|-----------------|
-| `src/slugify.ts` | WI-1 (create), WI-5 (extend) | WI-5 → WI-1 ✓ |
-| `src/batch.ts` | WI-3 (create) | — (single WI, no conflict) |
-| `tests/slugify.test.ts` | WI-2 (create) | — (single WI, no conflict) |
-| `tests/batch.test.ts` | WI-4 (create) | — (single WI, no conflict) |
-| `tests/slugify-options.test.ts` | WI-6 (create) | — (single WI, no conflict) |
+## Hidden-coupling check
 
-No hidden coupling detected.
+| Shared file | WIs | Serialised? |
+|-------------|-----|-------------|
+| `src/slugify.ts` | WI-1, WI-4 | ✅ WI-4 depends_on WI-1 |
+| `tests/slugify.test.ts` | WI-2, WI-5 | ✅ WI-5 depends_on WI-2 |
+| `src/batch.ts` | WI-3 only | n/a |
+| `tests/batch.test.ts` | WI-3 only | n/a |
+| `tests/placeholder.test.ts` | none (read-only reference) | n/a |

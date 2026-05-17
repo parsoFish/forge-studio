@@ -1,52 +1,70 @@
 ---
 work_item_id: WI-3
 feature_id: FEAT-2
-initiative_id: INIT-2025-07-14-slugifier
+initiative_id: INIT-2025-05-17-slugifier-package
 status: complete
 depends_on:
   - WI-1
 acceptance_criteria:
-  - given: 'inputs = ["Hello World", "Foo Bar"]'
-    when: slugifyMany(inputs) is called
-    then: 'it returns ["hello-world", "foo-bar"] in the same order'
-  - given: 'inputs = [] (empty array)'
-    when: slugifyMany(inputs) is called
-    then: 'it returns []'
-  - given: 'slug = "foo" and taken = []'
-    when: 'uniqueSlug(slug, taken) is called'
-    then: it returns "foo" (base slug is free)
-  - given: 'slug = "foo" and taken = ["foo"]'
-    when: 'uniqueSlug(slug, taken) is called'
-    then: it returns "foo-2"
-  - given: 'slug = "foo" and taken = ["foo", "foo-2", "foo-3"]'
-    when: 'uniqueSlug(slug, taken) is called'
-    then: it returns "foo-4"
-  - given: 'slug = "foo" and taken = ["foo-2"] (gap: foo is free)'
-    when: 'uniqueSlug(slug, taken) is called'
-    then: it returns "foo" (base slug is free despite higher suffixes being taken)
+  - given: 'an array [''Hello World'', ''ES2025'', '''']'
+    when: 'slugifyMany([''Hello World'', ''ES2025'', '''']) is called'
+    then: 'it returns [''hello-world'', ''es2025'', ''''] preserving order'
+  - given: 'slug ''foo'' and taken []'
+    when: 'uniqueSlug(''foo'', []) is called'
+    then: it returns 'foo' because the slug is not in the taken list
+  - given: 'slug ''foo'' and taken [''foo'']'
+    when: 'uniqueSlug(''foo'', [''foo'']) is called'
+    then: it returns 'foo-2' using the smallest integer suffix starting at 2
+  - given: 'slug ''foo'' and taken [''foo'', ''foo-2'']'
+    when: 'uniqueSlug(''foo'', [''foo'', ''foo-2'']) is called'
+    then: it returns 'foo-3' skipping already-taken suffixed variants
+  - given: 'slug ''foo'' and taken [''foo'', ''foo-2'', ''foo-3'', ''foo-4'']'
+    when: 'uniqueSlug(''foo'', [''foo'', ''foo-2'', ''foo-3'', ''foo-4'']) is called'
+    then: it returns 'foo-5'
+  - given: 'slug ''bar'' and taken [''foo'', ''baz'']'
+    when: 'uniqueSlug(''bar'', [''foo'', ''baz'']) is called'
+    then: it returns 'bar' because 'bar' is not in the taken list
 files_in_scope:
   - src/batch.ts
+  - tests/batch.test.ts
 estimated_iterations: 2
 ---
 
-# WI-3: Batch helpers implementation (`src/batch.ts`)
+# WI-3: Batch helpers in `src/batch.ts` + `tests/batch.test.ts`
 
-Create `src/batch.ts` exporting:
+Implements the two batch helper functions that layer over the core `slugify` from FEAT-1, and their accompanying test suite. FEAT-2 depends on FEAT-1, so this WI depends on WI-1.
 
-- `slugifyMany(inputs: string[]): string[]` — maps `slugify` over the array preserving order. Import `slugify` from `./slugify.ts`.
-- `uniqueSlug(slug: string, taken: string[]): string` — returns the base `slug` if it is not in `taken`; otherwise tries `slug-2`, `slug-3`, … (linear search) until a free suffix is found. The search starts at 2 and increments by 1. The `taken` lookup is case-sensitive and exact (simple `includes` or `Set.has`).
+## Functions to export
 
-`src/batch.ts` is a new file; `src/` currently holds only `.gitkeep`. This WI creates it. It depends on WI-1 because it imports from `./slugify.ts`.
+```
+export function slugifyMany(inputs: string[]): string[]
+export function uniqueSlug(slug: string, taken: string[]): string
+```
 
-This WI is parallel to WI-5 (which extends `src/slugify.ts` for FEAT-3). The two WIs touch different files (`src/batch.ts` vs `src/slugify.ts`) so there is no hidden coupling.
+**`slugifyMany`**: Maps `slugify` over the input array. Preserves order. Returns an array of the same length. Empty strings in the input produce empty strings in the output (not dropped).
 
-## Inferred decisions (not in manifest)
+**`uniqueSlug`**: If `slug` is not in `taken`, return it unchanged. Otherwise, append `-N` where N is the smallest integer ≥ 2 such that `slug-N` is not in `taken`. Uses exact string matching (case-sensitive, no normalization at this layer — the caller is expected to pass already-slugified values).
 
-- `uniqueSlug` uses a `Set` for O(1) membership testing on large `taken` arrays, but a plain `Array.prototype.includes` is acceptable given the scope constraint.
-- The suffix separator in `uniqueSlug` is always a hyphen (`-`), regardless of any `SlugifyOptions.separator` in the slug itself — the manifest specifies `slug-N` literally.
+## Implementation notes
+
+- Import: `import { slugify } from './slugify.ts'` (ESM + NodeNext).
+- `taken` comparison is exact string equality (`Array.prototype.includes`).
+- The function does NOT mutate `taken`.
+
+## Test file notes (`tests/batch.test.ts`)
+
+- Use `node:test` and `node:assert/strict` matching project conventions.
+- Cover all 6 acceptance-criteria cases above.
+- Import from `'../src/batch.ts'`.
+
+## File-scope discipline
+
+This WI touches exactly 2 files: `src/batch.ts` (new) and `tests/batch.test.ts` (new). Neither file is touched by any other WI. No hidden coupling risk.
+
+FEAT-2 and FEAT-3 are parallel features (both depend on FEAT-1 but not on each other). WI-3 (FEAT-2) and WI-4/WI-5 (FEAT-3) are therefore independent of each other — they may run concurrently after WI-1 completes.
 
 ## Brain themes consulted
 
-- `brain/forge/themes/spec-driven-work-items.md` — 1 new file, all ACs are GWT, atomic scope.
-- `brain/forge/themes/dependency-ordered-work.md` — parallel to WI-5; no file overlap; depends only on WI-1.
-- `brain/forge/themes/work-item-completion-by-domain.md` — clean TypeScript utility domain; `estimated_iterations: 2` to allow for edge-case iteration.
+- `brain/forge/themes/spec-driven-work-items.md` — 2 files in scope, all 6 criteria are Given-When-Then.
+- `brain/forge/themes/work-item-completion-by-domain.md` — simple TypeScript stdlib domain; estimated_iterations: 2.
+- `brain/forge/themes/design-is-the-bottleneck.md` — explicit file-scope discipline prevents merge conflicts.

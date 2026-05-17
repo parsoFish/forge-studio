@@ -1,68 +1,67 @@
 ---
 work_item_id: WI-1
 feature_id: FEAT-1
-initiative_id: INIT-2025-07-14-slugifier
+initiative_id: INIT-2025-05-17-slugifier-package
 status: complete
 depends_on: []
 acceptance_criteria:
-  - given: 'the input "Hello, World!"'
-    when: slugify is called with no options
-    then: it returns "hello-world"
-  - given: the input "Héllo Wörld" (Latin accents)
-    when: slugify is called
+  - given: an empty string input
+    when: slugify('') is called
+    then: it returns an empty string ''
+  - given: a plain ASCII title 'Hello World'
+    when: slugify('Hello World') is called
+    then: it returns 'hello-world'
+  - given: a title with numbers 'ES2025 Release'
+    when: slugify('ES2025 Release') is called
+    then: it returns 'es2025-release' with numbers preserved
+  - given: a Latin-accented title 'Ångström & Résumé'
+    when: slugify('Ångström & Résumé') is called
     then: >-
-      it returns "hello-world" (accents normalised via NFD + combining-mark
-      strip)
-  - given: the input "My 2nd Post" (contains a number)
-    when: slugify is called
-    then: it returns "my-2nd-post" (number preserved)
-  - given: the input "日本語 title" (non-Latin script mixed with Latin)
-    when: slugify is called
-    then: 'it returns "title" (non-Latin characters dropped, Latin portion kept)'
-  - given: "the input \"\U0001F389 Party time!\" (emoji)"
-    when: slugify is called
-    then: it returns "party-time" (emoji dropped)
-  - given: the input "  --multiple---hyphens--  " (consecutive non-alphanumerics)
-    when: slugify is called
+      it returns 'angstrom-resume' with accents stripped via NFD and
+      non-alphanumerics collapsed
+  - given: "an emoji-only input '\U0001F680\U0001F389'"
+    when: "slugify('\U0001F680\U0001F389') is called"
     then: >-
-      it returns "multiple-hyphens" (consecutive separators collapsed,
-      leading/trailing trimmed)
-  - given: the input "" (empty string)
-    when: slugify is called
-    then: it returns ""
-  - given: slugify is imported from src/slugify.ts
-    when: the module is loaded
-    then: it exports both a slugify function and a SlugifyOptions type
+      it returns '' because all non-Latin/non-numeric chars are dropped and
+      result trims to empty
+  - given: a title with consecutive non-alphanumerics 'foo---bar  baz'
+    when: slugify('foo---bar  baz') is called
+    then: it returns 'foo-bar-baz' with consecutive separators collapsed to one
+  - given: a title with leading and trailing punctuation '--hello--'
+    when: slugify('--hello--') is called
+    then: it returns 'hello' with leading and trailing hyphens trimmed
 files_in_scope:
   - src/slugify.ts
 estimated_iterations: 2
 ---
 
-# WI-1: Core slugify function (`src/slugify.ts`)
+# WI-1: Core `slugify` function in `src/slugify.ts`
 
-Create `src/slugify.ts` from scratch, exporting the `slugify(input: string, options?: SlugifyOptions): string` function and the `SlugifyOptions` type.
+Implements the canonical URL-safe slug transform as the foundation for the entire slugifier package. This is the most load-bearing work item: FEAT-2 (batch helpers) and FEAT-3 (configurable options) both depend on this function being correct and exported.
 
-The transformation pipeline (in order):
-1. Unicode NFD normalisation (`String.prototype.normalize('NFD')`)
-2. Strip combining marks (characters in Unicode category Mn — i.e. `/\p{Mn}/gu`)
-3. Lower-case (`toLowerCase()`)
-4. Collapse runs of non-alphanumeric characters to a single hyphen
-5. Trim leading/trailing hyphens
-6. Return result (empty string for empty/whitespace-only input)
+## Transform pipeline (in order)
 
-The `SlugifyOptions` type (exported) carries `separator?: string` and `maxLength?: number`. FEAT-3 (WI-5) will activate them; in this WI the base pipeline above must be stable and all FEAT-1 ACs must pass with no options supplied.
+1. NFD-normalise the input string (`String.prototype.normalize('NFD')`).
+2. Strip Unicode combining marks (Unicode category `Mn`) — use a regex against the NFD-normalised string.
+3. Lowercase the result.
+4. Replace any character that is not `[a-z0-9]` with a hyphen `-`.
+5. Collapse runs of consecutive hyphens to a single hyphen.
+6. Trim leading and trailing hyphens.
+7. Return the result. Empty input → empty string.
 
-Numbers are preserved by the alphanumeric keep rule (`/[^a-z0-9]+/g` → hyphen). Non-Latin scripts and emoji are naturally dropped after NFD + Mn strip because they resolve to characters outside `[a-z0-9]`.
+## Implementation notes
 
-The placeholder test `tests/placeholder.test.ts` imports `src/slugify.ts` and asserts `slugify('') === ''`; this WI must satisfy that import for the smoke test to go green.
+- Export the function as a named export: `export function slugify(input: string): string`
+- The project uses ESM (`"type": "module"` in package.json) with TypeScript strict mode and `NodeNext` module resolution — use `.ts` extension imports where needed.
+- The smoke test in `tests/placeholder.test.ts` already imports `../src/slugify.ts` and checks `slugify('') === ''`; this WI makes that test pass.
+- No third-party dependencies — use only the JS built-in `String.prototype.normalize`.
 
-## Inferred decisions (not in manifest)
+## Scope note
 
-- `src/slugify.ts` does not exist yet; the `src/` directory contains only `.gitkeep`. This WI creates the file.
-- The options parameter is accepted in the signature (for forward-compatibility with WI-5) but may be ignored in this WI — the no-options pipeline must be correct.
+This WI touches ONLY `src/slugify.ts`. The test file `tests/slugify.test.ts` is written in WI-2 (independent). The options extension is added in WI-4 (depends on this WI).
 
 ## Brain themes consulted
 
-- `brain/forge/themes/spec-driven-work-items.md` — atomic scope (1 file), GWT criteria, designed for Ralph iteration.
-- `brain/forge/themes/dependency-ordered-work.md` — this WI has no predecessors; it unblocks WI-2, WI-3, and WI-5 in parallel.
-- `brain/forge/themes/work-item-completion-by-domain.md` — clean TypeScript stdlib domain; `estimated_iterations: 2` is conservative given Unicode regex work.
+- `brain/forge/themes/spec-driven-work-items.md` — atomic (≤3 files), Given-When-Then criteria, designed for iteration.
+- `brain/forge/themes/design-is-the-bottleneck.md` — good decomposition prevents agent churn.
+- `brain/forge/themes/work-item-completion-by-domain.md` — clean TypeScript stdlib domain → tight estimated_iterations distribution; set to 2.

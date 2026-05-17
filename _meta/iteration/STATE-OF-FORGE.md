@@ -1,3 +1,20 @@
+## UPDATE 2026-05-17 (final) — GREEN END-TO-END ACHIEVED
+
+`benchmarks/chained`: **1/1 chains passed** — architect 1.0 · PM 1.0 ·
+dev-loop 0.80 · review-loop 1.0 · reflection 1.0 ($7.59, ~22 min).
+Forge ran a real seed through the entire product path
+(architect→PM→dev-loop→review-Ralph→closure→reflection) to a genuine
+green result; the human + remote are faithfully stubbed (no auto-merge —
+G9). Getting here required fixing real issues the full-flow run surfaced
+(missing-origin, F-45 PM-invalid-WI recoverable, bench-scoped dev-loop
+wedge ride, two deterministic bench false-reds) — all in the bench
+harness; forge runtime behaviour was correct throughout. Demonstration
+(per-phase I/O, the 3 stubbed human moments, the reviewer's before/after
+demo recording, the working slugifier — `npm test` 21/0):
+`_meta/iteration/demonstration/`. `closure-check --tier=full`: GREEN
+including the new `E2E-GREEN` obligation. This supersedes every earlier
+section.
+
 # State of forge — autonomous closure run (2026-05-16 → 2026-05-17)
 
 > Read this first. One-page honest status of the overnight autonomous

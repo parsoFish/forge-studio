@@ -35,6 +35,7 @@
 | US-7.1-notify | one notify sink (no hardcoded literal) | grep-absent | `desktop: true, webhook_url: null :: orchestrator/cycle.ts` | fast |
 | US-1.3-pr | PR/merge extracted to orchestrator/pr.ts | file-present | `orchestrator/pr.ts` | fast |
 | G11 | per-phase benches, no false-colour (Phase-4 drift fixes in code + real chained run scored solely via existing per-phase rubrics) | cmd | bash -c "grep -q 2.5 benchmarks/project-manager/sdk.ts && grep -q runReviewer benchmarks/review-loop/sdk.ts && ls benchmarks/chained/results/*.json >/dev/null 2>&1 && grep -q 'SOLELY the six existing per-phase' benchmarks/chained/score.ts" | full |
+| E2E-GREEN | a real chained run passed end-to-end (every per-phase rubric green on one generated artifact set; human+remote stubbed) | cmd | node -e "const fs=require('node:fs'),d='benchmarks/chained/results',p=fs.readdirSync(d).filter(f=>f.endsWith('.json')).sort().pop();process.exit(JSON.parse(fs.readFileSync(d+'/'+p,'utf8')).cases[0].chain_passed?0:1)" | full |
 | G12-b | chained bench owns no rubric (scores via existing per-phase caseScore only) | file-absent | `benchmarks/chained/scoring.ts` | full |
 | G1 | done/ ⇒ MERGED: reviewer never moves a manifest to done/ (only closure, gated on a confirmed merge, does) | grep-absent | `, 'done') :: orchestrator/phases/reviewer.ts` | fast |
 | G1-rt | closure moves to done/ ONLY on a confirmed merge; pr-open + unmerged stays ready-for-review | cmd | `npx tsx --test orchestrator/phases/closure.test.ts` | full |

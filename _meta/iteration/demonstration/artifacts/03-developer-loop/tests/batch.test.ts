@@ -1,35 +1,45 @@
 /**
- * Batch helper tests — covers all FEAT-2 acceptance criteria (WI-3).
+ * Batch helpers test suite — WI-3 / FEAT-2.
+ *
+ * Covers all 6 acceptance-criteria cases:
+ *   1. slugifyMany preserves order and maps slugify over the array
+ *   2. uniqueSlug returns slug unchanged when not in taken
+ *   3. uniqueSlug returns slug-2 when slug is taken
+ *   4. uniqueSlug returns slug-3 when slug and slug-2 are taken
+ *   5. uniqueSlug returns slug-5 when slug through slug-4 are taken
+ *   6. uniqueSlug returns slug unchanged when slug is not in taken list
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slugifyMany } from '../src/batch.ts';
-import { uniqueSlug } from '../src/batch.ts';
+import { slugifyMany, uniqueSlug } from '../src/batch.ts';
 
-// slugifyMany tests
+// --- slugifyMany ---
 
-test('AC1: slugifyMany preserves order and slugifies each element', () => {
-  assert.deepEqual(slugifyMany(['Hello World', 'Foo Bar']), ['hello-world', 'foo-bar']);
+test('slugifyMany maps slugify over input array preserving order', () => {
+  assert.deepEqual(
+    slugifyMany(['Hello World', 'ES2025', '']),
+    ['hello-world', 'es2025', ''],
+  );
 });
 
-test('AC2: slugifyMany returns empty array for empty input', () => {
-  assert.deepEqual(slugifyMany([]), []);
-});
+// --- uniqueSlug ---
 
-// uniqueSlug tests
-
-test('AC3: uniqueSlug returns base slug when taken is empty', () => {
+test('uniqueSlug returns slug unchanged when taken list is empty', () => {
   assert.equal(uniqueSlug('foo', []), 'foo');
 });
 
-test('AC4: uniqueSlug returns foo-2 when foo is taken', () => {
+test('uniqueSlug returns foo-2 using the smallest integer suffix starting at 2', () => {
   assert.equal(uniqueSlug('foo', ['foo']), 'foo-2');
 });
 
-test('AC5: uniqueSlug returns foo-4 when foo, foo-2, foo-3 are all taken', () => {
-  assert.equal(uniqueSlug('foo', ['foo', 'foo-2', 'foo-3']), 'foo-4');
+test('uniqueSlug returns foo-3 skipping already-taken suffixed variants', () => {
+  assert.equal(uniqueSlug('foo', ['foo', 'foo-2']), 'foo-3');
 });
 
-test('AC6: uniqueSlug returns base slug when base is free despite higher suffixes being taken', () => {
-  assert.equal(uniqueSlug('foo', ['foo-2']), 'foo');
+test('uniqueSlug returns foo-5 when foo through foo-4 are taken', () => {
+  assert.equal(uniqueSlug('foo', ['foo', 'foo-2', 'foo-3', 'foo-4']), 'foo-5');
+});
+
+test('uniqueSlug returns bar unchanged when bar is not in taken list', () => {
+  assert.equal(uniqueSlug('bar', ['foo', 'baz']), 'bar');
 });

@@ -1,115 +1,175 @@
 ---
-initiative_id: INIT-2025-07-14-slugifier
+initiative_id: INIT-2025-05-17-slugifier-package
 project: slugifier
 project_repo_path: .
-created_at: "2025-07-14T00:00:00Z"
-iteration_budget: 8
-cost_budget_usd: 0.50
+created_at: "2025-05-17T00:00:00Z"
+iteration_budget: 6
+cost_budget_usd: 2.00
 phase: pending
-origin: architect
 features:
   - feature_id: FEAT-1
-    title: "Core slugify function (src/slugify.ts)"
+    title: Core slugify function in src/slugify.ts
     depends_on: []
   - feature_id: FEAT-2
-    title: "Batch helpers — slugifyMany and uniqueSlug (src/batch.ts)"
+    title: Batch helpers in src/batch.ts
     depends_on: [FEAT-1]
   - feature_id: FEAT-3
-    title: "Configurable options — separator and maxLength on slugify"
+    title: Configurable options on slugify (separator, maxLength)
     depends_on: [FEAT-1]
 ---
 
-# Slugifier — canonical URL-safe slug package
+# Initiative: Canonical URL-safe slugifier package
 
 ## Context
 
-Two existing callers in the content pipeline (index builder and link renderer) each roll their own slug logic. Because neither shares code, identical titles produce divergent slugs and dead-link each other. This initiative introduces a single canonical `slugifier` package that all callers will import.
+Two callers in the content pipeline — the index builder and the link renderer — each maintain independent slug logic. They produce divergent slugs for the same title, causing dead links between them. This initiative introduces one shared package that all callers import. No more drift.
 
-Brain sources consulted:
-- `brain/forge/themes/spec-driven-work-items.md` — Given-When-Then criterion discipline.
-- `brain/forge/themes/declarative-specs-vs-imperative.md` — target-state specification over procedural instructions.
-- `brain/forge/themes/dependency-ordered-work.md` — FEAT-2 and FEAT-3 both depend on FEAT-1; they may run in parallel once FEAT-1 merges.
+Brain reference consulted: `brain/forge/themes/spec-driven-work-items.md` (atomic features with Given-When-Then criteria) and `brain/forge/themes/declarative-specs-vs-imperative.md` (describe desired state; let the agent iterate). The brain index at `brain/INDEX.md` was the navigation entry point.
 
-Out of scope: pluggable transliteration tables, locale-aware lowercasing, corpus-persisted uniqueness.
+## Out of scope
 
----
-
-## FEAT-1 — Core slugify function (`src/slugify.ts`)
-
-Deliver `src/slugify.ts` exporting `slugify(input: string): string` with the following transformation pipeline: Unicode NFD normalisation → combining-mark strip → lower-case → collapse non-alphanumeric runs to a single hyphen → trim leading/trailing hyphens → return. Numbers are preserved. Latin accents are normalised (é → e). Non-Latin scripts and emoji are dropped. Empty input returns empty string.
-
-Also export `type SlugifyOptions = { separator?: string; maxLength?: number }`. The base `slugify` signature accepts an optional second argument of this type (used fully in FEAT-3), but in FEAT-1 it may be accepted and ignored — the no-options behaviour must be stable before FEAT-2 and FEAT-3 build on it.
-
-Tests live under `tests/slugify.test.ts`.
-
-### Acceptance criteria
-
-**Given** the input `"Hello, World!"`, **when** `slugify` is called, **then** it returns `"hello-world"`.
-
-**Given** the input `"Héllo Wörld"` (Latin accents), **when** `slugify` is called, **then** it returns `"hello-world"` (accents normalised via NFD + combining-mark strip).
-
-**Given** the input `"My 2nd Post"` (number), **when** `slugify` is called, **then** it returns `"my-2nd-post"` (number preserved).
-
-**Given** the input `"日本語 title"` (non-Latin script), **when** `slugify` is called, **then** it returns `"title"` (non-Latin characters dropped, Latin portion kept).
-
-**Given** the input `"🎉 Party time!"` (emoji), **when** `slugify` is called, **then** it returns `"party-time"` (emoji dropped).
-
-**Given** the input `"  --multiple---hyphens--  "` (consecutive non-alphanumerics), **when** `slugify` is called, **then** it returns `"multiple-hyphens"` (consecutive separators collapsed, leading/trailing trimmed).
-
-**Given** the input `""` (empty string), **when** `slugify` is called, **then** it returns `""`.
+- Pluggable transliteration tables
+- Locale-aware lowercasing (e.g. Turkish dotless-i)
+- Corpus-persisted uniqueness (database-backed dedup)
 
 ---
 
-## FEAT-2 — Batch helpers (`src/batch.ts`)
+## FEAT-1 — Core slugify function in `src/slugify.ts`
 
-Deliver `src/batch.ts` exporting:
+**What to build:** Export a single function `slugify(input: string): string` implementing the canonical slug transform.
 
-- `slugifyMany(inputs: string[]): string[]` — maps `slugify` over an array, preserving order. Empty array returns `[]`.
-- `uniqueSlug(slug: string, taken: string[]): string` — returns `slug` if not in `taken`; otherwise returns the smallest `slug-N` (N ≥ 2) not in `taken`. The suffix search must be linear: try `-2`, `-3`, … until a free slot is found. The `taken` lookup is case-sensitive and exact.
+**Transform rules (in order):**
+1. NFD-normalise the input string.
+2. Strip Unicode combining marks (category `Mn`).
+3. Lowercase the result.
+4. Replace any character that is not `[a-z0-9]` with a hyphen.
+5. Collapse runs of consecutive hyphens to a single hyphen.
+6. Trim leading and trailing hyphens.
+7. Return the result. Empty input → empty string.
 
-Tests live under `tests/batch.test.ts`.
+Also add `tests/slugify.test.ts` with full coverage of the cases below.
 
 ### Acceptance criteria
 
-**Given** `inputs = ["Hello World", "Foo Bar"]`, **when** `slugifyMany(inputs)` is called, **then** it returns `["hello-world", "foo-bar"]`.
+**Given** an empty string
+**When** `slugify("")` is called
+**Then** it returns `""`
 
-**Given** `inputs = []`, **when** `slugifyMany(inputs)` is called, **then** it returns `[]`.
+**Given** a plain ASCII title `"Hello World"`
+**When** `slugify("Hello World")` is called
+**Then** it returns `"hello-world"`
 
-**Given** `slug = "foo"` and `taken = []`, **when** `uniqueSlug` is called, **then** it returns `"foo"`.
+**Given** a title with numbers `"ES2025 Release"`
+**When** `slugify("ES2025 Release")` is called
+**Then** it returns `"es2025-release"` (numbers preserved)
 
-**Given** `slug = "foo"` and `taken = ["foo"]`, **when** `uniqueSlug` is called, **then** it returns `"foo-2"`.
+**Given** a Latin-accented title `"Ångström & Résumé"`
+**When** `slugify("Ångström & Résumé")` is called
+**Then** it returns `"angstrom-resume"` (accents stripped via NFD, `&` collapsed)
 
-**Given** `slug = "foo"` and `taken = ["foo", "foo-2"]`, **when** `uniqueSlug` is called, **then** it returns `"foo-3"`.
+**Given** an emoji-only input `"🚀🎉"`
+**When** `slugify("🚀🎉")` is called
+**Then** it returns `""` (non-Latin/emoji dropped, result trims to empty)
 
-**Given** `slug = "foo"` and `taken = ["foo", "foo-2", "foo-3"]`, **when** `uniqueSlug` is called, **then** it returns `"foo-4"`.
+**Given** a non-Latin script `"日本語タイトル"`
+**When** `slugify("日本語タイトル")` is called
+**Then** it returns `""` (no transliteration; all chars dropped)
 
-**Given** `slug = "foo"` and `taken = ["foo-2"]` (gap: foo is free), **when** `uniqueSlug` is called, **then** it returns `"foo"` (the base slug is free).
+**Given** a title with consecutive non-alphanumerics `"foo---bar  baz"`
+**When** `slugify("foo---bar  baz")` is called
+**Then** it returns `"foo-bar-baz"` (consecutive separators collapsed)
+
+**Given** a title with leading/trailing punctuation `"--hello--"`
+**When** `slugify("--hello--")` is called
+**Then** it returns `"hello"` (leading/trailing hyphens trimmed)
+
+---
+
+## FEAT-2 — Batch helpers in `src/batch.ts`
+
+**What to build:** Export two helpers that layer over `slugify`.
+
+```ts
+export function slugifyMany(inputs: string[]): string[]
+export function uniqueSlug(slug: string, taken: string[]): string
+```
+
+**`slugifyMany`**: Maps `slugify` over the array; preserves order.
+
+**`uniqueSlug`**: If `slug` is not in `taken`, return it unchanged. Otherwise append `-N` where N is the smallest integer ≥ 2 such that `slug-N` is not in `taken`. The `taken` list uses exact string matching.
+
+Also add `tests/batch.test.ts`.
+
+### Acceptance criteria
+
+**Given** an array `["Hello World", "ES2025", ""]`
+**When** `slugifyMany(["Hello World", "ES2025", ""])` is called
+**Then** it returns `["hello-world", "es2025", ""]` in the same order
+
+**Given** `slug = "foo"` and `taken = []`
+**When** `uniqueSlug("foo", [])` is called
+**Then** it returns `"foo"` (not in taken, no suffix needed)
+
+**Given** `slug = "foo"` and `taken = ["foo"]`
+**When** `uniqueSlug("foo", ["foo"])` is called
+**Then** it returns `"foo-2"` (smallest suffix starting at 2)
+
+**Given** `slug = "foo"` and `taken = ["foo", "foo-2"]`
+**When** `uniqueSlug("foo", ["foo", "foo-2"])` is called
+**Then** it returns `"foo-3"` (skips taken entries, finds next free slot)
+
+**Given** `slug = "foo"` and `taken = ["foo", "foo-2", "foo-3", "foo-4"]`
+**When** `uniqueSlug("foo", ["foo", "foo-2", "foo-3", "foo-4"])` is called
+**Then** it returns `"foo-5"`
+
+**Given** `slug = "bar"` and `taken = ["foo", "baz"]`
+**When** `uniqueSlug("bar", ["foo", "baz"])` is called
+**Then** it returns `"bar"` (slug not in taken, no collision)
 
 ---
 
 ## FEAT-3 — Configurable options on `slugify`
 
-Extend the `slugify(input, options?)` signature to honour:
+**What to build:** Extend `slugify` to accept an optional second argument and export the options type.
 
-- `options.separator` — replaces the default hyphen with any string (e.g. `"_"`). All internal collapses and trim operations apply to the custom separator. The separator may be empty string (produces a run-together slug with no separator).
-- `options.maxLength` — positive integer. After the full transformation pipeline, the result is truncated to at most `maxLength` characters; any trailing separator characters are then re-trimmed. If the result would be entirely separators after truncation, return empty string. Non-positive or non-integer values for `maxLength` are treated as no-limit (inferred; not specified in brief — noted here).
+```ts
+export type SlugifyOptions = {
+  separator?: string    // default: "-"
+  maxLength?: number    // positive integer; cap total output length
+}
 
-No-options behaviour (both options absent or `undefined`) is unchanged from FEAT-1.
+export function slugify(input: string, options?: SlugifyOptions): string
+```
 
-Tests live under `tests/slugify-options.test.ts`.
+**Behaviour:**
+- `separator`: replaces the default `-` between words. The core transform replaces non-alphanumerics with this separator, collapses consecutive occurrences, and trims leading/trailing occurrences.
+- `maxLength`: after the full transform, truncate to `maxLength` characters, then re-trim any trailing occurrence of the separator (to avoid a slug ending with `-`). Must be a positive integer; non-positive values are ignored (treat as unset).
+- Calling `slugify(input)` with no options is unchanged from FEAT-1 behaviour.
+
+Update `tests/slugify.test.ts` to add option-specific cases.
 
 ### Acceptance criteria
 
-**Given** `slugify("Hello World", { separator: "_" })`, **when** called, **then** it returns `"hello_world"`.
+**Given** input `"Hello World"` and `options = { separator: "_" }`
+**When** `slugify("Hello World", { separator: "_" })` is called
+**Then** it returns `"hello_world"` (custom separator used throughout)
 
-**Given** `slugify("Hello World", { separator: "" })`, **when** called, **then** it returns `"helloworld"`.
+**Given** input `"Hello Beautiful World"` and `options = { maxLength: 11 }`
+**When** `slugify("Hello Beautiful World", { maxLength: 11 })` is called
+**Then** it returns `"hello-beaut"` (truncated at 11 chars; no trailing separator)
 
-**Given** `slugify("Hello World", { maxLength: 5 })`, **when** called, **then** it returns `"hello"` (truncated; no trailing separator).
+**Given** input `"Hello World"` and `options = { maxLength: 6 }`
+**When** `slugify("Hello World", { maxLength: 6 })` is called
+**Then** it returns `"hello"` (truncated to 6; trailing `-` re-trimmed → 5 chars is acceptable as long as no trailing separator remains — the cap is a maximum, not an exact length)
 
-**Given** `slugify("Hello World", { maxLength: 6 })`, **when** called, **then** it returns `"hello"` (truncated at 6 = `"hello-"`, trailing separator re-trimmed → `"hello"`).
+**Given** input `"Hello World"` and `options = { separator: "_", maxLength: 9 }`
+**When** `slugify("Hello World", { separator: "_", maxLength: 9 })` is called
+**Then** it returns `"hello_wor"` (both options applied; trailing `_` trimmed if present)
 
-**Given** `slugify("Hello World", { separator: "_", maxLength: 8 })`, **when** called, **then** it returns `"hello_wo"` — separator and maxLength compose correctly.
+**Given** input `"Hello World"` and `options = {}`
+**When** `slugify("Hello World", {})` is called
+**Then** it returns `"hello-world"` (defaults apply; identical to no-options call)
 
-**Given** `slugify("Hello, World!", {})` (empty options object), **when** called, **then** it returns `"hello-world"` (no-options behaviour unchanged).
-
-**Given** `slugify("", { maxLength: 10 })`, **when** called, **then** it returns `""` (empty input still returns empty).
+**Given** input `"Hello World"` and `options = { maxLength: 0 }`
+**When** `slugify("Hello World", { maxLength: 0 })` is called
+**Then** it returns `"hello-world"` (non-positive maxLength ignored)
