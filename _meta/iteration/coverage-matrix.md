@@ -34,7 +34,7 @@
 | G7 | doc/code parity (ARCHITECTURE reconciled to as-built) | grep-present | `Reconciled 2026-05-16 :: ARCHITECTURE.md` | fast |
 | US-7.1-notify | one notify sink (no hardcoded literal) | grep-absent | `desktop: true, webhook_url: null :: orchestrator/cycle.ts` | fast |
 | US-1.3-pr | PR/merge extracted to orchestrator/pr.ts | file-present | `orchestrator/pr.ts` | fast |
-| G11 | per-phase benches, no false-colour | pending | phase-4 | full |
+| G11 | per-phase benches, no false-colour (Phase-4 drift fixes in code + real chained run scored solely via existing per-phase rubrics) | cmd | bash -c "grep -q 2.5 benchmarks/project-manager/sdk.ts && grep -q runReviewer benchmarks/review-loop/sdk.ts && ls benchmarks/chained/results/*.json >/dev/null 2>&1 && grep -q 'SOLELY the six existing per-phase' benchmarks/chained/score.ts" | full |
 | G12-b | chained bench owns no rubric (scores via existing per-phase caseScore only) | file-absent | `benchmarks/chained/scoring.ts` | full |
 | G1 | done/ ⇒ MERGED: reviewer never moves a manifest to done/ (only closure, gated on a confirmed merge, does) | grep-absent | `, 'done') :: orchestrator/phases/reviewer.ts` | fast |
 | G1-rt | closure moves to done/ ONLY on a confirmed merge; pr-open + unmerged stays ready-for-review | cmd | `npx tsx --test orchestrator/phases/closure.test.ts` | full |

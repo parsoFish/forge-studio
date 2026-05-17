@@ -752,3 +752,12 @@ Confirmed `_meta/iteration/PLAN.md` executed by an in-session loop + fresh-conte
 - New raw source: `brain/_raw/cycles/2026-05-17_forge-self-closure-arc.md`.
 - New theme (pattern): `forge/themes/objective-gate-autonomous-closure.md` (indexed in `forge/patterns.md`).
 - Also commits the foundational 2026-05-16 trafficGame-arc reflection knowledge (themes + cycle archive + category-index updates) that this arc executed against.
+
+## [2026-05-17] structural | G11 validation — full-flow chained runs (2 paid cycles); real harness bug found+fixed
+
+Operator-authorised G11 validation: ran the `slugifier-chain` seed through the full chained flow twice (real SDK, $5.86 + $0.29).
+- **Run 1** ($5.86): architect 1.0 → PM 0.85 (6 WIs) → dev-loop 0.80 (real slugify.ts/batch.ts + tests, 6 commits, per-WI `gate.pass`) → **Phase-6 G8 invariant correctly halted the cycle** because the chained bench harness (`initGitRepo`) gave the seed repo no `origin` (branch never pushed). A real cross-phase gap the full-flow run surfaced that per-phase isolation could not.
+- **Fix**: `benchmarks/chained/sdk.ts:initGitRepo` now creates a bare `origin` (e2e/review-loop pattern). Gated green (466/466).
+- **Run 2** ($0.29, post-fix): architect 1.0 → PM emitted 4 WIs, 1 failed runtime `validateWorkItem` → forge **correctly failed-fast** (classifier `unknown`/non-recoverable). Stochastic agent output; forge's guardrail working.
+- **G11 closed on its design-of-record definition** (benchmark-alignment.md §D — the 3 Phase-4 drift fixes in code; runs confirm no false-colour: per-phase rubrics scored faithfully, nothing false-green). **Not claimed**: a green end-to-end chained cycle (0/1 across 2 runs for the documented reasons above). Chained-cycle convergence on a live seed is **stochastic and is NOT a closure gate** — documented characteristic. No 3rd paid run (cost/thrash discipline; honest over forced-green).
+- Demonstration built from real run-1 artifacts: `_meta/iteration/demonstration/`.

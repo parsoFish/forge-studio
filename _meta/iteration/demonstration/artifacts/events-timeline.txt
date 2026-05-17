@@ -1,0 +1,35 @@
+# Event timeline (run 1) — total $5.86, 58 events
+
+orchestrator     start    cycle.start                      $0.000
+project-manager  start                                     $0.000
+project-manager  end                                       $0.380
+developer-loop   start                                     $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   error    gate.fail                        $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.541
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.269
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.251
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.250
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.230
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   log      ralph.start                      $0.000
+developer-loop   log      gate.pass                        $0.000
+developer-loop   end      ralph.end                        $0.284
+developer-loop   error    dev-loop.branch-push-failed      $0.000
+developer-loop   end                                       $1.825
+orchestrator     error    cycle.dev-close-push-failed      $0.000
+orchestrator     error    local↔remote invariant violated: $0.000
+orchestrator     log      failure_classification           $0.000

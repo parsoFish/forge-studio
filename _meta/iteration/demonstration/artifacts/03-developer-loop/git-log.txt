@@ -1,0 +1,7 @@
+34c697e chore(developer-loop): pre-review boundary snapshot
+5d5bfb9 test: add slugify-options.test.ts covering all seven FEAT-3 option ACs
+dde545d feat(slugify): implement separator and maxLength options (WI-5)
+81e5f2e feat: implement slugifyMany and uniqueSlug batch helpers (FEAT-2)
+280c1f8 test: add core slugify tests covering all FEAT-1 transformation cases
+86c3e85 feat: implement core slugify function (WI-1)
+80a7992 initial commit (bench seed)

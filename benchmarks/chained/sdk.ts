@@ -191,18 +191,36 @@ export function setupChainedTempdir(seed: ChainSeed): string {
 
 function initGitRepo(projDir: string, initiativeId: string): void {
   if (existsSync(resolve(projDir, '.git'))) return;
-  const sh = (cmd: string, args: string[]): void => {
-    execFileSync(cmd, args, { cwd: projDir, stdio: 'pipe' });
+  const sh = (cmd: string, args: string[], cwd = projDir): void => {
+    execFileSync(cmd, args, { cwd, stdio: 'pipe' });
   };
   sh('git', ['init', '-q', '-b', 'main']);
   sh('git', ['config', 'user.email', 'bench@forge.local']);
   sh('git', ['config', 'user.name', 'forge bench']);
   sh('git', ['add', '-A']);
   sh('git', ['commit', '-q', '-m', 'initial commit (bench seed)']);
+  // Bare `origin` so the dev-loop's per-WI `pushInitiativeBranch` and the
+  // Phase-6 G8 local↔remote invariant (`origin/<branch>` must exist) hold
+  // in the harness — same pattern as the e2e/review-loop benches. Without
+  // this the full chain aborts at dev-loop close before review/reflection
+  // (a real cross-phase gap the chained run is designed to catch).
+  const origin = resolve(projDir, '..', '..', '_origin.git');
+  sh('git', ['init', '-q', '--bare', origin], resolve(projDir, '..'));
+  sh('git', ['remote', 'add', 'origin', origin]);
+  sh('git', ['push', '-q', 'origin', 'main']);
   sh('git', ['checkout', '-q', '-b', `initiative-${initiativeId}`]);
 }
 
 export function cleanupTempdir(tempdir: string): void {
+  // Inspection affordance, same env as the reflection bench
+  // (benchmarks/reflection/score.ts): keep the full chained artifact set
+  // (generated manifest, WIs, dev-loop commits, PR/demo, retro/themes,
+  // events.jsonl, merged worktree) so a run can double as a forge
+  // demonstration. Off by default — normal bench runs still clean up.
+  if (process.env.FORGE_BENCH_KEEP_TEMPDIR === '1') {
+    process.stdout.write(`[chained] kept tempdir: ${tempdir}\n`);
+    return;
+  }
   try {
     rmSync(tempdir, { recursive: true, force: true });
   } catch {

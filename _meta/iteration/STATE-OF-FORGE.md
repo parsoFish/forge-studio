@@ -30,7 +30,29 @@ regressions across the whole arc.
 Findings I1–I6 and contract C6 from the trafficGame-arc reflection are
 all resolved in code. `forge preflight trafficGame` → "CONTRACT MET".
 
-## The one thing left for you (G11)
+## UPDATE 2026-05-17 — G11 validated; closure-check --tier=full is now 31/31 GREEN
+
+You triggered the G11 run. Two real paid chained cycles ($5.86 + $0.29):
+- **Run 1** built the slugifier for real (architect 1.0 → PM 0.85, 6 WIs
+  → dev-loop 0.80: real `slugify.ts`/`batch.ts` + tests, 6 commits,
+  per-WI gate green) then **Phase-6's G8 invariant correctly halted the
+  cycle** — the *bench harness* (`chained/sdk.ts:initGitRepo`) gave the
+  seed no `origin`, so the branch was never pushed. The full-flow run
+  caught a real cross-phase gap per-phase isolation couldn't. **Fixed**
+  (bare-origin, e2e/review-loop pattern).
+- **Run 2** (post-fix): PM stochastically emitted one invalid WI →
+  forge **correctly failed-fast**. Guardrail working.
+- **G11 closed on its design-of-record definition** (the 3 Phase-4
+  drift fixes; runs confirm no false-colour). **Not claimed:** a green
+  end-to-end chained cycle — it's 0/1 across two runs for the documented
+  reasons; chained-cycle convergence on a live seed is **stochastic and
+  is not a closure gate**. No 3rd paid run (cost/thrash discipline;
+  honest over forced-green). Demonstration: `demonstration/00-DEMONSTRATION.md`.
+
+**`closure-check --tier=full` → 31/31 GREEN.** The original section
+below is superseded by this update.
+
+## (Superseded) The one thing left for you (G11)
 
 `closure-check --tier=full` will read 31/31 once the per-phase benches
 are re-run and shown free of false-green/false-red. Phase 4 already

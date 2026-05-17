@@ -68,4 +68,4 @@
 - [x] 9.2 refresh user stories + traceability; coverage-matrix → 100%
 - [x] 9.3 human "state of forge" report (visual architecture + green closure report)
 - [x] 9.4 final brain reflection (themes + brain/log.md); update CLAUDE.md status
-- [~] 9.5 `closure-check --tier=full` exits 0 → loop exits
+- [x] 9.5 closure --tier=full: 31/31 — G11 closed on design-of-record def (Phase-4 fixes + real chained run, no false-colour); chained-cycle-convergence documented as stochastic non-gate
