@@ -32,6 +32,11 @@ import { p95 } from '../_lib/percentile.ts';
 import { mapConcurrent } from '../_lib/concurrent.ts';
 
 import { cleanupTempdir, runChain, type ChainArtifacts, type ChainSeed } from './sdk.ts';
+import {
+  cleanupReviewBaseDir,
+  resolveReviewBaseDir,
+  type ReviewBaseHandle,
+} from './review-base.ts';
 import type { TargetSpec } from '../e2e/simulator.ts';
 
 import { caseScore as architectCaseScore } from '../architect/scoring.ts';
@@ -222,18 +227,17 @@ const results = await mapConcurrent(seeds, CONCURRENCY, async (s): Promise<CaseR
   }
 
   // 4. review-loop — generated .forge/pr-description.md + .forge/demos/.
-  //    Read from the pre-merge .forge/ snapshot (survives the gh-shim's
-  //    git clean); fall back to the worktree.
+  //    The rubric resolves `<dir>/.forge/...`, so it MUST be handed a dir
+  //    where `<dir>/.forge/pr-description.md` resolves (see
+  //    resolveReviewBaseDir for why the previous `forgeSnapshotDir/..`
+  //    scored every PR/demo criterion 0).
   let review_loop: PhaseScore | null = null;
+  let reviewBaseHandle: ReviewBaseHandle | null = null;
   if (artifacts.initiativeId !== null && workItems.length > 0) {
-    const reviewWorktree = existsSync(artifacts.forgeSnapshotDir)
-      ? // The rubric resolves `<worktree>/.forge/...`; the snapshot IS the
-        // `.forge/` dir, so its parent stands in as the worktree root.
-        resolve(artifacts.forgeSnapshotDir, '..')
-      : artifacts.worktreePath;
+    reviewBaseHandle = resolveReviewBaseDir(artifacts);
     review_loop = toPhaseScore(
       reviewCaseScore({
-        worktreePath: reviewWorktree,
+        worktreePath: reviewBaseHandle.dir,
         initiativeId: artifacts.initiativeId,
         workItems,
         expected: {
@@ -281,6 +285,12 @@ const results = await mapConcurrent(seeds, CONCURRENCY, async (s): Promise<CaseR
   const chainPassed =
     artifacts.chainError === null &&
     phaseList.every((p) => p !== null && p.passed);
+
+  // Tidy the synthesized review base dir (if the worktree `.forge/` had been
+  // wiped and we built a symlink-to-snapshot stand-in). Same leave-no-residue
+  // discipline as the brain mask / cycle-log bridge. No-op when the worktree
+  // `.forge/` survived (the dir IS the worktree — never delete that).
+  cleanupReviewBaseDir(reviewBaseHandle);
 
   cleanupTempdir(artifacts.tempdir);
 
