@@ -68,6 +68,11 @@ import {
 } from '../_lib/recorder-shims.ts';
 import { runArchitect, type RunArchitectResult } from '../architect/sdk.ts';
 import { simulatorVerdict, runSpecChecks, type TargetSpec } from '../e2e/simulator.ts';
+import {
+  bridgeMovedManifestForReflector,
+  removeReflectorManifestBridge,
+  type ReflectorManifestBridge,
+} from './reflector-manifest-bridge.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -577,6 +582,23 @@ export async function runChain(input: RunChainInput): Promise<ChainArtifacts> {
   const originalPath = process.env.PATH ?? '';
   const originalGhToken = process.env.GH_TOKEN;
   const brainMask = maskLiveBrain(tempdir, seed.project);
+  // Wiring bridge (false-red fix): the reflector phase resolves the manifest
+  // module-relative to the REAL forge root via
+  // `resolveCurrentManifestPath(input.manifestPath, realForgeRoot)`. On a
+  // merged cycle closure has moved the manifest into the *tempdir*
+  // `_queue/done/` and reflection runs immediately after (same `runCycle`),
+  // so that resolution ENOENTs (`reflector.manifest-unreadable`) even though
+  // closure succeeded. Mirror the tempdir queue under the real forge root
+  // with symlinks (installed BEFORE the cycle; they activate exactly when
+  // closure populates the tempdir done/). Same leave-no-residue discipline
+  // as the cycle-log / user-feedback bridge below — torn down in `finally`.
+  const manifestBridge: ReflectorManifestBridge | null =
+    bridgeMovedManifestForReflector({
+      tempdir,
+      initiativeId,
+      inFlightManifestPath: inFlightPath,
+      realForgeRoot: FORGE_ROOT,
+    });
 
   let cycleResult: CycleResult | null = null;
   let chainError: ChainStepError | null = null;
@@ -618,6 +640,10 @@ export async function runChain(input: RunChainInput): Promise<ChainArtifacts> {
     else process.env.GH_TOKEN = originalGhToken;
     // CRITICAL: always restore the live brain.
     restoreLiveBrain(brainMask);
+    // CRITICAL: always remove the reflector manifest bridge symlinks (leave
+    // the real forge `_queue/` byte-identical — same discipline as the
+    // brain mask).
+    removeReflectorManifestBridge(manifestBridge);
     // Wiring bridge (gap fix): the reflector phase resolves its cycle-log
     // dir module-relative to the REAL forge root (it `mkdir`s + writes
     // retro.md / user-questions.md to `<realforge>/_logs/<cycleId>/`),
