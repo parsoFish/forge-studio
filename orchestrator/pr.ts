@@ -24,6 +24,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 /**
  * Best-effort PR creation via `gh pr create`. Returns the PR URL on success,
@@ -297,46 +298,133 @@ export type AlignResult = {
  * cosmetic local hygiene, surfaced via the returned detail + event log).
  *
  * Caller contract: only invoke after `confirmPrMerged` returned true.
+ *
+ * 2026-05-18 fix: the prior implementation moved `refs/heads/main` with
+ * `git update-ref` and deliberately SKIPPED the checkout, on the assumption
+ * that "main may be checked out elsewhere". In the normal operator-merge
+ * path the project repo at `projectRepoPath` IS the working checkout of
+ * `main` (the forge worktree is a *separate* dir that gets removed), so a
+ * bare ref move left the operator's working tree frozen at the pre-merge
+ * code with a huge phantom reverse-diff in `git status` — they opened the
+ * repo, saw OLD code, and could not review. When `projectRepoPath` is the
+ * `main` checkout we now bring its WORKING TREE forward with
+ * `merge --ff-only`, preserving any uncommitted operator/architect state
+ * (e.g. `roadmap.md`, which the architect phase writes directly into the
+ * project repo and which is NOT part of the merged initiative) via a
+ * stash that is always restored or surfaced — never silently discarded.
+ * The bare-ref path is kept as a fallback for the not-on-main case.
  */
-export function alignLocalToRemote(worktreePath: string, initiativeBranch: string): AlignResult {
+export function alignLocalToRemote(
+  worktreePath: string,
+  initiativeBranch: string,
+  projectRepoPath?: string,
+): AlignResult {
   const steps: string[] = [];
+  // Prefer the project repo for git ops (it shares the object store with the
+  // forge worktree, so a fetch there populates origin/main for both).
+  const gitCwd =
+    projectRepoPath && existsSync(projectRepoPath) ? projectRepoPath : worktreePath;
   try {
-    execFileSync('git', ['fetch', 'origin', '--prune'], { cwd: worktreePath, stdio: 'pipe' });
+    execFileSync('git', ['fetch', 'origin', '--prune'], { cwd: gitCwd, stdio: 'pipe' });
     steps.push('fetched origin');
   } catch {
     steps.push('fetch origin failed (non-fatal)');
   }
-  // Fast-forward local main to origin/main without checking it out (the
-  // project repo may have main checked out elsewhere — a forge worktree
-  // is attached off the same repo). `update-ref` is safe when main is an
-  // ancestor of origin/main, which it is after a clean PR merge.
-  const originMain = revParse(worktreePath, 'refs/remotes/origin/main');
-  const localMain = revParse(worktreePath, 'refs/heads/main');
-  if (originMain && originMain !== localMain) {
+  const originMain = revParse(gitCwd, 'refs/remotes/origin/main');
+  const localMain = revParse(gitCwd, 'refs/heads/main');
+
+  let alignedViaProjectTree = false;
+  if (
+    projectRepoPath &&
+    existsSync(projectRepoPath) &&
+    originMain &&
+    originMain !== localMain &&
+    currentBranch(projectRepoPath) === 'main'
+  ) {
+    // The project repo is the working checkout of `main` — bring its WORKING
+    // TREE (not just the ref) to origin/main. Preserve any uncommitted
+    // operator/architect state via stash; never discard it silently.
+    let dirty = false;
     try {
-      execFileSync('git', ['update-ref', 'refs/heads/main', originMain], {
-        cwd: worktreePath,
+      const out = execFileSync('git', ['status', '--porcelain'], {
+        cwd: projectRepoPath,
         stdio: 'pipe',
+        encoding: 'utf8',
       });
-      steps.push(`fast-forwarded main → ${originMain.slice(0, 8)}`);
+      dirty = out.trim().length > 0;
     } catch {
-      steps.push('main fast-forward failed (non-fatal)');
+      /* if status is unreadable, treat as clean and let ff-only be the guard */
     }
-  } else {
-    steps.push('main already up to date');
+    let stashed = false;
+    if (dirty) {
+      try {
+        execFileSync(
+          'git',
+          ['stash', 'push', '--include-untracked', '-m', `forge-closure-preserve ${initiativeBranch}`],
+          { cwd: projectRepoPath, stdio: 'pipe' },
+        );
+        stashed = true;
+        steps.push('stashed uncommitted project changes');
+      } catch {
+        steps.push('could not stash uncommitted changes — skipped working-tree ff (no data loss)');
+      }
+    }
+    if (!dirty || stashed) {
+      try {
+        execFileSync('git', ['merge', '--ff-only', 'origin/main'], {
+          cwd: projectRepoPath,
+          stdio: 'pipe',
+        });
+        steps.push(`project working tree fast-forwarded main → ${originMain.slice(0, 8)}`);
+        alignedViaProjectTree = true;
+      } catch {
+        steps.push('project working-tree ff-only failed (non-fatal)');
+      }
+    }
+    if (stashed) {
+      try {
+        execFileSync('git', ['stash', 'pop'], { cwd: projectRepoPath, stdio: 'pipe' });
+        steps.push('restored uncommitted project changes');
+      } catch {
+        steps.push(
+          'uncommitted changes kept in `git stash` (pop conflicted — operator resolves; no data loss)',
+        );
+      }
+    }
   }
+
+  if (!alignedViaProjectTree) {
+    // Fallback: move the ref without a checkout (original behaviour) when the
+    // project repo is not the `main` checkout / not provided.
+    if (originMain && originMain !== localMain) {
+      try {
+        execFileSync('git', ['update-ref', 'refs/heads/main', originMain], {
+          cwd: gitCwd,
+          stdio: 'pipe',
+        });
+        steps.push(
+          `fast-forwarded main ref → ${originMain.slice(0, 8)} (ref-only — project repo not the main checkout)`,
+        );
+      } catch {
+        steps.push('main fast-forward failed (non-fatal)');
+      }
+    } else {
+      steps.push('main already up to date');
+    }
+  }
+
   // Prune the initiative branch locally + on origin. The scheduler's
   // worktree.cleanup() also deletes the local branch in its finally; this
   // makes the closure self-contained for the operator-driven path.
   try {
-    execFileSync('git', ['branch', '-D', initiativeBranch], { cwd: worktreePath, stdio: 'pipe' });
+    execFileSync('git', ['branch', '-D', initiativeBranch], { cwd: gitCwd, stdio: 'pipe' });
     steps.push(`deleted local ${initiativeBranch}`);
   } catch {
     steps.push(`local ${initiativeBranch} already gone`);
   }
   try {
     execFileSync('git', ['push', 'origin', '--delete', initiativeBranch], {
-      cwd: worktreePath,
+      cwd: gitCwd,
       stdio: 'pipe',
     });
     steps.push(`deleted origin ${initiativeBranch}`);
