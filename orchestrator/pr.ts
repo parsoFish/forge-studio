@@ -93,13 +93,36 @@ export function embedDemoInPr(
     const ownerRepo = parseOwnerRepo(originUrl);
     if (!ownerRepo) return null; // only GitHub raw URLs render inline
 
-    // Copy the bundle into a tracked path and commit it on the branch.
+    // Copy the bundle into a tracked path.
     const relDir = `demo/${initiativeId}`;
     const dstDir = join(worktreePath, relDir);
     mkdirSync(dstDir, { recursive: true });
     cpSync(srcDir, dstDir, { recursive: true, force: true });
+
+    const images = entries.filter((n) => DEMO_IMAGE_EXTS.has(extname(n).toLowerCase())).sort();
+    const others = entries
+      .filter((n) => !DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))
+      .sort();
+
+    // Ensure a DEMO.md with RELATIVE image links exists. This is the
+    // visibility-agnostic surface: GitHub renders a committed markdown
+    // file (with relative images) for the authenticated reviewer on the
+    // blob page even for a PRIVATE repo — whereas an `![](raw-url)` inline
+    // in the PR body is fetched by GitHub's image proxy, which CANNOT read
+    // a private repo and shows a broken image. Don't clobber an
+    // agent-authored DEMO.md.
+    const demoMdPath = join(dstDir, 'DEMO.md');
+    if (!existsSync(demoMdPath) && images.length > 0) {
+      const md = ['# Demo', ''];
+      for (const img of images) {
+        const label = img.replace(/\.[^.]+$/, '');
+        md.push(`## ${label}`, '', `![${label}](./${img})`, '');
+      }
+      writeFileSync(demoMdPath, md.join('\n') + '\n');
+    }
+
+    // Commit the bundle on the branch (idempotent).
     execFileSync('git', ['add', '--', relDir], { cwd: worktreePath, stdio: 'pipe' });
-    // Only commit if staging produced changes (idempotent on re-runs).
     const staged = execFileSync('git', ['diff', '--cached', '--name-only', '--', relDir], {
       cwd: worktreePath,
       stdio: 'pipe',
@@ -113,23 +136,48 @@ export function embedDemoInPr(
       );
     }
 
+    // Repo visibility decides whether inline raw images render. Default to
+    // PRIVATE (the safe assumption — a broken inline image is worse than a
+    // link) if `gh` can't tell us.
+    let isPrivate = true;
+    try {
+      const vis = execFileSync(
+        'gh',
+        ['repo', 'view', ownerRepo, '--json', 'isPrivate', '-q', '.isPrivate'],
+        { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
+      ).trim();
+      isPrivate = vis !== 'false';
+    } catch {
+      /* keep the safe default */
+    }
+
     const rawBase = `https://github.com/${ownerRepo}/raw/${branch}/${relDir}`;
     const blobBase = `https://github.com/${ownerRepo}/blob/${branch}/${relDir}`;
-    const images = entries.filter((n) => DEMO_IMAGE_EXTS.has(extname(n).toLowerCase())).sort();
-    const others = entries
-      .filter((n) => !DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))
-      .sort();
-
     const lines: string[] = ['', '---', '', '## Demo', ''];
-    if (images.length > 0) {
-      lines.push('_Rendered inline from the committed demo bundle on this branch._', '');
+
+    // Always: the reliable, visibility-agnostic surface.
+    if (existsSync(demoMdPath)) {
+      lines.push(
+        `▶ **[Open the rendered demo: \`${relDir}/DEMO.md\`](${blobBase}/DEMO.md)**` +
+          ' — renders inline on GitHub (works for private repos too).',
+        '',
+      );
+    }
+    lines.push(
+      `The screenshots are also visible in this PR's **Files changed** tab` +
+        ` (committed under \`${relDir}/\`).`,
+      '',
+    );
+
+    if (!isPrivate && images.length > 0) {
+      // Public repo: GitHub's proxy can fetch raw → inline them too.
       for (const img of images) {
         const label = img.replace(/\.[^.]+$/, '');
         lines.push(`**${label}**`, '', `![${label}](${rawBase}/${encodeURIComponent(img)})`, '');
       }
     }
     if (others.length > 0) {
-      lines.push('Other demo artefacts:');
+      lines.push('Demo artefacts:');
       for (const f of others) lines.push(`- [\`${f}\`](${blobBase}/${encodeURIComponent(f)})`);
       lines.push('');
     }
