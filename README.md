@@ -101,7 +101,18 @@ review entirely from GitHub. Pick **one**:
 | [`/forge-review <id>`](./.claude/commands/forge-review.md) | Merge the PR in GitHub, **or** send-back ACs / PR comments | `…verdict-response.md` (send-back/approve), or GitHub merge |
 | [`/forge-reflect <id>`](./.claude/commands/forge-reflect.md) | Answer the reflector's questions + free-form | writes `_logs/<id>/user-feedback.md` |
 
-Design of record: [`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md) (US-3.1 / US-3.2); review/closure mechanics in [`docs/phases/review-loop.md`](./docs/phases/review-loop.md).
+This section is an operator-facing **guide**. The **authoritative
+contract** for each moment is its skill (the `.claude/commands/forge-*`
+slash commands are thin invokers of these — no standalone procedure):
+`/forge-architect` → [`skills/architect/SKILL.md`](./skills/architect/SKILL.md)
+(whose Process step 3 mandates the `architect-llm-council` pass);
+`/forge-review` → the **Operator handoff** section of
+[`skills/reviewer/SKILL.md`](./skills/reviewer/SKILL.md);
+`/forge-reflect` → the **Operator handoff** section of
+[`skills/reflector/SKILL.md`](./skills/reflector/SKILL.md). Design of
+record: [`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md)
+(US-3.1 / US-3.2); review/closure mechanics in
+[`docs/phases/review-loop.md`](./docs/phases/review-loop.md).
 
 ## Quickstart
 

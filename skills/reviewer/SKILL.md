@@ -17,6 +17,40 @@ Drive a post-developer-loop initiative branch to **approved + merged**. The agen
 
 The orchestrator owns the verdict gate between iterations — it re-runs the project quality command, asks the verdict-provider (human in production; simulator agent in bench), and either stops the loop on `approve` or appends the new feedback ACs to fix_plan.md on `send-back`.
 
+## Operator handoff (the `/forge-review` human moment — single source of truth)
+
+This section is authoritative for the operator side of the verdict gate;
+the `/forge-review <id>` slash command is a thin invoker of it.
+
+> Human moment — run in YOUR OWN Claude session. Forge never auto-supplies
+> a verdict or merges in production (Phase 6 / G9). The review-Ralph
+> produced a **demo-embedded PR and STOPPED**; the GitHub PR is the
+> operator's merge + feedback surface. The PR is self-contained — the demo
+> is committed on the branch (`demo/<id>/`) and surfaced in the PR body
+> (see `brain/forge/themes/pr-as-sole-review-window.md`).
+
+**Reads:** `_queue/in-flight/<id>.verdict-prompt.md` (round + artefact
+paths); the GitHub PR (`gh pr view` / the PR page) and its diff vs `main`.
+
+**Decide — exactly ONE:**
+- **Merge in GitHub (normal path).** Click *Merge* on the PR. A later
+  `runClosure` confirms `gh pr view --json state == MERGED`
+  (`orchestrator/pr.ts:confirmPrMerged`), aligns local↔remote (ff the
+  project working tree, stash-preserving uncommitted operator state;
+  prune the branch), moves the manifest `in-flight/ → done/`, and only
+  then does reflection fire.
+- **Send back.** Write `_queue/in-flight/<id>.verdict-response.md` with
+  `verdict: send-back`, a rationale, and `- GIVEN … WHEN … THEN …`
+  acceptance criteria (or comment on the PR and have your agent address +
+  push). Review-Ralph reads the ACs from `fix_plan.md` next iteration.
+  Cap: **2 send-back rounds**. Format contract:
+  `orchestrator/file-verdict.ts:parseVerdictResponse`.
+- **Approve without merging (rare).** Same file with `verdict: approve` +
+  rationale. This only releases the review gate; it does **not** merge —
+  you still merge in GitHub.
+
+Do not run a cycle and do not merge programmatically from this moment.
+
 ## Required first action
 
 Read the initiative manifest + the work-item set, then `git log` /

@@ -16,6 +16,29 @@ and write the findings into the brain by **direct file writes** — theme
 markdown files under `brain/projects/<project>/themes/` plus a cycle
 archive under `brain/_raw/cycles/<cycle-id>.md`.
 
+## Operator handoff (the `/forge-reflect` human moment — single source of truth)
+
+This section is authoritative for the operator side of stage 2/3; the
+`/forge-reflect <id>` slash command is a thin invoker of it.
+
+> Human moment — run in YOUR OWN Claude session. Forge never simulates
+> this feedback in production (the bench simulator is bench-only).
+
+**Reads:** `_logs/<id>/user-questions.md` (the reflector's stage-2
+questions — ≤4 numbered; may be absent if none were non-brain-resolvable);
+`_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
+
+**Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question,
+then add any free-form feedback for the brain. Stage 3 distils this into
+`retro.md` Section 2 (answers) + Section 3 (free-form). Contract:
+`orchestrator/reflector-invocation.ts` (stage 2/3),
+`orchestrator/phases/reflector.ts` (`userFeedbackRelPath`).
+
+If the file is absent when the reflector runs it records
+`_(no feedback supplied this cycle)_` and continues — so writing it (ideally
+*before* the reflector runs) is how the operator's voice enters the brain
+this cycle. Do not run a cycle from this moment.
+
 ## Required first action
 
 Invoke `brain-query` BEFORE writing anything. The bench gates on this
