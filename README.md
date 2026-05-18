@@ -120,6 +120,9 @@ git --version            # 2.20+ (for git worktree)
 cd ~/forge
 npm install
 npm run build
+npm link                 # puts the `forge` command on PATH
+                         # (declared in package.json `bin` → bin/forge.mjs;
+                         #  TS runs directly, no build needed for the CLI)
 
 # CLI surface (see `forge --help` for the full list)
 forge --help
