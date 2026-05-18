@@ -24,7 +24,15 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import { extname, join } from 'node:path';
 
 /**
  * Best-effort PR creation via `gh pr create`. Returns the PR URL on success,
@@ -36,6 +44,104 @@ import { existsSync } from 'node:fs';
  * called `gh pr create` without a push, which fails with "no pull requests
  * found" since the branch wasn't published.
  */
+/** Initiative id from a `forge/<initiativeId>` branch name. */
+function basenameInitiativeId(branch: string): string {
+  return branch.startsWith('forge/') ? branch.slice('forge/'.length) : branch;
+}
+
+/** Parse `owner/repo` from a git origin URL (https or ssh form). */
+function parseOwnerRepo(originUrl: string): string | null {
+  const s = originUrl.trim().replace(/\.git$/, '');
+  const m =
+    s.match(/github\.com[:/]([^/]+\/[^/]+)$/) ?? s.match(/[:/]([^/]+\/[^/]+)$/);
+  return m ? m[1] : null;
+}
+
+const DEMO_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
+
+/**
+ * 2026-05-18 amendment: make the PR the SOLE review window. The reviewer
+ * writes the demo bundle into `.forge/demos/<id>/` (gitignored — invisible
+ * to a PR reviewer, who otherwise has to open a local HTML, infer the
+ * change, then come back to comment). This copies that bundle into a
+ * TRACKED `demo/<id>/` dir, commits it on the initiative branch, and
+ * returns a `## Demo` markdown block that embeds the screenshots INLINE in
+ * the PR body via GitHub raw URLs (and links non-image artefacts). After
+ * this the reviewer sees and comments on everything from the PR alone.
+ *
+ * Best-effort: returns `null` on any failure (no demo, not a GitHub
+ * remote, git error) so PR creation never breaks because of the demo.
+ */
+export function embedDemoInPr(
+  worktreePath: string,
+  initiativeId: string,
+  branch: string,
+): string | null {
+  try {
+    const srcDir = join(worktreePath, '.forge', 'demos', initiativeId);
+    if (!existsSync(srcDir)) return null;
+    const entries = readdirSync(srcDir, { withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => e.name)
+      .filter((n) => !n.startsWith('.'));
+    if (entries.length === 0) return null;
+
+    const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    const ownerRepo = parseOwnerRepo(originUrl);
+    if (!ownerRepo) return null; // only GitHub raw URLs render inline
+
+    // Copy the bundle into a tracked path and commit it on the branch.
+    const relDir = `demo/${initiativeId}`;
+    const dstDir = join(worktreePath, relDir);
+    mkdirSync(dstDir, { recursive: true });
+    cpSync(srcDir, dstDir, { recursive: true, force: true });
+    execFileSync('git', ['add', '--', relDir], { cwd: worktreePath, stdio: 'pipe' });
+    // Only commit if staging produced changes (idempotent on re-runs).
+    const staged = execFileSync('git', ['diff', '--cached', '--name-only', '--', relDir], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    if (staged) {
+      execFileSync(
+        'git',
+        ['commit', '-m', `docs(demo): embed review demo for ${initiativeId}`],
+        { cwd: worktreePath, stdio: 'pipe' },
+      );
+    }
+
+    const rawBase = `https://github.com/${ownerRepo}/raw/${branch}/${relDir}`;
+    const blobBase = `https://github.com/${ownerRepo}/blob/${branch}/${relDir}`;
+    const images = entries.filter((n) => DEMO_IMAGE_EXTS.has(extname(n).toLowerCase())).sort();
+    const others = entries
+      .filter((n) => !DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))
+      .sort();
+
+    const lines: string[] = ['', '---', '', '## Demo', ''];
+    if (images.length > 0) {
+      lines.push('_Rendered inline from the committed demo bundle on this branch._', '');
+      for (const img of images) {
+        const label = img.replace(/\.[^.]+$/, '');
+        lines.push(`**${label}**`, '', `![${label}](${rawBase}/${encodeURIComponent(img)})`, '');
+      }
+    }
+    if (others.length > 0) {
+      lines.push('Other demo artefacts:');
+      for (const f of others) lines.push(`- [\`${f}\`](${blobBase}/${encodeURIComponent(f)})`);
+      lines.push('');
+    }
+    return lines.join('\n');
+  } catch (err) {
+    const e = err as { stderr?: Buffer | string; message?: string };
+    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
+    process.stderr.write(`[embedDemoInPr] non-fatal: ${stderr || e.message || 'failed'}\n`);
+    return null;
+  }
+}
+
 export function openPullRequest(
   worktreePath: string,
   prDescriptionPath: string,
@@ -50,6 +156,26 @@ export function openPullRequest(
     }).trim();
     if (!branch || branch === 'HEAD') return null;
 
+    // Make the PR self-contained: commit the demo bundle on the branch and
+    // build a combined body (PR description + inline demo). Best-effort —
+    // a demo failure must never block the PR. Done BEFORE the push so the
+    // demo commit ships with the branch.
+    let bodyFile = prDescriptionPath;
+    try {
+      const demoMd = embedDemoInPr(worktreePath, basenameInitiativeId(branch), branch);
+      if (demoMd) {
+        const base = existsSync(prDescriptionPath)
+          ? readFileSync(prDescriptionPath, 'utf8')
+          : '';
+        const combined = join(worktreePath, '.forge', 'pr-body-with-demo.md');
+        mkdirSync(join(worktreePath, '.forge'), { recursive: true });
+        writeFileSync(combined, base + '\n' + demoMd + '\n');
+        bodyFile = combined;
+      }
+    } catch {
+      /* keep the plain description */
+    }
+
     // Push to origin (set-upstream so gh pr create knows the head ref).
     // Failures here propagate to the catch — a non-pushable branch is a
     // genuine merge blocker, not a soft warning.
@@ -60,7 +186,7 @@ export function openPullRequest(
 
     const out = execFileSync(
       'gh',
-      ['pr', 'create', '--body-file', prDescriptionPath, '--title', title],
+      ['pr', 'create', '--body-file', bodyFile, '--title', title],
       { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
     );
     const match = out.match(/https:\S+/);
