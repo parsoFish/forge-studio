@@ -111,6 +111,8 @@ export function scrubTestContamination(opts: {
       continue;
     }
     try {
+      // recursive: true even for empty dirs — Node's rm refuses to remove
+      // directories without it (EISDIR).
       rmSync(full, { recursive: true, force: true });
       report.deleted.push(full);
     } catch (err) {
