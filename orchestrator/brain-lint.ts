@@ -124,18 +124,56 @@ function readThemeFiles(brainRoot: string): string[] {
   return files;
 }
 
+/**
+ * Lenient frontmatter parser. Tries gray-matter first; on YAML failure (e.g.
+ * unquoted `:` in a description value), falls back to a regex line-by-line
+ * extractor that captures `key: value` pairs without YAML-spec strictness.
+ * This means lint can still surface frontmatter findings (missing fields,
+ * bad category) on themes that gray-matter would reject — failing-closed
+ * would hide the very class of violations we want to find.
+ */
 function parseTheme(file: string): {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: Record<string, any>;
   content: string;
   raw: string;
 } | null {
+  let raw: string;
   try {
-    const raw = readFileSync(file, 'utf8');
+    raw = readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  try {
     const { data, content } = matter(raw);
     return { data, content, raw };
   } catch {
-    return null;
+    // Fallback: split on first two `---` lines.
+    const lines = raw.split('\n');
+    if (lines[0]?.trim() !== '---') {
+      return { data: {}, content: raw, raw };
+    }
+    let end = -1;
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0) {
+      return { data: {}, content: raw, raw };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: Record<string, any> = {};
+    for (let i = 1; i < end; i++) {
+      const line = lines[i];
+      const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
+      if (m) {
+        data[m[1]] = m[2].trim();
+      }
+    }
+    const content = lines.slice(end + 1).join('\n');
+    return { data, content, raw };
   }
 }
 
