@@ -1,6 +1,6 @@
 ---
 description: Reflection human moment — supply stage-3 reflection feedback (own session).
-argument-hint: <initiative-id>
+argument-hint: <initiative-id-or-handle>
 ---
 
 # /forge-reflect &lt;initiative-id&gt;

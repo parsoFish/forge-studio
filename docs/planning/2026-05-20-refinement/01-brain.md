@@ -71,7 +71,7 @@ forge themes + 56 project themes are NOT rewritten.
 The current brain implements Karpathy's three-layer pattern correctly
 ([`brain/forge/themes/karpathy-three-layer-wiki.md`](../../../brain/forge/themes/karpathy-three-layer-wiki.md)
 references the canonical [gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)).
-Graphify ([`safishamsi/graphify`](https://github.com/safishamsi/graphify),
+Graphify ([`rhanka/graphify`](https://github.com/rhanka/graphify) — npm `graphifyy`,
 51K stars, MIT, YC S26) covers a different axis: **structural relationships
 across code+docs** (god nodes, surprising cross-file connections,
 call/edit flows) that the brain's current `related_themes` frontmatter

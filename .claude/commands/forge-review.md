@@ -1,6 +1,6 @@
 ---
 description: Review human moment — engage the open PR for an initiative (own session).
-argument-hint: <initiative-id>
+argument-hint: <initiative-id-or-handle>
 ---
 
 # /forge-review &lt;initiative-id&gt;
