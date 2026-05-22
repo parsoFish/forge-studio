@@ -22,8 +22,7 @@
  * cycle-touched-themes | cleanup-dry-run`.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, basename } from 'node:path';
 // gray-matter has no usable types; we treat the default export as `any` for parsing.
 // The structure we use is well-defined: `{ data, content }`.
@@ -184,11 +183,6 @@ function projectOfTheme(file: string, brainRoot: string): string | null {
     return parts[1] ?? null;
   }
   return null;
-}
-
-function isForgeTheme(file: string, brainRoot: string): boolean {
-  const rel = relative(brainRoot, file);
-  return rel.startsWith(`forge${join('/', '').slice(0)}themes`) || rel.startsWith('forge/themes');
 }
 
 // ---------- checkFrontmatter ----------
