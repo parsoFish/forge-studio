@@ -2,8 +2,9 @@
 area: review
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_trafficgame_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C3a, C3b, C3c, C6, C16, C16a, C16b]
+contract_deps: [C3a, C3b, C3c, C6, C16, C16a, C16b, C26, C27]
 ---
 
 # Review refinement plan
@@ -15,6 +16,15 @@ contract_deps: [C3a, C3b, C3c, C6, C16, C16a, C16b]
 > (approve-vs-send-back decision table replaces the prose rule), C16b
 > (cursor write is `tmp + rename`; parse-fail = `cursor=0`), C6
 > (`/forge-review` accepts handles like `traf#7` per plan 07b's resolver).
+> **Amended 2026-05-23 (trafficGame post-S0 learnings):** the verdict
+> shape extends to include **score-delta vs locked baselines** (L1 +
+> C26) AND **visual confirmation** (L4 — screenshots are non-optional
+> for visual/canvas/physics work; never just "diff matches spec"); L8
+> reinforces that "tests pass" ≠ "fix landed" for visual systems
+> (real-browser luminance was the only honest gate for the overlay-darken
+> regression). For `type: exploration` manifests per C27, the send-back
+> may carry a sweep-direction directive ("approve, but explore in
+> direction X"). See [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
 
 ## Problem (grounded in current state)
 

@@ -2,8 +2,9 @@
 area: project-manager
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_trafficgame_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C3c, C4, C5, C5a, C5b, C10, C11]
+contract_deps: [C3c, C4, C5, C5a, C5b, C10, C11, C27]
 ---
 
 # PM refinement plan
@@ -18,6 +19,14 @@ contract_deps: [C3c, C4, C5, C5a, C5b, C10, C11]
 > (`benchmarks/_lib/handoff.ts` single module), C11
 > (`initiatives.json` migration parses both shapes for one release),
 > C3c (cross-plan filename refs).
+> **Amended 2026-05-23 (trafficGame post-S0 learnings):** C27 introduces
+> a new **sweep-batch WI shape** for `type: exploration` manifests
+> (per L2 — coarse → fine → regression check → screenshot+doc rather
+> than feature-decomposition WIs). L4 (visual confirmation): WI's
+> `verification_artifact` may be a screenshot path; L6 (single source
+> of truth): PM's `detectHiddenCoupling` should flag when multiple WIs
+> imply the same fact needs reading from multiple files. See
+> [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
 
 ## Problem (grounded in real PM outputs)
 

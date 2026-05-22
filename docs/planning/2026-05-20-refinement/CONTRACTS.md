@@ -492,19 +492,237 @@ example); 02 (drop §"Risk register" budget mitigation row if any).
 Existing per-WI $1.0 cap and `cost_budget_respected` (0.15) bench
 criterion both removed as part of S4.
 
-## Quick lookup
+---
+
+# 2026-05-23 — second wave (graphify + token economy + trafficGame learnings)
+
+Following the post-S0 trafficGame work and the graphify / caveman
+research, the following contracts are added. They extend (not replace)
+C1–C19. Numbering continues from C20.
+
+## C20 — Brain has two indexes (graphify additive layer)
+
+**Decision:** Brain carries **two indexes**:
+- The Karpathy markdown wiki (themes + categories + INDEX.md) — narrative
+  knowledge layer, owned by the planner / reflector phases.
+- The Graphify knowledge graph (`brain/graph.json`) — structural
+  relationships across code + docs (god nodes, cross-file links,
+  call/edit flow).
+
+`brain-query` consults both: graph-first for structural questions,
+narrative-first for keyword / category questions. The two are
+complementary; neither replaces the other.
+
+**Rationale:** The current brain already implements Karpathy correctly.
+Graphify fills a gap forge has been carrying manually via
+`related_themes` frontmatter (low-rigour, error-prone). Community has
+proven the pairing (`sly-codechum/chum-mem`,
+`lucasrosati/claude-code-memory-setup` claims 71.5× fewer tokens per
+session). Battle-tested: 51K stars, MIT, YC S26.
+
+**Affects plans:** 01 (new refinements #8-#10 ship in S1.4 alongside
+S1.2 hygiene).
+
+## C21 — `brain/graph.json` is the canonical structural index
+
+**Decision:** `brain/graph.json` is committed; it is the
+machine-readable structural index. Render artefacts (`brain/graph.html`,
+`brain/GRAPH_REPORT.md`) are **gitignored** and regenerable. `brain-lint`
+flags a stale `graph.json` (older than any theme it indexes) as an
+error.
+
+**Affects plans:** 01 (refinement #9), `.gitignore`.
+
+## C22 — `brain-graph` skill owns the graphify integration
+
+**Decision:** A new hand-authored `skills/brain-graph/SKILL.md` wraps
+graphify's CLI/MCP. Forge does NOT accept graphify's generated
+`.claude/skills/graphify/SKILL.md` as-is — forge skills are
+hand-authored to maintain consistency with `brain-query`, `brain-lint`,
+`brain-ingest`. The `brain-graph` skill exposes 4 operations:
+`update | query | report | install-hook`.
+
+`brain-ingest` continues to own raw + themes. `brain-lint` extends with
+the graph-freshness check from C21. `brain-query` is rewritten (per
+plan 01 refinement #10) to consult graphify's `query_graph` first.
+
+**Affects plans:** 01 (refinement #9), 02/03/06 (consumers of
+`brain-query` get the new graph-first behaviour transparently).
+
+## C23 — Prompt caching is on by default at every SDK call site
+
+**Decision:** `cache_control: { type: 'ephemeral' }` is set on the
+system prompt + tools array in every `query()` invocation:
+- `loops/ralph/claude-agent.ts` (`createClaudeAgent`)
+- `skills/architect-llm-council/council.ts` (shared `projectContext`)
+- `orchestrator/pm-invocation.ts`
+- `orchestrator/reflector-invocation.ts`
+- `orchestrator/reviewer-invocation.ts` (until plan 05's reviewer
+  deletion in S4)
+
+`createClaudeAgent` exposes a `cacheable?: boolean` knob; default
+`true`. TTL default is 5-min (ephemeral); the PM's brain-index block
+gets 1-hour to amortise across a multi-WI cycle.
+
+**Rationale:** Anthropic's prompt caching offers ~90% cost reduction
+on cache hits with a ~25% write premium amortised across iterations.
+Forge's dev-loop is a hot loop on a near-static prompt — the highest
+single cost lever available.
+
+**Affects plans:** 08 (WI-1).
+
+## C24 — Council uses Haiku by default; Sonnet by exception
+
+**Decision:** `defaultCritics()` in
+`skills/architect-llm-council/council.ts` routes `ceo`, `design`, `dx`
+critics to `claude-haiku-4-5` and `eng` to `claude-sonnet-4-6`. The
+`eng` critic is the only one that needs code-reading depth;
+the other three do structured-JSON classification of a draft against
+a stable rubric (Haiku-grade work).
+
+**Affects plans:** 08 (WI-2).
+
+## C25 — Output style is per-phase, not global
+
+**Decision:** Forge does NOT install caveman or any output-compression
+skill globally. Output style is per-phase:
+
+| Phase | Output style |
+|---|---|
+| dev-loop, architect, PM, council | Normal (no compression) |
+| reflector | Micro-caveman (5-line directive, code/paths preserved) |
+| reviewer (pre-S4 deletion) | Micro-caveman |
+
+The micro-caveman directive (per
+[`kuba-guzik/caveman-micro`](https://github.com/kuba-guzik/caveman-micro)'s
+finding that the 85-token version equals the 552-token full skill on
+structured tasks) is appended to the relevant SKILL.md files. Explicit
+carve-out: **do NOT** compress destructive-op confirmations, security
+warnings, PR descriptions, or anything addressed to humans for
+narrative consumption.
+
+**Affects plans:** 08 (WI-3).
+
+## C26 — Holistic metrics + locked baselines as project onboarding clause
+
+**Decision:** `.forge/project.json` may carry (optional but expected
+for any project where exploration is desirable):
+
+```json
+{
+  "metrics": {
+    "command": ["bash", "-lc", "..."],
+    "baselines_dir": "docs/baselines/",
+    "tolerance_pct": 1.0
+  }
+}
+```
+
+The `command` returns one or more scalar metrics on stdout (caller
+parses). The `baselines_dir` holds markdown files locking known-good
+numbers (`frontier.md` style — header with metric + value + tolerance
+per row). The architect reads these as machine-readable architecture
+context; PM emits measurement WIs; the dev-loop unifier compares vs
+locks; the reviewer's verdict cites score-delta.
+
+**Projects without a clean holistic metric** simply omit the `metrics`
+block — they can only get `type: implementation` initiatives, never
+`type: exploration` (per C27).
+
+**Visual confirmation is non-optional** for visual / canvas / physics
+projects (per L4): when `metric_command` exists and the project is
+visual, every champion result requires a screenshot artefact alongside
+the score.
+
+**Rationale:** trafficGame's PR #57 arc proved 788 unit tests can stay
+green while real throughput collapses; metrics + locked baselines are
+the missing onboarding contract clause. Operator's own framing in
+[`brain/forge/themes/holistic-metrics-onboarding.md`](../../../brain/forge/themes/holistic-metrics-onboarding.md):
+*"Tests verify did this break; metrics verify did this help."*
+
+**Affects plans:** 02 (architect reads `metrics`), 03 (PM emits
+measurement WIs), 04 (`.forge/project.json` schema extension + unifier
+runs the metric command at gate time), 05 (verdict includes score-delta
+vs locks + visual confirmation per L4).
+
+## C27 — Architect emits `type: 'implementation' | 'exploration'` manifests
+
+**Decision:** Every architect-emitted manifest carries a `type:`
+discriminator in the frontmatter:
+
+- **`type: implementation`** (default — today's behaviour): feature →
+  WI → file scope → AC. `iteration_budget` is a contract; scope-firm.
+  PM produces feature-decomposition WIs; dev-loop authors code; reviewer
+  checks "matches spec".
+- **`type: exploration`**: scope is hypothesis-driven; manifest carries
+  `parameter_space`, `hypothesis`, `metric_command` (from C26),
+  `locked_baselines`. `iteration_budget` is a **hint, not a contract**
+  (per L9 — explorations grow naturally as one fix exposes the next
+  structural problem). PM emits **sweep-batch WIs** (coarse → fine →
+  regression check → screenshot+doc) rather than feature-decomposition.
+  Dev-loop unifier runs the `metric_command` against the parameter
+  space (harness-runner mode) rather than authoring new code. Reviewer's
+  verdict cites score-delta vs locks + visual confirmation.
+
+The two manifest types share the YAML frontmatter shape but the body
+sections differ.
+
+**Rationale:** trafficGame's PR #57 arc had no obvious AC ("find the
+highest-throughput design") and ran conversationally because forge's
+pipeline is implementation-shaped. A second pipeline shape
+(exploration-shaped) is the actual deliverable, not a flag on the
+existing one. See L2 in [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
+
+**Affects plans:** 02 (architect emits `type:`), 03 (PM branches on
+`type:` for WI shape), 04 (unifier branches on `type:` for harness vs
+code mode), 05 (verdict shape extends for explorations), 06 (reflector
+captures hypothesis-trajectory for exploration cycles).
+
+## C28 — `project-sweep` is a forge-provided abstract skill
+
+**Decision:** A new `skills/project-sweep/SKILL.md` defines the **abstract
+parallel-sweep harness skeleton** (worker pool, shared queue, dev-server
+wiring, measurement protocol, CSV/MD/JSON output) and the per-project
+plug-in interface:
+
+```json
+// .forge/project.json
+{
+  "sweep": {
+    "start_command": ["bash", "-lc", "..."],     // bring the testbed up
+    "draw_function": "src/sweep/draw.ts",        // returns a param-space sample
+    "measurement_extractor": "src/sweep/extract.ts" // parses metric_command stdout
+  }
+}
+```
+
+Forge provides the skeleton once; each project that wants exploration
+mode provides the three plug-in points. trafficGame's existing
+`projects/trafficGame/scripts/grading/runSweep.mjs` is the reference
+implementation the skeleton is extracted from.
+
+**Rationale:** L3 — a 30-line theory + parallel-worker harness collapses
+ideation cost from 2-3 designs/hour (hand-run) to ~8 designs/minute
+(agentic). The pattern generalises to any project with a parameter
+space + holistic metric + reproducible testbed.
+
+**Affects plans:** 04 (dev-loop unifier consults `project-sweep` skill
+when `type: exploration` per C27).
+
+## Quick lookup (updated)
 
 For each plan, the C-decisions it must reflect:
 
 | Plan | Affected by |
 |---|---|
-| 01 | C7, C18a |
-| 02 | C4, C10, C10a, C12, C18b, C19 |
-| 03 | C3c, C4, C5, C5a, C5b, C10, C11 |
-| 04 | C1, C2, C3a, C3b, C3c, C10, C15a, C15b, C19 |
-| 05 | C3a, C3c, C6, C16, C16a, C16b, C18d (slash-cmd `argument-hint`) |
-| 06 | C7, C8, C9, C15a, C18c |
+| 01 | C7, C18a, **C20, C21, C22** |
+| 02 | C4, C10, C10a, C12, C18b, C19, **C26, C27** |
+| 03 | C3c, C4, C5, C5a, C5b, C10, C11, **C27** |
+| 04 | C1, C2, C3a, C3b, C3c, C10, C15a, C15b, C19, **C26, C27, C28** |
+| 05 | C3a, C3c, C6, C16, C16a, C16b, C18d, **C26, C27** |
+| 06 | C7, C8, C9, C15a, C18c, **C27** |
 | 07a / 07b | C6, C13, C14, C17, C18d |
+| **08** | **C23, C24, C25, C26** |
 
 ## Change control
 

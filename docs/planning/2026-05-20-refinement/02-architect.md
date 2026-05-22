@@ -2,8 +2,9 @@
 area: architect
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_trafficgame_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C4, C10, C10a, C12, C18b, C19]
+contract_deps: [C4, C10, C10a, C12, C18b, C19, C26, C27]
 ---
 
 # Architect refinement plan
@@ -18,6 +19,13 @@ contract_deps: [C4, C10, C10a, C12, C18b, C19]
 > frozen-SHA PM-bench snapshot for `downstream_pm_score`), C18b (split
 > into S2A operator UX, then S2B bench reground). Also incorporates
 > I-23 (council infrastructure robustness fix — bundled into S2A).
+> **Amended 2026-05-23 (trafficGame post-S0 learnings):** C26 (manifest
+> carries `metric_command` + `locked_baselines` + `baselines_dir` when
+> the project has them — per L1 holistic-metrics); C27 (architect emits
+> `type: 'implementation' | 'exploration'` discriminator — `exploration`
+> manifests carry `parameter_space` + `hypothesis` + `metric_command` +
+> `locked_baselines` per L2 and treat `iteration_budget` as a hint not
+> a contract per L9). See [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
 
 ## Problem (grounded in cycles thus far)
 

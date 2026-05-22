@@ -2,8 +2,9 @@
 area: reflect
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_trafficgame_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C7, C8, C9, C15a, C18c]
+contract_deps: [C7, C8, C9, C15a, C18c, C27]
 ---
 
 # Reflect refinement plan
@@ -18,6 +19,17 @@ contract_deps: [C7, C8, C9, C15a, C18c]
 > reflect owns `_logs/<id>/recap.md`; PR-comment posting is plan 04's
 > via `post_recap_to_pr` manifest field), C18c (split S6A lint+retention
 > from S6B slash+recap; either order acceptable).
+> **Amended 2026-05-23 (trafficGame post-S0 learnings):** reflector
+> produces a **structured scope-delta artefact** when actual landed
+> work diverges from the manifest (per L9); reflector **proposes
+> theme updates** when arc results contradict an existing theme (per
+> L10 — themes carry `updated_at`, "History (do not regress to these)"
+> headers); reflector extracts project-agnostic engineering principles
+> like "single source of truth" (per L6) into `brain/forge/themes/`.
+> For `type: exploration` cycles per C27, the reflector additionally
+> captures the **score-delta trajectory** and **which hypotheses worked**
+> so the next architect starts from there (per L5 operator-load
+> reduction). See [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
 
 ## Problem (grounded in current state)
 

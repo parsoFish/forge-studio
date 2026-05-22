@@ -2,12 +2,20 @@
 doc: execution-plan
 batch: 2026-05-20-refinement
 date: 2026-05-21
-status: contracts ratified; S0 in flight
+date_iteration_2: 2026-05-23
+status: contracts ratified through C28; S0 landed; S1 unblocked
 operator_answers:
   q1_confirm_c1_c18: verbatim
   q2_aggregate_budget_n: "removed entirely (C19 added — no budget mechanisms in refinement scope)"
   q3_contracts_md_location: "next to the plans (this dir), not promoted to ADR"
   q4_dogfooding_project: terraform-provider-betterado
+iteration_2_additions:
+  - "C20-C22 (graphify additive brain layer)"
+  - "C23-C26 (token economy: caching, model routing, output style, memory compression)"
+  - "C26-C27 (trafficGame learnings: holistic metrics contract clause, exploration manifest type)"
+  - "C28 (project-sweep skill skeleton)"
+  - "Plan 08 (token economy) added"
+  - "LEARNINGS-trafficgame.md added — canonical reference for what good looks like"
 ---
 
 # Forge refinement — execution plan
@@ -141,6 +149,15 @@ For the full text (rationale, schema, "Affects plans"), see
 | C17 | `_aliases.json` mints use `proper-lockfile` |
 | C18 | Plan splits: 01→01a/01b, 02→S2A/S2B, 06→S6A/S6B, 07→07a/07b |
 | C19 | **Remove budget mechanisms entirely** (operator override Q2): no aggregate-budget gate, no $ caps in unifier, existing per-WI $1.0 cap removed, `cost_budget_respected` bench criterion removed. Iteration caps stay; `cost_usd` per-event logging stays. Operator: "We haven't seen instances of runaway spend and churn." |
+| C20 | Brain has **two indexes**: Karpathy markdown wiki (narrative) + Graphify knowledge graph (structural). `brain-query` consults both. |
+| C21 | `brain/graph.json` is canonical structural index (committed). Render artefacts (`graph.html`, `GRAPH_REPORT.md`) are gitignored. `brain-lint` flags stale graph. |
+| C22 | New hand-authored `skills/brain-graph/SKILL.md` owns the graphify integration (4 ops: `update | query | report | install-hook`). |
+| C23 | Prompt caching default-on at every SDK call site (`cache_control: ephemeral`). 5-min default; PM brain index gets 1-hour. |
+| C24 | Council uses **Haiku by default**, Sonnet for `eng` critic only. |
+| C25 | Output style is **per-phase**: reflector (and pre-deletion reviewer) emit micro-caveman terse; dev-loop / architect / PM speak normally. NOT installed globally. |
+| C26 | Holistic metrics + locked baselines onboarding clause: `.forge/project.json` `metrics.command` + `metrics.baselines_dir` + `metrics.tolerance_pct`. Architect reads, PM emits measurement WIs, dev-loop runs at gate time, reviewer cites score-delta. Visual confirmation non-optional for visual projects. |
+| C27 | Architect emits `type: 'implementation' \| 'exploration'` discriminator. `exploration` manifests carry `parameter_space` + `hypothesis` + `metric_command` + `locked_baselines`; `iteration_budget` is a hint not contract. PM/dev-loop/reviewer/reflector all branch on `type:`. |
+| C28 | `project-sweep` is a forge-provided abstract skill skeleton; per-project plug-ins via `.forge/project.json` `sweep.{start_command, draw_function, measurement_extractor}`. trafficGame's `runSweep.mjs` is the reference. |
 
 ## Stage-by-stage execution
 
@@ -199,6 +216,16 @@ Grep `demo.kind` (project-level) returns zero hits. Grep
 - Test: divergence throws + emits classified event.
 - Stand-alone PR; not bundled with the unifier (council 04 F5).
 
+**S1.4 — Graphify additive brain layer (plan 01 refinements #8-#10, per C20-C22)**
+- Re-ingest the canonical Karpathy gist; archive the Pass-A synthesis.
+- Install graphify, hand-author `skills/brain-graph/SKILL.md`, commit
+  `brain/graph.json`, gitignore render artefacts (`graph.html`,
+  `GRAPH_REPORT.md`).
+- Rewrite `brain-query` to consult graph first, fall back to themes.
+- Bench grows ~30% with ≥3 structural questions; existing 18 keep
+  passing.
+- Independent of S1.2 (additive). Parallelisable.
+
 **Join to S2:**
 - `forge review traf#7` resolves to the canonical ID and runs to completion.
 - `forge brain lint` returns 0 against the cleaned corpus.
@@ -218,9 +245,19 @@ Grep `demo.kind` (project-level) returns zero hits. Grep
   auto-escalation, no `N`).
 - Default surface: local-edit with `<!-- review: -->` annotations;
   `--via-pr` opt-in.
+- **Architect emits `type: 'implementation' | 'exploration'` discriminator
+  (per C27)** — `implementation` is today's shape; `exploration` carries
+  `parameter_space`, `hypothesis`, `metric_command`, `locked_baselines`
+  and treats `iteration_budget` as a hint.
+- **Architect reads `.forge/project.json` `metrics` block (per C26)** —
+  when present, the PLAN.md surfaces the metric command + baselines
+  alongside the manifest; the architect can propose exploration
+  initiatives when the project has them.
 - Acceptance: round-trip on the 8 synthetic fixtures preserves
   manifest parity (no regression); aggregate-footprint line appears in
-  PLAN.md for the betterado-style multi-initiative case.
+  PLAN.md for the betterado-style multi-initiative case;
+  `type: exploration` round-trips with a sample `metric_command` +
+  parameter space.
 - **Bundles the council-infrastructure robustness fix (I-23):** make
   `runCouncil()` survive ≥15k-char drafts + 30-turn budget; pin a snapshot
   of council output if SDK structured-output fails on retry.
@@ -400,12 +437,39 @@ phase→colour map needs the unifier's new phase events stable.
 - `benchmarks/logging-ux/` (deterministic, zero LLM): coverage +
   pretty-printer-snapshot tests; demo replay script.
 
-**Join to closure of the refinement batch:**
+**Join to S8:**
 - Operator watches a live betterado cycle through `forge watch <handle>`
   and articulates without re-reading code: current WI, current phase,
   last file changed, last test result, cycle cost, agent-idle age.
-- All 7 plans' acceptance criteria met. Brain at 19+/20. Council
-  infrastructure handles 20+k-char drafts.
+- Bench reflection 5/5; bench review-router 5/5; brain bench ≥ 94.4%.
+
+### S8. Token economy (plan 08, per C23-C26)
+
+Orthogonal to phase ordering — can ship any time after S2 stabilises
+(caching against a moving prompt is annoying; let architect surface
+settle first). C19 (no budgets) stands; this is the positive counterpart
+(lower the natural cost, don't police it).
+
+- **WI-1**: prompt caching across all SDK call sites (per C23). Highest
+  single lever. ~1 day.
+- **WI-2**: council model routing (per C24) — Haiku for `ceo`/`design`/`dx`,
+  Sonnet for `eng`. ~0.5 day.
+- **WI-3**: micro-caveman output directive on `skills/reflector/SKILL.md`
+  (per C25). ~0.5 day.
+- **WI-4**: one-shot caveman-compress of `CLAUDE.md`, `ARCHITECTURE.md`,
+  `PRINCIPLES.md`, `brain/INDEX.md` with operator hand-review (per C26
+  - the operator's pinned `feedback_destructive_instruction_preserve_intent`
+  applies). ~0.5 day + review.
+- **WI-5**: `benchmarks/token-economy/` ratcheting A/B harness. Surfaces
+  `cache_read_input_tokens` + `cache_creation_input_tokens` in JSONL
+  events. ~1 day.
+
+**Join to closure of the refinement batch:**
+- Cycle cost on `slugifier-basic` drops ≥40% vs the C19-baseline
+  snapshot (today: $2.35).
+- All 8 plans' acceptance criteria met.
+- Brain at 19+/20 with structural questions; graphify graph fresh.
+- Council infrastructure handles 20+k-char drafts.
 
 ## Dogfooding via betterado
 
@@ -432,6 +496,9 @@ betterado work against the new surface:
 6. **Then** queue INIT-03 + INIT-02 + the remaining 17 unattended. By
    construction, if the cycle survived INIT-01 it should chew through the
    rest.
+7. After S8 (token economy): re-run a betterado initiative with full
+   prompt caching + model routing + memory-file compression live; verify
+   cost-per-cycle dropped ≥40% vs the C19 baseline.
 
 ## Risk register
 

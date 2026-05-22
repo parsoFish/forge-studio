@@ -2,8 +2,9 @@
 area: brain
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_graphify_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C7, C18a]
+contract_deps: [C7, C18a, C20, C21, C22]
 ---
 
 # Brain refinement plan
@@ -11,8 +12,11 @@ contract_deps: [C7, C18a]
 > **Contracts locked.** This plan honours [CONTRACTS.md](./CONTRACTS.md).
 > Where this plan and `CONTRACTS.md` disagree, `CONTRACTS.md` wins.
 > Specifically: C7 (lint scope `cycle-touched-themes` added),
-> C18a (plan split into 01a hygiene + 01b bench-growth at the `## Slice
-> boundary` heading below).
+> C18a (plan split into 01a hygiene + 01b bench-growth + 01c graphify),
+> C20 (brain has **two indexes**: Karpathy markdown wiki + Graphify
+> knowledge graph), C21 (`brain/graph.json` is the canonical structural
+> index, render artefacts are `graph.html` + `GRAPH_REPORT.md`), C22
+> (new `brain-graph` skill owns the graphify integration).
 
 ## Problem (grounded in current state)
 
@@ -56,6 +60,34 @@ initiatives; do not bundle.
 6. **Bench-growth pipeline (the question set must grow).** Motivation: the bench is frozen. Deliverable: reflector emits `_logs/<cycle-id>/brain-bench-candidates.jsonl` (each candidate = `{question, expected_sources, why_now, gap_id?}`); `forge brain bench:promote` reviews candidates, requires operator approval, appends to `benchmarks/brain/questions.json`. Gated: not every cycle adds; only cycles where a brain gap was filled AND the gap came up in ≥ 1 phase's `brain-query.gap` event. Files: `skills/reflector/SKILL.md` (new emit), `orchestrator/brain-bench-promote.ts` (new), `benchmarks/brain/questions.json` (target). Acceptance: a stale-brain-style cycle produces a candidate; operator promotes 1; bench grows from 18 → 19 without dropping below 94.4%.
 
 7. **Betterado bench coverage.** Motivation: the next real cycle is betterado; bench currently knows nothing about Go/Terraform/ADO. Deliverable: 2 questions covering betterado's hard constraints (single-branch model, test harness state, `betterado_` prefix surface) added to `questions.json` (manually for this seed, not via mechanism 6 — bootstrap). Acceptance: bench at 20 cases, ≥ 94.4% pass rate, betterado questions all score ≥ 0.65.
+
+## Slice boundary — 01c (graphify additive layer, per C20-C22)
+
+Refinements **#8–#10 below ship as Stage S1.4** (parallel to S1.2;
+independent of plan 06). They add a structural-graph index alongside
+the existing markdown wiki — **additive, not replacement**. The 65
+forge themes + 56 project themes are NOT rewritten.
+
+The current brain implements Karpathy's three-layer pattern correctly
+([`brain/forge/themes/karpathy-three-layer-wiki.md`](../../../brain/forge/themes/karpathy-three-layer-wiki.md)
+references the canonical [gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)).
+Graphify ([`safishamsi/graphify`](https://github.com/safishamsi/graphify),
+51K stars, MIT, YC S26) covers a different axis: **structural relationships
+across code+docs** (god nodes, surprising cross-file connections,
+call/edit flows) that the brain's current `related_themes` frontmatter
+captures only manually and at low rigour.
+
+The community has already paired these two
+([`sly-codechum/chum-mem`](https://github.com/sly-codechum/chum-mem),
+[`lucasrosati/claude-code-memory-setup`](https://github.com/lucasrosati/claude-code-memory-setup)
+— the latter claims 71.5× fewer tokens per session). Forge adopts the
+established fusion rather than inventing one.
+
+8. **Re-ingest the canonical Karpathy gist.** Motivation: `brain/_raw/web/karpathy-llm-wiki.chat.md` is a Pass-A synthesis because the gist was 404 at ingest time; the gist is now reachable. Deliverable: re-ingest via `brain-ingest`, replace the synthesis with the canonical source, update any theme that references the old synthesis. Files: `brain/_raw/web/karpathy-llm-wiki.md` (replace). Acceptance: themes that cite the gist now cite the canonical URL; the synthesis file is archived under `brain/_archive/`.
+
+9. **Install graphify + add `brain-graph` skill (per C22).** Motivation: structural relationships across the brain are currently invisible to `brain-query`. Deliverable: `npm install graphifyy[mcp]` (or `uv tool install`); new `skills/brain-graph/SKILL.md` (hand-authored, wraps graphify's CLI/MCP — does NOT accept graphify's generated `.claude/skills/graphify/SKILL.md` as-is per the forge discipline); `brain/graph.json` committed (per C21 — canonical structural index); `brain/graph.html` + `brain/GRAPH_REPORT.md` gitignored as render artefacts; a `brain-lint` rule that flags stale graph (`graph.json` mtime older than any theme it indexes). Files: `skills/brain-graph/SKILL.md` (new), `brain/graph.json` (committed), `orchestrator/brain-lint.ts` (extend with graph-freshness check), `package.json` (new dep). Acceptance: `graphify .` over `brain/` produces `graph.json`; brain-lint detects when a theme changes without a graph refresh; brain-graph SKILL.md documents the four operations `update | query | report | install-hook`.
+
+10. **Rewrite `brain-query` to consult the graph first (per C20 dual-index).** Motivation: the lucasrosati claim of 71.5× fewer tokens per session is the operator's cost target. Deliverable: `skills/brain-query/SKILL.md` updated so brain-query uses graphify's MCP `query_graph` (or CLI `graphify query`) as the first lookup; falls back to keyword scan over themes if graph returns empty. The graph holds structural relationships; the themes hold narrative. Both are consulted; the order is graph-first. Files: `skills/brain-query/SKILL.md` (rewrite), `benchmarks/brain/questions.json` (add ≥3 structural questions). Acceptance: existing 18 keyword questions still pass; 3 new structural questions (e.g. "which theme bridges PR-as-review-window and reviewer-stage2 logic?") pass; bench question count grows ~30%; per-query token count drops measurably for graph-answerable questions.
 
 ## Brain-lint design
 
@@ -114,6 +146,9 @@ For any deletion: the user's pinned `feedback_destructive_instruction_preserve_i
 4. **Contamination scrubber: hard-delete vs `_archive/`-move for empty dirs?** They are demonstrably empty, but moving keeps the audit clean.
 5. **Per-project `INDEX.md`** (a generated `brain/projects/<n>/INDEX.md`) or keep the project-level navigation as just `profile.md` + the category indexes?
 6. **Does betterado get a 2-question seed now, or does it wait until its first reflector cycle produces real ones?** Cold-starting feels artificial; waiting means bench has no betterado coverage during the project's most-fragile period.
+7. **Graphify scope — brain-only or brain+forge-code?** Running `graphify .` at the forge repo root would graph forge's own code alongside the brain — high signal but couples brain freshness to code changes. Lean: **brain-only** initially (cleaner), revisit after a real query session. Affects S1.4 scope.
+8. **MCP vs CLI for graphify?** MCP is faster and structured; CLI is simpler. Lean: **MCP first** since the brain-query rewrite (#10) needs structured returns anyway. Affects skill design in S1.4.
+9. **Accept graphify's own `.claude/skills/graphify/SKILL.md` or hand-author `brain-graph/SKILL.md`?** Forge discipline is hand-authored skills. Lean: **hand-author** `brain-graph/SKILL.md` that delegates to graphify, matching the pattern of every other forge skill.
 
 ## Dependencies on other refinement plans
 
@@ -132,3 +167,5 @@ For any deletion: the user's pinned `feedback_destructive_instruction_preserve_i
 6. `skills/reflector/SKILL.md` documents the `brain-bench-candidates.jsonl` emit; a real reflector run produces ≥ 1 candidate for the next operator-promoted cycle.
 7. `brain/log.md` has new entries documenting the lint executable, the scrub pass, and the bench-growth promotion mechanism — making this refinement itself reflectable.
 8. `CLAUDE.md` "Build & test" block lists `forge brain lint`, `forge brain index --write`, `forge brain bench:promote --cycle <id>` with one-line descriptions (per council 01 dx flag).
+9. **(S1.4 — graphify additive layer):** `brain/graph.json` is committed; `skills/brain-graph/SKILL.md` is hand-authored; `brain-query` consults graph first then themes; brain bench grows ~30% with structural questions; bench still passes ≥ 94.4%; per-query token count drops measurably for graph-answerable questions.
+10. **(S1.4 — Karpathy gist re-ingest):** the canonical gist is at `brain/_raw/web/karpathy-llm-wiki.md`; themes citing the old synthesis updated; synthesis archived.

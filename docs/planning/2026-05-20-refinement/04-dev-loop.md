@@ -2,8 +2,9 @@
 area: dev-loop
 date: 2026-05-20
 date_contracts_locked: 2026-05-21
+date_trafficgame_amended: 2026-05-23
 status: contracts locked — see CONTRACTS.md
-contract_deps: [C1, C2, C3a, C3b, C3c, C10, C15a, C15b, C19]
+contract_deps: [C1, C2, C3a, C3b, C3c, C10, C15a, C15b, C19, C26, C27]
 ---
 
 # Dev-loop refinement plan
@@ -19,6 +20,17 @@ contract_deps: [C1, C2, C3a, C3b, C3c, C10, C15a, C15b, C19]
 > iteration cap is the only bound; existing per-WI $1.0 cap removed in
 > the same initiative; `cost_budget_respected` / `cost_within_unifier_budget`
 > bench criteria removed).
+> **Amended 2026-05-23 (trafficGame post-S0 learnings):** C2 reinforced
+> by L8 — `demo.shape: browser` MUST mean a real browser, never `jsdom`
+> (the trafficGame overlay-darken regression hid behind jsdom's
+> `getImageData` graceful-degrade); C27 introduces a **harness-runner
+> mode** where the unifier runs the project's `metric_command` against
+> the parameter space rather than authoring new code (per L2 exploration
+> manifests + L3 parallel-sweep skeleton). New project-agnostic
+> `project-sweep` skill skeleton lives at `skills/project-sweep/SKILL.md`
+> — abstract harness; per-project plug-ins via `.forge/project.json`
+> (start command, draw function, measurement extractor). See
+> [LEARNINGS-trafficgame.md](./LEARNINGS-trafficgame.md).
 
 ## Problem (grounded in cycles)
 
