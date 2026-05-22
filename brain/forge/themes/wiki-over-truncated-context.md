@@ -25,7 +25,7 @@ This theme is the **load-bearing argument for v2's brain** — the brain isn't a
 ## Sources
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — episodic-not-cumulative section.
-- [`karpathy-llm-wiki.chat.md`](../../_raw/web/karpathy-llm-wiki.chat.md) — the philosophy.
+- [`karpathy-llm-wiki.md`](../../_raw/web/karpathy-llm-wiki.md) — the canonical gist ([gist.github.com/karpathy/442a6bf555914893e9891c11519de94f](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)).
 
 ## Related
 

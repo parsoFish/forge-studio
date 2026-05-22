@@ -4,7 +4,7 @@ description: Brain layout — immutable raw → 15-40-line theme pages → categ
 category: pattern
 keywords: [karpathy, llm-wiki, three-layer, theme-pages, raw, indexes, obsidian]
 created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
+updated_at: 2026-05-23T00:00:00Z
 related_themes: [brain-first-research, theme-page-format, brain-gap-feedback-loop]
 ---
 
@@ -22,6 +22,7 @@ Karpathy's principle: many small navigable pages > few large summaries. A reader
 
 ## Sources
 
+- [`karpathy-llm-wiki.md`](../../_raw/web/karpathy-llm-wiki.md) — the canonical Karpathy gist ([gist.github.com/karpathy/442a6bf555914893e9891c11519de94f](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)), re-ingested 2026-05-23 in S1.4 (the Pass-A synthesis is archived under `brain/_archive/2026-05-23/karpathy-llm-wiki.chat.md`).
 - [`adr-004-obsidian-wiki.docs.md`](../../_raw/docs/adr-004-obsidian-wiki.docs.md) — the brain's structural decision record.
 
 ## Related
