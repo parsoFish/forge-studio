@@ -10,6 +10,9 @@
  *   forge metrics [<cycle-id>]              print per-cycle aggregates (or all)
  *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
+ *   forge brain graph update                rebuild brain/graph.json (structural index, C21)
+ *   forge brain graph check                 verify graph.json freshness vs theme mtimes
+ *   forge brain graph query <op> [...args]  neighbours | reachable | bridges | node
  */
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -23,6 +26,15 @@ import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from './brain-lint.ts';
+import {
+  buildBrainGraph,
+  bridgesBetween,
+  checkGraphFreshness,
+  lookupNode,
+  neighbours,
+  reachable,
+  type BrainGraph,
+} from './brain-graph.ts';
 import { runPreflight, formatPreflightReport } from './preflight.ts';
 import { fileVerdictPaths } from './file-verdict.ts';
 import { assertEnv } from './config.ts';
@@ -104,6 +116,9 @@ Usage:
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (7 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
+  forge brain graph update                Rebuild brain/graph.json (structural index, C21)
+  forge brain graph check                 Verify graph.json is fresh vs every theme mtime
+  forge brain graph query neighbours <id> | reachable <id> [hops] | bridges <a> <b> | node <id>
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
@@ -632,7 +647,8 @@ function cmdBrain(rest: string[]): void {
   const sub = rest[0];
   if (sub === 'index') return cmdBrainIndex(rest.slice(1));
   if (sub === 'lint') return cmdBrainLint(rest.slice(1));
-  console.error('forge brain: subcommands: index | lint');
+  if (sub === 'graph') return cmdBrainGraph(rest.slice(1));
+  console.error('forge brain: subcommands: index | lint | graph');
   process.exit(2);
 }
 
@@ -714,4 +730,82 @@ function cmdBrainLint(rest: string[]): void {
     `Summary: ${errors.length} error(s), ${flags.length} flag(s), ${fixes.length} auto-fix(es).`,
   );
   process.exit(result.exitCode);
+}
+
+function cmdBrainGraph(rest: string[]): void {
+  const sub = rest[0];
+  if (sub === 'update' || sub === undefined) return cmdBrainGraphUpdate();
+  if (sub === 'check') return cmdBrainGraphCheck();
+  if (sub === 'query') return cmdBrainGraphQuery(rest.slice(1));
+  console.error('forge brain graph: subcommands: update (default) | check | query');
+  process.exit(2);
+}
+
+function cmdBrainGraphUpdate(): void {
+  const graph = buildBrainGraph({ cwd: FORGE_ROOT });
+  const out = join(FORGE_ROOT, 'brain', 'graph.json');
+  writeFileSync(out, JSON.stringify(graph, null, 2) + '\n');
+  process.stdout.write(
+    `wrote ${out} — ${graph.node_count} nodes, ${graph.edge_count} edges\n`,
+  );
+}
+
+function cmdBrainGraphCheck(): void {
+  const check = checkGraphFreshness({
+    cwd: FORGE_ROOT,
+    graphPath: 'brain/graph.json',
+  });
+  if (check.fresh) {
+    process.stdout.write('brain/graph.json is fresh\n');
+    return;
+  }
+  if (check.graph_mtime === null) {
+    process.stderr.write(
+      'brain/graph.json is missing — run `forge brain graph update`\n',
+    );
+    process.exit(1);
+  }
+  process.stderr.write(
+    `brain/graph.json is stale (${check.stale_files.length} newer themes):\n  - ${check.stale_files.join(
+      '\n  - ',
+    )}\nRun \`forge brain graph update\` to refresh.\n`,
+  );
+  process.exit(1);
+}
+
+function cmdBrainGraphQuery(rest: string[]): void {
+  const graphPath = join(FORGE_ROOT, 'brain', 'graph.json');
+  if (!existsSync(graphPath)) {
+    process.stderr.write(
+      'brain/graph.json missing — run `forge brain graph update` first\n',
+    );
+    process.exit(1);
+  }
+  const graph = JSON.parse(readFileSync(graphPath, 'utf8')) as BrainGraph;
+  const op = rest[0];
+  if (op === 'neighbours' && rest[1]) {
+    const nbs = neighbours(graph, rest[1]);
+    process.stdout.write(JSON.stringify(nbs, null, 2) + '\n');
+    return;
+  }
+  if (op === 'reachable' && rest[1]) {
+    const hops = Number.parseInt(rest[2] ?? '2', 10);
+    const r = reachable(graph, rest[1], hops);
+    process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+    return;
+  }
+  if (op === 'bridges' && rest[1] && rest[2]) {
+    const b = bridgesBetween(graph, rest[1], rest[2]);
+    process.stdout.write(JSON.stringify(b, null, 2) + '\n');
+    return;
+  }
+  if (op === 'node' && rest[1]) {
+    const n = lookupNode(graph, rest[1]);
+    process.stdout.write(JSON.stringify(n ?? null, null, 2) + '\n');
+    return;
+  }
+  process.stderr.write(
+    'forge brain graph query: ops: neighbours <id> | reachable <id> [hops] | bridges <a> <b> | node <id>\n',
+  );
+  process.exit(2);
 }
