@@ -805,3 +805,113 @@ demo-runtime prefers built preview; brain-staleness preflight WARN +
 `pm-thrash-no-converge` classifier). All forge changes are on local branch
 `fix/operator-review-reliability` (forge has no remote) — committed, gates
 green (tsc, 489 tests, closure 25/25), **awaiting operator review/merge**.
+
+## [2026-05-18] ingest | repo: terraform-provider-betterado (project onboarded)
+
+Onboarded `parsoFish/terraform-provider-betterado` — a Go fork of
+`microsoft/terraform-provider-azuredevops` adding classic release
+pipelines + task groups — as a new managed project. Cloned to
+`projects/terraform-provider-betterado`. **Branch consolidation:** the repo
+shipped a deliberate two-branch model (`main` = pristine upstream,
+`betterado` = all fork work). Forge is single-branch per project, so `main`
+was fast-forwarded onto `betterado`'s tip (clean ff — `main` was a strict
+ancestor; no merge commit, no rewrite, zero data loss), pushed, and
+`betterado` deleted local + remote. Only `main` exists, local↔remote in
+sync at `0822657`. The repo's own `CLAUDE.md` Fork-Workflow section is now
+**stale/superseded** — recorded so planners don't trust it. **Demo
+method:** Go-test harness (`kind:"harness"`) — no web UI, so the Playwright
+media path does not apply; new release/task_group code is acceptance-only
+(zero unit tests) so test-first work there is doubly valuable. Substrate
+verified: `go build ./...` clean, unit tests pass; Go 1.24.1 installed at
+`~/.local/go` + PATH-exported for `bash -lc`. New brain sub-wiki:
+`brain/projects/terraform-provider-betterado/` (profile + 3 themes:
+branch-model-consolidated [decision], go-test-harness-demos [operation],
+stack-and-test-layout [reference]) + raw extract under
+`_raw/projects/terraform-provider-betterado/`. INDEX.md updated.
+
+## 2026-05-19 → trafficGame overlay-clear-fix arc (PR #56 merged)
+
+PR #56 (`forge/INIT-2026-05-18-trafficgame-overlay-clear-fix`, merge
+`59d1713`) landed two things that took several iterations to get right:
+
+1. **The cumulative-darken bug fix.** Root cause turned out to be
+   structural: ONE shared canvas + `Game.stop()` cancels rAF (paused
+   game, nothing repaints behind the overlay). The dev-loop's first pass
+   routed re-renders through `redraw()` (clear+draw) — stopped the
+   stacking but *erased the paused game frame*, so the menu sat on
+   blank/black. The landed fix snapshots the canvas in
+   `CanvasScreen.start()` (`getImageData`) and restores it on every
+   `redraw()` (`putImageData → draw`) so the dim is painted exactly
+   once over a STABLE frame. Real-browser luminance measurement
+   (Playwright, Crossroads map, 12 hover cycles → constant 17.43)
+   was what finally proved it; unit tests (jsdom) had been passing
+   for the broken-but-doesn't-stack version because jsdom's
+   `getImageData` throws → graceful-degrade path hid the regression.
+   Brain theme refreshed: `brain/projects/trafficGame/themes/2026-05-10-ui-canvas-overlay-pattern.md`.
+
+2. **A forge process fix.** The reviewer phase was committing
+   `.forge/pr-description.md` (gitignored scratch, FIXED path) onto the
+   initiative branch, guaranteeing add/add conflicts between any two
+   parallel initiatives after the first merges (exactly the v1 "many
+   branches don't merge downward" failure). Fixed in
+   `orchestrator/reviewer-invocation.ts` (prompt no longer instructs
+   agent to commit `.forge/`) + enforced
+   `pr.ts:stripForgeScratchFromBranch` guard in both push paths so
+   `.forge/` cannot reach origin regardless of agent behavior.
+
+Side effects of the arc, all reconciled: PR #55 (backpressure
+foundation FEAT-1/2) merged at `e3b1da1`; local main was stale at
+`#54` until manually fast-forwarded; the dependent `backpressure-wiring`
+branch was redundantly built from the stale base → conflicted →
+abandoned + re-queued as `INIT-2026-05-19-trafficgame-backpressure-live`
+(running on the fixed daemon, FEAT-3 wiring + FEAT-4 invariant). Two
+deeper forge defects deferred to a later session (saved as memory
+`project_forge_deferred_defects`): (b) reviewer SDK transient crash is
+unclassified + strands good work; (c) dependent initiatives branch from
+stale local `main` (scheduler doesn't ff before `git worktree add`).
+
+
+---
+
+## 2026-05-23 — trafficGame collision/elevation + grading-frontier arc closed (PR #57 merged)
+
+Closing-out a multi-session, operator-driven arc that began as
+`INIT-2026-05-19-trafficgame-backpressure-live` (wire the backpressure
+foundation into the live sim + anti-collision invariant proof) and
+expanded into a complete rebuild of trafficGame's collision and
+elevation systems plus the introduction of a parametric grading
+harness for map-design theories. PR #57 merged 31 + 3 commits at
+`47109cd`.
+
+**Landed in trafficGame** (commits on `main` post-merge):
+- `7c64b4b feat(traffic): elevation-aware collision avoidance + binary elevation model` — new `CollisionAvoidance.ts` (pairwise geometric route-crossing detection + two-leader IDM + predictive merge + cycle-break), new `OverlapTracker.ts`, `vehicle.currentElevation` as single source of truth with three update rules, IDM elevation-lookahead extended 80→400px, removal of `IntersectionManager` / `IntersectionPolicy` / `NetworkEvaluation` / `PredictiveHeatmap` / `RoadSegmentMetrics` + tests, `ElevationGraphColorizer` capped at 2 levels.
+- `146cf5c feat(grading): parametric sweep harness + locked design-frontier baselines` — `scripts/grading/runSweep.mjs` library + 8 per-theory sweep scripts + `capture-notable.mjs` + `docs/baselines/grading-frontier-*.md` + `docs/baselines/screenshots/`.
+- `95e0745 chore(tuning): expanded harness + analyze-overlap + per-map variants` — `scripts/tuning/` additions + `docs/TUNING-2026-05-22.md` + `docs/LEARNINGS.md` updates.
+
+**Headline numbers**:
+- Locked roundabout baseline preserved EXACTLY at `r=300 = 1.921 v/sim-s, 0 severe`.
+- Locked plain-grid baseline preserved within ±1%: `s=60 = 1.236 → 1.232 v/sim-s, 0 severe`.
+- **NEW FRONTIER**: `elevated split-grid s=400 = 3.314 v/sim-s, 0 severe` (+72% over roundabout baseline).
+- 788 traffic + network + scoring tests passing.
+
+**Brain themes written**:
+- **Project (trafficGame)**:
+  - `2026-05-23-binary-elevation-model.md` — the elevation model that worked after three failures (3-level, body-aware footprint, route-segment span).
+  - `2026-05-23-grading-frontier-infrastructure.md` — `runSweep.mjs` + locked baselines + screenshot index as the project's tight-loop layer.
+- **Forge (system-level)**:
+  - `holistic-metrics-onboarding.md` — proposes **C7** as a new clause on the forge↔project contract: a project declares a holistic metric command + locked baselines + regression budget. Tests verify "did this break"; metrics verify "did this help". Indexed under [`forge/decisions.md`](./forge/decisions.md).
+  - `parametric-design-search.md` — the reusable sweep harness as a forge-wide pattern: ~30 lines per new theory, ~10s wall-clock per sweep, generalises to any project with a parameter space + measurable outcome. Indexed under [`forge/patterns.md`](./forge/patterns.md).
+  - `exploration-vs-implementation-initiatives.md` — counterfactual reconstruction of how the trafficGame arc would have run as a forge cycle. Implementation initiatives have closed ACs; exploration initiatives have score-delta + regression-budget closure. Proposes manifest/PM/dev-loop/reviewer shapes for the exploration mode. Indexed under [`forge/decisions.md`](./forge/decisions.md).
+- **Cycle archive**: `_raw/cycles/2026-05-23_trafficgame-elevation-grading-arc.md` — trajectory + decision points + counterfactual analysis.
+
+**Operator's framing for the wrap-up** (verbatim):
+1. How traffic flow should work → binary elevation model theme captures the as-built.
+2. How important holistic metrics are for agentic / forge development, including a potential future onboarding skill that prepares projects with measurements so agentic flows can design testable tight loops and fanout ideation/testing → holistic-metrics-onboarding theme (proposes C7) + parametric-design-search theme (the harness pattern).
+3. Theories on initiatives and work that could have gotten us here through forge cycles → exploration-vs-implementation-initiatives theme + the cycle archive's counterfactual section.
+
+**Operational mode of this arc**: hand-directed via conversational
+sessions, not forge initiatives. The original initiative manifest's
+scope was wildly exceeded. Counts toward the `human-directed-work-as-initiatives`
+antipattern: large operator-driven arcs that succeed but produce no
+autonomy-signal data. The exploration-vs-implementation theme is the
+proposed remediation.

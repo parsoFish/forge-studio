@@ -14,6 +14,8 @@ The full ADR set lives in [`docs/decisions/`](../../../docs/decisions/). This in
 - [`brain-read-policy`](./themes/brain-read-policy.md) — Planner/architect MUST read the brain; dev-loop and reviewer MUST NOT (intent is in the work items); all reads index-guarded.
 - [`human-interaction-via-own-session`](./themes/human-interaction-via-own-session.md) — The 3 human moments run in the operator's own Claude session as slash commands; forge never simulates them in production.
 - [`chained-phase-benchmarks`](./themes/chained-phase-benchmarks.md) — An e2e test is a SEED at the front of the chain, not a benchmark; chain reuses only the existing per-phase rubrics; delete benchmarks/e2e's bespoke rubric; fix 3 drift corrections.
+- [`holistic-metrics-onboarding`](./themes/holistic-metrics-onboarding.md) — A new contract clause (C7) — projects declare a holistic metric command + locked baselines + regression budget. Tests verify "did this break"; metrics verify "did this help". Derived from the trafficGame collision/elevation arc.
+- [`exploration-vs-implementation-initiatives`](./themes/exploration-vs-implementation-initiatives.md) — Exploration initiatives (sweep parameter space for a measurable outcome) need a different pipeline shape than implementation initiatives. Counterfactual reconstruction of the trafficGame arc's structure.
 
 > Most ADRs surface as `pattern`-categorised theme pages indexed in [`patterns.md`](./patterns.md). This index is reserved for theme pages whose primary frame is "we chose X over Y because Z" — i.e. the *why* of a decision rather than the *what* of a pattern.
 

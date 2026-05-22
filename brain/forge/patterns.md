@@ -55,6 +55,7 @@
 - [`phase-isolation-benchmarks`](./themes/phase-isolation-benchmarks.md) — Per-phase `benchmarks/<phase>/` for fast feedback.
 - [`eval-driven-development`](./themes/eval-driven-development.md) — Every change shows a benchmark delta; reflection-discovered failures become new cases.
 - [`tdd-with-agents`](./themes/tdd-with-agents.md) — Tests first, verified in a worktree by the orchestrator (never by the agent).
+- [`parametric-design-search`](./themes/parametric-design-search.md) — Reusable parallel-sweep harness pattern: ~30 lines per new theory, ~10s wall-clock per sweep, score-delta vs locked baselines + screenshots. Generalises to any project with a parameter space + measurable outcome.
 
 ### Process discipline
 
