@@ -31,7 +31,7 @@ import {
 import { createClaudeAgent, type QueryFn } from '../../loops/ralph/claude-agent.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
-import { pushInitiativeBranch } from '../pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from '../pr.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -303,6 +303,87 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );
+  }
+
+  // S1.3: at dev-loop close the local↔remote invariant MUST hold —
+  // `origin/<branch>` == local HEAD AND `main` == merge-base. A per-WI
+  // push could have failed silently mid-loop (transient network blip),
+  // and the reviewer + the rest of the cycle assume the branch is fully
+  // published. A divergence here is a hard, classified failure: emit a
+  // `dev-loop.branch-divergence` event and re-throw — the cycle's
+  // try/catch + failure classifier handle the rest.
+  //
+  // Note: `cycle.ts:enforceDevLoopCloseInvariant` ALSO asserts this same
+  // invariant immediately after `runDeveloperLoop` returns. The two calls
+  // are deliberately additive (not duplicative): this one is the
+  // dev-loop-PHASE'S own boundary check (phase-scoped event), the
+  // cycle-level one runs AFTER `commitDevLoopBoundary` may have added
+  // one more commit + push. Both are idempotent reads against git state.
+  assertDevLoopCloseSync(input.worktreePath, logger, input.initiativeId);
+}
+
+/**
+ * S1.3 — dev-loop close-step local↔remote invariant assertion.
+ *
+ * On OK: emits a `dev-loop.branch-sync-ok` log event (with ref hashes for
+ * post-mortem) and returns.
+ * On divergence: emits a `dev-loop.branch-divergence` error event (same
+ * metadata shape) and re-throws the underlying `assertLocalRemoteSynced`
+ * error. Caller decides what to do — the cycle's try/catch + failure
+ * classifier consume the event.
+ *
+ * Exported for unit testing (real tmp git repos — see
+ * `developer-loop-close-sync.test.ts`). Production callers should reach
+ * this only via `runDeveloperLoop`'s close path.
+ */
+export function assertDevLoopCloseSync(
+  worktreePath: string,
+  logger: EventLogger,
+  initiativeId: string,
+): void {
+  try {
+    const inv = assertLocalRemoteSynced(worktreePath);
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'log',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: 'dev-loop.branch-sync-ok',
+      metadata: {
+        branch: inv.branch,
+        local_head: inv.localHead,
+        origin_head: inv.originHead,
+        main_head: inv.mainHead,
+        merge_base: inv.mergeBase,
+        detail: inv.detail,
+      },
+    });
+  } catch (err) {
+    // Capture the ref-hash snapshot for the event BEFORE re-throwing so
+    // post-mortems can see what diverged without re-running git from the
+    // (possibly cleaned-up) worktree.
+    const inv = checkLocalRemoteSynced(worktreePath);
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'error',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: 'dev-loop.branch-divergence',
+      metadata: {
+        branch: inv.branch,
+        local_head: inv.localHead,
+        origin_head: inv.originHead,
+        main_head: inv.mainHead,
+        merge_base: inv.mergeBase,
+        detail: inv.detail,
+        error_message: err instanceof Error ? err.message : String(err),
+      },
+    });
+    throw err;
   }
 }
 
