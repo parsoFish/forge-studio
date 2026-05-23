@@ -1,0 +1,6 @@
+# graphify graph.json — union-merge via the graphify merge driver to avoid
+# spurious conflicts on the committed structural index. Install the driver
+# in local .git/config with:
+#   git config merge.graphify.name "graphify graph.json union-merger"
+#   git config merge.graphify.driver "graphify merge-driver %O %A %B"
+brain/graphify-out/graph.json merge=graphify

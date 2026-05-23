@@ -100,11 +100,32 @@ cd brain && graphify cluster-only .
 ### `hook-install` — auto-rebuild on git commit
 
 ```bash
-graphify hook install
+cd /home/parso/forge && graphify hook install
 ```
 
-Installs post-commit / post-checkout hooks so the graph stays fresh
-with every commit. Optional but recommended on developer machines.
+Installs post-commit + post-checkout hooks so the graph stays fresh on
+every commit. The post-commit hook is **background (nohup)** — no
+commit-time latency. Both are idempotent (marker-guarded) and respect
+`core.hooksPath` for Husky-compatible setups. Per-clone setup; the
+hooks themselves are not version-controlled.
+
+Confirm installation: `graphify hook status`. Output lives at
+`~/.cache/graphify-rebuild.log`.
+
+### Merge driver — kill conflicts on the committed `graph.json`
+
+`brain/graphify-out/graph.json` is committed (C21) and changes on every
+content edit, so it merge-conflicts easily. The graphify merge driver
+union-merges the two sides. Per-clone setup:
+
+```bash
+git config merge.graphify.name "graphify graph.json union-merger"
+git config merge.graphify.driver "graphify merge-driver %O %A %B"
+```
+
+`.gitattributes` already routes `brain/graphify-out/graph.json` through
+`merge=graphify` — only the local `.git/config` install is needed per
+clone.
 
 ### Freshness check
 
