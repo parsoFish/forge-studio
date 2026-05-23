@@ -522,15 +522,82 @@ test('renderPlanHtml: produces a self-contained HTML document with no external l
   assert.match(html, /<title>PLAN — 2026-05-23T10-15-00 — sample<\/title>/);
 });
 
-test('renderPlanHtml: includes the forge cycle diagram with brain band + user nodes', () => {
-  const html = renderPlanHtml(fxSession());
-  assert.match(html, /class="cycle"/);
-  assert.match(html, /graphify brain/);
-  assert.match(html, /class="node user this">architect/);
-  assert.match(html, /class="node user">before\/after/);
-  assert.match(html, /class="node user">reflect/);
-  // The HTML page node mentioned in the diagram
-  assert.match(html, /\+ html page/);
+test('renderPlanHtml: renders a feature dependency graph as inline SVG (replaces cycle diagram per 2026-05-23 dogfood pushback)', () => {
+  const html = renderPlanHtml(fxSession({
+    initiatives: [
+      fxInitiative({
+        initiative_id: 'INIT-2026-05-24-multi-feat',
+        features: [
+          { feature_id: 'FEAT-1', title: 'gomock substrate', depends_on: [] },
+          { feature_id: 'FEAT-2', title: 'pre_deployment_gates', depends_on: ['FEAT-1'] },
+          { feature_id: 'FEAT-3', title: 'post_deployment_gates', depends_on: ['FEAT-2'] },
+          { feature_id: 'FEAT-4', title: 'docs + example', depends_on: ['FEAT-2', 'FEAT-3'] },
+        ],
+      }),
+    ],
+  }));
+  // The replaced cycle diagram MUST NOT be present
+  assert.ok(!/class="cycle"/.test(html), 'cycle diagram dropped per dogfood pushback');
+  assert.ok(!/graphify brain/.test(html), 'cycle preamble dropped');
+  assert.ok(!/Where this sits in the forge cycle/.test(html), 'irrelevant header dropped');
+  // The dep graph IS rendered
+  assert.match(html, /<h2>Feature dependency graph<\/h2>/);
+  assert.match(html, /<svg class="dep-graph"/);
+  // Each feature appears as a node
+  assert.match(html, />FEAT-1</);
+  assert.match(html, />FEAT-2</);
+  assert.match(html, />FEAT-3</);
+  assert.match(html, />FEAT-4</);
+  // Titles surface (may be truncated)
+  assert.match(html, /gomock substrate/);
+  // Edges rendered as <path class="edge">
+  const edgeCount = (html.match(/class="edge"/g) ?? []).length;
+  assert.ok(edgeCount >= 4, `expected ≥4 edge paths for 4 dependency edges (FEAT-2→FEAT-1, FEAT-3→FEAT-2, FEAT-4→FEAT-2, FEAT-4→FEAT-3); got ${edgeCount}`);
+  // Root feature (FEAT-1) gets the accented border via .root class
+  assert.match(html, /class="node-box root"/);
+  // Hover tooltip via SVG <title>
+  assert.match(html, /<title>FEAT-1: gomock substrate<\/title>/);
+});
+
+test('renderPlanHtml: single-feature initiative renders a degenerate dep graph (no edges, one node)', () => {
+  const html = renderPlanHtml(fxSession({
+    initiatives: [
+      fxInitiative({
+        initiative_id: 'INIT-2026-05-24-single-feat',
+        features: [
+          { feature_id: 'FEAT-1', title: 'Single feature', depends_on: [] },
+        ],
+      }),
+    ],
+  }));
+  assert.match(html, /<svg class="dep-graph"/);
+  assert.match(html, />FEAT-1</);
+  // No edges expected
+  assert.ok(!/class="edge"/.test(html));
+});
+
+test('renderPlanHtml: multi-initiative session renders one dep graph per initiative with title chrome', () => {
+  const html = renderPlanHtml(fxSession({
+    initiatives: [
+      fxInitiative({
+        initiative_id: 'INIT-A',
+        title: 'First initiative',
+        features: [{ feature_id: 'FEAT-1', title: 'a', depends_on: [] }],
+      }),
+      fxInitiative({
+        initiative_id: 'INIT-B',
+        title: 'Second initiative',
+        features: [{ feature_id: 'FEAT-1', title: 'b', depends_on: [] }],
+      }),
+    ],
+  }));
+  // One SVG per initiative
+  const svgCount = (html.match(/<svg class="dep-graph"/g) ?? []).length;
+  assert.equal(svgCount, 2);
+  // Each carries its initiative-id title chrome (only shown when N>1)
+  assert.match(html, /<div class="dep-graph-title">/);
+  assert.match(html, /INIT-A/);
+  assert.match(html, /INIT-B/);
 });
 
 test('renderPlanHtml: surfaces vision + interview rounds as a table', () => {

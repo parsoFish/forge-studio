@@ -431,15 +431,134 @@ function esc(s: string): string {
 }
 
 /**
+ * Render a feature dependency graph as inline SVG. Replaces the
+ * informational cycle-diagram (operator pushback 2026-05-23: irrelevant —
+ * the operator knows where they are in the cycle). The graph IS the value
+ * markdown can't render: visual topology of feature edges, hover-revealed
+ * titles, root highlighting.
+ *
+ * Layout algorithm: simple level-by-topo layout. Each feature's level =
+ * 1 + max(level of its depends_on). Features at the same level stack
+ * vertically. Edges drawn as orthogonal polylines with arrowheads.
+ *
+ * Sizing keeps within the page's max-width (1100px) for typical session
+ * shapes (≤6 features). Wider shapes get horizontal scroll via the
+ * wrapper's `overflow-x: auto`.
+ */
+function renderFeatureDepGraphSvg(init: ProposedInitiative): string {
+  const features = init.features;
+  if (features.length === 0) {
+    return '<p class="empty">No features.</p>';
+  }
+
+  // Topological levels: feature.level = 1 + max(level of deps within this init).
+  // Deps that reference unknown FEAT-ids (shouldn't happen for valid manifests)
+  // are skipped silently — the layout still renders.
+  const idToFeat = new Map(features.map((f) => [f.feature_id, f]));
+  const levels = new Map<string, number>();
+  const compute = (id: string, stack: Set<string>): number => {
+    const cached = levels.get(id);
+    if (cached !== undefined) return cached;
+    if (stack.has(id)) return 0; // cycle protection (shouldn't happen)
+    stack.add(id);
+    const f = idToFeat.get(id);
+    if (!f) return 0;
+    const depLevels = f.depends_on.filter((d) => idToFeat.has(d)).map((d) => compute(d, stack));
+    const lvl = depLevels.length === 0 ? 0 : Math.max(...depLevels) + 1;
+    stack.delete(id);
+    levels.set(id, lvl);
+    return lvl;
+  };
+  for (const f of features) compute(f.feature_id, new Set());
+
+  // Bucket features by level for vertical placement.
+  const byLevel = new Map<number, ProposedFeature[]>();
+  for (const f of features) {
+    const lvl = levels.get(f.feature_id) ?? 0;
+    const bucket = byLevel.get(lvl) ?? [];
+    bucket.push(f);
+    byLevel.set(lvl, bucket);
+  }
+  const maxLevel = Math.max(...levels.values());
+  const maxRowsInAnyLevel = Math.max(...Array.from(byLevel.values()).map((b) => b.length));
+
+  // Layout constants.
+  const NODE_W = 200;
+  const NODE_H = 56;
+  const COL_GAP = 70;
+  const ROW_GAP = 22;
+  const PADDING = 16;
+  const COLS = maxLevel + 1;
+  const ROWS = maxRowsInAnyLevel;
+
+  const width = PADDING * 2 + COLS * NODE_W + (COLS - 1) * COL_GAP;
+  const height = PADDING * 2 + ROWS * NODE_H + (ROWS - 1) * ROW_GAP;
+
+  // Compute each feature's (x, y) center.
+  const positions = new Map<string, { x: number; y: number }>();
+  for (let lvl = 0; lvl <= maxLevel; lvl++) {
+    const bucket = byLevel.get(lvl) ?? [];
+    const x = PADDING + lvl * (NODE_W + COL_GAP) + NODE_W / 2;
+    const totalH = bucket.length * NODE_H + (bucket.length - 1) * ROW_GAP;
+    const yStart = PADDING + (height - PADDING * 2 - totalH) / 2 + NODE_H / 2;
+    bucket.forEach((f, idx) => {
+      positions.set(f.feature_id, { x, y: yStart + idx * (NODE_H + ROW_GAP) });
+    });
+  }
+
+  // Render node rects + labels.
+  const nodes = features.map((f) => {
+    const p = positions.get(f.feature_id)!;
+    const isRoot = f.depends_on.length === 0;
+    const titleTrim = f.title.length > 28 ? f.title.slice(0, 27) + '…' : f.title;
+    return `    <g>
+      <title>${esc(f.feature_id)}: ${esc(f.title)}</title>
+      <rect class="node-box${isRoot ? ' root' : ''}" x="${p.x - NODE_W / 2}" y="${p.y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="4" ry="4"/>
+      <text class="node-id" x="${p.x - NODE_W / 2 + 10}" y="${p.y - 8}">${esc(f.feature_id)}</text>
+      <text class="node-title" x="${p.x - NODE_W / 2 + 10}" y="${p.y + 12}">${esc(titleTrim)}</text>
+    </g>`;
+  }).join('\n');
+
+  // Render edges with arrowheads.
+  const edges: string[] = [];
+  for (const f of features) {
+    const to = positions.get(f.feature_id);
+    if (!to) continue;
+    for (const depId of f.depends_on) {
+      const from = positions.get(depId);
+      if (!from) continue;
+      const x1 = from.x + NODE_W / 2;
+      const y1 = from.y;
+      const x2 = to.x - NODE_W / 2 - 6; // leave room for arrowhead
+      const y2 = to.y;
+      const midX = (x1 + x2) / 2;
+      edges.push(
+        `    <path class="edge" d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" marker-end="url(#arrow)"/>`,
+      );
+    }
+  }
+
+  return `<svg class="dep-graph" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+${edges.join('\n')}
+${nodes}
+  </svg>`;
+}
+
+/**
  * Render a self-contained HTML viewer for the architect session. Zero
  * external deps — single HTML file, inline CSS, no JS framework. The
  * operator opens this in their browser; annotations still happen in
  * PLAN.md.
  *
- * The diagram mirrors the operator's hand-drawn forge cycle:
- *   architect (user) → initiative (+ html page) → feats → work items
- *                  → initiative branch → before/after demo+pr (user) → reflect (user)
- *   with graphify brain hovering above.
+ * cwc Amendment 2 + 2026-05-23 dogfood pushback: the cycle position diagram
+ * was dropped (operator already knows where they are). Replaced with an
+ * actual visual feature dependency graph (inline SVG) per initiative —
+ * the genuine HTML value markdown can't render.
  */
 export function renderPlanHtml(session: ArchitectSession): string {
   const type: InitiativeType = session.type ?? 'implementation';
@@ -508,68 +627,23 @@ export function renderPlanHtml(session: ArchitectSession): string {
     font-size: 0.9rem;
   }
   .notice code { background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 3px; }
-  /* Forge cycle diagram */
-  .cycle {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    margin: 1.25rem 0 2rem;
+  /* Feature dependency graph */
+  .dep-graph-wrap {
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 1.25rem 1rem;
+    padding: 1rem;
+    margin: 0.75rem 0 1.25rem;
     overflow-x: auto;
   }
-  .cycle .brain-band {
-    align-self: center;
-    background: var(--brain);
-    color: white;
-    padding: 0.4rem 1.25rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    margin-bottom: 1rem;
-    letter-spacing: 0.02em;
-  }
-  .cycle .flow {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: nowrap;
-    min-width: 0;
-  }
-  .cycle .node {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 0.45rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.78rem;
-    text-align: center;
-    min-width: 70px;
-    position: relative;
-    white-space: nowrap;
-  }
-  .cycle .node.user::before {
-    content: "👤";
-    position: absolute;
-    top: -1.2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.9rem;
-  }
-  .cycle .node.this {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-  .cycle .arrow { color: var(--muted); font-size: 1rem; flex-shrink: 0; }
-  .cycle .stack {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    align-items: stretch;
-    min-width: 70px;
-  }
-  .cycle .stack .node { padding: 0.25rem 0.4rem; font-size: 0.7rem; }
+  .dep-graph-title { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+  svg.dep-graph { display: block; min-width: 100%; }
+  svg.dep-graph .node-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+  svg.dep-graph .node-box.root { stroke: var(--accent); stroke-width: 2; }
+  svg.dep-graph .node-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 11px; font-weight: 600; fill: var(--accent); }
+  svg.dep-graph .node-title { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 11px; fill: var(--fg); }
+  svg.dep-graph .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+  svg.dep-graph .arrowhead { fill: var(--muted); }
   /* Tables */
   table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
   th, td {
@@ -702,36 +776,11 @@ export function renderPlanHtml(session: ArchitectSession): string {
     <code>forge architect commit ${esc(session.session_id)}</code>.
   </div>
 
-  <h2>Where this sits in the forge cycle</h2>
-  <div class="cycle">
-    <div class="brain-band">graphify brain</div>
-    <div class="flow">
-      <div class="node user this">architect</div>
-      <span class="arrow">→</span>
-      <div class="stack">
-        <div class="node">initiative</div>
-        <div class="node">+ html page</div>
-      </div>
-      <span class="arrow">→</span>
-      <div class="stack">
-        <div class="node">feat</div>
-        <div class="node">feat</div>
-        <div class="node">feat</div>
-      </div>
-      <span class="arrow">→</span>
-      <div class="stack">
-        <div class="node">work item</div>
-        <div class="node">work item</div>
-        <div class="node">…</div>
-      </div>
-      <span class="arrow">→</span>
-      <div class="node">initiative branch</div>
-      <span class="arrow">→</span>
-      <div class="node user">before/after<br>demo + PR</div>
-      <span class="arrow">→</span>
-      <div class="node user">reflect</div>
-    </div>
-  </div>
+  <h2>Feature dependency graph</h2>
+${session.initiatives.map((init) => `  <div class="dep-graph-wrap">
+    ${session.initiatives.length > 1 ? `<div class="dep-graph-title"><code>${esc(init.initiative_id)}</code> — ${esc(init.title)}</div>` : ''}
+    ${renderFeatureDepGraphSvg(init)}
+  </div>`).join('\n')}
 
   <h2>Operator brief + interview</h2>
   <p>${esc(session.vision.trim()).replace(/\n+/g, '</p><p>')}</p>
