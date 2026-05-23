@@ -17,7 +17,53 @@ export type Phase =
   | 'closure'
   | 'reflection';
 
-export type EventType = 'start' | 'end' | 'log' | 'error' | 'tool_use' | 'iteration';
+export type EventType =
+  | 'start'
+  | 'end'
+  | 'log'
+  | 'error'
+  | 'tool_use'
+  | 'iteration'
+  /**
+   * S7 / plan 07a — file mutated by the agent's tool-use stream
+   * (Edit / Write / MultiEdit / NotebookEdit). Emit site:
+   * `orchestrator/file-change-emit.ts` consuming Ralph's tool-use
+   * stream. Metadata: `{ path, op: 'add'|'modify'|'delete',
+   * size_bytes, work_item_id? }`.
+   */
+  | 'file_change'
+  /**
+   * S7 / plan 07a — heuristic-detected test-runner invocation
+   * (`npm test` / `pytest` / `go test`). Emit site:
+   * `orchestrator/test-run-emit.ts`. Metadata: `{ command,
+   * exit_code?, duration_ms?, pass_count?, fail_count?,
+   * stdout_tail?, work_item_id? }`.
+   */
+  | 'test_run'
+  /**
+   * S7 / plan 07a — orchestrator phase boundary
+   * (`runProjectManager` → `runDeveloperLoop` → …). Emit site:
+   * `orchestrator/phase-transition-emit.ts`, called from
+   * `cycle.ts`. Metadata: `{ from, to, reason }`.
+   */
+  | 'phase_transition'
+  /**
+   * S7 / C13 — sidecar liveness pulse during a silent SDK call.
+   * Emit site: `loops/ralph/claude-agent.ts` (NOT the runner).
+   * Cadence: default 15s, configurable per-project via
+   * `.forge/project.json` `logging.heartbeat_seconds`. Tail-emit
+   * on idle > 30s. Metadata: `{ tool_use_count, last_tool,
+   * since_ms }`.
+   */
+  | 'agent_heartbeat'
+  /**
+   * S7 / C14 — derived consumer rollup keyed on cycle_id + wi_id.
+   * Emit site: `orchestrator/cost-tick.ts` (subscribes to the
+   * existing `tee` hook; NOT a writer in this module).
+   * Debounce ≤ 1/s; only emit when cost changed. Metadata:
+   * `{ cycle_cost_usd, wi_cost_usd? }`.
+   */
+  | 'cost_tick';
 
 export type EventLogEntry = {
   event_id: string;
