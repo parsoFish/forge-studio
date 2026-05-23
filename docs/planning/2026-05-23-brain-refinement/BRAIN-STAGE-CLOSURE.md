@@ -2,9 +2,11 @@
 doc: brain-stage-closure
 batch: 2026-05-23-brain-refinement
 date_closed: 2026-05-23
-status: closed (4 of 6 stages landed; Stages 5 + 6 deferred — both blocked on operator-supplied LLM API key)
-stages_landed: 4 / 6
+status: closed (12 stages landed, 2 originally-deferred API-key items unblocked via Max OAuth SDK path)
+stages_landed: 12 / 12
 tests_final: 724 pass + 1 deliberate skip (carried over from 2026-05-20 batch)
+bench_metric: 84.6% (22/26 metric F1 ≥ 0.65); 86.4% judge-pass; 95.5% agreement
+graph_state: 3713 nodes / 5417 edges / 299 named communities (post-Stage-11)
 ---
 
 # Brain stage review — closure (post-2026-05-20-batch follow-up)
@@ -50,6 +52,58 @@ sessions).
 - `brain/projects/trafficGame/themes/2026-05-17-reviewer-budget-undersized-medium-initiatives.md` re-tagged `retention: archived` + `supersedes_by: CONTRACTS.md C19`; preserved as historical evidence.
 - INDEX.md now reflects the graphify-out layer + accurate project-theme count.
 - 99 themes normalised; 101 wikilink entries in INDEX hub.
+
+## Closure stages 7-12 (added 2026-05-23 evening after operator feedback)
+
+| Stage | Headline | Commit |
+|---|---|---|
+| **S7** | Aggressive prune: drop `brain/_raw/`, planning council/exec/per-stage docs, `S*-DECISIONS` at root; keep `_meta/`, CONTRACTS, BATCH-CLOSURE | `64667a4` |
+| **S8** | Per-project graphs in trafficGame (2524 nodes) + betterado (5934 nodes, vendor/website/docs excluded); new theme [[per-project-knowledge-graph]] | `64667a4` |
+| **S9** | brain-query trusts graphify's `EXTRACTED`/`INFERRED`/`AMBIGUOUS` tiers as-is — no parallel filter | `64667a4` |
+| **S7.1** | Relocate `S*-DECISIONS.md` from forge root into `docs/planning/2026-05-20-refinement/` next to their plan docs | `9cf2f02` |
+| **S10** | Deterministic edge injection: INDEX wikilink hub (102 edges) + theme `related_themes` (223) + body `[[wikilinks]]` (3) → graph. + `projects/*` exclusion bug fix that had silently dropped `brain/projects/*/themes/` from the graph (276 nodes restored) | `27a1b9e` |
+| **S11** | Semantic community names via SDK Haiku — all 302 communities labelled (cost $0.20). `.graphify_labels.json` now tracked alongside graph.json | `ded3721` |
+| **S12** | Full bench run + Opus LLM-judge (this commit) |  |
+
+## Bench results (S12)
+
+`npm run bench:brain` followed by `npm run bench:brain:judge` against
+the refreshed 26-question set (Q24-Q26 graph-dependent, post-C21a):
+
+| Metric | Result |
+|---|---|
+| Metric (F1 ≥ 0.65 + keyword): | **22/26 = 84.6%** |
+| Opus LLM-judge pass rate: | **19/22 judged = 86.4%** |
+| Metric ↔ judge agreement: | **95.5%** |
+| Mean cost / question: | $0.11 (bench) + $0.37 (judge) |
+| Hallucination rate (metric): | 0% (no fabricated citations) |
+| Hallucination rate (judge): | 2 of 22 judged (Q13, Q21 — see below) |
+
+**4 cases unjudged** because the Haiku agent hit budget/turn limits and
+produced no answer:
+- Q1 (`error_max_budget_usd` $0.20 cap)
+- Q15 (`error_max_turns` 15-turn cap)
+- Q18 (same)
+- Q25 (same as Q1)
+
+The 0.20/15-turn ceilings are aggressive for the dual-index brain-query
+flow (graphify → grep → synthesise). A modest bump to 0.30/20 turns
+would likely close 2-4 of these gaps without changing the metric's
+discrimination character.
+
+**Judge findings**:
+- **1 metric_only_fail** (Q10): F1 was overly strict — judge says the
+  v1→v2 differences answer was substantively correct despite missing
+  two tangential citations. Confirms the metric's known squeeze.
+- **2 judge_only_fail**:
+  - Q13 — agent answering an env-optimiser scope question hallucinated
+    forge-wide patterns (Given-When-Then ACs, declarative-vs-imperative,
+    80% coverage) that aren't in env-optimiser themes. Real failure mode.
+  - Q21 — directionality issue. The agent cited brain-read-policy +
+    brain-gap-feedback-loop as structurally connected to the trafficGame
+    stale-brain antipattern, which IS true via the antipattern's own
+    frontmatter (added in Stage 4 bridges) — but the judge expected
+    bidirectional listing and read this as hallucination.
 
 ## Operator-pending items
 

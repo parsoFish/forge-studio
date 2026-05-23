@@ -4,6 +4,87 @@
   "graph": {},
   "nodes": [
     {
+      "label": "brain-name-communities.ts",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L1",
+      "id": "scripts_brain_name_communities_ts",
+      "community": 223,
+      "norm_label": "brain-name-communities.ts"
+    },
+    {
+      "label": "GRAPH_PATH",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L27",
+      "id": "scripts_brain_name_communities_graph_path",
+      "community": 223,
+      "norm_label": "graph_path"
+    },
+    {
+      "label": "LABELS_PATH",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L28",
+      "id": "scripts_brain_name_communities_labels_path",
+      "community": 223,
+      "norm_label": "labels_path"
+    },
+    {
+      "label": "Node",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L32",
+      "id": "scripts_brain_name_communities_node",
+      "community": 223,
+      "norm_label": "node"
+    },
+    {
+      "label": "Graph",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L33",
+      "id": "scripts_brain_name_communities_graph",
+      "community": 223,
+      "norm_label": "graph"
+    },
+    {
+      "label": "force",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L35",
+      "id": "scripts_brain_name_communities_force",
+      "community": 223,
+      "norm_label": "force"
+    },
+    {
+      "label": "summariseCommunity()",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L37",
+      "id": "scripts_brain_name_communities_summarisecommunity",
+      "community": 223,
+      "norm_label": "summarisecommunity()"
+    },
+    {
+      "label": "namesForBatch()",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L57",
+      "id": "scripts_brain_name_communities_namesforbatch",
+      "community": 223,
+      "norm_label": "namesforbatch()"
+    },
+    {
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L100",
+      "id": "scripts_brain_name_communities_main",
+      "community": 223,
+      "norm_label": "main()"
+    },
+    {
       "label": "package.json",
       "file_type": "code",
       "source_file": "package.json",
@@ -944,7 +1025,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L1",
-      "community": 52,
+      "community": 1,
       "norm_label": "scheduler-dispatch.ts",
       "id": "orchestrator_scheduler_dispatch_ts"
     },
@@ -953,7 +1034,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L17",
-      "community": 52,
+      "community": 1,
       "norm_label": "dispatchinput",
       "id": "orchestrator_scheduler_dispatch_dispatchinput"
     },
@@ -962,7 +1043,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L26",
-      "community": 52,
+      "community": 1,
       "norm_label": "dispatchdeps",
       "id": "orchestrator_scheduler_dispatch_dispatchdeps"
     },
@@ -971,7 +1052,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L31",
-      "community": 52,
+      "community": 1,
       "norm_label": "dispatchoutcome",
       "id": "orchestrator_scheduler_dispatch_dispatchoutcome"
     },
@@ -980,7 +1061,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L55",
-      "community": 52,
+      "community": 1,
       "norm_label": "autoretrydecision",
       "id": "orchestrator_scheduler_dispatch_autoretrydecision"
     },
@@ -989,7 +1070,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L66",
-      "community": 52,
+      "community": 1,
       "norm_label": "dispatchterminalstatus()",
       "id": "orchestrator_scheduler_dispatch_dispatchterminalstatus"
     },
@@ -998,7 +1079,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L170",
-      "community": 52,
+      "community": 1,
       "norm_label": "decideautoretry()",
       "id": "orchestrator_scheduler_dispatch_decideautoretry"
     },
@@ -1007,7 +1088,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler-dispatch.ts",
       "source_location": "L236",
-      "community": 52,
+      "community": 19,
       "norm_label": "annotatemanifestforretry()",
       "id": "orchestrator_scheduler_dispatch_annotatemanifestforretry"
     },
@@ -1160,7 +1241,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L1",
-      "community": 10,
+      "community": 144,
       "norm_label": "cycle-retention.test.ts",
       "id": "orchestrator_cycle_retention_test_ts"
     },
@@ -1169,7 +1250,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L34",
-      "community": 10,
+      "community": 144,
       "norm_label": "makeevent()",
       "id": "orchestrator_cycle_retention_test_makeevent"
     },
@@ -1178,7 +1259,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L49",
-      "community": 10,
+      "community": 144,
       "norm_label": "maketheme()",
       "id": "orchestrator_cycle_retention_test_maketheme"
     },
@@ -1187,7 +1268,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L56",
-      "community": 10,
+      "community": 144,
       "norm_label": "result",
       "id": "orchestrator_cycle_retention_test_result"
     },
@@ -1196,7 +1277,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L141",
-      "community": 10,
+      "community": 144,
       "norm_label": "treeharness",
       "id": "orchestrator_cycle_retention_test_treeharness"
     },
@@ -1205,7 +1286,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L146",
-      "community": 10,
+      "community": 144,
       "norm_label": "setupbraintree()",
       "id": "orchestrator_cycle_retention_test_setupbraintree"
     },
@@ -1214,7 +1295,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L184",
-      "community": 10,
+      "community": 144,
       "norm_label": "h",
       "id": "orchestrator_cycle_retention_test_h"
     },
@@ -1223,7 +1304,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L193",
-      "community": 10,
+      "community": 144,
       "norm_label": "cited",
       "id": "orchestrator_cycle_retention_test_cited"
     },
@@ -1232,7 +1313,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L209",
-      "community": 10,
+      "community": 144,
       "norm_label": "old",
       "id": "orchestrator_cycle_retention_test_old"
     },
@@ -1241,7 +1322,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L275",
-      "community": 10,
+      "community": 144,
       "norm_label": "makearchive()",
       "id": "orchestrator_cycle_retention_test_makearchive"
     },
@@ -1250,7 +1331,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L311",
-      "community": 10,
+      "community": 144,
       "norm_label": "a",
       "id": "orchestrator_cycle_retention_test_a"
     },
@@ -1259,7 +1340,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L313",
-      "community": 10,
+      "community": 144,
       "norm_label": "ok",
       "id": "orchestrator_cycle_retention_test_ok"
     },
@@ -1268,7 +1349,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L318",
-      "community": 10,
+      "community": 144,
       "norm_label": "body",
       "id": "orchestrator_cycle_retention_test_body"
     },
@@ -1277,7 +1358,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L368",
-      "community": 10,
+      "community": 144,
       "norm_label": "dir",
       "id": "orchestrator_cycle_retention_test_dir"
     },
@@ -1286,7 +1367,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L369",
-      "community": 10,
+      "community": 144,
       "norm_label": "path",
       "id": "orchestrator_cycle_retention_test_path"
     },
@@ -1295,7 +1376,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L383",
-      "community": 10,
+      "community": 144,
       "norm_label": "first",
       "id": "orchestrator_cycle_retention_test_first"
     },
@@ -1304,7 +1385,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-retention.test.ts",
       "source_location": "L385",
-      "community": 10,
+      "community": 144,
       "norm_label": "second",
       "id": "orchestrator_cycle_retention_test_second"
     },
@@ -1889,7 +1970,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.ts",
       "source_location": "L446",
-      "community": 24,
+      "community": 11,
       "norm_label": "pushinitiativebranch()",
       "id": "orchestrator_pr_pushinitiativebranch"
     },
@@ -1925,7 +2006,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.ts",
       "source_location": "L564",
-      "community": 11,
+      "community": 111,
       "norm_label": "confirmprmerged()",
       "id": "orchestrator_pr_confirmprmerged"
     },
@@ -1943,7 +2024,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.ts",
       "source_location": "L611",
-      "community": 11,
+      "community": 111,
       "norm_label": "alignlocaltoremote()",
       "id": "orchestrator_pr_alignlocaltoremote"
     },
@@ -1997,7 +2078,7 @@
       "file_type": "code",
       "source_file": "orchestrator/manifest.ts",
       "source_location": "L46",
-      "community": 60,
+      "community": 19,
       "norm_label": "initiativemanifest",
       "id": "orchestrator_manifest_initiativemanifest"
     },
@@ -2015,7 +2096,7 @@
       "file_type": "code",
       "source_file": "orchestrator/manifest.ts",
       "source_location": "L158",
-      "community": 52,
+      "community": 19,
       "norm_label": "serializemanifest()",
       "id": "orchestrator_manifest_serializemanifest"
     },
@@ -2618,7 +2699,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L271",
-      "community": 4,
+      "community": 1,
       "norm_label": "cmdresume()",
       "id": "orchestrator_cli_cmdresume"
     },
@@ -2654,7 +2735,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L418",
-      "community": 1,
+      "community": 4,
       "norm_label": "cmdstatus()",
       "id": "orchestrator_cli_cmdstatus"
     },
@@ -2672,7 +2753,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L461",
-      "community": 4,
+      "community": 239,
       "norm_label": "cmdreview()",
       "id": "orchestrator_cli_cmdreview"
     },
@@ -2681,7 +2762,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L508",
-      "community": 4,
+      "community": 239,
       "norm_label": "cmdreviewinspect()",
       "id": "orchestrator_cli_cmdreviewinspect"
     },
@@ -2690,7 +2771,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L565",
-      "community": 4,
+      "community": 239,
       "norm_label": "cmdreviewapprove()",
       "id": "orchestrator_cli_cmdreviewapprove"
     },
@@ -2699,7 +2780,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L617",
-      "community": 4,
+      "community": 239,
       "norm_label": "cmdreviewabandon()",
       "id": "orchestrator_cli_cmdreviewabandon"
     },
@@ -2708,7 +2789,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L651",
-      "community": 4,
+      "community": 239,
       "norm_label": "locateinitiative()",
       "id": "orchestrator_cli_locateinitiative"
     },
@@ -2726,7 +2807,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cli.ts",
       "source_location": "L715",
-      "community": 14,
+      "community": 4,
       "norm_label": "cmdreport()",
       "id": "orchestrator_cli_cmdreport"
     },
@@ -3023,7 +3104,7 @@
       "file_type": "code",
       "source_file": "orchestrator/file-verdict.ts",
       "source_location": "L43",
-      "community": 48,
+      "community": 28,
       "norm_label": "verdict",
       "id": "orchestrator_file_verdict_verdict"
     },
@@ -3050,7 +3131,7 @@
       "file_type": "code",
       "source_file": "orchestrator/file-verdict.ts",
       "source_location": "L96",
-      "community": 4,
+      "community": 239,
       "norm_label": "fileverdictpaths",
       "id": "orchestrator_file_verdict_fileverdictpaths"
     },
@@ -3473,7 +3554,7 @@
       "file_type": "code",
       "source_file": "orchestrator/scheduler.ts",
       "source_location": "L667",
-      "community": 1,
+      "community": 4,
       "norm_label": "status()",
       "id": "orchestrator_scheduler_status"
     },
@@ -3626,7 +3707,7 @@
       "file_type": "code",
       "source_file": "orchestrator/dev-invocation.ts",
       "source_location": "L270",
-      "community": 82,
+      "community": 45,
       "norm_label": "devtoolusesummary",
       "id": "orchestrator_dev_invocation_devtoolusesummary"
     },
@@ -3761,7 +3842,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pm-invocation.ts",
       "source_location": "L131",
-      "community": 41,
+      "community": 93,
       "norm_label": "renderpmuserprompt()",
       "id": "orchestrator_pm_invocation_renderpmuserprompt"
     },
@@ -3770,7 +3851,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pm-invocation.ts",
       "source_location": "L272",
-      "community": 111,
+      "community": 93,
       "norm_label": "renderpmhallucinationretryaugment()",
       "id": "orchestrator_pm_invocation_renderpmhallucinationretryaugment"
     },
@@ -3788,7 +3869,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pm-invocation.ts",
       "source_location": "L301",
-      "community": 111,
+      "community": 93,
       "norm_label": "tallytooluse()",
       "id": "orchestrator_pm_invocation_tallytooluse"
     },
@@ -4346,7 +4427,7 @@
       "file_type": "code",
       "source_file": "orchestrator/forge-reflect-rerun.ts",
       "source_location": "L36",
-      "community": 20,
+      "community": 4,
       "norm_label": "rerunreflector()",
       "id": "orchestrator_forge_reflect_rerun_rerunreflector"
     },
@@ -4355,7 +4436,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L1",
-      "community": 11,
+      "community": 94,
       "norm_label": "pr.test.ts",
       "id": "orchestrator_pr_test_ts"
     },
@@ -4364,7 +4445,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L41",
-      "community": 11,
+      "community": 94,
       "norm_label": "sh()",
       "id": "orchestrator_pr_test_sh"
     },
@@ -4373,7 +4454,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L50",
-      "community": 11,
+      "community": 94,
       "norm_label": "makerepowithorigin()",
       "id": "orchestrator_pr_test_makerepowithorigin"
     },
@@ -4382,7 +4463,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L74",
-      "community": 11,
+      "community": 94,
       "norm_label": "{ proj, cleanup }",
       "id": "orchestrator_pr_test_proj_cleanup"
     },
@@ -4391,7 +4472,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L76",
-      "community": 11,
+      "community": 94,
       "norm_label": "r",
       "id": "orchestrator_pr_test_r"
     },
@@ -4400,7 +4481,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L80",
-      "community": 11,
+      "community": 94,
       "norm_label": "local",
       "id": "orchestrator_pr_test_local"
     },
@@ -4409,7 +4490,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L81",
-      "community": 11,
+      "community": 94,
       "norm_label": "remote",
       "id": "orchestrator_pr_test_remote"
     },
@@ -4418,7 +4499,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L89",
-      "community": 11,
+      "community": 94,
       "norm_label": "dir",
       "id": "orchestrator_pr_test_dir"
     },
@@ -4427,7 +4508,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L102",
-      "community": 11,
+      "community": 94,
       "norm_label": "inv",
       "id": "orchestrator_pr_test_inv"
     },
@@ -4436,7 +4517,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L165",
-      "community": 11,
+      "community": 94,
       "norm_label": "withghshim()",
       "id": "orchestrator_pr_test_withghshim"
     },
@@ -4445,7 +4526,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L189",
-      "community": 11,
+      "community": 94,
       "norm_label": "{ root, proj, cleanup }",
       "id": "orchestrator_pr_test_root_proj_cleanup"
     },
@@ -4454,7 +4535,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L192",
-      "community": 11,
+      "community": 94,
       "norm_label": "bindir",
       "id": "orchestrator_pr_test_bindir"
     },
@@ -4463,7 +4544,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L235",
-      "community": 11,
+      "community": 94,
       "norm_label": "clone",
       "id": "orchestrator_pr_test_clone"
     },
@@ -4472,7 +4553,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L244",
-      "community": 11,
+      "community": 94,
       "norm_label": "beforemain",
       "id": "orchestrator_pr_test_beforemain"
     },
@@ -4481,7 +4562,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L247",
-      "community": 11,
+      "community": 94,
       "norm_label": "aftermain",
       "id": "orchestrator_pr_test_aftermain"
     },
@@ -4490,7 +4571,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L248",
-      "community": 11,
+      "community": 94,
       "norm_label": "originmain",
       "id": "orchestrator_pr_test_originmain"
     },
@@ -4499,7 +4580,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L263",
-      "community": 11,
+      "community": 94,
       "norm_label": "r2",
       "id": "orchestrator_pr_test_r2"
     },
@@ -4508,7 +4589,7 @@
       "file_type": "code",
       "source_file": "orchestrator/pr.test.ts",
       "source_location": "L312",
-      "community": 11,
+      "community": 94,
       "norm_label": "result",
       "id": "orchestrator_pr_test_result"
     },
@@ -5093,7 +5174,7 @@
       "file_type": "code",
       "source_file": "orchestrator/work-item.ts",
       "source_location": "L264",
-      "community": 66,
+      "community": 88,
       "norm_label": "validateworkitemset()",
       "id": "orchestrator_work_item_validateworkitemset"
     },
@@ -5588,7 +5669,7 @@
       "file_type": "code",
       "source_file": "orchestrator/project-config.ts",
       "source_location": "L26",
-      "community": 55,
+      "community": 23,
       "norm_label": "demoshape",
       "id": "orchestrator_project_config_demoshape"
     },
@@ -6218,7 +6299,7 @@
       "file_type": "code",
       "source_file": "orchestrator/unifier-invocation.ts",
       "source_location": "L261",
-      "community": 24,
+      "community": 55,
       "norm_label": "prepareunifierworkspace()",
       "id": "orchestrator_unifier_invocation_prepareunifierworkspace"
     },
@@ -6254,7 +6335,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-report.ts",
       "source_location": "L100",
-      "community": 14,
+      "community": 4,
       "norm_label": "writecyclereport()",
       "id": "orchestrator_cycle_report_writecyclereport"
     },
@@ -6587,7 +6668,7 @@
       "file_type": "code",
       "source_file": "orchestrator/visualise.ts",
       "source_location": "L68",
-      "community": 1,
+      "community": 4,
       "norm_label": "render()",
       "id": "orchestrator_visualise_render"
     },
@@ -6965,7 +7046,7 @@
       "file_type": "code",
       "source_file": "orchestrator/architect-plan.ts",
       "source_location": "L65",
-      "community": 86,
+      "community": 60,
       "norm_label": "proposedinitiative",
       "id": "orchestrator_architect_plan_proposedinitiative"
     },
@@ -7010,7 +7091,7 @@
       "file_type": "code",
       "source_file": "orchestrator/architect-plan.ts",
       "source_location": "L126",
-      "community": 86,
+      "community": 103,
       "norm_label": "verdict",
       "id": "orchestrator_architect_plan_verdict"
     },
@@ -7019,7 +7100,7 @@
       "file_type": "code",
       "source_file": "orchestrator/architect-plan.ts",
       "source_location": "L128",
-      "community": 86,
+      "community": 103,
       "norm_label": "annotation",
       "id": "orchestrator_architect_plan_annotation"
     },
@@ -7379,7 +7460,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L1",
-      "community": 20,
+      "community": 56,
       "norm_label": "logging.ts",
       "id": "orchestrator_logging_ts"
     },
@@ -7397,7 +7478,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L20",
-      "community": 20,
+      "community": 30,
       "norm_label": "eventtype",
       "id": "orchestrator_logging_eventtype"
     },
@@ -7406,7 +7487,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L68",
-      "community": 57,
+      "community": 10,
       "norm_label": "eventlogentry",
       "id": "orchestrator_logging_eventlogentry"
     },
@@ -7415,7 +7496,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L102",
-      "community": 14,
+      "community": 56,
       "norm_label": "eventlogger",
       "id": "orchestrator_logging_eventlogger"
     },
@@ -7424,7 +7505,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L111",
-      "community": 20,
+      "community": 56,
       "norm_label": "loggeroptions",
       "id": "orchestrator_logging_loggeroptions"
     },
@@ -7442,7 +7523,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.ts",
       "source_location": "L153",
-      "community": 20,
+      "community": 56,
       "norm_label": "neweventid()",
       "id": "orchestrator_logging_neweventid"
     },
@@ -8144,7 +8225,7 @@
       "file_type": "code",
       "source_file": "orchestrator/brain-index.ts",
       "source_location": "L26",
-      "community": 47,
+      "community": 75,
       "norm_label": "braincategory",
       "id": "orchestrator_brain_index_braincategory"
     },
@@ -8189,7 +8270,7 @@
       "file_type": "code",
       "source_file": "orchestrator/brain-index.ts",
       "source_location": "L61",
-      "community": 93,
+      "community": 75,
       "norm_label": "loadbrainindex()",
       "id": "orchestrator_brain_index_loadbrainindex"
     },
@@ -8198,7 +8279,7 @@
       "file_type": "code",
       "source_file": "orchestrator/brain-index.ts",
       "source_location": "L85",
-      "community": 93,
+      "community": 75,
       "norm_label": "rendersection()",
       "id": "orchestrator_brain_index_rendersection"
     },
@@ -8378,7 +8459,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-context.ts",
       "source_location": "L179",
-      "community": 14,
+      "community": 111,
       "norm_label": "cycleoutcome",
       "id": "orchestrator_cycle_context_cycleoutcome"
     },
@@ -8387,7 +8468,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle-context.ts",
       "source_location": "L193",
-      "community": 111,
+      "community": 93,
       "norm_label": "recordbraingateresult()",
       "id": "orchestrator_cycle_context_recordbraingateresult"
     },
@@ -8765,7 +8846,7 @@
       "file_type": "code",
       "source_file": "orchestrator/cycle.ts",
       "source_location": "L396",
-      "community": 11,
+      "community": 14,
       "norm_label": "enforcedevloopcloseinvariant()",
       "id": "orchestrator_cycle_enforcedevloopcloseinvariant"
     },
@@ -9152,7 +9233,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L1",
-      "community": 20,
+      "community": 231,
       "norm_label": "logging.test.ts",
       "id": "orchestrator_logging_test_ts"
     },
@@ -9161,7 +9242,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L13",
-      "community": 20,
+      "community": 231,
       "norm_label": "root",
       "id": "orchestrator_logging_test_root"
     },
@@ -9170,7 +9251,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L15",
-      "community": 20,
+      "community": 231,
       "norm_label": "logger",
       "id": "orchestrator_logging_test_logger"
     },
@@ -9179,7 +9260,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L30",
-      "community": 20,
+      "community": 231,
       "norm_label": "lines",
       "id": "orchestrator_logging_test_lines"
     },
@@ -9188,7 +9269,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L32",
-      "community": 20,
+      "community": 231,
       "norm_label": "entry",
       "id": "orchestrator_logging_test_entry"
     },
@@ -9197,7 +9278,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L88",
-      "community": 20,
+      "community": 231,
       "norm_label": "start",
       "id": "orchestrator_logging_test_start"
     },
@@ -9206,7 +9287,7 @@
       "file_type": "code",
       "source_file": "orchestrator/logging.test.ts",
       "source_location": "L89",
-      "community": 20,
+      "community": 231,
       "norm_label": "end",
       "id": "orchestrator_logging_test_end"
     },
@@ -9764,7 +9845,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L1",
-      "community": 14,
+      "community": 111,
       "norm_label": "closure.test.ts",
       "id": "orchestrator_phases_closure_test_ts"
     },
@@ -9773,7 +9854,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L44",
-      "community": 14,
+      "community": 111,
       "norm_label": "module_cwd",
       "id": "phases_closure_test_module_cwd"
     },
@@ -9782,7 +9863,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L46",
-      "community": 14,
+      "community": 111,
       "norm_label": "sh()",
       "id": "phases_closure_test_sh"
     },
@@ -9791,7 +9872,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L50",
-      "community": 14,
+      "community": 111,
       "norm_label": "harness",
       "id": "phases_closure_test_harness"
     },
@@ -9800,7 +9881,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L67",
-      "community": 14,
+      "community": 111,
       "norm_label": "setup()",
       "id": "phases_closure_test_setup"
     },
@@ -9809,7 +9890,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L127",
-      "community": 14,
+      "community": 111,
       "norm_label": "input()",
       "id": "phases_closure_test_input"
     },
@@ -9818,7 +9899,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L138",
-      "community": 14,
+      "community": 111,
       "norm_label": "h",
       "id": "phases_closure_test_h"
     },
@@ -9827,7 +9908,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L146",
-      "community": 14,
+      "community": 111,
       "norm_label": "msgs",
       "id": "phases_closure_test_msgs"
     },
@@ -9836,7 +9917,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.test.ts",
       "source_location": "L160",
-      "community": 14,
+      "community": 111,
       "norm_label": "clone",
       "id": "phases_closure_test_clone"
     },
@@ -9944,7 +10025,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.ts",
       "source_location": "L1",
-      "community": 14,
+      "community": 111,
       "norm_label": "closure.ts",
       "id": "orchestrator_phases_closure_ts"
     },
@@ -9953,7 +10034,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.ts",
       "source_location": "L41",
-      "community": 14,
+      "community": 111,
       "norm_label": "closureresult",
       "id": "phases_closure_closureresult"
     },
@@ -9962,7 +10043,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.ts",
       "source_location": "L52",
-      "community": 14,
+      "community": 111,
       "norm_label": "initiativebranch()",
       "id": "phases_closure_initiativebranch"
     },
@@ -9971,7 +10052,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.ts",
       "source_location": "L72",
-      "community": 14,
+      "community": 111,
       "norm_label": "terminalmove()",
       "id": "phases_closure_terminalmove"
     },
@@ -9980,7 +10061,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/closure.ts",
       "source_location": "L114",
-      "community": 14,
+      "community": 111,
       "norm_label": "runclosure()",
       "id": "phases_closure_runclosure"
     },
@@ -10331,7 +10412,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L1",
-      "community": 111,
+      "community": 93,
       "norm_label": "project-manager.ts",
       "id": "orchestrator_phases_project_manager_ts"
     },
@@ -10349,7 +10430,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L45",
-      "community": 111,
+      "community": 93,
       "norm_label": "runprojectmanageroptions",
       "id": "phases_project_manager_runprojectmanageroptions"
     },
@@ -10358,7 +10439,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L73",
-      "community": 111,
+      "community": 93,
       "norm_label": "pmmaxbudgetusd()",
       "id": "phases_project_manager_pmmaxbudgetusd"
     },
@@ -10367,7 +10448,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L80",
-      "community": 111,
+      "community": 93,
       "norm_label": "runprojectmanager()",
       "id": "phases_project_manager_runprojectmanager"
     },
@@ -10376,7 +10457,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L180",
-      "community": 111,
+      "community": 93,
       "norm_label": "pmpassinput",
       "id": "phases_project_manager_pmpassinput"
     },
@@ -10385,7 +10466,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L191",
-      "community": 111,
+      "community": 93,
       "norm_label": "pmpassoutcome",
       "id": "phases_project_manager_pmpassoutcome"
     },
@@ -10394,7 +10475,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L202",
-      "community": 111,
+      "community": 93,
       "norm_label": "runonepmpass()",
       "id": "phases_project_manager_runonepmpass"
     },
@@ -10403,7 +10484,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L440",
-      "community": 111,
+      "community": 93,
       "norm_label": "collecthallucinatedfeatureids()",
       "id": "phases_project_manager_collecthallucinatedfeatureids"
     },
@@ -10412,7 +10493,7 @@
       "file_type": "code",
       "source_file": "orchestrator/phases/project-manager.ts",
       "source_location": "L459",
-      "community": 111,
+      "community": 93,
       "norm_label": "detectmanifesttype()",
       "id": "phases_project_manager_detectmanifesttype"
     },
@@ -13517,7 +13598,7 @@
       "file_type": "code",
       "source_file": "benchmarks/brain/sdk.ts",
       "source_location": "L62",
-      "community": 47,
+      "community": 63,
       "norm_label": "runbrainqueryresult",
       "id": "brain_sdk_runbrainqueryresult"
     },
@@ -14912,7 +14993,7 @@
       "file_type": "code",
       "source_file": "benchmarks/architect/scoring.ts",
       "source_location": "L151",
-      "community": 40,
+      "community": 64,
       "norm_label": "specsconcrete()",
       "id": "architect_scoring_specsconcrete"
     },
@@ -14921,7 +15002,7 @@
       "file_type": "code",
       "source_file": "benchmarks/architect/scoring.ts",
       "source_location": "L158",
-      "community": 40,
+      "community": 64,
       "norm_label": "countgivenwhenthen()",
       "id": "architect_scoring_countgivenwhenthen"
     },
@@ -14930,7 +15011,7 @@
       "file_type": "code",
       "source_file": "benchmarks/architect/scoring.ts",
       "source_location": "L163",
-      "community": 40,
+      "community": 64,
       "norm_label": "countacceptanceheadings()",
       "id": "architect_scoring_countacceptanceheadings"
     },
@@ -16082,7 +16163,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.ts",
       "source_location": "L56",
-      "community": 94,
+      "community": 39,
       "norm_label": "reflectorqueryfn",
       "id": "reflection_sdk_reflectorqueryfn"
     },
@@ -16118,7 +16199,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.ts",
       "source_location": "L129",
-      "community": 39,
+      "community": 76,
       "norm_label": "setuptempdir()",
       "id": "reflection_sdk_setuptempdir"
     },
@@ -16154,7 +16235,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/scoring.ts",
       "source_location": "L97",
-      "community": 8,
+      "community": 49,
       "norm_label": "reflectionexpected",
       "id": "reflection_scoring_reflectionexpected"
     },
@@ -16163,7 +16244,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/scoring.ts",
       "source_location": "L109",
-      "community": 8,
+      "community": 49,
       "norm_label": "reflectioncriteria",
       "id": "reflection_scoring_reflectioncriteria"
     },
@@ -16415,7 +16496,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L1",
-      "community": 94,
+      "community": 39,
       "norm_label": "sdk.test.ts",
       "id": "benchmarks_reflection_sdk_test_ts"
     },
@@ -16424,7 +16505,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L63",
-      "community": 94,
+      "community": 39,
       "norm_label": "makefixturebundle()",
       "id": "reflection_sdk_test_makefixturebundle"
     },
@@ -16433,7 +16514,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L89",
-      "community": 94,
+      "community": 39,
       "norm_label": "makeinput()",
       "id": "reflection_sdk_test_makeinput"
     },
@@ -16442,7 +16523,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L104",
-      "community": 94,
+      "community": 39,
       "norm_label": "fakequeryfn()",
       "id": "reflection_sdk_test_fakequeryfn"
     },
@@ -16451,7 +16532,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L129",
-      "community": 94,
+      "community": 39,
       "norm_label": "fix",
       "id": "reflection_sdk_test_fix"
     },
@@ -16460,7 +16541,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L131",
-      "community": 94,
+      "community": 39,
       "norm_label": "dir",
       "id": "reflection_sdk_test_dir"
     },
@@ -16469,7 +16550,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L141",
-      "community": 94,
+      "community": 39,
       "norm_label": "linkpath",
       "id": "reflection_sdk_test_linkpath"
     },
@@ -16478,7 +16559,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L166",
-      "community": 94,
+      "community": 39,
       "norm_label": "indexpath",
       "id": "reflection_sdk_test_indexpath"
     },
@@ -16487,7 +16568,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L170",
-      "community": 94,
+      "community": 39,
       "norm_label": "themesdir",
       "id": "reflection_sdk_test_themesdir"
     },
@@ -16496,7 +16577,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L175",
-      "community": 94,
+      "community": 39,
       "norm_label": "cyclesdir",
       "id": "reflection_sdk_test_cyclesdir"
     },
@@ -16505,7 +16586,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L198",
-      "community": 94,
+      "community": 39,
       "norm_label": "dest",
       "id": "reflection_sdk_test_dest"
     },
@@ -16514,7 +16595,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L411",
-      "community": 94,
+      "community": 39,
       "norm_label": "written",
       "id": "reflection_sdk_test_written"
     },
@@ -16523,7 +16604,7 @@
       "file_type": "code",
       "source_file": "benchmarks/reflection/sdk.test.ts",
       "source_location": "L414",
-      "community": 94,
+      "community": 39,
       "norm_label": "livecounterpart",
       "id": "reflection_sdk_test_livecounterpart"
     },
@@ -16541,7 +16622,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L1",
-      "community": 144,
+      "community": 70,
       "norm_label": "source-switch.ts",
       "id": "benchmarks_lib_source_switch_ts"
     },
@@ -16550,7 +16631,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L23",
-      "community": 144,
+      "community": 70,
       "norm_label": "benchsource",
       "id": "lib_source_switch_benchsource"
     },
@@ -16559,7 +16640,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L26",
-      "community": 144,
+      "community": 70,
       "norm_label": "parsesource()",
       "id": "lib_source_switch_parsesource"
     },
@@ -16568,7 +16649,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L32",
-      "community": 144,
+      "community": 70,
       "norm_label": "chainedcase",
       "id": "lib_source_switch_chainedcase"
     },
@@ -16577,7 +16658,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L41",
-      "community": 144,
+      "community": 70,
       "norm_label": "chainedresults",
       "id": "lib_source_switch_chainedresults"
     },
@@ -16586,7 +16667,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L43",
-      "community": 144,
+      "community": 70,
       "norm_label": "forge_root",
       "id": "lib_source_switch_forge_root"
     },
@@ -16595,7 +16676,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L46",
-      "community": 144,
+      "community": 70,
       "norm_label": "latestchainedresults()",
       "id": "lib_source_switch_latestchainedresults"
     },
@@ -16604,7 +16685,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/source-switch.ts",
       "source_location": "L72",
-      "community": 144,
+      "community": 70,
       "norm_label": "emitchainedsliceandexit()",
       "id": "lib_source_switch_emitchainedsliceandexit"
     },
@@ -16703,7 +16784,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/brain-mask.ts",
       "source_location": "L1",
-      "community": 39,
+      "community": 28,
       "norm_label": "brain-mask.ts",
       "id": "benchmarks_lib_brain_mask_ts"
     },
@@ -16712,7 +16793,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/brain-mask.ts",
       "source_location": "L29",
-      "community": 39,
+      "community": 28,
       "norm_label": "forge_root",
       "id": "lib_brain_mask_forge_root"
     },
@@ -16721,7 +16802,7 @@
       "file_type": "code",
       "source_file": "benchmarks/_lib/brain-mask.ts",
       "source_location": "L43",
-      "community": 39,
+      "community": 28,
       "norm_label": "layerbrain()",
       "id": "lib_brain_mask_layerbrain"
     },
@@ -18134,7 +18215,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L1",
-      "community": 82,
+      "community": 45,
       "norm_label": "score.ts",
       "id": "benchmarks_developer_loop_score_ts"
     },
@@ -18143,7 +18224,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L41",
-      "community": 82,
+      "community": 45,
       "norm_label": "case",
       "id": "developer_loop_score_case"
     },
@@ -18152,7 +18233,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L56",
-      "community": 82,
+      "community": 45,
       "norm_label": "caseresult",
       "id": "developer_loop_score_caseresult"
     },
@@ -18161,7 +18242,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L76",
-      "community": 82,
+      "community": 45,
       "norm_label": "casespath",
       "id": "developer_loop_score_casespath"
     },
@@ -18170,7 +18251,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L77",
-      "community": 82,
+      "community": 45,
       "norm_label": "cases",
       "id": "developer_loop_score_cases"
     },
@@ -18179,7 +18260,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L78",
-      "community": 82,
+      "community": 45,
       "norm_label": "ranat",
       "id": "developer_loop_score_ranat"
     },
@@ -18188,7 +18269,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L83",
-      "community": 82,
+      "community": 45,
       "norm_label": "emptycriteria()",
       "id": "developer_loop_score_emptycriteria"
     },
@@ -18197,7 +18278,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L113",
-      "community": 82,
+      "community": 45,
       "norm_label": "seedtreepath",
       "id": "developer_loop_score_seedtreepath"
     },
@@ -18206,7 +18287,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L169",
-      "community": 82,
+      "community": 45,
       "norm_label": "score",
       "id": "developer_loop_score_score"
     },
@@ -18215,7 +18296,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L195",
-      "community": 82,
+      "community": 45,
       "norm_label": "totalcost",
       "id": "developer_loop_score_totalcost"
     },
@@ -18224,7 +18305,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L197",
-      "community": 82,
+      "community": 45,
       "norm_label": "criteriapassrates",
       "id": "developer_loop_score_criteriapassrates"
     },
@@ -18233,7 +18314,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L213",
-      "community": 82,
+      "community": 45,
       "norm_label": "summary",
       "id": "developer_loop_score_summary"
     },
@@ -18242,7 +18323,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L232",
-      "community": 82,
+      "community": 45,
       "norm_label": "writtento",
       "id": "developer_loop_score_writtento"
     },
@@ -18251,7 +18332,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/score.ts",
       "source_location": "L240",
-      "community": 82,
+      "community": 45,
       "norm_label": "round3()",
       "id": "developer_loop_score_round3"
     },
@@ -18305,7 +18386,7 @@
       "file_type": "code",
       "source_file": "benchmarks/developer-loop/sdk.ts",
       "source_location": "L87",
-      "community": 82,
+      "community": 45,
       "norm_label": "rundevresult",
       "id": "developer_loop_sdk_rundevresult"
     },
@@ -19447,7 +19528,7 @@
       "file_type": "code",
       "source_file": "loops/ralph/stop-conditions.test.ts",
       "source_location": "L1",
-      "community": 223,
+      "community": 29,
       "norm_label": "stop-conditions.test.ts",
       "id": "loops_ralph_stop_conditions_test_ts"
     },
@@ -19456,7 +19537,7 @@
       "file_type": "code",
       "source_file": "loops/ralph/stop-conditions.test.ts",
       "source_location": "L15",
-      "community": 223,
+      "community": 29,
       "norm_label": "dir",
       "id": "ralph_stop_conditions_test_dir"
     },
@@ -19465,7 +19546,7 @@
       "file_type": "code",
       "source_file": "loops/ralph/stop-conditions.test.ts",
       "source_location": "L17",
-      "community": 223,
+      "community": 29,
       "norm_label": "gate",
       "id": "ralph_stop_conditions_test_gate"
     },
@@ -19474,7 +19555,7 @@
       "file_type": "code",
       "source_file": "loops/ralph/stop-conditions.test.ts",
       "source_location": "L59",
-      "community": 223,
+      "community": 29,
       "norm_label": "gatefail",
       "id": "ralph_stop_conditions_test_gatefail"
     },
@@ -19483,7 +19564,7 @@
       "file_type": "code",
       "source_file": "loops/ralph/stop-conditions.test.ts",
       "source_location": "L61",
-      "community": 223,
+      "community": 29,
       "norm_label": "gatepass",
       "id": "ralph_stop_conditions_test_gatepass"
     },
@@ -20419,7 +20500,7 @@
       "file_type": "document",
       "source_file": "brain/INDEX.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 16,
       "norm_label": "index.md",
       "id": "brain_index_md"
     },
@@ -21544,7 +21625,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-10-ui-canvas-overlay-pattern.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "2026-05-10-ui-canvas-overlay-pattern.md",
       "id": "brain_projects_trafficgame_themes_2026_05_10_ui_canvas_overlay_pattern_md"
     },
@@ -21634,7 +21715,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-17-reviewer-budget-undersized-medium-initiatives.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 16,
       "norm_label": "2026-05-17-reviewer-budget-undersized-medium-initiatives.md",
       "id": "brain_projects_trafficgame_themes_2026_05_17_reviewer_budget_undersized_medium_initiatives_md"
     },
@@ -21805,7 +21886,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-10-test-stack-and-gates.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 16,
       "norm_label": "2026-05-10-test-stack-and-gates.md",
       "id": "brain_projects_trafficgame_themes_2026_05_10_test_stack_and_gates_md"
     },
@@ -21940,7 +22021,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-10-minimal-utility-single-iteration-pattern.md",
       "source_location": "L1",
-      "community": 231,
+      "community": 207,
       "norm_label": "2026-05-10-minimal-utility-single-iteration-pattern.md",
       "id": "brain_projects_trafficgame_themes_2026_05_10_minimal_utility_single_iteration_pattern_md"
     },
@@ -22003,7 +22084,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-23-binary-elevation-model.md",
       "source_location": "L1",
-      "community": 101,
+      "community": 16,
       "norm_label": "2026-05-23-binary-elevation-model.md",
       "id": "brain_projects_trafficgame_themes_2026_05_23_binary_elevation_model_md"
     },
@@ -22075,7 +22156,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/canvas-bpr-flow-tests.md",
       "source_location": "L1",
-      "community": 101,
+      "community": 16,
       "norm_label": "canvas-bpr-flow-tests.md",
       "id": "brain_projects_trafficgame_themes_canvas_bpr_flow_tests_md"
     },
@@ -22084,7 +22165,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/canvas-bpr-flow-tests.md",
       "source_location": "L21",
-      "community": 101,
+      "community": 16,
       "norm_label": "trafficgame \u2014 canvas + bpr flow regressions need visual tests",
       "id": "themes_canvas_bpr_flow_tests_trafficgame_canvas_bpr_flow_regressions_need_visual_tests"
     },
@@ -22093,7 +22174,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/canvas-bpr-flow-tests.md",
       "source_location": "L36",
-      "community": 101,
+      "community": 16,
       "norm_label": "sources",
       "id": "themes_canvas_bpr_flow_tests_sources"
     },
@@ -22102,7 +22183,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/algorithm-heavy-items.md",
       "source_location": "L1",
-      "community": 231,
+      "community": 207,
       "norm_label": "algorithm-heavy-items.md",
       "id": "brain_projects_trafficgame_themes_algorithm_heavy_items_md"
     },
@@ -22111,7 +22192,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/algorithm-heavy-items.md",
       "source_location": "L20",
-      "community": 231,
+      "community": 207,
       "norm_label": "trafficgame \u2014 algorithm-heavy items must be decomposed",
       "id": "themes_algorithm_heavy_items_trafficgame_algorithm_heavy_items_must_be_decomposed"
     },
@@ -22120,7 +22201,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/algorithm-heavy-items.md",
       "source_location": "L33",
-      "community": 231,
+      "community": 207,
       "norm_label": "sources",
       "id": "themes_algorithm_heavy_items_sources"
     },
@@ -22228,7 +22309,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-10-mvp-architecture-snapshot.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "2026-05-10-mvp-architecture-snapshot.md",
       "id": "brain_projects_trafficgame_themes_2026_05_10_mvp_architecture_snapshot_md"
     },
@@ -22426,7 +22507,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-23-grading-frontier-infrastructure.md",
       "source_location": "L1",
-      "community": 101,
+      "community": 16,
       "norm_label": "2026-05-23-grading-frontier-infrastructure.md",
       "id": "brain_projects_trafficgame_themes_2026_05_23_grading_frontier_infrastructure_md"
     },
@@ -22615,7 +22696,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-10-traffic-physics-and-flow.md",
       "source_location": "L1",
-      "community": 101,
+      "community": 16,
       "norm_label": "2026-05-10-traffic-physics-and-flow.md",
       "id": "brain_projects_trafficgame_themes_2026_05_10_traffic_physics_and_flow_md"
     },
@@ -22687,7 +22768,7 @@
       "file_type": "document",
       "source_file": "brain/projects/trafficGame/themes/2026-05-17-stale-brain-contradicts-code-pm-failure.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "2026-05-17-stale-brain-contradicts-code-pm-failure.md",
       "id": "brain_projects_trafficgame_themes_2026_05_17_stale_brain_contradicts_code_pm_failure_md"
     },
@@ -22858,7 +22939,7 @@
       "file_type": "document",
       "source_file": "brain/projects/GitWeave/themes/control-repo-centricity.md",
       "source_location": "L1",
-      "community": 243,
+      "community": 16,
       "norm_label": "control-repo-centricity.md",
       "id": "brain_projects_gitweave_themes_control_repo_centricity_md"
     },
@@ -22867,7 +22948,7 @@
       "file_type": "document",
       "source_file": "brain/projects/GitWeave/themes/control-repo-centricity.md",
       "source_location": "L20",
-      "community": 243,
+      "community": 16,
       "norm_label": "gitweave \u2014 control-repo centricity",
       "id": "themes_control_repo_centricity_gitweave_control_repo_centricity"
     },
@@ -22876,7 +22957,7 @@
       "file_type": "document",
       "source_file": "brain/projects/GitWeave/themes/control-repo-centricity.md",
       "source_location": "L32",
-      "community": 243,
+      "community": 16,
       "norm_label": "sources",
       "id": "themes_control_repo_centricity_sources"
     },
@@ -23353,7 +23434,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L10",
-      "community": 32,
+      "community": 232,
       "norm_label": "terraform-provider-betterado \u2014 binding council constraints",
       "id": "themes_council_constraints_terraform_provider_betterado_binding_council_constraints"
     },
@@ -23362,7 +23443,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L16",
-      "community": 32,
+      "community": 232,
       "norm_label": "quality gate",
       "id": "themes_council_constraints_quality_gate"
     },
@@ -23371,7 +23452,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L23",
-      "community": 32,
+      "community": 232,
       "norm_label": "per-resource test substrate",
       "id": "themes_council_constraints_per_resource_test_substrate"
     },
@@ -23380,7 +23461,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L35",
-      "community": 32,
+      "community": 232,
       "norm_label": "docs",
       "id": "themes_council_constraints_docs"
     },
@@ -23389,7 +23470,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L41",
-      "community": 32,
+      "community": 232,
       "norm_label": "fixtures",
       "id": "themes_council_constraints_fixtures"
     },
@@ -23398,7 +23479,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L46",
-      "community": 32,
+      "community": 232,
       "norm_label": "additive & atomic",
       "id": "themes_council_constraints_additive_atomic"
     },
@@ -23407,7 +23488,7 @@
       "file_type": "document",
       "source_file": "brain/projects/terraform-provider-betterado/themes/council-constraints.md",
       "source_location": "L51",
-      "community": 32,
+      "community": 232,
       "norm_label": "pm scope-guard",
       "id": "themes_council_constraints_pm_scope_guard"
     },
@@ -23893,7 +23974,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/chained-phase-benchmarks.md",
       "source_location": "L34",
-      "community": 241,
+      "community": 17,
       "norm_label": "an e2e test is a seed, not a separate benchmark",
       "id": "themes_chained_phase_benchmarks_an_e2e_test_is_a_seed_not_a_separate_benchmark"
     },
@@ -23902,7 +23983,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/chained-phase-benchmarks.md",
       "source_location": "L79",
-      "community": 241,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_chained_phase_benchmarks_sources"
     },
@@ -23911,7 +23992,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/chained-phase-benchmarks.md",
       "source_location": "L84",
-      "community": 241,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_chained_phase_benchmarks_see_also"
     },
@@ -23992,7 +24073,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wedged-loop-detector.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 16,
       "norm_label": "wedged-loop-detector.md",
       "id": "brain_forge_themes_wedged_loop_detector_md"
     },
@@ -24001,7 +24082,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wedged-loop-detector.md",
       "source_location": "L22",
-      "community": 42,
+      "community": 269,
       "norm_label": "wedged loop detector",
       "id": "themes_wedged_loop_detector_wedged_loop_detector"
     },
@@ -24010,7 +24091,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wedged-loop-detector.md",
       "source_location": "L36",
-      "community": 42,
+      "community": 269,
       "norm_label": "sources",
       "id": "themes_wedged_loop_detector_sources"
     },
@@ -24019,7 +24100,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wedged-loop-detector.md",
       "source_location": "L41",
-      "community": 42,
+      "community": 269,
       "norm_label": "see also",
       "id": "themes_wedged_loop_detector_see_also"
     },
@@ -24073,7 +24154,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/pluggable-notifications.md",
       "source_location": "L1",
-      "community": 9,
+      "community": 82,
       "norm_label": "pluggable-notifications.md",
       "id": "brain_forge_themes_pluggable_notifications_md"
     },
@@ -24082,7 +24163,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/pluggable-notifications.md",
       "source_location": "L22",
-      "community": 9,
+      "community": 82,
       "norm_label": "pluggable notifications on review-ready",
       "id": "themes_pluggable_notifications_pluggable_notifications_on_review_ready"
     },
@@ -24091,7 +24172,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/pluggable-notifications.md",
       "source_location": "L37",
-      "community": 9,
+      "community": 82,
       "norm_label": "sources",
       "id": "themes_pluggable_notifications_sources"
     },
@@ -24100,7 +24181,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/pluggable-notifications.md",
       "source_location": "L41",
-      "community": 9,
+      "community": 82,
       "norm_label": "see also",
       "id": "themes_pluggable_notifications_see_also"
     },
@@ -24145,7 +24226,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/unattended-scheduler.md",
       "source_location": "L1",
-      "community": 9,
+      "community": 82,
       "norm_label": "unattended-scheduler.md",
       "id": "brain_forge_themes_unattended_scheduler_md"
     },
@@ -24154,7 +24235,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/unattended-scheduler.md",
       "source_location": "L24",
-      "community": 9,
+      "community": 82,
       "norm_label": "unattended scheduler with file-based queue + worktree pool",
       "id": "themes_unattended_scheduler_unattended_scheduler_with_file_based_queue_worktree_pool"
     },
@@ -24163,7 +24244,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/unattended-scheduler.md",
       "source_location": "L38",
-      "community": 9,
+      "community": 82,
       "norm_label": "sources",
       "id": "themes_unattended_scheduler_sources"
     },
@@ -24172,7 +24253,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/unattended-scheduler.md",
       "source_location": "L42",
-      "community": 9,
+      "community": 82,
       "norm_label": "see also",
       "id": "themes_unattended_scheduler_see_also"
     },
@@ -24190,7 +24271,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-project-onboarding-contract.md",
       "source_location": "L32",
-      "community": 250,
+      "community": 17,
       "norm_label": "the forge\u2194project contract",
       "id": "themes_forge_project_onboarding_contract_the_forge_project_contract"
     },
@@ -24199,7 +24280,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-project-onboarding-contract.md",
       "source_location": "L66",
-      "community": 250,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_forge_project_onboarding_contract_sources"
     },
@@ -24208,7 +24289,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-project-onboarding-contract.md",
       "source_location": "L71",
-      "community": 250,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_forge_project_onboarding_contract_see_also"
     },
@@ -24298,7 +24379,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/alternative-loop-runtimes.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "alternative-loop-runtimes.md",
       "id": "brain_forge_themes_alternative_loop_runtimes_md"
     },
@@ -24307,7 +24388,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/alternative-loop-runtimes.md",
       "source_location": "L24",
-      "community": 15,
+      "community": 244,
       "norm_label": "alternative loop runtimes",
       "id": "themes_alternative_loop_runtimes_alternative_loop_runtimes"
     },
@@ -24316,7 +24397,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/alternative-loop-runtimes.md",
       "source_location": "L40",
-      "community": 15,
+      "community": 244,
       "norm_label": "sources",
       "id": "themes_alternative_loop_runtimes_sources"
     },
@@ -24325,7 +24406,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/alternative-loop-runtimes.md",
       "source_location": "L47",
-      "community": 15,
+      "community": 244,
       "norm_label": "see also",
       "id": "themes_alternative_loop_runtimes_see_also"
     },
@@ -24343,7 +24424,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/design-is-the-bottleneck.md",
       "source_location": "L24",
-      "community": 16,
+      "community": 251,
       "norm_label": "design is the bottleneck",
       "id": "themes_design_is_the_bottleneck_design_is_the_bottleneck"
     },
@@ -24352,7 +24433,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/design-is-the-bottleneck.md",
       "source_location": "L34",
-      "community": 16,
+      "community": 251,
       "norm_label": "sources",
       "id": "themes_design_is_the_bottleneck_sources"
     },
@@ -24361,7 +24442,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/design-is-the-bottleneck.md",
       "source_location": "L39",
-      "community": 16,
+      "community": 251,
       "norm_label": "see also",
       "id": "themes_design_is_the_bottleneck_see_also"
     },
@@ -24478,7 +24559,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/dependency-ordered-work.md",
       "source_location": "L22",
-      "community": 16,
+      "community": 250,
       "norm_label": "dependency-ordered work \u2014 parallelism is correctness",
       "id": "themes_dependency_ordered_work_dependency_ordered_work_parallelism_is_correctness"
     },
@@ -24487,7 +24568,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/dependency-ordered-work.md",
       "source_location": "L37",
-      "community": 16,
+      "community": 250,
       "norm_label": "sources",
       "id": "themes_dependency_ordered_work_sources"
     },
@@ -24496,7 +24577,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/dependency-ordered-work.md",
       "source_location": "L42",
-      "community": 16,
+      "community": 250,
       "norm_label": "see also",
       "id": "themes_dependency_ordered_work_see_also"
     },
@@ -24505,7 +24586,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-fix-loop-spinning.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 9,
       "norm_label": "review-fix-loop-spinning.md",
       "id": "brain_forge_themes_review_fix_loop_spinning_md"
     },
@@ -24514,7 +24595,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-fix-loop-spinning.md",
       "source_location": "L23",
-      "community": 42,
+      "community": 9,
       "norm_label": "review-fix loop spinning \u2014 sha-guard missing",
       "id": "themes_review_fix_loop_spinning_review_fix_loop_spinning_sha_guard_missing"
     },
@@ -24523,7 +24604,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-fix-loop-spinning.md",
       "source_location": "L44",
-      "community": 42,
+      "community": 9,
       "norm_label": "sources",
       "id": "themes_review_fix_loop_spinning_sources"
     },
@@ -24532,7 +24613,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-fix-loop-spinning.md",
       "source_location": "L48",
-      "community": 42,
+      "community": 9,
       "norm_label": "see also",
       "id": "themes_review_fix_loop_spinning_see_also"
     },
@@ -24550,7 +24631,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/simplicity-as-architecture.md",
       "source_location": "L22",
-      "community": 265,
+      "community": 17,
       "norm_label": "simplicity is key \u2014 every \"no\" defends it",
       "id": "themes_simplicity_as_architecture_simplicity_is_key_every_no_defends_it"
     },
@@ -24559,7 +24640,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/simplicity-as-architecture.md",
       "source_location": "L39",
-      "community": 265,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_simplicity_as_architecture_sources"
     },
@@ -24568,7 +24649,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/simplicity-as-architecture.md",
       "source_location": "L44",
-      "community": 265,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_simplicity_as_architecture_see_also"
     },
@@ -24577,7 +24658,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/rate-limit-no-backoff.md",
       "source_location": "L1",
-      "community": 145,
+      "community": 16,
       "norm_label": "rate-limit-no-backoff.md",
       "id": "brain_forge_themes_rate_limit_no_backoff_md"
     },
@@ -24586,7 +24667,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/rate-limit-no-backoff.md",
       "source_location": "L24",
-      "community": 145,
+      "community": 260,
       "norm_label": "rate-limit no-backoff antipattern",
       "id": "themes_rate_limit_no_backoff_rate_limit_no_backoff_antipattern"
     },
@@ -24595,7 +24676,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/rate-limit-no-backoff.md",
       "source_location": "L39",
-      "community": 145,
+      "community": 260,
       "norm_label": "sources",
       "id": "themes_rate_limit_no_backoff_sources"
     },
@@ -24604,7 +24685,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/rate-limit-no-backoff.md",
       "source_location": "L43",
-      "community": 145,
+      "community": 260,
       "norm_label": "see also",
       "id": "themes_rate_limit_no_backoff_see_also"
     },
@@ -24622,7 +24703,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/objective-gate-autonomous-closure.md",
       "source_location": "L31",
-      "community": 258,
+      "community": 17,
       "norm_label": "objective-gate autonomous closure",
       "id": "themes_objective_gate_autonomous_closure_objective_gate_autonomous_closure"
     },
@@ -24631,7 +24712,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/objective-gate-autonomous-closure.md",
       "source_location": "L63",
-      "community": 258,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_objective_gate_autonomous_closure_sources"
     },
@@ -24640,7 +24721,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/objective-gate-autonomous-closure.md",
       "source_location": "L68",
-      "community": 258,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_objective_gate_autonomous_closure_see_also"
     },
@@ -24649,7 +24730,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/markdown-artifact-flow.md",
       "source_location": "L1",
-      "community": 136,
+      "community": 16,
       "norm_label": "markdown-artifact-flow.md",
       "id": "brain_forge_themes_markdown_artifact_flow_md"
     },
@@ -24694,7 +24775,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/prompt-caching-strategy.md",
       "source_location": "L1",
-      "community": 53,
+      "community": 16,
       "norm_label": "prompt-caching-strategy.md",
       "id": "brain_forge_themes_prompt_caching_strategy_md"
     },
@@ -24703,7 +24784,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/prompt-caching-strategy.md",
       "source_location": "L23",
-      "community": 53,
+      "community": 254,
       "norm_label": "prompt caching \u2014 stable prefix first",
       "id": "themes_prompt_caching_strategy_prompt_caching_stable_prefix_first"
     },
@@ -24712,7 +24793,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/prompt-caching-strategy.md",
       "source_location": "L37",
-      "community": 53,
+      "community": 254,
       "norm_label": "sources",
       "id": "themes_prompt_caching_strategy_sources"
     },
@@ -24721,7 +24802,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/prompt-caching-strategy.md",
       "source_location": "L41",
-      "community": 53,
+      "community": 254,
       "norm_label": "see also",
       "id": "themes_prompt_caching_strategy_see_also"
     },
@@ -24739,7 +24820,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/eval-driven-development.md",
       "source_location": "L23",
-      "community": 248,
+      "community": 17,
       "norm_label": "eval-driven development \u2014 every change shows a benchmark delta",
       "id": "themes_eval_driven_development_eval_driven_development_every_change_shows_a_benchmark_delta"
     },
@@ -24748,7 +24829,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/eval-driven-development.md",
       "source_location": "L38",
-      "community": 248,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_eval_driven_development_sources"
     },
@@ -24757,7 +24838,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/eval-driven-development.md",
       "source_location": "L43",
-      "community": 248,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_eval_driven_development_see_also"
     },
@@ -24766,7 +24847,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wiki-over-truncated-context.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "wiki-over-truncated-context.md",
       "id": "brain_forge_themes_wiki_over_truncated_context_md"
     },
@@ -24775,7 +24856,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wiki-over-truncated-context.md",
       "source_location": "L25",
-      "community": 269,
+      "community": 238,
       "norm_label": "wiki over truncated learning-context",
       "id": "themes_wiki_over_truncated_context_wiki_over_truncated_learning_context"
     },
@@ -24784,7 +24865,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wiki-over-truncated-context.md",
       "source_location": "L39",
-      "community": 269,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_wiki_over_truncated_context_sources"
     },
@@ -24793,7 +24874,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/wiki-over-truncated-context.md",
       "source_location": "L44",
-      "community": 269,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_wiki_over_truncated_context_see_also"
     },
@@ -24811,7 +24892,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/six-phases-of-forge.md",
       "source_location": "L25",
-      "community": 232,
+      "community": 17,
       "norm_label": "six phases of forge backed by a brain",
       "id": "themes_six_phases_of_forge_six_phases_of_forge_backed_by_a_brain"
     },
@@ -24820,7 +24901,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/six-phases-of-forge.md",
       "source_location": "L29",
-      "community": 232,
+      "community": 17,
       "norm_label": "code:block1 (\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510)",
       "id": "themes_six_phases_of_forge_codeblock_1"
     },
@@ -24829,7 +24910,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/six-phases-of-forge.md",
       "source_location": "L49",
-      "community": 232,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_six_phases_of_forge_sources"
     },
@@ -24838,7 +24919,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/six-phases-of-forge.md",
       "source_location": "L54",
-      "community": 232,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_six_phases_of_forge_see_also"
     },
@@ -24847,7 +24928,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/conditional-core-values.md",
       "source_location": "L1",
-      "community": 53,
+      "community": 16,
       "norm_label": "conditional-core-values.md",
       "id": "brain_forge_themes_conditional_core_values_md"
     },
@@ -24856,7 +24937,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/conditional-core-values.md",
       "source_location": "L23",
-      "community": 53,
+      "community": 248,
       "norm_label": "conditional core-values injection per role",
       "id": "themes_conditional_core_values_conditional_core_values_injection_per_role"
     },
@@ -24865,7 +24946,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/conditional-core-values.md",
       "source_location": "L37",
-      "community": 53,
+      "community": 248,
       "norm_label": "sources",
       "id": "themes_conditional_core_values_sources"
     },
@@ -24874,7 +24955,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/conditional-core-values.md",
       "source_location": "L41",
-      "community": 53,
+      "community": 248,
       "norm_label": "see also",
       "id": "themes_conditional_core_values_see_also"
     },
@@ -24883,7 +24964,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/jsonl-event-log.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "jsonl-event-log.md",
       "id": "brain_forge_themes_jsonl_event_log_md"
     },
@@ -24892,7 +24973,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/jsonl-event-log.md",
       "source_location": "L24",
-      "community": 253,
+      "community": 238,
       "norm_label": "jsonl event log per cycle",
       "id": "themes_jsonl_event_log_jsonl_event_log_per_cycle"
     },
@@ -24901,7 +24982,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/jsonl-event-log.md",
       "source_location": "L32",
-      "community": 253,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_jsonl_event_log_sources"
     },
@@ -24910,7 +24991,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/jsonl-event-log.md",
       "source_location": "L36",
-      "community": 253,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_jsonl_event_log_see_also"
     },
@@ -24919,7 +25000,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/skills-as-agent-surface.md",
       "source_location": "L1",
-      "community": 53,
+      "community": 16,
       "norm_label": "skills-as-agent-surface.md",
       "id": "brain_forge_themes_skills_as_agent_surface_md"
     },
@@ -24928,7 +25009,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/skills-as-agent-surface.md",
       "source_location": "L22",
-      "community": 53,
+      "community": 263,
       "norm_label": "skills as the agent surface",
       "id": "themes_skills_as_agent_surface_skills_as_the_agent_surface"
     },
@@ -24937,7 +25018,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/skills-as-agent-surface.md",
       "source_location": "L32",
-      "community": 53,
+      "community": 263,
       "norm_label": "sources",
       "id": "themes_skills_as_agent_surface_sources"
     },
@@ -24946,7 +25027,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/skills-as-agent-surface.md",
       "source_location": "L36",
-      "community": 53,
+      "community": 263,
       "norm_label": "see also",
       "id": "themes_skills_as_agent_surface_see_also"
     },
@@ -24955,7 +25036,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/avoid-hand-rolling-tools.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "avoid-hand-rolling-tools.md",
       "id": "brain_forge_themes_avoid_hand_rolling_tools_md"
     },
@@ -24991,7 +25072,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/ralph-stop-hook-vs-bash-loop.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "ralph-stop-hook-vs-bash-loop.md",
       "id": "brain_forge_themes_ralph_stop_hook_vs_bash_loop_md"
     },
@@ -25081,7 +25162,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/v1-vs-v2-key-differences.md",
       "source_location": "L23",
-      "community": 268,
+      "community": 17,
       "norm_label": "v1 vs v2 \u2014 what was rejected and why",
       "id": "themes_v1_vs_v2_key_differences_v1_vs_v2_what_was_rejected_and_why"
     },
@@ -25090,7 +25171,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/v1-vs-v2-key-differences.md",
       "source_location": "L43",
-      "community": 268,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_v1_vs_v2_key_differences_sources"
     },
@@ -25099,7 +25180,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/v1-vs-v2-key-differences.md",
       "source_location": "L48",
-      "community": 268,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_v1_vs_v2_key_differences_see_also"
     },
@@ -25108,7 +25189,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-agent-sdk.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "claude-agent-sdk.md",
       "id": "brain_forge_themes_claude_agent_sdk_md"
     },
@@ -25117,7 +25198,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-agent-sdk.md",
       "source_location": "L22",
-      "community": 15,
+      "community": 247,
       "norm_label": "claude agent sdk as the agent runtime",
       "id": "themes_claude_agent_sdk_claude_agent_sdk_as_the_agent_runtime"
     },
@@ -25126,7 +25207,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-agent-sdk.md",
       "source_location": "L30",
-      "community": 15,
+      "community": 247,
       "norm_label": "sources",
       "id": "themes_claude_agent_sdk_sources"
     },
@@ -25135,7 +25216,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-agent-sdk.md",
       "source_location": "L34",
-      "community": 15,
+      "community": 247,
       "norm_label": "see also",
       "id": "themes_claude_agent_sdk_see_also"
     },
@@ -25144,7 +25225,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/quality-gates-orchestrator-verified.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 16,
       "norm_label": "quality-gates-orchestrator-verified.md",
       "id": "brain_forge_themes_quality_gates_orchestrator_verified_md"
     },
@@ -25153,7 +25234,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/quality-gates-orchestrator-verified.md",
       "source_location": "L23",
-      "community": 42,
+      "community": 258,
       "norm_label": "quality gates verified by the orchestrator, not the agent",
       "id": "themes_quality_gates_orchestrator_verified_quality_gates_verified_by_the_orchestrator_not_the_agent"
     },
@@ -25162,7 +25243,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/quality-gates-orchestrator-verified.md",
       "source_location": "L39",
-      "community": 42,
+      "community": 258,
       "norm_label": "sources",
       "id": "themes_quality_gates_orchestrator_verified_sources"
     },
@@ -25171,7 +25252,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/quality-gates-orchestrator-verified.md",
       "source_location": "L44",
-      "community": 42,
+      "community": 258,
       "norm_label": "see also",
       "id": "themes_quality_gates_orchestrator_verified_see_also"
     },
@@ -25189,7 +25270,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/reactive-constraint-stripback-arc.md",
       "source_location": "L34",
-      "community": 261,
+      "community": 17,
       "norm_label": "agent-facing constraints masked structural bugs",
       "id": "themes_reactive_constraint_stripback_arc_agent_facing_constraints_masked_structural_bugs"
     },
@@ -25198,7 +25279,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/reactive-constraint-stripback-arc.md",
       "source_location": "L68",
-      "community": 261,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_reactive_constraint_stripback_arc_sources"
     },
@@ -25207,7 +25288,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/reactive-constraint-stripback-arc.md",
       "source_location": "L73",
-      "community": 261,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_reactive_constraint_stripback_arc_see_also"
     },
@@ -25216,7 +25297,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-first-research.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "brain-first-research.md",
       "id": "brain_forge_themes_brain_first_research_md"
     },
@@ -25252,7 +25333,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-hooks-system.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "claude-sdk-hooks-system.md",
       "id": "brain_forge_themes_claude_sdk_hooks_system_md"
     },
@@ -25306,7 +25387,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-phase-target-design.md",
       "source_location": "L32",
-      "community": 263,
+      "community": 17,
       "norm_label": "review-phase target design",
       "id": "themes_review_phase_target_design_review_phase_target_design"
     },
@@ -25315,7 +25396,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-phase-target-design.md",
       "source_location": "L71",
-      "community": 263,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_review_phase_target_design_sources"
     },
@@ -25324,7 +25405,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/review-phase-target-design.md",
       "source_location": "L76",
-      "community": 263,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_review_phase_target_design_see_also"
     },
@@ -25378,7 +25459,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-work-items.md",
       "source_location": "L23",
-      "community": 16,
+      "community": 243,
       "norm_label": "spec-driven work items",
       "id": "themes_spec_driven_work_items_spec_driven_work_items"
     },
@@ -25387,7 +25468,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-work-items.md",
       "source_location": "L27",
-      "community": 16,
+      "community": 243,
       "norm_label": "code:yaml (work_item_id: wi-<n>)",
       "id": "themes_spec_driven_work_items_codeblock_1"
     },
@@ -25396,7 +25477,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-work-items.md",
       "source_location": "L52",
-      "community": 16,
+      "community": 243,
       "norm_label": "sources",
       "id": "themes_spec_driven_work_items_sources"
     },
@@ -25405,7 +25486,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-work-items.md",
       "source_location": "L56",
-      "community": 16,
+      "community": 243,
       "norm_label": "see also",
       "id": "themes_spec_driven_work_items_see_also"
     },
@@ -25558,7 +25639,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/tdd-with-agents.md",
       "source_location": "L1",
-      "community": 42,
+      "community": 16,
       "norm_label": "tdd-with-agents.md",
       "id": "brain_forge_themes_tdd_with_agents_md"
     },
@@ -25567,7 +25648,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/tdd-with-agents.md",
       "source_location": "L23",
-      "community": 42,
+      "community": 268,
       "norm_label": "tdd with agents",
       "id": "themes_tdd_with_agents_tdd_with_agents"
     },
@@ -25576,7 +25657,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/tdd-with-agents.md",
       "source_location": "L39",
-      "community": 42,
+      "community": 268,
       "norm_label": "sources",
       "id": "themes_tdd_with_agents_sources"
     },
@@ -25585,7 +25666,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/tdd-with-agents.md",
       "source_location": "L45",
-      "community": 42,
+      "community": 268,
       "norm_label": "see also",
       "id": "themes_tdd_with_agents_see_also"
     },
@@ -25648,7 +25729,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/crash-recovery-heartbeat.md",
       "source_location": "L1",
-      "community": 9,
+      "community": 82,
       "norm_label": "crash-recovery-heartbeat.md",
       "id": "brain_forge_themes_crash_recovery_heartbeat_md"
     },
@@ -25657,7 +25738,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/crash-recovery-heartbeat.md",
       "source_location": "L22",
-      "community": 9,
+      "community": 82,
       "norm_label": "crash recovery via worktree heartbeat + atomic claim",
       "id": "themes_crash_recovery_heartbeat_crash_recovery_via_worktree_heartbeat_atomic_claim"
     },
@@ -25666,7 +25747,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/crash-recovery-heartbeat.md",
       "source_location": "L33",
-      "community": 9,
+      "community": 82,
       "norm_label": "sources",
       "id": "themes_crash_recovery_heartbeat_sources"
     },
@@ -25675,7 +25756,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/crash-recovery-heartbeat.md",
       "source_location": "L37",
-      "community": 9,
+      "community": 82,
       "norm_label": "see also",
       "id": "themes_crash_recovery_heartbeat_see_also"
     },
@@ -25693,7 +25774,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/phase-isolation-benchmarks.md",
       "source_location": "L21",
-      "community": 260,
+      "community": 17,
       "norm_label": "phase isolation with per-phase benchmarks",
       "id": "themes_phase_isolation_benchmarks_phase_isolation_with_per_phase_benchmarks"
     },
@@ -25702,7 +25783,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/phase-isolation-benchmarks.md",
       "source_location": "L33",
-      "community": 260,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_phase_isolation_benchmarks_sources"
     },
@@ -25711,7 +25792,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/phase-isolation-benchmarks.md",
       "source_location": "L38",
-      "community": 260,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_phase_isolation_benchmarks_see_also"
     },
@@ -25720,7 +25801,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/karpathy-three-layer-wiki.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "karpathy-three-layer-wiki.md",
       "id": "brain_forge_themes_karpathy_three_layer_wiki_md"
     },
@@ -25729,7 +25810,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/karpathy-three-layer-wiki.md",
       "source_location": "L23",
-      "community": 254,
+      "community": 238,
       "norm_label": "karpathy three-layer llm wiki",
       "id": "themes_karpathy_three_layer_wiki_karpathy_three_layer_llm_wiki"
     },
@@ -25738,7 +25819,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/karpathy-three-layer-wiki.md",
       "source_location": "L35",
-      "community": 254,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_karpathy_three_layer_wiki_sources"
     },
@@ -25747,7 +25828,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/karpathy-three-layer-wiki.md",
       "source_location": "L40",
-      "community": 254,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_karpathy_three_layer_wiki_see_also"
     },
@@ -25756,7 +25837,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/cost-aware-model-routing.md",
       "source_location": "L1",
-      "community": 53,
+      "community": 16,
       "norm_label": "cost-aware-model-routing.md",
       "id": "brain_forge_themes_cost_aware_model_routing_md"
     },
@@ -25801,7 +25882,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/agent-stuck-no-detection.md",
       "source_location": "L1",
-      "community": 145,
+      "community": 16,
       "norm_label": "agent-stuck-no-detection.md",
       "id": "brain_forge_themes_agent_stuck_no_detection_md"
     },
@@ -25846,7 +25927,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-directed-work-as-initiatives.md",
       "source_location": "L29",
-      "community": 251,
+      "community": 17,
       "norm_label": "hand-directed work routed through the pipeline blurs autonomy metrics",
       "id": "themes_human_directed_work_as_initiatives_hand_directed_work_routed_through_the_pipeline_blurs_autonomy_metrics"
     },
@@ -25855,7 +25936,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-directed-work-as-initiatives.md",
       "source_location": "L55",
-      "community": 251,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_human_directed_work_as_initiatives_sources"
     },
@@ -25864,7 +25945,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-directed-work-as-initiatives.md",
       "source_location": "L60",
-      "community": 251,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_human_directed_work_as_initiatives_see_also"
     },
@@ -25882,7 +25963,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-current-architecture-as-built.md",
       "source_location": "L30",
-      "community": 249,
+      "community": 17,
       "norm_label": "forge as-built (honest snapshot)",
       "id": "themes_forge_current_architecture_as_built_forge_as_built_honest_snapshot"
     },
@@ -25891,7 +25972,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-current-architecture-as-built.md",
       "source_location": "L63",
-      "community": 249,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_forge_current_architecture_as_built_sources"
     },
@@ -25900,7 +25981,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-current-architecture-as-built.md",
       "source_location": "L68",
-      "community": 249,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_forge_current_architecture_as_built_see_also"
     },
@@ -25918,7 +25999,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-read-policy.md",
       "source_location": "L32",
-      "community": 240,
+      "community": 17,
       "norm_label": "brain-read policy",
       "id": "themes_brain_read_policy_brain_read_policy"
     },
@@ -25927,7 +26008,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-read-policy.md",
       "source_location": "L67",
-      "community": 240,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_brain_read_policy_sources"
     },
@@ -25936,7 +26017,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-read-policy.md",
       "source_location": "L72",
-      "community": 240,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_brain_read_policy_see_also"
     },
@@ -25954,7 +26035,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-interaction-via-own-session.md",
       "source_location": "L31",
-      "community": 252,
+      "community": 17,
       "norm_label": "human interaction points run in the operator's own session",
       "id": "themes_human_interaction_via_own_session_human_interaction_points_run_in_the_operator_s_own_session"
     },
@@ -25963,7 +26044,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-interaction-via-own-session.md",
       "source_location": "L62",
-      "community": 252,
+      "community": 17,
       "norm_label": "sources",
       "id": "themes_human_interaction_via_own_session_sources"
     },
@@ -25972,7 +26053,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/human-interaction-via-own-session.md",
       "source_location": "L67",
-      "community": 252,
+      "community": 17,
       "norm_label": "see also",
       "id": "themes_human_interaction_via_own_session_see_also"
     },
@@ -25981,7 +26062,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/per-project-knowledge-graph.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "per-project-knowledge-graph.md",
       "id": "brain_forge_themes_per_project_knowledge_graph_md"
     },
@@ -26071,7 +26152,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-subagents.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "claude-sdk-subagents.md",
       "id": "brain_forge_themes_claude_sdk_subagents_md"
     },
@@ -26080,7 +26161,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-subagents.md",
       "source_location": "L24",
-      "community": 15,
+      "community": 240,
       "norm_label": "claude agent sdk subagents",
       "id": "themes_claude_sdk_subagents_claude_agent_sdk_subagents"
     },
@@ -26089,7 +26170,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-subagents.md",
       "source_location": "L28",
-      "community": 15,
+      "community": 240,
       "norm_label": "code:ts (const options = {)",
       "id": "themes_claude_sdk_subagents_codeblock_1"
     },
@@ -26098,7 +26179,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-subagents.md",
       "source_location": "L58",
-      "community": 15,
+      "community": 240,
       "norm_label": "sources",
       "id": "themes_claude_sdk_subagents_sources"
     },
@@ -26107,7 +26188,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/claude-sdk-subagents.md",
       "source_location": "L62",
-      "community": 15,
+      "community": 240,
       "norm_label": "see also",
       "id": "themes_claude_sdk_subagents_see_also"
     },
@@ -26125,7 +26206,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/declarative-specs-vs-imperative.md",
       "source_location": "L23",
-      "community": 16,
+      "community": 249,
       "norm_label": "declarative specs over imperative instructions",
       "id": "themes_declarative_specs_vs_imperative_declarative_specs_over_imperative_instructions"
     },
@@ -26134,7 +26215,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/declarative-specs-vs-imperative.md",
       "source_location": "L33",
-      "community": 16,
+      "community": 249,
       "norm_label": "sources",
       "id": "themes_declarative_specs_vs_imperative_sources"
     },
@@ -26143,7 +26224,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/declarative-specs-vs-imperative.md",
       "source_location": "L38",
-      "community": 16,
+      "community": 249,
       "norm_label": "see also",
       "id": "themes_declarative_specs_vs_imperative_see_also"
     },
@@ -26161,7 +26242,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-development.md",
       "source_location": "L24",
-      "community": 16,
+      "community": 265,
       "norm_label": "spec-driven development \u2014 prd as the contract",
       "id": "themes_spec_driven_development_spec_driven_development_prd_as_the_contract"
     },
@@ -26170,7 +26251,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-development.md",
       "source_location": "L41",
-      "community": 16,
+      "community": 265,
       "norm_label": "sources",
       "id": "themes_spec_driven_development_sources"
     },
@@ -26179,7 +26260,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/spec-driven-development.md",
       "source_location": "L46",
-      "community": 16,
+      "community": 265,
       "norm_label": "see also",
       "id": "themes_spec_driven_development_see_also"
     },
@@ -26188,7 +26269,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-never-self-modifies.md",
       "source_location": "L1",
-      "community": 9,
+      "community": 82,
       "norm_label": "forge-never-self-modifies.md",
       "id": "brain_forge_themes_forge_never_self_modifies_md"
     },
@@ -26197,7 +26278,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-never-self-modifies.md",
       "source_location": "L23",
-      "community": 9,
+      "community": 82,
       "norm_label": "forge never self-modifies while running",
       "id": "themes_forge_never_self_modifies_forge_never_self_modifies_while_running"
     },
@@ -26206,7 +26287,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-never-self-modifies.md",
       "source_location": "L37",
-      "community": 9,
+      "community": 82,
       "norm_label": "sources",
       "id": "themes_forge_never_self_modifies_sources"
     },
@@ -26215,7 +26296,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/forge-never-self-modifies.md",
       "source_location": "L41",
-      "community": 9,
+      "community": 82,
       "norm_label": "see also",
       "id": "themes_forge_never_self_modifies_see_also"
     },
@@ -26224,7 +26305,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/gstack-conventions.md",
       "source_location": "L1",
-      "community": 136,
+      "community": 16,
       "norm_label": "gstack-conventions.md",
       "id": "brain_forge_themes_gstack_conventions_md"
     },
@@ -26233,7 +26314,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/gstack-conventions.md",
       "source_location": "L23",
-      "community": 136,
+      "community": 252,
       "norm_label": "gstack conventions",
       "id": "themes_gstack_conventions_gstack_conventions"
     },
@@ -26242,7 +26323,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/gstack-conventions.md",
       "source_location": "L37",
-      "community": 136,
+      "community": 252,
       "norm_label": "sources",
       "id": "themes_gstack_conventions_sources"
     },
@@ -26251,7 +26332,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/gstack-conventions.md",
       "source_location": "L41",
-      "community": 136,
+      "community": 252,
       "norm_label": "see also",
       "id": "themes_gstack_conventions_see_also"
     },
@@ -26260,7 +26341,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/cycle-event-log-replay.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "cycle-event-log-replay.md",
       "id": "brain_forge_themes_cycle_event_log_replay_md"
     },
@@ -26269,7 +26350,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/cycle-event-log-replay.md",
       "source_location": "L22",
-      "community": 244,
+      "community": 238,
       "norm_label": "cycle event-log replay",
       "id": "themes_cycle_event_log_replay_cycle_event_log_replay"
     },
@@ -26278,7 +26359,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/cycle-event-log-replay.md",
       "source_location": "L38",
-      "community": 244,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_cycle_event_log_replay_sources"
     },
@@ -26287,7 +26368,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/cycle-event-log-replay.md",
       "source_location": "L42",
-      "community": 244,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_cycle_event_log_replay_see_also"
     },
@@ -26332,7 +26413,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/minimal-runtime-config.md",
       "source_location": "L1",
-      "community": 53,
+      "community": 16,
       "norm_label": "minimal-runtime-config.md",
       "id": "brain_forge_themes_minimal_runtime_config_md"
     },
@@ -26341,7 +26422,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/minimal-runtime-config.md",
       "source_location": "L22",
-      "community": 53,
+      "community": 241,
       "norm_label": "minimal forge.config.json",
       "id": "themes_minimal_runtime_config_minimal_forge_config_json"
     },
@@ -26350,7 +26431,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/minimal-runtime-config.md",
       "source_location": "L28",
-      "community": 53,
+      "community": 241,
       "norm_label": "code:jsonc ({)",
       "id": "themes_minimal_runtime_config_codeblock_1"
     },
@@ -26359,7 +26440,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/minimal-runtime-config.md",
       "source_location": "L45",
-      "community": 53,
+      "community": 241,
       "norm_label": "sources",
       "id": "themes_minimal_runtime_config_sources"
     },
@@ -26368,7 +26449,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/minimal-runtime-config.md",
       "source_location": "L49",
-      "community": 53,
+      "community": 241,
       "norm_label": "see also",
       "id": "themes_minimal_runtime_config_see_also"
     },
@@ -26386,7 +26467,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/llm-council-pattern.md",
       "source_location": "L23",
-      "community": 16,
+      "community": 253,
       "norm_label": "llm council pattern \u2014 chained-reviewer perspectives",
       "id": "themes_llm_council_pattern_llm_council_pattern_chained_reviewer_perspectives"
     },
@@ -26395,7 +26476,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/llm-council-pattern.md",
       "source_location": "L36",
-      "community": 16,
+      "community": 253,
       "norm_label": "sources",
       "id": "themes_llm_council_pattern_sources"
     },
@@ -26404,7 +26485,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/llm-council-pattern.md",
       "source_location": "L41",
-      "community": 16,
+      "community": 253,
       "norm_label": "see also",
       "id": "themes_llm_council_pattern_see_also"
     },
@@ -26413,7 +26494,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-gap-feedback-loop.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "brain-gap-feedback-loop.md",
       "id": "brain_forge_themes_brain_gap_feedback_loop_md"
     },
@@ -26422,7 +26503,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-gap-feedback-loop.md",
       "source_location": "L22",
-      "community": 239,
+      "community": 238,
       "norm_label": "brain-gap feedback loop",
       "id": "themes_brain_gap_feedback_loop_brain_gap_feedback_loop"
     },
@@ -26431,7 +26512,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-gap-feedback-loop.md",
       "source_location": "L35",
-      "community": 239,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_brain_gap_feedback_loop_sources"
     },
@@ -26440,7 +26521,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/brain-gap-feedback-loop.md",
       "source_location": "L40",
-      "community": 239,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_brain_gap_feedback_loop_see_also"
     },
@@ -26449,7 +26530,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/ralph-loop-pattern.md",
       "source_location": "L1",
-      "community": 15,
+      "community": 16,
       "norm_label": "ralph-loop-pattern.md",
       "id": "brain_forge_themes_ralph_loop_pattern_md"
     },
@@ -26494,7 +26575,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/theme-page-format.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "theme-page-format.md",
       "id": "brain_forge_themes_theme_page_format_md"
     },
@@ -26503,7 +26584,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/theme-page-format.md",
       "source_location": "L20",
-      "community": 17,
+      "community": 238,
       "norm_label": "theme page format",
       "id": "themes_theme_page_format_theme_page_format"
     },
@@ -26512,7 +26593,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/file-based-state-machine.md",
       "source_location": "L1",
-      "community": 9,
+      "community": 82,
       "norm_label": "file-based-state-machine.md",
       "id": "brain_forge_themes_file_based_state_machine_md"
     },
@@ -26521,7 +26602,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/file-based-state-machine.md",
       "source_location": "L23",
-      "community": 9,
+      "community": 82,
       "norm_label": "file-based state machine for queue management",
       "id": "themes_file_based_state_machine_file_based_state_machine_for_queue_management"
     },
@@ -26530,7 +26611,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/file-based-state-machine.md",
       "source_location": "L27",
-      "community": 9,
+      "community": 82,
       "norm_label": "code:block1 (_queue/)",
       "id": "themes_file_based_state_machine_codeblock_1"
     },
@@ -26539,7 +26620,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/file-based-state-machine.md",
       "source_location": "L44",
-      "community": 9,
+      "community": 82,
       "norm_label": "sources",
       "id": "themes_file_based_state_machine_sources"
     },
@@ -26548,7 +26629,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/file-based-state-machine.md",
       "source_location": "L49",
-      "community": 9,
+      "community": 82,
       "norm_label": "see also",
       "id": "themes_file_based_state_machine_see_also"
     },
@@ -26566,7 +26647,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/work-item-completion-by-domain.md",
       "source_location": "L23",
-      "community": 16,
+      "community": 299,
       "norm_label": "work-item completion by domain complexity",
       "id": "themes_work_item_completion_by_domain_work_item_completion_by_domain_complexity"
     },
@@ -26575,7 +26656,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/work-item-completion-by-domain.md",
       "source_location": "L45",
-      "community": 16,
+      "community": 299,
       "norm_label": "sources",
       "id": "themes_work_item_completion_by_domain_sources"
     },
@@ -26584,7 +26665,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/work-item-completion-by-domain.md",
       "source_location": "L49",
-      "community": 16,
+      "community": 299,
       "norm_label": "see also",
       "id": "themes_work_item_completion_by_domain_see_also"
     },
@@ -26593,7 +26674,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/episodic-not-cumulative-learnings.md",
       "source_location": "L1",
-      "community": 17,
+      "community": 238,
       "norm_label": "episodic-not-cumulative-learnings.md",
       "id": "brain_forge_themes_episodic_not_cumulative_learnings_md"
     },
@@ -26602,7 +26683,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/episodic-not-cumulative-learnings.md",
       "source_location": "L23",
-      "community": 247,
+      "community": 238,
       "norm_label": "episodic-not-cumulative learnings antipattern",
       "id": "themes_episodic_not_cumulative_learnings_episodic_not_cumulative_learnings_antipattern"
     },
@@ -26611,7 +26692,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/episodic-not-cumulative-learnings.md",
       "source_location": "L36",
-      "community": 247,
+      "community": 238,
       "norm_label": "sources",
       "id": "themes_episodic_not_cumulative_learnings_sources"
     },
@@ -26620,7 +26701,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/episodic-not-cumulative-learnings.md",
       "source_location": "L40",
-      "community": 247,
+      "community": 238,
       "norm_label": "see also",
       "id": "themes_episodic_not_cumulative_learnings_see_also"
     },
@@ -26674,7 +26755,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/roadmap-simplification-convergence.md",
       "source_location": "L22",
-      "community": 16,
+      "community": 261,
       "norm_label": "roadmaps converge on simplification before features",
       "id": "themes_roadmap_simplification_convergence_roadmaps_converge_on_simplification_before_features"
     },
@@ -26683,7 +26764,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/roadmap-simplification-convergence.md",
       "source_location": "L35",
-      "community": 16,
+      "community": 261,
       "norm_label": "sources",
       "id": "themes_roadmap_simplification_convergence_sources"
     },
@@ -26692,7 +26773,7 @@
       "file_type": "document",
       "source_file": "brain/forge/themes/roadmap-simplification-convergence.md",
       "source_location": "L39",
-      "community": 16,
+      "community": 261,
       "norm_label": "see also",
       "id": "themes_roadmap_simplification_convergence_see_also"
     },
@@ -33430,6 +33511,108 @@
     }
   ],
   "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_graph_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_labels_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_node",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L33",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_graph",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_force",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_summarisecommunity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_namesforbatch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L100",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_ts",
+      "target": "scripts_brain_name_communities_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L118",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_main",
+      "target": "scripts_brain_name_communities_summarisecommunity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "scripts/brain-name-communities.ts",
+      "source_location": "L127",
+      "weight": 1.0,
+      "source": "scripts_brain_name_communities_main",
+      "target": "scripts_brain_name_communities_namesforbatch",
+      "confidence_score": 1.0
+    },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
@@ -89705,5 +89888,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "27a1b9e56c06aa1fac4a2bae97d744b6a0bfd459"
+  "built_at_commit": "ded3721f406b6a03338b09222588dedf558986ed"
 }
