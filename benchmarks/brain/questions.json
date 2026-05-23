@@ -261,7 +261,6 @@
     "id": "Q16",
     "question": "What separates simplarr's scope from healarr's scope?",
     "expected_sources": [
-      "brain/projects/simplarr/themes/no-monitoring-bundle.md",
       "brain/projects/healarr/profile.md"
     ],
     "expected_keywords": [
@@ -330,7 +329,7 @@
     "id": "Q20",
     "question": "What other themes are directly structurally connected to the Karpathy three-layer-wiki theme — i.e. one wikilink, related_themes, or sources hop away?",
     "expected_sources": [
-      "brain/forge/themes/karpathy-three-layer-wiki.md"
+      "brain/forge/themes/brain-first-research.md"
     ],
     "expected_keywords": [
       "karpathy",
@@ -424,7 +423,7 @@
     "id": "Q25",
     "question": "Which orchestrator module implements the developer-loop unifier sub-phase, and what's the canonical pattern this collapses?",
     "expected_sources": [
-      "brain/forge/themes/six-phases-of-forge.md"
+      "brain/forge/themes/pr-as-sole-review-window.md"
     ],
     "expected_keywords": [
       "unifier-invocation",

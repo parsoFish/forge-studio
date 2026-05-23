@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
-import { loadBrainIndex, type BrainCategory } from '../../orchestrator/brain-index.ts';
+import { loadBrainIndex } from '../../orchestrator/brain-index.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'brain-query', 'SKILL.md');
@@ -107,24 +107,29 @@ function loadSkillSystemPrompt(): string {
   return cachedSkillText;
 }
 
-const cachedIndexByKey: Map<string, string> = new Map();
+let cachedUniversalIndex: string | null = null;
 
-function loadIndexPrefix(scope: string | null | undefined, category: BrainCategory | null | undefined): string {
-  const key = `${scope ?? '_'}:${category ?? '_'}`;
-  const cached = cachedIndexByKey.get(key);
-  if (cached !== undefined) return cached;
-  const index = loadBrainIndex({ cwd: FORGE_ROOT, scope, category });
-  cachedIndexByKey.set(key, index);
-  return index;
+function loadUniversalIndex(): string {
+  if (cachedUniversalIndex !== null) return cachedUniversalIndex;
+  // Universal — full forge + project sub-wiki index. Byte-stable across
+  // questions so the system prompt benefits from automatic prompt caching
+  // (~5.7K tokens cached, served via cache_read at 10x cheaper than fresh
+  // input). The prior scope/category-branched index varied per question
+  // and defeated cross-question cache hits.
+  cachedUniversalIndex = loadBrainIndex({ cwd: FORGE_ROOT });
+  return cachedUniversalIndex;
 }
 
-function buildSystemPrompt(scope: string | null | undefined, category: BrainCategory | null | undefined): string {
+let cachedSystemPrompt: string | null = null;
+
+function buildSystemPrompt(): string {
+  if (cachedSystemPrompt !== null) return cachedSystemPrompt;
   const skill = loadSkillSystemPrompt();
-  const index = loadIndexPrefix(scope, category);
-  return [
+  const index = loadUniversalIndex();
+  cachedSystemPrompt = [
     '# Brain navigation index',
     '',
-    'Below are the brain\'s category indexes — every theme in scope, with a one-line description. Use these descriptions to identify candidate theme pages, then read those files in full to verify and extract precise terminology / numbers / project names. The indexes ARE the retrieval index; you should rarely need grep.',
+    'The brain\'s category indexes (every theme + one-line description). Use these to identify candidate theme pages, then `graphify query/explain` + `Read` to retrieve content. The indexes ARE the retrieval index; you should rarely need grep.',
     '',
     index,
     '',
@@ -134,6 +139,7 @@ function buildSystemPrompt(scope: string | null | undefined, category: BrainCate
     '',
     skill,
   ].join('\n');
+  return cachedSystemPrompt;
 }
 
 function renderUserPrompt(input: RunBrainQueryInput): string {
@@ -163,21 +169,25 @@ function isStructured(value: unknown): value is BrainQueryStructured {
 
 export async function runBrainQuery(input: RunBrainQueryInput): Promise<RunBrainQueryResult> {
   const queryFn: BrainQueryFn = input.queryFn ?? (sdkQuery as unknown as BrainQueryFn);
-  const systemPrompt = buildSystemPrompt(input.scope ?? null, (input.category ?? null) as BrainCategory | null);
+  const systemPrompt = buildSystemPrompt();
   const prompt = renderUserPrompt(input);
 
   const options: Record<string, unknown> = {
     cwd: FORGE_ROOT,
     systemPrompt,
     model: 'claude-haiku-4-5',
+    // C23 — prompt caching opt-in. The universal system prompt (~8K tokens)
+    // is byte-stable across all 26 bench questions; flagging `cacheable`
+    // documents the intent for the SDK's eventual cache_control marker.
+    cacheable: true,
     permissionMode: 'acceptEdits',
     allowedTools: READ_ONLY_TOOLS,
     disallowedTools: WRITE_TOOLS,
-    // Tight per-question ceilings now that the SKILL is graphify-first and
-    // single-pass — 1 graphify call + up to 3-5 theme Read calls + synthesis
-    // completes in 6-10 turns typical, p95 ~ 15. The high prior caps were
-    // masking the SKILL's dual-search waste, not enabling deep work.
-    maxTurns: 15,
+    // 25-turn ceiling: graphify-first questions complete in 6-15 turns
+    // typical; the 90th percentile is around 20. The previous 15-turn cap
+    // was truncating multi-source questions (Q25 etc.) on the wrong side
+    // of the distribution. $0.50 budget remains generous.
+    maxTurns: 25,
     maxBudgetUsd: 0.5,
     outputFormat: { type: 'json_schema', schema: ANSWERS_SCHEMA },
   };

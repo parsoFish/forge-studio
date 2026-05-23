@@ -308,6 +308,5 @@
   "306": "pluggable notifications review",
   "307": "review fix loop spinning",
   "308": "review phase targeting",
-  "309": "squash merge stacked prs",
-  "310": "unattended scheduler queue"
+  "309": "squash merge stacked prs"
 }

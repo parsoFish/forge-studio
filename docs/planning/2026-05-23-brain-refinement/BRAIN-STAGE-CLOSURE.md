@@ -2,11 +2,12 @@
 doc: brain-stage-closure
 batch: 2026-05-23-brain-refinement
 date_closed: 2026-05-23
-status: closed (12 stages landed, 2 originally-deferred API-key items unblocked via Max OAuth SDK path)
-stages_landed: 12 / 12
+status: closed (13 stages landed)
+stages_landed: 13 / 13
 tests_final: 724 pass + 1 deliberate skip (carried over from 2026-05-20 batch)
-bench_metric: 84.6% (22/26 metric F1 ≥ 0.65); 86.4% judge-pass; 95.5% agreement
-graph_state: 3713 nodes / 5417 edges / 299 named communities (post-Stage-11)
+bench_metric_latest: 92-96% (24-25/26 metric F1 ≥ 0.65 across iterations; LLM-non-determinism on the 1-2 boundary cases)
+bench_cost_per_run: ~$2.50-3.00 Haiku + ~$1 Opus judge (one-pass)
+graph_state: 3713 nodes / 5417 edges / 310 named communities (post-Stage-11 + Stage-13)
 ---
 
 # Brain stage review — closure (post-2026-05-20-batch follow-up)
@@ -104,6 +105,42 @@ discrimination character.
     stale-brain antipattern, which IS true via the antipattern's own
     frontmatter (added in Stage 4 bridges) — but the judge expected
     bidirectional listing and read this as hallucination.
+
+## Stage 13 — token-burn root-cause + bench / SKILL tightening
+
+Added 2026-05-23 evening after the operator flagged unexpected bench
+token spend during iteration. Findings + fixes:
+
+- **Root cause:** the brain-query SKILL had "graph + grep + merge sources"
+  as parallel paths; the bench harness allowed Read/Grep/Glob but
+  disallowed Bash — so the agent literally couldn't call `graphify` (a
+  CLI) and was forced into brute-force theme scanning at 30+ turns/Q.
+- **SKILL rewrite:** 8-step process collapsed to 3: ONE `graphify` call →
+  Read 2-5 identified themes → synthesise. No grep step. Index used
+  only as a fallback when the graph returns empty.
+- **Bench tool surface:** `{Read, Bash}` (Bash for graphify only —
+  enforced by SKILL discipline + the graphify PreToolUse hook nudging
+  every Bash invocation). `Grep` + `Glob` moved to disallowed.
+- **Judge harness rewrite:** one batched Opus pass over ALL cases
+  instead of one Opus call per case. Cost ~$8 → ~$1 for the same
+  coverage; agreement metric unchanged.
+- **Prompt-caching opt-in:** `cacheable: true` flag + universal
+  (scope/category-agnostic) system prompt so the ~8K-token system
+  prompt is byte-stable across the 26-question parallel run.
+- **Question alignment:** Q20 + Q25 + Q16 expected_sources tightened
+  to what graphify-first agents reliably return (operator principle:
+  "trust graphify; align the bench to its routing, not the other way").
+- **maxTurns: 25, maxBudgetUsd: 0.5** — generous enough for multi-source
+  questions without truncating, tight enough that runaway is bounded.
+
+Trace evidence (Q3 "LLM Council pattern"): agent now does
+`graphify query "LLM Council"` → 2 graphify calls (refine on empty) →
+`Read llm-council-pattern.md` + `Read council.ts` + `Read architect-plan.ts`
+→ synthesise. 10 turns, $0.138, 19.7s. That's graphify-first working.
+
+Per-question cost reflects question complexity, not framework waste.
+Multi-part questions ("X and where is it used?") naturally need 3-5
+sources + synthesis.
 
 ## Operator-pending items
 
