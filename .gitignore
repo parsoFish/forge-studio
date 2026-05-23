@@ -11,6 +11,7 @@ forge-ui/.next/
 forge-ui/out/
 forge-ui/tsconfig.tsbuildinfo
 forge-ui/next-env.d.ts
+forge-ui/.demo-shots/
 
 # Runtime state — not source. Ignore contents but keep .gitkeep so structure
 # is preserved in git.

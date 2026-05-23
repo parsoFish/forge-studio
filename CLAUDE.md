@@ -77,7 +77,7 @@ forge/
 ├── loops/              # agentic loop runtimes (default: Ralph)
 ├── orchestrator/       # scheduler, cycle runner, logging (hot path)
 ├── cli/                # operator utilities + forge subcommand handlers (post-2026-05-24 Move 1)
-├── forge-ui/           # Next.js operator UI; launched by `forge watch` (M2-A, in progress)
+├── forge-ui/           # Next.js operator UI; launched by `forge watch` (M2-A/B/C; see CWC DOM convention below)
 ├── _queue/             # initiative queue (gitignored)
 ├── benchmarks/         # per-phase eval harnesses
 ├── monitor/            # tmux + Obsidian + log-tail visualisation
@@ -120,3 +120,40 @@ After modifying code, run `cd /home/parso/forge && graphify update .`
 to keep the graph current (AST-only, no API cost; the installed
 post-commit hook does this in the background — manual invocation only
 needed if you skip the hook).
+
+## forge-ui DOM-as-metrics convention
+
+Every load-bearing UI state in `forge-ui/` is mirrored to `data-*`
+attributes so any automation (playwright today, LLM-driven UI tests
+tomorrow) can drive the page by reading structured DOM state rather
+than scraping rendered text. Pattern from
+[anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code).
+
+The root `<main>` carries page-level state:
+
+- `data-conn-state` — `connecting | open | reconnecting | no-bridge`
+- `data-live-count`, `data-recent-count` — cycle counts
+- `data-active-cycle-id`, `data-active-cycle-status`, `data-active-cycle-events`
+- `data-page-ready` — `true` once the bridge connection is open
+
+Section + component anchors:
+
+- `[data-section="cycles-tab"]`, `[data-section="state-machine"]`,
+  `[data-section="activity-sidebar"]`, `[data-section="wi-graph"]`,
+  `[data-section="event-tail"]`, `[data-section="verdict-form"]`
+- Cycle buttons: `[data-cycle-id]`, `[data-cycle-status]`, `[data-cycle-active]`
+- State-machine rows: `[data-phase][data-phase-status]`
+- Activity rows: `[data-phase][data-phase-events][data-phase-tool-uses]…`
+- WI rows: `[data-wi-id][data-wi-deps][data-wi-enables]`
+- Event tail rows: `[data-event-id][data-event-phase][data-event-type]`
+- Components: `[data-component="verdict-form"][data-form-state]`,
+  `[data-component="scheduler-banner"][data-banner-state]`,
+  `[data-component="toasts"][data-toast-count]`
+
+When changing component state, **add or update the corresponding
+`data-*` attribute** alongside any visual change. The demo script
+[`scripts/forge-ui-demo.mjs`](./scripts/forge-ui-demo.mjs) reads these
+attributes to wait deterministically (instead of timing-based sleeps)
+and to know which state to capture. `npm run forge-ui:demo` produces
+chromium-rendered screenshots into `forge-ui/.demo-shots/` plus an
+index.html for review without launching a real browser.

@@ -15,7 +15,7 @@ export function Sidebar({ events }: { events: EventLogEntry[] }) {
 
   const phases = derivePhaseActivity(events, now);
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} data-section="activity-sidebar" data-events-total={events.length}>
       <h2 style={panelTitle}>activity</h2>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {phases.map((p) => (
@@ -29,7 +29,16 @@ export function Sidebar({ events }: { events: EventLogEntry[] }) {
 function PhaseRow({ a }: { a: PhaseActivity }) {
   const empty = a.events === 0;
   return (
-    <li style={{ padding: '8px 0', borderTop: '1px solid #21262d', opacity: empty ? 0.4 : 1 }}>
+    <li
+      data-phase={a.phase}
+      data-phase-events={a.events}
+      data-phase-tool-uses={a.toolUses}
+      data-phase-iterations={a.iterations}
+      data-phase-errors={a.errors}
+      data-phase-work-item={a.lastWorkItem ?? ''}
+      data-phase-empty={empty ? 'true' : 'false'}
+      style={{ padding: '8px 0', borderTop: '1px solid #21262d', opacity: empty ? 0.4 : 1 }}
+    >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 13 }}>{a.phase}</span>
         {!empty && (

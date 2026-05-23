@@ -41,6 +41,9 @@ export function SchedulerBanner() {
 
   return (
     <div
+      data-component="scheduler-banner"
+      data-scheduler-running="false"
+      data-banner-state={starting ? 'starting' : error ? 'error' : 'idle'}
       style={{
         background: '#21262d',
         border: '1px solid #d29922',
@@ -57,10 +60,11 @@ export function SchedulerBanner() {
       <span style={{ flex: 1 }}>
         Scheduler is stopped. Queue work won't progress until you start it.
       </span>
-      {error && <span style={{ color: '#f85149', fontSize: 11 }}>{error}</span>}
+      {error && <span style={{ color: '#f85149', fontSize: 11 }} data-banner-error>{error}</span>}
       <button
         onClick={() => void onStart()}
         disabled={starting}
+        data-action="start-scheduler"
         style={{
           background: '#d29922',
           border: 'none',

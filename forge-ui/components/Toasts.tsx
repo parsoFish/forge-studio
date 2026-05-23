@@ -24,7 +24,13 @@ export function CycleToasts({ snapshot }: { snapshot: CycleListSnapshot }) {
 
   useEffect(() => {
     const all = [...snapshot.live, ...snapshot.recent];
+    // Skip seeding until the first NON-empty snapshot lands. The initial
+    // useState({live:[], recent:[]}) would otherwise mark `seeded` true
+    // before any real cycles arrive — and the next update (the real
+    // fetch) would fire a toast for every cycle as if they all just
+    // appeared.
     if (!seeded.current) {
+      if (all.length === 0) return;
       for (const c of all) lastStatus.current.set(c.cycleId, c.status);
       seeded.current = true;
       return;
@@ -48,10 +54,16 @@ export function CycleToasts({ snapshot }: { snapshot: CycleListSnapshot }) {
 
   if (toasts.length === 0) return null;
   return (
-    <div style={{ position: 'fixed', right: 16, bottom: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1000 }}>
+    <div
+      data-component="toasts"
+      data-toast-count={toasts.length}
+      style={{ position: 'fixed', right: 16, bottom: 16, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1000 }}
+    >
       {toasts.map((t) => (
         <div
           key={t.id}
+          data-toast-id={t.id}
+          data-toast-kind={t.kind}
           onClick={() => dismiss(t.id)}
           style={{
             background: '#161b22',

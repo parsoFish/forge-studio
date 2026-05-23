@@ -76,7 +76,21 @@ export default function Page() {
   );
 
   return (
-    <main style={{ padding: '16px 24px', minHeight: '100vh' }}>
+    <main
+      style={{ padding: '16px 24px', minHeight: '100vh' }}
+      // DOM-as-metrics root (cwc-workshops "how-we-claude-code" pattern):
+      // every load-bearing UI state is mirrored to a data-* attribute so
+      // playwright / scripted automation / LLM-driven UI tests can read
+      // page state without scraping rendered text. Keep these in sync
+      // when changing component state.
+      data-conn-state={connState}
+      data-live-count={snapshot.live.length}
+      data-recent-count={snapshot.recent.length}
+      data-active-cycle-id={activeCycleId ?? ''}
+      data-active-cycle-status={activeCycle?.status ?? ''}
+      data-active-cycle-events={events.length}
+      data-page-ready={connState === 'open' || connState === 'no-bridge' ? 'true' : 'false'}
+    >
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>forge</h1>
         <ConnectionBadge state={connState} />
@@ -87,7 +101,7 @@ export default function Page() {
       <CyclesTab cycles={allCycles} activeId={activeCycleId} onSelect={setActiveCycleId} />
 
       {activeCycle?.status === 'ready-for-review' && (
-        <section style={{ marginTop: 24 }}>
+        <section style={{ marginTop: 24 }} data-section="verdict-form">
           <VerdictForm initiativeId={activeCycle.initiativeId} />
         </section>
       )}
@@ -115,7 +129,7 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
     '#8b949e';
   const glyph = state === 'open' ? '●' : state === 'connecting' ? '◐' : state === 'reconnecting' ? '◌' : '○';
   return (
-    <span style={{ fontSize: 12, color: colour }}>
+    <span style={{ fontSize: 12, color: colour }} data-conn-badge data-state={state}>
       bridge {glyph} {state}
     </span>
   );
@@ -132,18 +146,27 @@ function CyclesTab({
 }) {
   if (cycles.length === 0) {
     return (
-      <div style={{ color: '#8b949e', fontSize: 13 }}>
+      <div style={{ color: '#8b949e', fontSize: 13 }} data-section="cycles-tab" data-cycles-empty="true">
         No cycles yet. Run <code>forge enqueue …</code> + <code>forge start</code>.
       </div>
     );
   }
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <div
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
+      data-section="cycles-tab"
+      data-cycles-count={cycles.length}
+    >
       {cycles.map((c) => {
         const active = c.cycleId === activeId;
         return (
           <button
             key={c.cycleId}
+            data-cycle-id={c.cycleId}
+            data-cycle-initiative-id={c.initiativeId}
+            data-cycle-status={c.status}
+            data-cycle-project={c.project ?? ''}
+            data-cycle-active={active ? 'true' : 'false'}
             onClick={() => onSelect(c.cycleId)}
             style={{
               padding: '6px 12px',
@@ -167,14 +190,19 @@ function CyclesTab({
 
 function StateMachine({ phaseStates }: { phaseStates: PhaseState[] }) {
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} data-section="state-machine">
       <h2 style={panelTitle}>state machine</h2>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {PHASE_ORDER.map((phase) => {
           const s = phaseStates.find((p) => p.phase === phase);
           const status = s?.status ?? 'pending';
           return (
-            <li key={phase} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}>
+            <li
+              key={phase}
+              data-phase={phase}
+              data-phase-status={status}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}
+            >
               <span style={{ width: 18, display: 'inline-block', textAlign: 'center' }}>
                 {phaseGlyph(status)}
               </span>
@@ -191,14 +219,20 @@ function StateMachine({ phaseStates }: { phaseStates: PhaseState[] }) {
 function EventTail({ events }: { events: EventLogEntry[] }) {
   const recent = events.slice(-50);
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} data-section="event-tail" data-events-total={events.length}>
       <h2 style={panelTitle}>event tail ({events.length} total · last 50 shown)</h2>
       <div style={{ maxHeight: 480, overflowY: 'auto', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11 }}>
         {recent.length === 0 ? (
-          <div style={{ color: '#8b949e' }}>(no events yet for this cycle)</div>
+          <div style={{ color: '#8b949e' }} data-events-empty="true">(no events yet for this cycle)</div>
         ) : (
           recent.map((e) => (
-            <div key={e.event_id} style={{ padding: '2px 0', borderBottom: '1px solid #21262d' }}>
+            <div
+              key={e.event_id}
+              data-event-id={e.event_id}
+              data-event-phase={e.phase}
+              data-event-type={e.event_type}
+              style={{ padding: '2px 0', borderBottom: '1px solid #21262d' }}
+            >
               <span style={{ color: '#8b949e' }}>{shortTime(e.started_at)}</span>
               {' '}
               <span style={{ color: phaseColor(e.phase) }}>{e.phase}</span>

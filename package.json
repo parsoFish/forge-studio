@@ -32,6 +32,7 @@
     "forge": "node --experimental-strip-types orchestrator/cli.ts",
     "forge:brain:lint": "node --experimental-strip-types cli/brain-lint.ts",
     "forge:brain:index": "node --experimental-strip-types cli/brain-index.ts",
+    "forge-ui:demo": "node scripts/forge-ui-demo.mjs",
     "brain:scrub": "node --experimental-strip-types scripts/brain-scrub-test-contamination.ts"
   },
   "dependencies": {

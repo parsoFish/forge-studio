@@ -41,7 +41,13 @@ export function VerdictForm({ initiativeId }: { initiativeId: string }) {
 
   if (submitted) {
     return (
-      <div style={{ ...panelStyle, borderColor: '#7ee787' }}>
+      <div
+        style={{ ...panelStyle, borderColor: '#7ee787' }}
+        data-component="verdict-form"
+        data-form-state="submitted"
+        data-form-kind={kind}
+        data-initiative-id={initiativeId}
+      >
         <h2 style={panelTitle}>verdict</h2>
         <div style={{ fontSize: 13, color: '#7ee787' }}>
           {kind === 'approve' ? 'Approved — the reviewer will close out the cycle.' : 'Sent back — the reviewer will react to the new acceptance criteria.'}
@@ -51,7 +57,14 @@ export function VerdictForm({ initiativeId }: { initiativeId: string }) {
   }
 
   return (
-    <div style={panelStyle}>
+    <div
+      style={panelStyle}
+      data-component="verdict-form"
+      data-form-state={submitting ? 'submitting' : 'editing'}
+      data-form-kind={kind}
+      data-initiative-id={initiativeId}
+      data-ac-count={kind === 'send-back' ? acs.length : 0}
+    >
       <h2 style={panelTitle}>verdict needed</h2>
       <div style={{ fontSize: 11, color: '#8b949e', marginBottom: 12 }}>
         Initiative <code>{initiativeId}</code> is awaiting your decision.

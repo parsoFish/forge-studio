@@ -20,8 +20,9 @@ export function WiGraphPanel({ cycleId }: { cycleId: string | null }) {
     return () => { cancelled = true; };
   }, [cycleId]);
 
+  const state = !cycleId ? 'no-cycle' : !loaded ? 'loading' : !graph ? 'no-graph' : graph.nodes.length === 0 ? 'empty' : 'ready';
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} data-section="wi-graph" data-state={state} data-wi-count={graph?.nodes.length ?? 0}>
       <h2 style={panelTitle}>work items</h2>
       {!cycleId ? (
         <div style={emptyStyle}>(no cycle selected)</div>
@@ -37,7 +38,13 @@ export function WiGraphPanel({ cycleId }: { cycleId: string | null }) {
             const deps = graph.edges.filter((e) => e.to === n.id).map((e) => e.from);
             const enables = graph.edges.filter((e) => e.from === n.id).map((e) => e.to);
             return (
-              <li key={n.id} style={{ padding: '6px 0', borderTop: '1px solid #21262d', fontSize: 12 }}>
+              <li
+                key={n.id}
+                data-wi-id={n.id}
+                data-wi-deps={deps.join(',')}
+                data-wi-enables={enables.join(',')}
+                style={{ padding: '6px 0', borderTop: '1px solid #21262d', fontSize: 12 }}
+              >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ color: '#79c0ff', fontFamily: 'ui-monospace, Menlo, monospace' }}>{n.id}</span>
                   <span style={{ flex: 1 }}>{stripPrefix(n.label, n.id)}</span>
