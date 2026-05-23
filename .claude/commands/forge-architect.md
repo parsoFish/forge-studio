@@ -1,5 +1,5 @@
 ---
-description: Architect human moment — turn a vision into queued initiatives (own session, out-of-cycle).
+description: Architect human moment — draft a PLAN.md the operator reviews before any manifest is queued (own session, out-of-cycle).
 argument-hint: <project-name>
 ---
 
@@ -19,7 +19,10 @@ any step. In particular its Process **step 3 (`architect-llm-council` via
 `architect.council-invoked` when you do it.
 
 When the skill's contract is satisfied (roadmap rows updated +
-schema-valid `_queue/pending/INIT-*.md` written and validated), **stop** —
-do not start a cycle; the scheduler picks the queue up on its own.
+`<project-repo>/_architect/<session-id>/PLAN.md` written per C12), **stop** —
+do not start a cycle, do not promote draft manifests to the queue.
+Print the path to PLAN.md and the next command:
+
+    forge architect commit <session-id>  [--via-pr]
 
 Target project: **$ARGUMENTS**
