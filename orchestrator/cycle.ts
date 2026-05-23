@@ -31,6 +31,8 @@ export type {
   CycleResult,
   CycleOutcome,
   ReflectionStatus,
+  LintStatus,
+  ReflectorPhaseResult,
   ReviewerOutcome,
 } from './cycle-context.ts';
 export { recordBrainGateResult } from './cycle-context.ts';
@@ -41,6 +43,7 @@ import type {
   CycleResult,
   CycleOutcome,
   ReflectionStatus,
+  LintStatus,
 } from './cycle-context.ts';
 import { resolveQualityGateCmd } from './cycle-context.ts';
 
@@ -92,6 +95,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   // (a GitHub-confirmed merge) — never from the reviewer (G9).
   let cycleOutcome: CycleOutcome = 'ready-for-review';
   let reflectionStatus: ReflectionStatus = 'skipped';
+  let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
       await runProjectManager(inputWithGate, logger);
@@ -126,7 +130,9 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       const closure = await runClosure(inputWithGate, logger, reviewerOutcome);
       cycleOutcome = closure.outcome;
       if (closure.merged) {
-        reflectionStatus = await runReflector(inputWithGate, logger);
+        const reflectorResult = await runReflector(inputWithGate, logger);
+        reflectionStatus = reflectorResult.reflection_status;
+        lintStatus = reflectorResult.lint_status;
       }
     }
   } catch (err) {
@@ -150,6 +156,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       initiative_id: input.initiativeId,
       status: 'failed',
       reflection_status: reflectionStatus,
+      lint_status: lintStatus,
       duration_ms: Date.now() - started,
       log_path: logger.logFilePath,
     };
@@ -172,6 +179,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     initiative_id: input.initiativeId,
     status: cycleOutcome,
     reflection_status: reflectionStatus,
+    lint_status: lintStatus,
     duration_ms: Date.now() - started,
     log_path: logger.logFilePath,
   };
@@ -185,7 +193,11 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     output_refs: [logger.logFilePath],
     duration_ms: result.duration_ms,
     message: 'cycle.end',
-    metadata: { status: result.status, reflection_status: result.reflection_status },
+    metadata: {
+      status: result.status,
+      reflection_status: result.reflection_status,
+      lint_status: result.lint_status,
+    },
   });
 
   // Generate the human-facing report as the final cycle step. Best-effort —
