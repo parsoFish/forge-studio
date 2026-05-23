@@ -1,11 +1,23 @@
 ---
 title: Ralph stop-hook pattern vs bash-loop pattern
-description: Two implementations of Ralph — outer bash loop (ghuntley canonical) vs Stop-hook within a single Claude Code session (Anthropic plugin). Different operational properties.
+description: >-
+  Two implementations of Ralph — outer bash loop (ghuntley canonical) vs
+  Stop-hook within a single Claude Code session (Anthropic plugin). Different
+  operational properties.
 category: pattern
-keywords: [ralph, stop-hook, bash-loop, anthropic-plugin, claude-code, single-session, completion-promise]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [ralph-loop-pattern, claude-agent-sdk]
+keywords:
+  - ralph
+  - stop-hook
+  - bash-loop
+  - anthropic-plugin
+  - claude-code
+  - single-session
+  - completion-promise
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - claude-agent-sdk
 ---
 
 # Ralph stop-hook pattern vs bash-loop pattern
@@ -46,7 +58,7 @@ Forge v2 uses the **bash-loop pattern** (ADR 002) so iteration is auditable per-
 - [`ralph-anthropic-plugin.web.md`](../../_raw/web/ralph-anthropic-plugin.web.md) — stop-hook implementation.
 - [`ralph-vercel-agent.web.md`](../../_raw/web/ralph-vercel-agent.web.md) — TS bash-loop reification.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — the underlying pattern.
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — what stop-hook hooks into.
+- [[ralph-loop-pattern]] — the underlying pattern.
+- [[claude-agent-sdk]] — what stop-hook hooks into.

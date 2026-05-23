@@ -1,10 +1,20 @@
 ---
 title: simplarr — Bash + PowerShell parity is mandatory
-description: Every configurator feature exists in both configure.sh and configure.ps1. Single-language work items are flagged as missing a sibling by the dependency-graph critic.
+description: >-
+  Every configurator feature exists in both configure.sh and configure.ps1.
+  Single-language work items are flagged as missing a sibling by the
+  dependency-graph critic.
 category: decision
-keywords: [simplarr, dual-language, bash, powershell, parity, configurator, paired-work-items]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - simplarr
+  - dual-language
+  - bash
+  - powershell
+  - parity
+  - configurator
+  - paired-work-items
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -27,7 +37,3 @@ Why accept the doubling cost:
 
 - simplarr README presence of `configure.sh` + `configure.ps1`.
 - [`v1-themes-completion-stats.cycle.md`](../../../_raw/v1-wiki/v1-themes-completion-stats.cycle.md) — dual-language inflation note.
-
-## Related
-
-- [Theme: Dependency-ordered work](../../../forge/themes/dependency-ordered-work.md) — graph critic enforcement.

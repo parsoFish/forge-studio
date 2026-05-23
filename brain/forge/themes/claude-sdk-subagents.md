@@ -1,11 +1,24 @@
 ---
 title: Claude Agent SDK subagents
-description: Specialised agents declared inline in options.agents, invoked by the main agent via the Agent tool. Each has its own tools, model, maxTurns, permissionMode. Can run background.
+description: >-
+  Specialised agents declared inline in options.agents, invoked by the main
+  agent via the Agent tool. Each has its own tools, model, maxTurns,
+  permissionMode. Can run background.
 category: pattern
-keywords: [subagents, claude-agent-sdk, delegation, parallel, isolated-context, background, agent-tool]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [claude-agent-sdk, ralph-loop-pattern, llm-council-pattern]
+keywords:
+  - subagents
+  - claude-agent-sdk
+  - delegation
+  - parallel
+  - isolated-context
+  - background
+  - agent-tool
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - claude-agent-sdk
+  - ralph-loop-pattern
+  - llm-council-pattern
 ---
 
 # Claude Agent SDK subagents
@@ -46,8 +59,8 @@ Forge v2 uses subagents for the LLM Council pattern (one subagent per critic per
 
 - [`claude-agent-sdk-typescript.docs.md`](../../_raw/docs/claude-agent-sdk-typescript.docs.md) — subagents API + options.agents.
 
-## Related
+## See also
 
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — what subagents run on.
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — Ralph's `query()` lives here.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — uses subagents for each critic.
+- [[claude-agent-sdk]] — what subagents run on.
+- [[ralph-loop-pattern]] — Ralph's `query()` lives here.
+- [[llm-council-pattern]] — uses subagents for each critic.

@@ -1,11 +1,30 @@
 ---
-title: trafficGame — test stack is Vitest + Playwright with a strict TDD + visual-test discipline
-description: TypeScript strict, Vitest for unit/integration, Playwright for visual; locked CLAUDE.md mandates write-tests-first, ~150 lines per file, no any, no time-based waits. Quality gates for any forge initiative against trafficGame must include both npm test and npm run test:visual where canvas/physics is touched.
+title: >-
+  trafficGame — test stack is Vitest + Playwright with a strict TDD +
+  visual-test discipline
+description: >-
+  TypeScript strict, Vitest for unit/integration, Playwright for visual; locked
+  CLAUDE.md mandates write-tests-first, ~150 lines per file, no any, no
+  time-based waits. Quality gates for any forge initiative against trafficGame
+  must include both npm test and npm run test:visual where canvas/physics is
+  touched.
 category: process
-keywords: [trafficgame, vitest, playwright, tdd, visual-test, strict-typescript, claude-md, quality-gate, deterministic, fixed-timestep]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-10T15:30:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - vitest
+  - playwright
+  - tdd
+  - visual-test
+  - strict-typescript
+  - claude-md
+  - quality-gate
+  - deterministic
+  - fixed-timestep
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-10T15:30:00.000Z
+related_themes:
+  - tdd-with-agents
+  - quality-gates-orchestrator-verified
 ---
 
 # trafficGame — test stack and quality gates
@@ -63,8 +82,7 @@ CLAUDE.md mandates that agents **read `docs/LEARNINGS.md` before acting** and **
 - Project [`docs/LEARNINGS.md`](../../../../projects/trafficGame/docs/LEARNINGS.md) (canonical project-side learnings).
 - Project test scripts: `npm test`, `npm run test:visual`, `npm run test:visual`.
 
-## Related
+## See also
 
-- [`canvas-bpr-flow-tests`](canvas-bpr-flow-tests.md) — Playwright is the orchestrator-verified gate for canvas/BPR.
-- [`algorithm-heavy-items`](algorithm-heavy-items.md) — decomposition discipline.
-- [`developer-ralph-brain-skip-on-second-wi`](2026-05-10-developer-ralph-brain-skip-on-second-wi.md) — brain-first per-WI discipline.
+- [[tdd-with-agents]] — tdd with agents — tests first, verified in a worktree.
+- [[quality-gates-orchestrator-verified]] — quality gates verified by the orchestrator, not the agent.

@@ -1,11 +1,29 @@
 ---
-title: trafficGame — stale brain themes that contradict the codebase cause PM-phase failure
-description: Two 2026-05-10 themes still described the deleted CampaignLevels.ts array. The PM read the brain (8 reads), ingested a false model, Glob'd the real tree, hit an irreconcilable contradiction, and exhausted its entire budget producing hallucinated work items. Stale-but-contradictory brain content is worse than a gap.
+title: >-
+  trafficGame — stale brain themes that contradict the codebase cause PM-phase
+  failure
+description: >-
+  Two 2026-05-10 themes still described the deleted CampaignLevels.ts array. The
+  PM read the brain (8 reads), ingested a false model, Glob'd the real tree, hit
+  an irreconcilable contradiction, and exhausted its entire budget producing
+  hallucinated work items. Stale-but-contradictory brain content is worse than a
+  gap.
 category: antipattern
-keywords: [trafficgame, stale-brain, brain-contradiction, pm-failure, campaignlevels, campaigngraph, by-hand-change, reflection-bypass, brain-accuracy]
-created_at: 2026-05-17T14:30:00Z
-updated_at: 2026-05-17T14:30:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - stale-brain
+  - brain-contradiction
+  - pm-failure
+  - campaignlevels
+  - campaigngraph
+  - by-hand-change
+  - reflection-bypass
+  - brain-accuracy
+created_at: 2026-05-17T14:30:00.000Z
+updated_at: 2026-05-17T14:30:00.000Z
+related_themes:
+  - brain-read-policy
+  - brain-gap-feedback-loop
 ---
 
 # trafficGame — stale brain themes that contradict the codebase cause PM-phase failure
@@ -37,7 +55,7 @@ Contradictions are worse than gaps.
 - `_logs/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity/user-feedback.md` — operator description of the failure and fix.
 - `/home/parso/forge/brain/_raw/cycles/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity.md` — cycle archive §"Finding 1".
 
-## Related
+## See also
 
-- [`campaign-mode-state`](2026-05-10-campaign-mode-state.md) — one of the two themes that was stale (now corrected to as-built `CampaignGraph`).
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — the other stale theme (now corrected).
+- [[brain-read-policy]] — brain-read policy — planner reads, executor/reviewer don't, all reads index-guarded.
+- [[brain-gap-feedback-loop]] — brain-gap feedback loop.

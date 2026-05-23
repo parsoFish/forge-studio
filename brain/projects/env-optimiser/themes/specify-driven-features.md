@@ -1,10 +1,19 @@
 ---
 title: env-optimiser — features land via specs/<feature>/ pattern (specify/)
-description: Each feature has spec.md, plan.md, tasks.md, quickstart.md under specs/<NNN>-<slug>/. The PM phase mirrors this layout when decomposing initiatives.
+description: >-
+  Each feature has spec.md, plan.md, tasks.md, quickstart.md under
+  specs/<NNN>-<slug>/. The PM phase mirrors this layout when decomposing
+  initiatives.
 category: pattern
-keywords: [env-optimiser, specify, spec-driven, quickstart, pm-mapping, feature-folder]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - env-optimiser
+  - specify
+  - spec-driven
+  - quickstart
+  - pm-mapping
+  - feature-folder
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -28,8 +37,3 @@ The reviewer phase's demo script for any env-optimiser initiative should *be* th
 ## Sources
 
 - env-optimiser README — references `specs/001-local-history-mvp/`, `specs/002-install-prereqs/`.
-
-## Related
-
-- [Theme: Markdown artifact flow](../../../forge/themes/markdown-artifact-flow.md) — the same spirit at v2's level.
-- [Theme: Spec-driven work items](../../../forge/themes/spec-driven-work-items.md) — task → work-item mapping.

@@ -1,11 +1,23 @@
 ---
 title: Eval-driven development — every change shows a benchmark delta
-description: If a change can't move a benchmark, you don't know if it helped. Per-phase benchmarks + per-PR delta + reflection-discovered failures become new cases.
+description: >-
+  If a change can't move a benchmark, you don't know if it helped. Per-phase
+  benchmarks + per-PR delta + reflection-discovered failures become new cases.
 category: pattern
-keywords: [eval-driven, edd, benchmarks, score-delta, regression, reflection, fixtures]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [phase-isolation-benchmarks, tdd-with-agents, brain-gap-feedback-loop]
+keywords:
+  - eval-driven
+  - edd
+  - benchmarks
+  - score-delta
+  - regression
+  - reflection
+  - fixtures
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - phase-isolation-benchmarks
+  - tdd-with-agents
+  - brain-gap-feedback-loop
 ---
 
 # Eval-driven development — every change shows a benchmark delta
@@ -28,8 +40,8 @@ This is the practitioner-version of forge's principle 3 (phase isolation with fa
 - [`agentic-engineering-best-practices.chat.md`](../../_raw/web/agentic-engineering-best-practices.chat.md) — synthesis section 4.
 - [`adr-005-phase-isolation.docs.md`](../../_raw/docs/adr-005-phase-isolation.docs.md) — codified locally.
 
-## Related
+## See also
 
-- [Theme: Phase isolation benchmarks](./phase-isolation-benchmarks.md) — forge's instantiation.
-- [Theme: TDD with agents](./tdd-with-agents.md) — sister discipline (test-vs-benchmark).
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — the brain version.
+- [[phase-isolation-benchmarks]] — forge's instantiation.
+- [[tdd-with-agents]] — sister discipline (test-vs-benchmark).
+- [[brain-gap-feedback-loop]] — the brain version.

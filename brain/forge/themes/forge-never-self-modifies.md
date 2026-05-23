@@ -1,11 +1,23 @@
 ---
 title: Forge never self-modifies while running
-description: Reflection outputs recommendations; a human implements forge changes in a separate session after the forge process is stopped. CI validates before forge restarts.
+description: >-
+  Reflection outputs recommendations; a human implements forge changes in a
+  separate session after the forge process is stopped. CI validates before forge
+  restarts.
 category: operation
-keywords: [self-modification, reflect, separate-session, mid-cycle-risk, recommendations, governance]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [unattended-scheduler, file-based-state-machine, brain-gap-feedback-loop]
+keywords:
+  - self-modification
+  - reflect
+  - separate-session
+  - mid-cycle-risk
+  - recommendations
+  - governance
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - unattended-scheduler
+  - file-based-state-machine
+  - brain-gap-feedback-loop
 ---
 
 # Forge never self-modifies while running
@@ -26,8 +38,8 @@ This is the first "pause point" in the system. Even though the unattended schedu
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — full discipline + rationale.
 
-## Related
+## See also
 
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — what gets paused before self-modification.
-- [Theme: File-based state machine](./file-based-state-machine.md) — the state at risk of corruption.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — how reflect-output flows into the brain.
+- [[unattended-scheduler]] — what gets paused before self-modification.
+- [[file-based-state-machine]] — the state at risk of corruption.
+- [[brain-gap-feedback-loop]] — how reflect-output flows into the brain.

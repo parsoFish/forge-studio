@@ -1,11 +1,23 @@
 ---
 title: Declarative specs over imperative instructions
-description: Ralph principle — describe the desired state, let the agent iterate toward it, rather than dictating step-by-step procedures. Bad specs produce mediocre results.
+description: >-
+  Ralph principle — describe the desired state, let the agent iterate toward it,
+  rather than dictating step-by-step procedures. Bad specs produce mediocre
+  results.
 category: pattern
-keywords: [declarative, imperative, specs, ralph, prompts, refactoring, prompt-engineering]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [ralph-loop-pattern, spec-driven-work-items]
+keywords:
+  - declarative
+  - imperative
+  - specs
+  - ralph
+  - prompts
+  - refactoring
+  - prompt-engineering
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - spec-driven-work-items
 ---
 
 # Declarative specs over imperative instructions
@@ -23,7 +35,7 @@ Practitioner lesson: small, manageable changesets deployed repeatedly outperform
 - [`ralph-humanlayer-history.web.md`](../../_raw/web/ralph-humanlayer-history.web.md) — declarative-vs-imperative framing, "bad specs → mediocre results" lesson.
 - [`ralph-ghuntley.web.md`](../../_raw/web/ralph-ghuntley.web.md) — "deterministically bad in an undeterministic world" — predictable failure tunable through prompt refinement.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — the loop these specs feed.
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — forge's instantiation.
+- [[ralph-loop-pattern]] — the loop these specs feed.
+- [[spec-driven-work-items]] — forge's instantiation.

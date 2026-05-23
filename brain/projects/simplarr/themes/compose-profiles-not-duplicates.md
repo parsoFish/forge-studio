@@ -1,10 +1,19 @@
 ---
-title: simplarr — docker-compose-{nas,pi}.yml are profiles, not duplicates
-description: Host-specific overrides on a shared base. A new profile needs justification, not just a copy. Changes to one require considering both.
+title: 'simplarr — docker-compose-{nas,pi}.yml are profiles, not duplicates'
+description: >-
+  Host-specific overrides on a shared base. A new profile needs justification,
+  not just a copy. Changes to one require considering both.
 category: pattern
-keywords: [simplarr, docker-compose, profiles, nas, pi, overrides, deployment-targets]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - simplarr
+  - docker-compose
+  - profiles
+  - nas
+  - pi
+  - overrides
+  - deployment-targets
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -23,7 +32,3 @@ This is the simplarr equivalent of the layered-merge-order pattern: structural e
 ## Sources
 
 - simplarr README + `docker-compose-{nas,pi}.yml` files in repo.
-
-## Related
-
-- [Theme: Dependency-ordered work](../../../forge/themes/dependency-ordered-work.md) — multi-file work items.

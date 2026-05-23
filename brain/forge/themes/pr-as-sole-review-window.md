@@ -1,11 +1,30 @@
 ---
 title: The PR must be the sole review window (visibility-aware demo-in-PR)
-description: When the operator is engaged, iterating via PR comments is a low-overhead high-fidelity review loop — but ONLY if the PR is self-contained. The demo must live IN the PR; for PRIVATE repos that means a committed DEMO.md with relative image links, not inline raw URLs (GitHub's image proxy can't fetch private raw).
+description: >-
+  When the operator is engaged, iterating via PR comments is a low-overhead
+  high-fidelity review loop — but ONLY if the PR is self-contained. The demo
+  must live IN the PR; for PRIVATE repos that means a committed DEMO.md with
+  relative image links, not inline raw URLs (GitHub's image proxy can't fetch
+  private raw).
 category: pattern
-keywords: [review, pull-request, demo, demo-in-pr, embedDemoInPr, private-repo, raw-url, image-proxy, operator, send-back, iteration, self-contained]
-created_at: 2026-05-18T00:00:00Z
-updated_at: 2026-05-18T00:00:00Z
-related_themes: [review-phase-target-design, human-interaction-via-own-session]
+keywords:
+  - review
+  - pull-request
+  - demo
+  - demo-in-pr
+  - embedDemoInPr
+  - private-repo
+  - raw-url
+  - image-proxy
+  - operator
+  - send-back
+  - iteration
+  - self-contained
+created_at: 2026-05-18T00:00:00.000Z
+updated_at: 2026-05-18T00:00:00.000Z
+related_themes:
+  - review-phase-target-design
+  - human-interaction-via-own-session
 ---
 
 # The PR must be the sole review window
@@ -84,3 +103,8 @@ The pattern is now the **default mechanism**, not an aspiration:
 - `orchestrator/daemon.ts` + `orchestrator/cli.ts` — P4 daemon control.
 - trafficGame PR #54 — 4 review rounds on the PR; demo committed under
   `demo/world-map/`.
+
+## See also
+
+- [[review-phase-target-design]] — review-phase target design — initiative branch synced, holistic intent gate, pr-as-feedback-surface, no auto-merge.
+- [[human-interaction-via-own-session]] — human interaction points run in the operator's own claude session via slash commands.

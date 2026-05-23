@@ -1,11 +1,31 @@
 ---
-title: Grading-frontier infrastructure — parametric sweeps + locked baselines + curated screenshots as the tight-loop layer for map-design ideation
-description: scripts/grading/runSweep.mjs is the reusable parallel sweep library; ~30 lines per new theory. docs/baselines/ locks the headline numbers. docs/baselines/screenshots/ is the curated visual reference. Together they make "is this design better" a measurable score-delta, not a prose argument.
+title: >-
+  Grading-frontier infrastructure — parametric sweeps + locked baselines +
+  curated screenshots as the tight-loop layer for map-design ideation
+description: >-
+  scripts/grading/runSweep.mjs is the reusable parallel sweep library; ~30 lines
+  per new theory. docs/baselines/ locks the headline numbers.
+  docs/baselines/screenshots/ is the curated visual reference. Together they
+  make "is this design better" a measurable score-delta, not a prose argument.
 category: pattern
-keywords: [grading, sweep, parametric, baselines, frontier, parallel, playwright, runsweep, map-design, ideation, fanout]
-created_at: 2026-05-23T00:00:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [2026-05-23-binary-elevation-model, 2026-05-10-test-stack-and-gates, canvas-bpr-flow-tests]
+keywords:
+  - grading
+  - sweep
+  - parametric
+  - baselines
+  - frontier
+  - parallel
+  - playwright
+  - runsweep
+  - map-design
+  - ideation
+  - fanout
+created_at: 2026-05-23T00:00:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - 2026-05-23-binary-elevation-model
+  - 2026-05-10-test-stack-and-gates
+  - canvas-bpr-flow-tests
 ---
 
 # Grading-frontier infrastructure
@@ -124,8 +144,8 @@ load-bearing for that reason.
 - [`docs/baselines/`](../../../../projects/trafficGame/docs/baselines/) — the locks.
 - Commit `146cf5c` "feat(grading): parametric sweep harness + locked design-frontier baselines" on trafficGame `main`.
 
-## Related
+## See also
 
-- [Theme: Binary elevation model](./2026-05-23-binary-elevation-model.md) — what the harness measured.
-- [Theme: Test stack and gates](./2026-05-10-test-stack-and-gates.md) — unit tests verify correctness; sweeps verify holistic performance.
-- [Forge theme: Eval-driven development](../../../forge/themes/eval-driven-development.md) — the principle this implements.
+- [[2026-05-23-binary-elevation-model]] — what the harness measured.
+- [[2026-05-10-test-stack-and-gates]] — unit tests verify correctness; sweeps verify holistic performance.
+- [[canvas-bpr-flow-tests]] — trafficgame — canvas + bpr flow regressions need visual tests.

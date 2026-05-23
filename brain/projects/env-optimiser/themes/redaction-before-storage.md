@@ -1,10 +1,18 @@
 ---
 title: env-optimiser — secret redaction is mandatory before any storage
-description: 30+ patterns redacted before SQLite write. A capture path that bypasses redaction is a critical bug, not a feature toggle.
+description: >-
+  30+ patterns redacted before SQLite write. A capture path that bypasses
+  redaction is a critical bug, not a feature toggle.
 category: pattern
-keywords: [env-optimiser, redaction, secrets, security, sqlite, capture-path]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - env-optimiser
+  - redaction
+  - secrets
+  - security
+  - sqlite
+  - capture-path
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -23,7 +31,3 @@ For the developer loop: a work item that adds a capture path *must* declare `red
 ## Sources
 
 - env-optimiser README "Privacy Model" section + "Constitution Principles" #2.
-
-## Related
-
-- [Theme: Quality gates orchestrator-verified](../../../forge/themes/quality-gates-orchestrator-verified.md) — TDD-first applies here.

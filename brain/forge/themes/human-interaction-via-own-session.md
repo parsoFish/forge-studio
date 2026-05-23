@@ -1,11 +1,31 @@
 ---
-title: Human interaction points run in the operator's own Claude session via slash commands
-description: The three deliberate human moments (roadmap/architect, review feedback & merge, reflection feedback) must be undertaken in the operator's own Claude session (CLI / VSCode extension), not a forge-spawned agent. Implement as slash commands. Forge must never simulate these in production.
+title: >-
+  Human interaction points run in the operator's own Claude session via slash
+  commands
+description: >-
+  The three deliberate human moments (roadmap/architect, review feedback &
+  merge, reflection feedback) must be undertaken in the operator's own Claude
+  session (CLI / VSCode extension), not a forge-spawned agent. Implement as
+  slash commands. Forge must never simulate these in production.
 category: decision
-keywords: [human-interaction, slash-commands, own-session, architect, review, reflection, path-b, no-simulation, three-moments, file-handoff]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [review-phase-target-design, forge-current-architecture-as-built, human-directed-work-as-initiatives, six-phases-of-forge]
+keywords:
+  - human-interaction
+  - slash-commands
+  - own-session
+  - architect
+  - review
+  - reflection
+  - path-b
+  - no-simulation
+  - three-moments
+  - file-handoff
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - review-phase-target-design
+  - forge-current-architecture-as-built
+  - human-directed-work-as-initiatives
+  - six-phases-of-forge
 ---
 
 # Human interaction points run in the operator's own session
@@ -44,8 +64,9 @@ is its first-class home.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: blurred-lines + auto-approve footgun evidence.
 - [`architecture.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/architecture.md) — §A out-of-cycle architect, §G operator-driven PR, §H simplification candidate 7.
 
-## Related
+## See also
 
-- [Theme: Review-phase target design](./review-phase-target-design.md) — `/forge-review` engages the PR surface defined there.
-- [Theme: Hand-directed work as initiatives](./human-directed-work-as-initiatives.md) — the failure mode clean human surfaces prevent.
-- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — turns the out-of-cycle architect into a designed property.
+- [[review-phase-target-design]] — `/forge-review` engages the PR surface defined there.
+- [[forge-current-architecture-as-built]] — turns the out-of-cycle architect into a designed property.
+- [[human-directed-work-as-initiatives]] — the failure mode clean human surfaces prevent.
+- [[six-phases-of-forge]] — six phases of forge backed by a brain.

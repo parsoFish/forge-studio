@@ -1,7 +1,7 @@
 ---
 slug: release-substrate-context
 project: terraform-provider-betterado
-date_added: 2026-05-22
+date_added: 2026-05-22T00:00:00.000Z
 related_themes:
   - council-constraints.md
   - 2026-05-18-stack-and-test-layout.md

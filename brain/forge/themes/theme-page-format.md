@@ -1,11 +1,20 @@
 ---
 title: Theme page format
-description: 15-40 line markdown file with mandatory frontmatter, ≥1 source link, ≤60 lines (warn) / 100 (error). Slug = filename. Indexed in exactly one category index.
+description: >-
+  15-40 line markdown file with mandatory frontmatter, ≥1 source link, ≤60 lines
+  (warn) / 100 (error). Slug = filename. Indexed in exactly one category index.
 category: operation
-keywords: [theme-page, format, frontmatter, slug, lint, structure]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [karpathy-three-layer-wiki]
+keywords:
+  - theme-page
+  - format
+  - frontmatter
+  - slug
+  - lint
+  - structure
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - karpathy-three-layer-wiki
 ---
 
 # Theme page format
@@ -33,11 +42,6 @@ related_themes: [other-theme-slug-1, other-theme-slug-2]
 
 - [`<path/to/raw-source.md>`](../../_raw/<path>) — one-line annotation describing what's in this source.
 
-## Related
-
-- [Theme: <name>](./<other-theme-slug>.md)
-```
-
 ## Rules
 
 - **15-40 lines** (length cap warns at 60, errors at 100).
@@ -53,6 +57,10 @@ related_themes: [other-theme-slug-1, other-theme-slug-2]
 - [`brain/LINT.md`](../../LINT.md) — structural rules `brain-lint` enforces.
 - [`karpathy-llm-wiki.md`](../../_raw/web/karpathy-llm-wiki.md) — the philosophy underneath the format (canonical gist, re-ingested 2026-05-23).
 
-## Related
+## See also
 
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — the structural context.
+- [[karpathy-three-layer-wiki]] — karpathy three-layer llm wiki.
+
+## See also
+
+- [[karpathy-three-layer-wiki]] — the structural context.

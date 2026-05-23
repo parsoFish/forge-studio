@@ -1,11 +1,31 @@
 ---
-title: Autonomous closure works when the stop condition is an objective script, not the agent's judgement
-description: A confirmed plan was driven to a green gate by an in-session loop + fresh-context subagents, each unit gated tsc+tests before commit. The loop could not self-declare done — closure-check.ts (tiered fast|full, parsed from a coverage matrix) was the sole arbiter. Closure 2/22→25/25 fast, 30/31 full; cycle.ts 1753→330; 0 regressions.
+title: >-
+  Autonomous closure works when the stop condition is an objective script, not
+  the agent's judgement
+description: >-
+  A confirmed plan was driven to a green gate by an in-session loop +
+  fresh-context subagents, each unit gated tsc+tests before commit. The loop
+  could not self-declare done — closure-check.ts (tiered fast|full, parsed from
+  a coverage matrix) was the sole arbiter. Closure 2/22→25/25 fast, 30/31 full;
+  cycle.ts 1753→330; 0 regressions.
 category: pattern
-keywords: [autonomous-loop, objective-gate, closure-check, fresh-context-subagents, gate-every-commit, ralph-pattern, simplification, coverage-matrix, no-gaming]
-created_at: 2026-05-17T00:00:00Z
-updated_at: 2026-05-17T00:00:00Z
-related_themes: [reactive-constraint-stripback-arc, forge-current-architecture-as-built, chained-phase-benchmarks, eval-driven-development]
+keywords:
+  - autonomous-loop
+  - objective-gate
+  - closure-check
+  - fresh-context-subagents
+  - gate-every-commit
+  - ralph-pattern
+  - simplification
+  - coverage-matrix
+  - no-gaming
+created_at: 2026-05-17T00:00:00.000Z
+updated_at: 2026-05-17T00:00:00.000Z
+related_themes:
+  - reactive-constraint-stripback-arc
+  - forge-current-architecture-as-built
+  - chained-phase-benchmarks
+  - eval-driven-development
 ---
 
 # Objective-gate autonomous closure
@@ -45,8 +65,9 @@ redefining it is gaming. The loop is resumable from
 - [`2026-05-17_forge-self-closure-arc.md`](../../_raw/cycles/2026-05-17_forge-self-closure-arc.md) — the cycle archive (outcome + evidence).
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — the reflection that produced the plan this arc executed.
 
-## Related
+## See also
 
-- [Theme: Reactive constraint strip-back arc](./reactive-constraint-stripback-arc.md) — the antipattern this closure remediated.
-- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — superseded by the 2026-05-17 snapshot this arc produced.
-- [Theme: Chained phase benchmarks](./chained-phase-benchmarks.md) — the bench model landed in this arc.
+- [[reactive-constraint-stripback-arc]] — the antipattern this closure remediated.
+- [[forge-current-architecture-as-built]] — superseded by the 2026-05-17 snapshot this arc produced.
+- [[chained-phase-benchmarks]] — the bench model landed in this arc.
+- [[eval-driven-development]] — eval-driven development — every change shows a benchmark delta.

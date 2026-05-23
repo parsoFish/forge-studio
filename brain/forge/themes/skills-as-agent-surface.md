@@ -1,11 +1,22 @@
 ---
 title: Skills as the agent surface
-description: Every "agent" in forge v2 is a Claude Code skill (SKILL.md per role) — no spawned subprocesses, no custom registry.
+description: >-
+  Every "agent" in forge v2 is a Claude Code skill (SKILL.md per role) — no
+  spawned subprocesses, no custom registry.
 category: pattern
-keywords: [skills, claude-code, agent, persona, hot-swappable, version-controlled]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [claude-agent-sdk, brain-first-research, llm-council-pattern]
+keywords:
+  - skills
+  - claude-code
+  - agent
+  - persona
+  - hot-swappable
+  - version-controlled
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - claude-agent-sdk
+  - brain-first-research
+  - llm-council-pattern
 ---
 
 # Skills as the agent surface
@@ -22,8 +33,8 @@ Trade-off: skill discovery is conventional (filesystem-based), not registered. S
 
 - [`adr-003-skills-not-self-baked-agents.docs.md`](../../_raw/docs/adr-003-skills-not-self-baked-agents.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — runtime the skills run on.
-- [Theme: Brain-first research](./brain-first-research.md) — every skill's mandated first action.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — multi-skill chain used in the architect.
+- [[claude-agent-sdk]] — runtime the skills run on.
+- [[brain-first-research]] — every skill's mandated first action.
+- [[llm-council-pattern]] — multi-skill chain used in the architect.

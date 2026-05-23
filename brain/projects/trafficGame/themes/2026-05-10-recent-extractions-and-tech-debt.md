@@ -1,10 +1,26 @@
 ---
 title: trafficGame — recent extractions reduced Game.ts and what tech debt remains
-description: Apr–May 2026 work split NetworkOptimizer, extracted NetworkAnalysisService/VisibilityManager/GameToolManager out of Game.ts, archived MCP server, removed 264-line dead TrafficPointEntity. Game.ts is still ~1,732 lines and TrafficMap.ts is still 517 — these are the priority extractions left.
+description: >-
+  Apr–May 2026 work split NetworkOptimizer, extracted
+  NetworkAnalysisService/VisibilityManager/GameToolManager out of Game.ts,
+  archived MCP server, removed 264-line dead TrafficPointEntity. Game.ts is
+  still ~1,732 lines and TrafficMap.ts is still 517 — these are the priority
+  extractions left.
 category: snapshot
-keywords: [trafficgame, refactor, extraction, game-ts, network-optimizer, visibility-manager, game-tool-manager, scoring-coordinator, tech-debt, steiner, graph-coloring]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-10T15:30:00Z
+keywords:
+  - trafficgame
+  - refactor
+  - extraction
+  - game-ts
+  - network-optimizer
+  - visibility-manager
+  - game-tool-manager
+  - scoring-coordinator
+  - tech-debt
+  - steiner
+  - graph-coloring
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-10T15:30:00.000Z
 related_themes: []
 ---
 
@@ -52,9 +68,3 @@ From the explicit list at [`docs/LEARNINGS.md`](../../../../projects/trafficGame
 
 - Recent git log on `/home/parso/forge/projects/trafficGame/`.
 - Project [`docs/LEARNINGS.md`](../../../../projects/trafficGame/docs/LEARNINGS.md) §"Refactoring Log (Feb 2026 Session)" + §"Session 2 refactoring".
-
-## Related
-
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — current src/ shape.
-- [`algorithm-heavy-items`](algorithm-heavy-items.md) — Steiner is the canonical algorithm-heavy precedent.
-- [`test-stack-and-gates`](2026-05-10-test-stack-and-gates.md) — `~150 lines per file` is enforced via review, not a linter.

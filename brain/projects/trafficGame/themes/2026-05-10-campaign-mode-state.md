@@ -1,10 +1,34 @@
 ---
-title: trafficGame — campaign is a connected CampaignGraph (5-map directed convergent-AND world)
-description: The level array is long gone. The campaign is a CampaignGraph of 5 maps with DIRECTED edges carrying real, count-parity-validated connection points. Unlock is convergent-AND (a map unlocks only when EVERY map feeding it is completed; sources always unlocked). The hub renders a spatial map-of-maps with two-way-road exit/entry ports. This is what any campaign/world/unlock initiative starts from now.
+title: >-
+  trafficGame — campaign is a connected CampaignGraph (5-map directed
+  convergent-AND world)
+description: >-
+  The level array is long gone. The campaign is a CampaignGraph of 5 maps with
+  DIRECTED edges carrying real, count-parity-validated connection points. Unlock
+  is convergent-AND (a map unlocks only when EVERY map feeding it is completed;
+  sources always unlocked). The hub renders a spatial map-of-maps with
+  two-way-road exit/entry ports. This is what any campaign/world/unlock
+  initiative starts from now.
 category: snapshot
-keywords: [trafficgame, campaign, campaigngraph, campaignGraphData, worldedge, unlock, isUnlocked, convergent-and, connection-points, count-parity, MapLocationRegistry, gridPos, world-map, two-way-road, modular-maps, cross-map-flow]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-18T00:00:00Z
+keywords:
+  - trafficgame
+  - campaign
+  - campaigngraph
+  - campaignGraphData
+  - worldedge
+  - unlock
+  - isUnlocked
+  - convergent-and
+  - connection-points
+  - count-parity
+  - MapLocationRegistry
+  - gridPos
+  - world-map
+  - two-way-road
+  - modular-maps
+  - cross-map-flow
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-18T00:00:00.000Z
 related_themes: []
 ---
 
@@ -83,9 +107,3 @@ automatically; do NOT wire main.ts.
 - [`src/ui/CampaignHub.ts`](../../../../projects/trafficGame/src/ui/CampaignHub.ts) — spatial map-of-maps, two-way-road ports.
 - [`src/traffic/MapDefinitions.ts`](../../../../projects/trafficGame/src/traffic/MapDefinitions.ts) — per-side connection-point counts (registry source).
 - Git: origin/main `386e973` (PR #54 merge). Tests: `tests/campaign/CampaignGraph.test.ts` + `campaignGraphData.test.ts` (convergent-AND, count-parity, no-phantom).
-
-## Related
-
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — src/ tree.
-- [`per-map-calibrated-thresholds`](per-map-calibrated-thresholds.md) — scoring tuning (out of scope here).
-- [`algorithm-heavy-items`](algorithm-heavy-items.md) — decomposition discipline.

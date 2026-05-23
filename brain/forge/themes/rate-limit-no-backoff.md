@@ -1,11 +1,24 @@
 ---
 title: Rate-limit no-backoff antipattern
-description: Retrying spawns immediately after hitting Claude's rate limit produced 215+ zero-cost spawns and 49% of all v1 Cycle 3 job failures. Parse resetsAt, set rateLimitPausedUntil, gate canSpawnAgent.
+description: >-
+  Retrying spawns immediately after hitting Claude's rate limit produced 215+
+  zero-cost spawns and 49% of all v1 Cycle 3 job failures. Parse resetsAt, set
+  rateLimitPausedUntil, gate canSpawnAgent.
 category: antipattern
-keywords: [rate-limit, backoff, retry, zero-cost-spawns, usage-limit, 49-percent, resetsAt]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [agent-stuck-no-detection, claude-agent-sdk, unattended-scheduler]
+keywords:
+  - rate-limit
+  - backoff
+  - retry
+  - zero-cost-spawns
+  - usage-limit
+  - 49-percent
+  - resetsAt
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - agent-stuck-no-detection
+  - claude-agent-sdk
+  - unattended-scheduler
 ---
 
 # Rate-limit no-backoff antipattern
@@ -27,8 +40,8 @@ The Claude Agent SDK provides a structured `RateLimitEvent` with `resetsAt` time
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — full lesson + Cycle 3 stats.
 
-## Related
+## See also
 
-- [Theme: Agent stuck without detection](./agent-stuck-no-detection.md) — the other dominant waste category.
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — where structured `RateLimitEvent` lives.
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — what enforces the gate.
+- [[agent-stuck-no-detection]] — the other dominant waste category.
+- [[claude-agent-sdk]] — where structured `RateLimitEvent` lives.
+- [[unattended-scheduler]] — what enforces the gate.

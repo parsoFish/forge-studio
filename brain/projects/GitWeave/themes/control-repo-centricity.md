@@ -1,10 +1,19 @@
 ---
 title: GitWeave — control-repo centricity is non-negotiable
-description: All behaviour drives from one repo. No bespoke services, no parallel control planes. Initiatives that propose a separate "GitWeave service" are escalations, not auto-resolves.
+description: >-
+  All behaviour drives from one repo. No bespoke services, no parallel control
+  planes. Initiatives that propose a separate "GitWeave service" are
+  escalations, not auto-resolves.
 category: decision
-keywords: [gitweave, control-repo, governance, monolith, platform-as-code, single-source-of-truth]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - gitweave
+  - control-repo
+  - governance
+  - monolith
+  - platform-as-code
+  - single-source-of-truth
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -23,7 +32,3 @@ The reviewer phase rejects PRs that introduce parallel control surfaces (e.g. co
 ## Sources
 
 - GitWeave README "Constitution & Governance" + "Core Concepts" sections.
-
-## Related
-
-- [Theme: Simplicity as architecture](../../../forge/themes/simplicity-as-architecture.md) — sister principle at the system level.

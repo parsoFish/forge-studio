@@ -1,11 +1,24 @@
 ---
 title: Layered merge order with health checks
-description: Stacked PRs merge in strict Layer 0 → Layer 1 → Layer 2 order, with a post-merge health check between each layer. The merge train stops on failure; human review unblocks.
+description: >-
+  Stacked PRs merge in strict Layer 0 → Layer 1 → Layer 2 order, with a
+  post-merge health check between each layer. The merge train stops on failure;
+  human review unblocks.
 category: pattern
-keywords: [layered-merge, stacked-prs, layer-0, health-check, dependency-ordering, merge-train, gitweave]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [squash-merge-stacked-prs, health-check-protocol, gh-cli-and-worktrees]
+keywords:
+  - layered-merge
+  - stacked-prs
+  - layer-0
+  - health-check
+  - dependency-ordering
+  - merge-train
+  - gitweave
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - squash-merge-stacked-prs
+  - health-check-protocol
+  - gh-cli-and-worktrees
 ---
 
 # Layered merge order with health checks
@@ -32,8 +45,8 @@ In v2 the responsibility lands on the review-loop phase (review-prep verifies th
 
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — full pattern + GitWeave PR sequence.
 
-## Related
+## See also
 
-- [Theme: Squash-merge stacked PRs](./squash-merge-stacked-prs.md) — antipattern this prevents.
-- [Theme: Health-check protocol](./health-check-protocol.md) — the gate between layers.
-- [Theme: gh CLI + worktrees](./gh-cli-and-worktrees.md) — the tooling layer.
+- [[squash-merge-stacked-prs]] — antipattern this prevents.
+- [[health-check-protocol]] — the gate between layers.
+- [[gh-cli-and-worktrees]] — the tooling layer.

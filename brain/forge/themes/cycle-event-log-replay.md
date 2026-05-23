@@ -1,11 +1,22 @@
 ---
 title: Cycle event-log replay
-description: events.jsonl + referenced artifacts let any cycle be replayed for reflection, debugging, or benchmark fixture creation.
+description: >-
+  events.jsonl + referenced artifacts let any cycle be replayed for reflection,
+  debugging, or benchmark fixture creation.
 category: pattern
-keywords: [replay, event-log, jsonl, reflection, debugging, fixture, archival]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [jsonl-event-log, brain-gap-feedback-loop]
+keywords:
+  - replay
+  - event-log
+  - jsonl
+  - reflection
+  - debugging
+  - fixture
+  - archival
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - jsonl-event-log
+  - brain-gap-feedback-loop
 ---
 
 # Cycle event-log replay
@@ -28,7 +39,7 @@ Old cycles are archived to `brain/_raw/cycles/<cycle-id>.md` with a frontmatter 
 
 - [`adr-008-jsonl-event-log.docs.md`](../../_raw/docs/adr-008-jsonl-event-log.docs.md) — log schema and writer/reader split.
 
-## Related
+## See also
 
-- [Theme: JSONL event log](./jsonl-event-log.md) — the substrate.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — uses sibling `brain-gaps.jsonl`.
+- [[jsonl-event-log]] — the substrate.
+- [[brain-gap-feedback-loop]] — uses sibling `brain-gaps.jsonl`.

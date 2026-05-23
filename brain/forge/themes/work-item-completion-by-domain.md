@@ -1,11 +1,23 @@
 ---
 title: Work-item completion by domain complexity
-description: Domain complexity — not item count or codebase size — is the primary predictor of agent failure rate. Clean Python achieves 3.6 min avg; complex TS canvas takes 5.2 min with 26.9 min outliers.
+description: >-
+  Domain complexity — not item count or codebase size — is the primary predictor
+  of agent failure rate. Clean Python achieves 3.6 min avg; complex TS canvas
+  takes 5.2 min with 26.9 min outliers.
 category: pattern
-keywords: [domain-complexity, completion-rate, develop-time, planner-estimation, project-manager, 109-items]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [design-is-the-bottleneck, spec-driven-work-items, dependency-ordered-work]
+keywords:
+  - domain-complexity
+  - completion-rate
+  - develop-time
+  - planner-estimation
+  - project-manager
+  - 109-items
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - design-is-the-bottleneck
+  - spec-driven-work-items
+  - dependency-ordered-work
 ---
 
 # Work-item completion by domain complexity
@@ -34,8 +46,8 @@ For v2's project-manager phase, this is the empirical floor: PM benchmarks shoul
 
 - [`v1-themes-completion-stats.cycle.md`](../../_raw/v1-wiki/v1-themes-completion-stats.cycle.md) — full table + project commentary.
 
-## Related
+## See also
 
-- [Theme: Design is the bottleneck](./design-is-the-bottleneck.md) — why decomposition matters.
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — where `estimated_iterations` lives.
-- [Theme: Dependency-ordered work](./dependency-ordered-work.md) — parallelism axis.
+- [[design-is-the-bottleneck]] — why decomposition matters.
+- [[spec-driven-work-items]] — where `estimated_iterations` lives.
+- [[dependency-ordered-work]] — parallelism axis.

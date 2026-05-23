@@ -1,11 +1,22 @@
 ---
 title: Minimal forge.config.json
-description: Per-machine, gitignored, ~10 lines. Models, projectsDir, scheduler concurrency, notify provider. Everything else lives in ADRs, SKILL.md, or initiative manifests.
+description: >-
+  Per-machine, gitignored, ~10 lines. Models, projectsDir, scheduler
+  concurrency, notify provider. Everything else lives in ADRs, SKILL.md, or
+  initiative manifests.
 category: decision
-keywords: [config, forge.config.json, settings, knobs, model-overrides, scheduler]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [cost-aware-model-routing, unattended-scheduler]
+keywords:
+  - config
+  - forge.config.json
+  - settings
+  - knobs
+  - model-overrides
+  - scheduler
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - cost-aware-model-routing
+  - unattended-scheduler
 ---
 
 # Minimal forge.config.json
@@ -35,7 +46,7 @@ If a v1-style knob (e.g. `concurrency.targetCpuLoad`) becomes a real need, it ge
 
 - [`adr-009-minimal-config.docs.md`](../../_raw/docs/adr-009-minimal-config.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Cost-aware model routing](./cost-aware-model-routing.md) — what `models.<skill>` overrides enable.
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — uses `scheduler.maxConcurrentInitiatives`.
+- [[cost-aware-model-routing]] — what `models.<skill>` overrides enable.
+- [[unattended-scheduler]] — uses `scheduler.maxConcurrentInitiatives`.

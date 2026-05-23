@@ -1,10 +1,21 @@
 ---
 title: healarr — email approvals; no web UI
-description: Correct-tier actions are gated by email approval — reply "approve" / "yes" or "reject" / "no" as the first line. Zero web infrastructure. Works from any phone.
+description: >-
+  Correct-tier actions are gated by email approval — reply "approve" / "yes" or
+  "reject" / "no" as the first line. Zero web infrastructure. Works from any
+  phone.
 category: pattern
-keywords: [healarr, email, approval, no-web-ui, imap, smtp, mobile-friendly, lightweight]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - healarr
+  - email
+  - approval
+  - no-web-ui
+  - imap
+  - smtp
+  - mobile-friendly
+  - lightweight
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -33,7 +44,3 @@ For forge initiatives:
 
 - healarr README "What it does about it" — email-reply specification.
 - `docs/architecture.md` (referenced in README) — full flow.
-
-## Related
-
-- [Theme: Pluggable notifications](../../../forge/themes/pluggable-notifications.md) — sister pattern (forge's own notification interface).

@@ -1,11 +1,24 @@
 ---
-title: Stack & test layout (Go, vendored, make test vs make testacc)
-description: Go 1.24.1 + Terraform Plugin SDK v2, vendored offline build; make test = unit, make testacc = live ADO.
+title: 'Stack & test layout (Go, vendored, make test vs make testacc)'
+description: >-
+  Go 1.24.1 + Terraform Plugin SDK v2, vendored offline build; make test = unit,
+  make testacc = live ADO.
 category: reference
-keywords: [go, terraform, sdk, vendor, make test, testacc, ci, azure devops, PAT]
-created_at: 2026-05-18T10:43:08Z
-updated_at: 2026-05-18T10:43:08Z
-related_themes: [2026-05-18-go-test-harness-demos, 2026-05-18-branch-model-consolidated]
+keywords:
+  - go
+  - terraform
+  - sdk
+  - vendor
+  - make test
+  - testacc
+  - ci
+  - azure devops
+  - PAT
+created_at: 2026-05-18T10:43:08.000Z
+updated_at: 2026-05-18T10:43:08.000Z
+related_themes:
+  - 2026-05-18-go-test-harness-demos
+  - 2026-05-18-branch-model-consolidated
 ---
 
 # Stack & test layout
@@ -42,7 +55,7 @@ re-check those profile exports.
 
 - [`_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md`](../../../_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md) — full repo extract: identity, stack, test layout, CI, onboarding actions.
 
-## Related
+## See also
 
-- [Theme: go-test-harness-demos](./2026-05-18-go-test-harness-demos.md)
-- [Theme: branch-model-consolidated](./2026-05-18-branch-model-consolidated.md)
+- [[2026-05-18-go-test-harness-demos]] — demos for this project use the go-test harness, not playwright media.
+- [[2026-05-18-branch-model-consolidated]] — branch model consolidated to single main (repo claude.md superseded).

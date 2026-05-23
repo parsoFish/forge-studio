@@ -1,11 +1,33 @@
 ---
-title: Holistic project metrics are an onboarding contract clause — without them, agentic ideation is blind
-description: The forge↔project contract (C1 fast gate, C2 scratch hygiene, C3 decomposed source, C4 machine-readable arch, C5 honoured locked-core, C6 satisfiable merge model) is necessary but not sufficient for measurement-driven loops. A new clause — C7 holistic metrics, with a measurement command and locked baselines — is the missing piece. Tests verify "did this break"; metrics verify "did this help".
+title: >-
+  Holistic project metrics are an onboarding contract clause — without them,
+  agentic ideation is blind
+description: >-
+  The forge↔project contract (C1 fast gate, C2 scratch hygiene, C3 decomposed
+  source, C4 machine-readable arch, C5 honoured locked-core, C6 satisfiable
+  merge model) is necessary but not sufficient for measurement-driven loops. A
+  new clause — C7 holistic metrics, with a measurement command and locked
+  baselines — is the missing piece. Tests verify "did this break"; metrics
+  verify "did this help".
 category: decision
-keywords: [holistic-metrics, onboarding, contract, C7, eval-driven, locked-baselines, measurement, agentic-ideation, score-delta, project-bootstrap]
-created_at: 2026-05-23T00:00:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [forge-project-onboarding-contract, eval-driven-development, phase-isolation-benchmarks, parametric-design-search]
+keywords:
+  - holistic-metrics
+  - onboarding
+  - contract
+  - C7
+  - eval-driven
+  - locked-baselines
+  - measurement
+  - agentic-ideation
+  - score-delta
+  - project-bootstrap
+created_at: 2026-05-23T00:00:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - forge-project-onboarding-contract
+  - eval-driven-development
+  - phase-isolation-benchmarks
+  - parametric-design-search
 ---
 
 # Holistic project metrics are a contract clause
@@ -131,9 +153,9 @@ to score deltas.
 - [`projects/trafficGame/docs/baselines/`](../../../projects/trafficGame/docs/baselines/) — the locks.
 - PR #57 — the arc that demonstrated the gap.
 
-## Related
+## See also
 
-- [Theme: Forge↔project onboarding contract](./forge-project-onboarding-contract.md) — C1–C6 (C7 extends).
-- [Theme: Eval-driven development](./eval-driven-development.md) — the principle this clause enforces.
-- [Theme: Parametric design search](./parametric-design-search.md) — the ideation pattern C7 enables.
-- [Theme: Phase isolation benchmarks](./phase-isolation-benchmarks.md) — forge's own analogue (benchmarks/<phase>/).
+- [[forge-project-onboarding-contract]] — C1–C6 (C7 extends).
+- [[eval-driven-development]] — the principle this clause enforces.
+- [[phase-isolation-benchmarks]] — forge's own analogue (benchmarks/<phase>/).
+- [[parametric-design-search]] — the ideation pattern C7 enables.

@@ -1,10 +1,19 @@
 ---
 title: healarr — triage stage is deterministic; LLM only in agent stage
-description: Two-stage pipeline. Triage = rule engine over observations; cheap, fast, no LLM. Agent stage runs only on the small fraction triage marks suspicious. Don't blur the boundary.
+description: >-
+  Two-stage pipeline. Triage = rule engine over observations; cheap, fast, no
+  LLM. Agent stage runs only on the small fraction triage marks suspicious.
+  Don't blur the boundary.
 category: decision
-keywords: [healarr, triage, deterministic, two-stage, llm-cost-control, rule-engine]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - healarr
+  - triage
+  - deterministic
+  - two-stage
+  - llm-cost-control
+  - rule-engine
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -26,7 +35,3 @@ For forge initiatives on healarr:
 ## Sources
 
 - healarr README "What it does about it" — two-stage pipeline definition.
-
-## Related
-
-- [Theme: Cost-aware model routing](../../../forge/themes/cost-aware-model-routing.md) — sibling cost discipline at the system level.

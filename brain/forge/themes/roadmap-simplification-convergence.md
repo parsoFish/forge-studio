@@ -1,11 +1,22 @@
 ---
 title: Roadmaps converge on simplification before features
-description: All 4 v1 project roadmaps independently chose simplify-and-consolidate before adding new capabilities. The planner has a reliable instinct for structural health — useful default for the architect.
+description: >-
+  All 4 v1 project roadmaps independently chose simplify-and-consolidate before
+  adding new capabilities. The planner has a reliable instinct for structural
+  health — useful default for the architect.
 category: pattern
-keywords: [roadmap, simplification, convergence, planner-instinct, technical-debt, architect-default]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [design-is-the-bottleneck, llm-council-pattern]
+keywords:
+  - roadmap
+  - simplification
+  - convergence
+  - planner-instinct
+  - technical-debt
+  - architect-default
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - design-is-the-bottleneck
+  - llm-council-pattern
 ---
 
 # Roadmaps converge on simplification before features
@@ -25,7 +36,7 @@ Either the planner has a reliable instinct for structural health, *or* all four 
 
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — roadmap convergence section.
 
-## Related
+## See also
 
-- [Theme: Design is the bottleneck](./design-is-the-bottleneck.md) — why early planning quality compounds.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — where the "feature vs hardening" critique lives.
+- [[design-is-the-bottleneck]] — why early planning quality compounds.
+- [[llm-council-pattern]] — where the "feature vs hardening" critique lives.

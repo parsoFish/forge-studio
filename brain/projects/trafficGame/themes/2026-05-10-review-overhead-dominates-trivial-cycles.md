@@ -1,11 +1,25 @@
 ---
 title: trafficGame — review-loop overhead dominates cost for trivial initiatives
-description: For simple utility additions, the reviewer phase (2 iterations, demo scaffolding, PR description) consumed 53% of total cycle cost, more than PM (28%) and developer (19%) combined; fixed review scaffolding cost is disproportionate to implementation complexity.
+description: >-
+  For simple utility additions, the reviewer phase (2 iterations, demo
+  scaffolding, PR description) consumed 53% of total cycle cost, more than PM
+  (28%) and developer (19%) combined; fixed review scaffolding cost is
+  disproportionate to implementation complexity.
 category: reference
-keywords: [trafficgame, reviewer, cost, overhead, scaffolding, demo, pr-description, cost-distribution]
-created_at: 2026-05-10T03:23:11Z
-updated_at: 2026-05-10T03:23:11Z
-related_themes: []
+keywords:
+  - trafficgame
+  - reviewer
+  - cost
+  - overhead
+  - scaffolding
+  - demo
+  - pr-description
+  - cost-distribution
+created_at: 2026-05-10T03:23:11.000Z
+updated_at: 2026-05-10T03:23:11.000Z
+related_themes:
+  - review-phase-target-design
+  - phase-isolation-benchmarks
 ---
 
 # Review-loop overhead dominates cost for trivial initiatives
@@ -42,3 +56,8 @@ Do not use cycle cost alone to judge developer-loop efficiency for trivial initi
 
 - `_logs/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5/events.jsonl` — cost fields in phase-end events: PM $0.643, developer-ralph $0.447, reviewer $1.220.
 - `/home/parso/forge/brain/_raw/cycles/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5.md`
+
+## See also
+
+- [[review-phase-target-design]] — review-phase target design — initiative branch synced, holistic intent gate, pr-as-feedback-surface, no auto-merge.
+- [[phase-isolation-benchmarks]] — phase isolation with per-phase benchmarks.

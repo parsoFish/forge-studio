@@ -1,11 +1,27 @@
 ---
-title: Cost-aware model routing — Opus for design, Sonnet for coding, Haiku for triage
-description: Different tasks have different reasoning depths. Per-skill model overrides in forge.config.json route triage to Haiku, coding to Sonnet, deep design to Opus.
+title: >-
+  Cost-aware model routing — Opus for design, Sonnet for coding, Haiku for
+  triage
+description: >-
+  Different tasks have different reasoning depths. Per-skill model overrides in
+  forge.config.json route triage to Haiku, coding to Sonnet, deep design to
+  Opus.
 category: pattern
-keywords: [model-routing, opus, sonnet, haiku, cost, model-selection, per-skill, frontmatter]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [minimal-runtime-config, claude-agent-sdk, skills-as-agent-surface]
+keywords:
+  - model-routing
+  - opus
+  - sonnet
+  - haiku
+  - cost
+  - model-selection
+  - per-skill
+  - frontmatter
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - minimal-runtime-config
+  - claude-agent-sdk
+  - skills-as-agent-surface
 ---
 
 # Cost-aware model routing
@@ -43,8 +59,8 @@ The routing isn't fixed. A skill's model choice is itself a benchmark target —
 - [`adr-009-minimal-config.docs.md`](../../_raw/docs/adr-009-minimal-config.docs.md) — `models.<skill>` override location.
 - [`v1-themes-cost-and-cache.cycle.md`](../../_raw/v1-wiki/v1-themes-cost-and-cache.cycle.md) — 87% cost-reduction data point + pr-creator at $0.12/run.
 
-## Related
+## See also
 
-- [Theme: Minimal runtime config](./minimal-runtime-config.md) — where overrides live.
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — the runtime that respects the choice.
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — per-skill defaults via `SKILL.md`.
+- [[minimal-runtime-config]] — where overrides live.
+- [[claude-agent-sdk]] — the runtime that respects the choice.
+- [[skills-as-agent-surface]] — per-skill defaults via `SKILL.md`.

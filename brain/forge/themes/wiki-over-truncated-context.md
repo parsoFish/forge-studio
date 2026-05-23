@@ -1,11 +1,25 @@
 ---
 title: Wiki over truncated learning-context
-description: Forge v1 truncated cross-cycle learnings to 2000 chars per cycle, producing episodic-not-cumulative memory. The Karpathy three-layer wiki is the architectural fix — and the load-bearing argument for v2's brain.
+description: >-
+  Forge v1 truncated cross-cycle learnings to 2000 chars per cycle, producing
+  episodic-not-cumulative memory. The Karpathy three-layer wiki is the
+  architectural fix — and the load-bearing argument for v2's brain.
 category: pattern
-keywords: [wiki, truncated-context, episodic, cumulative, karpathy, brain, motivation]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [karpathy-three-layer-wiki, brain-first-research, brain-gap-feedback-loop, episodic-not-cumulative-learnings]
+keywords:
+  - wiki
+  - truncated-context
+  - episodic
+  - cumulative
+  - karpathy
+  - brain
+  - motivation
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - karpathy-three-layer-wiki
+  - brain-first-research
+  - brain-gap-feedback-loop
+  - episodic-not-cumulative-learnings
 ---
 
 # Wiki over truncated learning-context
@@ -27,9 +41,9 @@ This theme is the **load-bearing argument for v2's brain** — the brain isn't a
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — episodic-not-cumulative section.
 - [`karpathy-llm-wiki.md`](../../_raw/web/karpathy-llm-wiki.md) — the canonical gist ([gist.github.com/karpathy/442a6bf555914893e9891c11519de94f](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)).
 
-## Related
+## See also
 
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — what the structural fix is.
-- [Theme: Brain-first research](./brain-first-research.md) — what enforces use of the wiki.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — what prevents the wiki from going stale.
-- [Theme: Episodic-not-cumulative learnings](./episodic-not-cumulative-learnings.md) — antipattern this fixes.
+- [[karpathy-three-layer-wiki]] — what the structural fix is.
+- [[brain-first-research]] — what enforces use of the wiki.
+- [[brain-gap-feedback-loop]] — what prevents the wiki from going stale.
+- [[episodic-not-cumulative-learnings]] — antipattern this fixes.

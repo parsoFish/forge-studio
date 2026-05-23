@@ -1,11 +1,23 @@
 ---
 title: Conditional core-values injection per role
-description: Each agent role receives only the subset of core values relevant to its job. Smaller stable prefix → better cache hits + less token waste on irrelevant context.
+description: >-
+  Each agent role receives only the subset of core values relevant to its job.
+  Smaller stable prefix → better cache hits + less token waste on irrelevant
+  context.
 category: pattern
-keywords: [core-values, role-specific, system-prompt, cache-prefix, token-optimization, per-skill]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [prompt-caching-strategy, skills-as-agent-surface, cost-aware-model-routing]
+keywords:
+  - core-values
+  - role-specific
+  - system-prompt
+  - cache-prefix
+  - token-optimization
+  - per-skill
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - prompt-caching-strategy
+  - skills-as-agent-surface
+  - cost-aware-model-routing
 ---
 
 # Conditional core-values injection per role
@@ -26,8 +38,8 @@ The secondary benefit — a smaller, more stable prefix means better prompt-cach
 
 - [`v1-themes-cost-and-cache.cycle.md`](../../_raw/v1-wiki/v1-themes-cost-and-cache.cycle.md) — v1 implementation details.
 
-## Related
+## See also
 
-- [Theme: Prompt caching strategy](./prompt-caching-strategy.md) — what the compact prefix enables.
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — v2's natural form.
-- [Theme: Cost-aware model routing](./cost-aware-model-routing.md) — sister cost lever.
+- [[prompt-caching-strategy]] — what the compact prefix enables.
+- [[skills-as-agent-surface]] — v2's natural form.
+- [[cost-aware-model-routing]] — sister cost lever.

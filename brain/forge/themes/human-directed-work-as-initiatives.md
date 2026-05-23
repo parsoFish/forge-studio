@@ -1,11 +1,29 @@
 ---
-title: Hand-directed project surgery routed through the pipeline blurs autonomy metrics
-description: simplification-tests/source/arch and hand-authored reflection themes were human-directed trafficGame surgery run as forge initiatives. "Forge autonomously progresses the project" and "human directs specific work via the pipeline" have different success criteria; the queue/metrics do not distinguish them.
+title: >-
+  Hand-directed project surgery routed through the pipeline blurs autonomy
+  metrics
+description: >-
+  simplification-tests/source/arch and hand-authored reflection themes were
+  human-directed trafficGame surgery run as forge initiatives. "Forge
+  autonomously progresses the project" and "human directs specific work via the
+  pipeline" have different success criteria; the queue/metrics do not
+  distinguish them.
 category: antipattern
-keywords: [blurred-lines, human-directed, autonomy-metrics, origin-tagging, simplification-initiatives, hand-authored-themes, close-out, operational-mode]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [forge-current-architecture-as-built, forge-project-onboarding-contract, episodic-not-cumulative-learnings]
+keywords:
+  - blurred-lines
+  - human-directed
+  - autonomy-metrics
+  - origin-tagging
+  - simplification-initiatives
+  - hand-authored-themes
+  - close-out
+  - operational-mode
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - forge-current-architecture-as-built
+  - forge-project-onboarding-contract
+  - episodic-not-cumulative-learnings
 ---
 
 # Hand-directed work routed through the pipeline blurs autonomy metrics
@@ -39,8 +57,8 @@ about forge is confounded by the close-out work that produced it.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: autonomous-vs-handheld split with evidence.
 - [`retro.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — finding I6, closure goal G6, user-question 2.
 
-## Related
+## See also
 
-- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — the metrics surface this confounds.
-- [Theme: Forge↔project contract](./forge-project-onboarding-contract.md) — the contract makes the autonomous mode well-defined.
-- [Theme: Episodic not cumulative learnings](./episodic-not-cumulative-learnings.md) — why hand-authored themes are a smell.
+- [[forge-current-architecture-as-built]] — the metrics surface this confounds.
+- [[forge-project-onboarding-contract]] — the contract makes the autonomous mode well-defined.
+- [[episodic-not-cumulative-learnings]] — why hand-authored themes are a smell.

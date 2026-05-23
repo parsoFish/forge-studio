@@ -1,10 +1,20 @@
 ---
 title: trafficGame — canvas + BPR flow regressions need visual tests
-description: Vitest unit tests miss canvas rendering and BPR-flow prediction regressions. Playwright test:visual is the orchestrator-verified gate for the game's correctness.
+description: >-
+  Vitest unit tests miss canvas rendering and BPR-flow prediction regressions.
+  Playwright test:visual is the orchestrator-verified gate for the game's
+  correctness.
 category: pattern
-keywords: [trafficgame, playwright, visual-test, canvas, bpr, flow-prediction, regression]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - trafficgame
+  - playwright
+  - visual-test
+  - canvas
+  - bpr
+  - flow-prediction
+  - regression
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -27,8 +37,3 @@ The reviewer phase should refuse to merge if visual diffs aren't reviewed; the h
 
 - trafficGame README — lists Vitest + Playwright as the two test entry points.
 - `docs/MVP_ARCHITECTURE.md` — defines the canvas + BPR core systems.
-
-## Related
-
-- [Theme: Quality gates orchestrator-verified](../../../forge/themes/quality-gates-orchestrator-verified.md) — verification principle.
-- [Theme: TDD with agents](../../../forge/themes/tdd-with-agents.md) — orchestrator-runs-tests discipline.

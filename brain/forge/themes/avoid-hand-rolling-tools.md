@@ -1,11 +1,24 @@
 ---
 title: Avoid hand-rolling tools that battle-tested community equivalents exist for
-description: User principle 1 — plug into Claude, gh CLI, git worktree, Ralph loop, etc. The user's idea is in hanging powerful ideas together, not building from scratch.
+description: >-
+  User principle 1 — plug into Claude, gh CLI, git worktree, Ralph loop, etc.
+  The user's idea is in hanging powerful ideas together, not building from
+  scratch.
 category: pattern
-keywords: [hand-rolling, battle-tested, community-tools, principle-1, dependencies, leverage]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [simplicity-as-architecture, claude-agent-sdk, ralph-loop-pattern, gh-cli-and-worktrees]
+keywords:
+  - hand-rolling
+  - battle-tested
+  - community-tools
+  - principle-1
+  - dependencies
+  - leverage
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - simplicity-as-architecture
+  - claude-agent-sdk
+  - ralph-loop-pattern
+  - gh-cli-and-worktrees
 ---
 
 # Avoid hand-rolling tools
@@ -28,7 +41,10 @@ Test: when reviewing a proposed addition to v2, ask "is this re-inventing X that
 - [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 1.
 - [`adr-001-claude-agent-sdk.docs.md`](../../_raw/docs/adr-001-claude-agent-sdk.docs.md), [`adr-002-ralph-loop-pattern.docs.md`](../../_raw/docs/adr-002-ralph-loop-pattern.docs.md), [`adr-003-skills-not-self-baked-agents.docs.md`](../../_raw/docs/adr-003-skills-not-self-baked-agents.docs.md), [`adr-006-gh-cli-and-worktrees.docs.md`](../../_raw/docs/adr-006-gh-cli-and-worktrees.docs.md) — codifications.
 
-## Related
+## See also
 
-- [Theme: Simplicity as architecture](./simplicity-as-architecture.md) — companion principle.
-- [Theme: v1 vs v2 key differences](./v1-vs-v2-key-differences.md) — what got swapped.
+- [[simplicity-as-architecture]] — companion principle.
+- [[claude-agent-sdk]] — claude agent sdk as the agent runtime.
+- [[ralph-loop-pattern]] — ralph loop pattern.
+- [[gh-cli-and-worktrees]] — gh cli + git worktrees + github actions.
+- [[v1-vs-v2-key-differences]] — what got swapped.

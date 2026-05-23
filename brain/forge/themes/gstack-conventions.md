@@ -1,11 +1,23 @@
 ---
-title: gstack conventions — process-not-tools, skill-driven, markdown-artifact-flow
-description: 23 sprint-phase skills + SKILL.md/SKILL.md.tmpl + /autoplan + /learn. Inspired forge v2's skills-as-agents and markdown-artifact-flow.
+title: 'gstack conventions — process-not-tools, skill-driven, markdown-artifact-flow'
+description: >-
+  23 sprint-phase skills + SKILL.md/SKILL.md.tmpl + /autoplan + /learn. Inspired
+  forge v2's skills-as-agents and markdown-artifact-flow.
 category: reference
-keywords: [gstack, garrytan, skills, autoplan, learn, sprint-phases, markdown-artifacts]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [skills-as-agent-surface, markdown-artifact-flow, llm-council-pattern]
+keywords:
+  - gstack
+  - garrytan
+  - skills
+  - autoplan
+  - learn
+  - sprint-phases
+  - markdown-artifacts
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - skills-as-agent-surface
+  - markdown-artifact-flow
+  - llm-council-pattern
 ---
 
 # gstack conventions
@@ -26,8 +38,8 @@ The framing slogan: gstack treats this as a **process, not tools**. Claude's wea
 
 - [`gstack-readme.web.md`](../../_raw/web/gstack-readme.web.md) — README extract.
 
-## Related
+## See also
 
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — what forge inherits.
-- [Theme: Markdown artifact flow](./markdown-artifact-flow.md) — what forge inherits.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — `/autoplan` is the inspiration.
+- [[skills-as-agent-surface]] — what forge inherits.
+- [[markdown-artifact-flow]] — what forge inherits.
+- [[llm-council-pattern]] — `/autoplan` is the inspiration.

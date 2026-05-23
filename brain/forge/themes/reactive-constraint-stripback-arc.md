@@ -1,11 +1,34 @@
 ---
-title: Agent-facing constraints masked structural bugs — diagnose cwd/state before adding gates
-description: F-35..F-43 arc — the PM path validator, per-WI brain-first gate, brain index, noop stop condition all got ripped out. The real bugs were cwd=forgeRoot (F-37) and shared Ralph scratch (F-40). Constraints added false-positive surface and hid root causes.
+title: >-
+  Agent-facing constraints masked structural bugs — diagnose cwd/state before
+  adding gates
+description: >-
+  F-35..F-43 arc — the PM path validator, per-WI brain-first gate, brain index,
+  noop stop condition all got ripped out. The real bugs were cwd=forgeRoot
+  (F-37) and shared Ralph scratch (F-40). Constraints added false-positive
+  surface and hid root causes.
 category: antipattern
-keywords: [over-restriction, strip-back, false-positives, cwd-forgeroot, shared-scratch, brain-first-gate, path-validator, root-cause, F-34, F-37, F-39, F-40, F-41]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [brain-first-research, ralph-loop-pattern, quality-gates-orchestrator-verified, simplicity-as-architecture]
+keywords:
+  - over-restriction
+  - strip-back
+  - false-positives
+  - cwd-forgeroot
+  - shared-scratch
+  - brain-first-gate
+  - path-validator
+  - root-cause
+  - F-34
+  - F-37
+  - F-39
+  - F-40
+  - F-41
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - brain-first-research
+  - ralph-loop-pattern
+  - quality-gates-orchestrator-verified
+  - simplicity-as-architecture
 ---
 
 # Agent-facing constraints masked structural bugs
@@ -47,8 +70,9 @@ deliberate redesign.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the F-24…F-44 change list.
 - [`retro.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — §2 "how forge shifted", I2/I4/I5 stale-surface findings.
 
-## Related
+## See also
 
-- [Theme: Brain-first research](./brain-first-research.md) — the mandate that was deliberately narrowed to PM/reflector only.
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — where the shared-scratch bug lived.
-- [Theme: Simplicity as architecture](./simplicity-as-architecture.md) — the principle the strip-backs restored.
+- [[brain-first-research]] — the mandate that was deliberately narrowed to PM/reflector only.
+- [[ralph-loop-pattern]] — where the shared-scratch bug lived.
+- [[quality-gates-orchestrator-verified]] — quality gates verified by the orchestrator, not the agent.
+- [[simplicity-as-architecture]] — the principle the strip-backs restored.

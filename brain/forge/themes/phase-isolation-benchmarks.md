@@ -1,11 +1,21 @@
 ---
 title: Phase isolation with per-phase benchmarks
-description: Every phase has benchmarks/<phase>/ with sample inputs → measurable outputs so improvement is provable per-phase without a full cycle.
+description: >-
+  Every phase has benchmarks/<phase>/ with sample inputs → measurable outputs so
+  improvement is provable per-phase without a full cycle.
 category: pattern
-keywords: [benchmarks, phase-isolation, eval-driven, fast-feedback, score, regression]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [eval-driven-development, six-phases-of-forge]
+keywords:
+  - benchmarks
+  - phase-isolation
+  - eval-driven
+  - fast-feedback
+  - score
+  - regression
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - eval-driven-development
+  - six-phases-of-forge
 ---
 
 # Phase isolation with per-phase benchmarks
@@ -25,7 +35,7 @@ Trade-off: maintaining benchmark cases is real ongoing work. Mitigated by treati
 - [`adr-005-phase-isolation.docs.md`](../../_raw/docs/adr-005-phase-isolation.docs.md) — decision record.
 - [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 3.
 
-## Related
+## See also
 
-- [Theme: Eval-driven development](./eval-driven-development.md) — the broader pattern.
-- [Theme: Six phases of forge](./six-phases-of-forge.md) — the phases that get benchmarked.
+- [[eval-driven-development]] — the broader pattern.
+- [[six-phases-of-forge]] — the phases that get benchmarked.

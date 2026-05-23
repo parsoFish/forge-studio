@@ -1,11 +1,22 @@
 ---
 title: Wedged loop detector
-description: One of Ralph's stop conditions — abort when the loop makes no progress for N iterations. Caps token burn on no-op iterations.
+description: >-
+  One of Ralph's stop conditions — abort when the loop makes no progress for N
+  iterations. Caps token burn on no-op iterations.
 category: pattern
-keywords: [wedged, stuck, no-progress, stop-condition, ralph, iteration-budget, abort]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [ralph-loop-pattern, quality-gates-orchestrator-verified]
+keywords:
+  - wedged
+  - stuck
+  - no-progress
+  - stop-condition
+  - ralph
+  - iteration-budget
+  - abort
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - quality-gates-orchestrator-verified
 ---
 
 # Wedged loop detector
@@ -27,7 +38,7 @@ The wedge rate (≤5% of work items target) is one of the developer-loop benchma
 - [`forge-v2-phase-developer-loop.docs.md`](../../_raw/docs/forge-v2-phase-developer-loop.docs.md) — failure modes section.
 - [`adr-002-ralph-loop-pattern.docs.md`](../../_raw/docs/adr-002-ralph-loop-pattern.docs.md) — stop condition design.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — the loop this guards.
-- [Theme: Quality gates orchestrator-verified](./quality-gates-orchestrator-verified.md) — the other primary stop condition.
+- [[ralph-loop-pattern]] — the loop this guards.
+- [[quality-gates-orchestrator-verified]] — the other primary stop condition.

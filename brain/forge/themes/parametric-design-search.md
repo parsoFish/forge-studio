@@ -1,11 +1,32 @@
 ---
-title: Parametric design search — the ideation-fanout pattern any project with a measurable outcome can use
-description: trafficGame's runSweep.mjs library is ~250 lines of reusable infrastructure that turned every map-design hypothesis from prose into a ~30-line script + 10s wall-clock sweep. Pattern generalises to any project where a parameter space and a holistic metric exist; forge should expose a project-agnostic harness skeleton.
+title: >-
+  Parametric design search — the ideation-fanout pattern any project with a
+  measurable outcome can use
+description: >-
+  trafficGame's runSweep.mjs library is ~250 lines of reusable infrastructure
+  that turned every map-design hypothesis from prose into a ~30-line script +
+  10s wall-clock sweep. Pattern generalises to any project where a parameter
+  space and a holistic metric exist; forge should expose a project-agnostic
+  harness skeleton.
 category: pattern
-keywords: [parametric, sweep, ideation, fanout, parallel, playwright, runsweep, holistic-metric, exploration, harness, agentic-loop]
-created_at: 2026-05-23T00:00:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [holistic-metrics-onboarding, exploration-vs-implementation-initiatives, eval-driven-development]
+keywords:
+  - parametric
+  - sweep
+  - ideation
+  - fanout
+  - parallel
+  - playwright
+  - runsweep
+  - holistic-metric
+  - exploration
+  - harness
+  - agentic-loop
+created_at: 2026-05-23T00:00:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - holistic-metrics-onboarding
+  - exploration-vs-implementation-initiatives
+  - eval-driven-development
 ---
 
 # Parametric design search
@@ -143,8 +164,8 @@ afterthought.
 - [`projects/trafficGame/scripts/grading/README.md`](../../../projects/trafficGame/scripts/grading/README.md) — the "add a theory" guide.
 - PR #57 — 8 theories graded against each other inside this loop.
 
-## Related
+## See also
 
-- [Theme: Holistic metrics onboarding](./holistic-metrics-onboarding.md) — what the harness measures.
-- [Theme: Exploration vs implementation initiatives](./exploration-vs-implementation-initiatives.md) — what kind of initiative this is.
-- [Theme: Eval-driven development](./eval-driven-development.md) — the principle.
+- [[holistic-metrics-onboarding]] — what the harness measures.
+- [[exploration-vs-implementation-initiatives]] — what kind of initiative this is.
+- [[eval-driven-development]] — the principle.

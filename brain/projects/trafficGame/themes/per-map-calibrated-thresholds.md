@@ -1,10 +1,19 @@
 ---
-title: trafficGame — per-map star thresholds are hand-tuned, not auto-generated
-description: Each map's star thresholds are calibrated against realistically achievable scores via playtesting. Auto-generating from heuristics produces frustrating-or-trivial maps.
+title: 'trafficGame — per-map star thresholds are hand-tuned, not auto-generated'
+description: >-
+  Each map's star thresholds are calibrated against realistically achievable
+  scores via playtesting. Auto-generating from heuristics produces
+  frustrating-or-trivial maps.
 category: decision
-keywords: [trafficgame, star-threshold, calibration, playtest, learnings-doc, scoring]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - trafficgame
+  - star-threshold
+  - calibration
+  - playtest
+  - learnings-doc
+  - scoring
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -24,7 +33,3 @@ This is the prime example of *taste-signal-as-data* in trafficGame: per-map LEAR
 
 - trafficGame README — "Each map has calibrated star thresholds based on realistically achievable scores."
 - `docs/LEARNINGS.md` (in the project repo) — per-map strategy notes.
-
-## Related
-
-- [Theme: Design is the bottleneck](../../../forge/themes/design-is-the-bottleneck.md) — design issues compound here.

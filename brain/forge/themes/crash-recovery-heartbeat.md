@@ -1,11 +1,22 @@
 ---
 title: Crash recovery via worktree heartbeat + atomic claim
-description: Two file-system passes at scheduler startup recover orphaned in-flight initiatives. No DB, no journaling, no leader election.
+description: >-
+  Two file-system passes at scheduler startup recover orphaned in-flight
+  initiatives. No DB, no journaling, no leader election.
 category: pattern
-keywords: [crash-recovery, heartbeat, atomic-claim, restart, orphaned, mtime, sweep]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [unattended-scheduler, file-based-state-machine]
+keywords:
+  - crash-recovery
+  - heartbeat
+  - atomic-claim
+  - restart
+  - orphaned
+  - mtime
+  - sweep
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - unattended-scheduler
+  - file-based-state-machine
 ---
 
 # Crash recovery via worktree heartbeat + atomic claim
@@ -23,7 +34,7 @@ Trade-off: 5-minute window where a stuck initiative looks alive — acceptable f
 
 - [`adr-012-crash-recovery.docs.md`](../../_raw/docs/adr-012-crash-recovery.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — what this protects.
-- [Theme: File-based state machine](./file-based-state-machine.md) — the underlying protocol.
+- [[unattended-scheduler]] — what this protects.
+- [[file-based-state-machine]] — the underlying protocol.

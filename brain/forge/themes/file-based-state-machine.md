@@ -1,11 +1,23 @@
 ---
 title: File-based state machine for queue management
-description: _queue/{pending,in-flight,ready-for-review,done,failed}/ directories with atomic mv as the transition primitive. The filesystem IS the protocol.
+description: >-
+  _queue/{pending,in-flight,ready-for-review,done,failed}/ directories with
+  atomic mv as the transition primitive. The filesystem IS the protocol.
 category: pattern
-keywords: [state-machine, atomic-mv, queue, directories, pending, in-flight, file-protocol]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [unattended-scheduler, crash-recovery-heartbeat, markdown-artifact-flow]
+keywords:
+  - state-machine
+  - atomic-mv
+  - queue
+  - directories
+  - pending
+  - in-flight
+  - file-protocol
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - unattended-scheduler
+  - crash-recovery-heartbeat
+  - markdown-artifact-flow
 ---
 
 # File-based state machine for queue management
@@ -34,7 +46,8 @@ Trade-off: assumes single filesystem (no NFS-style network mounts). No priority 
 - [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — primary source.
 - [`adr-012-crash-recovery.docs.md`](../../_raw/docs/adr-012-crash-recovery.docs.md) — recovery semantics.
 
-## Related
+## See also
 
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — the consumer.
-- [Theme: Crash recovery via heartbeat](./crash-recovery-heartbeat.md) — what protects in-flight integrity.
+- [[unattended-scheduler]] — the consumer.
+- [[crash-recovery-heartbeat]] — what protects in-flight integrity.
+- [[markdown-artifact-flow]] — markdown artifacts flow phase-to-phase.

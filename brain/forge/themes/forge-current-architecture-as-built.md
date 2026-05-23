@@ -1,11 +1,30 @@
 ---
-title: Forge as-built — 5 wired phases + hand-run architect, PM/reflector-only brain-first, ~4,400 LOC, a real resilience layer
-description: Honest snapshot of forge's actual structure (not the stated ideal). Architect is out-of-cycle Path-B; brain-first is enforced only for PM+reflector; orchestrator is ~4,400 LOC not 300; the classifier/auto-retry resilience layer is the most mature subsystem; queue state is not ground truth.
+title: >-
+  Forge as-built — 5 wired phases + hand-run architect, PM/reflector-only
+  brain-first, ~4,400 LOC, a real resilience layer
+description: >-
+  Honest snapshot of forge's actual structure (not the stated ideal). Architect
+  is out-of-cycle Path-B; brain-first is enforced only for PM+reflector;
+  orchestrator is ~4,400 LOC not 300; the classifier/auto-retry resilience layer
+  is the most mature subsystem; queue state is not ground truth.
 category: reference
-keywords: [as-built, architecture, path-b-architect, brain-first-narrowed, orchestrator-loc, failure-classifier, auto-retry, queue-not-truth, doc-drift]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [six-phases-of-forge, forge-project-onboarding-contract, unattended-scheduler, simplicity-as-architecture]
+keywords:
+  - as-built
+  - architecture
+  - path-b-architect
+  - brain-first-narrowed
+  - orchestrator-loc
+  - failure-classifier
+  - auto-retry
+  - queue-not-truth
+  - doc-drift
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - six-phases-of-forge
+  - forge-project-onboarding-contract
+  - unattended-scheduler
+  - simplicity-as-architecture
 ---
 
 # Forge as-built (honest snapshot)
@@ -46,8 +65,9 @@ docs should be reconciled to this (closure goal G7).
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: F-24…F-44 + audit basis.
 - [`retro.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — §4 as-built, §5 inconsistencies I1–I6, §6 goals G3/G5/G7.
 
-## Related
+## See also
 
-- [Theme: Six phases of forge](./six-phases-of-forge.md) — the idealised model this corrects.
-- [Theme: Forge↔project contract](./forge-project-onboarding-contract.md) — what this architecture is held to.
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — the subsystem that grew the resilience layer.
+- [[six-phases-of-forge]] — the idealised model this corrects.
+- [[forge-project-onboarding-contract]] — what this architecture is held to.
+- [[unattended-scheduler]] — the subsystem that grew the resilience layer.
+- [[simplicity-as-architecture]] — simplicity is key — every "no" defends it.

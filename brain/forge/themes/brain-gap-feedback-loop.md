@@ -1,11 +1,22 @@
 ---
 title: Brain-gap feedback loop
-description: brain-query logs unanswered questions to brain-gaps.jsonl; brain-ingest fills them at end of cycle. The brain learns from its own failures.
+description: >-
+  brain-query logs unanswered questions to brain-gaps.jsonl; brain-ingest fills
+  them at end of cycle. The brain learns from its own failures.
 category: pattern
-keywords: [brain-gaps, feedback-loop, self-improving, brain-query, brain-ingest, jsonl]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [brain-first-research, karpathy-three-layer-wiki, jsonl-event-log]
+keywords:
+  - brain-gaps
+  - feedback-loop
+  - self-improving
+  - brain-query
+  - brain-ingest
+  - jsonl
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - brain-first-research
+  - karpathy-three-layer-wiki
+  - jsonl-event-log
 ---
 
 # Brain-gap feedback loop
@@ -26,8 +37,8 @@ This is what makes the brain a self-improving loop rather than a static document
 - [`adr-010-brain-first.docs.md`](../../_raw/docs/adr-010-brain-first.docs.md) — gap-logging discipline.
 - [`adr-008-jsonl-event-log.docs.md`](../../_raw/docs/adr-008-jsonl-event-log.docs.md) — log substrate.
 
-## Related
+## See also
 
-- [Theme: Brain-first research](./brain-first-research.md) — why gaps are forced into existence.
-- [Theme: JSONL event log](./jsonl-event-log.md) — the log family.
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — what gets grown.
+- [[brain-first-research]] — why gaps are forced into existence.
+- [[karpathy-three-layer-wiki]] — what gets grown.
+- [[jsonl-event-log]] — the log family.

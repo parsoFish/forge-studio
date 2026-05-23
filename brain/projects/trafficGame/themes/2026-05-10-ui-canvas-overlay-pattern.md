@@ -1,11 +1,35 @@
 ---
-title: trafficGame — overlays on the shared paused canvas need a frame snapshot, not just clearRect
-description: GameMenu and every CanvasScreen subclass share a single canvas with the game. Opening the menu calls game.stop() (rAF cancelled), so nothing repaints the game behind the overlay. A bare `fillRect` per re-render stacks dims (cumulative darken); a bare `clearRect` erases the paused game frame (overlay on blank). The landed fix (PR #56) snapshots the canvas in CanvasScreen.start() and restores it on every redraw so the dim is painted exactly ONCE over a STABLE game frame.
+title: >-
+  trafficGame — overlays on the shared paused canvas need a frame snapshot, not
+  just clearRect
+description: >-
+  GameMenu and every CanvasScreen subclass share a single canvas with the game.
+  Opening the menu calls game.stop() (rAF cancelled), so nothing repaints the
+  game behind the overlay. A bare `fillRect` per re-render stacks dims
+  (cumulative darken); a bare `clearRect` erases the paused game frame (overlay
+  on blank). The landed fix (PR
 category: pattern
-keywords: [trafficgame, ui, canvas, overlay, fillrect, clearrect, hover, darken, gamemenu, levelcompleteoverlay, alpha-stacking, snapshot, getImageData, putImageData, paused-canvas, redraw]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-20T00:00:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - ui
+  - canvas
+  - overlay
+  - fillrect
+  - clearrect
+  - hover
+  - darken
+  - gamemenu
+  - levelcompleteoverlay
+  - alpha-stacking
+  - snapshot
+  - getImageData
+  - putImageData
+  - paused-canvas
+  - redraw
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-20T00:00:00.000Z
+related_themes:
+  - episodic-not-cumulative-learnings
 ---
 
 # trafficGame — overlays on the shared paused canvas
@@ -104,7 +128,6 @@ honest test for "does this overlay still show the dimmed game?".
 - [`src/main.ts`](../../../../projects/trafficGame/src/main.ts) — `showGameMenu()` stop→new GameMenu(same canvas)→start.
 - PR #56 (merged 2026-05-19, main `59d1713`), commit `01630c7`.
 
-## Related
+## See also
 
-- [`canvas-bpr-flow-tests`](canvas-bpr-flow-tests.md) — Playwright `test:visual` is the gate for canvas regressions; this fix also added a real-browser luminance repro pattern.
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — `src/ui/` location.
+- [[episodic-not-cumulative-learnings]] — episodic-not-cumulative learnings antipattern.

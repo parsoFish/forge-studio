@@ -1,11 +1,22 @@
 ---
-title: Dependency-ordered work — parallelism is correctness, not optimisation
-description: When work items don't declare dependencies, parallel execution silently corrupts merges. depends_on edges + a graph-critic make parallelism safe.
+title: 'Dependency-ordered work — parallelism is correctness, not optimisation'
+description: >-
+  When work items don't declare dependencies, parallel execution silently
+  corrupts merges. depends_on edges + a graph-critic make parallelism safe.
 category: pattern
-keywords: [dependencies, parallelism, depends-on, dependency-graph, merge-conflicts, correctness]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [spec-driven-work-items, llm-council-pattern, gh-cli-and-worktrees]
+keywords:
+  - dependencies
+  - parallelism
+  - depends-on
+  - dependency-graph
+  - merge-conflicts
+  - correctness
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - spec-driven-work-items
+  - llm-council-pattern
+  - gh-cli-and-worktrees
 ---
 
 # Dependency-ordered work — parallelism is correctness
@@ -28,8 +39,8 @@ Forge implements this via `git worktree` (one worktree per claimed work unit, is
 - [`agentic-engineering-best-practices.chat.md`](../../_raw/web/agentic-engineering-best-practices.chat.md) — synthesis section 3.
 - [`forge-v2-phase-project-manager.docs.md`](../../_raw/docs/forge-v2-phase-project-manager.docs.md) — `_graph.md` mermaid view.
 
-## Related
+## See also
 
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — where `depends_on` lives.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — the dependency-graph critic.
-- [Theme: gh CLI + worktrees](./gh-cli-and-worktrees.md) — the parallelism mechanism.
+- [[spec-driven-work-items]] — where `depends_on` lives.
+- [[llm-council-pattern]] — the dependency-graph critic.
+- [[gh-cli-and-worktrees]] — the parallelism mechanism.

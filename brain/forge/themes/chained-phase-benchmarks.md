@@ -1,11 +1,34 @@
 ---
-title: An e2e test is a seed at the front of the chain — not a benchmark with its own rubric
-description: Keep the isolated per-phase benches. "Chained" means each phase bench's generated output is the next phase bench's input, scored by the existing per-phase pure rubrics. An end-to-end test is a SEED fed into the architect bench, never a standalone fixture+rubric. Eliminate benchmarks/e2e's bespoke rubric; keep only its plumbing in _lib. Plus 3 isolated-bench drift corrections.
+title: >-
+  An e2e test is a seed at the front of the chain — not a benchmark with its own
+  rubric
+description: >-
+  Keep the isolated per-phase benches. "Chained" means each phase bench's
+  generated output is the next phase bench's input, scored by the existing
+  per-phase pure rubrics. An end-to-end test is a SEED fed into the architect
+  bench, never a standalone fixture+rubric. Eliminate benchmarks/e2e's bespoke
+  rubric; keep only its plumbing in _lib. Plus 3 isolated-bench drift
+  corrections.
 category: decision
-keywords: [benchmarks, chained, e2e-as-seed, no-standalone-e2e-rubric, phase-isolation, drift, false-green, false-red, runCycle-as-engine, scoring-pure, simplification]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [phase-isolation-benchmarks, eval-driven-development, forge-current-architecture-as-built, brain-read-policy]
+keywords:
+  - benchmarks
+  - chained
+  - e2e-as-seed
+  - no-standalone-e2e-rubric
+  - phase-isolation
+  - drift
+  - false-green
+  - false-red
+  - runCycle-as-engine
+  - scoring-pure
+  - simplification
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - phase-isolation-benchmarks
+  - eval-driven-development
+  - forge-current-architecture-as-built
+  - brain-read-policy
 ---
 
 # An e2e test is a seed, not a separate benchmark
@@ -58,8 +81,9 @@ only; no `benchmarks/e2e/scoring.ts` or any chained-only rubric).
 - [`benchmark-alignment.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md) — §A drift table, §C corrected design, G11/G12.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the F-24…F-44 changes that caused the drift.
 
-## Related
+## See also
 
-- [Theme: Phase isolation benchmarks](./phase-isolation-benchmarks.md) — the isolation the chain preserves (chain reuses the same rubrics).
-- [Theme: Eval-driven development](./eval-driven-development.md) — why bench fidelity is load-bearing.
-- [Theme: Brain-read policy](./brain-read-policy.md) — why the review-loop brain criterion must go.
+- [[phase-isolation-benchmarks]] — the isolation the chain preserves (chain reuses the same rubrics).
+- [[eval-driven-development]] — why bench fidelity is load-bearing.
+- [[forge-current-architecture-as-built]] — forge as-built — 5 wired phases + hand-run architect, pm/reflector-only brain-first, ~4,400 loc, a real resilience layer.
+- [[brain-read-policy]] — why the review-loop brain criterion must go.

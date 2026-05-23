@@ -1,11 +1,23 @@
 ---
 title: Review-fix loop spinning — SHA-guard missing
-description: One v1 Cycle 1 merge produced 70+ review-fix cycles overnight. 40-60% of $451 Cycle 1 spend wasted. SHA-change guard + worktree isolation + chain consolidation are the fix.
+description: >-
+  One v1 Cycle 1 merge produced 70+ review-fix cycles overnight. 40-60% of $451
+  Cycle 1 spend wasted. SHA-change guard + worktree isolation + chain
+  consolidation are the fix.
 category: antipattern
-keywords: [review-fix-loop, sha-guard, infinite-loop, cycle-1, $200-waste, progress-verification]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [wedged-loop-detector, quality-gates-orchestrator-verified, gh-cli-and-worktrees]
+keywords:
+  - review-fix-loop
+  - sha-guard
+  - infinite-loop
+  - cycle-1
+  - $200-waste
+  - progress-verification
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - wedged-loop-detector
+  - quality-gates-orchestrator-verified
+  - gh-cli-and-worktrees
 ---
 
 # Review-fix loop spinning — SHA-guard missing
@@ -33,8 +45,8 @@ In v2 the fix is structural: Ralph's wedged-loop detector + orchestrator-verifie
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — full design + Cycle 1 numbers.
 
-## Related
+## See also
 
-- [Theme: Wedged loop detector](./wedged-loop-detector.md) — the structural fix in v2.
-- [Theme: Quality gates orchestrator-verified](./quality-gates-orchestrator-verified.md) — the trust-model fix.
-- [Theme: gh CLI + worktrees](./gh-cli-and-worktrees.md) — the isolation that makes SHA-guard work.
+- [[wedged-loop-detector]] — the structural fix in v2.
+- [[quality-gates-orchestrator-verified]] — the trust-model fix.
+- [[gh-cli-and-worktrees]] — the isolation that makes SHA-guard work.

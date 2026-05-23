@@ -1,11 +1,23 @@
 ---
 title: Markdown artifacts flow phase-to-phase
-description: All inter-phase data is markdown with YAML frontmatter. Greppable, debuggable, version-controllable. Inspired by gstack.
+description: >-
+  All inter-phase data is markdown with YAML frontmatter. Greppable, debuggable,
+  version-controllable. Inspired by gstack.
 category: pattern
-keywords: [markdown, artifacts, frontmatter, gstack, gray-matter, phase-boundary, greppable]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [spec-driven-work-items, gstack-conventions, six-phases-of-forge]
+keywords:
+  - markdown
+  - artifacts
+  - frontmatter
+  - gstack
+  - gray-matter
+  - phase-boundary
+  - greppable
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - spec-driven-work-items
+  - gstack-conventions
+  - six-phases-of-forge
 ---
 
 # Markdown artifacts flow phase-to-phase
@@ -31,7 +43,8 @@ Trade-off: no compile-time schema enforcement. Mitigated by lint skills and benc
 
 - [`adr-007-markdown-artifact-flow.docs.md`](../../_raw/docs/adr-007-markdown-artifact-flow.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — one of the artifacts.
-- [Theme: gstack conventions](./gstack-conventions.md) — the inspiration.
+- [[spec-driven-work-items]] — one of the artifacts.
+- [[gstack-conventions]] — the inspiration.
+- [[six-phases-of-forge]] — six phases of forge backed by a brain.

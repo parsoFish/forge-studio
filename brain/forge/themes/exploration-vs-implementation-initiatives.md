@@ -1,11 +1,30 @@
 ---
-title: Exploration initiatives differ structurally from implementation initiatives — the architect/PM/dev-loop pipeline is shaped for the latter and needs new artifacts for the former
-description: The trafficGame collision/elevation arc (PR #57) was scientific exploration — design a parametric space, sweep, lock the champion. Forge's current pipeline is shaped for "implement spec X with ACs" and the trafficGame work ran conversationally because the existing initiative shape doesn't fit "find the highest-throughput design via measurement." Counterfactual: what manifest, WIs, and reviewer behaviour would have made this an autonomous forge cycle?
+title: >-
+  Exploration initiatives differ structurally from implementation initiatives —
+  the architect/PM/dev-loop pipeline is shaped for the latter and needs new
+  artifacts for the former
+description: The trafficGame collision/elevation arc (PR
 category: decision
-keywords: [exploration, implementation, initiative-types, counterfactual, autonomy, architect, pm, dev-loop, reviewer, score-delta-completion, measurement-driven, ideation-fanout]
-created_at: 2026-05-23T00:00:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [holistic-metrics-onboarding, parametric-design-search, human-directed-work-as-initiatives, forge-current-architecture-as-built]
+keywords:
+  - exploration
+  - implementation
+  - initiative-types
+  - counterfactual
+  - autonomy
+  - architect
+  - pm
+  - dev-loop
+  - reviewer
+  - score-delta-completion
+  - measurement-driven
+  - ideation-fanout
+created_at: 2026-05-23T00:00:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - holistic-metrics-onboarding
+  - parametric-design-search
+  - human-directed-work-as-initiatives
+  - forge-current-architecture-as-built
 ---
 
 # Exploration vs implementation initiatives
@@ -244,9 +263,9 @@ the finish.
 - [`brain/projects/trafficGame/themes/2026-05-23-grading-frontier-infrastructure.md`](../../projects/trafficGame/themes/2026-05-23-grading-frontier-infrastructure.md) — the project-local instance.
 - [`brain/_raw/cycles/2026-05-23_trafficgame-elevation-grading-arc.md`](../../_raw/cycles/2026-05-23_trafficgame-elevation-grading-arc.md) — the cycle archive.
 
-## Related
+## See also
 
-- [Theme: Hand-directed work blurs autonomy metrics](./human-directed-work-as-initiatives.md) — the `origin` tag that distinguishes hand-directed from autonomous.
-- [Theme: Holistic metrics onboarding](./holistic-metrics-onboarding.md) — C7, the contract clause this builds on.
-- [Theme: Parametric design search](./parametric-design-search.md) — the harness pattern.
-- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — what's shaped for implementation only.
+- [[holistic-metrics-onboarding]] — C7, the contract clause this builds on.
+- [[parametric-design-search]] — the harness pattern.
+- [[human-directed-work-as-initiatives]] — the `origin` tag that distinguishes hand-directed from autonomous.
+- [[forge-current-architecture-as-built]] — what's shaped for implementation only.

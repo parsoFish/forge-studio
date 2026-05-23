@@ -1,13 +1,31 @@
 ---
-title: trafficGame — reviewer per-iteration budget undersized for medium-complexity initiatives
-description: HISTORICAL — REVIEWER_LIVE_MAX_BUDGET_USD_PER_ITERATION = $0.60 cut off all 3 reviewer iterations before a verdict could be emitted. This evidence motivated CONTRACTS.md C19 (2026-05-23), which removed all $-budgets entirely; the mechanism this theme documents no longer exists.
+title: >-
+  trafficGame — reviewer per-iteration budget undersized for medium-complexity
+  initiatives
+description: >-
+  HISTORICAL — REVIEWER_LIVE_MAX_BUDGET_USD_PER_ITERATION = $0.60 cut off all 3
+  reviewer iterations before a verdict could be emitted. This evidence motivated
+  CONTRACTS.md C19 (2026-05-23), which removed all $-budgets entirely; the
+  mechanism this theme documents no longer exists.
 category: antipattern
-keywords: [trafficgame, reviewer, budget, per-iteration, send-back-cap, verdict, medium-initiative, forge-config, historical, c19]
-created_at: 2026-05-17T14:30:00Z
-updated_at: 2026-05-23T00:00:00Z
+keywords:
+  - trafficgame
+  - reviewer
+  - budget
+  - per-iteration
+  - send-back-cap
+  - verdict
+  - medium-initiative
+  - forge-config
+  - historical
+  - c19
+created_at: 2026-05-17T14:30:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
 retention: archived
 supersedes_by: CONTRACTS.md C19
-related_themes: []
+related_themes:
+  - wedged-loop-detector
+  - cost-aware-model-routing
 ---
 
 > **Historical (C19 superseded).** The per-iteration $/turn budget guard
@@ -52,3 +70,8 @@ An alternative (simpler) fix: raise `REVIEWER_LIVE_MAX_BUDGET_USD_PER_ITERATION`
 - `_logs/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity/events.jsonl` — reviewer.send-back-cap-exhausted event, review iteration costs.
 - `_logs/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity/user-feedback.md` — §"Secondary findings #1".
 - `/home/parso/forge/brain/_raw/cycles/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity.md` — cycle archive §"Finding 2".
+
+## See also
+
+- [[wedged-loop-detector]] — wedged loop detector.
+- [[cost-aware-model-routing]] — cost-aware model routing — opus for design, sonnet for coding, haiku for triage.

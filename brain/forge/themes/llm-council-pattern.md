@@ -1,11 +1,23 @@
 ---
 title: LLM Council pattern — chained-reviewer perspectives
-description: Multi-perspective critic chain (CEO/eng/design/DX) auto-resolves mechanical questions and surfaces only taste decisions to the user. Inspired by gstack /autoplan.
+description: >-
+  Multi-perspective critic chain (CEO/eng/design/DX) auto-resolves mechanical
+  questions and surfaces only taste decisions to the user. Inspired by gstack
+  /autoplan.
 category: pattern
-keywords: [llm-council, multi-perspective, critic-chain, autoplan, gstack, taste-decisions, architect]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [skills-as-agent-surface, gstack-conventions]
+keywords:
+  - llm-council
+  - multi-perspective
+  - critic-chain
+  - autoplan
+  - gstack
+  - taste-decisions
+  - architect
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - skills-as-agent-surface
+  - gstack-conventions
 ---
 
 # LLM Council pattern — chained-reviewer perspectives
@@ -26,7 +38,7 @@ The dependency-graph critic specifically watches for hidden dependencies that wo
 - [`forge-v2-phase-architect.docs.md`](../../_raw/docs/forge-v2-phase-architect.docs.md) — phase doc references the pattern.
 - [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — narrative mention.
 
-## Related
+## See also
 
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — each council critic is a skill.
-- [Theme: gstack conventions](./gstack-conventions.md) — the inspiration.
+- [[skills-as-agent-surface]] — each council critic is a skill.
+- [[gstack-conventions]] — the inspiration.

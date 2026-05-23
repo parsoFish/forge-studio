@@ -1,10 +1,19 @@
 ---
-title: env-optimiser — local-first, zero network calls (constitutional)
-description: Constitution principle 1. All data lives in ~/.wsl-deo/. Any network call requires explicit constitutional justification — privacy is the load-bearing trust property.
+title: 'env-optimiser — local-first, zero network calls (constitutional)'
+description: >-
+  Constitution principle 1. All data lives in ~/.wsl-deo/. Any network call
+  requires explicit constitutional justification — privacy is the load-bearing
+  trust property.
 category: decision
-keywords: [env-optimiser, local-first, zero-network, privacy, constitution, principle-1]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - env-optimiser
+  - local-first
+  - zero-network
+  - privacy
+  - constitution
+  - principle-1
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -31,7 +40,3 @@ The architect must reject any initiative that breaks this without first amending
 
 - env-optimiser README "Constitution Principles" section.
 - `.specify/memory/constitution.md` in the project repo.
-
-## Related
-
-- [Theme: Spec-driven development](../../../forge/themes/spec-driven-development.md) — the constitution is the project's PRD.

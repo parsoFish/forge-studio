@@ -1,11 +1,21 @@
 ---
 title: Branch model consolidated to single main (repo CLAUDE.md superseded)
-description: main IS the fork now; the repo's documented two-branch upstream-merge workflow no longer applies.
+description: >-
+  main IS the fork now; the repo's documented two-branch upstream-merge workflow
+  no longer applies.
 category: decision
-keywords: [branch, main, betterado, fork, upstream, consolidation, onboarding]
-created_at: 2026-05-18T10:43:08Z
-updated_at: 2026-05-18T10:43:08Z
-related_themes: [2026-05-18-stack-and-test-layout]
+keywords:
+  - branch
+  - main
+  - betterado
+  - fork
+  - upstream
+  - consolidation
+  - onboarding
+created_at: 2026-05-18T10:43:08.000Z
+updated_at: 2026-05-18T10:43:08.000Z
+related_themes:
+  - 2026-05-18-stack-and-test-layout
 ---
 
 # Branch model consolidated to a single `main`
@@ -35,6 +45,6 @@ an initiative explicitly asks for it.
 
 - [`_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md`](../../../_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md) — onboarding actions, the 4 fork commits, and why the fast-forward was lossless.
 
-## Related
+## See also
 
-- [Theme: stack-and-test-layout](./2026-05-18-stack-and-test-layout.md)
+- [[2026-05-18-stack-and-test-layout]] — stack & test layout (go, vendored, make test vs make testacc).

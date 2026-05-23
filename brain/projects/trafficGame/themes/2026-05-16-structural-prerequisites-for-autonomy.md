@@ -5,7 +5,9 @@ category: reference
 keywords: [trafficgame, prerequisites, simplification, test-stack, gitignore, decomposition, locked-core, git-ownership, roadmap, autonomy]
 created_at: 2026-05-16T00:00:00Z
 updated_at: 2026-05-16T00:00:00Z
-related_themes: []
+related_themes:
+  - merge-boundary-stacked-initiative-failure
+  - objective-gate-autonomous-closure
 ---
 
 # trafficGame — structural prerequisites for autonomy

@@ -1,11 +1,22 @@
 ---
 title: Brain-first research
-description: Every skill mandates brain-query as its first action. Broader research only when the brain is insufficient — and the gap is logged.
+description: >-
+  Every skill mandates brain-query as its first action. Broader research only
+  when the brain is insufficient — and the gap is logged.
 category: pattern
-keywords: [brain-query, brain-first, gaps, research, skill-discipline, self-improving]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [karpathy-three-layer-wiki, brain-gap-feedback-loop, skills-as-agent-surface]
+keywords:
+  - brain-query
+  - brain-first
+  - gaps
+  - research
+  - skill-discipline
+  - self-improving
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - karpathy-three-layer-wiki
+  - brain-gap-feedback-loop
+  - skills-as-agent-surface
 ---
 
 # Brain-first research
@@ -26,8 +37,8 @@ Skills could lie about having queried the brain. Mitigated by event-log enforcem
 - [`adr-010-brain-first.docs.md`](../../_raw/docs/adr-010-brain-first.docs.md) — decision record.
 - [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 4.
 
-## Related
+## See also
 
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — the wiki being queried.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — how gaps surface and get filled.
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — every one of these mandates brain-query.
+- [[karpathy-three-layer-wiki]] — the wiki being queried.
+- [[brain-gap-feedback-loop]] — how gaps surface and get filled.
+- [[skills-as-agent-surface]] — every one of these mandates brain-query.

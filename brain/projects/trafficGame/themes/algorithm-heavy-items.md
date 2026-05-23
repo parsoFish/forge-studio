@@ -1,10 +1,19 @@
 ---
 title: trafficGame — algorithm-heavy items must be decomposed before queueing
-description: Steiner topology + graph colouring as single work units caused 48% failure rate in v1 Cycle 3. Multi-file algorithmic restructuring exceeds the developer-loop's atomic-item design point.
+description: >-
+  Steiner topology + graph colouring as single work units caused 48% failure
+  rate in v1 Cycle 3. Multi-file algorithmic restructuring exceeds the
+  developer-loop's atomic-item design point.
 category: antipattern
-keywords: [trafficgame, steiner, graph-coloring, decomposition, algorithm-heavy, 48-percent-failure]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - trafficgame
+  - steiner
+  - graph-coloring
+  - decomposition
+  - algorithm-heavy
+  - 48-percent-failure
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -25,8 +34,3 @@ The architect's LLM Council should flag any trafficGame initiative whose Enginee
 
 - [`v1-themes-completion-stats.cycle.md`](../../../_raw/v1-wiki/v1-themes-completion-stats.cycle.md) — 5.2 min avg / 26.9 min max for trafficGame; outlier cluster.
 - [`v1-themes-design-and-merge.cycle.md`](../../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — design-is-the-bottleneck section names trafficGame's 48% failure rate.
-
-## Related
-
-- [Theme: Design is the bottleneck](../../../forge/themes/design-is-the-bottleneck.md) — system-level theme.
-- [Theme: Spec-driven work items](../../../forge/themes/spec-driven-work-items.md) — atomicity discipline.

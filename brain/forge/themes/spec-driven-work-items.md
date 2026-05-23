@@ -1,11 +1,23 @@
 ---
 title: Spec-driven work items
-description: Atomic (≤3 files), Given-When-Then acceptance criteria, declared dependencies, designed for iteration not one-shotting. PM phase output.
+description: >-
+  Atomic (≤3 files), Given-When-Then acceptance criteria, declared dependencies,
+  designed for iteration not one-shotting. PM phase output.
 category: pattern
-keywords: [work-item, spec, given-when-then, acceptance-criteria, atomic, dependencies, parallelism]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [markdown-artifact-flow, ralph-loop-pattern, dependency-ordered-work]
+keywords:
+  - work-item
+  - spec
+  - given-when-then
+  - acceptance-criteria
+  - atomic
+  - dependencies
+  - parallelism
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - markdown-artifact-flow
+  - ralph-loop-pattern
+  - dependency-ordered-work
 ---
 
 # Spec-driven work items
@@ -41,8 +53,8 @@ A `_graph.md` (mermaid) sibling shows the dependency graph for human review.
 
 - [`forge-v2-phase-project-manager.docs.md`](../../_raw/docs/forge-v2-phase-project-manager.docs.md) — primary source.
 
-## Related
+## See also
 
-- [Theme: Markdown artifact flow](./markdown-artifact-flow.md) — the artifact format.
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — what consumes the work items.
-- [Theme: Dependency-ordered work](./dependency-ordered-work.md) — broader principle.
+- [[markdown-artifact-flow]] — the artifact format.
+- [[ralph-loop-pattern]] — what consumes the work items.
+- [[dependency-ordered-work]] — broader principle.

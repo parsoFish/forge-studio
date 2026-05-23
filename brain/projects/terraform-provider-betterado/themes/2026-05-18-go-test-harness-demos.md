@@ -1,11 +1,22 @@
 ---
-title: Demos for this project use the Go-test harness, not Playwright media
-description: No web UI — forge demos this provider via kind:"harness" go test metric scraping; release/task_group are acceptance-only.
+title: 'Demos for this project use the Go-test harness, not Playwright media'
+description: >-
+  No web UI — forge demos this provider via kind:"harness" go test metric
+  scraping; release/task_group are acceptance-only.
 category: operation
-keywords: [demo, harness, go test, playwright, testacc, TF_ACC, metrics, release]
-created_at: 2026-05-18T10:43:08Z
-updated_at: 2026-05-18T10:43:08Z
-related_themes: [2026-05-18-stack-and-test-layout]
+keywords:
+  - demo
+  - harness
+  - go test
+  - playwright
+  - testacc
+  - TF_ACC
+  - metrics
+  - release
+created_at: 2026-05-18T10:43:08.000Z
+updated_at: 2026-05-18T10:43:08.000Z
+related_themes:
+  - 2026-05-18-stack-and-test-layout
 ---
 
 # Demos use the Go-test harness path
@@ -40,6 +51,6 @@ resolve `go`.
 
 - [`_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md`](../../../_raw/projects/terraform-provider-betterado/2026-05-18-onboarding.repo.md) — test layout, the release-package zero-unit-test finding, substrate verification.
 
-## Related
+## See also
 
-- [Theme: stack-and-test-layout](./2026-05-18-stack-and-test-layout.md)
+- [[2026-05-18-stack-and-test-layout]] — stack & test layout (go, vendored, make test vs make testacc).

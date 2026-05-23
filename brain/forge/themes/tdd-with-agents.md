@@ -1,11 +1,23 @@
 ---
-title: TDD with agents — tests first, verified in a worktree
-description: Agents produce plausible-looking code that doesn't quite work. Tests make correctness mechanically verifiable. Orchestrator runs the gate, not the agent.
+title: 'TDD with agents — tests first, verified in a worktree'
+description: >-
+  Agents produce plausible-looking code that doesn't quite work. Tests make
+  correctness mechanically verifiable. Orchestrator runs the gate, not the
+  agent.
 category: pattern
-keywords: [tdd, test-driven-development, red-green-refactor, hallucinated-tests, coverage, worktree]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [quality-gates-orchestrator-verified, spec-driven-work-items, eval-driven-development]
+keywords:
+  - tdd
+  - test-driven-development
+  - red-green-refactor
+  - hallucinated-tests
+  - coverage
+  - worktree
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - quality-gates-orchestrator-verified
+  - spec-driven-work-items
+  - eval-driven-development
 ---
 
 # TDD with agents
@@ -30,8 +42,8 @@ The discipline matters more for agents than for humans: a human with a wrong men
 - [`v1-themes-completion-stats.cycle.md`](../../_raw/v1-wiki/v1-themes-completion-stats.cycle.md) — 109 items + completion-by-domain.
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — design-is-the-bottleneck section.
 
-## Related
+## See also
 
-- [Theme: Quality gates orchestrator-verified](./quality-gates-orchestrator-verified.md) — the structural defence.
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — what the tests are written from.
-- [Theme: Eval-driven development](./eval-driven-development.md) — broader pattern.
+- [[quality-gates-orchestrator-verified]] — the structural defence.
+- [[spec-driven-work-items]] — what the tests are written from.
+- [[eval-driven-development]] — broader pattern.

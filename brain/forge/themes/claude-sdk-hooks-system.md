@@ -1,11 +1,24 @@
 ---
 title: Claude Agent SDK hooks system
-description: PreToolUse / PostToolUse / SessionStart / UserPromptSubmit lifecycle hooks. Inspect/modify tool calls, augment prompts, inject context, block dangerous operations.
+description: >-
+  PreToolUse / PostToolUse / SessionStart / UserPromptSubmit lifecycle hooks.
+  Inspect/modify tool calls, augment prompts, inject context, block dangerous
+  operations.
 category: pattern
-keywords: [hooks, sdk, pretooluse, posttooluse, sessionstart, userpromptsubmit, lifecycle, permissions]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [claude-agent-sdk, claude-sdk-subagents]
+keywords:
+  - hooks
+  - sdk
+  - pretooluse
+  - posttooluse
+  - sessionstart
+  - userpromptsubmit
+  - lifecycle
+  - permissions
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - claude-agent-sdk
+  - claude-sdk-subagents
 ---
 
 # Claude Agent SDK hooks system
@@ -34,7 +47,8 @@ Forge v2 uses hooks for:
 
 - [`claude-agent-sdk-typescript.docs.md`](../../_raw/docs/claude-agent-sdk-typescript.docs.md) — hooks reference.
 
-## Related
+## See also
 
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — runtime context.
-- [Theme: Brain-first research](./brain-first-research.md) — enforced via hooks.
+- [[claude-agent-sdk]] — runtime context.
+- [[claude-sdk-subagents]] — claude agent sdk subagents.
+- [[brain-first-research]] — enforced via hooks.

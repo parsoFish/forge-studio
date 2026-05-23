@@ -1,11 +1,23 @@
 ---
 title: v1 vs v2 — what was rejected and why
-description: V2 keeps v1's mental models (TDD, dep-ordered work, brain-as-wiki) and replaces v1's hand-rolled infrastructure with battle-tested community tools.
+description: >-
+  V2 keeps v1's mental models (TDD, dep-ordered work, brain-as-wiki) and
+  replaces v1's hand-rolled infrastructure with battle-tested community tools.
 category: reference
-keywords: [v1, v2, comparison, evolution, rejected, infrastructure, refactor]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [avoid-hand-rolling-tools, simplicity-as-architecture, six-phases-of-forge]
+keywords:
+  - v1
+  - v2
+  - comparison
+  - evolution
+  - rejected
+  - infrastructure
+  - refactor
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - avoid-hand-rolling-tools
+  - simplicity-as-architecture
+  - six-phases-of-forge
 ---
 
 # v1 vs v2 — what was rejected and why
@@ -33,7 +45,8 @@ V2 has **no v1 users to support** — no feature flags, no fallbacks, no "for ba
 - [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — "What forge is *not*" section.
 - [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — explicit non-rebuild list.
 
-## Related
+## See also
 
-- [Theme: Avoid hand-rolling tools](./avoid-hand-rolling-tools.md) — principle that drove the swap.
-- [Theme: Simplicity as architecture](./simplicity-as-architecture.md) — principle that drove the cuts.
+- [[avoid-hand-rolling-tools]] — principle that drove the swap.
+- [[simplicity-as-architecture]] — principle that drove the cuts.
+- [[six-phases-of-forge]] — six phases of forge backed by a brain.

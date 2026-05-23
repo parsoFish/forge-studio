@@ -1,10 +1,18 @@
 ---
 title: simplarr — no monitoring or remediation logic (that's healarr)
-description: simplarr is set-up-and-run only. Adding monitoring, remediation, or self-healing logic is a new project (healarr), not a simplarr feature.
+description: >-
+  simplarr is set-up-and-run only. Adding monitoring, remediation, or
+  self-healing logic is a new project (healarr), not a simplarr feature.
 category: decision
-keywords: [simplarr, healarr, scope, monitoring, remediation, separation-of-concerns]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - simplarr
+  - healarr
+  - scope
+  - monitoring
+  - remediation
+  - separation-of-concerns
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -33,7 +41,3 @@ This is forge enforcing the user-stated separation: *"simplarr = set up and run;
 ## Sources
 
 - healarr README "Why a separate repo?" section.
-
-## Related
-
-- [`healarr/profile.md`](../../healarr/profile.md) — the project that owns monitoring + remediation.

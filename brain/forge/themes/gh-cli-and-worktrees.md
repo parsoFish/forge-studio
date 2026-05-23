@@ -1,11 +1,23 @@
 ---
 title: gh CLI + git worktrees + GitHub Actions
-description: Use battle-tested git/GitHub tooling instead of hand-rolled equivalents. Worktrees give native filesystem isolation per parallel work unit.
+description: >-
+  Use battle-tested git/GitHub tooling instead of hand-rolled equivalents.
+  Worktrees give native filesystem isolation per parallel work unit.
 category: pattern
-keywords: [gh-cli, git-worktree, github-actions, branch, pr, ci, isolation]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [unattended-scheduler, file-based-state-machine, avoid-hand-rolling-tools]
+keywords:
+  - gh-cli
+  - git-worktree
+  - github-actions
+  - branch
+  - pr
+  - ci
+  - isolation
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - unattended-scheduler
+  - file-based-state-machine
+  - avoid-hand-rolling-tools
 ---
 
 # gh CLI + git worktrees + GitHub Actions
@@ -24,7 +36,8 @@ Trade-off: skills shell to `gh` rather than calling a typed library. Errors come
 
 - [`adr-006-gh-cli-and-worktrees.docs.md`](../../_raw/docs/adr-006-gh-cli-and-worktrees.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — uses worktrees as the parallelism primitive.
-- [Theme: Avoid hand-rolling tools](./avoid-hand-rolling-tools.md) — the principle this codifies.
+- [[unattended-scheduler]] — uses worktrees as the parallelism primitive.
+- [[file-based-state-machine]] — file-based state machine for queue management.
+- [[avoid-hand-rolling-tools]] — the principle this codifies.

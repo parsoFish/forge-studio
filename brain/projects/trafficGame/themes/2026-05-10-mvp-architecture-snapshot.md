@@ -1,11 +1,26 @@
 ---
-title: trafficGame — MVP architecture snapshot (May 2026, post-extraction)
-description: Current src/ tree, key extracted services (NetworkAnalysisService, NetworkOptimizer split, VisibilityManager, GameToolManager), and what survives unchanged from the MVP doc. Use this to ground any architect proposal in the real present-day shape.
+title: 'trafficGame — MVP architecture snapshot (May 2026, post-extraction)'
+description: >-
+  Current src/ tree, key extracted services (NetworkAnalysisService,
+  NetworkOptimizer split, VisibilityManager, GameToolManager), and what survives
+  unchanged from the MVP doc. Use this to ground any architect proposal in the
+  real present-day shape.
 category: snapshot
-keywords: [trafficgame, architecture, src-structure, network-analysis-service, network-optimizer, visibility-manager, game-tool-manager, post-extraction, mvp]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-17T00:00:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - architecture
+  - src-structure
+  - network-analysis-service
+  - network-optimizer
+  - visibility-manager
+  - game-tool-manager
+  - post-extraction
+  - mvp
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-17T00:00:00.000Z
+related_themes:
+  - karpathy-three-layer-wiki
+  - forge-current-architecture-as-built
 ---
 
 # trafficGame — MVP architecture snapshot (May 2026)
@@ -68,10 +83,7 @@ src/
 - Project [`docs/LEARNINGS.md`](../../../../projects/trafficGame/docs/LEARNINGS.md) §"Refactoring Log (Feb 2026 Session)" + §"Session 2 refactoring".
 - Recent git log on `projects/trafficGame/` — extractions and Steiner replacement.
 
-## Related
+## See also
 
-- [`traffic-physics-and-flow`](traffic-physics-and-flow.md) — IDM, BPR, calibration.
-- [`campaign-mode-state`](campaign-mode-state.md) — current 3-node `CampaignGraph` (the 9-level `CampaignLevels.ts` array was deleted).
-- [`traffic-location-data-model`](traffic-location-data-model.md) — entry/exit point shape.
-- [`ui-canvas-overlay-pattern`](ui-canvas-overlay-pattern.md) — UI/menu rendering.
-- [`test-stack-and-gates`](test-stack-and-gates.md) — Vitest + Playwright discipline.
+- [[karpathy-three-layer-wiki]] — karpathy three-layer llm wiki.
+- [[forge-current-architecture-as-built]] — forge as-built — 5 wired phases + hand-run architect, pm/reflector-only brain-first, ~4,400 loc, a real resilience layer.

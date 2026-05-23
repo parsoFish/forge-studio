@@ -1,10 +1,19 @@
 ---
 title: GitWeave — scattered branches debt; consolidate before features
-description: 6 unmerged branches at end of v1 Cycle 3. Roadmap says "simplify and consolidate" first. Architect should reject feature initiatives that add to the pile.
+description: >-
+  6 unmerged branches at end of v1 Cycle 3. Roadmap says "simplify and
+  consolidate" first. Architect should reject feature initiatives that add to
+  the pile.
 category: antipattern
-keywords: [gitweave, scattered-branches, technical-debt, simplify-first, roadmap, consolidate]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
+keywords:
+  - gitweave
+  - scattered-branches
+  - technical-debt
+  - simplify-first
+  - roadmap
+  - consolidate
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
 related_themes: []
 ---
 
@@ -24,8 +33,3 @@ This is the GitWeave instance of the cross-project [`roadmap-simplification-conv
 
 - GitWeave v1 roadmap (in `~/sideProjects/.forge/wiki/_raw/roadmaps/GitWeave.json`).
 - [`v1-themes-design-and-merge.cycle.md`](../../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — roadmap-simplification-convergence section.
-
-## Related
-
-- [Theme: Layered merge order](../../../forge/themes/layered-merge-order.md) — what to do when finally merging.
-- [Theme: Roadmap simplification convergence](../../../forge/themes/roadmap-simplification-convergence.md) — system-level pattern.

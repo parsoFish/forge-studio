@@ -1,11 +1,25 @@
 ---
 title: Six phases of forge backed by a brain
-description: Brain → Architect → Project Manager → Developer Loop → Review Loop → Reflection. Three human-in-the-loop touchpoints; everything else unattended.
+description: >-
+  Brain → Architect → Project Manager → Developer Loop → Review Loop →
+  Reflection. Three human-in-the-loop touchpoints; everything else unattended.
 category: reference
-keywords: [phases, architecture, six-phases, brain, architect, pm, developer-loop, review-loop, reflection]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [phase-isolation-benchmarks, markdown-artifact-flow, unattended-scheduler]
+keywords:
+  - phases
+  - architecture
+  - six-phases
+  - brain
+  - architect
+  - pm
+  - developer-loop
+  - review-loop
+  - reflection
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - phase-isolation-benchmarks
+  - markdown-artifact-flow
+  - unattended-scheduler
 ---
 
 # Six phases of forge backed by a brain
@@ -37,7 +51,8 @@ Three human interaction points: Architect (ideation), Review (closeout), Reflect
 - [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — narrative architecture.
 - [`forge-v2-phase-brain.docs.md`](../../_raw/docs/forge-v2-phase-brain.docs.md) through [`forge-v2-phase-reflection.docs.md`](../../_raw/docs/forge-v2-phase-reflection.docs.md) — per-phase docs.
 
-## Related
+## See also
 
-- [Theme: Phase isolation benchmarks](./phase-isolation-benchmarks.md) — how each phase measures improvement.
-- [Theme: Markdown artifact flow](./markdown-artifact-flow.md) — what flows between the phases.
+- [[phase-isolation-benchmarks]] — how each phase measures improvement.
+- [[markdown-artifact-flow]] — what flows between the phases.
+- [[unattended-scheduler]] — unattended scheduler with file-based queue + worktree pool.

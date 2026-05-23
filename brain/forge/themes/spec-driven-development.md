@@ -1,11 +1,24 @@
 ---
 title: Spec-driven development — PRD as the contract
-description: Vague specs propagate downstream and break the developer loop. Concrete specs let agents self-verify. PRD is the contract between architect → PM → developer.
+description: >-
+  Vague specs propagate downstream and break the developer loop. Concrete specs
+  let agents self-verify. PRD is the contract between architect → PM →
+  developer.
 category: pattern
-keywords: [spec-driven, prd, contract, given-when-then, declarative, files-in-scope, acceptance-criteria]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [spec-driven-work-items, declarative-specs-vs-imperative, six-phases-of-forge]
+keywords:
+  - spec-driven
+  - prd
+  - contract
+  - given-when-then
+  - declarative
+  - files-in-scope
+  - acceptance-criteria
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - spec-driven-work-items
+  - declarative-specs-vs-imperative
+  - six-phases-of-forge
 ---
 
 # Spec-driven development — PRD as the contract
@@ -30,8 +43,8 @@ Practice:
 - [`agentic-engineering-best-practices.chat.md`](../../_raw/web/agentic-engineering-best-practices.chat.md) — synthesis section 2.
 - [`forge-v2-phase-project-manager.docs.md`](../../_raw/docs/forge-v2-phase-project-manager.docs.md) — forge's instantiation.
 
-## Related
+## See also
 
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — the artifact.
-- [Theme: Declarative specs over imperative](./declarative-specs-vs-imperative.md) — the prompt-level discipline.
-- [Theme: Six phases of forge](./six-phases-of-forge.md) — the phase chain.
+- [[spec-driven-work-items]] — the artifact.
+- [[declarative-specs-vs-imperative]] — the prompt-level discipline.
+- [[six-phases-of-forge]] — the phase chain.

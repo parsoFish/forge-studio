@@ -1,11 +1,22 @@
 ---
 title: Pluggable notifications on review-ready
-description: orchestrator/notify.ts with desktop (default) and webhook providers. Closes the unattended loop — human knows when to look.
+description: >-
+  orchestrator/notify.ts with desktop (default) and webhook providers. Closes
+  the unattended loop — human knows when to look.
 category: pattern
-keywords: [notifications, notify-send, webhook, desktop, slack, review-ready, unattended]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [unattended-scheduler, file-based-state-machine]
+keywords:
+  - notifications
+  - notify-send
+  - webhook
+  - desktop
+  - slack
+  - review-ready
+  - unattended
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - unattended-scheduler
+  - file-based-state-machine
 ---
 
 # Pluggable notifications on review-ready
@@ -27,6 +38,7 @@ Trade-off: desktop notification on remote/headless machine is silent. Document `
 
 - [`adr-013-notifications.docs.md`](../../_raw/docs/adr-013-notifications.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: Unattended scheduler](./unattended-scheduler.md) — what triggers the notifications.
+- [[unattended-scheduler]] — what triggers the notifications.
+- [[file-based-state-machine]] — file-based state machine for queue management.

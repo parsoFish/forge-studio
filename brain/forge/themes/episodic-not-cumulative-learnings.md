@@ -1,11 +1,23 @@
 ---
 title: Episodic-not-cumulative learnings antipattern
-description: 5 identical learnings files generated in a single day for the same observation, because cross-cycle context was truncated. The wiki is the architectural fix; deduplication-at-write is a tactical patch.
+description: >-
+  5 identical learnings files generated in a single day for the same
+  observation, because cross-cycle context was truncated. The wiki is the
+  architectural fix; deduplication-at-write is a tactical patch.
 category: antipattern
-keywords: [episodic, cumulative, duplicate-learnings, institutional-memory, truncation, 2000-char]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [wiki-over-truncated-context, karpathy-three-layer-wiki, brain-gap-feedback-loop]
+keywords:
+  - episodic
+  - cumulative
+  - duplicate-learnings
+  - institutional-memory
+  - truncation
+  - 2000-char
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - wiki-over-truncated-context
+  - karpathy-three-layer-wiki
+  - brain-gap-feedback-loop
 ---
 
 # Episodic-not-cumulative learnings antipattern
@@ -25,8 +37,8 @@ In v2, the brain-first principle (every skill mandates `brain-query` first) make
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — episodic-not-cumulative section + duplicate-learnings example.
 
-## Related
+## See also
 
-- [Theme: Wiki over truncated context](./wiki-over-truncated-context.md) — the strategic fix.
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — the underlying structure.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — what keeps the brain accumulating instead of regenerating.
+- [[wiki-over-truncated-context]] — the strategic fix.
+- [[karpathy-three-layer-wiki]] — the underlying structure.
+- [[brain-gap-feedback-loop]] — what keeps the brain accumulating instead of regenerating.

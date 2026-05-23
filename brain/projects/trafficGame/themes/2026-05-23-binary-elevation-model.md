@@ -1,11 +1,31 @@
 ---
-title: Binary elevation model — one elevation per vehicle, three transition rules, every consumer reads the same value
-description: After three failed attempts (3-level coloring, body-aware footprint that spans both levels, route-segment span elevations), the model that works is binary — vehicle.currentElevation is a single point, locked to ramp target on transition segments, lifted early at next-waypoint and ramp-CP boundaries. Collision, overlap, and IDM leader-finding all read the same value. Future-segment elevations evaluated at TARGET, not source-to-target span.
+title: >-
+  Binary elevation model — one elevation per vehicle, three transition rules,
+  every consumer reads the same value
+description: >-
+  After three failed attempts (3-level coloring, body-aware footprint that spans
+  both levels, route-segment span elevations), the model that works is binary —
+  vehicle.currentElevation is a single point, locked to ramp target on
+  transition segments, lifted early at next-waypoint and ramp-CP boundaries.
+  Collision, overlap, and IDM leader-finding all read the same value.
+  Future-segment elevations evaluated at TARGET, not source-to-target span.
 category: decision
-keywords: [elevation, ramp, grade-separation, collision-avoidance, binary-model, flicker, ramp-cp, current-elevation, route-elevations, target-elevation]
-created_at: 2026-05-23T00:00:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [2026-05-23-grading-frontier-infrastructure, 2026-05-10-traffic-physics-and-flow]
+keywords:
+  - elevation
+  - ramp
+  - grade-separation
+  - collision-avoidance
+  - binary-model
+  - flicker
+  - ramp-cp
+  - current-elevation
+  - route-elevations
+  - target-elevation
+created_at: 2026-05-23T00:00:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - 2026-05-23-grading-frontier-infrastructure
+  - 2026-05-10-traffic-physics-and-flow
 ---
 
 # Binary elevation model
@@ -116,7 +136,7 @@ preserved exactly at roundabout r=300 = 1.921 v/sim-s.
 - [`src/traffic/CollisionAvoidance.ts`](../../../../projects/trafficGame/src/traffic/CollisionAvoidance.ts), [`src/traffic/OverlapTracker.ts`](../../../../projects/trafficGame/src/traffic/OverlapTracker.ts), [`src/traffic/VehicleUpdate.ts`](../../../../projects/trafficGame/src/traffic/VehicleUpdate.ts).
 - Commit `7c64b4b` "feat(traffic): elevation-aware collision avoidance + binary elevation model" on the trafficGame `main` (merged via PR #57).
 
-## Related
+## See also
 
-- [Theme: Grading-frontier infrastructure](./2026-05-23-grading-frontier-infrastructure.md) — what locks the throughput numbers in.
-- [Theme: Traffic physics and flow](./2026-05-10-traffic-physics-and-flow.md) — the surrounding IDM stack.
+- [[2026-05-23-grading-frontier-infrastructure]] — what locks the throughput numbers in.
+- [[2026-05-10-traffic-physics-and-flow]] — the surrounding IDM stack.

@@ -1,11 +1,24 @@
 ---
-title: Merge boundary is forge's real unattended ceiling — stacked initiatives strand in done/
-description: 12 trafficGame cycles; only PR #47 truly merged. Every approved feature initiative died at `gh pr merge` (stacked-branch conflicts) yet was moved to _queue/done/. Queue done/ ≠ merged.
+title: >-
+  Merge boundary is forge's real unattended ceiling — stacked initiatives strand
+  in done/
+description: 12 trafficGame cycles; only PR
 category: antipattern
-keywords: [merge-boundary, stacked-prs, queue-truth, done-not-merged, reviewer-merge-failed, unattended-ceiling, partial-merge, trafficgame]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [squash-merge-stacked-prs, layered-merge-order, file-based-state-machine]
+keywords:
+  - merge-boundary
+  - stacked-prs
+  - queue-truth
+  - done-not-merged
+  - reviewer-merge-failed
+  - unattended-ceiling
+  - partial-merge
+  - trafficgame
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - squash-merge-stacked-prs
+  - layered-merge-order
+  - file-based-state-machine
 ---
 
 # Merge boundary is forge's real unattended ceiling
@@ -40,8 +53,8 @@ goal G1); flag partial merges instead of approving them.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the 12-cycle merge-outcome table.
 - [`retro.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — §1 fidelity, Inconsistency #1, closure goal G1.
 
-## Related
+## See also
 
-- [Theme: Squash-merge stacked PRs](./squash-merge-stacked-prs.md) — the v1 form of the same hazard.
-- [Theme: Layered merge order](./layered-merge-order.md) — the intended branch-flow this violates.
-- [Theme: File-based state machine](./file-based-state-machine.md) — why queue state drifted from truth.
+- [[squash-merge-stacked-prs]] — the v1 form of the same hazard.
+- [[layered-merge-order]] — the intended branch-flow this violates.
+- [[file-based-state-machine]] — why queue state drifted from truth.

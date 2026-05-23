@@ -1,11 +1,23 @@
 ---
 title: Post-merge health-check protocol
-description: After every gh pr merge, run language-agnostic test discovery + execute tests in a worktree-isolated environment. The merge step is not the success condition; the test suite on updated main is.
+description: >-
+  After every gh pr merge, run language-agnostic test discovery + execute tests
+  in a worktree-isolated environment. The merge step is not the success
+  condition; the test suite on updated main is.
 category: operation
-keywords: [health-check, post-merge, test-discovery, merge-train, worktree-isolation, source-test-pairing]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [layered-merge-order, quality-gates-orchestrator-verified, squash-merge-stacked-prs]
+keywords:
+  - health-check
+  - post-merge
+  - test-discovery
+  - merge-train
+  - worktree-isolation
+  - source-test-pairing
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - layered-merge-order
+  - quality-gates-orchestrator-verified
+  - squash-merge-stacked-prs
 ---
 
 # Post-merge health-check protocol
@@ -28,8 +40,8 @@ In v2 this is the reviewer skill's responsibility (review-prep stage) — the ga
 
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — full protocol + Cycle 2 motivation.
 
-## Related
+## See also
 
-- [Theme: Layered merge order](./layered-merge-order.md) — health checks gate layer transitions.
-- [Theme: Quality gates orchestrator-verified](./quality-gates-orchestrator-verified.md) — same verification principle, applied to merges.
-- [Theme: Squash-merge stacked PRs](./squash-merge-stacked-prs.md) — what health checks detect.
+- [[layered-merge-order]] — health checks gate layer transitions.
+- [[quality-gates-orchestrator-verified]] — same verification principle, applied to merges.
+- [[squash-merge-stacked-prs]] — what health checks detect.

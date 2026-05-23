@@ -1,11 +1,24 @@
 ---
 title: Unattended scheduler with file-based queue + worktree pool
-description: ~150-line forge serve loop. _queue/ directories + atomic mv for claim + bounded git worktrees. The filesystem IS the protocol.
+description: >-
+  ~150-line forge serve loop. _queue/ directories + atomic mv for claim +
+  bounded git worktrees. The filesystem IS the protocol.
 category: pattern
-keywords: [scheduler, forge-serve, queue, worktree, atomic-claim, unattended, filesystem-protocol]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [file-based-state-machine, crash-recovery-heartbeat, gh-cli-and-worktrees, pluggable-notifications]
+keywords:
+  - scheduler
+  - forge-serve
+  - queue
+  - worktree
+  - atomic-claim
+  - unattended
+  - filesystem-protocol
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - file-based-state-machine
+  - crash-recovery-heartbeat
+  - gh-cli-and-worktrees
+  - pluggable-notifications
 ---
 
 # Unattended scheduler with file-based queue + worktree pool
@@ -26,8 +39,9 @@ CLI surface: `forge serve`, `forge serve --once`, `forge enqueue`, `forge status
 
 - [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — decision record.
 
-## Related
+## See also
 
-- [Theme: File-based state machine](./file-based-state-machine.md) — the queue mechanism.
-- [Theme: Crash recovery via heartbeat](./crash-recovery-heartbeat.md) — what makes it survive restarts.
-- [Theme: gh CLI + worktrees](./gh-cli-and-worktrees.md) — what worktrees come from.
+- [[file-based-state-machine]] — the queue mechanism.
+- [[crash-recovery-heartbeat]] — what makes it survive restarts.
+- [[gh-cli-and-worktrees]] — what worktrees come from.
+- [[pluggable-notifications]] — pluggable notifications on review-ready.

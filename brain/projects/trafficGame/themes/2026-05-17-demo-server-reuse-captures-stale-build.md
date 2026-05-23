@@ -1,11 +1,28 @@
 ---
-title: trafficGame — demo Playwright config reuseExistingServer:true captures stale main-repo build
-description: The Playwright demo config used reuseExistingServer:true and latched onto a pre-existing vite dev server from the main repo rather than the worktree build. Every screenshot in the demo bundle showed the pre-change hub (3-node linear chain), making the demo actively misleading. Per-worktree server isolation is required.
+title: >-
+  trafficGame — demo Playwright config reuseExistingServer:true captures stale
+  main-repo build
+description: >-
+  The Playwright demo config used reuseExistingServer:true and latched onto a
+  pre-existing vite dev server from the main repo rather than the worktree
+  build. Every screenshot in the demo bundle showed the pre-change hub (3-node
+  linear chain), making the demo actively misleading. Per-worktree server
+  isolation is required.
 category: antipattern
-keywords: [trafficgame, demo, playwright, reuseExistingServer, vite, worktree, stale-build, demo-isolation]
-created_at: 2026-05-17T14:30:00Z
-updated_at: 2026-05-17T14:30:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - demo
+  - playwright
+  - reuseExistingServer
+  - vite
+  - worktree
+  - stale-build
+  - demo-isolation
+created_at: 2026-05-17T14:30:00.000Z
+updated_at: 2026-05-17T14:30:00.000Z
+related_themes:
+  - pr-as-sole-review-window
+  - quality-gates-orchestrator-verified
 ---
 
 # trafficGame — demo Playwright config `reuseExistingServer:true` captures stale main-repo build
@@ -31,3 +48,8 @@ The demo server must be isolated per worktree. Options (in preference order):
 - `_logs/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity/events.jsonl` — reviewer iteration 1 event, tools_used showing Playwright demo execution and the resulting misleading screenshots.
 - `_logs/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity/user-feedback.md` — §"Secondary findings #2".
 - `/home/parso/forge/brain/_raw/cycles/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity.md` — cycle archive §"Finding 3".
+
+## See also
+
+- [[pr-as-sole-review-window]] — the pr must be the sole review window (visibility-aware demo-in-pr).
+- [[quality-gates-orchestrator-verified]] — quality gates verified by the orchestrator, not the agent.

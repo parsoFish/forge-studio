@@ -1,11 +1,23 @@
 ---
 title: trafficGame — developer-ralph skips brain-first on second WI in multi-WI runs
-description: In multi-WI cycles, developer-ralph reliably consulted the brain for WI-1 but skipped it entirely for WI-2, triggering an automatic fail; the brain-first mandate must be enforced per-WI, not per-cycle.
+description: >-
+  In multi-WI cycles, developer-ralph reliably consulted the brain for WI-1 but
+  skipped it entirely for WI-2, triggering an automatic fail; the brain-first
+  mandate must be enforced per-WI, not per-cycle.
 category: antipattern
-keywords: [trafficgame, developer-ralph, brain-first, multi-wi, brain-skip, mandate, WI-2]
-created_at: 2026-05-10T03:23:11Z
-updated_at: 2026-05-10T03:23:11Z
-related_themes: []
+keywords:
+  - trafficgame
+  - developer-ralph
+  - brain-first
+  - multi-wi
+  - brain-skip
+  - mandate
+  - WI-2
+created_at: 2026-05-10T03:23:11.000Z
+updated_at: 2026-05-10T03:23:11.000Z
+related_themes:
+  - brain-read-policy
+  - ralph-loop-pattern
 ---
 
 # developer-ralph skips brain-first on second WI in multi-WI runs
@@ -33,3 +45,8 @@ WI-2 produced no code, no commits, no output. Any functionality it was meant to 
 
 - `_logs/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5/events.jsonl` — event `EV_moz7bym4_0cwjpif4` (`developer-ralph.brain-skipped`, WI-2) and `EV_moz7bym5_045ctcxi` (ralph.end, status: failed, brainReads: 0).
 - `/home/parso/forge/brain/_raw/cycles/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5.md`
+
+## See also
+
+- [[brain-read-policy]] — brain-read policy — planner reads, executor/reviewer don't, all reads index-guarded.
+- [[ralph-loop-pattern]] — ralph loop pattern.

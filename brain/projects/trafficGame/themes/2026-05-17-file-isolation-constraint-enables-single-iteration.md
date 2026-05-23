@@ -1,11 +1,27 @@
 ---
-title: trafficGame — one-file-per-WI constraint correlated with single-iteration dev-loop success
-description: Manifest hard constraints (FEAT-1 → campaignGraphData.ts, FEAT-2 → CampaignGraph.ts, FEAT-3 → CampaignHub.ts; no shared files across features) produced 3 dev-loop WIs that each completed in a single iteration with no wedge events, no send-backs, and 836 tests green. File-isolation avoids the file-collision failure mode seen in prior trafficGame cycles.
+title: >-
+  trafficGame — one-file-per-WI constraint correlated with single-iteration
+  dev-loop success
+description: >-
+  Manifest hard constraints (FEAT-1 → campaignGraphData.ts, FEAT-2 →
+  CampaignGraph.ts, FEAT-3 → CampaignHub.ts; no shared files across features)
+  produced 3 dev-loop WIs that each completed in a single iteration with no
+  wedge events, no send-backs, and 836 tests green. File-isolation avoids the
+  file-collision failure mode seen in prior trafficGame cycles.
 category: pattern
-keywords: [trafficgame, file-isolation, manifest-constraints, single-iteration, one-file-per-wi, decomposition, developer-ralph]
-created_at: 2026-05-17T14:30:00Z
-updated_at: 2026-05-17T14:30:00Z
-related_themes: []
+keywords:
+  - trafficgame
+  - file-isolation
+  - manifest-constraints
+  - single-iteration
+  - one-file-per-wi
+  - decomposition
+  - developer-ralph
+created_at: 2026-05-17T14:30:00.000Z
+updated_at: 2026-05-17T14:30:00.000Z
+related_themes:
+  - spec-driven-work-items
+  - dependency-ordered-work
 ---
 
 # trafficGame — one-file-per-WI constraint correlated with single-iteration dev-loop success
@@ -45,7 +61,7 @@ This pattern works best when the features map onto the existing module boundarie
 - `_queue/done/INIT-2026-05-17-world-graph-connectivity.md` — hard constraints section specifying one file per feature.
 - `/home/parso/forge/brain/_raw/cycles/2026-05-17T13-36-43_INIT-2026-05-17-world-graph-connectivity.md` — cycle archive §"Finding 5".
 
-## Related
+## See also
 
-- [`algorithm-heavy-items`](algorithm-heavy-items.md) — decomposition discipline for trafficGame; this pattern is its positive counterpart.
-- [`developer-ralph-brain-skip-on-second-wi`](2026-05-10-developer-ralph-brain-skip-on-second-wi.md) — the brain-first skip antipattern; a WI completing in 1 iteration does not guarantee brain-first was honoured.
+- [[spec-driven-work-items]] — spec-driven work items.
+- [[dependency-ordered-work]] — dependency-ordered work — parallelism is correctness, not optimisation.

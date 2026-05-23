@@ -1,11 +1,22 @@
 ---
 title: Simplicity is key — every "no" defends it
-description: User principle 2. Forge is a small core that hangs powerful tools together. The non-goals lists across ADRs are load-bearing.
+description: >-
+  User principle 2. Forge is a small core that hangs powerful tools together.
+  The non-goals lists across ADRs are load-bearing.
 category: pattern
-keywords: [simplicity, principle-2, minimal, non-goals, small-core, knobs]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [avoid-hand-rolling-tools, minimal-runtime-config, v1-vs-v2-key-differences]
+keywords:
+  - simplicity
+  - principle-2
+  - minimal
+  - non-goals
+  - small-core
+  - knobs
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - avoid-hand-rolling-tools
+  - minimal-runtime-config
+  - v1-vs-v2-key-differences
 ---
 
 # Simplicity is key — every "no" defends it
@@ -30,7 +41,8 @@ Every ADR's "Alternatives considered" + non-goals section is part of this princi
 - [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 2.
 - [`adr-009-minimal-config.docs.md`](../../_raw/docs/adr-009-minimal-config.docs.md), [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — explicit small-core defenses.
 
-## Related
+## See also
 
-- [Theme: Avoid hand-rolling tools](./avoid-hand-rolling-tools.md) — companion principle.
-- [Theme: Minimal runtime config](./minimal-runtime-config.md) — concrete codification.
+- [[avoid-hand-rolling-tools]] — companion principle.
+- [[minimal-runtime-config]] — concrete codification.
+- [[v1-vs-v2-key-differences]] — v1 vs v2 — what was rejected and why.

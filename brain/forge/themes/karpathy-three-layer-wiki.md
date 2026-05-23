@@ -1,11 +1,23 @@
 ---
 title: Karpathy three-layer LLM wiki
-description: Brain layout — immutable raw → 15-40-line theme pages → category indexes. Many small pages > few large summaries.
+description: >-
+  Brain layout — immutable raw → 15-40-line theme pages → category indexes. Many
+  small pages > few large summaries.
 category: pattern
-keywords: [karpathy, llm-wiki, three-layer, theme-pages, raw, indexes, obsidian]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-23T00:00:00Z
-related_themes: [brain-first-research, theme-page-format, brain-gap-feedback-loop]
+keywords:
+  - karpathy
+  - llm-wiki
+  - three-layer
+  - theme-pages
+  - raw
+  - indexes
+  - obsidian
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-23T00:00:00.000Z
+related_themes:
+  - brain-first-research
+  - theme-page-format
+  - brain-gap-feedback-loop
 ---
 
 # Karpathy three-layer LLM wiki
@@ -25,7 +37,8 @@ Karpathy's principle: many small navigable pages > few large summaries. A reader
 - [`karpathy-llm-wiki.md`](../../_raw/web/karpathy-llm-wiki.md) — the canonical Karpathy gist ([gist.github.com/karpathy/442a6bf555914893e9891c11519de94f](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)), re-ingested 2026-05-23 in S1.4 (the Pass-A synthesis is archived under `brain/_archive/2026-05-23/karpathy-llm-wiki.chat.md`).
 - [`adr-004-obsidian-wiki.docs.md`](../../_raw/docs/adr-004-obsidian-wiki.docs.md) — the brain's structural decision record.
 
-## Related
+## See also
 
-- [Theme: Brain-first research](./brain-first-research.md) — why the wiki gets used.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — how it stays current.
+- [[brain-first-research]] — why the wiki gets used.
+- [[theme-page-format]] — theme page format.
+- [[brain-gap-feedback-loop]] — how it stays current.

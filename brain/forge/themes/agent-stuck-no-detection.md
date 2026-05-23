@@ -1,11 +1,24 @@
 ---
 title: Agent stuck without detection — silent build/test loops
-description: 12 developer timeouts/day at $8-12 waste in v1, agents cycling through the same build failure with no file changes. >5 turns no-progress is the heuristic; capture diagnostic on timeout.
+description: >-
+  12 developer timeouts/day at $8-12 waste in v1, agents cycling through the
+  same build failure with no file changes. >5 turns no-progress is the
+  heuristic; capture diagnostic on timeout.
 category: antipattern
-keywords: [stuck, silent-loop, timeout, no-progress, diagnostic-capture, wedged, $8-12-waste]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [wedged-loop-detector, rate-limit-no-backoff, design-is-the-bottleneck]
+keywords:
+  - stuck
+  - silent-loop
+  - timeout
+  - no-progress
+  - diagnostic-capture
+  - wedged
+  - $8-12-waste
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - wedged-loop-detector
+  - rate-limit-no-backoff
+  - design-is-the-bottleneck
 ---
 
 # Agent stuck without detection — silent build/test loops
@@ -29,8 +42,8 @@ In v2 the wedged-loop detector in [`loops/ralph/stop-conditions.ts`](../../loops
 
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — full design + Cycle 3 numbers.
 
-## Related
+## See also
 
-- [Theme: Wedged loop detector](./wedged-loop-detector.md) — v2's implementation.
-- [Theme: Rate-limit no-backoff](./rate-limit-no-backoff.md) — sister waste category.
-- [Theme: Design is the bottleneck](./design-is-the-bottleneck.md) — root cause for many "stuck" events is unclear acceptance criteria.
+- [[wedged-loop-detector]] — v2's implementation.
+- [[rate-limit-no-backoff]] — sister waste category.
+- [[design-is-the-bottleneck]] — root cause for many "stuck" events is unclear acceptance criteria.

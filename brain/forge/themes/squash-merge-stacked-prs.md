@@ -1,11 +1,25 @@
 ---
 title: Squash-merging stacked PRs is forbidden
-description: v1 Cycle 2 trafficGame produced 90 test failures + 12 TS errors after 8 stacked PRs were squash-merged independently. Use layered merge order with health checks instead.
+description: >-
+  v1 Cycle 2 trafficGame produced 90 test failures + 12 TS errors after 8
+  stacked PRs were squash-merged independently. Use layered merge order with
+  health checks instead.
 category: antipattern
-keywords: [squash-merge, stacked-prs, layered-merge, git-history, antipattern, v1-cycle-2, trafficgame, 90-failures]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [gh-cli-and-worktrees, layered-merge-order, health-check-protocol]
+keywords:
+  - squash-merge
+  - stacked-prs
+  - layered-merge
+  - git-history
+  - antipattern
+  - v1-cycle-2
+  - trafficgame
+  - 90-failures
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - gh-cli-and-worktrees
+  - layered-merge-order
+  - health-check-protocol
 ---
 
 # Squash-merging stacked PRs is forbidden
@@ -28,8 +42,8 @@ The reviewer skill's PR-description template asks: *"is this a stacked PR? If so
 - [`forge-v2-phase-review-loop.docs.md`](../../_raw/docs/forge-v2-phase-review-loop.docs.md) — failure-mode call-out.
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — full Cycle 2 post-mortem with the 4-failure-modes breakdown.
 
-## Related
+## See also
 
-- [Theme: Layered merge order](./layered-merge-order.md) — the correct pattern this violation breaks.
-- [Theme: Health-check protocol](./health-check-protocol.md) — gate that catches the breakage.
-- [Theme: gh CLI + worktrees](./gh-cli-and-worktrees.md) — the tooling involved.
+- [[gh-cli-and-worktrees]] — the tooling involved.
+- [[layered-merge-order]] — the correct pattern this violation breaks.
+- [[health-check-protocol]] — gate that catches the breakage.

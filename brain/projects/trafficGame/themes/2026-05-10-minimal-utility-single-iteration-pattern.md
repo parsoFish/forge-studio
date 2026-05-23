@@ -1,10 +1,22 @@
 ---
-title: trafficGame — minimal pure-utility initiatives complete in 1 developer iteration
-description: Tightly-scoped pure-function additions to core utilities (single file, concrete numeric acceptance criteria, strict TypeScript) reliably complete in 1 developer-ralph iteration with no wedge events.
+title: >-
+  trafficGame — minimal pure-utility initiatives complete in 1 developer
+  iteration
+description: >-
+  Tightly-scoped pure-function additions to core utilities (single file,
+  concrete numeric acceptance criteria, strict TypeScript) reliably complete in
+  1 developer-ralph iteration with no wedge events.
 category: pattern
-keywords: [trafficgame, developer-ralph, utility, single-iteration, pure-function, Vector2, acceptance-criteria]
-created_at: 2026-05-10T03:23:11Z
-updated_at: 2026-05-10T03:23:11Z
+keywords:
+  - trafficgame
+  - developer-ralph
+  - utility
+  - single-iteration
+  - pure-function
+  - Vector2
+  - acceptance-criteria
+created_at: 2026-05-10T03:23:11.000Z
+updated_at: 2026-05-10T03:23:11.000Z
 related_themes: []
 ---
 
@@ -39,6 +51,6 @@ This pattern is the ideal shape for "round out the math API" type work. The PM s
 - `_logs/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5/events.jsonl` — event `EV_moz7btsl_zamzjvco` (ralph.end WI-1, iterations: 1, stop_reason: quality-gates-pass).
 - `/home/parso/forge/brain/_raw/cycles/2026-05-10T03-08-21_INIT-2026-05-10-trafficgame-manhattan-v5.md`
 
-## Related
+## See also
 
-- [Theme: algorithm-heavy items must be decomposed](./algorithm-heavy-items.md) — the opposite failure mode: too-large items wedge.
+- [[algorithm-heavy-items]] — the opposite failure mode: too-large items wedge.

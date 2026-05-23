@@ -1,11 +1,23 @@
 ---
 title: Ralph loop pattern
-description: ~30-line outer loop where iteration lives in the loop itself, not the orchestrator. Used as forge v2's developer loop.
+description: >-
+  ~30-line outer loop where iteration lives in the loop itself, not the
+  orchestrator. Used as forge v2's developer loop.
 category: pattern
-keywords: [ralph, loop, agentic-loop, developer-loop, ghuntley, stop-conditions, iteration]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [claude-agent-sdk, wedged-loop-detector, alternative-loop-runtimes]
+keywords:
+  - ralph
+  - loop
+  - agentic-loop
+  - developer-loop
+  - ghuntley
+  - stop-conditions
+  - iteration
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - claude-agent-sdk
+  - wedged-loop-detector
+  - alternative-loop-runtimes
 ---
 
 # Ralph loop pattern
@@ -29,7 +41,8 @@ Reference implementations exist from Anthropic (ralph-wiggum plugin), Vercel (ra
 
 - [`adr-002-ralph-loop-pattern.docs.md`](../../_raw/docs/adr-002-ralph-loop-pattern.docs.md) — decision record + alternatives.
 
-## Related
+## See also
 
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — what Ralph calls.
-- [Theme: Wedged loop detector](./wedged-loop-detector.md) — one of the stop conditions.
+- [[claude-agent-sdk]] — what Ralph calls.
+- [[wedged-loop-detector]] — one of the stop conditions.
+- [[alternative-loop-runtimes]] — alternative loop runtimes — aider, openhands, openclaw, hermes.

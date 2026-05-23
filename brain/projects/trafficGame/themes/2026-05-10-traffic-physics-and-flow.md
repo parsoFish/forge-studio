@@ -1,10 +1,25 @@
 ---
-title: trafficGame — traffic physics, IDM model, and BPR flow prediction
-description: How cars accelerate, brake, and follow each other in trafficGame; the IDM-derived constants; the BPR-based flow prediction; and what's known to work and not work today. Includes the leverage points for any "smarter braking + intersection back-pressure" initiative.
+title: 'trafficGame — traffic physics, IDM model, and BPR flow prediction'
+description: >-
+  How cars accelerate, brake, and follow each other in trafficGame; the
+  IDM-derived constants; the BPR-based flow prediction; and what's known to work
+  and not work today. Includes the leverage points for any "smarter braking +
+  intersection back-pressure" initiative.
 category: pattern
-keywords: [trafficgame, idm, car-following, braking, bpr, flow-prediction, intersection, back-pressure, calibration, max_speed, time_headway]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-10T15:30:00Z
+keywords:
+  - trafficgame
+  - idm
+  - car-following
+  - braking
+  - bpr
+  - flow-prediction
+  - intersection
+  - back-pressure
+  - calibration
+  - max_speed
+  - time_headway
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-10T15:30:00.000Z
 related_themes: []
 ---
 
@@ -66,9 +81,3 @@ Constants (sourced from `VEHICLE_PHYSICS`, fixed — not time-scaled; simulation
 - [`src/traffic/CarFollowing.ts`](../../../../projects/trafficGame/src/traffic/CarFollowing.ts) — model + constants (lines 16–119).
 - Project [`docs/LEARNINGS.md`](../../../../projects/trafficGame/docs/LEARNINGS.md) §"Known Failure Modes", §"Physics & Calibration Facts", §"Architecture Decisions".
 - Project [`CLAUDE.md`](../../../../projects/trafficGame/CLAUDE.md) §"Physics (fixed values)" — locked constants table.
-
-## Related
-
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — where these modules live.
-- [`canvas-bpr-flow-tests`](canvas-bpr-flow-tests.md) — visual regressions catch flow changes.
-- [`algorithm-heavy-items`](algorithm-heavy-items.md) — back-pressure spans many files; decompose carefully.

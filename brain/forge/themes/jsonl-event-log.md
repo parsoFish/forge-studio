@@ -1,11 +1,24 @@
 ---
 title: JSONL event log per cycle
-description: One append-only events.jsonl per cycle records every skill invocation, iteration, cost, duration. Source of truth for reflection, metrics, replay.
+description: >-
+  One append-only events.jsonl per cycle records every skill invocation,
+  iteration, cost, duration. Source of truth for reflection, metrics, replay.
 category: pattern
-keywords: [jsonl, event-log, logging, observability, replay, metrics, reflection, ulid]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [cycle-event-log-replay, brain-gap-feedback-loop, six-phases-of-forge]
+keywords:
+  - jsonl
+  - event-log
+  - logging
+  - observability
+  - replay
+  - metrics
+  - reflection
+  - ulid
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - cycle-event-log-replay
+  - brain-gap-feedback-loop
+  - six-phases-of-forge
 ---
 
 # JSONL event log per cycle
@@ -20,7 +33,8 @@ Trade-off: log size grows with cycle complexity. Mitigated by refs-not-contents 
 
 - [`adr-008-jsonl-event-log.docs.md`](../../_raw/docs/adr-008-jsonl-event-log.docs.md) — decision record + full schema.
 
-## Related
+## See also
 
-- [Theme: Cycle event log replay](./cycle-event-log-replay.md) — what the log enables.
-- [Theme: Brain-gap feedback loop](./brain-gap-feedback-loop.md) — uses `brain-gaps.jsonl` (sibling log).
+- [[cycle-event-log-replay]] — what the log enables.
+- [[brain-gap-feedback-loop]] — uses `brain-gaps.jsonl` (sibling log).
+- [[six-phases-of-forge]] — six phases of forge backed by a brain.

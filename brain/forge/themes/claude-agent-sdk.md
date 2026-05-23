@@ -1,11 +1,22 @@
 ---
 title: Claude Agent SDK as the agent runtime
-description: First-party @anthropic-ai/claude-agent-sdk powers every TS-side agent invocation in forge v2.
+description: >-
+  First-party @anthropic-ai/claude-agent-sdk powers every TS-side agent
+  invocation in forge v2.
 category: pattern
-keywords: [claude-agent-sdk, anthropic, runtime, subagents, headless, mcp, hooks]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [ralph-loop-pattern, skills-as-agent-surface]
+keywords:
+  - claude-agent-sdk
+  - anthropic
+  - runtime
+  - subagents
+  - headless
+  - mcp
+  - hooks
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - skills-as-agent-surface
 ---
 
 # Claude Agent SDK as the agent runtime
@@ -20,7 +31,7 @@ Trade-off: Anthropic-only models. v1 already standardised on Claude. If portabil
 
 - [`adr-001-claude-agent-sdk.docs.md`](../../_raw/docs/adr-001-claude-agent-sdk.docs.md) — the decision record + alternatives considered.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — what the SDK powers.
-- [Theme: Skills as agent surface](./skills-as-agent-surface.md) — what the SDK invokes.
+- [[ralph-loop-pattern]] — what the SDK powers.
+- [[skills-as-agent-surface]] — what the SDK invokes.

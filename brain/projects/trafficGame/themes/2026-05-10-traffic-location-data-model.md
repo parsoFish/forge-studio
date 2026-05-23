@@ -1,10 +1,28 @@
 ---
-title: trafficGame — TrafficLocation has paired entry/exit ConnectionPoints with edge orientation
-description: TrafficPoint.ts defines TrafficLocation as a single map-edge anchor with separate entryPoint and exitPoint ConnectionPoints offset by edge direction (top/bottom/left/right). This is the natural seam for any "link maps at entry/exit" non-linear campaign work.
+title: >-
+  trafficGame — TrafficLocation has paired entry/exit ConnectionPoints with edge
+  orientation
+description: >-
+  TrafficPoint.ts defines TrafficLocation as a single map-edge anchor with
+  separate entryPoint and exitPoint ConnectionPoints offset by edge direction
+  (top/bottom/left/right). This is the natural seam for any "link maps at
+  entry/exit" non-linear campaign work.
 category: snapshot
-keywords: [trafficgame, traffic-location, connection-point, entry, exit, edge, top, bottom, left, right, map-linking, data-model]
-created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-10T15:30:00Z
+keywords:
+  - trafficgame
+  - traffic-location
+  - connection-point
+  - entry
+  - exit
+  - edge
+  - top
+  - bottom
+  - left
+  - right
+  - map-linking
+  - data-model
+created_at: 2026-05-10T15:30:00.000Z
+updated_at: 2026-05-10T15:30:00.000Z
 related_themes: []
 ---
 
@@ -57,9 +75,3 @@ What's *missing* for inter-map linking:
 - [`src/traffic/TrafficPoint.ts`](../../../../projects/trafficGame/src/traffic/TrafficPoint.ts):1–95 (interface, factory, guards).
 - [`src/traffic/FlowConfig.ts`](../../../../projects/trafficGame/src/traffic/FlowConfig.ts) — where the default 0.5 v/s lives.
 - Project [`docs/MVP_ARCHITECTURE.md`](../../../../projects/trafficGame/docs/MVP_ARCHITECTURE.md) §"Connection Points as Source of Truth".
-
-## Related
-
-- [`campaign-mode-state`](2026-05-10-campaign-mode-state.md) — the linear campaign that lives on top of this data model.
-- [`traffic-physics-and-flow`](2026-05-10-traffic-physics-and-flow.md) — flow rate is per-location and the natural cross-map signal.
-- [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — how `traffic/` fits into the broader src/.

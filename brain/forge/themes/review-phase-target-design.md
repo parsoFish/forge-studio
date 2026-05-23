@@ -1,11 +1,32 @@
 ---
-title: Review-phase target design — initiative branch synced, holistic intent gate, PR-as-feedback-surface, no auto-merge
-description: Operator's authoritative redesign. Dev-loop keeps the initiative branch in local↔remote sync and creates NO PR. Review = automated loop that assesses the branch against initiative INTENT holistically, may spawn dev-loops to refine, then emits a demo-embedded PR. The GitHub PR is the human feedback/merge surface; closure aligns local to remote.
+title: >-
+  Review-phase target design — initiative branch synced, holistic intent gate,
+  PR-as-feedback-surface, no auto-merge
+description: >-
+  Operator's authoritative redesign. Dev-loop keeps the initiative branch in
+  local↔remote sync and creates NO PR. Review = automated loop that assesses the
+  branch against initiative INTENT holistically, may spawn dev-loops to refine,
+  then emits a demo-embedded PR. The GitHub PR is the human feedback/merge
+  surface; closure aligns local to remote.
 category: decision
-keywords: [review-phase, initiative-branch, local-remote-sync, holistic-intent, spawn-dev-loop, pr-feedback-surface, no-auto-merge, user-triggered, C6, merge-boundary]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [merge-boundary-stacked-initiative-failure, forge-project-onboarding-contract, forge-current-architecture-as-built, review-fix-loop-spinning]
+keywords:
+  - review-phase
+  - initiative-branch
+  - local-remote-sync
+  - holistic-intent
+  - spawn-dev-loop
+  - pr-feedback-surface
+  - no-auto-merge
+  - user-triggered
+  - C6
+  - merge-boundary
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - merge-boundary-stacked-initiative-failure
+  - forge-project-onboarding-contract
+  - forge-current-architecture-as-built
+  - review-fix-loop-spinning
 ---
 
 # Review-phase target design
@@ -52,8 +73,9 @@ GitHub-confirmed merge). Full graph + delta table:
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: merge-boundary evidence.
 - [`architecture.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/architecture.md) — §C.3 as-built vs §G target, delta table, G8–G10.
 
-## Related
+## See also
 
-- [Theme: Merge boundary stranded initiatives](./merge-boundary-stacked-initiative-failure.md) — the failure this design fixes.
-- [Theme: Forge↔project contract](./forge-project-onboarding-contract.md) — this is C6's resolution.
-- [Theme: Review-fix loop spinning](./review-fix-loop-spinning.md) — why spawned dev-loops still need progress termination.
+- [[merge-boundary-stacked-initiative-failure]] — the failure this design fixes.
+- [[forge-project-onboarding-contract]] — this is C6's resolution.
+- [[forge-current-architecture-as-built]] — forge as-built — 5 wired phases + hand-run architect, pm/reflector-only brain-first, ~4,400 loc, a real resilience layer.
+- [[review-fix-loop-spinning]] — why spawned dev-loops still need progress termination.

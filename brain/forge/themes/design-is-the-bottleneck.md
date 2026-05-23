@@ -1,11 +1,24 @@
 ---
 title: Design is the bottleneck
-description: Planner quality multiplies everything downstream — agents churn through implementation fast; bad work-item design produces churn, failed completions, and wasted tokens that better design would prevent.
+description: >-
+  Planner quality multiplies everything downstream — agents churn through
+  implementation fast; bad work-item design produces churn, failed completions,
+  and wasted tokens that better design would prevent.
 category: pattern
-keywords: [design, planning, bottleneck, planner, work-item-quality, leverage, downstream]
-created_at: 2026-05-04T19:30:00Z
-updated_at: 2026-05-04T19:30:00Z
-related_themes: [spec-driven-work-items, llm-council-pattern, declarative-specs-vs-imperative]
+keywords:
+  - design
+  - planning
+  - bottleneck
+  - planner
+  - work-item-quality
+  - leverage
+  - downstream
+created_at: 2026-05-04T19:30:00.000Z
+updated_at: 2026-05-04T19:30:00.000Z
+related_themes:
+  - spec-driven-work-items
+  - llm-council-pattern
+  - declarative-specs-vs-imperative
 ---
 
 # Design is the bottleneck
@@ -23,8 +36,8 @@ This is why the LLM Council pattern lives at the architect, not at the developer
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — full v1 lesson + Gas Town reference.
 - [`v1-themes-completion-stats.cycle.md`](../../_raw/v1-wiki/v1-themes-completion-stats.cycle.md) — empirical floor (109 items, completion-rate-by-domain).
 
-## Related
+## See also
 
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — what good design produces.
-- [Theme: LLM Council pattern](./llm-council-pattern.md) — where design is critiqued before queuing.
-- [Theme: Declarative specs over imperative](./declarative-specs-vs-imperative.md) — the prompt-level companion.
+- [[spec-driven-work-items]] — what good design produces.
+- [[llm-council-pattern]] — where design is critiqued before queuing.
+- [[declarative-specs-vs-imperative]] — the prompt-level companion.

@@ -1,11 +1,23 @@
 ---
-title: Quality gates verified by the orchestrator, not the agent
-description: Acceptance-criterion verification runs in orchestrator (npm test, gh pr checks), not in the agent's response. Defends against hallucinated test passes.
+title: 'Quality gates verified by the orchestrator, not the agent'
+description: >-
+  Acceptance-criterion verification runs in orchestrator (npm test, gh pr
+  checks), not in the agent's response. Defends against hallucinated test
+  passes.
 category: pattern
-keywords: [quality-gates, hallucination, orchestrator-verified, test-pass, acceptance-criteria, trust-model]
-created_at: 2026-05-04T17:55:00Z
-updated_at: 2026-05-04T17:55:00Z
-related_themes: [ralph-loop-pattern, wedged-loop-detector, spec-driven-work-items]
+keywords:
+  - quality-gates
+  - hallucination
+  - orchestrator-verified
+  - test-pass
+  - acceptance-criteria
+  - trust-model
+created_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-05-04T17:55:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - wedged-loop-detector
+  - spec-driven-work-items
 ---
 
 # Quality gates verified by the orchestrator, not the agent
@@ -29,8 +41,8 @@ Trade-off: makes acceptance-criteria authoring discipline more important — vag
 - [`forge-v2-phase-developer-loop.docs.md`](../../_raw/docs/forge-v2-phase-developer-loop.docs.md) — "hallucinated test passes" failure mode.
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — trusting-agent-output cross-system data + review-fix-loop concrete numbers.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — the loop the gate stops.
-- [Theme: Spec-driven work items](./spec-driven-work-items.md) — where verifiable criteria live.
-- [Theme: Wedged loop detector](./wedged-loop-detector.md) — the other primary stop condition.
+- [[ralph-loop-pattern]] — the loop the gate stops.
+- [[wedged-loop-detector]] — the other primary stop condition.
+- [[spec-driven-work-items]] — where verifiable criteria live.

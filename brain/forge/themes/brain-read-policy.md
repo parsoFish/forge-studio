@@ -1,11 +1,32 @@
 ---
-title: Brain-read policy — planner reads, executor/reviewer don't, all reads index-guarded
-description: Operator-confirmed. The architect/PM MUST read the brain (antipatterns + historical work-sizing inform initiative slicing). The dev-loop and reviewer MUST NOT — intent is wholly captured in the work items the planner authored. Every brain read must use the INDEX/category-index/profile metadata, not expensive full scans.
+title: >-
+  Brain-read policy — planner reads, executor/reviewer don't, all reads
+  index-guarded
+description: >-
+  Operator-confirmed. The architect/PM MUST read the brain (antipatterns +
+  historical work-sizing inform initiative slicing). The dev-loop and reviewer
+  MUST NOT — intent is wholly captured in the work items the planner authored.
+  Every brain read must use the INDEX/category-index/profile metadata, not
+  expensive full scans.
 category: decision
-keywords: [brain-read, policy, planner-reads, dev-loop-no-brain, reviewer-no-brain, index-guardrail, navigation-metadata, F-34, F-41, single-source-of-intent]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [brain-first-research, reactive-constraint-stripback-arc, karpathy-three-layer-wiki, forge-current-architecture-as-built]
+keywords:
+  - brain-read
+  - policy
+  - planner-reads
+  - dev-loop-no-brain
+  - reviewer-no-brain
+  - index-guardrail
+  - navigation-metadata
+  - F-34
+  - F-41
+  - single-source-of-intent
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - brain-first-research
+  - reactive-constraint-stripback-arc
+  - karpathy-three-layer-wiki
+  - forge-current-architecture-as-built
 ---
 
 # Brain-read policy
@@ -48,8 +69,9 @@ work item. Reviewer ← manifest + work-item set. Reflector ↔ brain.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: F-34/F-41 strip-backs + operator confirmation.
 - [`architecture.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/architecture.md) — §F brain read/write topology + the index-guardrail caveat.
 
-## Related
+## See also
 
-- [Theme: Brain-first research](./brain-first-research.md) — the universal mandate this supersedes.
-- [Theme: Reactive constraint strip-back arc](./reactive-constraint-stripback-arc.md) — why the dev/reviewer brain gate was removed.
-- [Theme: Karpathy three-layer wiki](./karpathy-three-layer-wiki.md) — the index/metadata the guardrail relies on.
+- [[brain-first-research]] — the universal mandate this supersedes.
+- [[reactive-constraint-stripback-arc]] — why the dev/reviewer brain gate was removed.
+- [[karpathy-three-layer-wiki]] — the index/metadata the guardrail relies on.
+- [[forge-current-architecture-as-built]] — forge as-built — 5 wired phases + hand-run architect, pm/reflector-only brain-first, ~4,400 loc, a real resilience layer.

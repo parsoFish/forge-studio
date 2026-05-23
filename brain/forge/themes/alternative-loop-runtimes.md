@@ -1,11 +1,24 @@
 ---
-title: Alternative loop runtimes — Aider, OpenHands, OpenClaw, Hermes
-description: Reference profiles for loop runtimes forge could swap to. Each rejected at scaffold for shape-mismatch reasons; loops/_adapters/ holds future adapter slots.
+title: 'Alternative loop runtimes — Aider, OpenHands, OpenClaw, Hermes'
+description: >-
+  Reference profiles for loop runtimes forge could swap to. Each rejected at
+  scaffold for shape-mismatch reasons; loops/_adapters/ holds future adapter
+  slots.
 category: reference
-keywords: [aider, openhands, openclaw, hermes, alternatives, adapters, loop-runtime]
-created_at: 2026-05-04T18:00:00Z
-updated_at: 2026-05-04T18:00:00Z
-related_themes: [ralph-loop-pattern, claude-agent-sdk, avoid-hand-rolling-tools]
+keywords:
+  - aider
+  - openhands
+  - openclaw
+  - hermes
+  - alternatives
+  - adapters
+  - loop-runtime
+created_at: 2026-05-04T18:00:00.000Z
+updated_at: 2026-05-04T18:00:00.000Z
+related_themes:
+  - ralph-loop-pattern
+  - claude-agent-sdk
+  - avoid-hand-rolling-tools
 ---
 
 # Alternative loop runtimes
@@ -31,8 +44,8 @@ Adapter slots in `loops/_adapters/` exist so future "should we swap loops?" deci
 - [`openclaw-hermes-profiles.chat.md`](../../_raw/web/openclaw-hermes-profiles.chat.md) — OpenClaw + Hermes synthesis.
 - [`adr-002-ralph-loop-pattern.docs.md`](../../_raw/docs/adr-002-ralph-loop-pattern.docs.md) — alternatives-considered framing.
 
-## Related
+## See also
 
-- [Theme: Ralph loop pattern](./ralph-loop-pattern.md) — what forge ships with.
-- [Theme: Claude Agent SDK](./claude-agent-sdk.md) — the layer below Ralph.
-- [Theme: Avoid hand-rolling tools](./avoid-hand-rolling-tools.md) — the principle that constrains adoption.
+- [[ralph-loop-pattern]] — what forge ships with.
+- [[claude-agent-sdk]] — the layer below Ralph.
+- [[avoid-hand-rolling-tools]] — the principle that constrains adoption.

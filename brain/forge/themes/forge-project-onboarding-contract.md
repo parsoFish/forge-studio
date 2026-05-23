@@ -1,11 +1,32 @@
 ---
-title: The forge↔project contract — six clauses a project must meet for unattended progress
-description: Empirically derived from what trafficGame needed before forge could run it unattended. C1 fast gate, C2 scratch hygiene, C3 decomposed source, C4 machine-readable arch context, C5 honoured locked-core mandates, C6 satisfiable merge model (the open clause).
+title: >-
+  The forge↔project contract — six clauses a project must meet for unattended
+  progress
+description: >-
+  Empirically derived from what trafficGame needed before forge could run it
+  unattended. C1 fast gate, C2 scratch hygiene, C3 decomposed source, C4
+  machine-readable arch context, C5 honoured locked-core mandates, C6
+  satisfiable merge model (the open clause).
 category: decision
-keywords: [contract, onboarding, preflight, quality-gate, gitignore, decomposition, roadmap, locked-core, merge-model, C1-C6, automated-cycles]
-created_at: 2026-05-16T00:00:00Z
-updated_at: 2026-05-16T00:00:00Z
-related_themes: [merge-boundary-stacked-initiative-failure, forge-current-architecture-as-built, file-based-state-machine, quality-gates-orchestrator-verified]
+keywords:
+  - contract
+  - onboarding
+  - preflight
+  - quality-gate
+  - gitignore
+  - decomposition
+  - roadmap
+  - locked-core
+  - merge-model
+  - C1-C6
+  - automated-cycles
+created_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-16T00:00:00.000Z
+related_themes:
+  - merge-boundary-stacked-initiative-failure
+  - forge-current-architecture-as-built
+  - file-based-state-machine
+  - quality-gates-orchestrator-verified
 ---
 
 # The forge↔project contract
@@ -47,8 +68,9 @@ trafficGame today; C6 is not met by forge.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the structural-prerequisite evidence.
 - [`retro.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — §3 contract derivation, §6 closure goals G2/G6.
 
-## Related
+## See also
 
-- [Theme: Merge boundary stranded initiatives](./merge-boundary-stacked-initiative-failure.md) — C6, the open clause.
-- [Theme: Forge current architecture as-built](./forge-current-architecture-as-built.md) — what the contract is enforced against.
-- [Theme: Quality gates orchestrator-verified](./quality-gates-orchestrator-verified.md) — C1's enforcement mechanism.
+- [[merge-boundary-stacked-initiative-failure]] — C6, the open clause.
+- [[forge-current-architecture-as-built]] — what the contract is enforced against.
+- [[file-based-state-machine]] — file-based state machine for queue management.
+- [[quality-gates-orchestrator-verified]] — C1's enforcement mechanism.
