@@ -101,19 +101,20 @@ forge/
 This project has a knowledge graph at `brain/graphify-out/` (canonical
 path per C21; `./graphify-out` at the forge root is a symlink to it
 per C21a). The graph spans the **whole forge architecture** —
-`orchestrator/`, `skills/`, `loops/`, `docs/`, `benchmarks/` (harness
-only), `brain/` — with god nodes, community structure, and
-cross-cluster relationships.
+`orchestrator/`, `cli/`, `skills/`, `loops/`, `docs/`, `benchmarks/`
+(harness only), `brain/`.
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"`. Use
-  `graphify path "<A>" "<B>"` for relationships and `graphify explain
-  "<concept>"` for focused concepts. These return a scoped subgraph,
-  usually much smaller than `GRAPH_REPORT.md` or raw grep output.
-- Read `brain/graphify-out/GRAPH_REPORT.md` only for broad architecture
-  review or when query/path/explain don't surface enough context.
-- After modifying code, run `cd /home/parso/forge && graphify update .`
-  to keep the graph current (AST-only, no API cost; runs background
-  via the installed post-commit hook).
-- Per-clone setup is documented in [`skills/brain-graph/SKILL.md`](./skills/brain-graph/SKILL.md)
-  (hook install + merge-driver config).
+The graph is a **power-tool, not a mandate** (2026-05-24
+rebuild-review): brain-query passes its bench at 94.4% on the markdown
+themes alone. Reach for it when grep is too noisy or you want a
+cross-cluster relationship — see
+[`skills/brain-graph/SKILL.md`](./skills/brain-graph/SKILL.md) for the
+query / path / explain commands.
+
+`GRAPH_REPORT.md` under `brain/graphify-out/` is the broad-architecture
+read.
+
+After modifying code, run `cd /home/parso/forge && graphify update .`
+to keep the graph current (AST-only, no API cost; the installed
+post-commit hook does this in the background — manual invocation only
+needed if you skip the hook).
