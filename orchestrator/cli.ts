@@ -625,13 +625,22 @@ function cmdReviewAbandon(initiativeId: string): void {
   const wt = (m as { worktree_path?: string }).worktree_path;
   const projectRepoPath = m.project_repo_path;
   const branch = `forge/${initiativeId}`;
-  if (wt && existsSync(wt) && projectRepoPath && existsSync(projectRepoPath)) {
-    try {
-      execSync(`git -C "${projectRepoPath}" worktree remove --force "${wt}"`, { stdio: 'pipe' });
-    } catch { /* ignore */ }
+  if (projectRepoPath && existsSync(projectRepoPath)) {
+    if (wt && existsSync(wt)) {
+      try {
+        execSync(`git -C "${projectRepoPath}" worktree remove --force "${wt}"`, { stdio: 'pipe' });
+      } catch { /* ignore */ }
+    }
     try {
       execSync(`git -C "${projectRepoPath}" branch -D "${branch}"`, { stdio: 'pipe' });
-    } catch { /* ignore */ }
+    } catch { /* ignore — branch never created or already deleted */ }
+    // 2026-05-23 dogfood pushback: an abandon that doesn't clean the
+    // REMOTE branch leaves stale origin refs that block the next cycle's
+    // push (non-fast-forward). Delete the remote branch too. Best-effort
+    // — projects without origin / branches never pushed silently skip.
+    try {
+      execSync(`git -C "${projectRepoPath}" push origin --delete "${branch}"`, { stdio: 'pipe' });
+    } catch { /* ignore — no remote / never pushed / already deleted */ }
   }
   const failedTarget = join(queuePaths.failed, basename(located.path));
   execSync(`mv "${located.path}" "${failedTarget}"`);

@@ -343,8 +343,14 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
     // remote throughout the dev-loop (no divergence → no stacked-PR merge
     // conflict at the review boundary). The agent's per-iteration commit
     // (backstopped by commitDevLoopBoundary) is already on the branch;
-    // publishing it now keeps origin in lock-step. Best-effort by return
-    // value — the hard invariant is asserted once at close (below).
+    // publishing it now keeps origin in lock-step.
+    //
+    // Push failure is a HARD EARLY-EXIT (post-2026-05-23 dogfood pushback):
+    // if the push fails (e.g. remote ahead from a prior cycle's stale
+    // state), every subsequent WI runs on a branch that won't merge
+    // cleanly. The previous best-effort posture wasted tokens by
+    // continuing through 4-5 more WIs on a broken branch before the close
+    // invariant caught it.
     const push = pushInitiativeBranch(input.worktreePath);
     logger.emit({
       initiative_id: input.initiativeId,
@@ -357,10 +363,36 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
       message: push.pushed ? 'dev-loop.branch-pushed' : 'dev-loop.branch-push-failed',
       metadata: push.pushed
         ? { work_item_id: wi.work_item_id, branch: push.branch }
-        : { work_item_id: wi.work_item_id, reason: push.reason },
+        : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true },
     });
 
     wiOutcomes.push({ id: wi.work_item_id, status: finalStatus, result });
+
+    if (!push.pushed) {
+      // Mark every WI we won't reach as 'failed' with reason
+      // 'branch-push-failed-early-exit' — mirrors the prerequisiteFailed
+      // path's shape so metrics + cycle report stay accurate. Then break
+      // out of the loop; the close-step invariant + failure classifier
+      // take it from here.
+      const currentIndex = ordered.findIndex((w) => w.work_item_id === wi.work_item_id);
+      for (let i = currentIndex + 1; i < ordered.length; i++) {
+        const skipped = ordered[i]!;
+        writeWorkItemStatus(resolve(workItemsDir, `${skipped.work_item_id}.md`), 'failed');
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: start.event_id,
+          phase: 'developer-loop',
+          skill: 'developer-ralph',
+          event_type: 'log',
+          input_refs: [resolve(workItemsDir, `${skipped.work_item_id}.md`)],
+          output_refs: [],
+          message: 'ralph.skipped',
+          metadata: { work_item_id: skipped.work_item_id, reason: 'branch-push-failed-early-exit' },
+        });
+        wiOutcomes.push({ id: skipped.work_item_id, status: 'failed', result: null });
+      }
+      break;
+    }
   }
 
   const completeCount = wiOutcomes.filter((o) => o.status === 'complete').length;
