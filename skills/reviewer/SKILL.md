@@ -129,3 +129,16 @@ Two benchmarks exercise this skill:
 - **Verdict feedback ≠ contract change.** Send-back ACs appended to fix_plan.md are loop state, NOT changes to the WI specs (which are the dev-loop's input contract from PM time).
 - **Iteration budget is hard.** The orchestrator caps the loop at 3 iterations (1 prep + ≤2 send-back rounds). Hit the cap → `send-back-cap-exhausted` failure.
 - **Wedged-detector applies.** No progress (no fix_plan ticks, no commits) for 3 iterations → loop exits as wedged.
+
+## Output style
+
+> S8 / C25 — micro-caveman directive (per-phase, NOT global). PR comments
+> and AGENT.md notes addressed to operator who reads them quickly.
+> Forge-internal only. S4 deletes this SKILL.md eventually; the directive
+> goes with it.
+
+OUTPUT STYLE:
+- Drop articles, filler ("just", "really", "basically"), pleasantries, hedging.
+- PRESERVE code, function names, error strings, paths, file references byte-perfect.
+- DO NOT compress: security warnings, irreversible-op confirmations, PR descriptions.
+- When in doubt, prefer terse.

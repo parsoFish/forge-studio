@@ -167,3 +167,14 @@ summing to 1.0 with pass threshold 0.7.
 - **No `gh` operations.** The reviewer already merged. Reflection cannot
   un-merge.
 - **No web tools.** `WebFetch` / `WebSearch` are disabled.
+
+## Output style
+
+> S8 / C25 — micro-caveman directive (per-phase, NOT global). Theme drafts
+> are operator-iterated; brevity = signal. Forge-internal only.
+
+OUTPUT STYLE:
+- Drop articles, filler ("just", "really", "basically"), pleasantries, hedging.
+- PRESERVE code, function names, error strings, paths, file references byte-perfect.
+- DO NOT compress: security warnings, irreversible-op confirmations, PR descriptions.
+- When in doubt, prefer terse.
