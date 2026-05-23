@@ -25,6 +25,7 @@ import {
   type QueuePaths,
 } from './queue.ts';
 import * as worktree from './worktree.ts';
+import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
@@ -128,8 +129,24 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   // F-25: track which initiative IDs we've already announced as "blocked" so
   // the idle stdout doesn't repeat the same line every poll cycle (5s).
   const announcedBlocked = new Set<string>();
+  // Poll toggle: when `<queueRoot>/.paused` exists the scheduler stops
+  // CLAIMING new work but keeps the process alive (in-flight cycles drain,
+  // recovery sweeps still run). Announce the transition once so forever
+  // stdout isn't spammed every poll tick.
+  let announcedPaused = false;
 
   const tick = async (): Promise<boolean> => {
+    if (isPaused(cfg.queueRoot)) {
+      if (!announcedPaused) {
+        console.log('[serve] paused — not claiming new work (forge resume to re-enable)');
+        announcedPaused = true;
+      }
+      return inFlight.size > 0;
+    }
+    if (announcedPaused) {
+      console.log('[serve] resumed — claiming work again');
+      announcedPaused = false;
+    }
     while (inFlight.size < cfg.maxConcurrentInitiatives) {
       const pending = listPending(getPaths(cfg.queueRoot));
       if (pending.length === 0) return false;

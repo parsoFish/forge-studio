@@ -78,3 +78,22 @@ visibility-aware demo commit, and closure-as-single-mover are all
 implemented (Phase-6 redesign + the 2026-05-18 operator-review
 reliability pass). Bench: [`benchmarks/review-loop/`](../../benchmarks/review-loop/)
 (per-phase) + the chained seed bench exercise the loop.
+
+**2026-05-18 P2/P3 (unit-tested; not yet exercised against a live cycle):**
+- **PR at end of review iteration 1, not on approve.** The gate ensures
+  the demo-embedded PR (`pr.ts:ensurePullRequest`, idempotent) as soon as
+  the branch is reviewable, so the PR is a durable review window that
+  survives a dead serve process. The old `if (approved) openPullRequest()`
+  creation point is removed.
+- **Verdict via PR comments** (`pr-verdict.ts:makePrCommentVerdict`),
+  with the file-verdict provider as a fallback when no PR can be created
+  (no remote / gh down) — never strands.
+- **P2 mechanical integrity gate:** a WI marked `complete` whose declared
+  `files_in_scope` are entirely absent from the branch diff auto-sends-
+  back into the loop WITHOUT consuming a human verdict round
+  (`detectFalselyCompleteWorkItems`). Surfaced as
+  `reviewer.integrity-autosendback` events.
+- Operability: the scheduler now runs as a managed daemon
+  (`forge start/stop/status/pause/resume`, `orchestrator/daemon.ts`) — a
+  closed shell no longer kills it (root cause of the strand that
+  motivated this pass).

@@ -189,9 +189,12 @@ export async function runProjectManager(input: RunPmInput): Promise<RunPmResult>
     allowedTools: PM_ALLOWED_TOOLS,
     disallowedTools: PM_DISALLOWED_TOOLS,
     maxTurns: 40,
-    // Phase 4.1 (drift correction): match live `PM_LIVE_MAX_BUDGET_USD = 2.5`
-    // (F-42). At 0.75 multi-feature fixtures can budget-fail in the bench but
-    // pass in prod (MED false-red).
+    // Phase 4.1 (drift correction): match the live PM budget FLOOR
+    // (`PM_LIVE_MAX_BUDGET_USD_FLOOR = 2.5`, F-42/F-43). Live now derives
+    // max(floor, initiative_budget * 0.2); the bench's fixed-budget fixtures
+    // sit at/below the floor so 2.5 still mirrors live for them. At 0.75
+    // multi-feature fixtures can budget-fail in the bench but pass in prod
+    // (MED false-red).
     maxBudgetUsd: 2.5,
   };
 

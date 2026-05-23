@@ -72,6 +72,21 @@ function wipeRalphScratch(worktreePath: string): void {
 const DEV_LIVE_DEFAULT_ITERATIONS_PER_WI = 5;
 const DEV_LIVE_MAX_TURNS_PER_ITERATION = 25;
 
+// F-44: the Claude Code agent subprocess intermittently dies on spawn
+// ("Claude Code process exited with code 1", iterations:0, stop_reason
+// crashed → runner_error.kind 'agent_threw'). Observed across betterado +
+// trafficgame: most WIs succeed, but a flaky crash on a *prerequisite* WI
+// (e.g. betterado-03 WI-1) fails the whole initiative non-recoverably and
+// stalls every dependent. A 0-iteration subprocess crash is a transient
+// infra fault, NOT a quality signal — so retry it a bounded number of
+// times with a short backoff. A genuine quality-gate failure returns a
+// `result` (status 'failed') and is NOT retried here (that path must stay
+// honest — don't mask real failures). Persistent crashes exhaust the
+// retries and fail exactly as before.
+const DEV_AGENT_CRASH_MAX_RETRIES = 2;
+const DEV_AGENT_CRASH_BACKOFF_MS = 10_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
@@ -186,8 +201,11 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
 
     let result: LoopResult | null = null;
     let runnerError: { kind: string; message: string } | undefined;
-    try {
-      result = await runRalph(
+    // F-44: bounded retry on transient agent-subprocess crash only.
+    for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
+      runnerError = undefined;
+      try {
+        result = await runRalph(
         {
           workItemSpecPath: specPath,
           worktreePath: input.worktreePath,
@@ -240,11 +258,36 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
         },
         agent,
       );
-    } catch (err) {
-      runnerError = {
-        kind: 'agent_threw',
-        message: err instanceof Error ? err.message : String(err),
-      };
+      } catch (err) {
+        runnerError = {
+          kind: 'agent_threw',
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+
+      // F-44: success (or a real quality-gate `result`) → done, no retry.
+      // Only a thrown agent-subprocess crash is retryable, and only while
+      // attempts remain. A persistent crash exhausts retries → fails as
+      // before. Quality-gate failures come back as `result` (not a throw)
+      // and intentionally fall through here without retry.
+      if (!runnerError || attempt === DEV_AGENT_CRASH_MAX_RETRIES) break;
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [specPath],
+        output_refs: [],
+        message: 'dev-loop.agent-crash-retry',
+        metadata: {
+          work_item_id: wi.work_item_id,
+          attempt: attempt + 1,
+          max_retries: DEV_AGENT_CRASH_MAX_RETRIES,
+          runner_error: runnerError,
+        },
+      });
+      await sleep(DEV_AGENT_CRASH_BACKOFF_MS);
     }
 
     // F-34b: brain-first runtime gate REMOVED from the dev-loop. Brain

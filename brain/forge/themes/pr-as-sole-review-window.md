@@ -49,8 +49,36 @@ URLs** — an inline `![](https://github.com/o/r/raw/branch/...)` renders
   `fix/operator-review-reliability`), wired into `openPullRequest`,
   best-effort (never blocks PR creation).
 
+## As-built (2026-05-18 — P3 landed)
+
+The pattern is now the **default mechanism**, not an aspiration:
+
+- The reviewer gate ensures the demo-embedded PR at the **end of review
+  iteration 1** (gate-green + artifacts-ready + integrity-OK) via
+  `pr.ts:ensurePullRequest` — idempotent: created once, re-pushed on
+  send-back rounds. The PR is **no longer gated behind an approve
+  verdict** (the old `reviewer.ts: if (approved) openPullRequest()` is
+  gone). A dead serve process now leaves a real PR behind.
+- Verdict/send-back runs via **PR comments**
+  (`pr-verdict.ts:makePrCommentVerdict`): posts a prompt comment, polls
+  `gh api .../issues/<n>/comments`, parses `forge: approve` /
+  `forge: send-back` + GIVEN/WHEN/THEN ACs.
+- **Fallback (never strand):** when no PR can be created (no remote / gh
+  unavailable) the gate falls back to the file-verdict provider. The
+  PR-comment loop is primary; the file loop is the safety net.
+- Pairs with the P2 mechanical integrity gate (a `complete` WI whose
+  declared files never changed auto-sends-back WITHOUT spending a human
+  round) and the P4 daemon (`forge start/stop/pause/resume` — a closed
+  shell no longer kills the scheduler, the strand that motivated P3).
+
 ## Sources
 
-- `orchestrator/pr.ts` — `embedDemoInPr`, `openPullRequest`.
+- `orchestrator/pr.ts` — `embedDemoInPr`, `openPullRequest`, `prRef`,
+  `ensurePullRequest`.
+- `orchestrator/pr-verdict.ts` — `makePrCommentVerdict`,
+  `parseVerdictComment`.
+- `orchestrator/reviewer-stage2.ts` — gate step 2.7 (ensure PR + select
+  provider) + `detectFalselyCompleteWorkItems` (P2).
+- `orchestrator/daemon.ts` + `orchestrator/cli.ts` — P4 daemon control.
 - trafficGame PR #54 — 4 review rounds on the PR; demo committed under
   `demo/world-map/`.

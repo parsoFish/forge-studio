@@ -43,6 +43,7 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
   const prTitle = `forge: ${input.initiativeId}`;
   const prUrl = openPullRequest(input.worktreePath, prDescriptionPath, prTitle);
 
+
   logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,

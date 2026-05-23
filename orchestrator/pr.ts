@@ -241,6 +241,11 @@ export function openPullRequest(
       /* keep the plain description — composition errors must not block PR open */
     }
 
+    // Strip any gitignored .forge/ scratch the agent may have force-added
+    // BEFORE the push so it can never reach origin (prevents the fixed-path
+    // .forge/pr-description.md add/add conflict across parallel initiatives).
+    stripForgeScratchFromBranch(worktreePath);
+
     // Push to origin (set-upstream so gh pr create knows the head ref).
     // Failures here propagate to the catch — a non-pushable branch is a
     // genuine merge blocker, not a soft warning.
@@ -265,6 +270,63 @@ export function openPullRequest(
     else if (e.message) process.stderr.write(`[openPullRequest] ${e.message}\n`);
     return null;
   }
+}
+
+export type PrRef = { owner: string; repo: string; number: number; url: string };
+
+/**
+ * Resolve the OPEN PullRequest for the worktree's current branch, plus the
+ * owner/repo needed to drive `gh api .../comments`. Returns null when there
+ * is no open PR, no remote, or `gh` is unavailable — callers fall back to
+ * the file-verdict transport so a cycle never strands (P3).
+ */
+export function prRef(worktreePath: string): PrRef | null {
+  const branch = currentBranch(worktreePath);
+  if (!branch) return null;
+  try {
+    const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    const ownerRepo = parseOwnerRepo(originUrl);
+    if (!ownerRepo) return null;
+    const [owner, repo] = ownerRepo.split('/');
+    const out = execFileSync(
+      'gh',
+      ['pr', 'view', branch, '--json', 'number,url,state', '-q', '{n:.number,u:.url,s:.state}'],
+      { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
+    ).trim();
+    const parsed = JSON.parse(out) as { n: number; u: string; s: string };
+    if (!parsed || parsed.s !== 'OPEN' || typeof parsed.n !== 'number') return null;
+    return { owner, repo, number: parsed.n, url: parsed.u };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Idempotent PR ensure (P3 — the PR is the durable review window, created
+ * at the END of review iteration 1, NOT gated behind an approve verdict).
+ *
+ *  - No open PR yet  → `openPullRequest` (push + embed demo + `gh pr create`).
+ *  - Open PR exists  → push the latest commits so send-back-round fixes land
+ *                      on the SAME PR, and return its URL.
+ *
+ * Returns null only when there is no remote / `gh` is unavailable — the
+ * caller then falls back to the file-verdict transport (never strands).
+ */
+export function ensurePullRequest(
+  worktreePath: string,
+  prDescriptionPath: string,
+  title: string,
+): string | null {
+  const existing = prRef(worktreePath);
+  if (existing) {
+    // Subsequent (send-back) round: publish new commits to the same PR.
+    pushInitiativeBranch(worktreePath);
+    return existing.url;
+  }
+  return openPullRequest(worktreePath, prDescriptionPath, title);
 }
 
 /**
@@ -341,10 +403,51 @@ export type PushResult =
  * it — the hard invariant is enforced separately by
  * `assertLocalRemoteSynced` at dev-loop close, which DOES throw.
  */
+/**
+ * Defense-in-depth: `.forge/` is gitignored scratch (PR draft, demo source,
+ * work-item specs, AGENT/PROMPT/fix_plan). It must NEVER reach an initiative
+ * branch — `.forge/pr-description.md` is a FIXED path, so two parallel
+ * initiatives that each commit it produce an unresolvable add/add conflict
+ * on the second PR once the first merges (the v1 branch-divergence failure).
+ * Reviewer/dev agents sometimes `git add -f` it despite the ignore; this
+ * strips any tracked `.forge/` from the index and commits the removal so
+ * scratch can never be pushed. Best-effort — never blocks a push.
+ */
+export function stripForgeScratchFromBranch(worktreePath: string): void {
+  try {
+    const tracked = execFileSync('git', ['ls-files', '.forge'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    if (!tracked) return;
+    execFileSync('git', ['rm', '-r', '--cached', '--quiet', '--ignore-unmatch', '.forge'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=forge@local',
+        '-c',
+        'user.name=forge',
+        'commit',
+        '-m',
+        'chore: drop gitignored .forge/ scratch from branch (prevents cross-initiative add/add conflicts)',
+      ],
+      { cwd: worktreePath, stdio: 'pipe' },
+    );
+  } catch {
+    /* best-effort — scratch cleanup must never block a push */
+  }
+}
+
 export function pushInitiativeBranch(worktreePath: string): PushResult {
   const branch = currentBranch(worktreePath);
   if (!branch) return { pushed: false, reason: 'detached HEAD or not a git repo' };
   try {
+    stripForgeScratchFromBranch(worktreePath);
     execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
       cwd: worktreePath,
       stdio: 'pipe',

@@ -52,16 +52,30 @@ export type RunProjectManagerOptions = {
  * turns to keep iteration cheap.
  */
 const PM_LIVE_MAX_TURNS = 50;
-// F-42: PM budget bumped from $1.00 → $2.50. The 22:17 simplification-source
-// cycle hit $1.01 and emitted 0 WIs (pm-budget-exhausted). At trafficGame's
-// scale (251 files; source-extraction WIs need to read ~2,600 LOC across 5
-// large modules before emitting reasonable files_in_scope), $1.00 wasn't
-// enough headroom. $2.50 is generous for the biggest projects without being
-// open-ended; PM rarely uses more than $1.50 even at scale (Phase 1 averaged
-// $0.70-1.00). Also raised because PM now runs with cwd=worktree (F-37),
-// which means it correctly globs real project trees — more useful tool calls
-// means slightly higher cost per cycle, in exchange for not fabricating.
-const PM_LIVE_MAX_BUDGET_USD = 2.5;
+// F-42: PM budget floor bumped from $1.00 → $2.50. The 22:17
+// simplification-source cycle hit $1.01 and emitted 0 WIs
+// (pm-budget-exhausted). At trafficGame's scale (251 files) $1.00 wasn't
+// enough headroom; $2.50 is generous there (PM peaks ~$1.50).
+//
+// F-43: $2.50 was a FLAT constant, so the classifier's pm-budget-exhausted
+// recommendation ("increase cost_budget_usd in the manifest") was inert —
+// the cap ignored the manifest entirely. terraform-provider-betterado (286
+// *_test.go + a huge vendored tree) proved larger than any project tuned
+// for: its PM blew $2.50 on the brain-first mandate + worktree exploration
+// before emitting any WIs, failing INIT 01/03 and stalling 18 dependents.
+// Fix: derive the cap from the initiative's own declared budget so big
+// initiatives (which already declare big budgets) get proportional PM
+// planning headroom, while $2.50 stays the floor (small projects + the PM
+// bench, which pins its own 2.5, are unchanged — no regression). This also
+// makes the classifier's existing recommendation actually true.
+const PM_LIVE_MAX_BUDGET_USD_FLOOR = 2.5;
+const PM_BUDGET_FRACTION_OF_INITIATIVE = 0.2;
+function pmMaxBudgetUsd(initiativeCostBudgetUsd: number): number {
+  return Math.max(
+    PM_LIVE_MAX_BUDGET_USD_FLOOR,
+    initiativeCostBudgetUsd * PM_BUDGET_FRACTION_OF_INITIATIVE,
+  );
+}
 
 export async function runProjectManager(
   input: CycleInput,
@@ -242,7 +256,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     allowedTools: PM_ALLOWED_TOOLS,
     disallowedTools: PM_DISALLOWED_TOOLS,
     maxTurns: PM_LIVE_MAX_TURNS,
-    maxBudgetUsd: PM_LIVE_MAX_BUDGET_USD,
+    maxBudgetUsd: pmMaxBudgetUsd(manifest.cost_budget_usd),
   };
 
   const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0, bashCalls: 0 };

@@ -1,80 +1,110 @@
 ---
-title: trafficGame — UI overlays paint translucent black via fillRect without clearRect first
-description: GameMenu.draw() (and likely other CanvasScreen-derived overlays) paint rgba(0,0,0,0.7) full-canvas without clearing first. Each redraw stacks another translucent layer on whatever is underneath — this is the most likely cause of the "menu hover incrementally darkens the screen" bug.
-category: bug-candidate
-keywords: [trafficgame, ui, canvas, overlay, fillrect, clearrect, hover, darken, gamemenu, levelcompleteoverlay, alpha-stacking]
+title: trafficGame — overlays on the shared paused canvas need a frame snapshot, not just clearRect
+description: GameMenu and every CanvasScreen subclass share a single canvas with the game. Opening the menu calls game.stop() (rAF cancelled), so nothing repaints the game behind the overlay. A bare `fillRect` per re-render stacks dims (cumulative darken); a bare `clearRect` erases the paused game frame (overlay on blank). The landed fix (PR #56) snapshots the canvas in CanvasScreen.start() and restores it on every redraw so the dim is painted exactly ONCE over a STABLE game frame.
+category: pattern
+keywords: [trafficgame, ui, canvas, overlay, fillrect, clearrect, hover, darken, gamemenu, levelcompleteoverlay, alpha-stacking, snapshot, getImageData, putImageData, paused-canvas, redraw]
 created_at: 2026-05-10T15:30:00Z
-updated_at: 2026-05-10T15:30:00Z
+updated_at: 2026-05-20T00:00:00Z
 related_themes: []
 ---
 
-# trafficGame — UI overlay pattern and the cumulative-darken bug
+# trafficGame — overlays on the shared paused canvas
 
-## The pattern
+## The architecture (load-bearing)
 
-`src/ui/` has 9+ canvas-overlay screens, all extending a `CanvasScreen` base:
+There is **one** `<canvas id="canvas">` (`index.html`). Game renders to it
+via `canvas.getContext('2d')`. Every `src/ui/` overlay (GameMenu,
+CampaignHub, LevelCompleteOverlay, TitleScreen, SandboxSettingsPanel,
+plus non-CanvasScreen helpers ConnectionFeedback, SimulationWarning,
+LevelMetadataHeader, RunSimulationButton) draws on the **same canvas**.
+Opening an overlay calls `currentGame.stop()` which cancels the rAF →
+**nothing repaints the game** while the overlay is up. Whatever was
+last rendered stays on the canvas.
 
-`CanvasScreen.ts`, `CampaignHub.ts`, `ConnectionFeedback.ts`, `GameMenu.ts`, `LevelCompleteOverlay.ts`, `LevelMetadataHeader.ts`, `RunSimulationButton.ts`, `SandboxSettingsPanel.ts`, `SimulationWarning.ts`, `TitleScreen.ts`.
+This shared-paused-canvas property is the constraint every overlay fix
+must respect, and it rules out the two naive approaches:
 
-Each overlay implements `draw()` and re-draws on hover (`onMouseMove`) when the hit-tested action changes.
+- **Naive 1 — `fillRect` without `clearRect` (the original bug).** Each
+  re-render on hover stacks another translucent black layer on the
+  canvas: 70% → 91% → 97% → visually black ("the cumulative-darken
+  bug").
+- **Naive 2 — route re-renders through `clearRect` then `draw()`.** Fixes
+  the stacking, but `clearRect` erases the paused game frame and
+  nothing repaints it → menu sits on blank/black. Different bug, looks
+  equally broken.
 
-## The bug pattern (cumulative darkening)
+## The landed fix (PR #56, commit `01630c7`)
 
-[`src/ui/GameMenu.ts`](../../../../projects/trafficGame/src/ui/GameMenu.ts):144–198.
+`CanvasScreen` owns a frame backdrop:
 
 ```typescript
-protected override onMouseMove(e: MouseEvent): void {
-  const { mx, my } = this.getMousePos(e);
-  const action = this.hitTest(mx, my);
-  if (action !== this.hoveredAction) {
-    this.hoveredAction = action;
-    this.setCursor(action ? 'pointer' : 'default');
-    this.draw();          // ← redraws the menu on every hover-change
-  }
+private backdrop: ImageData | null = null;
+
+start(): void {
+  this.canvas.addEventListener('click', this.clickHandler);
+  this.canvas.addEventListener('mousemove', this.moveHandler);
+  this.canvas.style.cursor = 'default';
+  // Capture the frame underneath BEFORE the first dim is applied.
+  try {
+    this.backdrop = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+  } catch { this.backdrop = null; }
+  this.draw();
 }
 
-protected override draw(): void {
-  const { ctx, canvas } = this;
-  const panel = this.getPanelRect();
-
-  // Dim overlay
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);   // ← no clearRect first
-
-  // Panel background, title, buttons, shortcuts...
+protected redraw(): void {
+  this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  if (this.backdrop) {
+    try { this.ctx.putImageData(this.backdrop, 0, 0); } catch { /* dims changed */ }
+  }
+  this.draw();
 }
 ```
 
-`draw()` paints **`rgba(0, 0, 0, 0.7)` over the entire canvas** without first calling `clearRect()`. If the canvas underneath isn't redrawn between hover events (i.e., the game frame loop is paused while the menu is open), every hover event stacks another 70%-alpha black layer:
+Every CanvasScreen subclass routes interaction re-renders through
+`this.redraw()` (`GameMenu.onMouseMove:150`, `CampaignHub:157`,
+`LevelCompleteOverlay:127`, `TitleScreen:37`, `SandboxSettingsPanel`).
+SandboxSettingsPanel was refactored to extend CanvasScreen in this PR
+so the fix applies uniformly.
 
-- After 1 hover: 70% opacity (correct).
-- After 2 hovers: ~91% opacity.
-- After 3 hovers: ~97% opacity.
-- After 5 hovers: ~99.8% opacity — visually black.
+## Why a bare `clearRect+draw` is insufficient (recorded so the next attempt doesn't regress)
 
-This matches the user's bug report: *"if any button in a menu is hovered over it darkens the rest of the screen incrementally"*.
+- Single canvas + paused game loop ⇒ `clearRect` erases the last game
+  frame for good. The snapshot is what makes the dim stable AND keeps
+  the dimmed game visible.
+- Degrades gracefully: if `getImageData` throws (tainted canvas),
+  `backdrop` stays null and `redraw` falls back to plain `clearRect+draw`
+  — still no stacking, just no preserved frame.
 
-`LevelCompleteOverlay.ts`:140 has the same `rgba(0, 0, 0, 0.75)` + `fillRect` pattern (and uses `globalAlpha` at line 170 — a second class of stacking). `globalAlpha` is restored to `1` immediately after, but the underlying `fillStyle` overlay shares the same root cause if it's re-applied without a clear.
+## Verification
 
-## The fix surface (informational, not prescriptive)
+- Unit (jsdom): `tests/ui/CanvasScreen.test.ts` covers the snapshot contract —
+  start() captures via getImageData once; redraw() restores the same
+  ImageData N times (no stacking); graceful fallback when getImageData
+  throws.
+- Empirical (real browser, Playwright + measured pixels): on the
+  Crossroads map, opening the menu drops canvas luminance 43.9 → 17.4
+  (the single dim applied); 12 hover cycles hold luminance at 17.43
+  **exactly** (net 0 darkening). Screenshot shows the panel with the
+  game map visibly dimmed behind it.
 
-- The canonical fix is to **call `ctx.clearRect(0, 0, canvas.width, canvas.height)` before** painting the dim overlay, OR have the parent `CanvasScreen` base class own the clear-then-delegate-draw pattern so every screen gets it for free.
-- Alternative: use a separate canvas layer for overlays, where the dim layer is owned by the layer compositor (cheap to repaint).
-- Beware the bug is unlikely to be **only** in `GameMenu` — every CanvasScreen subclass that uses `rgba(...)` + `fillRect` without a preceding clear is suspect. A single-WI fix that touches just GameMenu would leave LevelCompleteOverlay and any sibling screens still vulnerable.
+## Reusable lesson (forge-level)
 
-## What to verify in the architect's spec
-
-- Acceptance criteria should reference the **base CanvasScreen contract**, not just GameMenu — otherwise the bug returns the next time someone adds an overlay.
-- Visual regression coverage (Playwright `test:visual`) should cover the menu in three states: just-opened, after 1 hover, after 5+ hovers.
-- The fix must not regress the intentional dim effect — the menu *should* dim the game behind it, just stably.
+The whole detour — three iterations of "stops stacking but introduces a
+worse regression" — came from code-only analysis without empirical
+verification. The unit tests (jsdom) passed for the broken-but-doesn't-
+stack version because jsdom's `getImageData` throws → graceful-degrade
+hides the regression. Real-browser luminance measurement is the only
+honest test for "does this overlay still show the dimmed game?".
 
 ## Sources
 
-- [`src/ui/GameMenu.ts`](../../../../projects/trafficGame/src/ui/GameMenu.ts):144–198 — hover handler + draw with no preceding clear.
-- [`src/ui/LevelCompleteOverlay.ts`](../../../../projects/trafficGame/src/ui/LevelCompleteOverlay.ts):140, 170 — same pattern, plus `globalAlpha` use.
-- `ls src/ui/` — full list of CanvasScreen subclasses likely to share the pattern.
+- [`src/ui/CanvasScreen.ts`](../../../../projects/trafficGame/src/ui/CanvasScreen.ts) — backdrop snapshot/restore (lines 29–47, 100–145).
+- [`src/ui/GameMenu.ts`](../../../../projects/trafficGame/src/ui/GameMenu.ts) — `onMouseMove:150 → this.redraw()`.
+- [`src/Game.ts`](../../../../projects/trafficGame/src/Game.ts) — `Game.stop()` cancels rAF; does NOT clear canvas.
+- [`src/main.ts`](../../../../projects/trafficGame/src/main.ts) — `showGameMenu()` stop→new GameMenu(same canvas)→start.
+- PR #56 (merged 2026-05-19, main `59d1713`), commit `01630c7`.
 
 ## Related
 
-- [`canvas-bpr-flow-tests`](canvas-bpr-flow-tests.md) — Playwright `test:visual` is the gate for canvas regressions.
+- [`canvas-bpr-flow-tests`](canvas-bpr-flow-tests.md) — Playwright `test:visual` is the gate for canvas regressions; this fix also added a real-browser luminance repro pattern.
 - [`mvp-architecture-snapshot`](2026-05-10-mvp-architecture-snapshot.md) — `src/ui/` location.
