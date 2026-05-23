@@ -17,7 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { formatLine, createPrettyTransform, MESSAGE_FORMAT, CUSTOM_LEVELS, PHASE_COLOURS } from './logging-pretty.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '../orchestrator/logging.ts';
 
 function entry(overrides: Partial<EventLogEntry>): EventLogEntry {
   return {

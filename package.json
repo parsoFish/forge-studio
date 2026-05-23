@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "test": "node --test --experimental-strip-types orchestrator/*.test.ts orchestrator/phases/*.test.ts loops/ralph/*.test.ts skills/*/*.test.ts benchmarks/_lib/*.test.ts benchmarks/*/*.test.ts scripts/*.test.ts",
+    "test": "node --test --experimental-strip-types orchestrator/*.test.ts orchestrator/phases/*.test.ts cli/*.test.ts loops/ralph/*.test.ts skills/*/*.test.ts benchmarks/_lib/*.test.ts benchmarks/*/*.test.ts scripts/*.test.ts",
     "bench:brain": "node --experimental-strip-types benchmarks/brain/score.ts",
     "bench:brain:negatives": "node --experimental-strip-types benchmarks/brain/score-negatives.ts",
     "bench:brain:judge": "node --experimental-strip-types benchmarks/brain/score-judged.ts",
@@ -25,8 +25,8 @@
     "bench:chained": "node --experimental-strip-types benchmarks/chained/score.ts",
     "lint": "echo 'TODO: pick a linter; v2 stays minimal until a need appears'",
     "forge": "node --experimental-strip-types orchestrator/cli.ts",
-    "forge:brain:lint": "node --experimental-strip-types orchestrator/brain-lint.ts",
-    "forge:brain:index": "node --experimental-strip-types orchestrator/brain-index.ts",
+    "forge:brain:lint": "node --experimental-strip-types cli/brain-lint.ts",
+    "forge:brain:index": "node --experimental-strip-types cli/brain-index.ts",
     "brain:scrub": "node --experimental-strip-types scripts/brain-scrub-test-contamination.ts"
   },
   "dependencies": {

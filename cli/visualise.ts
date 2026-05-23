@@ -6,8 +6,8 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { counts, listInFlight, getPaths } from './queue.ts';
-import { loadAliases } from './initiative-id.ts';
+import { counts, listInFlight, getPaths } from '../orchestrator/queue.ts';
+import { loadAliases } from '../orchestrator/initiative-id.ts';
 
 export type StatusSnapshot = {
   queueCounts: Record<string, number>;

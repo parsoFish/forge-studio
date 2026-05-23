@@ -6,7 +6,7 @@
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { EventLogEntry, Phase } from './logging.ts';
+import type { EventLogEntry, Phase } from '../orchestrator/logging.ts';
 
 export type CycleMetrics = {
   cycle_id: string;

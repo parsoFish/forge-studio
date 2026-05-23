@@ -49,7 +49,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
-import { loadBrainIndex } from '../../orchestrator/brain-index.ts';
+import { loadBrainIndex } from '../../cli/brain-index.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'architect', 'SKILL.md');

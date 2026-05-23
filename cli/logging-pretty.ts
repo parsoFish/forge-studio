@@ -28,7 +28,7 @@
 
 import { Transform } from 'node:stream';
 import { prettyFactory } from 'pino-pretty';
-import type { EventLogEntry, Phase } from './logging.ts';
+import type { EventLogEntry, Phase } from '../orchestrator/logging.ts';
 
 // ---------------------------------------------------------------------------
 // Spec — exported so tests and operator tooling can read them.
@@ -343,5 +343,5 @@ function truncate(s: string, max: number): string {
 }
 
 // Local re-export so consumers don't need a second import for typing.
-export type { EventLogEntry, Phase, EventType } from './logging.ts';
+export type { EventLogEntry, Phase, EventType } from '../orchestrator/logging.ts';
 export { MAX_TAIL_LEN as PRETTY_MAX_TAIL_LEN };

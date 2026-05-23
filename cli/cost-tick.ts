@@ -22,7 +22,7 @@
  * still has at most one external sink from its own perspective.
  */
 
-import type { EventLogEntry, EventLogger } from './logging.ts';
+import type { EventLogEntry, EventLogger } from '../orchestrator/logging.ts';
 
 export type CostTickOptions = {
   /**

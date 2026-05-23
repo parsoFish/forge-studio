@@ -24,7 +24,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '../orchestrator/logging.ts';
 
 export type RetentionTag = 'load-bearing' | 'interesting' | 'routine';
 

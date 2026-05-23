@@ -41,7 +41,7 @@ import { join, resolve } from 'node:path';
 import { runReflector } from './reflector.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { CycleInput } from '../cycle-context.ts';
-import type { RunBrainLintResult, Finding } from '../brain-lint.ts';
+import type { RunBrainLintResult, Finding } from '../../cli/brain-lint.ts';
 
 // The forge root the reflector code resolves to (orchestrator/phases/ ⇒ ..)
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');

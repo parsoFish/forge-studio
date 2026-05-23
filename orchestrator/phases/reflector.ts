@@ -38,15 +38,15 @@ import {
   type ReflectionStatus,
   type ReflectorPhaseResult,
 } from '../cycle-context.ts';
-import { runBrainLint, type RunBrainLintResult } from '../brain-lint.ts';
+import { runBrainLint, type RunBrainLintResult } from '../../cli/brain-lint.ts';
 import {
   assignRetention,
   collectCitedBy,
   patchArchiveFrontmatter,
   type ThemeMeta,
   type RetentionTag,
-} from '../cycle-retention.ts';
-import { writeCycleRecap } from '../cycle-recap.ts';
+} from '../../cli/cycle-retention.ts';
+import { writeCycleRecap } from '../../cli/cycle-recap.ts';
 
 /**
  * Defaults for the live reflector invocation. The reflector is a one-shot SDK

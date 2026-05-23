@@ -32,7 +32,7 @@ import {
   writePlanDoc,
   type ArchitectSession,
   type ProposedInitiative,
-} from './architect-plan.ts';
+} from '../cli/architect-plan.ts';
 import { serializeManifest, type InitiativeManifest } from './manifest.ts';
 
 // ---------------------------------------------------------------------------

@@ -23,12 +23,12 @@ import { execSync, spawn } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import { runCycle } from './cycle.ts';
 import { serve, status as schedulerStatus } from './scheduler.ts';
-import { snapshot, render } from './visualise.ts';
-import { summariseCycle, summariseAll } from './metrics.ts';
+import { snapshot, render } from '../cli/visualise.ts';
+import { summariseCycle, summariseAll } from '../cli/metrics.ts';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
-import { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
-import { runBrainLint, type Scope as BrainLintScope } from './brain-lint.ts';
+import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
+import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
 import {
   runPromote,
   makeInteractivePrompter,
@@ -36,8 +36,8 @@ import {
   makeLatestResultAccuracy,
   type PromoteDecision,
   type PromptOperator,
-} from './brain-bench-promote.ts';
-import { runPreflight, formatPreflightReport } from './preflight.ts';
+} from '../cli/brain-bench-promote.ts';
+import { runPreflight, formatPreflightReport } from '../cli/preflight.ts';
 import { fileVerdictPaths } from './file-verdict.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -779,7 +779,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
   const build = rest.includes('--build');
 
   console.log(`forge demo: ${project}  ${baseRef} → ${changedRef}  (out: ${resolve(out)})`);
-  const { generateComparisonDemo } = await import('./demo.ts');
+  const { generateComparisonDemo } = await import('../cli/demo.ts');
   try {
     const res = await generateComparisonDemo({
       projectRepoPath,

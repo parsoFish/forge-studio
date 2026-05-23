@@ -11,7 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, readFileSync as _readFileSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createLogger, type EventLogEntry } from './logging.ts';
+import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
 import { createCostTickConsumer } from './cost-tick.ts';
 
 function readEntries(path: string): EventLogEntry[] {

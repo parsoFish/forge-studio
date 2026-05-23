@@ -20,6 +20,7 @@
   },
   "include": [
     "orchestrator/**/*.ts",
+    "cli/**/*.ts",
     "loops/**/*.ts",
     "benchmarks/**/*.ts",
     "skills/**/*.ts"

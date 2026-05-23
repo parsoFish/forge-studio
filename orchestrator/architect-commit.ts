@@ -40,7 +40,7 @@ import {
   archiveSessionDir,
   type Verdict,
   type Annotation,
-} from './architect-plan.ts';
+} from '../cli/architect-plan.ts';
 import {
   parseManifest,
   validateManifest,

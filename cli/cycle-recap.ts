@@ -31,9 +31,9 @@ import {
 } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 
-import { parseManifest, type InitiativeManifest } from './manifest.ts';
-import type { EventLogEntry } from './logging.ts';
-import type { LintStatus } from './cycle-context.ts';
+import { parseManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
+import type { EventLogEntry } from '../orchestrator/logging.ts';
+import type { LintStatus } from '../orchestrator/cycle-context.ts';
 
 export type WriteRecapInput = {
   forgeRoot: string;

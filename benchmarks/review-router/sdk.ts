@@ -22,7 +22,7 @@ import {
   type PrComment,
   type PrReviewEvent,
   type BranchHead,
-} from '../../orchestrator/review-router.ts';
+} from '../../cli/review-router.ts';
 import { fileVerdictPaths } from '../../orchestrator/file-verdict.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
