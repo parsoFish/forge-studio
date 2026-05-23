@@ -1,4 +1,4 @@
-# Graphify exclusion list — per C21a (2026-05-23).
+# Graphify exclusion list — per C21a (2026-05-23 brain-refinement Stage 7).
 #
 # graphify reads ONLY this file at the scan root (not nested .graphifyignore
 # files); when this file exists, .gitignore at the same level is NOT read
@@ -37,14 +37,22 @@ brain/.obsidian/
 npm-debug.log*
 
 # ---- graphify-specific additions ----
+
 # Frozen historical state — deliberately retained as evidence, not part of
 # forge's live architecture.
 brain/_archive/
 
-# Bench fixtures are test inputs, not forge architecture. The fixture
-# source trees would dominate the graph with low-signal nodes. Bench
-# harness code (cases.json, score.ts, scoring.ts, sdk.ts at each bench
-# root) IS in scope — only the fixtures/ subtree is excluded.
+# Raw sources — Karpathy Layer 1 (immutable provenance). Themes summarise
+# these and link to them via `## Sources` markdown; the curated theme is the
+# knowledge unit, raw is the provenance trail. Including raw in the graph
+# would create leaf-cross-link noise (each cycle archive cross-referencing
+# every other) when the operator's intent is a tree: themes → raw is
+# top-down provenance, raw ↔ raw is not a meaningful relationship.
+brain/_raw/
+
+# Bench fixtures are test inputs, not forge architecture. Bench harness
+# code (cases.json, score.ts, scoring.ts, sdk.ts at each bench root) IS
+# in scope — only the fixtures/ subtree is excluded.
 benchmarks/*/fixtures/
 
 # Graphify's own output. The committed graph.json must not be re-walked
@@ -52,7 +60,27 @@ benchmarks/*/fixtures/
 # symlink and the canonical path are both excluded.
 graphify-out/
 brain/graphify-out/
-# (S*-DECISIONS.md / S*-PROPOSALS.md operator-pending scratch at forge
-# root are deliberately INCLUDED — they're tracked content that documents
-# the 2026-05-20 batch decisions and contributes real edges to the graph.
-# They'll be cleaned up via normal git lifecycle when the operator decides.)
+
+# Planning docs are EPHEMERAL — live during execution, then the durable
+# outcomes are extracted as brain themes and the plan docs themselves are
+# pruned. The "history of decision making is what informs future direction,
+# not the specifics of plans themselves" (operator principle, 2026-05-23).
+#
+# Exclude PER-STAGE PLANS + COUNCIL DELIBERATIONS + EXEC SCAFFOLDING.
+# KEEP the durable per-batch outcomes (CONTRACTS.md, *-CLOSURE.md,
+# LEARNINGS-*.md) — these are NOT matched by any pattern below so they
+# stay in the graph by default. (Note: gitignore semantics don't allow
+# re-including via `!` once a parent dir is excluded, so we exclude by
+# file pattern instead of by directory.)
+docs/planning/*/[0-9]*.md
+docs/planning/*/*.council.md
+docs/planning/*/EXECUTION-PLAN.md
+docs/planning/*/INDEX.md
+docs/planning/*/S*-SUMMARY.md
+
+# Forge-root operator-pending stage decision scratch from the 2026-05-20
+# batch — transitional artifacts pending operator cleanup. Excluded per the
+# same ephemeral-planning principle.
+/S*-DECISIONS.md
+/S*-PROPOSALS.md
+/S*-SUMMARY.md

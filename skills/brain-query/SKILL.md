@@ -64,7 +64,7 @@ The question is fielded in two passes; the second is conditional on the first be
 
 1. **Parse the question.** Identify keywords + likely category + whether the phrasing is structural ("which theme bridges …", "what's connected to …", "two hops from …", "what's the longest dependency chain in …"). Record this for the graph-vs-narrative routing.
 
-2. **Graph-first lookup** via the real `graphify` CLI against `brain/graphify-out/graph.json` (canonical path; `./graphify-out` at forge root is a symlink to it per C21a). Always run from forge root — per C21a the graph spans the whole forge architecture (orchestrator/skills/loops/docs + brain), not just brain/:
+2. **Graph-first lookup** via the real `graphify` CLI against `brain/graphify-out/graph.json` (canonical path; `./graphify-out` at forge root is a symlink to it per C21a). Always run from forge root — per C21a the graph spans the forge architecture (orchestrator/skills/loops + curated docs + brain themes; raw provenance is deliberately excluded per the 2026-05-23 Stage 7 prune). For **project-code** structural questions consult the project graph instead (`cd projects/<name> && graphify ...`, when `projects/<name>/graphify-out/graph.json` exists per [[per-project-knowledge-graph]]):
    - For structural phrasings, pick the operation:
      - "what bridges A and B" / shortest connection → `cd /home/parso/forge && graphify path "<node-a>" "<node-b>"`
      - "what's near <node>" / "describe <node>" → `cd /home/parso/forge && graphify explain "<node>"`
@@ -112,6 +112,7 @@ If you don't know the exact slug, use the navigation indexes (`forge brain index
 - **Gaps are logged, not silently failed.** If the brain doesn't know, the brain learns by the next ingest pass.
 - **No web fallback in this skill.** Broader research is the *calling* skill's responsibility (after this skill's gap event is logged); separation of concerns.
 - **The graph is structural; the themes are content.** Don't try to answer narrative questions from the graph alone; don't try to answer structural questions from grep alone. Use each for what it's for.
+- **Trust graphify's own confidence tiers.** Edges are tagged `EXTRACTED` (direct from source, canonical), `INFERRED` (secondary), `AMBIGUOUS` (lowest). Consume them as-is; do NOT build a parallel filter layer (operator principle 2026-05-23 — graphify owns the confidence model). Cite higher-confidence edges first when synthesising.
 
 ## Sources
 

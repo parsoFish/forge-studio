@@ -56,6 +56,7 @@
 - [`eval-driven-development`](./themes/eval-driven-development.md) — Every change shows a benchmark delta; reflection-discovered failures become new cases.
 - [`tdd-with-agents`](./themes/tdd-with-agents.md) — Tests first, verified in a worktree by the orchestrator (never by the agent).
 - [`parametric-design-search`](./themes/parametric-design-search.md) — Reusable parallel-sweep harness pattern: ~30 lines per new theory, ~10s wall-clock per sweep, score-delta vs locked baselines + screenshots. Generalises to any project with a parameter space + measurable outcome.
+- [`per-project-knowledge-graph`](./themes/per-project-knowledge-graph.md) — Each managed project gets its own graphify graph inside its own repo; dev-loop / unifier consult it for code questions without traversing forge's brain. Forge brain stays scoped to forge; project graphs stay scoped to project code.
 
 ### Process discipline
 
