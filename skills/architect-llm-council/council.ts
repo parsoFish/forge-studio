@@ -317,12 +317,21 @@ async function invokeCritic(
     criticName: string;
   },
 ): Promise<InvokeResult> {
+  // S8 / C23 — prompt caching. The shared `projectContext` block plus this
+  // critic's stable system prompt are identical across all 4 critics in a
+  // council run; the Claude Code CLI's server-side caching keys on prompt
+  // stability so the 2nd/3rd/4th critic in the chain reads from cache. The
+  // explicit cache_control: { type: 'ephemeral' } marker is not exposed on
+  // the SDK's public surface today (see S8-DECISIONS D1) — `cacheable: true`
+  // carries forge's intent forward + future-proofs the wiring. TTL: 5-min
+  // (default ephemeral) covers the council's <1-min total runtime.
   const options: Record<string, unknown> = {
     systemPrompt: params.systemPrompt,
     model: params.model,
     maxTurns: params.maxTurns,
     permissionMode: 'plan',
     allowedTools: [],
+    cacheable: true,
     _criticName: params.criticName,
   };
   if (params.outputFormat) options.outputFormat = params.outputFormat;
@@ -411,11 +420,24 @@ function renderCriticPrompt(
   ].filter((s) => s !== '').join('\n');
 }
 
+/**
+ * S8 / C24 — Council uses Haiku by default; Sonnet by exception.
+ *
+ * - `ceo`, `design`, `dx` → `'haiku'`. These critics do structured-JSON
+ *   classification of a draft against a stable rubric. Haiku is 90% of
+ *   Sonnet quality on classification at ~1/3 the per-token cost.
+ * - `eng` → `'sonnet'`. The engineering critic needs code-reading depth
+ *   (checks acceptance-criteria verifiability, atomicity of WIs, rollback
+ *   paths) — Sonnet's reasoning-on-code edge matters here.
+ *
+ * Combined with C23's prompt caching (shared projectContext block reused
+ * across all 4 critics), the council's natural cost floor drops ~50-60%.
+ */
 export function defaultCritics(): Critic[] {
   return [
     {
       name: 'ceo',
-      model: 'sonnet',
+      model: 'haiku',
       prompt: [
         'You are the CEO critic. Evaluate strategic alignment.',
         '- Does this initiative align with the project\'s stated direction?',
@@ -437,7 +459,7 @@ export function defaultCritics(): Critic[] {
     },
     {
       name: 'design',
-      model: 'sonnet',
+      model: 'haiku',
       prompt: [
         'You are the design critic. Evaluate user experience.',
         '- For user-facing initiatives: is the experience considered (states, edge cases, accessibility)?',
@@ -447,7 +469,7 @@ export function defaultCritics(): Critic[] {
     },
     {
       name: 'dx',
-      model: 'sonnet',
+      model: 'haiku',
       prompt: [
         'You are the developer-experience critic. Evaluate maintainability.',
         '- Does this make the project easier or harder to work on next month?',
