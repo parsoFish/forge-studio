@@ -221,6 +221,12 @@ own surface, without spreading complexity to a central coordinator.
   orchestrator level — capture the cycle archive (already done) +
   file upstream once the crash is reproducible.
 
+  **Update 2026-05-24 (post-Move-2):** operator deferred this move
+  permanently — not worth pursuing inside forge. The cycle archive at
+  `_logs/2026-05-23T12-55-57_INIT-…/events.jsonl` is preserved as the
+  forensic record; if the crash recurs we'll file upstream against
+  Claude Code, not chase it from forge. Move 3 = closed without action.
+
 ## 8. Forge phase architecture (preserved — for grounding)
 
 ```
