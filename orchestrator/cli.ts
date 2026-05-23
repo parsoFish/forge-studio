@@ -168,7 +168,9 @@ Usage:
                                           Caps: ≤1 per cycle, ≤4 per calendar month. Accuracy floor 94.4%; promotion reverted on regression.
   forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
                                           Bring up the forge operator UI (foreground; Ctrl-C quits).
-                                          Starts the WebSocket bridge + Next.js dev server, opens the browser.
+                                          Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
+                                          any previous forge process so a pinned browser tab auto-reconnects).
+                                          Open http://localhost:4124 in your browser.
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
@@ -1091,11 +1093,13 @@ async function cmdWatch(rest: string[]): Promise<void> {
     else if (a === '--ui-port') opts.uiPort = Number(rest[++i]);
     else if (a === '--help' || a === '-h') {
       console.log(`forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
-  Bring up the forge operator UI.
+  Bring up the forge operator UI at http://localhost:4124.
+  Re-runs take over any prior forge process on the fixed ports so a
+  pinned browser tab auto-reconnects via WebSocket backoff.
     --bridge-only  Run only the WebSocket bridge (no Next.js dev server).
     --no-open      Skip launching the browser.
-    --bridge-port  HTTP/WS port for the bridge (default: OS-assigned).
-    --ui-port      Port for the Next.js dev server (default: 3000).`);
+    --bridge-port  HTTP/WS port for the bridge (default: 4123).
+    --ui-port      Port for the Next.js dev server (default: 4124).`);
       return;
     } else {
       console.error(`forge watch: unknown option ${a}`);

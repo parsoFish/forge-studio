@@ -49,14 +49,28 @@ export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridg
 // share a single network request.
 let cachedBridgeUrl: Promise<string> | null = null;
 
+/**
+ * Build the bridge base URL from `window.location` + the port the
+ * server-side API route resolved. Same-hostname-as-the-browser is
+ * essential for WSL2 + Windows browser: the Windows browser sees
+ * `localhost` (forwarded into WSL by WSL2), while a Linux/WSL browser
+ * sees the actual WSL hostname. Either way, the bridge port piggybacks
+ * on the same hostname-forwarding the UI port already uses.
+ */
 export function resolveBridgeUrl(): Promise<string> {
   if (cachedBridgeUrl) return cachedBridgeUrl;
   cachedBridgeUrl = (async () => {
     try {
       const res = await fetch('/api/forge-config', { cache: 'no-store' });
       if (!res.ok) throw new Error(`forge-config → ${res.status}`);
-      const body = (await res.json()) as { bridgeUrl: string };
-      return body.bridgeUrl || '';
+      const body = (await res.json()) as { bridgePort: number | null };
+      if (!body.bridgePort) return '';
+      // Same hostname as the page so WSL2 (or any other localhost-
+      // forwarding scheme) routes the request the same way it routed
+      // the UI's HTTP fetch.
+      const loc = typeof window !== 'undefined' ? window.location : null;
+      if (!loc) return ''; // SSR — client-only code path
+      return `${loc.protocol}//${loc.hostname}:${body.bridgePort}`;
     } catch {
       return '';
     }

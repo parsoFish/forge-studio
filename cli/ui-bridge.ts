@@ -76,7 +76,7 @@ type TailState = {
   timer?: NodeJS.Timeout;
 };
 
-export function startBridge(opts: BridgeOptions): { url: string; close: () => Promise<void> } {
+export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
   const port = opts.port ?? 0; // 0 = OS-assigned
   // getPaths takes the QUEUE ROOT, not the forge root — _queue/ is a
@@ -253,7 +253,16 @@ export function startBridge(opts: BridgeOptions): { url: string; close: () => Pr
     } catch { /* socket closed mid-send */ }
   });
 
-  http.listen(port);
+  // Bind to all interfaces (0.0.0.0) — required for WSL2 port-forwarding
+  // to pick the port up and expose it on Windows localhost. Wait for the
+  // 'listening' event before calling address() — listen() is async and
+  // server.address() returns null until the bind completes (which would
+  // leave us reporting `port: 0` to callers).
+  await new Promise<void>((resolveListen, rejectListen) => {
+    http.once('error', rejectListen);
+    http.once('listening', () => resolveListen());
+    http.listen(port, '0.0.0.0');
+  });
   startTailsForLive();
   watchQueue();
 

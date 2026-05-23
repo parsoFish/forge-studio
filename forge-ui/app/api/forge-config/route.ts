@@ -1,17 +1,25 @@
 /**
- * Runtime config endpoint — exposes the bridge URL the client should
- * talk to. Read from process.env at REQUEST time (not build time),
- * which is what we need because `forge watch` picks an OS-assigned
- * bridge port and `next.config.mjs`'s `env` block bakes values into
- * the bundle at startup — fragile across dev reloads.
+ * Runtime config endpoint — exposes the bridge PORT (not full URL) the
+ * client should talk to.
  *
- * The browser hits this endpoint on mount, gets the bridge URL, and
- * caches it for the WS + fetch calls.
+ * Why port-only: the client builds the bridge URL using
+ * `window.location.hostname` + port. This is critical for WSL2 + Windows
+ * browser: the browser sees `localhost`, and WSL2 auto-forwards
+ * `localhost:<port>` to the WSL-side process. Returning `127.0.0.1:<port>`
+ * would make the Windows browser hit its own loopback (where nothing is
+ * listening). The Next.js API route reads FORGE_BRIDGE_URL server-side
+ * and extracts the port.
  */
 
 export const dynamic = 'force-dynamic';
 
 export function GET() {
-  const bridgeUrl = process.env.FORGE_BRIDGE_URL ?? '';
-  return Response.json({ bridgeUrl });
+  const url = process.env.FORGE_BRIDGE_URL ?? '';
+  let bridgePort: number | null = null;
+  if (url) {
+    try {
+      bridgePort = Number(new URL(url).port) || null;
+    } catch { /* fall through */ }
+  }
+  return Response.json({ bridgePort });
 }

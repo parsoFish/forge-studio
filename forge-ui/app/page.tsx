@@ -75,6 +75,18 @@ export default function Page() {
     [allCycles, activeCycleId],
   );
 
+  // Surface the resolved bridge URL in the DOM so the operator can
+  // diagnose connectivity from view-source / dev-tools without needing
+  // to instrument the browser. Updated once on mount.
+  const [bridgeUrlDebug, setBridgeUrlDebug] = useState<string>('');
+  useEffect(() => {
+    let cancelled = false;
+    import('@/lib/bridge-client').then(({ resolveBridgeUrl }) => {
+      resolveBridgeUrl().then((url) => { if (!cancelled) setBridgeUrlDebug(url || '(none)'); });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <main
       style={{ padding: '16px 24px', minHeight: '100vh' }}
@@ -84,6 +96,7 @@ export default function Page() {
       // page state without scraping rendered text. Keep these in sync
       // when changing component state.
       data-conn-state={connState}
+      data-bridge-url={bridgeUrlDebug}
       data-live-count={snapshot.live.length}
       data-recent-count={snapshot.recent.length}
       data-active-cycle-id={activeCycleId ?? ''}
@@ -94,6 +107,15 @@ export default function Page() {
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>forge</h1>
         <ConnectionBadge state={connState} />
+        {connState !== 'open' && bridgeUrlDebug && (
+          <span
+            data-bridge-url-visible
+            style={{ fontSize: 11, color: '#8b949e', fontFamily: 'ui-monospace, Menlo, monospace' }}
+            title="The URL the browser is trying to reach for the bridge"
+          >
+            → {bridgeUrlDebug}
+          </span>
+        )}
       </header>
 
       <SchedulerBanner />
