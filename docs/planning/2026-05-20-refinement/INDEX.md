@@ -39,7 +39,12 @@ graphify (additive brain layer), and a token economy plan.
    knownFeatureIds wiring, hallucinated-FEAT retry, bench rubric, C11
    migration, architect→PM handoff) closure. Plumbing wired; chained-bench
    run operator-pending.
-7. Each plan + its council review below.
+7. **[S6-CWC-AMENDMENT.md](./S6-CWC-AMENDMENT.md)** — Reflector handoff
+   moves from file-based (`user-questions.md` → operator edits →
+   `user-feedback.md`) to `AskUserQuestion`-driven (cwc Phase 1 parity
+   with architect). Slash command rewritten; SKILL emits `user-questions.json`
+   alongside `.md`; tests + fallback for pre-amendment cycles.
+8. Each plan + its council review below.
 
 ## Plans
 

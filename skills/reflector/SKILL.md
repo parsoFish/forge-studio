@@ -72,6 +72,9 @@ signal (`brain_consulted`). Useful queries:
   `project`, `ingested_at`, `ingested_by: reflector`.
 - `_logs/<cycle-id>/user-questions.md` (stage 2; optional — skip if no
   question is warranted).
+- `_logs/<cycle-id>/user-questions.json` (stage 2; cwc Amendment —
+  AskUserQuestion-shaped sibling of `user-questions.md`. Same skip rule:
+  omit both when no question is warranted. Consumed by `/forge-reflect`).
 - `_logs/<cycle-id>/brain-bench-candidates.jsonl` (S5 / plan 01b #6;
   written by the orchestrator AFTER the agent exits, not by the agent
   itself). One row per gap whose corresponding theme this cycle wrote.
@@ -118,12 +121,39 @@ summing to 1.0 with pass threshold 0.7.
 4. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete
    observations, no hand-waving.
 
-### Stage 2 — Agent-prompted user questions (file-based handoff)
+### Stage 2 — Agent-prompted user questions (file-based handoff + AskUserQuestion shape)
 
 5. From Stage 1, identify items the agent cannot resolve from established
    principles + brain knowledge. These become user questions.
-6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md`
-   as numbered headings. Skip the file entirely if no such questions exist.
+6. Write up to 4 structured questions into **both** files:
+   - `_logs/<cycle-id>/user-questions.md` — numbered headings (human-readable
+     audit; pre-cwc-amendment format retained).
+   - `_logs/<cycle-id>/user-questions.json` — `AskUserQuestion`-shaped array
+     so the `/forge-reflect` slash command can drive the operator handoff
+     via the native tool (cwc Amendment, parity with `/forge-architect`).
+     Schema:
+     ```json
+     [
+       {
+         "question": "Was the 5-WI decomposition the right size?",
+         "header": "WI sizing",
+         "options": [
+           { "label": "Too small", "description": "Should have been 3-4 WIs." },
+           { "label": "Right size", "description": "5 was correct for this scope." },
+           { "label": "Too large", "description": "Should have been ≥7 WIs." }
+         ]
+       }
+     ]
+     ```
+     - `header`: short chip label, ≤12 chars (`AskUserQuestion` constraint).
+     - `options`: 2-4 entries. Each carries a `label` + `description`. The
+       slash command always lets the operator pick "Other" + type prose, so
+       you do NOT need to cover every possibility — pick the 2-4 most
+       likely answers.
+     - When a question is genuinely open-ended ("anything else worth
+       capturing?"), use generic options ("Nothing notable", "Worth a
+       theme", "Significant issue") + the operator's Other-fallback.
+   - Skip BOTH files entirely if no questions are warranted.
 7. Capture the user's answers (read from `user-feedback.md` in stage 3) as
    Section 2 of `retro.md` (`## User questions`).
 

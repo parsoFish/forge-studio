@@ -24,6 +24,7 @@ import { join } from 'node:path';
 
 import {
   parseFeedback,
+  readStructuredQuestions,
   render,
   writeOutput,
 } from './forge-reflect-cli.ts';
@@ -317,4 +318,140 @@ test('parseFeedback: returns empty answers when there is no Answers section', ()
   const parsed = parseFeedback(body);
   assert.deepEqual(parsed.answers, []);
   assert.match(parsed.freeform, /Just commentary/);
+});
+
+// ---------------------------------------------------------------------------
+// readStructuredQuestions() — cwc Amendment
+// ---------------------------------------------------------------------------
+
+test('readStructuredQuestions: prefers user-questions.json when present', () => {
+  const h = setup();
+  try {
+    const payload = [
+      {
+        question: 'Was the 5-WI decomposition right?',
+        header: 'WI sizing',
+        options: [
+          { label: 'Too small', description: '3-4 was correct.' },
+          { label: 'Right size', description: '5 was correct.' },
+          { label: 'Too large', description: '≥7 was correct.' },
+        ],
+      },
+      {
+        question: 'Should we backfill brain?',
+        header: 'Brain gap',
+        options: [
+          { label: 'Yes', description: 'Backfill before next cycle.' },
+          { label: 'No', description: 'Existing theme covers it.' },
+        ],
+      },
+    ];
+    writeFileSync(join(h.cycleDir, 'user-questions.json'), JSON.stringify(payload));
+    // Also write the markdown so we prove JSON wins.
+    writeFileSync(join(h.cycleDir, 'user-questions.md'), '## 1. Should be ignored?');
+
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'json');
+    assert.equal(r.questions.length, 2);
+    assert.equal(r.questions[0].header, 'WI sizing');
+    assert.equal(r.questions[0].options.length, 3);
+    assert.equal(r.questions[1].header, 'Brain gap');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('readStructuredQuestions: falls back to markdown when JSON absent', () => {
+  const h = setup();
+  try {
+    writeQuestionsFile(h.cycleDir, [
+      '## 1. Was the dev-loop iteration count reasonable?',
+      'Context paragraph.',
+      '## 2. Should the brain gain a theme on this pattern?',
+      '',
+    ].join('\n'));
+
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'markdown');
+    assert.equal(r.questions.length, 2);
+    // The first question's text comes through verbatim
+    assert.match(r.questions[0].question, /dev-loop iteration count/);
+    // Generic synthesised options
+    assert.equal(r.questions[0].options.length, 3);
+    assert.match(r.questions[0].options[0].label, /Nothing notable/);
+    assert.match(r.questions[0].options[1].label, /Worth a theme/);
+    assert.match(r.questions[0].options[2].label, /Significant issue/);
+    // Header heuristically truncated
+    assert.ok(r.questions[0].header.length <= 12, `header too long: ${r.questions[0].header}`);
+    assert.ok(r.questions[1].header.length <= 12);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('readStructuredQuestions: returns source:none when neither file exists', () => {
+  const h = setup();
+  try {
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'none');
+    assert.deepEqual(r.questions, []);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('readStructuredQuestions: malformed JSON falls through to markdown', () => {
+  const h = setup();
+  try {
+    writeFileSync(join(h.cycleDir, 'user-questions.json'), '{not json');
+    writeQuestionsFile(h.cycleDir, '## 1. Fallback question?');
+
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'markdown');
+    assert.equal(r.questions.length, 1);
+    assert.match(r.questions[0].question, /Fallback question/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('readStructuredQuestions: JSON with bad shape (options too few/many) rejects, falls through', () => {
+  const h = setup();
+  try {
+    const bad = [
+      {
+        question: 'q?',
+        header: 'h',
+        options: [{ label: 'only-one', description: 'too few options' }], // <2
+      },
+    ];
+    writeFileSync(join(h.cycleDir, 'user-questions.json'), JSON.stringify(bad));
+    // No markdown fallback → source:none
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'none');
+    assert.deepEqual(r.questions, []);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('readStructuredQuestions: JSON with empty header field rejects', () => {
+  const h = setup();
+  try {
+    const bad = [
+      {
+        question: 'q?',
+        header: '', // empty header rejected
+        options: [
+          { label: 'a', description: 'aa' },
+          { label: 'b', description: 'bb' },
+        ],
+      },
+    ];
+    writeFileSync(join(h.cycleDir, 'user-questions.json'), JSON.stringify(bad));
+    const r = readStructuredQuestions(h.cycleId, h.logsRoot);
+    assert.equal(r.source, 'none', 'empty header should cause JSON to be rejected');
+  } finally {
+    h.cleanup();
+  }
 });
