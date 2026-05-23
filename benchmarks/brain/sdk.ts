@@ -90,8 +90,14 @@ const ANSWERS_SCHEMA = {
   required: ['answers'],
 };
 
-const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'];
-const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash'];
+// Graphify-first tool surface (2026-05-23 token-burn root-cause): the agent
+// gets `Bash` (for invoking the `graphify` CLI) + `Read` (for the 2–5 theme
+// files graphify identifies). Grep/Glob are DISALLOWED — the graph IS the
+// retrieval index per the rewritten brain-query SKILL.md. Write tools stay
+// off (read-only skill). With graphify-first, typical question completes in
+// 2–4 turns instead of 30+ (was double-searching via grep + graph).
+const READ_ONLY_TOOLS = ['Read', 'Bash'];
+const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Grep', 'Glob'];
 
 let cachedSkillText: string | null = null;
 
@@ -167,8 +173,12 @@ export async function runBrainQuery(input: RunBrainQueryInput): Promise<RunBrain
     permissionMode: 'acceptEdits',
     allowedTools: READ_ONLY_TOOLS,
     disallowedTools: WRITE_TOOLS,
+    // Tight per-question ceilings now that the SKILL is graphify-first and
+    // single-pass — 1 graphify call + up to 3-5 theme Read calls + synthesis
+    // completes in 6-10 turns typical, p95 ~ 15. The high prior caps were
+    // masking the SKILL's dual-search waste, not enabling deep work.
     maxTurns: 15,
-    maxBudgetUsd: 0.2,
+    maxBudgetUsd: 0.5,
     outputFormat: { type: 'json_schema', schema: ANSWERS_SCHEMA },
   };
 

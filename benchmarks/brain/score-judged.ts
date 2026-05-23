@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * Pair the metric (F1 + keyword) with an Opus LLM-judge verdict over the same
- * 18 cases. Validates whether the metric's "fail" set matches a human-shaped
- * standard of "wrong answer".
+ * Pair the metric (F1 + keyword) with a single batched Opus LLM-judge pass
+ * over ALL cases. Validates whether the metric's "fail" set matches a
+ * human-shaped standard of "wrong answer".
  *
- * Reads the latest primary-bench result file in `results/`, runs Opus over
- * each case's answer + cited-theme content, and writes a paired report to
- * `results-judged/<iso>.json`.
+ * Reads the latest primary-bench result file in `results/`, packs every
+ * case's question + answer + cited-theme-content into ONE Opus prompt,
+ * Opus returns N verdicts, written to `results-judged/<iso>.json`.
  *
  * Three numbers fall out:
- *   metric_pass_rate  — F1 ≥ 0.8 (current scoring)
+ *   metric_pass_rate  — F1 ≥ 0.65 (current scoring)
  *   judge_pass_rate   — Opus says "acceptable answer"
  *   agreement_rate    — cases where both methods agree on pass/fail
  *
@@ -20,13 +20,9 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { mapConcurrent } from '../_lib/concurrent.ts';
-import { p95 } from '../_lib/percentile.ts';
-import { judgeAnswer, loadCitedThemeContents, type JudgeVerdict } from './judge.ts';
+import { judgeAllCases, loadCitedThemeContents, type JudgeVerdict } from './judge.ts';
 
 const PASS_THRESHOLD = 0.65;
-const CONCURRENCY = 4;
-const SESSION_BUDGET_USD = 30; // Opus is materially more expensive than Haiku.
 
 const here = import.meta.dirname;
 const forgeRoot = resolve(here, '..', '..');
@@ -61,14 +57,11 @@ type JudgedCase = {
   judge_missing_concepts: string[];
   judge_hallucinated_claims: string[];
   agreement: 'both_pass' | 'both_fail' | 'metric_only_fail' | 'judge_only_fail' | 'judge_unavailable';
-  elapsed_ms: number;
-  cost_usd: number;
-  runner_error?: { kind: string; message: string };
 };
 
 const cases: SourceCase[] = benchOutput.cases;
 
-// Map case id → original question text from the fixtures (we lose it when reading the result file).
+// Map case id → original question text from the fixtures (lost in the result file).
 const questionsByCaseId: Record<string, string> = {};
 const qsPath = join(here, 'questions.json');
 if (existsSync(qsPath)) {
@@ -76,10 +69,22 @@ if (existsSync(qsPath)) {
   for (const q of qs) questionsByCaseId[q.id] = q.question;
 }
 
-let totalCostUsd = 0;
-let aborted = false;
+// Build the input for a single batched Opus call. Skip cases with no actual
+// answer (Haiku hit a runner error — they get agreement='judge_unavailable').
+const judgeInputs = cases
+  .filter((c) => c.actual !== null)
+  .map((c) => ({
+    id: c.id,
+    question: questionsByCaseId[c.id] ?? '(question text missing from fixtures)',
+    answer: c.actual!.answer,
+    cited_sources: c.actual!.sources,
+    cited_theme_contents: loadCitedThemeContents(forgeRoot, c.actual!.sources),
+  }));
 
-const judged = await mapConcurrent(cases, CONCURRENCY, async (c): Promise<JudgedCase> => {
+const batchResult = await judgeAllCases(judgeInputs);
+const verdictsById = new Map(batchResult.verdicts.map((v) => [v.id, v]));
+
+const judged: JudgedCase[] = cases.map((c) => {
   const metricPass = c.score >= PASS_THRESHOLD;
   const baseline: Omit<JudgedCase, 'agreement'> = {
     id: c.id,
@@ -90,59 +95,18 @@ const judged = await mapConcurrent(cases, CONCURRENCY, async (c): Promise<Judged
     judge_reason: null,
     judge_missing_concepts: [],
     judge_hallucinated_claims: [],
-    elapsed_ms: 0,
-    cost_usd: 0,
   };
 
   if (!c.actual) {
-    return {
-      ...baseline,
-      agreement: metricPass ? 'judge_unavailable' : 'both_fail',
-      runner_error: { kind: 'no_haiku_answer', message: 'source bench had no actual answer' },
-    };
+    return { ...baseline, agreement: metricPass ? 'judge_unavailable' : 'both_fail' };
   }
 
-  if (aborted || totalCostUsd >= SESSION_BUDGET_USD) {
-    aborted = true;
-    return {
-      ...baseline,
-      agreement: 'judge_unavailable',
-      runner_error: {
-        kind: 'session_budget_exceeded',
-        message: `Aborted before judging ${c.id}: total $${totalCostUsd.toFixed(4)} crossed cap $${SESSION_BUDGET_USD}`,
-      },
-    };
+  const v = verdictsById.get(c.id);
+  if (!v) {
+    return { ...baseline, agreement: 'judge_unavailable' };
   }
 
-  const question = questionsByCaseId[c.id] ?? '(question text missing from fixtures)';
-  const themeContents = loadCitedThemeContents(forgeRoot, c.actual.sources);
-
-  let r;
-  try {
-    r = await judgeAnswer({
-      question,
-      answer: c.actual.answer,
-      cited_sources: c.actual.sources,
-      cited_theme_contents: themeContents,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ...baseline, agreement: 'judge_unavailable', runner_error: { kind: 'thrown', message } };
-  }
-
-  totalCostUsd += r.costUsd;
-
-  if (!r.verdict) {
-    return {
-      ...baseline,
-      agreement: 'judge_unavailable',
-      elapsed_ms: r.durationMs,
-      cost_usd: r.costUsd,
-      ...(r.runnerError ? { runner_error: r.runnerError } : {}),
-    };
-  }
-
-  const judgePass = r.verdict.pass;
+  const judgePass = v.pass;
   const agreement: JudgedCase['agreement'] =
     metricPass && judgePass ? 'both_pass'
     : !metricPass && !judgePass ? 'both_fail'
@@ -152,13 +116,11 @@ const judged = await mapConcurrent(cases, CONCURRENCY, async (c): Promise<Judged
   return {
     ...baseline,
     judge_pass: judgePass,
-    judge_severity: r.verdict.severity,
-    judge_reason: r.verdict.reason,
-    judge_missing_concepts: r.verdict.missing_concepts,
-    judge_hallucinated_claims: r.verdict.hallucinated_claims,
+    judge_severity: v.severity,
+    judge_reason: v.reason,
+    judge_missing_concepts: v.missing_concepts,
+    judge_hallucinated_claims: v.hallucinated_claims,
     agreement,
-    elapsed_ms: r.durationMs,
-    cost_usd: r.costUsd,
   };
 });
 
@@ -168,7 +130,6 @@ const judgeAvailable = judged.filter((j) => j.judge_pass !== null).length;
 const agreements = judged.filter((j) => j.agreement === 'both_pass' || j.agreement === 'both_fail').length;
 const metricOnlyFail = judged.filter((j) => j.agreement === 'metric_only_fail').length;
 const judgeOnlyFail = judged.filter((j) => j.agreement === 'judge_only_fail').length;
-const elapsed = judged.map((j) => j.elapsed_ms).filter((n) => n > 0);
 
 const out = {
   phase: 'brain-judged',
@@ -183,9 +144,9 @@ const out = {
     agreement_rate: judgeAvailable === 0 ? 1 : agreements / judgeAvailable,
     metric_only_fail: metricOnlyFail,
     judge_only_fail: judgeOnlyFail,
-    p95_judge_ms: p95(elapsed),
-    total_cost_usd: totalCostUsd,
-    aborted_on_budget: aborted,
+    judge_ms: batchResult.durationMs,
+    total_cost_usd: batchResult.costUsd,
+    ...(batchResult.runnerError ? { runner_error: batchResult.runnerError } : {}),
   },
 };
 
@@ -194,11 +155,11 @@ if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
 const outPath = join(resultsDir, `${ranAt.replace(/[:.]/g, '-')}.json`);
 writeFileSync(outPath, JSON.stringify(out, null, 2));
 
-process.stdout.write(`Judged ${judgeAvailable}/${cases.length} cases against Opus.\n\n`);
+process.stdout.write(`Judged ${judgeAvailable}/${cases.length} cases in ONE Opus call.\n\n`);
 process.stdout.write(`metric_pass_rate: ${(out.summary.metric_pass_rate * 100).toFixed(1)}% (${metricPasses}/${cases.length})\n`);
 process.stdout.write(`judge_pass_rate:  ${(out.summary.judge_pass_rate * 100).toFixed(1)}% (${judgePasses}/${judgeAvailable})\n`);
 process.stdout.write(`agreement_rate:   ${(out.summary.agreement_rate * 100).toFixed(1)}% (${agreements}/${judgeAvailable})\n`);
 process.stdout.write(`metric-only-fail: ${metricOnlyFail} (judge says correct, metric says fail)\n`);
 process.stdout.write(`judge-only-fail:  ${judgeOnlyFail} (metric says pass, judge says wrong)\n`);
-process.stdout.write(`p95 judge latency: ${out.summary.p95_judge_ms.toFixed(0)}ms — judge cost $${totalCostUsd.toFixed(4)}\n`);
+process.stdout.write(`judge latency: ${batchResult.durationMs.toFixed(0)}ms — judge cost $${batchResult.costUsd.toFixed(4)}\n`);
 process.stdout.write(`results: ${outPath}\n`);

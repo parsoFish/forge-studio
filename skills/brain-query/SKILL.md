@@ -60,36 +60,51 @@ Primary owner of [`benchmarks/brain/`](../../benchmarks/brain/) — `questions.j
 
 ## Process
 
-The question is fielded in two passes; the second is conditional on the first being thin:
+Three steps. Strict order. No alternation between graphify and grep.
 
-1. **Parse the question.** Identify keywords + likely category + whether the phrasing is structural ("which theme bridges …", "what's connected to …", "two hops from …", "what's the longest dependency chain in …"). Record this for the graph-vs-narrative routing.
+1. **Graph-first identify.** Run ONE `graphify` call against
+   `brain/graphify-out/graph.json` (canonical; routed via the
+   `./graphify-out` symlink per C21a). Pick the operation by phrasing:
+   - structural / "what bridges A and B" → `cd /home/parso/forge && graphify path "<A>" "<B>"`
+   - "describe <X>" / "what's near <X>" → `cd /home/parso/forge && graphify explain "<X>"`
+   - "what implements/uses <X>" → `cd /home/parso/forge && graphify affected "<X>"`
+   - free-form content question → `cd /home/parso/forge && graphify query "<the-question>"`
 
-2. **Graph-first lookup** via the real `graphify` CLI against `brain/graphify-out/graph.json` (canonical path; `./graphify-out` at forge root is a symlink to it per C21a). Always run from forge root — per C21a the graph spans the forge architecture (orchestrator/skills/loops + curated docs + brain themes; raw provenance is deliberately excluded per the 2026-05-23 Stage 7 prune). For **project-code** structural questions consult the project graph instead (`cd projects/<name> && graphify ...`, when `projects/<name>/graphify-out/graph.json` exists per [[per-project-knowledge-graph]]):
-   - For structural phrasings, pick the operation:
-     - "what bridges A and B" / shortest connection → `cd /home/parso/forge && graphify path "<node-a>" "<node-b>"`
-     - "what's near <node>" / "describe <node>" → `cd /home/parso/forge && graphify explain "<node>"`
-     - "what code touches this theme" / "which orchestrator module implements <pattern>" → `cd /home/parso/forge && graphify affected "<node>"` (reverse traversal — the C21a corpus widening makes this work; brain-only graphs couldn't answer cross-cluster questions)
-     - free-form structural question → `cd /home/parso/forge && graphify query "<the-question>"` (BFS traversal, token-efficient)
-   - For non-structural questions, still extract candidate theme ids by keyword (step 3a) and then run `graphify explain <id>` on each top candidate to widen the recall set with structurally-adjacent themes the keyword scan would miss.
-   - The graph contributes node ids (paths), not synthesised text. Treat returned ids as additional source candidates for step 4.
+   The graph returns a small subgraph of node ids + source files. Those
+   files are your candidate sources — typically 2–5 themes. Read them with
+   the `Read` tool. No grep, no glob — the graph IS your retrieval index.
+   That's the load-bearing token-saving promise of graphify
+   (see [[karpathy-three-layer-wiki]] + [[per-project-knowledge-graph]]).
 
-3. **Narrative scan** (when graph alone insufficient — almost always, for content-bearing questions):
-   - **Theme pages:** grep `brain/forge/themes/` and `brain/projects/<scope>/themes/` for keywords; load matching pages.
-   - **Category indexes:** cross-reference theme matches against the index hierarchy.
-   - **Raw layer:** only if theme matches are insufficient — grep `brain/_raw/` and load the most relevant.
+2. **Read identified themes.** Use `Read` on the 2–5 theme files the
+   graph surfaced. Verify they match the question (briefly), discard
+   off-topic returns. Do NOT grep `brain/_raw/` or expand the scan
+   beyond what the graph identified — if the graph missed something
+   relevant, that's a brain-completeness gap to log in step 4, not a
+   reason to fall back to brute-force search.
 
-4. **Merge sources.** Combine the keyword hits and the graph-derived neighbours. Dedupe by path. The graph's structural recall is what catches the "I forgot to mention the corrective antipattern" failure mode.
+3. **Synthesise + cite.** Write a one-paragraph answer that preserves
+   exact terminology from the cited themes. Cite by file path. Score
+   confidence:
+   - **High:** ≥ 2 corroborating themes, all on-topic.
+   - **Medium:** 1 source on-topic.
+   - **Low / gap:** no good source — set `gap: true`.
 
-5. **Synthesise.** Cite sources by file path (not by content quote — the caller can read the source itself).
+4. **Gap-flagging rule (load-bearing).** If your answer contains any of
+   "the brain does not contain X", "no documentation on X", "doesn't
+   have X", "no specific guidance", "outside the scope" — set
+   `gap: true`. Naming-the-absence is a gap; the feedback loop only
+   fires on `gap: true`. Returning "we don't have X" without the flag
+   is the worst failure mode (gap is real but invisible to ingest).
 
-6. **Score confidence:**
-   - **High:** ≥ 2 corroborating sources, all on-topic.
-   - **Medium:** 1 source on-topic, or multiple loosely related.
-   - **Low / gap:** no good source, or only off-topic matches. Mark `gap: true` and log.
+### Fallback (rare)
 
-7. **Gap-flagging rule (load-bearing):** if your synthesised answer says **any** of the following — "the brain does not contain X", "no documentation on X", "doesn't have X", "no specific guidance", "X is not in the brain", "outside the scope" — **set `gap: true`**, even if you cited 1–2 themes for context. Naming-the-absence is itself a gap; the brain-gap-feedback-loop only fires on `gap: true`. A correct answer that says "we don't have X" without setting the flag is the most damaging failure mode (the gap is real but invisible to ingest).
-
-8. **Return.** Populate `structural_neighbours` (informational) with the graph-derived node ids that were folded into `sources`. This lets the caller see why a theme was picked even when it wasn't a direct keyword match.
+If graphify returns an empty subgraph AND the question seems
+answerable from the brain, then — and only then — use `Read` on the
+INDEX hub or a category index to find candidates. Grep is NOT an
+option in this skill — the graph is the index. If after one
+`graphify` + one `Read` of an index the brain still has nothing, mark
+`gap: true` and return.
 
 ## Looking up by graph node id
 
@@ -113,6 +128,7 @@ If you don't know the exact slug, use the navigation indexes (`forge brain index
 - **No web fallback in this skill.** Broader research is the *calling* skill's responsibility (after this skill's gap event is logged); separation of concerns.
 - **The graph is structural; the themes are content.** Don't try to answer narrative questions from the graph alone; don't try to answer structural questions from grep alone. Use each for what it's for.
 - **Trust graphify's own confidence tiers.** Edges are tagged `EXTRACTED` (direct from source, canonical), `INFERRED` (secondary), `AMBIGUOUS` (lowest). Consume them as-is; do NOT build a parallel filter layer (operator principle 2026-05-23 — graphify owns the confidence model). Cite higher-confidence edges first when synthesising.
+- **Scope is load-bearing — respect it strictly.** When the caller supplies `scope: <project>`, your cited sources MUST come from `brain/projects/<project>/profile.md` or `brain/projects/<project>/themes/`. You may reference a forge-wide theme ONLY IF an in-scope theme explicitly links to it via `related_themes` or a `[[wikilink]]`. Do NOT pull in forge-wide concepts (Given-When-Then ACs, declarative-vs-imperative specs, 80% coverage gates, etc.) that aren't documented inside the project's own sub-wiki — that's hallucination by the project's standards even though the concept is real elsewhere. If the project's themes don't ground a claim, omit the claim or flag the gap.
 
 ## Sources
 
