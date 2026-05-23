@@ -59,7 +59,59 @@ export type ClaudeAgentOptions = {
   cacheable?: boolean;
   /** Inject a fake `query` for testing. */
   queryFn?: QueryFn;
+  /**
+   * S7 / C13 — sidecar heartbeat callback. When provided, the agent
+   * starts a `setInterval` BEFORE the SDK `query()` is awaited and clears
+   * it on the result. The callback receives `{ tool_use_count, last_tool,
+   * since_ms }`. Plumbed through to a JSONL `agent_heartbeat` event by
+   * the runner (which owns the cycle's logger reference).
+   *
+   * If unset, no heartbeats fire — the dev-loop runner / review-loop
+   * runner is responsible for wiring this in production. Tests pass
+   * `onHeartbeat` directly to assert the timer behaviour.
+   */
+  onHeartbeat?: (info: HeartbeatInfo) => void;
+  /**
+   * S7 / C13 — heartbeat cadence in ms. Default 15_000 (15s). Read from
+   * the project config's `logging.heartbeat_seconds` by callers; here we
+   * accept the resolved value so this module stays config-agnostic.
+   */
+  heartbeatIntervalMs?: number;
+  /**
+   * S7 / C13 — idle threshold for the tail-emit. Default 30_000 (30s).
+   * If the SDK call takes longer than this AND no heartbeat has fired
+   * for that span (e.g. the timer was masked or skipped), one extra
+   * "idle" heartbeat is forced when the result arrives so the operator
+   * sees the silent stretch in the log.
+   */
+  heartbeatIdleTailMs?: number;
+  /**
+   * Inject a fake setInterval / clearInterval / Date.now for tests.
+   * Defaults to `globalThis.*`. Lets the heartbeat test mock the timer
+   * without hooking the real event loop.
+   */
+  timers?: {
+    setInterval: (fn: () => void, ms: number) => unknown;
+    clearInterval: (handle: unknown) => void;
+    now: () => number;
+  };
 };
+
+/**
+ * S7 / C13 — payload of one agent_heartbeat metadata block. The runner
+ * adapts this into an `EventLogEntry` row via the project's logger.
+ */
+export type HeartbeatInfo = {
+  /** Number of tool_use blocks observed since `query()` started. */
+  tool_use_count: number;
+  /** Name of the most recently observed tool (`Bash`, `Read`, …) or `''`. */
+  last_tool: string;
+  /** Elapsed wall time in ms since `query()` was invoked. */
+  since_ms: number;
+};
+
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
+const DEFAULT_HEARTBEAT_IDLE_TAIL_MS = 30_000;
 
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash', 'Grep', 'Glob'];
 const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -101,6 +153,37 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     // existing `cost_usd / tokens_in / tokens_out` convention).
     let cacheReadTokens = 0;
     let cacheCreationTokens = 0;
+    // S7 / C13 — heartbeat sidecar state. `lastTool` mutates as the SDK
+    // stream yields tool_use blocks; the timer reads it without locking
+    // (single-threaded JS).
+    let toolUseCount = 0;
+    let lastTool = '';
+    let lastHeartbeatAt = 0;
+    let heartbeatHandle: unknown = null;
+
+    const timers = opts.timers ?? {
+      setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
+      clearInterval: (handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>),
+      now: () => Date.now(),
+    };
+    const intervalMs = opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+    const idleTailMs = opts.heartbeatIdleTailMs ?? DEFAULT_HEARTBEAT_IDLE_TAIL_MS;
+    const queryStartedAt = timers.now();
+    if (opts.onHeartbeat) {
+      heartbeatHandle = timers.setInterval(() => {
+        const now = timers.now();
+        try {
+          opts.onHeartbeat!({
+            tool_use_count: toolUseCount,
+            last_tool: lastTool,
+            since_ms: now - queryStartedAt,
+          });
+        } catch {
+          /* never let a misbehaving heartbeat sink kill the SDK call */
+        }
+        lastHeartbeatAt = now;
+      }, intervalMs);
+    }
 
     for await (const msg of queryFn({ prompt, options })) {
       const m = msg as { type?: string };
@@ -115,6 +198,10 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
               continue;
             }
             if (b.type !== 'tool_use' || !b.name) continue;
+            // S7 / C13 — heartbeat sees every tool_use; counter advances
+            // even when the tool doesn't mutate files.
+            toolUseCount += 1;
+            lastTool = b.name;
             // Capture every tool_use, not just file-modifying ones, for the
             // observability log.
             toolsUsed.push({ name: b.name, inputSummary: summarizeToolInput(b.name, b.input) });
@@ -148,6 +235,33 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
           if (typeof r.usage.cache_creation_input_tokens === 'number') {
             cacheCreationTokens = r.usage.cache_creation_input_tokens;
           }
+        }
+      }
+    }
+
+    // S7 / C13 — sidecar shutdown. Always clear the interval, then check
+    // the idle-tail invariant: if the SDK call took ≥ idleTailMs AND no
+    // heartbeat has fired in the last idleTailMs span, force one final
+    // emit so the operator's log shows the silent stretch even when the
+    // interval timer was masked (e.g. event-loop saturation, mocked
+    // timers that didn't advance, etc.).
+    if (heartbeatHandle !== null) {
+      timers.clearInterval(heartbeatHandle);
+      heartbeatHandle = null;
+    }
+    if (opts.onHeartbeat) {
+      const now = timers.now();
+      const elapsed = now - queryStartedAt;
+      const sinceLast = lastHeartbeatAt === 0 ? elapsed : now - lastHeartbeatAt;
+      if (elapsed >= idleTailMs && sinceLast >= idleTailMs) {
+        try {
+          opts.onHeartbeat({
+            tool_use_count: toolUseCount,
+            last_tool: lastTool,
+            since_ms: elapsed,
+          });
+        } catch {
+          /* swallow */
         }
       }
     }

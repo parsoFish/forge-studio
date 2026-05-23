@@ -294,3 +294,199 @@ test('createClaudeAgent: zero cost when result message is missing or errored', a
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// S7 / C13 — agent_heartbeat sidecar timer.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mocked timer harness for the heartbeat test. Records every
+ * `setInterval`-driven callback, advances a synthetic clock, and lets the
+ * test drive when the heartbeat fires deterministically.
+ */
+function mockTimers() {
+  let now = 0;
+  const intervals: Array<{ fn: () => void; ms: number; alive: boolean; nextFireAt: number }> = [];
+  return {
+    api: {
+      setInterval: (fn: () => void, ms: number) => {
+        const handle = { fn, ms, alive: true, nextFireAt: now + ms };
+        intervals.push(handle);
+        return handle;
+      },
+      clearInterval: (handle: unknown) => {
+        const h = handle as { alive: boolean } | null;
+        if (h) h.alive = false;
+      },
+      now: () => now,
+    },
+    advance(ms: number) {
+      const target = now + ms;
+      // Fire any intervals whose nextFireAt falls in (now, target].
+      // Repeat for multi-interval crossings within one advance call.
+      while (true) {
+        let earliest: { idx: number; at: number } | null = null;
+        for (let i = 0; i < intervals.length; i++) {
+          const h = intervals[i]!;
+          if (!h.alive) continue;
+          if (h.nextFireAt > target) continue;
+          if (earliest === null || h.nextFireAt < earliest.at) {
+            earliest = { idx: i, at: h.nextFireAt };
+          }
+        }
+        if (earliest === null) break;
+        now = earliest.at;
+        const h = intervals[earliest.idx]!;
+        h.fn();
+        h.nextFireAt = now + h.ms;
+      }
+      now = target;
+    },
+  };
+}
+
+test('createClaudeAgent: emits ≥1 agent_heartbeat during a synthetic 30s SDK call (S7 / C13)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const heartbeats: Array<{ tool_use_count: number; last_tool: string; since_ms: number }> = [];
+    const timers = mockTimers();
+
+    // Synthetic SDK that "sleeps" 30s of mocked time before emitting result.
+    // We model the sleep by yielding tool_use blocks interleaved with
+    // `timers.advance()` calls (so the interval timer fires at virtual
+    // 15s + 30s while the for-await loop iterates).
+    const captured: CapturedCall[] = [];
+    const slowQuery: QueryFn = ((params: { prompt: string; options?: Record<string, unknown> }) => {
+      captured.push({ prompt: params.prompt, options: params.options ?? {} });
+      async function* gen() {
+        // 0s: tool_use Bash
+        yield {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'pytest' } }] },
+        };
+        timers.advance(20_000);
+        // 20s: tool_use Read
+        yield {
+          type: 'assistant',
+          message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/tmp/x' } }] },
+        };
+        timers.advance(15_000);
+        // 35s: result. Interval fires expected at 15_000 and 30_000.
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.05, num_turns: 2 };
+      }
+      return gen() as never;
+    }) as unknown as QueryFn;
+
+    const agent = createClaudeAgent({
+      queryFn: slowQuery,
+      onHeartbeat: (info) => heartbeats.push(info),
+      heartbeatIntervalMs: 15_000,
+      heartbeatIdleTailMs: 30_000,
+      timers: timers.api,
+    });
+
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.ok(
+      heartbeats.length >= 1,
+      `expected ≥1 heartbeat over a 35s synthetic SDK call, got ${heartbeats.length}`,
+    );
+    for (const h of heartbeats) {
+      assert.equal(typeof h.tool_use_count, 'number');
+      assert.equal(typeof h.last_tool, 'string');
+      assert.equal(typeof h.since_ms, 'number');
+      assert.ok(h.since_ms > 0);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: no heartbeats when onHeartbeat is unset (default)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [{ type: 'result', subtype: 'success', total_cost_usd: 0.01, num_turns: 1 }],
+        captured,
+      ),
+    });
+    const r = await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+    assert.equal(r.costUsd, 0.01);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: idle-tail emits 1 final heartbeat when interval did not fire (S7 / C13)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    // Mocked timers where setInterval registers but is NEVER advanced —
+    // simulates a saturated event loop / a mocked SDK that wedges before
+    // the timer can fire. The idle-tail invariant should still produce
+    // exactly one heartbeat at cleanup time.
+    let now = 0;
+    const heartbeats: Array<{ since_ms: number }> = [];
+    const captured: CapturedCall[] = [];
+    const fastResultQuery: QueryFn = ((params: {
+      prompt: string;
+      options?: Record<string, unknown>;
+    }) => {
+      captured.push({ prompt: params.prompt, options: params.options ?? {} });
+      async function* gen() {
+        now += 31_000;
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.02, num_turns: 1 };
+      }
+      return gen() as never;
+    }) as unknown as QueryFn;
+
+    const agent = createClaudeAgent({
+      queryFn: fastResultQuery,
+      onHeartbeat: (info) => heartbeats.push(info),
+      heartbeatIntervalMs: 15_000,
+      heartbeatIdleTailMs: 30_000,
+      timers: {
+        setInterval: () => ({} as unknown),
+        clearInterval: () => undefined,
+        now: () => now,
+      },
+    });
+
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    // No interval fires occurred, but elapsed (31s) ≥ idleTailMs (30s)
+    // ⇒ exactly one tail heartbeat.
+    assert.equal(heartbeats.length, 1, `expected 1 tail heartbeat, got ${heartbeats.length}`);
+    assert.ok(heartbeats[0]!.since_ms >= 30_000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

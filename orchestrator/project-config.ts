@@ -63,11 +63,22 @@ export type SweepConfig = {
   measurement_extractor: string;
 };
 
+/**
+ * S7 / C13 — optional logging block. Currently surfaces
+ * `heartbeat_seconds` so a project can tune the agent_heartbeat cadence
+ * (default 15s) without touching forge code. Future logging knobs slot
+ * in here.
+ */
+export type LoggingConfig = {
+  heartbeat_seconds?: number;
+};
+
 export type ProjectConfig = {
   demo: DemoConfig;
   quality_gate_cmd: string[];
   metrics?: MetricsConfig;
   sweep?: SweepConfig;
+  logging?: LoggingConfig;
 };
 
 /**
@@ -146,13 +157,35 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
 
   const metrics = parseMetrics(obj.metrics);
   const sweep = parseSweep(obj.sweep);
+  const logging = parseLogging(obj.logging);
 
   return {
     demo,
     quality_gate_cmd,
     ...(metrics ? { metrics } : {}),
     ...(sweep ? { sweep } : {}),
+    ...(logging ? { logging } : {}),
   };
+}
+
+function parseLogging(raw: unknown): LoggingConfig | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object') {
+    throw new Error('project-config: logging must be an object when present');
+  }
+  const l = raw as Record<string, unknown>;
+  const hb = l.heartbeat_seconds;
+  let heartbeat_seconds: number | undefined;
+  if (hb !== undefined && hb !== null) {
+    if (typeof hb !== 'number' || !Number.isFinite(hb) || hb <= 0) {
+      throw new Error(
+        'project-config: logging.heartbeat_seconds must be a positive finite number when present',
+      );
+    }
+    heartbeat_seconds = hb;
+  }
+  if (heartbeat_seconds === undefined) return undefined;
+  return { heartbeat_seconds };
 }
 
 function parseMetrics(raw: unknown): MetricsConfig | undefined {
