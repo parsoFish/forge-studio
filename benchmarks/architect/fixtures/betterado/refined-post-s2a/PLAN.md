@@ -2,11 +2,19 @@
 
 # Architect PLAN — terraform-provider-betterado (2026-05-18 session)
 
-## Vision recap
+## Operator brief + interview
 
 Queue the entire ADO 7.1 createable surface for terraform-provider-betterado.
 20 initiatives total; 3 substrate initiatives (01, 03, 04) unblock the
 remaining 17.
+
+### Interview
+
+| # | Question | Operator answer |
+|---|---|---|
+| 1 | Should we queue all 20 initiatives this session, or stage them? | Queue all 20; PLAN.md surfaces aggregate footprint informationally per C19. |
+| 2 | Do project-level constraints (gate command, fixture rules) belong in each manifest or in the brain? | Brain — lift to `brain/projects/terraform-provider-betterado/themes/council-constraints.md` and reference. |
+| 3 | Substrate ordering — 01 + 03 + 04 in parallel, or serial? | Parallel; they're independent. Downstream 17 depend on them. |
 
 ## Brain context
 

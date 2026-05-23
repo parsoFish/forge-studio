@@ -34,10 +34,11 @@ const baseInput: Omit<RunArchitectInput, 'queryFn'> = {
   expected: { min_features: 1, max_features: 5 },
 };
 
-test('setupTempdir: creates _queue/pending and projects/<name>/, symlinks brain', () => {
+test('setupTempdir: creates _architect (post-S2A) and _queue/pending (legacy fallback), symlinks brain', () => {
   const dir = setupTempdir({ ...baseInput });
   try {
-    assert.ok(existsSync(resolve(dir, '_queue/pending')));
+    assert.ok(existsSync(resolve(dir, 'projects/simplarr/_architect')), '_architect dir scaffolded');
+    assert.ok(existsSync(resolve(dir, '_queue/pending')), 'legacy _queue/pending kept as fallback');
     assert.ok(existsSync(resolve(dir, 'projects/simplarr')));
     assert.ok(existsSync(resolve(dir, 'brain')));
     assert.ok(existsSync(resolve(dir, 'skills')));
@@ -56,7 +57,7 @@ test('setupTempdir: writes roadmap.md when projectContext is supplied', () => {
   }
 });
 
-test('runArchitect: reads back the manifest the agent wrote in tempdir', async () => {
+test('runArchitect: reads back the manifest the agent wrote into _architect/<sid>/manifests/', async () => {
   const queryFn = fakeQueryFn([
     {
       type: 'result',
@@ -65,13 +66,15 @@ test('runArchitect: reads back the manifest the agent wrote in tempdir', async (
       total_cost_usd: 0.0042,
     },
   ], (cwd) => {
-    // Simulate the agent writing a manifest
-    const pending = resolve(cwd, '_queue/pending');
-    mkdirSync(pending, { recursive: true });
+    // Simulate a post-S2A architect agent: writes to _architect/<sid>/manifests/
+    const sessionDir = resolve(cwd, 'projects/simplarr/_architect/2026-05-24T00-00-00');
+    const manifestsDir = resolve(sessionDir, 'manifests');
+    mkdirSync(manifestsDir, { recursive: true });
     writeFileSync(
-      resolve(pending, 'INIT-2026-05-08-test.md'),
-      '---\ninitiative_id: INIT-2026-05-08-test\nproject: simplarr\n---\nbody',
+      resolve(manifestsDir, 'INIT-2026-05-24-test.md'),
+      '---\ninitiative_id: INIT-2026-05-24-test\nproject: simplarr\n---\nbody',
     );
+    writeFileSync(resolve(sessionDir, 'PLAN.md'), '<!-- verdict: approve | revise | reject -->\n\n# Plan\n');
   });
 
   const r = await runArchitect({ ...baseInput, queryFn });
@@ -80,8 +83,34 @@ test('runArchitect: reads back the manifest the agent wrote in tempdir', async (
     assert.equal(r.durationMs, 1234);
     assert.equal(r.costUsd, 0.0042);
     assert.notEqual(r.manifestText, null);
-    assert.ok(r.manifestText?.includes('initiative_id: INIT-2026-05-08-test'));
-    assert.equal(r.manifestPath, '_queue/pending/INIT-2026-05-08-test.md');
+    assert.ok(r.manifestText?.includes('initiative_id: INIT-2026-05-24-test'));
+    assert.equal(
+      r.manifestPath,
+      'projects/simplarr/_architect/2026-05-24T00-00-00/manifests/INIT-2026-05-24-test.md',
+    );
+    // PLAN.md surfaces via findPlanArtifacts
+    assert.ok(r.planDoc.includes('# Plan'));
+  } finally {
+    cleanupTempdir(r.tempdir);
+  }
+});
+
+test('runArchitect: legacy _queue/pending fallback still works when agent writes the old way', async () => {
+  const queryFn = fakeQueryFn([
+    { type: 'result', subtype: 'success', duration_ms: 100, total_cost_usd: 0.001 },
+  ], (cwd) => {
+    const pending = resolve(cwd, '_queue/pending');
+    mkdirSync(pending, { recursive: true });
+    writeFileSync(
+      resolve(pending, 'INIT-2026-05-08-legacy.md'),
+      '---\ninitiative_id: INIT-2026-05-08-legacy\nproject: simplarr\n---\nbody',
+    );
+  });
+  const r = await runArchitect({ ...baseInput, queryFn });
+  try {
+    assert.equal(r.runnerError, undefined);
+    assert.equal(r.manifestPath, '_queue/pending/INIT-2026-05-08-legacy.md');
+    assert.ok(r.manifestText?.includes('INIT-2026-05-08-legacy'));
   } finally {
     cleanupTempdir(r.tempdir);
   }
@@ -133,6 +162,8 @@ test('runArchitect: missing manifest surfaces as no_manifest_written', async () 
   try {
     assert.equal(r.manifestText, null);
     assert.equal(r.runnerError?.kind, 'no_manifest_written');
+    // Error message mentions the new _architect path
+    assert.match(r.runnerError?.message ?? '', /_architect/);
   } finally {
     cleanupTempdir(r.tempdir);
   }
@@ -177,20 +208,22 @@ test('runArchitect: empty iterator surfaces as no_result', async () => {
   }
 });
 
-test('runArchitect: detects multiple manifests as multiple_manifests_written', async () => {
+test('runArchitect: detects multiple manifests as multiple_manifests_written (in _architect)', async () => {
   const queryFn = fakeQueryFn([
     { type: 'result', subtype: 'success', duration_ms: 100, total_cost_usd: 0.001 },
   ], (cwd) => {
-    const pending = resolve(cwd, '_queue/pending');
-    mkdirSync(pending, { recursive: true });
-    writeFileSync(resolve(pending, 'INIT-2026-05-08-a.md'), 'one');
-    writeFileSync(resolve(pending, 'INIT-2026-05-08-b.md'), 'two');
+    const manifestsDir = resolve(cwd, 'projects/simplarr/_architect/2026-05-24T00-00-00/manifests');
+    mkdirSync(manifestsDir, { recursive: true });
+    writeFileSync(resolve(manifestsDir, 'INIT-2026-05-24-a.md'), 'one');
+    writeFileSync(resolve(manifestsDir, 'INIT-2026-05-24-b.md'), 'two');
   });
 
   const r = await runArchitect({ ...baseInput, queryFn });
   try {
     assert.notEqual(r.manifestText, null);
     assert.equal(r.runnerError?.kind, 'multiple_manifests_written');
+    // Sibling collection picks up the other manifest
+    assert.equal(r.siblingManifestTexts.length, 1);
   } finally {
     cleanupTempdir(r.tempdir);
   }

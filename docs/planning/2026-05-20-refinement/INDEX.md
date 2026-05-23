@@ -31,7 +31,11 @@ graphify (additive brain layer), and a token economy plan.
    interview step (`AskUserQuestion`) + sibling `PLAN.html` rich viewer,
    distilled from `anthropics/cwc-workshops/how-we-claude-code`. Additive
    to S2A; doesn't disturb the locked surface.
-5. Each plan + its council review below.
+5. **[S2B-CLOSURE.md](./S2B-CLOSURE.md)** — S2B (architect bench reground +
+   cross-phase handoff + `interview_section_present` gate) closure. Bench
+   surface + scoring + fixtures + harness migration landed; LLM-driven
+   bench run operator-pending (API-key blocker).
+6. Each plan + its council review below.
 
 ## Plans
 

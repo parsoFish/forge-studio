@@ -85,6 +85,7 @@ function emptyCriteria(): ArchitectCriteria {
     downstream_pm_score: 0,
     specs_concrete_per_feature: 0,
     brain_consulted_qualified: 0,
+    interview_section_present: 0,
   };
 }
 

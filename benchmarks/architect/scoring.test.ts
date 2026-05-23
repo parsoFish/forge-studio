@@ -27,6 +27,7 @@ import {
   countGivenWhenThen,
   detectBoilerplateBlocks,
   escalationsResolved,
+  interviewSectionPresent,
   loadManifestForScoring,
   PASS_THRESHOLD,
   projectContextLifted,
@@ -36,6 +37,7 @@ import {
   WEIGHT_CONTEXT_LIFTED,
   WEIGHT_DOWNSTREAM_PM,
   WEIGHT_ESCALATIONS,
+  WEIGHT_INTERVIEW,
   WEIGHT_SPECS,
 } from './scoring.ts';
 
@@ -64,7 +66,13 @@ function manifestWith(body: string): string {
 }
 
 test('weights sum to 1', () => {
-  const sum = WEIGHT_CONTEXT_LIFTED + WEIGHT_ESCALATIONS + WEIGHT_DOWNSTREAM_PM + WEIGHT_SPECS + WEIGHT_BRAIN;
+  const sum =
+    WEIGHT_CONTEXT_LIFTED +
+    WEIGHT_ESCALATIONS +
+    WEIGHT_DOWNSTREAM_PM +
+    WEIGHT_SPECS +
+    WEIGHT_BRAIN +
+    WEIGHT_INTERVIEW;
   assert.ok(Math.abs(sum - 1) < 1e-9, `expected weights to sum to 1, got ${sum}`);
 });
 
@@ -432,6 +440,84 @@ test('caseScore: manifest without aggregate-spend info still passes if other cri
 
 test('PASS_THRESHOLD matches plan (0.7)', () => {
   assert.equal(PASS_THRESHOLD, 0.7);
+});
+
+// --------------------- interview_section_present (cwc Amendment 1) ---------------------
+
+test('interviewSectionPresent: undefined planDoc ⇒ N/A (1)', () => {
+  assert.equal(interviewSectionPresent(undefined), 1);
+});
+
+test('interviewSectionPresent: empty planDoc ⇒ N/A (1)', () => {
+  assert.equal(interviewSectionPresent(''), 1);
+});
+
+test('interviewSectionPresent: section heading present with Q&A table row ⇒ 1', () => {
+  const plan = [
+    '# Architect plan',
+    '',
+    '## Operator brief + interview',
+    '',
+    'A paraphrase paragraph.',
+    '',
+    '### Interview',
+    '',
+    '| # | Question | Operator answer |',
+    '|---|---|---|',
+    '| 1 | What is the scope edge? | INIT-01 only. |',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 1);
+});
+
+test('interviewSectionPresent: empty-rounds notice (renderPlanDoc default) ⇒ 1', () => {
+  const plan = [
+    '## Operator brief + interview',
+    '',
+    'Paraphrase paragraph.',
+    '',
+    '### Interview',
+    '',
+    '_No interview rounds — operator drafted directly._',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 1);
+});
+
+test('interviewSectionPresent: paraphrase-only body (no rounds, no notice) ⇒ 1 (paragraph counts)', () => {
+  const plan = [
+    '## Operator brief + interview',
+    '',
+    'A paragraph capturing the brief.',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 1);
+});
+
+test('interviewSectionPresent: missing heading (PLAN.md from pre-amendment SKILL) ⇒ 0', () => {
+  const plan = [
+    '# Architect plan',
+    '',
+    '## Vision recap',
+    '',
+    'A paraphrase paragraph (pre-amendment SKILL output).',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 0);
+});
+
+test('interviewSectionPresent: heading present but body completely empty ⇒ 0', () => {
+  const plan = [
+    '## Operator brief + interview',
+    '',
+    '## Brain context',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 0);
+});
+
+test('interviewSectionPresent: accepts "Operator brief and interview" spelling', () => {
+  const plan = [
+    '## Operator Brief and Interview',
+    '',
+    'Paraphrase.',
+  ].join('\n');
+  assert.equal(interviewSectionPresent(plan), 1);
 });
 
 // --------------------- discrimination test (key acceptance) ---------------------

@@ -2,7 +2,7 @@
  * Pure scoring functions for the architect benchmark.
  *
  * S2B regrounding (per plan 02 §"Benchmark regrounding", per CONTRACTS.md
- * C10/C10a/C19):
+ * C10/C10a/C19) + cwc Amendment 1 follow-up (interview_section_present):
  *
  *   gate: manifest_valid (0 or 1; if 0, total = 0)
  *
@@ -25,10 +25,17 @@
  *       The pin to scoring.frozen.ts means PM-bench iteration cannot
  *       perturb architect-bench scores.
  *
- *   specs_concrete_per_feature  (0.10)  — retained, weight halved.
+ *   specs_concrete_per_feature  (0.05)  — retained, weight halved (was 0.10).
  *   brain_consulted_qualified   (0.05)  — current `brain/` regex + on-disk
  *                                          existsSync check (≥1 cited path
  *                                          must resolve).
+ *   interview_section_present   (0.05)  — cwc Amendment 1. PLAN.md carries an
+ *                                          `## Operator brief + interview`
+ *                                          heading with a non-empty body
+ *                                          (Q&A table OR explicit
+ *                                          "operator drafted directly"
+ *                                          notice). Auto-passes if no
+ *                                          PLAN.md was supplied.
  *
  * Per CONTRACTS.md C19, there is **no** `aggregate_budget_declared`
  * criterion. The aggregate-spend footprint is informational only in
@@ -90,6 +97,7 @@ export type ArchitectCriteria = {
   downstream_pm_score: number;             // 0 to 1 (fractional — passes through PM rubric)
   specs_concrete_per_feature: number;      // 0 or 1
   brain_consulted_qualified: number;       // 0 or 1
+  interview_section_present: number;       // 0 or 1 (cwc Amendment 1)
 };
 
 export type ArchitectScore = {
@@ -105,12 +113,15 @@ export type ArchitectScore = {
 export const PASS_THRESHOLD = 0.7;
 
 // Weights — must sum to 1. Highest weights on the criteria that catch the
-// failure modes the S2B reground was motivated by.
+// failure modes the S2B reground was motivated by. Cwc Amendment 1 added
+// interview_section_present at 0.05; specs halved from 0.10 to 0.05 to
+// keep the total at 1.0 without diluting the load-bearing criteria.
 export const WEIGHT_CONTEXT_LIFTED = 0.30;
 export const WEIGHT_ESCALATIONS = 0.25;
 export const WEIGHT_DOWNSTREAM_PM = 0.30;
-export const WEIGHT_SPECS = 0.10;
+export const WEIGHT_SPECS = 0.05;
 export const WEIGHT_BRAIN = 0.05;
+export const WEIGHT_INTERVIEW = 0.05;
 
 // Boilerplate-detection tuning constants. Blocks shorter than these are
 // not signal — they're routine TL;DR-shaped boilerplate that's expected to
@@ -390,6 +401,51 @@ function isEscalationResolved(item: string): boolean {
   return false;
 }
 
+// --------------------- interview_section_present ---------------------
+
+/**
+ * Detect the cwc Amendment 1 "Operator brief + interview" section in PLAN.md.
+ *
+ * Pass cases:
+ *  - No PLAN.md supplied (undefined / empty): N/A → 1.
+ *  - Section heading present AND body has either a Q&A table row OR the
+ *    "operator drafted directly" empty notice.
+ *
+ * Fail case:
+ *  - PLAN.md exists, but no `## Operator brief + interview` heading, OR the
+ *    section body is empty (architect emitted PLAN.md but skipped the
+ *    interview step entirely).
+ *
+ * Naming variant tolerated: we accept `## Operator brief + interview`,
+ * `## Operator Brief + Interview`, or `## Operator brief and interview` —
+ * but NOT the legacy `## Vision recap` (which means the agent rendered
+ * pre-amendment SKILL.md).
+ */
+export function interviewSectionPresent(planDoc: string | undefined): number {
+  if (planDoc === undefined || planDoc.trim() === '') return 1;
+
+  const heading = /^##\s+operator\s+brief\s+(?:\+|and)\s+interview\s*$/im;
+  const m = planDoc.match(heading);
+  if (!m) return 0;
+
+  // Body = text from after the heading to the next H2 (or EOF).
+  const start = m.index! + m[0].length;
+  const rest = planDoc.slice(start);
+  const nextH2 = rest.match(/^##\s+/m);
+  const body = nextH2 ? rest.slice(0, nextH2.index!) : rest;
+
+  // Acceptable body signals:
+  //  - A markdown table row with a leading numeric column (the Q&A table)
+  //  - The explicit "operator drafted directly" notice
+  //  - Plain prose paragraphs (brief paraphrase) — must have some non-heading
+  //    content. The "no rounds" notice covers this too.
+  const hasQARow = /^\|\s*\d+\s*\|/m.test(body);
+  const hasNoRoundsNotice = /no\s+interview\s+rounds[^.]*\boperator\s+drafted\s+directly\b/i.test(body);
+  const hasParagraph = body.split(/\r?\n/).some((l) => l.trim().length > 0 && !/^#{2,6}\s/.test(l) && !/^\|/.test(l));
+
+  return (hasQARow || hasNoRoundsNotice || hasParagraph) ? 1 : 0;
+}
+
 // --------------------- downstream_pm_score ---------------------
 
 /**
@@ -429,6 +485,7 @@ export function caseScore(input: CaseScoreInput): ArchitectScore {
         downstream_pm_score: 0,
         specs_concrete_per_feature: 0,
         brain_consulted_qualified: 0,
+        interview_section_present: 0,
       },
       manifest_errors: parseError !== undefined ? [parseError] : ['parseManifest returned null'],
       feature_count: 0,
@@ -451,6 +508,7 @@ export function caseScore(input: CaseScoreInput): ArchitectScore {
         downstream_pm_score: 0,
         specs_concrete_per_feature: 0,
         brain_consulted_qualified: 0,
+        interview_section_present: 0,
       },
       manifest_errors: errors,
       feature_count: featureCount,
@@ -465,6 +523,7 @@ export function caseScore(input: CaseScoreInput): ArchitectScore {
   const brain = brainConsultedQualified(manifest.body, forgeRoot);
   const contextLifted = projectContextLifted(sessionManifests, input.planDoc ?? '');
   const escalations = escalationsResolved(input.planDoc);
+  const interview = interviewSectionPresent(input.planDoc);
   const { score: pmScore, detail: pmDetail } = downstreamPmScore(input.downstreamPm);
 
   const criteria: ArchitectCriteria = {
@@ -474,6 +533,7 @@ export function caseScore(input: CaseScoreInput): ArchitectScore {
     downstream_pm_score: pmScore,
     specs_concrete_per_feature: specs,
     brain_consulted_qualified: brain,
+    interview_section_present: interview,
   };
 
   const score =
@@ -481,7 +541,8 @@ export function caseScore(input: CaseScoreInput): ArchitectScore {
     WEIGHT_ESCALATIONS * criteria.escalations_resolved +
     WEIGHT_DOWNSTREAM_PM * criteria.downstream_pm_score +
     WEIGHT_SPECS * criteria.specs_concrete_per_feature +
-    WEIGHT_BRAIN * criteria.brain_consulted_qualified;
+    WEIGHT_BRAIN * criteria.brain_consulted_qualified +
+    WEIGHT_INTERVIEW * criteria.interview_section_present;
 
   return {
     score,
