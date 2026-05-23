@@ -19,10 +19,12 @@ import {
   caseScore,
   checkCycleArchive,
   checkTheme,
+  lintInvoked,
   listThemeFiles,
   logHasWedgeOrSendBack,
   parseEventLog,
   parseFrontmatter,
+  retentionAssigned,
   retroHasThreeSections,
   PASS_THRESHOLD,
   WEIGHT_BRAIN_GAPS,
@@ -762,6 +764,156 @@ test('caseScore: passes threshold at exactly 0.7', () => {
   } finally {
     t.cleanup();
   }
+});
+
+// ---------- S6A — lintInvoked gate ----------
+
+test('lintInvoked: 1 when reflector.lint-invoked event present', () => {
+  assert.equal(
+    lintInvoked([
+      { phase: 'reflection', message: 'reflector.start' },
+      { phase: 'reflection', message: 'reflector.lint-invoked' },
+    ]),
+    1,
+  );
+});
+
+test('lintInvoked: 1 when reflector.lint-skipped event present', () => {
+  assert.equal(
+    lintInvoked([
+      { phase: 'reflection', message: 'reflector.start' },
+      { phase: 'reflection', message: 'reflector.lint-skipped' },
+    ]),
+    1,
+  );
+});
+
+test('lintInvoked: 1 when reflector.lint-flagged event present', () => {
+  assert.equal(
+    lintInvoked([
+      { phase: 'reflection', message: 'reflector.start' },
+      { phase: 'reflection', message: 'reflector.lint-flagged' },
+    ]),
+    1,
+  );
+});
+
+test('lintInvoked: 0 when reflector ran but no lint event followed', () => {
+  assert.equal(
+    lintInvoked([
+      { phase: 'reflection', message: 'reflector.start' },
+      { phase: 'reflection', message: 'reflector.end' },
+    ]),
+    0,
+  );
+});
+
+test('lintInvoked: 1 (backward compat) when reflector phase never fired', () => {
+  // Pre-S6A frozen fixture log path.
+  assert.equal(
+    lintInvoked([
+      { phase: 'orchestrator', message: 'cycle.start' },
+      { phase: 'orchestrator', message: 'cycle.end' },
+    ]),
+    1,
+  );
+});
+
+// ---------- S6A — retentionAssigned gate ----------
+
+test('retentionAssigned: 1 when retention is load-bearing', () => {
+  const t = setupBenchTree('CY-1');
+  try {
+    const archivePath = join(t.brainRoot, '_raw', 'cycles', 'CY-1.md');
+    writeFileSync(
+      archivePath,
+      [
+        '---',
+        'source_type: cycle',
+        'cycle_id: CY-1',
+        'ingested_at: 2026-05-23',
+        'ingested_by: reflector',
+        'retention: load-bearing',
+        'cited_by: []',
+        '---',
+        '',
+        'body',
+      ].join('\n'),
+    );
+    assert.equal(retentionAssigned(archivePath), 1);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('retentionAssigned: 1 for interesting + routine tiers', () => {
+  const t = setupBenchTree('CY-1');
+  try {
+    for (const tier of ['interesting', 'routine']) {
+      const archivePath = join(t.brainRoot, '_raw', 'cycles', `CY-${tier}.md`);
+      writeFileSync(
+        archivePath,
+        [
+          '---',
+          'source_type: cycle',
+          `retention: ${tier}`,
+          '---',
+          '',
+        ].join('\n'),
+      );
+      assert.equal(retentionAssigned(archivePath), 1, `expected 1 for ${tier}`);
+    }
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('retentionAssigned: 0 when retention is the placeholder "auto"', () => {
+  const t = setupBenchTree('CY-1');
+  try {
+    const archivePath = join(t.brainRoot, '_raw', 'cycles', 'CY-1.md');
+    writeFileSync(
+      archivePath,
+      ['---', 'source_type: cycle', 'retention: auto', '---', ''].join('\n'),
+    );
+    assert.equal(retentionAssigned(archivePath), 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('retentionAssigned: 0 when retention value is invalid', () => {
+  const t = setupBenchTree('CY-1');
+  try {
+    const archivePath = join(t.brainRoot, '_raw', 'cycles', 'CY-1.md');
+    writeFileSync(
+      archivePath,
+      ['---', 'source_type: cycle', 'retention: garbage', '---', ''].join('\n'),
+    );
+    assert.equal(retentionAssigned(archivePath), 0);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('retentionAssigned: 1 (backward compat) when retention key is absent', () => {
+  const t = setupBenchTree('CY-1');
+  try {
+    const archivePath = join(t.brainRoot, '_raw', 'cycles', 'CY-1.md');
+    writeFileSync(
+      archivePath,
+      ['---', 'source_type: cycle', 'ingested_by: reflector', '---', ''].join(
+        '\n',
+      ),
+    );
+    assert.equal(retentionAssigned(archivePath), 1);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('retentionAssigned: 0 when archive file missing', () => {
+  assert.equal(retentionAssigned('/nonexistent/path.md'), 0);
 });
 
 test('weights sum to 1.0', () => {

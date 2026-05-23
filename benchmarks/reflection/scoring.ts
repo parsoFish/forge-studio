@@ -413,6 +413,62 @@ export function brainConsulted(toolUse: ReflectorToolUseSummary): 0 | 1 {
 }
 
 // ---------------------------------------------------------------------------
+// S6A — lint_invoked gate. Any of the three reflector.lint-* events present
+// in the cycle's event log counts as "lint was triggered". Per CONTRACTS.md
+// C8 + plan 06: lint is informational, not gating — but the gate exists so
+// bench tooling can confirm the trigger fired. Pre-S6A fixture-frozen logs
+// (no `reflector.start` event) return 1 to preserve backward compatibility
+// with the 5 existing fixtures' frozen event-log data.
+// ---------------------------------------------------------------------------
+
+export function lintInvoked(lines: EventLine[]): 0 | 1 {
+  const sawReflectorStart = lines.some(
+    (ln) => ln.phase === 'reflection' && ln.message === 'reflector.start',
+  );
+  if (!sawReflectorStart) {
+    // Pre-S6A fixture-frozen log (no reflector phase fired) — backward
+    // compatible: gate auto-passes so existing fixtures continue to score
+    // unchanged.
+    return 1;
+  }
+  for (const ln of lines) {
+    if (
+      ln.message === 'reflector.lint-invoked' ||
+      ln.message === 'reflector.lint-skipped' ||
+      ln.message === 'reflector.lint-flagged'
+    ) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// S6A — retention_assigned gate. The cycle archive must declare a
+// `retention` frontmatter field with one of the three valid tier values.
+// Pre-S6A archives (no retention key) return 1 to preserve backward
+// compatibility with frozen fixtures; an explicit `retention: auto`
+// placeholder is treated as NOT assigned (the orchestrator should have
+// post-processed it).
+// ---------------------------------------------------------------------------
+
+const VALID_RETENTION = new Set(['load-bearing', 'interesting', 'routine']);
+
+export function retentionAssigned(archivePath: string): 0 | 1 {
+  if (!existsSync(archivePath)) return 0;
+  const content = readFileSync(archivePath, 'utf8');
+  const fm = parseFrontmatter(content);
+  if (!fm) return 0;
+  const value = fm['retention'];
+  if (value === undefined) {
+    // Pre-S6A archive — backward compatible auto-pass.
+    return 1;
+  }
+  if (value === 'auto' || value === '') return 0;
+  return VALID_RETENTION.has(value) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Top-level case scorer.
 // ---------------------------------------------------------------------------
 

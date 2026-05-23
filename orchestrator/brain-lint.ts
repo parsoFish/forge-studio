@@ -588,6 +588,103 @@ export function checkContamination(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- checkCleanupCandidates (S6A — retention-aware) ----------
+
+/**
+ * S6A — surface cleanup candidates by reading each cycle archive's
+ * `retention` frontmatter (written by the reflector + post-processed by
+ * `orchestrator/cycle-retention.ts`). Tiers:
+ *
+ *   - `routine`     ⇒ Tier B (archive-and-summarise eligible if older
+ *                     than CLEANUP_ROUTINE_MIN_AGE_DAYS).
+ *   - `load-bearing` ⇒ Tier C (never auto). Surfaced as info-level so the
+ *                     operator can see it in cleanup-dry-run output.
+ *   - `interesting` ⇒ tier-A-ish (keep verbatim; not a cleanup candidate).
+ *   - missing       ⇒ "pre-S6A archive, manual triage".
+ *
+ * Only fires when scope is `cleanup-dry-run` (caller-filtered in
+ * `filterFindingsByScope`). All findings are `flag` category — this check
+ * never errors.
+ */
+const CLEANUP_ROUTINE_MIN_AGE_DAYS = 30;
+
+export function checkCleanupCandidates(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  const cyclesDir = join(forgeRoot, 'brain', '_raw', 'cycles');
+  if (!existsSync(cyclesDir)) return findings;
+  let entries: string[];
+  try {
+    entries = readdirSync(cyclesDir);
+  } catch {
+    return findings;
+  }
+  const nowMs = Date.now();
+  const ageMs = CLEANUP_ROUTINE_MIN_AGE_DAYS * 24 * 60 * 60 * 1000;
+  for (const file of entries) {
+    if (!file.endsWith('.md')) continue;
+    const full = join(cyclesDir, file);
+    let raw: string;
+    try {
+      raw = readFileSync(full, 'utf8');
+    } catch {
+      continue;
+    }
+    let mtimeMs: number;
+    try {
+      mtimeMs = statSync(full).mtimeMs;
+    } catch {
+      mtimeMs = nowMs;
+    }
+    const fmEnd = raw.indexOf('\n---', 4);
+    if (fmEnd === -1) {
+      findings.push({
+        category: 'flag',
+        file: full,
+        message: 'cleanup: pre-S6A archive, manual triage (no frontmatter)',
+        check: 'checkCleanupCandidates',
+      });
+      continue;
+    }
+    const fmBlock = raw.slice(4, fmEnd);
+    let retention: string | null = null;
+    for (const line of fmBlock.split(/\r?\n/)) {
+      const m = line.match(/^retention:\s*(.*)$/);
+      if (m) {
+        retention = m[1].trim();
+        break;
+      }
+    }
+    if (!retention || retention === 'auto') {
+      findings.push({
+        category: 'flag',
+        file: full,
+        message: 'cleanup: pre-S6A archive or placeholder retention, manual triage',
+        check: 'checkCleanupCandidates',
+      });
+      continue;
+    }
+    if (retention === 'load-bearing') {
+      findings.push({
+        category: 'flag',
+        file: full,
+        message: 'cleanup: tier-C (load-bearing — never auto)',
+        check: 'checkCleanupCandidates',
+      });
+      continue;
+    }
+    if (retention === 'routine' && nowMs - mtimeMs > ageMs) {
+      findings.push({
+        category: 'flag',
+        file: full,
+        message: `cleanup: tier-B (routine, > ${CLEANUP_ROUTINE_MIN_AGE_DAYS} days old — archive-and-summarise eligible)`,
+        check: 'checkCleanupCandidates',
+      });
+    }
+    // `interesting` and recent `routine`: not surfaced.
+  }
+  return findings;
+}
+
 // ---------- checkContradictions (warn-only stretch) ----------
 
 export function checkContradictions(forgeRoot: string): Finding[] {
@@ -700,6 +797,9 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...checkLengthSoftCap(opts.cwd),
     ...checkContamination(opts.cwd),
     ...checkContradictions(opts.cwd),
+    // S6A — cleanup-candidates only contributes when scope is
+    // `cleanup-dry-run`; filterFindingsByScope drops everything else.
+    ...(opts.scope === 'cleanup-dry-run' ? checkCleanupCandidates(opts.cwd) : []),
   ];
 
   let findings = filterFindingsByScope(allFindings, opts);

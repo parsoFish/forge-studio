@@ -83,6 +83,33 @@ export type CycleInput = {
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
 
+/**
+ * S6A / C8 — outcome of the post-reflection brain-lint pass over
+ * cycle-touched themes. Sibling field on `CycleResult`; NOT a new value on
+ * the existing `reflection_status` enum. Per
+ * `feedback_reflection_close_criterion`, `lint_status: 'flagged'` does
+ * NOT block `reflection_status: 'closed'` — themes the reflector wrote
+ * are still internally consistent; flagged lint reports pre-existing
+ * brain debt for the next cycle.
+ *
+ * - `clean`   — lint ran, zero error findings.
+ * - `flagged` — lint ran, ≥ 1 error finding (or lint itself threw on a
+ *               malformed brain file — see S6A-DECISIONS.md "Failure mode").
+ * - `skipped` — lint did not run (reflector bailed before lint trigger,
+ *               or lint module is unavailable in the runtime).
+ */
+export type LintStatus = 'clean' | 'flagged' | 'skipped';
+
+/**
+ * Combined outcome of the reflection phase — what `runReflector` returns
+ * so `runCycle` can populate both sibling fields on `CycleResult` from a
+ * single phase-runner invocation.
+ */
+export type ReflectorPhaseResult = {
+  reflection_status: ReflectionStatus;
+  lint_status: LintStatus;
+};
+
 export type CycleResult = {
   cycle_id: string;
   initiative_id: string;
@@ -114,6 +141,13 @@ export type CycleResult = {
    * - `skipped`  — reflection was not invoked (no merge, or dry run).
    */
   reflection_status?: ReflectionStatus;
+  /**
+   * S6A / C8 — sibling to `reflection_status`. Records whether the post-
+   * reflection brain-lint pass found errors in cycle-touched themes.
+   * Optional (absent ⇒ `'skipped'`). Informational only — does NOT
+   * change `status` or block `reflection_status: 'closed'`.
+   */
+  lint_status?: LintStatus;
   duration_ms: number;
   log_path: string;
 };
