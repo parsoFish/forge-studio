@@ -23,19 +23,26 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import {
   closeSync,
   existsSync,
+  mkdirSync,
   openSync,
   readFileSync,
   readSync,
   readdirSync,
+  renameSync,
   statSync,
   watch as fsWatch,
+  writeFileSync,
   type FSWatcher,
 } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
+import lockfile from 'proper-lockfile';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
+import { fileVerdictPaths } from '../orchestrator/file-verdict.ts';
+import { daemonState } from '../orchestrator/daemon.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 
 const TAIL_POLL_MS = 200;
@@ -216,7 +223,14 @@ export function startBridge(opts: BridgeOptions): { url: string; close: () => Pr
     }
   };
 
-  const http = createServer((req, res) => handleHttp(req, res, { scanCycles, logsRoot }));
+  const http = createServer((req, res) => {
+    void handleHttp(req, res, {
+      scanCycles,
+      logsRoot,
+      forgeRoot,
+      queueRoot: queuePaths.root,
+    });
+  });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 
   const debugWs = process.env.FORGE_BRIDGE_DEBUG === '1';
@@ -260,22 +274,42 @@ export function startBridge(opts: BridgeOptions): { url: string; close: () => Pr
 
 // ---- HTTP handlers ---------------------------------------------------------
 
-function handleHttp(
+type HttpContext = {
+  scanCycles: () => { live: Cycle[]; recent: Cycle[] };
+  logsRoot: string;
+  forgeRoot: string;
+  queueRoot: string;
+};
+
+async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: { scanCycles: () => { live: Cycle[]; recent: Cycle[] }; logsRoot: string },
-): void {
+  ctx: HttpContext,
+): Promise<void> {
   const url = req.url ?? '/';
-  if (url === '/api/health') {
+  const method = req.method ?? 'GET';
+
+  // CORS preflight for the browser fetch with content-type JSON.
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'content-type',
+    });
+    res.end();
+    return;
+  }
+
+  if (method === 'GET' && url === '/api/health') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('ok');
     return;
   }
-  if (url === '/api/cycles') {
+  if (method === 'GET' && url === '/api/cycles') {
     sendJson(res, 200, ctx.scanCycles());
     return;
   }
-  if (url.startsWith('/api/events/')) {
+  if (method === 'GET' && url.startsWith('/api/events/')) {
     const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
     const filePath = join(ctx.logsRoot, cycleId, 'events.jsonl');
     if (!existsSync(filePath)) {
@@ -295,7 +329,7 @@ function handleHttp(
     }
     return;
   }
-  if (url.startsWith('/api/graph/')) {
+  if (method === 'GET' && url.startsWith('/api/graph/')) {
     const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
     const filePath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', '_graph.md');
     if (!existsSync(filePath)) {
@@ -310,8 +344,125 @@ function handleHttp(
     }
     return;
   }
+
+  // Scheduler lifecycle.
+  if (method === 'GET' && url === '/api/scheduler/status') {
+    const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
+    sendJson(res, 200, state);
+    return;
+  }
+  if (method === 'POST' && url === '/api/scheduler/start') {
+    try {
+      const before = daemonState(ctx.forgeRoot, ctx.queueRoot);
+      if (before.running) {
+        sendJson(res, 200, { ok: true, alreadyRunning: true, state: before });
+        return;
+      }
+      // Spawn detached so the daemon outlives the forge-watch process.
+      const proc = spawn(process.execPath, ['--experimental-strip-types', 'orchestrator/cli.ts', 'start'], {
+        cwd: ctx.forgeRoot,
+        detached: true,
+        stdio: 'ignore',
+      });
+      proc.unref();
+      // Best-effort wait for the pid file to appear.
+      await sleep(800);
+      const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
+      sendJson(res, 200, { ok: true, started: true, state: after });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
+
+  // Review verdict — the M2-C intervention surface.
+  if (method === 'POST' && url === '/api/verdict') {
+    try {
+      const body = await readJson(req);
+      const { initiativeId, kind, rationale } = body as {
+        initiativeId?: string;
+        kind?: 'approve' | 'send-back';
+        rationale?: string;
+        acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
+      };
+      if (!initiativeId || !kind || !rationale) {
+        sendJson(res, 400, { error: 'initiativeId, kind, rationale required' });
+        return;
+      }
+      if (kind !== 'approve' && kind !== 'send-back') {
+        sendJson(res, 400, { error: `unknown kind: ${kind}` });
+        return;
+      }
+      const acs = (body as { acceptanceCriteria?: Array<{ given: string; when: string; then: string }> }).acceptanceCriteria ?? [];
+      if (kind === 'send-back' && acs.length === 0) {
+        sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' });
+        return;
+      }
+      const paths = fileVerdictPaths(initiativeId, ctx.queueRoot);
+      const manifestPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
+      if (!existsSync(manifestPath)) {
+        sendJson(res, 409, { error: 'no in-flight manifest for initiative (already resolved?)', initiativeId });
+        return;
+      }
+      // Lock the in-flight manifest so we don't race the scheduler's
+      // status transition. proper-lockfile uses a sibling `.lock` dir.
+      let release: (() => Promise<void>) | null = null;
+      try {
+        release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
+      } catch (lockErr) {
+        sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) });
+        return;
+      }
+      try {
+        const content = renderVerdictResponse(kind, rationale, acs);
+        // Write tmp+rename for atomicity (per C16).
+        const tmpPath = paths.responsePath + '.tmp';
+        mkdirSync(join(ctx.queueRoot, 'in-flight'), { recursive: true });
+        writeFileSync(tmpPath, content);
+        renameSync(tmpPath, paths.responsePath);
+      } finally {
+        if (release) { try { await release(); } catch { /* ignore */ } }
+      }
+      sendJson(res, 200, { ok: true, wrote: paths.responsePath });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
+
   res.writeHead(404);
   res.end();
+}
+
+function renderVerdictResponse(
+  kind: 'approve' | 'send-back',
+  rationale: string,
+  acs: Array<{ given: string; when: string; then: string }>,
+): string {
+  // Mirrors the shape that orchestrator/file-verdict.ts:parseVerdictResponse
+  // expects. YAML frontmatter (`verdict: …` + `rationale: |` block), then
+  // optional `- GIVEN ... WHEN ... THEN ...` lines for send-back.
+  const fmRationale = rationale.split('\n').map((l) => '  ' + l).join('\n');
+  const head = `---\nverdict: ${kind}\nrationale: |\n${fmRationale}\n---\n`;
+  if (kind === 'approve') return head;
+  const body = acs.map((a) => `- GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`).join('\n');
+  return `${head}\n## Acceptance criteria\n\n${body}\n`;
+}
+
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolveJson, rejectJson) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
+    });
+    req.on('error', rejectJson);
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

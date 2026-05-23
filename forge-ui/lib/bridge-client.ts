@@ -87,6 +87,60 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
   return body.events;
 }
 
+export type SchedulerStatus = {
+  running: boolean;
+  pid?: number;
+  paused?: boolean;
+};
+
+export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {
+  const base = await resolveBridgeUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/scheduler/status`);
+    if (!res.ok) return null;
+    return (await res.json()) as SchedulerStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function startScheduler(): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/scheduler/start`, { method: 'POST' });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+export type AcceptanceCriterion = { given: string; when: string; then: string };
+
+export type VerdictSubmission =
+  | { kind: 'approve'; initiativeId: string; rationale: string }
+  | { kind: 'send-back'; initiativeId: string; rationale: string; acceptanceCriteria: AcceptanceCriterion[] };
+
+export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/verdict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ---- WebSocket subscription ---------------------------------------------
 
 export type Subscription = { close: () => void };

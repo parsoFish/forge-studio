@@ -14,6 +14,8 @@ import { derivePhaseStates, PHASE_ORDER, type PhaseState } from '@/lib/phases';
 import { Sidebar } from '@/components/Sidebar';
 import { CycleToasts } from '@/components/Toasts';
 import { WiGraphPanel } from '@/components/WiGraph';
+import { VerdictForm } from '@/components/VerdictForm';
+import { SchedulerBanner } from '@/components/SchedulerBanner';
 
 export default function Page() {
   const [snapshot, setSnapshot] = useState<CycleListSnapshot>({ live: [], recent: [] });
@@ -68,6 +70,10 @@ export default function Page() {
   }, [activeCycleId, defaultActive]);
 
   const phaseStates = useMemo(() => derivePhaseStates(events), [events]);
+  const activeCycle = useMemo(
+    () => allCycles.find((c) => c.cycleId === activeCycleId) ?? null,
+    [allCycles, activeCycleId],
+  );
 
   return (
     <main style={{ padding: '16px 24px', minHeight: '100vh' }}>
@@ -76,7 +82,15 @@ export default function Page() {
         <ConnectionBadge state={connState} />
       </header>
 
+      <SchedulerBanner />
+
       <CyclesTab cycles={allCycles} activeId={activeCycleId} onSelect={setActiveCycleId} />
+
+      {activeCycle?.status === 'ready-for-review' && (
+        <section style={{ marginTop: 24 }}>
+          <VerdictForm initiativeId={activeCycle.initiativeId} />
+        </section>
+      )}
 
       <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
         <StateMachine phaseStates={phaseStates} />
