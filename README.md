@@ -10,9 +10,9 @@ This is **forge v2** — a fresh implementation that learns from v1 (at `~/sideP
 
 A real cycle — architect-supplied initiative → PM decomposes → dev-loop writes the code → unifier opens a PR — recorded against the operator UI shipped under [`forge-ui/`](./forge-ui).
 
-<video src="https://github.com/parsoFish/forge-v2/raw/main/docs/demo/cycle.mp4" controls muted width="800"></video>
+https://github.com/parsoFish/forge-v2/releases/download/v0.1.0/cycle.mp4
 
-If the video doesn't play inline: [open it on GitHub](./docs/demo/cycle.mp4) or read the [phase-by-phase frames](./docs/demo/README.md).
+(GitHub auto-embeds this as an inline `<video>` element on the rendered README page. Direct link: [cycle.mp4](https://github.com/parsoFish/forge-v2/releases/download/v0.1.0/cycle.mp4) · Phase-by-phase captions: [docs/demo/README.md](./docs/demo/README.md).)
 
 The cycle shown is `INIT-2026-05-25-claude-trail-verdict-summary` — cycle 10 of the `claude-harness` dogfood sequence (claude's own forge project, also published at [parsoFish/claude-harness](https://github.com/parsoFish/claude-harness)).
 
