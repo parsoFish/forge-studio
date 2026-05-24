@@ -181,3 +181,68 @@ was clearly load-bearing (the unifier's diagnostics in cycle 7 are
 exactly what would have been caught at WI-gate time). Doesn't
 require the bigger structural reshape of (1b). And keeps the
 unifier's role as I-implement-the-demo, not arbiter-of-completeness.
+
+## Update — cycle 8 (post-gate-quality-enforcement)
+
+Operator's framing made it sharper: don't force file declarations;
+fix the GATES. Implemented commit `ff23a9e`:
+- L1: `quality_gate_cmd` is now REQUIRED on every WI (validator).
+- L2: at iter 0, RUN the gate; if it passes, hard-fail the WI with
+  `gate-too-loose` (runner). The agent never starts on a WI that
+  doesn't have a sharp gate.
+- PM SKILL.md updated: explicit "your gate MUST FAIL ON A CLEAN
+  TREE before the agent does any work" guidance.
+
+**Cycle 8 result**: dev-loop **0/4 complete**. All 4 WIs fast-failed
+with `gate-too-loose`. The new check is doing exactly what it was
+designed to do — PM is now emitting WIs with **hollow gates of a
+different kind**:
+- WI-1, WI-2: `npx jest --testPathPattern trail.test.ts` (jest isn't
+  installed in claude-harness — package.json uses `node --test`)
+- WI-3: `npm run build` (claude-harness has no `build` script)
+- WI-4: `npm test` (default, passes on baseline alone)
+
+PM is **hallucinating tooling** that doesn't exist in the project.
+Looking at the WI bodies: PM also hallucinated the entire initiative
+SCOPE (cycle 8's WIs are about a `Trail` class with `append`/`verify`/
+`getAll` — completely orthogonal to the architect's "claude-trail CLI
+that reads forge state" brief).
+
+This is the deepest issue surfaced: PM-quality is the cycle limiter.
+The gate-quality enforcement works correctly — it surfaces PM's
+mistakes at WI-fail-fast time instead of letting them propagate to
+"complete but missing files" later. But it doesn't fix PM's
+underlying tendency to write WIs disconnected from the actual
+project + manifest.
+
+## The remaining decision
+
+Three paths I see:
+
+**A. Iterate on PM SKILL.md** — add explicit "read package.json + the
+project's CLAUDE.md before drafting gate commands" + show 2-3
+worked examples of sharp gates for common project shapes (node:test,
+pytest, go test, jest). Cheap; possibly enough.
+
+**B. Provide PM with project context inline** — at PM-invocation time,
+forge reads the project's package.json + .forge/project.json + the
+project's CLAUDE.md, and passes them as a prompt-prefix the PM
+can't ignore. Avoids relying on PM to remember to read them.
+
+**C. Forge-level gate validator** — at PM-validate time, verify the
+gate's first arg (`npx jest`, `npm test`, `pytest`, …) is mentioned
+in the project's package.json scripts / pyproject / etc. Reject WIs
+whose gate references tooling the project doesn't have. Hard to
+generalise across project types.
+
+I lean **A + B** — A is a small SKILL edit, B is a 10-line
+prompt-context expansion. Both keep agentic flexibility; both push
+PM's hallucination back to "you didn't read the project."
+
+C is more brittle (project shapes vary). Defer.
+
+This is the right hand-off point. We've gone from cycle 7 "WIs
+silently pass without delivering" (operator-visible after a long
+expensive unifier wedge) to cycle 8 "PM-quality is the limiter,
+surfaced in <30s at iter-0 of the first WI" (cheap, clear signal).
+The forge fix is correct; the next move is PM quality.
