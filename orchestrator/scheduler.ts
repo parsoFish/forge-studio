@@ -542,10 +542,20 @@ async function runOne(
     // `pr-open` (G9: review gate passed, PR awaiting the operator's merge)
     // MUST preserve — the operator needs the branch/worktree until they
     // merge in GitHub; the next cycle re-trigger confirms + aligns.
+    // 2026-05-25 (claude-harness overnight run): `failed` also preserves.
+    // The common failure mode in cycles 6/8/9 was dev-loop completed
+    // successfully but the unifier wedged at iteration-budget. Cleaning
+    // up the worktree wiped the dev-loop's committed work, forcing a
+    // full retry from scratch. Preserving on `failed` lets `forge
+    // requeue` salvage the work (the per-WI commits + tests stay on
+    // the branch). `forge requeue --reset-retries` is the operator's
+    // explicit cleanup signal — preserved worktrees only get garbage-
+    // collected when the operator decides.
     preserveWorktree =
       result.status === 'pr-open' ||
       result.status === 'ready-for-review' ||
-      result.status === 'send-back-cap-exhausted';
+      result.status === 'send-back-cap-exhausted' ||
+      result.status === 'failed';
     await dispatchTerminalStatus(
       {
         filename,
