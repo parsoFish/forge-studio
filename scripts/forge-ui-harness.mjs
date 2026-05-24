@@ -945,6 +945,8 @@ async function JOURNEY(ui, page) {
   const cycle = newCycle('journey');
   try {
     log('JOURNEY', `cycle=${cycle.cycleId}`);
+
+    // ---- 1: queue + claim ----
     await narrate('Step 1: pending. A new cycle for claude-greeting-svc enters the queue.');
     writeManifest('pending', cycle.initiativeId, 'claude-greeting-svc');
     await focusCycle(page, ui, cycle);
@@ -959,36 +961,70 @@ async function JOURNEY(ui, page) {
     await expectStatus('JOURNEY', page, cycle.cycleId, 'in-flight');
     await pauseAndCaptureJourney(page, 'J02-architect-active');
 
-    await narrate('Step 3: architect produces PLAN.md and closes.');
+    // ---- 3: architect emits PLAN.md ----
+    await narrate('Step 3: architect produces PLAN.md and closes. CycleArtifacts surfaces "view plan".');
     appendEvent(cycle, 'architect', 'tool_use', 'Glob projects/claude-greeting-svc/**/*.ts');
     appendEvent(cycle, 'architect', 'log', 'PLAN.md written: 5 acceptance criteria, 0 risks blocking');
     writeArtifact(cycle, 'PLAN.md', JOURNEY_PLAN_MD);
     appendEvent(cycle, 'architect', 'end', 'architect.end', { cost_usd: 0.18, duration_ms: 24000 });
-    await pauseAndCaptureJourney(page, 'J03-architect-complete');
+    // Give CycleArtifacts a probe interval (5s) to notice the artifact.
+    if (page) {
+      await page.waitForFunction(
+        () => document.querySelector('[data-component="cycle-artifacts"]')?.getAttribute('data-plan-state') === 'present',
+        undefined,
+        { timeout: 8000 },
+      ).catch(() => { /* */ });
+    }
+    await pauseAndCaptureJourney(page, 'J03-architect-complete-plan-link');
 
-    await narrate('Step 4: project-manager decomposes the plan into 3 work items.');
+    // ---- 4: operator clicks view-plan BEFORE pm runs ----
+    await narrate('Step 4: operator clicks "view plan" — reviews the architect output before letting PM run.');
+    if (page) {
+      try {
+        await page.goto(`${ui.uiUrl}/plan/${encodeURIComponent(cycle.cycleId)}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('main[data-page="plan"]')?.getAttribute('data-state') === 'ready',
+          undefined,
+          { timeout: 5000 },
+        ).catch(() => { /* */ });
+      } catch (err) {
+        log('JOURNEY', `plan navigation skipped: ${err.message}`);
+      }
+    }
+    await pauseAndCaptureJourney(page, 'J04-plan-page-review');
+
+    // ---- 5: back to main, PM starts ----
+    await narrate('Step 5: operator returns to the cycle view. Implicit approval — PM picks up.');
+    if (page) {
+      await page.goto(ui.uiUrl, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(
+        (id) => document.querySelector(`[data-cycle-id="${id}"]`),
+        cycle.cycleId,
+        { timeout: 5000 },
+      ).catch(() => { /* */ });
+      await page.locator(`[data-cycle-id="${cycle.cycleId}"]`).first().click().catch(() => { /* */ });
+    }
     appendEvent(cycle, 'project-manager', 'start', 'pm phase start');
     appendEvent(cycle, 'project-manager', 'tool_use', 'brain-query: ts-test-conventions');
     appendEvent(cycle, 'project-manager', 'tool_use', 'Glob projects/claude-greeting-svc/**');
-    await pauseAndCaptureJourney(page, 'J04-pm-active');
+    await pauseAndCaptureJourney(page, 'J05-pm-active');
 
-    await narrate('Step 5: pm.end fires with the WI graph (WI-1 → WI-2 + WI-3).');
+    // ---- 6: pm emits WI graph ----
+    await narrate('Step 6: pm.end fires with the WI graph (WI-1 → WI-2 + WI-3).');
     mkdirSync(join(cycle.logDir, 'work-items-snapshot'), { recursive: true });
     writeFileSync(join(cycle.logDir, 'work-items-snapshot', '_graph.md'), JOURNEY_GRAPH_MD);
     appendEvent(cycle, 'project-manager', 'end', 'pm.end', {
       cost_usd: 0.34, duration_ms: 31000,
       metadata: { work_item_count: 3, per_item_error_count: 0 },
     });
-    await pauseAndCaptureJourney(page, 'J05-pm-complete-wi-graph');
+    await pauseAndCaptureJourney(page, 'J06-pm-complete-wi-graph');
 
-    await narrate('Step 6: dev-loop iterates WI-1 (core).');
+    // ---- 7: dev-loop iterates ----
+    await narrate('Step 7: dev-loop iterates WI-1 (core), then WI-2 (tests) and WI-3 (docs) in parallel.');
     appendEvent(cycle, 'developer-loop', 'start', 'dev-loop start');
     appendEvent(cycle, 'developer-loop', 'iteration', 'WI-1 iter 1', { metadata: { work_item_id: 'WI-1' } });
     appendEvent(cycle, 'developer-loop', 'tool_use', 'Write src/greet.ts',     { metadata: { work_item_id: 'WI-1' } });
     appendEvent(cycle, 'developer-loop', 'tool_use', 'Bash node --test',       { metadata: { work_item_id: 'WI-1' } });
-    await pauseAndCaptureJourney(page, 'J06-dev-wi-1');
-
-    await narrate('Step 7: WI-2 (locale table + tests) and WI-3 (README) finish.');
     appendEvent(cycle, 'developer-loop', 'iteration', 'WI-2 iter 1', { metadata: { work_item_id: 'WI-2' } });
     appendEvent(cycle, 'developer-loop', 'tool_use', 'Write src/greet.test.ts', { metadata: { work_item_id: 'WI-2' } });
     appendEvent(cycle, 'developer-loop', 'iteration', 'WI-3 iter 1', { metadata: { work_item_id: 'WI-3' } });
@@ -996,41 +1032,23 @@ async function JOURNEY(ui, page) {
     appendEvent(cycle, 'developer-loop', 'end', 'dev-loop end', { cost_usd: 1.42, duration_ms: 187000 });
     await pauseAndCaptureJourney(page, 'J07-dev-complete');
 
-    await narrate('Step 8: review-loop runs the unifier, drafts a PR + DEMO.md.');
+    // ---- 8: review-loop writes DEMO.md ----
+    await narrate('Step 8: review-loop runs the unifier, drafts a PR + DEMO.md. CycleArtifacts surfaces "view demo".');
     appendEvent(cycle, 'review-loop', 'start', 'review iteration 1');
     appendEvent(cycle, 'review-loop', 'tool_use', 'Bash gh pr create --draft');
     appendEvent(cycle, 'review-loop', 'tool_use', 'Write DEMO.md');
     writeArtifact(cycle, 'DEMO.md', JOURNEY_DEMO_MD);
-    await pauseAndCaptureJourney(page, 'J08-review-active');
-
-    await narrate('Step 9: manifest moves to ready-for-review/. The verdict form appears with links to /plan and /demo.');
-    moveManifest('in-flight', 'ready-for-review', cycle.initiativeId);
-    await expectStatus('JOURNEY', page, cycle.cycleId, 'ready-for-review');
-    // Wait for the verdict form to materialise.
     if (page) {
-      await page.waitForSelector('[data-component="verdict-form"]', { timeout: 5000 }).catch(() => { /* */ });
-      await page.waitForSelector('[data-action="view-plan"]', { timeout: 3000 }).catch(() => { /* */ });
+      await page.waitForFunction(
+        () => document.querySelector('[data-component="cycle-artifacts"]')?.getAttribute('data-demo-state') === 'present',
+        undefined,
+        { timeout: 8000 },
+      ).catch(() => { /* */ });
     }
-    await pauseAndCaptureJourney(page, 'J09-verdict-form');
+    await pauseAndCaptureJourney(page, 'J08-review-active-demo-link');
 
-    await narrate('Step 10: operator clicks "view plan" — opens /plan/<cycleId>.');
-    if (page) {
-      try {
-        // The link opens in a new tab (target=_blank). Drive the
-        // navigation manually so the existing video tracks it.
-        await page.goto(`${ui.uiUrl}/plan/${encodeURIComponent(cycle.cycleId)}`, { waitUntil: 'domcontentloaded' });
-        await page.waitForFunction(
-          () => document.querySelector('main[data-page="plan"]')?.getAttribute('data-state') === 'ready',
-          undefined,
-          { timeout: 5000 },
-        ).catch(() => { /* may render in error/missing — capture either way */ });
-      } catch (err) {
-        log('JOURNEY', `plan navigation skipped: ${err.message}`);
-      }
-    }
-    await pauseAndCaptureJourney(page, 'J10-plan-subpage');
-
-    await narrate('Step 11: operator clicks "view demo" — opens /demo/<cycleId>.');
+    // ---- 9: operator clicks view-demo before verdict ----
+    await narrate('Step 9: operator clicks "view demo" — reviews the before/after for this cycle.');
     if (page) {
       try {
         await page.goto(`${ui.uiUrl}/demo/${encodeURIComponent(cycle.cycleId)}`, { waitUntil: 'domcontentloaded' });
@@ -1043,9 +1061,11 @@ async function JOURNEY(ui, page) {
         log('JOURNEY', `demo navigation skipped: ${err.message}`);
       }
     }
-    await pauseAndCaptureJourney(page, 'J11-demo-subpage');
+    await pauseAndCaptureJourney(page, 'J09-demo-page-review');
 
-    await narrate('Step 12: operator returns to the main page and approves.');
+    // ---- 10: back to main, verdict form ----
+    await narrate('Step 10: manifest moves to ready-for-review/; the verdict form appears.');
+    moveManifest('in-flight', 'ready-for-review', cycle.initiativeId);
     if (page) {
       await page.goto(ui.uiUrl, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(
@@ -1054,41 +1074,66 @@ async function JOURNEY(ui, page) {
         { timeout: 5000 },
       ).catch(() => { /* */ });
       await page.locator(`[data-cycle-id="${cycle.cycleId}"]`).first().click().catch(() => { /* */ });
-      await sleep(1000);
-      // Fill the rationale so the form visibly shows the operator's
-      // input. We INTENTIONALLY do NOT click "approve and merge"
-      // because the bridge's POST /api/verdict expects the manifest
-      // in in-flight/ — but this synthetic journey already moved it
-      // to ready-for-review/ to surface the form, so the POST would
-      // 409 and dead-end the cycle. Instead we write the
-      // verdict-response.md directly (the real flow this simulates is
-      // "operator's verdict file gets picked up by reviewer Ralph"
-      // which is the same end-state).
+    }
+    await expectStatus('JOURNEY', page, cycle.cycleId, 'ready-for-review');
+    if (page) {
+      await page.waitForSelector('[data-component="verdict-form"]', { timeout: 5000 }).catch(() => { /* */ });
+    }
+    await pauseAndCaptureJourney(page, 'J10-verdict-form');
+
+    // ---- 11: fill rationale + APPROVE (bridge now accepts ready-for-review) ----
+    await narrate('Step 11: operator types rationale and clicks "approve and merge".');
+    let approveClicked = false;
+    if (page) {
       try {
-        await page.locator('[data-component="verdict-form"] textarea').first().fill('LGTM — meets every acceptance criterion.');
+        await page.locator('[data-component="verdict-form"] textarea').first().fill('LGTM — meets every acceptance criterion in PLAN.md.');
+        await page.locator('[data-component="verdict-form"] button:has-text("approve")').first().click({ timeout: 3000 });
+        // Wait for the form to flip to data-form-state="submitted".
+        await page.waitForFunction(
+          () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-state') === 'submitted',
+          undefined,
+          { timeout: 5000 },
+        ).catch(() => { /* */ });
+        approveClicked = true;
       } catch (err) {
-        log('JOURNEY', `rationale fill skipped: ${err.message}`);
+        log('JOURNEY', `approve click failed (will fall back to file write): ${err.message}`);
       }
+    }
+    if (!approveClicked) {
+      // Belt-and-braces: write the verdict file directly so the cycle
+      // can still progress in the (rare) case the click didn't take.
       writeFileSync(
         join(QDIR('ready-for-review'), `${cycle.initiativeId}.verdict-response.md`),
-        '---\nverdict: approve\nrationale: |\n  LGTM — meets every acceptance criterion.\n---\n',
+        '---\nverdict: approve\nrationale: |\n  LGTM — meets every acceptance criterion in PLAN.md.\n---\n',
       );
     }
-    await pauseAndCaptureJourney(page, 'J12-verdict-submitted');
+    await pauseAndCaptureJourney(page, 'J11-verdict-submitted');
 
-    await narrate('Step 13: closure merges the PR; cycle moves to done.');
-    moveManifest('ready-for-review', 'done', cycle.initiativeId);
+    // ---- 12: closure starts ----
+    await narrate('Step 12: closure begins — the merger reads the verdict, prepares to push.');
     appendEvent(cycle, 'review-loop', 'end', 'review-loop end', { cost_usd: 0.21, duration_ms: 42000 });
-    appendEvent(cycle, 'closure', 'start', 'merging PR');
-    appendEvent(cycle, 'closure', 'end', 'merged into main', { cost_usd: 0.04, duration_ms: 6000 });
+    appendEvent(cycle, 'closure', 'start', 'closure.start — verdict picked up, merging PR');
+    appendEvent(cycle, 'closure', 'tool_use', 'Bash gh pr merge --squash');
+    await pauseAndCaptureJourney(page, 'J12-closure-active');
+
+    // ---- 13: closure ends, cycle done ----
+    await narrate('Step 13: PR merged; manifest moves to done/. Cycle leaves "live" and enters "recent".');
+    moveManifest('ready-for-review', 'done', cycle.initiativeId);
+    appendEvent(cycle, 'closure', 'end', 'closure.end — merged into main', { cost_usd: 0.04, duration_ms: 6000 });
     await expectStatus('JOURNEY', page, cycle.cycleId, 'done');
     await pauseAndCaptureJourney(page, 'J13-closure-merged');
 
-    await narrate('Step 14: reflection writes a theme back into the brain. Cycle complete.');
-    appendEvent(cycle, 'reflection', 'start', 'reflecting on the merged cycle');
+    // ---- 14: reflection starts ----
+    await narrate('Step 14: reflection begins — the brain gets updated with what this cycle taught us.');
+    appendEvent(cycle, 'reflection', 'start', 'reflection.start — reflecting on the merged cycle');
+    appendEvent(cycle, 'reflection', 'tool_use', 'brain-query: greet-locale-prior-art');
     appendEvent(cycle, 'reflection', 'tool_use', 'Write brain/projects/claude-greeting-svc/themes/2026-05-24-locale-table-pattern.md');
+    await pauseAndCaptureJourney(page, 'J14-reflection-active');
+
+    // ---- 15: reflection done, all green ----
+    await narrate('Step 15: reflection complete. Every phase hex is green. Cycle finished.');
     appendEvent(cycle, 'reflection', 'end', 'reflection.end', { cost_usd: 0.12, duration_ms: 18000 });
-    await pauseAndCaptureJourney(page, 'J14-reflection-complete');
+    await pauseAndCaptureJourney(page, 'J15-reflection-complete');
 
     log('JOURNEY', 'walked architect → reflection ✓');
   } finally {

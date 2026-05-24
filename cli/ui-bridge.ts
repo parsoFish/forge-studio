@@ -466,12 +466,27 @@ async function handleHttp(
         return;
       }
       const paths = fileVerdictPaths(initiativeId, ctx.queueRoot);
-      const manifestPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
-      if (!existsSync(manifestPath)) {
-        sendJson(res, 409, { error: 'no in-flight manifest for initiative (already resolved?)', initiativeId });
+      // Accept the verdict for a manifest in EITHER in-flight/ (the
+      // reviewer is still iterating, waiting for the verdict file to
+      // be picked up) OR ready-for-review/ (closure moved it there
+      // because the PR is open / the cap was hit / convergence
+      // failed; the verdict file still gets written to in-flight/
+      // because that's what the file-verdict reader watches). Without
+      // the ready-for-review fallback the UI's verdict form would
+      // 409 whenever closure had already run — which is the common
+      // case for the journey demo and for any cycle that completed a
+      // review iteration before the operator opened the form.
+      const inFlightPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
+      const readyForReviewPath = join(ctx.queueRoot, 'ready-for-review', `${initiativeId}.md`);
+      if (!existsSync(inFlightPath) && !existsSync(readyForReviewPath)) {
+        sendJson(res, 409, {
+          error: 'no manifest for initiative in in-flight/ or ready-for-review/ (already resolved?)',
+          initiativeId,
+        });
         return;
       }
-      // Lock the in-flight manifest so we don't race the scheduler's
+      const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
+      // Lock whichever manifest we found so we don't race the scheduler's
       // status transition. proper-lockfile uses a sibling `.lock` dir.
       let release: (() => Promise<void>) | null = null;
       try {
