@@ -227,6 +227,12 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   const maxWorkItems = featureCount > 4
     ? 2 * featureCount + 2
     : Math.min(2 * featureCount + 2, 8);
+  // 2026-05-25 (claude-harness cycle 8 audit): read the project-shape
+  // context off-disk and inject it into the prompt. PM was hallucinating
+  // tooling (jest in a node:test project, npm run build with no build
+  // script) because "go read package.json" wasn't load-bearing —
+  // inlining the contents makes it so.
+  const projectContext = readProjectContext(input.worktreePath);
   let prompt = renderPmUserPrompt({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
@@ -237,6 +243,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     parallelFractionAtLeast: 0.3,
     manifestType: detectManifestType(manifest),
     knownFeatureIds: manifest.features.map((f) => f.feature_id),
+    projectContext,
   });
   if (promptAugment) prompt = prompt + '\n\n' + promptAugment;
 
@@ -456,6 +463,43 @@ function collectHallucinatedFeatureIds(
  * defensively — most current manifests omit it, in which case the default
  * is `implementation`.
  */
+/**
+ * Read the project-shape context files off the worktree. Each is
+ * optional — skipped if the file isn't present. Caps each file at
+ * 8 KB so a freak large CLAUDE.md / package.json doesn't blow the
+ * prompt budget; trims aren't ideal but the agent only needs enough
+ * to identify the tooling.
+ *
+ * Surfaced 2026-05-25 by the claude-harness cycle 8 audit: PM was
+ * hallucinating `jest` in a `node:test` project. Inlining
+ * package.json's actual scripts makes it impossible to ignore.
+ */
+function readProjectContext(worktreePath: string): {
+  packageJson?: string;
+  pyprojectToml?: string;
+  cargoToml?: string;
+  forgeProjectJson?: string;
+  claudeMd?: string;
+} {
+  const safeRead = (rel: string): string | undefined => {
+    const p = resolve(worktreePath, rel);
+    if (!existsSync(p)) return undefined;
+    try {
+      const raw = readFileSync(p, 'utf8');
+      return raw.length > 8192 ? raw.slice(0, 8192) + '\n… (truncated)' : raw;
+    } catch {
+      return undefined;
+    }
+  };
+  return {
+    packageJson: safeRead('package.json'),
+    pyprojectToml: safeRead('pyproject.toml'),
+    cargoToml: safeRead('Cargo.toml'),
+    forgeProjectJson: safeRead('.forge/project.json'),
+    claudeMd: safeRead('CLAUDE.md'),
+  };
+}
+
 function detectManifestType(manifest: InitiativeManifest): 'implementation' | 'exploration' {
   // The current InitiativeManifest type doesn't yet expose `type:` (it
   // arrives via S2B). Read the body for a frontmatter-shaped hint until

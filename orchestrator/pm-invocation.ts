@@ -121,6 +121,23 @@ export type PmUserPromptInput = {
    * always passes it.
    */
   knownFeatureIds?: readonly string[];
+  /**
+   * Project-shape context the live caller reads from the worktree before
+   * invoking the PM (2026-05-25 — claude-harness cycle 8 audit):
+   * `package.json`, `CLAUDE.md`, `.forge/project.json`, and a directory
+   * listing. Injected verbatim near the top of the prompt so the PM
+   * cannot draft `quality_gate_cmd` referencing tooling the project
+   * doesn't have. Each is OPTIONAL (skipped if the file doesn't exist);
+   * when present, the prompt block makes them load-bearing.
+   */
+  projectContext?: {
+    packageJson?: string;
+    claudeMd?: string;
+    forgeProjectJson?: string;
+    pyprojectToml?: string;
+    cargoToml?: string;
+    treeListing?: string;
+  };
 };
 
 /**
@@ -131,10 +148,12 @@ export type PmUserPromptInput = {
 export function renderPmUserPrompt(input: PmUserPromptInput): string {
   const manifestType = input.manifestType ?? 'implementation';
   const knownFeatureIds = input.knownFeatureIds ?? [];
+  const projectContextBlock = renderProjectContextBlock(input.projectContext);
   return [
     '# Project-manager invocation',
     '',
     'You are running non-interactively. Decompose the initiative into atomic work items and write them to disk. **You MUST write at least one work-item file before stopping; finishing without writing files is a failed run.** Do not ask clarifying questions; if something is genuinely under-specified in the manifest, infer the most reasonable choice, note it in the work-item body, and proceed.',
+    ...(projectContextBlock ? ['', projectContextBlock] : []),
     '',
     '## Step 0 — Brain queries (REQUIRED, before any other action)',
     '',
@@ -193,14 +212,29 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
         ]
       : []),
     '',
-    '## Per-WI optional fields (C5)',
+    '## Per-WI REQUIRED gate (post-2026-05-24 audit) + optional fields',
     '',
-    'In addition to the required frontmatter below, you MAY emit four optional fields when they materially help the dev-loop. All are omit-on-undefined — a WI without them serialises identically to the legacy shape. Use them especially on larger initiatives (≥ 6 WIs) where the dev-loop otherwise lacks per-WI signal:',
+    "**`quality_gate_cmd` is REQUIRED on every WI** (was optional pre-2026-05-24; the gate-quality audit at `docs/planning/2026-05-24-claude-harness/CYCLE-AUDIT.md` made it mandatory). A WI without one is validator-rejected.",
     '',
-    '- `quality_gate_cmd: ["npm","test","--","tests/x.test.ts"]` — per-WI gate command override (must be non-empty array of strings). Use when the WI is tightly scoped to one test file or module so the dev-loop spends time on the work, not on whole-project test runs.',
+    "**The gate's first arg MUST be tooling the project actually has.** This is not advisory. The orchestrator runs the gate at iter-0 BEFORE the agent does any work; if it passes, the WI is hard-failed with `gate-too-loose` — meaning the gate doesn't actually exercise the AC. Common failure shape (claude-harness cycle 8): PM emits `npx jest --testPathPattern X` in a project that uses `node:test` (no jest in package.json) — the gate either passes trivially or fails in a way the agent can't fix. Same for `npm run build` when the project has no `build` script.",
+    '',
+    "**Before drafting any `quality_gate_cmd`, you MUST have already:**",
+    "- `Read({ file_path: 'package.json' })` (or `pyproject.toml`, `Cargo.toml`, `Makefile`, etc.) and identified what test command the project ACTUALLY uses.",
+    "- Confirmed the gate's first arg appears in `package.json` scripts OR is a CLI explicitly declared in the project (e.g., `pytest` if `pyproject.toml` has `[tool.pytest]`; `bats` if there's a `*.bats` file; `node --test` if package.json uses `node:test`).",
+    "",
+    "**Concrete sharp-gate patterns by project shape (mirror these — don't invent):**",
+    "- **node:test project** (package.json `\"test\": \"node --test ...\"`): `quality_gate_cmd: ['node', '--test', '--experimental-strip-types', 'tests/<the-new-test-file>.test.ts']` — pointing at a SPECIFIC test file that doesn't exist yet (so iter-0 gate FAILS with file-not-found).",
+    "- **jest project** (package.json has `\"jest\": ...` dep + `\"test\": \"jest\"`): `quality_gate_cmd: ['npx', 'jest', '--testPathPattern', '<new-test-file>', '--findRelatedTests']`.",
+    "- **pytest project** (pyproject.toml `[tool.pytest]`): `quality_gate_cmd: ['pytest', '-k', '<new-test-name-pattern>', '-x']`.",
+    "- **bash/bats project**: `quality_gate_cmd: ['bats', 'tests/<new-test>.bats']`.",
+    "- **go test project**: `quality_gate_cmd: ['go', 'test', '-run', '<NewTestName>', './...']`.",
+    '',
+    "**Why the gate must fail on a clean tree:** the gate IS the proof the AC is met. If the gate passes before the agent does anything, the gate doesn't prove anything. PM hallucinating `npm test` (which passes on the project's baseline tests alone) was the exact failure mode that wedged 6 cycles on claude-harness — every WI passed gate without delivering. Don't replicate.",
+    '',
+    'Other optional fields (omit-on-undefined):',
     '- `non_goals: ["docs","the bar component"]` — explicit out-of-scope items pulled forward from the manifest\'s per-feature `non_goals` block. Forces clarity; rescues the over-eager dev-loop from rewriting adjacent code.',
     '- `verification_artifact: "tests/x.test.ts"` — the path the dev-loop must produce that the gate exercises. Pairs with `quality_gate_cmd`. Must appear in `files_in_scope`.',
-    '- `creates: ["tests/x.test.ts"]` — files this WI creates from scratch (subset of `files_in_scope`). At most one WI may declare a given path in `creates`; subsequent WIs `depends_on` the creator and may extend the file. This is a structured marker — the bench uses it to verify every `files_in_scope` path either exists on disk or is explicitly created by some WI.',
+    '- `creates: ["tests/x.test.ts"]` — files this WI creates from scratch (subset of `files_in_scope`). Advisory only — the dev-loop agent has freedom to add other files too; this just marks intent.',
     '',
     '`demo_hook` is **NOT** a WI field — it lives at the initiative level only (C15b). The unifier reads it from the manifest; do not author demos here.',
     '',
@@ -250,6 +284,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '- `acceptance_criteria` — at least 2 entries, each with `given` / `when` / `then`, all double-quoted',
     '- `files_in_scope` — at least 1 worktree-relative path, no leading `/`, must point at files that actually exist or will exist post-implementation',
     '- `estimated_iterations` — a positive integer (>= 1). Use 1 for trivial WIs, 2-3 for non-trivial.',
+    "- `quality_gate_cmd` — REQUIRED (post-audit). The first arg MUST match tooling the project actually uses (verified by your earlier `Read` of package.json / pyproject.toml / etc.). The gate MUST fail on a clean tree before the agent does any work — at iter 0 the orchestrator runs it; if it passes, the WI hard-fails with `gate-too-loose`. Point at a specific test file or test name that doesn't exist yet.",
     '',
     "**Hidden-coupling check:** walk every pair of work items that share any file in `files_in_scope`. If neither item appears in the other's `depends_on` (transitively, in either direction), they will conflict at merge time — add the missing edge or merge them into one work item. This is non-negotiable; the bench scores it as `no_hidden_coupling` and the orchestrator now enforces it at runtime.",
     '',
@@ -257,6 +292,49 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '',
     'Do not update the manifest frontmatter or status — leave that to the orchestrator. Just write the work items and the graph, then stop.',
   ].join('\n');
+}
+
+/**
+ * Render the inlined project context block (2026-05-25; claude-harness
+ * cycle 8 audit). Telling the PM "you MUST Read package.json" was
+ * insufficient — the PM kept hallucinating tooling. Injecting the
+ * contents verbatim near the top of the prompt makes them load-bearing
+ * (the PM can't ignore what it's already reading).
+ *
+ * Returns '' (and the caller omits the block entirely) when no project
+ * context is provided — keeps the bench tests' shorter prompts byte-
+ * stable.
+ */
+function renderProjectContextBlock(
+  ctx: PmUserPromptInput['projectContext'],
+): string {
+  if (!ctx) return '';
+  const parts: string[] = [
+    '## Project context (read this FIRST — load-bearing)',
+    '',
+    'The live cycle harness reads the following from the worktree at PM-invocation time and inlines them here. Do NOT draft a `quality_gate_cmd` that references tooling absent from these files — the orchestrator runs the gate at iter 0 and hard-fails the WI with `gate-too-loose` when it passes trivially (which happens when the gate references `jest` in a project that uses `node:test`, `npm run build` when there\'s no build script, etc.).',
+    '',
+  ];
+  if (ctx.packageJson) {
+    parts.push('### package.json', '', '```json', ctx.packageJson.trim(), '```', '');
+  }
+  if (ctx.pyprojectToml) {
+    parts.push('### pyproject.toml', '', '```toml', ctx.pyprojectToml.trim(), '```', '');
+  }
+  if (ctx.cargoToml) {
+    parts.push('### Cargo.toml', '', '```toml', ctx.cargoToml.trim(), '```', '');
+  }
+  if (ctx.forgeProjectJson) {
+    parts.push('### .forge/project.json', '', '```json', ctx.forgeProjectJson.trim(), '```', '');
+  }
+  if (ctx.claudeMd) {
+    parts.push('### CLAUDE.md (project conventions)', '', '```markdown', ctx.claudeMd.trim(), '```', '');
+  }
+  if (ctx.treeListing) {
+    parts.push('### Directory listing (top-level + src/ + tests/)', '', '```', ctx.treeListing.trim(), '```', '');
+  }
+  if (parts.length <= 4) return ''; // header only — nothing actually inlined
+  return parts.join('\n');
 }
 
 /**
