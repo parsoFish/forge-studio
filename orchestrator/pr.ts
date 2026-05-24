@@ -446,6 +446,14 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
 export function pushInitiativeBranch(worktreePath: string): PushResult {
   const branch = currentBranch(worktreePath);
   if (!branch) return { pushed: false, reason: 'detached HEAD or not a git repo' };
+  // Projects without an `origin` remote (the gh-shim local-merge model,
+  // claude-harness, e2e bench fixtures, …) treat push as a no-op: local
+  // IS the source of truth. Otherwise the dev-loop cascade-skips every
+  // WI after the first with `branch-push-failed-early-exit`.
+  // Surfaced 2026-05-24 by claude-harness cycle 1.
+  if (!hasOriginRemote(worktreePath)) {
+    return { pushed: true, branch };
+  }
   try {
     stripForgeScratchFromBranch(worktreePath);
     execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
@@ -457,6 +465,18 @@ export function pushInitiativeBranch(worktreePath: string): PushResult {
     const e = err as { stderr?: Buffer | string; message?: string };
     const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
     return { pushed: false, reason: stderr || e.message || 'git push failed' };
+  }
+}
+
+function hasOriginRemote(worktreePath: string): boolean {
+  try {
+    execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -502,6 +522,14 @@ export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvaria
   }
   if (!branch) {
     return { ok: false, branch, localHead, originHead, mergeBase, mainHead, detail: 'detached HEAD or not a git repo' };
+  }
+  // No-origin projects (claude-harness, e2e bench fixtures, anyone using
+  // the local-merge model): local IS the source of truth, so an absent
+  // `origin/<branch>` ref doesn't violate the invariant — it's the
+  // expected steady state. Mirrors the no-op in `pushInitiativeBranch`.
+  // Surfaced 2026-05-24 by claude-harness cycle 1.
+  if (!hasOriginRemote(worktreePath)) {
+    return { ok: true, branch, localHead, originHead, mergeBase, mainHead, detail: 'no origin remote — local-only project' };
   }
   if (!originHead) {
     return {
