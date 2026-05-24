@@ -109,18 +109,75 @@ gh-shim build is meaningful — non-trivial — and the unifier-as-hook
 question is a real architectural choice. Pushing through another LLM-
 priced cycle without your call on either would be wasteful.
 
-## What I need from you
+## Update — cycles 6 + 7 (post-operator-guidance)
 
-1. **gh-shim** — confirm the lift-to-orchestrator approach + the
-   forge/<id> branch-prefix adjustment. (Or push back: a different
-   shape?)
-2. **Unifier determinism** — ratify replacing the unifier agent with
-   a deterministic generator (option I lean toward), OR direct me at
-   a different fix (better prompt? more iters? hook on the agent's
-   exit?).
-3. **Architect interview** — separate ask from earlier; once cycle 1
-   reaches green I'll run the real `/forge-architect claude-harness`
-   so roadmap + council exist for cycle 2.
+Operator clarified: hooks are for small/pure git operations (not
+the unifier); unifier needs more turns since its task is broader;
+go with option A (gh-shim). Built + ran:
 
-Pending your direction on (1) and (2), I'll either build them or
-take the alternative path you point me at.
+**Cycle 6** (commits `36569d0`, `6cd3760`):
+- gh-shim landed at [`orchestrator/gh-shim.ts`](../../../orchestrator/gh-shim.ts), wired into all 4
+  pr.ts call sites (`openPullRequest`, `prRef`, `confirmPrMerged`,
+  `mergePullRequest`). No more no-origin gate failures.
+- Unifier cap 3 → 6 + wedged disabled for unifier.
+- Result: dev-loop 5/5 ✓ ($2.13). Unifier still wedged at
+  iteration-budget. Transcript: agent is **reading WI specs as work
+  to implement**: "Now I need to implement WI-5: wire sections 4+5
+  into trail.ts…". 6 iterations of attempted re-implementation,
+  zero writes to demo bundle.
+
+**Cycle 7** (commit `6dbae92`):
+- Unifier prompt rewritten with a "⚠ YOU ARE THE UNIFIER — NOT A
+  DEVELOPER" header + explicit "WIs are ALREADY DONE — your job is
+  demo + describe, not implement" framing.
+- Result: dev-loop 6/6 ✓ ($2.67). Unifier no longer re-implements
+  but **correctly identifies that the dev-loop's WIs lied**: the
+  agent reports "src/cli.ts is missing (WI-2 was autocommited but
+  cli.ts isn't there), integration tests are missing (WI-3),
+  fixture files are missing (WI-3, WI-6). The initiative partially
+  landed." Six iterations of correctly-diagnosing-incomplete-work
+  with no escape mechanism.
+
+## The new finding (round 7)
+
+WIs are passing their `quality_gate_cmd` (`npm test` exit 0) **without
+actually producing all their `creates:` files**. The gate is too
+loose — if `cli.ts` is missing, no test imports it, npm test happily
+passes. The `autoCommitWorktreeIfDirty` safety net commits the
+partial work. The gate signals "complete". Next WI. Repeat.
+
+I removed the `requiredVerificationPaths`/F1.I5 path-tightening in
+commit `23db87f` per your "overly restrictive" feedback. That removal
+was too aggressive: it also dropped the GATE-TIME check that the
+declared `creates:` files actually exist in the diff. Without that
+check, a WI can claim done without doing the work.
+
+The unifier in cycle 7 IS the natural place to catch this — it
+already does the catch. What it lacks is an **escape mechanism**:
+"initiative not actually met, send back to dev-loop / operator." Right
+now the unifier's only exits are (a) write demo + description, or
+(b) iteration-budget → terminal fail.
+
+## What I need from you (revised)
+
+1. **F1.I5 + path-tightening** — re-introduce SOMETHING in this space.
+   Two shapes to choose from:
+     (a) **Gate-time only**: keep the validator simple (no rejection
+         at PM-validate); at the dev-loop gate, fail the gate if the
+         declared `creates:` files aren't in the diff after a passing
+         npm test. The agent still has flexibility (can add new files
+         outside scope), just can't claim done without producing the
+         spec'd files.
+     (b) **Unifier-driven**: leave the gate loose; teach the unifier
+         to RETURN a "send-back: initiative-not-met" status that
+         cycles back to dev-loop (or to operator-as-verdict). More
+         structural change — affects review-router + closure.
+
+2. **Architect interview** — still pending; once cycle 1 closes I'll
+   run `/forge-architect claude-harness` for real.
+
+I lean toward (1a) — it's the simplest restoration of a check that
+was clearly load-bearing (the unifier's diagnostics in cycle 7 are
+exactly what would have been caught at WI-gate time). Doesn't
+require the bigger structural reshape of (1b). And keeps the
+unifier's role as I-implement-the-demo, not arbiter-of-completeness.
