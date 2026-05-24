@@ -143,10 +143,14 @@ export function AgentHexCanvas({ phaseStates, cost = null }: Props): JSX.Element
       ctx.fillText(state.status, cx, HEX_Y + 12);
     });
 
-    // 3) Cost pills above each hex, only if the phase has a recorded cost.
+    // 3) Cost pills above each hex, only if the phase has a *non-zero*
+    //    recorded cost. metrics.ts seeds perPhase[phase] with cost_usd: 0
+    //    on the first event for that phase, so the `!= null` check alone
+    //    leaks "$0.00" pills onto phases that fired events without cost
+    //    metadata (e.g. a reviewer.pr-open-failed log).
     ordered.forEach((state, i) => {
       const phaseCost = cost?.perPhase?.[state.phase]?.cost_usd;
-      if (phaseCost == null) return;
+      if (phaseCost == null || phaseCost <= 0) return;
       const cx = FIRST_HEX_X + i * HEX_SPACING;
       const top = HEX_Y - HEX_RADIUS - PILL_GAP - PILL_H;
       drawPill(ctx, cx - PILL_W / 2, top, PILL_W, PILL_H, `$${phaseCost.toFixed(2)}`);
@@ -175,13 +179,17 @@ export function AgentHexCanvas({ phaseStates, cost = null }: Props): JSX.Element
         {ordered.map((state, i) => {
           const cx = FIRST_HEX_X + i * HEX_SPACING;
           const phaseCost = cost?.perPhase?.[state.phase]?.cost_usd;
+          // Match the canvas: leak no zero-cost pills, so the data-* mirror
+          // also stays empty when the only events on this phase were
+          // cost-less (e.g. orchestrator logs).
+          const phaseCostStr = phaseCost != null && phaseCost > 0 ? phaseCost.toFixed(4) : '';
           return (
             <div
               key={state.phase}
               data-phase-hex
               data-phase={state.phase}
               data-phase-status={state.status}
-              data-phase-cost-usd={phaseCost != null ? phaseCost.toFixed(4) : ''}
+              data-phase-cost-usd={phaseCostStr}
               data-phase-index={i}
               style={{
                 position: 'absolute',

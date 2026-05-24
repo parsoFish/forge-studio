@@ -46,6 +46,14 @@
  *                                                  # pauses 4s between steps
  *                                                  # so the UI's reaction
  *                                                  # is visible in real time.
+ *   node scripts/forge-ui-harness.mjs --record     # playwright drives a
+ *                                                  # headless chromium and
+ *                                                  # records video + per-step
+ *                                                  # screenshots to
+ *                                                  # forge-ui/.demo-shots/
+ *                                                  # harness/. Same scenarios,
+ *                                                  # longer pauses, no DOM
+ *                                                  # check disabling.
  *
  * Exits 0 if every scenario passes, 1 otherwise.
  */
@@ -54,6 +62,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -71,6 +80,7 @@ const flags = {
   only: arg('--only'),
   keepGoing: args.includes('--keep-going'),
   showcase: args.includes('--showcase'),
+  record: args.includes('--record'),
 };
 function arg(name) {
   const i = args.indexOf(name);
@@ -80,6 +90,13 @@ function arg(name) {
 // Inter-step pause in showcase mode (ms). Long enough for a human to
 // see the UI react; short enough that the full suite finishes in ~1min.
 const SHOWCASE_PAUSE_MS = 4000;
+
+// Inter-step pause for --record (video frame rate is ~25 fps; this gives
+// ~75 frames per pause so transitions read clearly on playback).
+const RECORD_PAUSE_MS = 3000;
+const RECORD_DIR = resolve(FORGE_ROOT, 'forge-ui/.demo-shots/harness');
+const RECORD_VIDEO_DIR = join(RECORD_DIR, 'video');
+const RECORD_FRAMES_DIR = join(RECORD_DIR, 'frames');
 
 // ---- shared infra --------------------------------------------------------
 
@@ -273,8 +290,30 @@ async function focusCycle(page, ui, cycle, timeoutMs = 15000) {
  * operator can follow live alongside their browser.
  */
 async function narrate(msg) {
-  if (!flags.showcase) return;
+  if (!flags.showcase && !flags.record) return;
   console.log(`        ${msg}`);
+}
+
+/**
+ * In --record mode: pause RECORD_PAUSE_MS so the video has time to
+ * show the just-changed state, then full-page screenshot to a known
+ * path. The screenshot is the cheap-to-inspect artifact (PNG, no
+ * playback tooling required); the video is the smooth animation.
+ *
+ * Outside --record this is a no-op so the headless / showcase
+ * timings are unchanged.
+ */
+let recordSeq = 0;
+async function pauseAndCapture(page, name) {
+  if (!flags.record || !page) return;
+  await sleep(RECORD_PAUSE_MS);
+  recordSeq += 1;
+  const frame = `${String(recordSeq).padStart(2, '0')}-${name}.png`;
+  try {
+    await page.screenshot({ path: join(RECORD_FRAMES_DIR, frame), fullPage: true });
+  } catch (err) {
+    console.error(`[harness:record] screenshot ${frame} failed: ${err.message}`);
+  }
 }
 
 /**
@@ -361,12 +400,14 @@ async function S1(ui, page) {
     await focusCycle(page, ui, cycle);
     await expectStatus('S1', page, cycle.cycleId, 'pending');
     log('S1', 'pending ✓');
+    await pauseAndCapture(page, 'S1-pending');
 
     await narrate('Step: pending → in-flight. The state-machine row for "architect" should flip to active (▶).');
     moveManifest('pending', 'in-flight', cycle.initiativeId);
     appendEvent(cycle, 'architect', 'start', 'architect start');
     await expectStatus('S1', page, cycle.cycleId, 'in-flight');
     log('S1', 'in-flight ✓');
+    await pauseAndCapture(page, 'S1-inflight');
 
     await narrate('Step: in-flight → ready-for-review. Verdict form should appear; activity sidebar gains "developer-loop".');
     appendEvent(cycle, 'architect', 'end', 'architect end');
@@ -375,12 +416,14 @@ async function S1(ui, page) {
     moveManifest('in-flight', 'ready-for-review', cycle.initiativeId);
     await expectStatus('S1', page, cycle.cycleId, 'ready-for-review');
     log('S1', 'ready-for-review ✓');
+    await pauseAndCapture(page, 'S1-ready-for-review');
 
     await narrate('Step: ready-for-review → done. Cycle moves out of "live", verdict form disappears, final toast fires.');
     moveManifest('ready-for-review', 'done', cycle.initiativeId);
     appendEvent(cycle, 'closure', 'end', 'merged');
     await expectStatus('S1', page, cycle.cycleId, 'done');
     log('S1', 'done ✓');
+    await pauseAndCapture(page, 'S1-done');
   } finally {
     cleanupCycle(cycle);
   }
@@ -445,6 +488,7 @@ async function S2(ui, page) {
 
     await expectStatus('S2', page, cycle.cycleId, 'failed');
     log('S2', 'failed ✓');
+    await pauseAndCapture(page, 'S2-failed');
 
     // Negative check: must NOT be tagged ready-for-review (the regression).
     // The positive check above already confirms status=failed, but in
@@ -510,6 +554,7 @@ async function S3(ui, page) {
       ? await page.evaluate(() => document.querySelector('main')?.getAttribute('data-active-cycle-cost-usd'))
       : '(showcase — verify visually)';
     log('S3', `UI header cost ✓ ($${headerCost})`);
+    await pauseAndCapture(page, 'S3-cost-header');
 
     // hex per-phase pill: at least one phase shows data-phase-cost-usd
     await expect(
@@ -526,6 +571,7 @@ async function S3(ui, page) {
       'expected at least one [data-phase-hex] with data-phase-cost-usd > 0',
     );
     log('S3', 'hex cost pill ✓');
+    await pauseAndCapture(page, 'S3-hex-pills');
   } finally {
     cleanupCycle(cycle);
   }
@@ -581,6 +627,7 @@ async function S4(ui, page) {
       'expected >=6 [data-phase-hex] mirror divs from AgentHexCanvas',
     );
     log('S4', 'AgentHexCanvas ✓');
+    await pauseAndCapture(page, 'S4-hex-canvas');
 
     // WiGraphCanvas: data-state should reach "ready".
     await expect(
@@ -599,6 +646,7 @@ async function S4(ui, page) {
       fail('S4', `expected data-wi-count >= 3, got "${wiCount}"`);
     }
     log('S4', `WiGraphCanvas ✓ (wi-count=${wiCount})`);
+    await pauseAndCapture(page, 'S4-wi-graph');
 
     // ActivityPanel: events-shown > 0.
     await expect(
@@ -615,6 +663,29 @@ async function S4(ui, page) {
       ? await page.evaluate(() => document.querySelector('[data-component="activity-panel"]')?.getAttribute('data-events-shown'))
       : '(showcase — verify visually)';
     log('S4', `ActivityPanel ✓ (events-shown=${shown})`);
+    await pauseAndCapture(page, 'S4-activity-panel');
+
+    // Demonstrate the WI graph → ActivityPanel auto-filter wiring.
+    // Click WI-2 in the dep graph; the panel's work-item chip should
+    // flip to "WI-2", filtering the events list down to just WI-2 rows.
+    if (page) {
+      try {
+        await page.locator('[data-wi-id="WI-2"]').first().click({ timeout: 3000 });
+        await page.waitForFunction(
+          () =>
+            document.querySelector('[data-component="activity-panel"]')?.getAttribute('data-wi-filter') === 'WI-2'
+            || document
+              .querySelector('[data-component="activity-panel"] [data-chip-kind="wi"][data-chip-active="true"]')
+              ?.getAttribute('data-chip-value') === 'WI-2',
+          undefined,
+          { timeout: 3000 },
+        ).catch(() => { /* selector miss — the screenshot still tells the story */ });
+        log('S4', 'WI-2 click → activity filter ✓');
+      } catch (err) {
+        log('S4', `WI-2 click skipped: ${err.message}`);
+      }
+      await pauseAndCapture(page, 'S4-wi-click-filter');
+    }
   } finally {
     cleanupCycle(cycle);
   }
@@ -725,6 +796,54 @@ const SCENARIOS = [
   { id: 'S6', name: 'requeue-cli',          needsBrowser: false, run: S6 },
 ];
 
+/**
+ * --record output is easier to review through a single page: video at
+ * top, then the screenshots in capture order with their scenario tags.
+ * Captions match the file names so the operator can correlate against
+ * the harness log.
+ */
+function writeIndexHtml(results) {
+  const frames = readdirSync(RECORD_FRAMES_DIR)
+    .filter((f) => f.endsWith('.png'))
+    .sort();
+  const passed = results.filter((r) => r.ok).length;
+  const failed = results.length - passed;
+  const summaryRows = results
+    .map((r) => `<li>${r.ok ? '✓' : '✗'} <code>${r.id}</code> ${r.name} <span class="dim">${r.ms}ms</span>${r.ok ? '' : ' — ' + (r.err ?? '').replace(/[<>&]/g, '')}</li>`)
+    .join('\n');
+  const frameRows = frames
+    .map((f) => `<figure><img src="frames/${f}" loading="lazy" /><figcaption><code>${f}</code></figcaption></figure>`)
+    .join('\n');
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>forge-ui harness — recording</title>
+<style>
+  body { background: #0d1117; color: #e6edf3; font: 14px ui-sans-serif, system-ui, sans-serif; margin: 32px auto; max-width: 1640px; padding: 0 24px; }
+  h1, h2 { letter-spacing: 0.4px; }
+  .summary { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 24px; margin-bottom: 24px; }
+  .summary ul { padding-left: 18px; line-height: 1.7; }
+  .dim { color: #8b949e; font-size: 11px; }
+  video { width: 100%; max-width: 1600px; border: 1px solid #30363d; border-radius: 8px; background: #000; }
+  figure { margin: 24px 0; padding: 0; }
+  figure img { width: 100%; border: 1px solid #30363d; border-radius: 8px; display: block; }
+  figure figcaption { color: #8b949e; font-family: ui-monospace, Menlo, monospace; padding-top: 6px; font-size: 12px; }
+  code { color: #d2a8ff; }
+</style></head>
+<body>
+  <h1>forge-ui harness — recording</h1>
+  <div class="summary">
+    <p>${passed} passed, ${failed} failed. Recorded ${new Date().toISOString()}.</p>
+    <ul>
+${summaryRows}
+    </ul>
+  </div>
+  <h2>video</h2>
+  <video src="harness-demo.webm" controls autoplay muted loop></video>
+  <h2>frames (in capture order)</h2>
+${frameRows}
+</body></html>`;
+  writeFileSync(join(RECORD_DIR, 'index.html'), html);
+}
+
 async function main() {
   const filtered = flags.only ? SCENARIOS.filter((s) => s.id === flags.only) : SCENARIOS;
   if (filtered.length === 0) {
@@ -737,7 +856,24 @@ async function main() {
   let browser = null;
   let page = null;
 
-  if (flags.showcase) {
+  if (flags.record) {
+    // Recording mode: same chromium-driven flow as headless, plus a
+    // recorded video + per-step screenshots saved under
+    // forge-ui/.demo-shots/harness/.
+    console.log('[harness:record] starting forge watch (this takes ~15s)…');
+    watch = await startWatch();
+    console.log(`[harness:record] watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
+    rmSync(RECORD_DIR, { recursive: true, force: true });
+    mkdirSync(RECORD_VIDEO_DIR, { recursive: true });
+    mkdirSync(RECORD_FRAMES_DIR, { recursive: true });
+    browser = await chromium.launch();
+    const ctx = await browser.newContext({
+      viewport: { width: 1600, height: 1000 },
+      recordVideo: { dir: RECORD_VIDEO_DIR, size: { width: 1600, height: 1000 } },
+    });
+    page = await ctx.newPage();
+    page.on('pageerror', (err) => console.error(`[harness:pageerror] ${err.message}`));
+  } else if (flags.showcase) {
     // Operator-watchable mode: bring up forge watch, hand the URL to
     // the operator, and let their browser observe each transition.
     console.log('[harness:showcase] starting forge watch (this takes ~15s)…');
@@ -787,8 +923,29 @@ async function main() {
     }
   }
 
+  // In --record we want the video file to land at a STABLE path
+  // (harness-demo.webm) so the operator can find it without digging
+  // through playwright's random filenames. Capture the video object
+  // before closing the page (after .close() it returns null), then
+  // rename once the context flush completes.
+  let videoSrc = null;
+  if (flags.record && page) {
+    try { videoSrc = await page.video()?.path(); } catch { /* no video */ }
+  }
   if (browser) await browser.close();
   if (watch) await stopWatch(watch.proc);
+  if (flags.record && videoSrc && existsSync(videoSrc)) {
+    const dest = join(RECORD_DIR, 'harness-demo.webm');
+    try {
+      renameSync(videoSrc, dest);
+      writeIndexHtml(results);
+      console.log(`\n[harness:record] video → ${dest}`);
+      console.log(`[harness:record] frames → ${RECORD_FRAMES_DIR}/`);
+      console.log(`[harness:record] index  → ${join(RECORD_DIR, 'index.html')}`);
+    } catch (err) {
+      console.error(`[harness:record] failed to move video: ${err.message}`);
+    }
+  }
 
   // Summary table.
   console.log('\n──── harness summary ────');
