@@ -19,6 +19,7 @@
  * unifier with the new feedback.
  */
 
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger } from '../logging.ts';
@@ -66,6 +67,31 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
   // cycle's catch block classifies as terminal and the manifest moves to
   // _queue/failed/.
   if (!prUrl) {
+    // F2.I7: emit a structured `unifier.prerequisite-missing` event so the
+    // UI + post-mortem reports can show the operator WHICH prerequisite is
+    // missing (instead of just "PR open failed").
+    const demoMdPath = resolve(input.worktreePath, 'demo', input.initiativeId, 'DEMO.md');
+    const prDescPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
+    const missing: string[] = [];
+    if (!existsSync(demoMdPath)) missing.push(`demo/${input.initiativeId}/DEMO.md`);
+    if (!existsSync(prDescPath)) {
+      missing.push('.forge/pr-description.md');
+    } else {
+      try {
+        if (statSync(prDescPath).size < 300) missing.push('.forge/pr-description.md (too short — needs ≥300 chars)');
+      } catch { /* */ }
+    }
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'review-router',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'unifier.prerequisite-missing',
+      metadata: { missing, demo_md_path: demoMdPath, pr_description_path: prDescPath },
+    });
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -74,9 +100,9 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
       event_type: 'end',
       input_refs: [input.worktreePath],
       output_refs: [input.worktreePath],
-      metadata: { outcome: 'failed', pr_url: null },
+      metadata: { outcome: 'failed', pr_url: null, missing_prerequisites: missing },
     });
-    throw new Error('reviewer.pr-open-failed: unifier did not author a PR — DEMO.md or pr-description.md missing. Dev-loop work items must produce their declared `creates:` paths before the unifier can build a demo bundle.');
+    throw new Error(`reviewer.pr-open-failed: unifier did not author a PR — missing prerequisites: ${missing.join(', ')}. Dev-loop work items must produce their declared \`creates:\` paths before the unifier can build a demo bundle.`);
   }
 
   const outcome: ReviewerOutcome = 'pr-open';

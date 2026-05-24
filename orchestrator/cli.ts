@@ -111,6 +111,10 @@ process.chdir(FORGE_ROOT);
       return await cmdArchitect(args.slice(1));
     case 'watch':
       return await cmdWatch(args.slice(1));
+    case 'requeue':
+      return cmdRequeue(args.slice(1));
+    case 'send-back':
+      return cmdSendBack(args.slice(1));
     case '--help':
     case '-h':
     case undefined:
@@ -171,6 +175,14 @@ Usage:
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
                                           any previous forge process so a pinned browser tab auto-reconnects).
                                           Open http://localhost:4124 in your browser.
+  forge requeue <init-or-handle> [--reset-retries]
+                                          Recover a stuck initiative: move manifest back to pending/,
+                                          remove stranded verdict files + worktree, append a marker to
+                                          previous_failure_modes. --reset-retries zeros retry_count.
+  forge send-back <init-or-handle> --feedback <file.md>
+                                          Write an operator send-back verdict for a ready-for-review
+                                          initiative. Feedback file must contain at least one acceptance
+                                          criterion (GIVEN ... WHEN ... THEN ...).
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
@@ -1107,6 +1119,64 @@ async function cmdWatch(rest: string[]): Promise<void> {
     }
   }
   await runWatch({ forgeRoot: FORGE_ROOT, ...opts });
+}
+
+function cmdRequeue(rest: string[]): void {
+  const initInput = rest.find((a) => !a.startsWith('--'));
+  const resetRetries = rest.includes('--reset-retries');
+  if (rest.includes('--help') || rest.includes('-h') || !initInput) {
+    console.log(`forge requeue <init-id-or-handle> [--reset-retries]
+  Recover a stuck initiative back to the pending queue. Idempotent.
+  Moves manifest from any queue dir → _queue/pending/, deletes stranded
+  verdict files, removes the worktree, and (optionally) resets
+  retry_count to 0. Appends a 'requeued-from-<dir>-<date>' marker to
+  previous_failure_modes for the forensic trail.
+    --reset-retries  Set retry_count to 0 (default: preserve prior count).`);
+    if (!initInput) process.exit(2);
+    return;
+  }
+  void import('../cli/forge-requeue.ts').then(({ runRequeue }) => {
+    try {
+      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries });
+      console.log(`requeued ${r.initiativeId}`);
+      console.log(`  from: ${r.fromQueueDir}/ → pending/`);
+      console.log(`  worktree removed: ${r.worktreeRemoved}`);
+      console.log(`  verdict files removed: ${r.verdictsRemoved.length}`);
+      console.log(`  retry_count: ${r.retryCountBefore} → ${r.retryCountAfter}`);
+      console.log(`  previous_failure_modes: ${r.previousFailureModesAfter.join(', ')}`);
+    } catch (err) {
+      console.error(`forge requeue: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+}
+
+function cmdSendBack(rest: string[]): void {
+  const initInput = rest.find((a) => !a.startsWith('--'));
+  const fbIdx = rest.indexOf('--feedback');
+  const feedbackPath = fbIdx >= 0 ? rest[fbIdx + 1] : undefined;
+  if (rest.includes('--help') || rest.includes('-h') || !initInput || !feedbackPath) {
+    console.log(`forge send-back <init-id-or-handle> --feedback <file.md>
+  Write an operator send-back verdict for an initiative in ready-for-
+  review/. The feedback file must contain at least one acceptance
+  criterion in the format:
+      - GIVEN <precondition> WHEN <action> THEN <expected>
+  The next scheduler claim will resume the reviewer-Ralph with the
+  feedback as input.`);
+    if (!initInput || !feedbackPath) process.exit(2);
+    return;
+  }
+  void import('../cli/forge-send-back.ts').then(({ runSendBack }) => {
+    try {
+      const r = runSendBack(initInput, feedbackPath, { forgeRoot: FORGE_ROOT });
+      console.log(`send-back queued for ${r.initiativeId}`);
+      console.log(`  wrote: ${r.verdictPath}`);
+      console.log(`  acceptance criteria: ${r.acCount}`);
+    } catch (err) {
+      console.error(`forge send-back: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
 }
 
 async function cmdArchitectCommit(rest: string[]): Promise<void> {
