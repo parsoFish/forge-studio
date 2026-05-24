@@ -54,6 +54,13 @@ projects/*
 # Worktrees the scheduler creates
 _worktrees/
 
+# Unifier scratchpad + DEMO bundle directories — these belong to a
+# worktree, but occasionally leak to the forge root when a worktree's
+# fast-forward into main carries gitignored-elsewhere paths. Pin them
+# at the root so the leak doesn't recur.
+/.forge/
+/demo/
+
 # Review/audit output — runtime artefact, not source
 _review/
 
