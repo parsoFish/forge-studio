@@ -101,6 +101,37 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
   return body.events;
 }
 
+export type InitiativeFeature = {
+  featureId: string;
+  title: string;
+  dependsOn: string[];
+};
+
+export type InitiativeManifestSummary = {
+  initiativeId: string;
+  project: string;
+  features: InitiativeFeature[];
+};
+
+/**
+ * Fetch the initiative manifest summary (id, project, features). Used by
+ * the InitiativeInfo panel so the operator sees what the cycle is
+ * actually working on without parsing event metadata. Returns null when
+ * the manifest isn't accessible (initiative ID unknown to the bridge,
+ * or all queue-state copies are gone).
+ */
+export async function fetchManifest(initiativeId: string): Promise<InitiativeManifestSummary | null> {
+  const base = await resolveBridgeUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/manifest/${encodeURIComponent(initiativeId)}`);
+    if (!res.ok) return null;
+    return (await res.json()) as InitiativeManifestSummary;
+  } catch {
+    return null;
+  }
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;

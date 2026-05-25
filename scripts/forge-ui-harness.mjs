@@ -218,11 +218,15 @@ function manifestPath(queue, initiativeId) {
   return join(QDIR(queue), `${initiativeId}.md`);
 }
 
-function writeManifest(queue, initiativeId, project = 'harness') {
+function writeManifest(queue, initiativeId, project = 'harness', features) {
   mkdirSync(QDIR(queue), { recursive: true });
   // Schema: orchestrator/manifest.ts:parseManifest requires
   //   initiative_id, project, created_at, iteration_budget, cost_budget_usd.
   // features use feature_id / title (not id / name).
+  const featList = features ?? [{ feature_id: 'FEAT-1', title: 'harness scenario', depends_on: [] }];
+  const featuresYaml = featList
+    .map((f) => `  - feature_id: ${f.feature_id}\n    title: ${f.title}\n    depends_on: [${(f.depends_on || []).join(', ')}]`)
+    .join('\n');
   const body = `---
 initiative_id: ${initiativeId}
 project: ${project}
@@ -231,9 +235,7 @@ created_at: '${new Date().toISOString()}'
 iteration_budget: 5
 cost_budget_usd: 1.0
 features:
-  - feature_id: FEAT-1
-    title: harness scenario
-    depends_on: []
+${featuresYaml}
 ---
 
 # Harness scenario
@@ -971,7 +973,11 @@ async function JOURNEY(ui, page) {
 
     // ---- 1: queue + claim ----
     await narrate('Step 1: pending. A new cycle for claude-greeting-svc enters the queue.');
-    writeManifest('pending', cycle.initiativeId, 'claude-greeting-svc');
+    writeManifest('pending', cycle.initiativeId, 'claude-greeting-svc', [
+      { feature_id: 'FEAT-1', title: 'greet() core + locale table',          depends_on: [] },
+      { feature_id: 'FEAT-2', title: 'tests covering the locale table',     depends_on: ['FEAT-1'] },
+      { feature_id: 'FEAT-3', title: 'README + usage examples',             depends_on: ['FEAT-1'] },
+    ]);
     await focusCycle(page, ui, cycle);
     await expectStatus('JOURNEY', page, cycle.cycleId, 'pending');
     await pauseAndCaptureJourney(page, 'J01-pending');
@@ -990,13 +996,12 @@ async function JOURNEY(ui, page) {
     appendEvent(cycle, 'architect', 'log', 'PLAN.md written: 5 acceptance criteria, 0 risks blocking');
     writeArtifact(cycle, 'PLAN.md', JOURNEY_PLAN_MD);
     appendEvent(cycle, 'architect', 'end', 'architect.end', { cost_usd: 0.18, duration_ms: 24000 });
-    // 2026-05-25: post-Bug-4 fix, the plan link is an inline
-    // ArtifactBadge on the architect row of the StateMachine (not the
-    // old standalone CycleArtifacts banner). Wait for [data-action="view-plan"]
-    // to appear. Probe interval is still 5s.
+    // 2026-05-25 (v2): state machine removed; plan badge now lives in
+    // the InitiativeInfo panel header (`[data-section="initiative-info"]`).
+    // Probe interval is 5s.
     if (page) {
       await page.waitForFunction(
-        () => !!document.querySelector('[data-phase="architect"] [data-action="view-plan"]'),
+        () => !!document.querySelector('[data-section="initiative-info"] [data-action="view-plan"]'),
         undefined,
         { timeout: 8000 },
       ).catch(() => { /* */ });
@@ -1078,15 +1083,14 @@ async function JOURNEY(ui, page) {
     appendEvent(cycle, 'review-loop', 'tool_use', 'Bash gh pr create --draft');
     appendEvent(cycle, 'review-loop', 'tool_use', 'Write DEMO.md');
     writeArtifact(cycle, 'DEMO.md', JOURNEY_DEMO_MD);
-    // 2026-05-25: post-Bug-4 fix, the demo link is an inline
-    // ArtifactBadge on the REFLECTION row (the operator's "where the
-    // demo lives" mental model post-2026-05-25 steer), not the old
-    // standalone CycleArtifacts banner. The badge stays hidden until
-    // review-loop OR reflection is non-pending — by this step the
-    // review-loop start event has fired, so the badge will surface.
+    // 2026-05-25 (v2): state machine removed; demo badge lives in
+    // the InitiativeInfo panel header next to the plan badge. It
+    // stays hidden until review-loop OR reflection is non-pending —
+    // by this step the review-loop start event has fired, so the
+    // badge will surface.
     if (page) {
       await page.waitForFunction(
-        () => !!document.querySelector('[data-phase="reflection"] [data-action="view-demo"]'),
+        () => !!document.querySelector('[data-section="initiative-info"] [data-action="view-demo"]'),
         undefined,
         { timeout: 8000 },
       ).catch(() => { /* */ });

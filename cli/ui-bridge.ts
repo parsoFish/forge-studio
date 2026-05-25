@@ -355,6 +355,44 @@ async function handleHttp(
     }
     return;
   }
+  // Initiative manifest (initiative_id, project, features). Used by the
+  // UI's InitiativeInfo panel so the operator sees what the cycle is
+  // actually working on (features, not just IDs). 2026-05-25.
+  if (method === 'GET' && url.startsWith('/api/manifest/')) {
+    const initiativeId = decodeURIComponent(url.slice('/api/manifest/'.length));
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' });
+      return;
+    }
+    const filename = `${initiativeId}.md`;
+    const candidates = [
+      join(ctx.queueRoot, 'in-flight', filename),
+      join(ctx.queueRoot, 'ready-for-review', filename),
+      join(ctx.queueRoot, 'done', filename),
+      join(ctx.queueRoot, 'failed', filename),
+      join(ctx.queueRoot, 'pending', filename),
+    ];
+    const found = candidates.find((p) => existsSync(p));
+    if (!found) {
+      sendJson(res, 404, { error: 'manifest not found in any queue state', initiativeId });
+      return;
+    }
+    try {
+      const m = parseManifest(readFileSync(found, 'utf8'));
+      sendJson(res, 200, {
+        initiativeId: m.initiative_id,
+        project: m.project,
+        features: m.features.map((f) => ({
+          featureId: f.feature_id,
+          title: f.title,
+          dependsOn: f.depends_on,
+        })),
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
   if (method === 'GET' && url.startsWith('/api/graph/')) {
     const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
     const filePath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', '_graph.md');

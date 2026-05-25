@@ -12,15 +12,14 @@ import {
   type EventLogEntry,
   type ConnectionState,
 } from '@/lib/bridge-client';
-import { derivePhaseStates, PHASE_ORDER, type PhaseState } from '@/lib/phases';
-import { Sidebar } from '@/components/Sidebar';
+import { derivePhaseStates, type PhaseState } from '@/lib/phases';
 import { CycleToasts } from '@/components/Toasts';
 import { WiGraphCanvas } from '@/components/WiGraphCanvas';
 import { AgentHexCanvas } from '@/components/AgentHexCanvas';
 import { ActivityPanel } from '@/components/ActivityPanel';
 import { VerdictForm } from '@/components/VerdictForm';
 import { SchedulerBanner } from '@/components/SchedulerBanner';
-import { ArtifactBadge } from '@/components/CycleArtifacts';
+import { InitiativeInfo } from '@/components/InitiativeInfo';
 
 export default function Page() {
   const [snapshot, setSnapshot] = useState<CycleListSnapshot>({ live: [], recent: [] });
@@ -167,10 +166,11 @@ export default function Page() {
         <AgentHexCanvas phaseStates={phaseStates} cost={cost} />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
-        <StateMachine phaseStates={phaseStates} cycleId={activeCycleId} />
-        <Sidebar events={events} />
-      </section>
+      <InitiativeInfo
+        cycleId={activeCycleId}
+        initiativeId={activeCycle?.initiativeId ?? null}
+        phaseStates={phaseStates}
+      />
 
       <section style={{ marginTop: 24 }}>
         <WiGraphCanvas cycleId={activeCycleId} events={events} onSelectWi={setSelectedWiId} />
@@ -252,77 +252,6 @@ function CyclesTab({
   );
 }
 
-function StateMachine({ phaseStates, cycleId }: { phaseStates: PhaseState[]; cycleId: string | null }) {
-  // 2026-05-25: surface PLAN.md inline on the architect row and
-  // DEMO.md inline on the reflection row, per operator note ("plan
-  // should be shown after architect, demo should be shown as part of
-  // the reflect phase"). The demo is also revealed during review-loop
-  // (it's the operator's review surface) so the badge unhides once
-  // review-loop is active or later.
-  const reflectionStatus = phaseStates.find((p) => p.phase === 'reflection')?.status ?? 'pending';
-  const reviewStatus = phaseStates.find((p) => p.phase === 'review-loop')?.status ?? 'pending';
-  const demoVisible = reviewStatus !== 'pending' || reflectionStatus !== 'pending';
-  return (
-    <div style={panelStyle} data-section="state-machine">
-      <h2 style={panelTitle}>state machine</h2>
-      <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {PHASE_ORDER.map((phase) => {
-          const s = phaseStates.find((p) => p.phase === phase);
-          const status = s?.status ?? 'pending';
-          return (
-            <li
-              key={phase}
-              data-phase={phase}
-              data-phase-status={status}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13 }}
-            >
-              <span style={{ width: 18, display: 'inline-block', textAlign: 'center' }}>
-                {phaseGlyph(status)}
-              </span>
-              <span style={{ flex: 1 }}>{phase}</span>
-              {phase === 'architect' && (
-                <ArtifactBadge
-                  cycleId={cycleId}
-                  filename="PLAN.md"
-                  href={`/plan/${encodeURIComponent(cycleId ?? '')}`}
-                  label="📋 plan"
-                  title="The architect's PLAN.md for this cycle"
-                />
-              )}
-              {phase === 'reflection' && (
-                <ArtifactBadge
-                  cycleId={cycleId}
-                  filename="DEMO.md"
-                  href={`/demo/${encodeURIComponent(cycleId ?? '')}`}
-                  label="🎬 demo"
-                  title="The unifier's DEMO.md (reviewable here from review-loop onward)"
-                  visible={demoVisible}
-                />
-              )}
-              <span style={{ color: '#8b949e', fontSize: 11 }}>{status}</span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
-const panelStyle: React.CSSProperties = {
-  background: '#161b22',
-  border: '1px solid #30363d',
-  borderRadius: 8,
-  padding: 16,
-};
-
-const panelTitle: React.CSSProperties = {
-  margin: '0 0 12px',
-  fontSize: 12,
-  letterSpacing: 0.4,
-  textTransform: 'uppercase',
-  color: '#8b949e',
-};
-
 function statusGlyph(s: Cycle['status']): string {
   switch (s) {
     case 'in-flight': return '▶';
@@ -331,28 +260,6 @@ function statusGlyph(s: Cycle['status']): string {
     case 'failed': return '✗';
     case 'pending': return '○';
   }
-}
-
-function phaseGlyph(s: PhaseState['status']): string {
-  switch (s) {
-    case 'pending': return '○';
-    case 'active': return '▶';
-    case 'complete': return '✓';
-    case 'failed': return '✗';
-  }
-}
-
-function phaseColor(phase: string): string {
-  const map: Record<string, string> = {
-    architect: '#a371f7',
-    'project-manager': '#79c0ff',
-    'developer-loop': '#7ee787',
-    'review-loop': '#ffa657',
-    closure: '#d2a8ff',
-    reflection: '#ff7b72',
-    orchestrator: '#8b949e',
-  };
-  return map[phase] ?? '#e6edf3';
 }
 
 function shortTime(iso: string | undefined): string {

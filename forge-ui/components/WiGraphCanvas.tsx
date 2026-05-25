@@ -16,7 +16,7 @@
  *     data-wi-enables
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -58,25 +58,40 @@ const NODE_HEIGHT = 56;
 export function WiGraphCanvas({ cycleId, events, onSelectWi }: WiGraphCanvasProps): JSX.Element {
   const [graph, setGraph] = useState<WiGraph | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const graphRef = useRef<WiGraph | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setGraph(null);
     setLoaded(false);
+    graphRef.current = null;
     if (!cycleId) return;
-    fetchWiGraph(cycleId)
-      .then((g) => {
-        if (cancelled) return;
-        setGraph(g);
-        setLoaded(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setGraph(null);
-        setLoaded(true);
-      });
+    // 2026-05-25: keep polling until the bridge serves the graph. PM
+    // writes `_logs/<cycleId>/work-items-snapshot/_graph.md` only at
+    // pm.end, which can happen long after the cycle becomes visible
+    // in the UI. Pre-fix the WI graph never appeared until the user
+    // navigated away + back. Once we have the graph the poll stops —
+    // the DAG doesn't change mid-cycle in production; per-WI live
+    // status overlays come from the `events` prop separately.
+    const attempt = (): void => {
+      if (graphRef.current) return;
+      fetchWiGraph(cycleId)
+        .then((g) => {
+          if (cancelled) return;
+          if (g) graphRef.current = g;
+          setGraph(g);
+          setLoaded(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setLoaded(true);
+        });
+    };
+    attempt();
+    const id = setInterval(attempt, 3000);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [cycleId]);
 
