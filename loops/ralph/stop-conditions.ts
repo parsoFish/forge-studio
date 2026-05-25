@@ -7,27 +7,23 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
   | { kind: 'iteration-budget'; max: number }
   | { kind: 'cost-budget'; maxUsd: number }
-  | { kind: 'wedged'; noProgressIterations: number }
   // 2026-05-24 (claude-harness cycle 1 audit): synthetic condition the
   // runner emits on iter-0 if the gate passes BEFORE any agent work.
   // Means the WI's quality_gate_cmd doesn't exercise its acceptance
-  // criteria — PM must rewrite the gate. Distinct from `wedged` (which
-  // is mid-loop no-progress); this fires before any iter has run.
+  // criteria — PM must rewrite the gate. Fires before any iter has run.
   | { kind: 'gate-too-loose'; reason: string };
 
 export type LoopState = {
   worktreePath: string;
   iteration: number;
   costUsdSoFar: number;
-  fixPlanItemsHistory: number[]; // length-of-fix_plan checklist per iteration
-  filesChangedHistory: string[][]; // files changed per iteration
+  /** Files reported as changed each iteration (used for LoopResult.filesChanged). */
+  filesChangedHistory: string[][];
 };
 
 export type StopResult =
@@ -77,22 +73,6 @@ async function checkOne(
         };
       }
       return { stop: false };
-
-    case 'wedged': {
-      const window = state.fixPlanItemsHistory.slice(-condition.noProgressIterations);
-      if (window.length < condition.noProgressIterations) return { stop: false };
-      const filesWindow = state.filesChangedHistory.slice(-condition.noProgressIterations);
-      const noFixPlanProgress = window.every((n) => n === window[0]);
-      const noFileChange = filesWindow.every((files) => files.length === 0);
-      if (noFixPlanProgress && noFileChange) {
-        return {
-          stop: true,
-          reason: `wedged: no progress for ${condition.noProgressIterations} iterations`,
-          condition: 'wedged',
-        };
-      }
-      return { stop: false };
-    }
 
     case 'gate-too-loose':
       // This condition is never CHECKED in the per-iteration loop — the
@@ -409,13 +389,4 @@ function resolveBaseBranch(worktreePath: string): string {
 function tail(s: string, max: number): string {
   if (s.length <= max) return s;
   return '…' + s.slice(s.length - max + 1);
-}
-
-/** Read the fix_plan checklist count (number of unchecked items). */
-export function countOpenFixPlanItems(worktreePath: string): number {
-  const path = join(worktreePath, 'fix_plan.md');
-  if (!existsSync(path)) return 0;
-  const content = readFileSync(path, 'utf8');
-  const matches = content.match(/^- \[ \]/gm);
-  return matches?.length ?? 0;
 }

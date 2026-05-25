@@ -9,7 +9,7 @@ loop:
   read PROMPT.md, AGENT.md (institutional memory), specs/, fix_plan.md
   call query() against the worktree
   commit changes (when the agent makes them)
-  check stop conditions (quality gates pass | iteration budget | wedged)
+  check stop conditions (quality gates pass | iteration budget)
   if stop: exit
   else: update fix_plan.md with what's left, repeat
 ```
@@ -28,7 +28,7 @@ The pattern is *brute repetition with institutional memory*. Each iteration:
 
 - [`runner.ts`](./runner.ts) — the driver implementing the `LoopInput`/`LoopResult` interface from [`loops/README.md`](../README.md).
 - [`claude-agent.ts`](./claude-agent.ts) — `createClaudeAgent(opts)` factory; the SDK-backed `AgentInvocation` the runner accepts. Reads `PROMPT.md`, calls `query()` with `cwd=worktree` and `permissionMode='acceptEdits'`, surfaces files-changed via `tool_use` events and cost via the final `result` message.
-- [`stop-conditions.ts`](./stop-conditions.ts) — quality-gates-pass | iteration-budget | wedged-detector.
+- [`stop-conditions.ts`](./stop-conditions.ts) — quality-gates-pass | iteration-budget.
 - [`PROMPT.md.tmpl`](./PROMPT.md.tmpl) — template stamped per work item.
 - [`AGENT.md.tmpl`](./AGENT.md.tmpl) — institutional-memory template, populated initially from brain-query results.
 

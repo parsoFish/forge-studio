@@ -17,7 +17,6 @@ import { join } from 'node:path';
 import {
   autoCommitWorktreeIfDirty,
   checkStopConditions,
-  countOpenFixPlanItems,
   defaultQualityGates,
   type StopCondition,
   type LoopState,
@@ -57,19 +56,6 @@ export type LoopInput = {
     iteration: number,
     info: AgentIterationInfo,
   ) => void | Promise<void>;
-  /**
-   * Override the default wedged-detection window (3 iterations of
-   * no-progress). Unifier sets this higher (or to a sentinel that
-   * disables the check) because its task legitimately includes
-   * read-only iterations before the write — e.g. read all WI outputs
-   * → judge → compose demo + PR description. The per-WI Ralph keeps
-   * the default 3.
-   *
-   * Set to `Infinity` to disable wedged-detection entirely.
-   * 2026-05-24 — surfaced by claude-harness cycle 1 unifier wedging
-   * at iter 2 after 2 read-only iters.
-   */
-  wedgedNoProgressIterations?: number;
   /**
    * Default `true` — see runner main loop. The per-WI Ralph WANTS
    * this on (catches PM-emitted hollow gates per 2026-05-24
@@ -116,7 +102,7 @@ export type ToolUseDetail = {
 };
 
 export type LoopResult = {
-  status: 'complete' | 'failed' | 'wedged';
+  status: 'complete' | 'failed';
   iterations: number;
   cost_usd: number;
   duration_ms: number;
@@ -164,17 +150,17 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
   const startedAt = Date.now();
   const { promptPath, agentMdPath, fixPlanPath } = prepareWorkspace(input);
 
-  // wedgedNoProgressIterations: caller-overridable (unifier sets 6+ so
-  // its legitimate read-only iters don't false-fire the wedged check).
-  // Infinity → disabled (no wedged check at all).
-  const wedgedWindow = input.wedgedNoProgressIterations ?? 3;
+  // Tier 2 thinning (2026-05-26): the wedged-no-progress check was
+  // removed. The magic 3-iteration window was diagnostic guesswork
+  // that false-fired on the unifier's legitimate read-only iterations
+  // (it had to be disabled via Infinity for the unifier — sign that
+  // the check was fragile, not load-bearing). The iteration budget
+  // is the principled cap; if an agent wedges it eats its budget
+  // and exits naturally on `iteration-budget`.
   const conditions: StopCondition[] = [
     { kind: 'quality-gates-pass' },
     { kind: 'iteration-budget', max: input.initiativeBudget.iterations },
     { kind: 'cost-budget', maxUsd: input.initiativeBudget.usd },
-    ...(Number.isFinite(wedgedWindow)
-      ? [{ kind: 'wedged' as const, noProgressIterations: wedgedWindow }]
-      : []),
   ];
 
   const qualityGate = input.qualityGate ?? ((ctx) => defaultQualityGates(input.worktreePath, undefined, ctx));
@@ -183,7 +169,6 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     worktreePath: input.worktreePath,
     iteration: 0,
     costUsdSoFar: 0,
-    fixPlanItemsHistory: [countOpenFixPlanItems(input.worktreePath)],
     filesChangedHistory: [],
   };
 
@@ -231,7 +216,6 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     });
     state.costUsdSoFar += result.costUsd;
     state.filesChangedHistory.push(result.filesChanged);
-    state.fixPlanItemsHistory.push(countOpenFixPlanItems(input.worktreePath));
     // Safety net (surfaced by claude-harness cycle 1, 2026-05-24): if
     // the agent left WIP uncommitted, commit it under a clearly-tagged
     // `forge-autocommit:` message before the next gate check so the
@@ -295,11 +279,7 @@ function finalize(
   fixPlanPath: string,
 ): LoopResult {
   const status: LoopResult['status'] =
-    stopReason === 'quality-gates-pass'
-      ? 'complete'
-      : stopReason === 'wedged'
-        ? 'wedged'
-        : 'failed';
+    stopReason === 'quality-gates-pass' ? 'complete' : 'failed';
   // gate-too-loose surfaces as a failed WI; the caller (developer-loop)
   // reads stop_reason and classifies the failure mode for the cycle
   // report + the failure-classifier.

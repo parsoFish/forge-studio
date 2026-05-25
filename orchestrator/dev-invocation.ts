@@ -86,7 +86,7 @@ export function buildDevSystemPrompt(_brainCwd: string): string {
     '',
     'After your work this iteration, **commit** with a conventional-commits message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Atomic commits — one concern per commit. You may use `Bash` for `git`, `npm test`, `pytest`, `bats`, or any test runner.',
     '',
-    '**The orchestrator decides when to stop, not you.** It runs the project\'s quality gates between your iterations. Your job is to make incremental progress every iteration; the orchestrator exits the loop when gates pass, when the iteration / cost budget is exhausted, or when no progress is detected for several iterations (wedged).',
+    '**The orchestrator decides when to stop, not you.** It runs the project\'s quality gates between your iterations. Your job is to make incremental progress every iteration; the orchestrator exits the loop when gates pass or when the iteration budget is exhausted.',
     '',
     'Hard rules:',
     '- **Anchor on the WI\'s acceptance criteria.** Your job is to make each AC\'s `then` clause observable. Read the WI spec FIRST. Read `files_in_scope` SECOND. Then write code. Do not browse `brain/`, the project README, or unrelated files — the WI body already cites everything you need.',
@@ -256,7 +256,7 @@ export function prepareDevWorkspace(input: PrepareDevWorkspaceInput): PreparedDe
       [
         '# Fix Plan',
         '',
-        `> Checklist for ${workItem.work_item_id}. Tick items as you complete them; add items as you discover sub-problems. The orchestrator uses this list (count of unchecked items) to detect when the loop is wedged.`,
+        `> Checklist for ${workItem.work_item_id}. Tick items as you complete them; add items as you discover sub-problems.`,
         '',
         checklist,
         '',

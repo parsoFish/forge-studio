@@ -43,6 +43,29 @@ principles — only from "this one cycle went wrong".**
 - Architect SKILL "~5 features cap" replaced with brain-query guidance.
 - 3 misleading 2026-05-25 themes deleted (`single-wi-single-pass-delivery`, `small-cycle-scope-ships-cleanly`, `autocommit-rate-worsening-multi-wi`).
 
+## Tier 1 (landed 2026-05-25 in commit d1a2ba1)
+
+- PM SKILL: dropped "at most 3 times" brain-query cap, "Suggested 3 queries" hint, "≤3 files per WI" cap, "50 WIs for a 3-day feature" overgeneralisation, the dead Benchmark suite reference.
+- Developer-unifier SKILL + invocation: dropped "≥50 chars" / "≥300 chars" PR thresholds, the stale "3 iteration" cap mention (code is 15), updated runaway-bound framing.
+- Reviewer gate: dropped the 300-char `pr-description.md` size floor; substance is operator-judged.
+- Developer-ralph SKILL: dropped dead Benchmark suite reference + stale `cost_budget_usd` mention.
+- Architect SKILL: dropped "up to 5 interview rounds" cap, the "50 000-char maxDraftChars / 60-turn budget" mention.
+
+## Tier 2 (landed 2026-05-26)
+
+Audit verdicts on the orchestrator-side enforcement surfaces called out in the plan:
+
+| Surface | Verdict | Why |
+|---|---|---|
+| `orchestrator/failure-classifier.ts` | **keep** | Already collapsed to `transient | terminal` (2026-05-24). All patterns grounded in real observed failures; no magic numbers. |
+| `orchestrator/scheduler.ts` preserveWorktree set | **keep** | Each preserved status (`pr-open | ready-for-review | send-back-cap-exhausted | failed`) is a real ops decision the operator needs the worktree for. |
+| `orchestrator/dev-invocation.ts` requiredPaths gate-tightening | **keep** | Durable principle: "a quality gate that passes on iteration 0 is by definition not exercising the WI's AC". Catches the 2026-05-23 betterado false-pass. |
+| `loops/ralph/runner.ts` iter-0 must-fail check | **keep** | Same principle as above; defensible. |
+| `loops/ralph/stop-conditions.ts` `wedgedNoProgressIterations: 3` | **drop** | Magic number from intuition. The unifier already had to disable it via Infinity because legitimate read-only iterations false-fired — sign that the check was fragile, not load-bearing. Iteration budget is the principled cap; agents that wedge eat their budget and exit naturally. |
+| `orchestrator/scheduler-dispatch.ts` `MAX_AUTO_RETRIES = 2` | **keep** | Runaway-bound, not a tuning knob — transient failures get a small fixed number of retries before escalating to terminal. Removing → unbounded retry loops. |
+
+Actual change in Tier 2: **wedged-detection removed entirely**. Dropped the `wedged` `StopCondition` variant + `wedgedNoProgressIterations` field + `fixPlanItemsHistory` state + `countOpenFixPlanItems` helper + the `LoopResult` `'wedged'` status. The unifier's Infinity override is gone (no longer needed). Dev-loop prompt + Ralph README updated to reflect "iteration budget is the only no-progress backstop".
+
 ## Remaining tiers
 
 ### Tier 1 — Skill prompts (medium impact, surgical)

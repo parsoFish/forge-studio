@@ -34,8 +34,10 @@ test('Ralph runner: stamps templates and exits on iteration budget', async () =>
     assert.ok(existsSync(join(dir, 'AGENT.md')), 'AGENT.md created');
     assert.ok(existsSync(join(dir, 'fix_plan.md')), 'fix_plan.md created');
 
-    // The stub agent makes no progress, so we exit on iteration-budget or wedged.
-    assert.ok(['failed', 'wedged'].includes(result.status), `status was ${result.status}`);
+    // The stub agent makes no progress, so we exit on iteration-budget.
+    // (Tier 2 thinning 2026-05-26 removed wedged-detection — iteration
+    // budget is now the sole no-progress backstop.)
+    assert.equal(result.status, 'failed', `status was ${result.status}`);
     assert.ok(result.iterations >= 1, 'at least one iteration ran');
     assert.equal(result.cost_usd, 0, 'stub agent costs nothing');
     assert.ok(result.duration_ms >= 0, 'duration tracked');

@@ -23,7 +23,7 @@ type LoopInput = {
 };
 
 type LoopResult = {
-  status: 'complete' | 'failed' | 'wedged';
+  status: 'complete' | 'failed';
   iterations: number;
   cost_usd: number;
   duration_ms: number;
