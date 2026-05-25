@@ -43,17 +43,13 @@ read here is wasted cost and a source-of-truth split.
 - per-iteration `event_type: 'iteration'` — iteration number, cost, duration, files touched.
 - `ralph.end` — `event_type: 'end'`, loop complete; carries `status`, `iterations`, `stop_reason`, `tool_use`.
 
-## Benchmark suite
-
-[`benchmarks/developer-loop/`](../../benchmarks/developer-loop/) — `work-items/<n>/` fixtures + `score.ts`.
-
 ## Process
 
 1. Read the work item spec — the single source of intent (no brain query).
 2. Stamp `loops/ralph/PROMPT.md.tmpl` with the work-item content + acceptance criteria → `<worktree>/PROMPT.md`.
 3. Stamp `loops/ralph/AGENT.md.tmpl` → `<worktree>/AGENT.md` (empty institutional memory; the loop fills it across iterations).
 4. Initialise `<worktree>/fix_plan.md` with the acceptance criteria as a checklist.
-6. Invoke `loops/ralph/runner.ts` with the worktree path and stop-condition config (from initiative manifest's `iteration_budget` and `cost_budget_usd`).
+6. Invoke `loops/ralph/runner.ts` with the worktree path and stop-condition config (from initiative manifest's `iteration_budget` — no $ cap per CONTRACTS.md C19).
 7. The runner returns: `{ status: 'complete' | 'failed' | 'wedged', iterations: n, cost: usd }`. The orchestrator writes `status` back to the WI spec — the skill does not.
 
 ## Constraints

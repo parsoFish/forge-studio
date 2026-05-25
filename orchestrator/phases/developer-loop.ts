@@ -686,7 +686,7 @@ export async function runUnifier(
   // Composed quality gate per plan 04: ALL of:
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
   //   2. demo_runs_clean (demo.command exits 0 — excused for shape "none")
-  //   3. pr_self_contained (DEMO.md exists + pr-description.md ≥ 300 chars + ## Demo block)
+  //   3. pr_self_contained (DEMO.md exists + pr-description.md present)
   //   4. branches_in_sync (assertLocalRemoteSynced doesn't throw)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
@@ -818,7 +818,7 @@ type ComposedUnifierGateInput = {
  * The four-gate composed check the unifier must clear to exit clean:
  *   1. initiative_gate — project quality_gate_cmd against branch tip.
  *   2. demo_runs_clean — demo.command exits 0 (excused for shape "none").
- *   3. pr_self_contained — DEMO.md + pr-description.md ≥ 300 chars + `## Demo`.
+ *   3. pr_self_contained — DEMO.md + pr-description.md present.
  *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw.
  *
  * Returns true ONLY when all four pass. Emits a classified event on each

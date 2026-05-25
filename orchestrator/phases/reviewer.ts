@@ -19,7 +19,7 @@
  * unifier with the new feedback.
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger } from '../logging.ts';
@@ -76,11 +76,11 @@ export async function runReviewer(input: CycleInput, logger: EventLogger): Promi
     if (!existsSync(demoMdPath)) missing.push(`demo/${input.initiativeId}/DEMO.md`);
     if (!existsSync(prDescPath)) {
       missing.push('.forge/pr-description.md');
-    } else {
-      try {
-        if (statSync(prDescPath).size < 300) missing.push('.forge/pr-description.md (too short — needs ≥300 chars)');
-      } catch { /* */ }
     }
+    // 2026-05-25: dropped the 300-char floor on pr-description.md. It
+    // was a synthetic threshold that filtered out short descriptions
+    // without actually catching bad ones; PR-description quality is
+    // something the operator judges when they read the PR.
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,

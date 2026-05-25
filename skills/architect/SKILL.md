@@ -110,13 +110,13 @@ emitted by the `forge architect commit` CLI, not by this skill.)
      the highest-leverage ambiguities in this order: scope edge (what's in,
      what's out?), success signal (when is this done?), prior-art tax
      (anything already attempted?), hard constraints (any no-goes?).
-   - You MAY run up to **5 interview rounds** total. STOP earlier when:
+   - Continue the interview only while questions are unblocking — stop
+     as soon as you have enough or the operator signals stop. STOP when:
      (a) the operator answers "just draft" or similar,
      (b) you have enough to draft a manifest without unresolved scope /
          success-signal / constraint ambiguity,
      (c) the next question would only refine, not unblock.
-   - Free-form chat between `AskUserQuestion` calls is fine; only the
-     structured rounds count toward the 5-round cap.
+   - Free-form chat between `AskUserQuestion` calls is fine.
    - Capture every round into `ArchitectSession.interview` as an array of
      `{ question, answer }` pairs. Use `"[operator skipped]"` verbatim as
      the answer if the operator declined to choose (e.g. typed "Other"
@@ -124,9 +124,8 @@ emitted by the `forge architect commit` CLI, not by this skill.)
 3. **Invoke `architect-llm-council`** via [`runCouncil()`](../architect-llm-council/council.ts)
    to apply CEO/eng/design/DX critics. The council resolves mechanical issues
    (`flags`) and surfaces only taste decisions (`escalations`). Use the
-   default 50 000-char `maxDraftChars` and 60-turn budget; if a critic
-   surfaces a `council.fallback-required` event, paste its raw text into PLAN.md
-   as an inline escalation for the operator.
+   defaults; if a critic surfaces a `council.fallback-required` event, paste
+   its raw text into PLAN.md as an inline escalation for the operator.
 4. **Read project metrics** (if any). Open `<projectRepoPath>/.forge/project.json`;
    if it carries a `metrics` block, hold the `command` / `baselines_dir` /
    `tolerance_pct` values for the PLAN.md project-metrics section.

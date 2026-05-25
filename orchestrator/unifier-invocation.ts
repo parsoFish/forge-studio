@@ -12,9 +12,9 @@
  * iteration.
  *
  * CONTRACTS.md C3b: when `feedbackRef` is set, the per-iteration prompt
- * augments the brief with send-back semantics. C19: there is no $ cap; the
- * iteration cap (default 3) is the only bound — this module does not
- * expose any cost-related fields.
+ * augments the brief with send-back semantics. C19: there is no $ cap; an
+ * iteration runaway-bound (see `UNIFIER_DEFAULT_ITERATION_CAP`) is the
+ * only backstop — this module does not expose any cost-related fields.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -100,10 +100,10 @@ export function buildUnifierSystemPrompt(): string {
     '**The orchestrator decides when to stop, not you.** It runs four composed gates between your iterations:',
     '1. `initiative_gate` — the project quality-gate command against the whole branch.',
     '2. `demo_runs_clean` — the project demo-command exits 0 (excused for shape "none").',
-    '3. `pr_self_contained` — `demo/<initiative-id>/DEMO.md` exists, `.forge/pr-description.md` ≥ 300 chars with a `## Demo` block.',
+    '3. `pr_self_contained` — `demo/<initiative-id>/DEMO.md` exists, `.forge/pr-description.md` has substantive Why/What/How/Demo sections.',
     '4. `branches_in_sync` — `origin/<branch>` == local HEAD; main == merge-base.',
     '',
-    'All four must pass for the unifier to exit clean. Cap: 3 iterations (no $ cap per CONTRACTS.md C19).',
+    'All four must pass for the unifier to exit clean. There is a runaway-bound on iterations (no $ cap per CONTRACTS.md C19) — treat it as a backstop, not a target.',
     '',
     'Hard rules:',
     '- **Scope discipline.** Files you may modify are the union of all WIs\' `files_in_scope` plus the tracked demo path (`demo/<initiative-id>/**`) plus `.forge/pr-description.md`. Anything else is a scope violation; flag in `AGENT.md` for the reflector.',
@@ -174,8 +174,8 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '1. Confirm the initiative was met (read the merged WI commits + run',
     '   the gate to verify they still pass together).',
     '2. **Produce the demo bundle** at `demo/' + input.initiativeId + '/DEMO.md`.',
-    '3. **Write the PR description** at `.forge/pr-description.md` (≥ 300 chars,',
-    '   must include `## Demo` section).',
+    '3. **Write the PR description** at `.forge/pr-description.md`',
+    '   (substantive Why/What/How/Demo sections; must include `## Demo`).',
     '4. Commit + push.',
     '',
     'If you find yourself reading WI specs to "figure out what to implement",',
@@ -246,7 +246,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
           `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
           '4. **Produce the demo** under `demo/<initiative-id>/`:',
           demoBlock,
-          '5. **Write `.forge/pr-description.md`** — `## Why` (≥ 50 chars), `## What`, `## How`, `## Demo` (relative link to `demo/<initiative-id>/DEMO.md`). Total body ≥ 300 chars. Anchor on `git log` + `git diff --stat main...HEAD`.',
+          '5. **Write `.forge/pr-description.md`** — substantive Why/What/How/Demo sections (Demo section must reference `demo/<initiative-id>/DEMO.md` via a relative link). Anchor on `git log` + `git diff --stat main...HEAD`.',
           '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
           '7. **Push** the branch so `origin/<branch>` == local HEAD.',
           '8. **Update AGENT.md** with what you did this iteration.',

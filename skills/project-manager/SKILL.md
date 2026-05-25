@@ -16,13 +16,11 @@ Format and validation rules are locked in [`docs/decisions/015-work-item-format.
 
 ## Required first action
 
-Invoke `brain-query` **at most 3 times** with targeted questions. The
-brain navigation index is already in your system prompt — re-querying for
-broad exploration burns tokens without adding signal (2026-05-23 dogfood:
-PM burned $1.54 / 9 brain-queries for an 8-min run that produced
-overlapping WIs).
+Invoke `brain-query` with **targeted** questions — the brain navigation
+index is already in your system prompt, so re-querying for broad
+exploration burns tokens without adding signal.
 
-Suggested 3 queries (pick the most relevant 1-3):
+Examples of useful queries:
 
 - "What patterns / antipatterns does the brain have for decomposing **<feature-type>** features?"
 - "What does the brain say about work-item sizing and acceptance criteria?"
@@ -109,16 +107,11 @@ graph TD
 - `pm.graph-emitted` — dependency graph written.
 - `pm.end` — decomposition complete.
 
-## Benchmark suite
-
-[`benchmarks/project-manager/`](../../benchmarks/project-manager/) — `initiatives.json` fixtures + `score.ts`. Six 0/1 criteria, weighted; pass threshold 0.7. Highest-weighted: `every_item_has_gwt` (vague criteria break the dev loop) and `no_hidden_coupling` (merge-time conflicts).
-
 ## Process
 
 1. **Brain query first.** Always-relevant themes plus project-specific.
 2. Read the initiative manifest. Read the worktree's README and source layout.
 3. For each feature in the initiative, decompose into work items:
-   - Each work item touches **≤3 files** where possible.
    - Each has at least one **Given-When-Then** acceptance criterion (frontmatter `acceptance_criteria` array; each entry has non-empty `given`, `when`, `then` strings). **Always wrap `given` / `when` / `then` values in double quotes** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators, and unquoted strings starting with any of these (e.g. backtick-prefixed code names) fail to parse.
    - Each declares its `depends_on` work items and its `files_in_scope` (worktree-relative paths, no leading `/`, no `..`). `files_in_scope` is advisory — it tells the operator + reviewer what files this WI touches; the dev-loop agent has freedom to edit any file to make the gate pass.
    - **Each declares a `quality_gate_cmd` that EXERCISES the ACs and FAILS ON A CLEAN TREE before the agent does any work.** This is MANDATORY (post-2026-05-24 claude-harness audit). The orchestrator's runner runs the gate at iter 0; if it passes, the WI is HARD-FAILED with `gate-too-loose: passed before agent invocation`. Sharp gates look like `['node', '--test', '--experimental-strip-types', 'tests/<NEW-FILE>.test.ts']` where `<NEW-FILE>.test.ts` doesn't exist yet on the worktree — the gate fails until the agent writes it AND the assertions inside it. Loose gates that default to the project-level `npm test` (which trivially passes on the existing test set) are rejected. If you can't write a sharp gate, the WI's AC is probably not testable — break it up.
@@ -131,7 +124,7 @@ graph TD
 ## Constraints
 
 - **Self-sufficient specs.** A work item must contain everything the developer loop needs. The developer loop never asks the PM for clarification.
-- **Atomic scope.** If a work item's spec runs over a page, decompose further. If you have 50 work items for a 3-day feature, you've over-decomposed — merge.
+- **Atomic scope.** If a work item's spec runs over a page, decompose further. If the WI count fights the work's shape, re-audit — there's no synthetic floor or ceiling, but the decomposition should mirror the seams in the work, not invent them.
 - **Explicit dependencies.** Don't rely on filename ordering or implicit conventions. Every `depends_on` edge must be a real prerequisite, not a stylistic preference.
 - **No code in specs.** Acceptance criteria, not implementations. The developer loop writes the code; this spec defines done.
 - **Don't update the manifest frontmatter or status.** That's the orchestrator's job. Just write the work items and the graph.

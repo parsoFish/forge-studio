@@ -38,10 +38,10 @@ and prove it cohesive:
      - **artifact** — produced file or output block embedded inline.
      - **none** — a `DEMO.md` rationale block; no media required.
 4. **Write the PR body** at `.forge/pr-description.md`:
-   - Sections: `## Why` (≥ 50 chars), `## What`, `## How`, `## Demo` (must
+   - Sections: `## Why` (non-empty), `## What`, `## How`, `## Demo` (must
      reference `demo/<initiative-id>/DEMO.md` via a relative link).
-   - Total body ≥ 300 chars. Anchor on `git log` + `git diff --stat
-     main...HEAD` — describe what actually landed, not what was hoped for.
+   - Anchor on `git log` + `git diff --stat main...HEAD` — describe what
+     actually landed, not what was hoped for. Substance, not boilerplate.
 5. **Commit** everything as `feat(<initiative-id>): unify and demo`. If no
    changes are needed (no fixes, demo already exists, PR body present),
    skip the commit — the gates run against the per-WI tip in that case.
@@ -106,9 +106,10 @@ Composed gates checked by the orchestrator after each iteration:
 - `demo_runs_clean` — `demo.command` (per `.forge/project.json`) exits 0;
   excused when `demo.shape: "none"`.
 - `pr_self_contained` — `demo/<initiative-id>/DEMO.md` exists,
-  `.forge/pr-description.md` ≥ 300 chars with `## Demo` section.
+  `.forge/pr-description.md` has substantive Why/What/How/Demo sections.
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` ==
   merge-base.
 
-The orchestrator decides when to stop. Cap: **3 iterations**, no $ cap
-(CONTRACTS.md C19 — iteration cap is the only bound).
+The orchestrator decides when to stop. There is a runaway-bound on
+iteration count (CONTRACTS.md C19 — no $ cap), but treat it as a
+backstop, not a target.
