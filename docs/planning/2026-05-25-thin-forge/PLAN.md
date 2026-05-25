@@ -66,6 +66,20 @@ Audit verdicts on the orchestrator-side enforcement surfaces called out in the p
 
 Actual change in Tier 2: **wedged-detection removed entirely**. Dropped the `wedged` `StopCondition` variant + `wedgedNoProgressIterations` field + `fixPlanItemsHistory` state + `countOpenFixPlanItems` helper + the `LoopResult` `'wedged'` status. The unifier's Infinity override is gone (no longer needed). Dev-loop prompt + Ralph README updated to reflect "iteration budget is the only no-progress backstop".
 
+## Tier 3 (landed 2026-05-26)
+
+CLAUDE.md audit. Verdicts:
+
+| Section | Verdict |
+|---|---|
+| North star (3 questions) | keep — durable |
+| Brain-first preamble | keep — cites ADR 010 + brain-read-policy |
+| Always-do bullets | **trim** — dropped the redundant + misleading "Consult the brain before starting work" bullet (the brain-first section already states this, and the bullet missed the planner-only qualification that the Never-do bullet correctly carries) |
+| Ask-first bullets | keep — all durable |
+| Never-do bullets | keep — all durable + ADR-cited |
+| Build & test, layout, status, graphify | keep — recent or not stale |
+| **forge-ui DOM-as-metrics** | **rewrite** — the old section listed `state-machine`, `activity-sidebar`, `wi-graph` data-sections that were merged into the cascading hex tree in the 2026-05-25 UI refactor. The new section reflects the post-cascade attributes (`[data-section="pipeline-tree"]`, `[data-phase-hex]`, `[data-feature-hex]`, `[data-wi-hex]`, `[data-overlay="plan-badge"]`, `[data-overlay="demo-badge"]`) plus the 5-state status vocabulary (`pending | active | complete | retrying | failed`) introduced in v2 of the verification cycle. |
+
 ## Remaining tiers
 
 ### Tier 1 — Skill prompts (medium impact, surgical)

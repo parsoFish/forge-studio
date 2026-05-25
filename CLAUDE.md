@@ -29,12 +29,15 @@ If a change conflicts with an ADR, **update the ADR first** (with rationale) bef
 
 ## Always do
 
-- Consult the brain before starting work.
 - Emit structured events to the JSONL event log on every skill invocation.
 - Use markdown artifacts to flow data between phases — every artifact must be greppable.
 - Use git worktrees for parallel work units.
 - Use conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
 - One concern per PR.
+
+(Brain-querying is mandatory for **planners only** — architect / PM /
+reflector. See the brain-first section above + the Never-do bullet
+below. The dev-loop and reviewer correctly do NOT read the brain.)
 
 ## Ask first
 
@@ -144,24 +147,40 @@ The root `<main>` carries page-level state:
 - `data-active-cycle-id`, `data-active-cycle-status`, `data-active-cycle-events`
 - `data-page-ready` — `true` once the bridge connection is open
 
-Section + component anchors:
+Section + component anchors (post-2026-05-25 cascade-tree layout —
+the old state-machine + activity-sidebar + standalone wi-graph
+sections were merged into a single hex pipeline):
 
-- `[data-section="cycles-tab"]`, `[data-section="state-machine"]`,
-  `[data-section="activity-sidebar"]`, `[data-section="wi-graph"]`,
-  `[data-section="event-tail"]`, `[data-section="verdict-form"]`
-- Cycle buttons: `[data-cycle-id]`, `[data-cycle-status]`, `[data-cycle-active]`
-- State-machine rows: `[data-phase][data-phase-status]`
-- Activity rows: `[data-phase][data-phase-events][data-phase-tool-uses]…`
-- WI rows: `[data-wi-id][data-wi-deps][data-wi-enables]`
-- Event tail rows: `[data-event-id][data-event-phase][data-event-type]`
+- `[data-section="cycles-tab"]` — live + recent cycle buttons.
+- `[data-section="pipeline-tree"]` — the cascading hex view (phases
+  on top, features branching off dev-loop post-PM, WIs branching off
+  features) hosted by `[data-component="agent-hex-canvas"]`.
+- `[data-section="verdict-form"]` — appears when active cycle is
+  `ready-for-review`.
+- Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
+- Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd][data-phase-index]`.
+- Feature hex mirrors: `[data-feature-hex][data-feature-id][data-feature-deps][data-feature-index]`.
+- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-feature-id][data-wi-deps]`.
+- Artifact badges overlaid on the canvas: `[data-overlay="plan-badge"]` (under architect), `[data-overlay="demo-badge"]` (under review-loop).
+- Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
 - Components: `[data-component="verdict-form"][data-form-state]`,
   `[data-component="scheduler-banner"][data-banner-state]`,
-  `[data-component="toasts"][data-toast-count]`
+  `[data-component="toasts"][data-toast-count]`.
+
+Phase, feature, and WI statuses share a single 5-state vocabulary
+(`pending | active | complete | retrying | failed`). Yellow = retrying
+(had a transient error, still recovering); red = full cycle failure
+only — sibling units stay in their own state independently. See
+[`forge-ui/lib/wi-status.ts`](./forge-ui/lib/wi-status.ts) +
+[`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts).
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change. The demo script
-[`scripts/forge-ui-demo.mjs`](./scripts/forge-ui-demo.mjs) reads these
-attributes to wait deterministically (instead of timing-based sleeps)
-and to know which state to capture. `npm run forge-ui:demo` produces
-chromium-rendered screenshots into `forge-ui/.demo-shots/` plus an
-index.html for review without launching a real browser.
+`data-*` attribute** alongside any visual change. The harness
+[`scripts/forge-ui-harness.mjs`](./scripts/forge-ui-harness.mjs) +
+real-cycle wrapper [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
+read these attributes to wait deterministically instead of using
+timing-based sleeps. `node scripts/forge-ui-harness.mjs --demo`
+produces a chromium-recorded synthetic journey under
+`forge-ui/.demo-shots/journey/`; `node scripts/verify-cycle.mjs <init>`
+runs a real cycle end-to-end with auto-approve + closure + reflection
+capture under `forge-ui/.demo-shots/verify/`.
