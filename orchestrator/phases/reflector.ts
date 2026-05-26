@@ -11,7 +11,7 @@
  *      surfaces the outcome on a new sibling `lint_status` field of
  *      `CycleResult` (per CONTRACTS.md C8 — NOT a new `reflection_status`
  *      enum value);
- *   2. tags the cycle archive (`brain/_raw/cycles/<id>.md`) with a
+ *   2. tags the cycle archive (`brain/cycles/_raw/<id>.md`) with a
  *      `retention` tier + `cited_by` list so plan 01's cleanup pass has
  *      a load-bearing signal for which archives to keep vs. summarise.
  */
@@ -143,13 +143,13 @@ export async function runReflector(
   }
 
   const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
-  const cycleArchivePath = resolve(forgeRoot, 'brain', '_raw', 'cycles', `${cycleId}.md`);
-  const themesDir = resolve(forgeRoot, 'brain', 'projects', projectName, 'themes');
+  const cycleArchivePath = resolve(forgeRoot, 'brain', 'cycles', '_raw', `${cycleId}.md`);
+  const themesDir = resolve(forgeRoot, 'projects', projectName, 'brain', 'themes');
   // F-07: ensure brain destination dirs exist before invoking the SDK; the
   // reflector writes here directly. A first-time project (no themes/ yet) or
-  // a fresh forge install (no brain/_raw/cycles/) would otherwise see ENOENT
+  // a fresh forge install (no brain/cycles/_raw/) would otherwise see ENOENT
   // inside the agent and silently log-and-continue-fail.
-  mkdirSync(resolve(forgeRoot, 'brain', '_raw', 'cycles'), { recursive: true });
+  mkdirSync(resolve(forgeRoot, 'brain', 'cycles', '_raw'), { recursive: true });
   mkdirSync(themesDir, { recursive: true });
   // F-12: touch brain-gaps.jsonl if absent. The reflector's user prompt
   // points it at this file; the bench fixtures pre-populate it. In live
@@ -631,7 +631,7 @@ function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): st
  *
  * One candidate row per qualifying gap. A gap qualifies iff this cycle
  * wrote at least one theme file (mtime >= sinceMs) under the project's
- * themes/ dir or under brain/forge/themes/, AND the gap's question
+ * themes/ dir (i.e., `projects/<project>/brain/themes/`), AND the gap's question
  * intersects (via shared keywords) with the written theme's title /
  * frontmatter keywords. Cycles that wrote zero themes emit zero
  * candidates; cycles whose gaps were not filled emit zero candidates.

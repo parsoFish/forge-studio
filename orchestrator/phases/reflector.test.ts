@@ -378,10 +378,10 @@ test('runReflector: emits brain-bench-candidates.jsonl (one row per matched gap)
 
   // Pre-create the matching theme file in the forge tree so the
   // `listFreshThemes` heuristic picks it up. The themesDir the reflector
-  // computes is `<FORGE_ROOT>/brain/projects/<project>/themes`. Project
+  // computes is `<FORGE_ROOT>/projects/<project>/brain/themes`. Project
   // is `slugifier` (set in setupHarness). We add a uniquely-named theme
   // so the cleanup is targeted and we don't trample real brain content.
-  const projectThemesDir = resolve(FORGE_ROOT, 'brain', 'projects', 'slugifier', 'themes');
+  const projectThemesDir = resolve(FORGE_ROOT, 'projects', 'slugifier', 'brain', 'themes');
   const themeFile = resolve(projectThemesDir, `__test-${h.cycleId.slice(-12)}-slugifier-batch-options.md`);
   try {
     mkdirSync(projectThemesDir, { recursive: true });

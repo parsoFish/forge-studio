@@ -40,7 +40,7 @@ single-file | cycle-touched-themes | cleanup-dry-run`. Default is `full`.
 
 - stdout from `forge brain lint` — ERRORS / FLAGS / AUTO-FIXES sections + a one-line summary.
 - `_logs/<cycle-id>/brain-lint.md` — categorised report (the skill writes this from the executable's output).
-- Append a one-line summary entry to `brain/log.md` per the cleanup playbook in plan 01.
+- Append a one-line summary entry to `brain/forge-dev/log.md` per the cleanup playbook in plan 01.
 
 ## Event-log entries to emit
 
@@ -65,10 +65,10 @@ checks + the contradictions stretch-goal + scope filtering).
 | `checkFrontmatter` | Missing required fields; category outside whitelist (`pattern\|antipattern\|decision\|operation\|reference`); `created_at > updated_at`. |
 | `checkIndexSync` | Theme with `category: X` not listed in `<X>s.md`, or listed multiple times. |
 | `checkSourceLinks` | Broken relative links + wikilinks in theme bodies. |
-| `checkStaleness` | Cited paths missing from the project repo (resolved via `brain/projects/<n>/profile.md` → `<forgeRoot>/projects/<n>/`). Per council 01 staleness-mechanism fix: NOT against the forge root. |
+| `checkStaleness` | Cited paths missing from the project repo (resolved via `projects/<n>/brain/profile.md` → `<forgeRoot>/projects/<n>/`). Per council 01 staleness-mechanism fix: NOT against the forge root. |
 | `checkOrphans` | Themes not reachable from `INDEX.md` → category index → theme. |
 | `checkLengthSoftCap` | > 60 lines warn; > 100 lines error (per `brain/LINT.md` rule 3). |
-| `checkContamination` | Directories matching `__chained_test_proj_*` or `__bench_*` under `brain/projects/`. |
+| `checkContamination` | Directories matching `__chained_test_proj_*` or `__bench_*` under `projects/`. |
 | `checkContradictions` (warn-only) | Stretch: pattern + antipattern with ≥3 keyword overlaps. Per plan 01 downgrade — staleness is the load-bearing contradiction defence. |
 
 ## Process
@@ -76,7 +76,7 @@ checks + the contradictions stretch-goal + scope filtering).
 1. **Invoke the CLI** with the appropriate `--scope`.
 2. **Capture stdout** + exit code.
 3. **Write the cycle-scoped report** at `_logs/<cycle-id>/brain-lint.md` mirroring the stdout sections.
-4. **Append one line** to `brain/log.md` per the cleanup playbook: `## [<date>] lint pass — N error, M flag, K auto-fix; bench: X/N → Y/N (if a bench was run)`.
+4. **Append one line** to `brain/forge-dev/log.md` per the cleanup playbook: `## [<date>] lint pass — N error, M flag, K auto-fix; bench: X/N → Y/N (if a bench was run)`.
 5. **Emit the event-log entries** above so the operator can grep cycle logs.
 
 ## Constraints

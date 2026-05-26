@@ -120,7 +120,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '- **Stage 3**: after writing questions, read `_logs/<cycle-id>/user-feedback.md`. This file is pre-populated (by the bench simulator or by the user before the next cycle). Treat its contents as the user\'s answers + free-form feedback, and incorporate them into `retro.md` Section 2 + Section 3.',
     '- If `user-feedback.md` does not exist when you go to read it, write retro.md sections 2 + 3 as `_(no feedback supplied this cycle)_` and continue.',
     '',
-    '**Direct-write brain.** Write theme markdown files directly to `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Required frontmatter: `title`, `description`, `category` (one of `pattern`, `antipattern`, `decision`, `operation`, `reference`), `created_at`, `updated_at`. The brain-ingest sub-skill is NOT invoked in this pass.',
+    '**Direct-write brain.** Write theme markdown files directly to `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`. Required frontmatter: `title`, `description`, `category` (one of `pattern`, `antipattern`, `decision`, `operation`, `reference`), `created_at`, `updated_at`. The brain-ingest sub-skill is NOT invoked in this pass.',
     '',
     '**Evidence grounding (load-bearing).** Every theme MUST include a `## Sources` section listing ≥ 1 path that resolves to either:',
     '- `_logs/<cycle-id>/...` (event log entries you cited), or',
@@ -128,7 +128,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '',
     'Themes without resolvable sources fail the bench\'s evidence-grounding criterion. Vague observations ("we could improve X") are rejected.',
     '',
-    '**Cycle archive (mandatory).** Write `brain/_raw/cycles/<cycle-id>.md` with frontmatter:',
+    '**Cycle archive (mandatory).** Write `brain/cycles/_raw/<cycle-id>.md` with frontmatter:',
     '```yaml',
     '---',
     'source_type: cycle',
@@ -152,7 +152,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '- `## User questions` — questions you wrote, plus answers from `user-feedback.md` (stage 2).',
     '- `## User feedback` — free-form user input from `user-feedback.md` (stage 3).',
     '',
-    '**Brain-query first (REQUIRED, mandatory).** Your first tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` whose description matches a pattern you observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. This is unconditional, not "when unsure". The bench AND production both gate on this signal.',
+    '**Brain-query first (REQUIRED, mandatory).** Your first tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` whose description matches a pattern you observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. This is unconditional, not "when unsure". The bench AND production both gate on this signal.',,
     '',
     'Hard rules:',
     '- **No `gh` operations.** The reviewer already merged. Reflection is post-merge log-and-continue.',
@@ -230,7 +230,7 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     '- Brain query MUST happen first. The bench gate fails otherwise.',
     '- Every theme MUST have resolvable evidence in `## Sources`. Vague observations get rejected.',
     '- If the cycle\'s event log contains any wedge or send-back event, ≥ 1 theme MUST carry `category: antipattern`.',
-    '- Themes go under `brain/projects/<project>/themes/`, NOT `brain/forge/themes/`. Forge-wide lessons are rare and out of scope for this cycle.',
+    '- Themes go under `projects/<project>/brain/themes/`, NOT `brain/cycles/themes/`. Forge-wide lessons are captured separately in brain/cycles/themes/ by the reflector after the project cycle completes.',
     '- One theme per file. Do not combine unrelated lessons.',
   ].join('\n');
 }
@@ -246,7 +246,7 @@ export type ReflectorToolUseSummary = {
 /**
  * Inspect a streamed assistant message and increment the summary in place.
  * - `brainReads`     — Read/Grep/Glob with a target containing `brain/`.
- * - `themeWrites`    — Write/Edit with a target containing `brain/projects/.../themes/` or `brain/_raw/`.
+ * - `themeWrites`    — Write/Edit with a target containing `projects/.../brain/themes/` or `brain/cycles/_raw/`.
  * - `retroWrites`    — Write/Edit with a target ending in `retro.md`.
  * - `bashCalls`      — any Bash invocation.
  */
@@ -270,9 +270,9 @@ export function tallyToolUse(
     if (name === 'Write' || name === 'Edit') {
       if (
         blob.includes('/themes/') ||
-        blob.includes('brain/_raw/') ||
+        blob.includes('brain/cycles/_raw/') ||
         blob.includes('brain\\_raw\\') ||
-        blob.includes('brain/projects/')
+        blob.includes('projects/')
       ) {
         summary.themeWrites += 1;
       }

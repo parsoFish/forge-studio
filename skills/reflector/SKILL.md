@@ -61,13 +61,13 @@ signal (`brain_consulted`). Useful queries:
 
 - `_logs/<cycle-id>/retro.md` — three structural sections:
   `## Self-reflection`, `## User questions`, `## User feedback`.
-- New theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`
+- New theme pages in `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`
   — one file per significant pattern. Frontmatter required: `title`,
   `description`, `category` (`pattern` | `antipattern` | `decision` |
   `operation` | `reference`), `created_at`, `updated_at`. Body must include
   a `## Sources` section listing ≥ 1 path that resolves to either
-  `_logs/<cycle-id>/...` or `brain/_raw/cycles/<cycle-id>.md`.
-- New raw source: `brain/_raw/cycles/<cycle-id>.md` (cycle log archived).
+  `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`.
+- New raw source: `brain/cycles/_raw/<cycle-id>.md` (cycle log archived).
   Frontmatter required: `source_type: cycle`, `cycle_id`, `initiative_id`,
   `project`, `ingested_at`, `ingested_by: reflector`.
 - `_logs/<cycle-id>/user-questions.md` (stage 2; optional — skip if no
@@ -171,12 +171,12 @@ summing to 1.0 with pass threshold 0.7.
 
 10. For each notable observation / pattern / antipattern from Stage 1, write
     a theme file directly to
-    `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Required
+    `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`. Required
     frontmatter + a `## Sources` section listing ≥ 1 path that resolves to
     either the cycle log or the cycle archive.
-11. Archive the cycle log to `brain/_raw/cycles/<cycle-id>.md` with full
+11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full
     provenance frontmatter.
-12. Append a short entry to `brain/log.md` summarising the cycle's deltas.
+12. Append a short entry to `brain/forge-dev/log.md` summarising the cycle's deltas.
 13. Validate: every theme file you wrote has valid frontmatter + a valid
     `category` value + at least one resolvable evidence path. If any theme
     fails this check, fix it before exiting.
@@ -194,11 +194,12 @@ summing to 1.0 with pass threshold 0.7.
   indexed" required.
 - **Evidence-grounded themes.** Every theme MUST cite ≥ 1 source path
   that resolves to `_logs/<cycle-id>/...` or
-  `brain/_raw/cycles/<cycle-id>.md`. Vague themes get rejected.
+  `brain/cycles/_raw/<cycle-id>.md`. Vague themes get rejected.
 - **One theme per file.** Don't combine unrelated lessons.
 - **Project-scoped writes.** Themes go under
-  `brain/projects/<project>/themes/`, NOT `brain/forge/themes/` (forge-wide
-  lessons are a separate, rarer category).
+  `projects/<project>/brain/themes/`, NOT `brain/cycles/themes/` (forge-wide
+  lessons are a separate, rarer category — write those only after the cycle
+  completes and only if the lesson is truly forge-wide).
 - **No queue mutation.** `_queue/done/` already contains the manifest (the
   reviewer moved it). Read-only for you.
 - **No `gh` operations.** The reviewer already merged. Reflection cannot

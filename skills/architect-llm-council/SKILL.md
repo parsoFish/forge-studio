@@ -22,7 +22,7 @@ Invoke `brain-query` with:
 ## Inputs
 
 - A draft initiative spec (markdown + frontmatter, in-memory or path).
-- Project context: `brain/projects/<name>/profile.md`, `projects/<name>/roadmap.md`.
+- Project context: `projects/<name>/brain/profile.md`, `projects/<name>/roadmap.md`.
 
 ## Outputs
 

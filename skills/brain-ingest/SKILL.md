@@ -13,9 +13,9 @@ model: claude-sonnet-4-6
 The only writer to the brain. Takes raw input (text, URL contents, cycle logs, retros, research) and:
 
 1. Appends the raw to `brain/_raw/` with full provenance.
-2. Creates new theme pages or appends to existing ones in `brain/forge/themes/` or `brain/projects/<name>/themes/`.
+2. Creates new theme pages or appends to existing ones in `brain/cycles/themes/` (forge-wide) or `projects/<name>/brain/themes/` (project-specific).
 3. Updates category indexes.
-4. Appends an entry to `brain/log.md`.
+4. Appends an entry to `brain/forge-dev/log.md`.
 
 ## Required first action
 
@@ -35,7 +35,7 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 ## Outputs
 
 - New `brain/_raw/<...>.md` (with mandatory frontmatter — see [`brain/_raw/README.md`](../../brain/_raw/README.md)).
-- New or updated `brain/forge/themes/<slug>.md` or `brain/projects/<name>/themes/<slug>.md`.
+- New or updated `brain/cycles/themes/<slug>.md` or `projects/<name>/brain/themes/<slug>.md`.
 - Updated category index (`forge/<category>.md` or `projects/<name>/<category>.md`).
 - Append to `brain/log.md`.
 

@@ -35,8 +35,8 @@ does NOT depend on the graph being present.
 
 - The user's free-form idea / brief / pain point (live in the conversation).
 - `projects/<name>/roadmap.md` (current roadmap).
-- `brain/projects/<name>/profile.md` (project taste + constraints).
-- `brain/projects/<name>/themes/` (project-specific patterns + antipatterns).
+- `projects/<name>/brain/profile.md` (project taste + constraints).
+- `projects/<name>/brain/themes/` (project-specific patterns + antipatterns).
 - `<projectRepoPath>/.forge/project.json` (per [C26](../../docs/planning/2026-05-20-refinement/CONTRACTS.md)):
   if the project has a `metrics` block, surface its `command` / `baselines_dir`
   / `tolerance_pct` in PLAN.md alongside the proposed manifest.
@@ -177,8 +177,8 @@ emitted by the `forge architect commit` CLI, not by this skill.)
 - **Initiatives are coherent and releasable.** Size each one for the work it
   actually needs — forge handles 1→N features just fine. The reference for
   what shape lands is past successful initiatives in this project (or, for
-  a fresh project, similar projects): query `brain/projects/<project>/themes/`
-  and `brain/forge/themes/` via `brain-query` to see what has worked. Don't
+  a fresh project, similar projects): query `projects/<project>/brain/themes/`
+  and `brain/cycles/themes/` via `brain-query` to see what has worked. Don't
   invent caps or floors from thin air.
 - **Acceptance criteria are concrete.** Vague criteria propagate downstream
   and break the developer loop. Reject your own draft if you can't write a
