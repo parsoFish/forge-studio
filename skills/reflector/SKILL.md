@@ -13,8 +13,8 @@ model: claude-sonnet-4-6
 Close the learning loop. After an initiative is merged, run the four-stage
 retro (per [`docs/phases/reflection.md`](../../docs/phases/reflection.md))
 and write the findings into the brain by **direct file writes** — theme
-markdown files under `brain/projects/<project>/themes/` plus a cycle
-archive under `brain/_raw/cycles/<cycle-id>.md`.
+markdown files under `projects/<project>/brain/themes/` plus a cycle
+archive under `brain/cycles/_raw/<cycle-id>.md`.
 
 ## Operator handoff (the `/forge-reflect` human moment — single source of truth)
 

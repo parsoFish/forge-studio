@@ -36,8 +36,8 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 
 - New `brain/_raw/<...>.md` (with mandatory frontmatter — see [`brain/_raw/README.md`](../../brain/_raw/README.md)).
 - New or updated `brain/cycles/themes/<slug>.md` or `projects/<name>/brain/themes/<slug>.md`.
-- Updated category index (`forge/<category>.md` or `projects/<name>/<category>.md`).
-- Append to `brain/log.md`.
+- Updated category index (`brain/cycles/<category>.md` or `projects/<name>/brain/<category>.md`).
+- Append to `brain/forge-dev/log.md`.
 
 ## Event-log entries to emit
 
@@ -58,8 +58,8 @@ Shared with `brain-lint` and `brain-query` under [`benchmarks/brain/`](../../ben
 3. Write to `brain/_raw/<source-type>/<slug>.<source-type>.md` with mandatory frontmatter.
 4. Decide: does this fit an existing theme, or does it warrant a new one?
    - **Fit existing:** append the new source link with a one-line annotation. Do not paraphrase the new source's content into the theme page; the source link is the index.
-   - **New theme:** create `brain/forge/themes/<slug>.md` (or project-scoped) following the format in [`brain/forge/themes/README.md`](../../brain/forge/themes/README.md). Add to the relevant category index.
-5. Append to `brain/log.md`: `## [<YYYY-MM-DD>] ingest | <source-type>: <slug>`.
+   - **New theme:** create `brain/cycles/themes/<slug>.md` (or project-scoped) following the format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md). Add to the relevant category index.
+5. Append to `brain/forge-dev/log.md`: `## [<YYYY-MM-DD>] ingest | <source-type>: <slug>`.
 
 ## Constraints
 

@@ -124,7 +124,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '',
     '**Evidence grounding (load-bearing).** Every theme MUST include a `## Sources` section listing ≥ 1 path that resolves to either:',
     '- `_logs/<cycle-id>/...` (event log entries you cited), or',
-    '- `brain/_raw/cycles/<cycle-id>.md` (the cycle archive you wrote).',
+    '- `brain/cycles/_raw/<cycle-id>.md` (the cycle archive you wrote).',
     '',
     'Themes without resolvable sources fail the bench\'s evidence-grounding criterion. Vague observations ("we could improve X") are rejected.',
     '',
