@@ -14,6 +14,13 @@ Types: `ingest`, `create-theme`, `update-theme`, `lint`, `structural`, `seed`.
 
 ---
 
+## [2026-05-26] create-theme | claude-harness cycle v3 reflection — 3 new themes, 1 cycle archive
+
+Reflected on `INIT-2026-05-26-claude-trail-verify-cascade-v3` (claude-harness, "verify cascade v3").
+119-event log. No cost metadata. Outcome: pr-open (WI-5 failed iteration-budget, unifier failed 15 iters).
+New themes: `2026-05-26-cwd-hallucination-zero-writes.md`, `2026-05-26-unifier-diagnosis-oscillation.md`,
+`2026-05-26-iteration-budget-as-sole-backstop.md`. Tier 2 (wedge removal) confirmed: zero wedge events.
+
 ## [2026-05-25] create-theme | claude-harness cycle 7 reflection — 4 new themes, 1 cycle archive
 
 Reflected on `INIT-2026-05-26-claude-trail-verify-cascade-v2` (claude-harness, cycle 7 / "verify cascade v2").

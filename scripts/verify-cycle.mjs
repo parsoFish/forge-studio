@@ -239,6 +239,16 @@ async function main() {
   serve.stdout.on('data', (d) => process.stdout.write(d));
   serve.stderr.on('data', (d) => process.stderr.write(d));
 
+  // 2026-05-26 fix: attach the exit listener IMMEDIATELY after spawn,
+  // not after the cycle-claim await. Previously the listener was
+  // attached AFTER `findCycleIdForInitiative` resolved; if the cycle
+  // failed fast (e.g. malformed manifest causes serve to exit with
+  // code 1 in <1s), the exit event fired before any listener saw it
+  // and the phase-poll loop later stalled forever waiting for
+  // SERVE_EXITED.
+  const SERVE_EXITED = Symbol('serve-exited');
+  const serveEnd = new Promise((res) => serve.on('exit', () => res(SERVE_EXITED)));
+
   log('waiting for cycle to appear on bridge…');
   const cycleId = await findCycleIdForInitiative(watch.bridgeUrl, initiativeId, Date.now() + 60_000);
   if (!cycleId) {
@@ -266,13 +276,12 @@ async function main() {
   // cycle hits a terminal phase for the autonomous part (pr-open,
   // failed, etc.) — serve exits at that point.
   //
-  // 2026-05-25 fix: previously used Promise.race + a falsy check to
-  // detect serve exit. serve exiting with code 0 (clean) made the
-  // race return `0`, which evaluates falsy, so the poll never exited
-  // and the auto-approve never fired. Use a sentinel object instead.
+  // 2026-05-25/26 fix: previously used Promise.race + a falsy check
+  // (broke on exit code 0) AND attached the exit listener after
+  // findCycleIdForInitiative (broke on fail-fast cycles). Now uses a
+  // sentinel object AND attaches the listener immediately after spawn
+  // (see SERVE_EXITED above).
   const seenPhase = new Map();
-  const SERVE_EXITED = Symbol('serve-exited');
-  const serveEnd = new Promise((res) => serve.on('exit', () => res(SERVE_EXITED)));
   const phasePoll = (async () => {
     while (true) {
       const r = await Promise.race([serveEnd, sleep(2000)]);
