@@ -88,25 +88,20 @@ To rebuild a single brain manually:
 
 **Brain 1 (forge-dev) —** forge code + ADRs + engineering notes:
 ```bash
-cd /home/parso/forge && graphify update . \
-  --output brain/forge-dev/graphify-out \
-  --include 'orchestrator/**' --include 'cli/**' --include 'skills/**' \
-  --include 'loops/**' --include 'docs/**' --include 'brain/forge-dev/**' \
-  --include 'ARCHITECTURE.md' --include 'CLAUDE.md' --include 'PRINCIPLES.md'
+cd /home/parso/forge && GRAPHIFY_OUT=brain/forge-dev/graphify-out graphify update .
 ```
+_(Brain 1 scope is controlled by `/home/parso/forge/.graphifyignore`)_
 
 **Brain 2 (cycles) —** cycle themes and archives:
 ```bash
-cd /home/parso/forge && graphify update brain/cycles \
-  --output brain/cycles/graphify-out
+cd /home/parso/forge && GRAPHIFY_OUT=graphify-out graphify update brain/cycles
 ```
 
-**Brain 3 (project) —** project brain + source tree (run inside the project repo):
+**Brain 3 (project) —** project root → covers source code + brain themes together:
 ```bash
-cd <project-repo> && graphify update . \
-  --output brain/graphify-out
+GRAPHIFY_OUT=brain/graphify-out graphify update <project-repo>
 ```
-Hook install for a project repo: `cd <project-repo> && graphify hook install`.
+_(Project exclusions are declared in `<project-repo>/.graphifyignore`, which should exclude `node_modules/`, `dist/`, `demo/`, and `brain/graphify-out/` to prevent self-recursion.)_
 
 Extracts AST + frontmatter + markdown links via tree-sitter, writes
 `{graph.json, graph.html, GRAPH_REPORT.md, manifest.json}`. Idempotent. No API cost.
@@ -119,7 +114,7 @@ Use `graphify update ... --force` after a refactor that DELETES content
 - `brain/forge-dev/graphify-out/.graphifyignore` — graphify's own output (no self-recursion).
 - `brain/cycles/graphify-out/.graphifyignore` — same.
 - `brain/cycles/_raw/.graphifyignore` — raw cycle archives are inputs to synthesis, not indexed.
-- `<project-repo>/brain/graphify-out/.graphifyignore` — same.
+- `<project-repo>/.graphifyignore` — project-level exclusions: `node_modules/`, `dist/`, `demo/`, `brain/graphify-out/` (prevents self-recursion), plus project-specific noise (vendored deps, generated docs, etc.).
 
 > **Query operations live in `brain-query`.** This skill owns BUILD +
 > MAINTENANCE; querying the resulting `graph.json` files (`graphify query` /

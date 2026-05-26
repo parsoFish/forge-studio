@@ -56,14 +56,18 @@ run_graphify \
 
 if [[ "${1:-}" == "--all" ]]; then
   # Brain 3 — each managed project repo
-  # Scan root is projects/<name>/brain/; output lands at projects/<name>/brain/graphify-out/.
+  # Scan root is the project root (not just brain/) so the graph covers
+  # both source code AND brain themes. Output lands at brain/graphify-out/
+  # via GRAPHIFY_OUT so it stays co-located with the brain wiki.
+  # Each project should have a .graphifyignore excluding node_modules/,
+  # dist/, demo/, and brain/graphify-out/ (to prevent self-recursion).
   for proj_dir in "$FORGE_ROOT/projects"/*/; do
     proj_name="$(basename "$proj_dir")"
     if [[ -d "$proj_dir/brain" ]]; then
       run_graphify \
         "Brain 3 ($proj_name)" \
-        "$proj_dir/brain" \
-        "graphify-out"
+        "$proj_dir" \
+        "brain/graphify-out"
     fi
   done
 fi

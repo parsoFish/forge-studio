@@ -115,7 +115,7 @@ Where to look for as-built detail:
 Three knowledge graphs after the Tier 4 brain restructure (2026-05-26):
 - **Brain 1 (forge-dev):** `brain/forge-dev/graphify-out/` — forge TypeScript source + ADRs (3,566 nodes).
 - **Brain 2 (cycles):** `brain/cycles/graphify-out/` — cycle-derived themes + raw archives (518 nodes).
-- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — project-specific knowledge.
+- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — whole-project knowledge (source code + brain themes). trafficGame: 2,578 nodes; terraform: 6,015 nodes; claude-harness: 553 nodes.
 
 Legacy `brain/graphify-out/` (and the `./graphify-out` symlink) remain as the monolith reference
 (5,248 nodes) until the three-brain workflow is fully established. The wrapper script
@@ -128,10 +128,11 @@ project brains.
 GRAPHIFY_OUT=brain/forge-dev/graphify-out GRAPHIFY_FORCE=1 graphify update .
 
 # Brain 2 — cycles themes + raw archives
-graphify update brain/cycles
+GRAPHIFY_OUT=graphify-out GRAPHIFY_FORCE=1 graphify update brain/cycles
 
-# Brain 3 — per-project (repeat for each)
-graphify update projects/<name>/brain
+# Brain 3 — whole project (code + brain themes); output lands at brain/graphify-out/
+# Each project needs a .graphifyignore excluding node_modules/, dist/, brain/graphify-out/
+GRAPHIFY_OUT=brain/graphify-out graphify update projects/<name>
 ```
 
 **Query by domain** (use the right graph for the question):
