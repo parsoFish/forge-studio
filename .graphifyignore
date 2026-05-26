@@ -92,3 +92,20 @@ docs/planning/*/S*-PROPOSALS.md
 /S*-DECISIONS.md
 /S*-PROPOSALS.md
 /S*-SUMMARY.md
+
+# Demonstration + iteration scaffolding — ephemeral working history, not
+# live architecture. Durable outcomes were extracted as brain themes; the
+# iteration artifacts themselves are noise in a structural-code graph and
+# their high inter-connectivity was polluting community detection results.
+_meta/
+
+# Transient forge-root WIP artifact (current cycle's PR description staging
+# area). Created/overwritten by the review-loop skill each cycle.
+.forge/
+
+# Schema example files — each repeats the same property names as
+# project-config.schema.json (demo, command, shape, start_command, etc.),
+# creating dense cross-linking that amplifies the schema community score and
+# pushes it above phase-docs communities in query results. The schema
+# definition file itself stays; examples are illustration-only.
+docs/schemas/examples/
