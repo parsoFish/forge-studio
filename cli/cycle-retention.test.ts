@@ -160,7 +160,7 @@ function setupBrainTree(opts: {
     }
   }
   if (opts.forgeThemes) {
-    const forgeThemesDir = join(forgeRoot, 'brain', 'forge', 'themes');
+    const forgeThemesDir = join(forgeRoot, 'brain', 'cycles', 'themes');
     mkdirSync(forgeThemesDir, { recursive: true });
     for (const [file, body] of Object.entries(opts.forgeThemes)) {
       const full = join(forgeThemesDir, file);
@@ -264,7 +264,7 @@ test('collectCitedBy: includes forge-themes namespace', () => {
       sinceMs: 0,
     });
     assert.equal(cited.length, 1);
-    assert.equal(cited[0], 'brain/forge/themes/cross-cycle.md');
+    assert.equal(cited[0], 'brain/cycles/themes/cross-cycle.md');
   } finally {
     h.cleanup();
   }
@@ -379,9 +379,9 @@ test('patchArchiveFrontmatter: returns false on file without frontmatter', () =>
 test('patchArchiveFrontmatter: idempotent — second call yields same content', () => {
   const a = makeArchive({});
   try {
-    patchArchiveFrontmatter(a.path, 'load-bearing', ['brain/forge/themes/a.md']);
+    patchArchiveFrontmatter(a.path, 'load-bearing', ['brain/cycles/themes/a.md']);
     const first = readFileSync(a.path, 'utf8');
-    patchArchiveFrontmatter(a.path, 'load-bearing', ['brain/forge/themes/a.md']);
+    patchArchiveFrontmatter(a.path, 'load-bearing', ['brain/cycles/themes/a.md']);
     const second = readFileSync(a.path, 'utf8');
     assert.equal(first, second);
   } finally {

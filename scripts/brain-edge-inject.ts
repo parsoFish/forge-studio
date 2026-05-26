@@ -64,7 +64,7 @@ function walkMarkdown(dir: string, out: string[] = []): string[] {
 }
 
 function findThemeFiles(): string[] {
-  const forgeThemes = walkMarkdown(join(FORGE, 'brain/forge/themes'));
+  const forgeThemes = walkMarkdown(join(FORGE, 'brain/cycles/themes'));
   const projectsDir = join(FORGE, 'brain/projects');
   const projectThemes: string[] = [];
   for (const proj of readdirSync(projectsDir)) {

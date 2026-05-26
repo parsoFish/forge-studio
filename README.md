@@ -91,7 +91,7 @@ review entirely from GitHub. Pick **one**:
 > when you are engaged: review → comment → agent addresses → push →
 > re-review, all on the PR. It works *because the demo lives in the PR*.
 > Pattern of record:
-> [`brain/forge/themes/pr-as-sole-review-window.md`](./brain/forge/themes/pr-as-sole-review-window.md).
+> [`brain/cycles/themes/pr-as-sole-review-window.md`](./brain/cycles/themes/pr-as-sole-review-window.md).
 
 ### 3. Reflect — `/forge-reflect <id>`  (after the merge)
 
@@ -120,7 +120,7 @@ slash commands are thin invokers of these — no standalone procedure):
 [`skills/reviewer/SKILL.md`](./skills/reviewer/SKILL.md);
 `/forge-reflect` → the **Operator handoff** section of
 [`skills/reflector/SKILL.md`](./skills/reflector/SKILL.md). Design of
-record: [`brain/forge/themes/human-interaction-via-own-session.md`](./brain/forge/themes/human-interaction-via-own-session.md)
+record: [`brain/cycles/themes/human-interaction-via-own-session.md`](./brain/cycles/themes/human-interaction-via-own-session.md)
 (US-3.1 / US-3.2); review/closure mechanics in
 [`docs/phases/review-loop.md`](./docs/phases/review-loop.md).
 

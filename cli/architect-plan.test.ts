@@ -392,13 +392,13 @@ test('renderPlanDoc: brain-context section lists every brain path + summary', ()
   const session = fxSession({
     brain_context: [
       { path: 'brain/projects/sample/profile.md', summary: 'Project profile.' },
-      { path: 'brain/forge/themes/pr-as-sole-review-window.md', summary: 'PR is the review window.' },
+      { path: 'brain/cycles/themes/pr-as-sole-review-window.md', summary: 'PR is the review window.' },
     ],
   });
   const doc = renderPlanDoc(session);
   assert.match(doc, /brain\/projects\/sample\/profile\.md/);
   assert.match(doc, /Project profile/);
-  assert.match(doc, /brain\/forge\/themes\/pr-as-sole-review-window\.md/);
+  assert.match(doc, /brain\/cycles\/themes\/pr-as-sole-review-window\.md/);
   assert.match(doc, /PR is the review window/);
 });
 

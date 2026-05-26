@@ -1,7 +1,7 @@
 /**
  * brain-wikilink-lift — Stage 4 of brain-refinement-2026-05-23.
  *
- * For every theme under brain/forge/themes/ and brain/projects/<name>/themes/:
+ * For every theme under brain/cycles/themes/ and brain/projects/<name>/themes/:
  *  - Read frontmatter.related_themes
  *  - Reconcile against any inline links found in body ## Related / ## See also
  *  - Write a normalised ## See also section using [[slug]] wikilink form,
@@ -41,7 +41,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 function findThemes(forgeRoot: string): string[] {
-  const forgeThemes = walk(join(forgeRoot, 'brain/forge/themes'));
+  const forgeThemes = walk(join(forgeRoot, 'brain/cycles/themes'));
   const projectsDir = join(forgeRoot, 'brain/projects');
   const projectThemes: string[] = [];
   for (const proj of readdirSync(projectsDir)) {

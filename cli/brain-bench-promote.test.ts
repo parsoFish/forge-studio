@@ -80,7 +80,7 @@ const BASE_QUESTIONS: QuestionRow[] = [
   {
     id: 'Q1',
     question: 'baseline question 1',
-    expected_sources: ['brain/forge/themes/baseline.md'],
+    expected_sources: ['brain/cycles/themes/baseline.md'],
     expected_keywords: ['baseline'],
     scope: null,
     category: null,
@@ -88,7 +88,7 @@ const BASE_QUESTIONS: QuestionRow[] = [
   {
     id: 'Q2',
     question: 'baseline question 2',
-    expected_sources: ['brain/forge/themes/baseline.md'],
+    expected_sources: ['brain/cycles/themes/baseline.md'],
     expected_keywords: ['baseline'],
     scope: null,
     category: null,
@@ -162,7 +162,7 @@ test('per-cycle cap: 2nd promotion of same cycle is rejected (still ≤1)', asyn
       {
         id: 'Q3',
         question: 'existing promoted question from cycle X',
-        expected_sources: ['brain/forge/themes/cycle-x.md'],
+        expected_sources: ['brain/cycles/themes/cycle-x.md'],
         expected_keywords: ['cycle-x'],
         scope: null,
         category: null,
@@ -324,7 +324,7 @@ test('edit-then-keep applies operator text verbatim', async () => {
 
     const edited: PromoteCandidate = {
       question: 'OPERATOR-EDITED question text',
-      expected_sources: ['brain/forge/themes/operator-pick.md'],
+      expected_sources: ['brain/cycles/themes/operator-pick.md'],
       why_now: 'operator refined the question',
       expected_keywords: ['operator', 'edited'],
     };
@@ -347,7 +347,7 @@ test('edit-then-keep applies operator text verbatim', async () => {
     assert.equal(after.length, BASE_QUESTIONS.length + 1);
     const last = after[after.length - 1];
     assert.equal(last.question, 'OPERATOR-EDITED question text');
-    assert.deepEqual(last.expected_sources, ['brain/forge/themes/operator-pick.md']);
+    assert.deepEqual(last.expected_sources, ['brain/cycles/themes/operator-pick.md']);
     assert.deepEqual(last.expected_keywords, ['operator', 'edited']);
     assert.equal(last.source_cycle, 'INIT-2026-05-23-edit');
   } finally {

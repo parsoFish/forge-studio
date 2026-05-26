@@ -106,7 +106,7 @@ Where to look for as-built detail:
 - Code structure: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`PRINCIPLES.md`](./PRINCIPLES.md), [ADRs](./docs/decisions/).
 - Per-phase invocation contracts: `orchestrator/<phase>-invocation.ts` (PM, dev, unifier, reflector).
 - Cycle archives: [`brain/_raw/cycles/`](./brain/_raw/cycles/).
-- Forge-level patterns: [`brain/forge/themes/`](./brain/forge/themes/).
+- Forge-level patterns: [`brain/cycles/themes/`](./brain/cycles/themes/).
 - Per-project patterns: [`brain/projects/<project>/themes/`](./brain/projects/).
 - Operator UI: [`forge-ui/`](./forge-ui/) (launched by `forge watch`).
 

@@ -101,7 +101,7 @@ export function collectCitedBy(opts: {
 
   const candidateDirs = [
     resolve(brainRoot, 'projects', projectName, 'themes'),
-    resolve(brainRoot, 'forge', 'themes'),
+    resolve(brainRoot, 'cycles', 'themes'),
   ];
 
   for (const dir of candidateDirs) {

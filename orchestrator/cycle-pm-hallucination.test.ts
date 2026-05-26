@@ -135,7 +135,7 @@ function makeStubQueryFn(passes: Array<{
             {
               type: 'tool_use',
               name: 'Read',
-              input: { file_path: 'brain/forge/themes/work-item-completion-by-domain.md' },
+              input: { file_path: 'brain/cycles/themes/work-item-completion-by-domain.md' },
             },
           ],
         },

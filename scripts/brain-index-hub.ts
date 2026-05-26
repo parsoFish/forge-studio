@@ -36,7 +36,7 @@ function build(): string {
   lines.push('');
 
   // forge themes
-  const forgeSlugs = listThemes(join(FORGE, 'brain/forge/themes'));
+  const forgeSlugs = listThemes(join(FORGE, 'brain/cycles/themes'));
   lines.push('### forge/themes/');
   lines.push('');
   lines.push(forgeSlugs.map((s) => `[[${s}]]`).join(' · '));
