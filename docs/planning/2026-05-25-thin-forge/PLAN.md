@@ -111,13 +111,17 @@ The orchestrator currently enforces several things via runtime checks that start
 - The "Always do / Ask first / Never do" lists in CLAUDE.md are a mix of durable principles and diagnostic-of-the-day rules. Re-read each bullet against the "can the rule be justified from a durable principle" test.
 - Tier 0 already dropped the bench-anchored "Status of the scaffold". Re-check the rest of CLAUDE.md for similar bench-anchored claims.
 
-### Tier 4 — Brain themes audit (split into a separate plan)
+### Tier 4 — Brain audit + three-brain restructure (own plan)
 
-Operator decision (2026-05-25): Tier 4 becomes its own plan once
-Tiers 1–3 land. The brain structure has grown organically over many
-cycles and warrants a holistic audit, not just spot-deletes. The new
-plan will live at `docs/planning/<date>-brain-audit/PLAN.md` and
-should cover:
+**Status (2026-05-26):** Tier 4 plan written at
+[`../2026-05-26-brain-audit/PLAN.md`](../2026-05-26-brain-audit/PLAN.md).
+It carries the structural + content audit captured below and adds the
+operator's **three-brain model** (forge-dev brain, cycle-knowledge
+brain, project-specific brains) plus a two-track validation procedure
+(re-run verification v3 + an optional brain-query precision/recall
+mini-bench). Execution handed off to a fresh session.
+
+The original Tier 4 stub for record (now superseded by the linked plan):
 
 - **Structural audit** — directory layout (forge themes / project
   themes / `_raw/cycles/` / `graphify-out/`), naming conventions,
