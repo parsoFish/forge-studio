@@ -78,3 +78,56 @@ Brain 3 (per-project) lives at `<project-repo>/brain/` inside each managed proje
 ## ADR
 
 See [docs/decisions/018-three-brain-model.md](../decisions/018-three-brain-model.md) for the full architectural decision record.
+
+## Graphify graph evidence
+
+All three brains have been built and verified with queries. Graphs are committed to git.
+
+### Graph size comparison
+
+| Graph | Path | Nodes | Links |
+|-------|------|-------|-------|
+| Legacy monolith | `brain/graphify-out/` | 5,248 | 7,676 |
+| Brain 1 (forge-dev) | `brain/forge-dev/graphify-out/` | 3,566 | 4,763 |
+| Brain 2 (cycles) | `brain/cycles/graphify-out/` | 518 | 426 |
+| Brain 3 (trafficGame) | `projects/trafficGame/brain/graphify-out/` | 145 | 121 |
+| Brain 3 (claude-harness) | `projects/claude-harness/brain/graphify-out/` | 216 | 187 |
+| Brain 3 (terraform-provider-betterado) | `projects/terraform-provider-betterado/brain/graphify-out/` | 45 | 35 |
+
+### Query comparison: "where are cycle archive files stored"
+
+**Old (legacy monolith):** returned 46 nodes dominated by `benchmarks/reflection/scoring.ts` functions
+(`checkCycleArchive`, `listThemeFiles`, `parseEventLog`, etc.) — code that reads archives, not the
+archives themselves. The actual archive path was buried in test code noise.
+
+**New (Brain 2, cycles):** returned 23 nodes, all directly from `_raw/` archive files:
+cycle summaries, commit logs, event logs, trajectories. Signal-to-noise ratio massively improved.
+
+### Query comparison: "how does the reflector phase work"
+
+**Old (legacy monolith):** first 15 nodes included `forge-ui` components — `page.tsx`,
+`bridge-client.ts`, `AgentHexCanvas.tsx`, `wi-status.ts`, `phases.ts` — before reaching
+`skills/reflector/SKILL.md`. UI code dominated because the graph mixed all domains.
+
+**New (Brain 1, forge-dev):** top results immediately: `Reflector` (SKILL.md L9), `Process`
+(SKILL.md L110), `Inputs`, `Outputs`, `Constraints`, `Stage 2` — focused skill documentation
+with no UI noise.
+
+### Build commands
+
+```bash
+# Rebuild Brain 1 + Brain 2:
+bash scripts/brain-graphify-all.sh
+
+# Rebuild all including Brain 3 projects:
+bash scripts/brain-graphify-all.sh --all
+
+# Brain 1 manually (GRAPHIFY_OUT controls output subdir):
+GRAPHIFY_OUT=brain/forge-dev/graphify-out GRAPHIFY_FORCE=1 graphify update .
+
+# Brain 2 manually:
+graphify update brain/cycles
+
+# Brain 3 for one project:
+graphify update projects/<name>/brain
+```

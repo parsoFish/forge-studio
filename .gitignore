@@ -90,9 +90,18 @@ brain/.obsidian/
 # names persist across clones. Everything else (`graph.html`,
 # `GRAPH_REPORT.md`, `manifest.json`, `cache/`, `.graphify_root`) is
 # regenerable view + machine-local state.
+# Legacy single-brain
 brain/graphify-out/*
 !brain/graphify-out/graph.json
 !brain/graphify-out/.graphify_labels.json
+# Brain 1 (forge-dev)
+brain/forge-dev/graphify-out/*
+!brain/forge-dev/graphify-out/graph.json
+!brain/forge-dev/graphify-out/.graphify_labels.json
+# Brain 2 (cycles)
+brain/cycles/graphify-out/*
+!brain/cycles/graphify-out/graph.json
+!brain/cycles/graphify-out/.graphify_labels.json
 # Graphify's own working state under brain/.graphify/ is per-machine.
 brain/.graphify/
 brain/.graphify-tmp/

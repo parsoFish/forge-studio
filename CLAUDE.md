@@ -113,13 +113,38 @@ Where to look for as-built detail:
 ## graphify
 
 Three knowledge graphs after the Tier 4 brain restructure (2026-05-26):
-- **Brain 1 (forge-dev):** `brain/forge-dev/graphify-out/` — forge TypeScript source + ADRs.
-- **Brain 2 (cycles):** `brain/cycles/graphify-out/` — cycle-derived themes + raw archives.
-- **Brain 3 (per-project):** `<project-repo>/brain/graphify-out/` — project-specific knowledge.
+- **Brain 1 (forge-dev):** `brain/forge-dev/graphify-out/` — forge TypeScript source + ADRs (3,566 nodes).
+- **Brain 2 (cycles):** `brain/cycles/graphify-out/` — cycle-derived themes + raw archives (518 nodes).
+- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — project-specific knowledge.
 
-Legacy `brain/graphify-out/` (and the `./graphify-out` symlink) remain until Brain 1 + 2 graphs
-are confirmed healthy. The wrapper script `bash scripts/brain-graphify-all.sh` rebuilds Brain 1 + 2;
-use `--all` flag to also rebuild all managed project brains.
+Legacy `brain/graphify-out/` (and the `./graphify-out` symlink) remain as the monolith reference
+(5,248 nodes) until the three-brain workflow is fully established. The wrapper script
+`bash scripts/brain-graphify-all.sh` rebuilds Brain 1 + 2; use `--all` to also rebuild all managed
+project brains.
+
+**Build commands** (all three brains):
+```bash
+# Brain 1 — forge source + ADRs (GRAPHIFY_OUT overrides the default graphify-out/ subdir)
+GRAPHIFY_OUT=brain/forge-dev/graphify-out GRAPHIFY_FORCE=1 graphify update .
+
+# Brain 2 — cycles themes + raw archives
+graphify update brain/cycles
+
+# Brain 3 — per-project (repeat for each)
+graphify update projects/<name>/brain
+```
+
+**Query by domain** (use the right graph for the question):
+```bash
+# Forge code / orchestration architecture
+graphify query "<question>" --graph brain/forge-dev/graphify-out/graph.json
+
+# Cycle patterns / antipatterns / archived cycle evidence
+graphify query "<question>" --graph brain/cycles/graphify-out/graph.json
+
+# Project-specific architecture
+graphify query "<question>" --graph projects/<name>/brain/graphify-out/graph.json
+```
 
 The graphs are a **power-tool, not a mandate** (2026-05-24 rebuild-review): brain-query against
 markdown themes alone is enough for most lookups. Reach for a graph when grep is too noisy or you
