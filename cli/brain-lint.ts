@@ -25,7 +25,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve, basename } from 'node:path';
+import { dirname, join, relative, resolve, basename, sep } from 'node:path';
 // gray-matter has no usable types; we treat the default export as `any` for parsing.
 // The structure we use is well-defined: `{ data, content }`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,7 +95,16 @@ function readThemeFiles(brainRoot: string): string[] {
   const files: string[] = [];
   if (!existsSync(brainRoot)) return files;
 
-  // forge/themes/
+  // cycles/themes/ — the primary forge-side theme store after the three-brain restructure
+  const cyclesThemes = join(brainRoot, 'cycles', 'themes');
+  if (existsSync(cyclesThemes)) {
+    for (const entry of readdirSync(cyclesThemes)) {
+      if (entry === 'README.md' || !entry.endsWith('.md')) continue;
+      files.push(join(cyclesThemes, entry));
+    }
+  }
+
+  // forge/themes/ — kept as fallback while migration is in progress; can be removed after Phase 2
   const forgeThemes = join(brainRoot, 'forge', 'themes');
   if (existsSync(forgeThemes)) {
     for (const entry of readdirSync(forgeThemes)) {
@@ -104,23 +113,8 @@ function readThemeFiles(brainRoot: string): string[] {
     }
   }
 
-  // projects/<n>/themes/
-  const projectsRoot = join(brainRoot, 'projects');
-  if (existsSync(projectsRoot)) {
-    for (const proj of readdirSync(projectsRoot)) {
-      const themes = join(projectsRoot, proj, 'themes');
-      if (!existsSync(themes)) continue;
-      try {
-        if (!statSync(themes).isDirectory()) continue;
-      } catch {
-        continue;
-      }
-      for (const entry of readdirSync(themes)) {
-        if (entry === 'README.md' || !entry.endsWith('.md')) continue;
-        files.push(join(themes, entry));
-      }
-    }
-  }
+  // Project themes now live in <project-repo>/brain/themes/ (separate git repos).
+  // They are not linted from forge-side; lint them inside the project repo instead.
 
   return files;
 }
@@ -181,9 +175,11 @@ function parseTheme(file: string): {
 function projectOfTheme(file: string, brainRoot: string): string | null {
   const rel = relative(brainRoot, file);
   const parts = rel.split(/[/\\]/);
+  // Old layout: brain/projects/<name>/themes/<file>.md
   if (parts[0] === 'projects' && parts[2] === 'themes') {
     return parts[1] ?? null;
   }
+  // New layout: project themes live in separate repos, not scanned from forge.
   return null;
 }
 
@@ -272,8 +268,8 @@ export function checkIndexSync(forgeRoot: string): Finding[] {
 
     const project = projectOfTheme(file, brainRoot);
     const indexPath = project
-      ? join(brainRoot, 'projects', project, indexFile)
-      : join(brainRoot, 'forge', indexFile);
+      ? join(brainRoot, 'projects', project, indexFile) // legacy; will be gone after Phase 2
+      : join(brainRoot, 'cycles', indexFile);
 
     if (!existsSync(indexPath)) {
       findings.push({
@@ -360,14 +356,12 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
     }
 
     for (const slug of wikilinks) {
-      // Try forge/themes/<slug>.md and projects/<*>/themes/<slug>.md.
-      const candidates = [join(brainRoot, 'forge', 'themes', `${slug}.md`)];
-      const projectsRoot = join(brainRoot, 'projects');
-      if (existsSync(projectsRoot)) {
-        for (const proj of readdirSync(projectsRoot)) {
-          candidates.push(join(projectsRoot, proj, 'themes', `${slug}.md`));
-        }
-      }
+      // Try cycles/themes/<slug>.md (new layout) and forge/themes/<slug>.md (legacy fallback).
+      const candidates = [
+        join(brainRoot, 'cycles', 'themes', `${slug}.md`),
+        join(brainRoot, 'forge', 'themes', `${slug}.md`),
+      ];
+      // Project themes are in separate repos; can't resolve from forge.
       const hit = candidates.some((c) => existsSync(c));
       if (!hit) {
         findings.push({
@@ -475,6 +469,23 @@ function collectIndexLinkTargets(brainRoot: string): Set<string> {
   const topIndex = join(brainRoot, 'INDEX.md');
   if (existsSync(topIndex)) indexFiles.push(topIndex);
 
+  // cycles/ category indexes
+  const cyclesDir = join(brainRoot, 'cycles');
+  if (existsSync(cyclesDir)) {
+    for (const entry of readdirSync(cyclesDir)) {
+      if (entry.endsWith('.md')) indexFiles.push(join(cyclesDir, entry));
+    }
+  }
+
+  // forge-dev/ index files
+  const forgeDevDir = join(brainRoot, 'forge-dev');
+  if (existsSync(forgeDevDir)) {
+    for (const entry of readdirSync(forgeDevDir)) {
+      if (entry.endsWith('.md')) indexFiles.push(join(forgeDevDir, entry));
+    }
+  }
+
+  // Legacy forge/ dir (fallback during migration)
   const forgeDir = join(brainRoot, 'forge');
   if (existsSync(forgeDir)) {
     for (const entry of readdirSync(forgeDir)) {
@@ -482,20 +493,7 @@ function collectIndexLinkTargets(brainRoot: string): Set<string> {
     }
   }
 
-  const projectsRoot = join(brainRoot, 'projects');
-  if (existsSync(projectsRoot)) {
-    for (const proj of readdirSync(projectsRoot)) {
-      const projDir = join(projectsRoot, proj);
-      try {
-        if (!statSync(projDir).isDirectory()) continue;
-      } catch {
-        continue;
-      }
-      for (const entry of readdirSync(projDir)) {
-        if (entry.endsWith('.md')) indexFiles.push(join(projDir, entry));
-      }
-    }
-  }
+  // Project category indexes now live in separate repos; not scanned from forge.
 
   for (const f of indexFiles) {
     let body: string;
@@ -748,14 +746,21 @@ function filterFindingsByScope(
     case 'full':
       return findings;
     case 'forge-only': {
-      const forgePrefix = join(brainRoot, 'forge') + '/';
-      return findings.filter((f) => f.file.startsWith(forgePrefix) || f.file.startsWith(join(brainRoot, 'forge') + '\\'));
+      // In the three-brain model, forge-side themes live in brain/cycles/themes/ (and legacy brain/forge/themes/).
+      const cyclesPrefix = join(brainRoot, 'cycles') + sep;
+      const legacyForgePrefix = join(brainRoot, 'forge') + sep;
+      return findings.filter(
+        (f) =>
+          f.file.startsWith(cyclesPrefix) ||
+          f.file.startsWith(legacyForgePrefix) ||
+          f.file.startsWith(cyclesPrefix.replace(/\//g, '\\')) ||
+          f.file.startsWith(legacyForgePrefix.replace(/\//g, '\\')),
+      );
     }
     case 'project-only': {
-      if (!opts.project) return findings;
-      const prefix = join(brainRoot, 'projects', opts.project) + '/';
-      const prefixWin = join(brainRoot, 'projects', opts.project) + '\\';
-      return findings.filter((f) => f.file.startsWith(prefix) || f.file.startsWith(prefixWin));
+      // Project themes now live in separate repos (three-brain restructure 2026-05-26).
+      // Forge-side brain-lint does not scan project themes; this scope returns empty.
+      return [];
     }
     case 'single-file': {
       if (!opts.file) return findings;

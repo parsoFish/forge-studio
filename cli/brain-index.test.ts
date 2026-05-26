@@ -8,18 +8,20 @@ import { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
 
 function scaffoldBrain(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-index-test-'));
-  mkdirSync(join(root, 'brain', 'forge'), { recursive: true });
-  mkdirSync(join(root, 'brain', 'projects', 'sample'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'cycles'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'forge-dev'), { recursive: true });
+  mkdirSync(join(root, 'projects', 'sample', 'brain'), { recursive: true });
 
   writeFileSync(join(root, 'brain', 'INDEX.md'), '# Brain\n\ntop-level navigation.');
-  writeFileSync(join(root, 'brain', 'forge', 'patterns.md'), '# Patterns\n\n- pattern A\n- pattern B');
-  writeFileSync(join(root, 'brain', 'forge', 'antipatterns.md'), '# Antipatterns\n');
-  writeFileSync(join(root, 'brain', 'forge', 'decisions.md'), '# Decisions\n');
-  writeFileSync(join(root, 'brain', 'forge', 'operations.md'), '# Operations\n');
-  writeFileSync(join(root, 'brain', 'forge', 'reference.md'), '# Reference\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'patterns.md'), '# Patterns\n\n- pattern A\n- pattern B');
+  writeFileSync(join(root, 'brain', 'cycles', 'antipatterns.md'), '# Antipatterns\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'decisions.md'), '# Decisions\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'operations.md'), '# Operations\n');
+  writeFileSync(join(root, 'brain', 'forge-dev', 'decisions.md'), '# Forge Decisions\n');
+  writeFileSync(join(root, 'brain', 'forge-dev', 'reference.md'), '# Reference\n');
 
-  writeFileSync(join(root, 'brain', 'projects', 'sample', 'profile.md'), '# Sample profile\n\nhard constraints.');
-  writeFileSync(join(root, 'brain', 'projects', 'sample', 'patterns.md'), '# Sample patterns\n');
+  writeFileSync(join(root, 'projects', 'sample', 'brain', 'profile.md'), '# Sample profile\n\nhard constraints.');
+  writeFileSync(join(root, 'projects', 'sample', 'brain', 'patterns.md'), '# Sample patterns\n');
 
   return root;
 }
@@ -30,11 +32,12 @@ test('loadBrainIndex: includes all forge category indexes', () => {
 
   for (const rel of [
     'brain/INDEX.md',
-    'brain/forge/patterns.md',
-    'brain/forge/antipatterns.md',
-    'brain/forge/decisions.md',
-    'brain/forge/operations.md',
-    'brain/forge/reference.md',
+    'brain/cycles/patterns.md',
+    'brain/cycles/antipatterns.md',
+    'brain/cycles/decisions.md',
+    'brain/cycles/operations.md',
+    'brain/forge-dev/decisions.md',
+    'brain/forge-dev/reference.md',
   ]) {
     assert.ok(output.includes(`<!-- BRAIN INDEX: ${rel} -->`), `marker for ${rel}`);
   }
@@ -46,8 +49,8 @@ test('loadBrainIndex: scope adds project profile + project category indexes when
   const root = scaffoldBrain();
   const output = loadBrainIndex({ cwd: root, scope: 'sample' });
 
-  assert.ok(output.includes('<!-- BRAIN INDEX: brain/projects/sample/profile.md -->'));
-  assert.ok(output.includes('<!-- BRAIN INDEX: brain/projects/sample/patterns.md -->'));
+  assert.ok(output.includes('<!-- BRAIN INDEX: projects/sample/brain/profile.md -->'));
+  assert.ok(output.includes('<!-- BRAIN INDEX: projects/sample/brain/patterns.md -->'));
   assert.ok(output.includes('hard constraints.'));
 });
 
@@ -56,8 +59,8 @@ test('loadBrainIndex: missing project category files are silently skipped', () =
   const output = loadBrainIndex({ cwd: root, scope: 'sample' });
 
   // antipatterns.md and decisions.md don't exist for `sample` — skipped.
-  assert.ok(!output.includes('brain/projects/sample/antipatterns.md'));
-  assert.ok(!output.includes('brain/projects/sample/decisions.md'));
+  assert.ok(!output.includes('projects/sample/brain/antipatterns.md'));
+  assert.ok(!output.includes('projects/sample/brain/decisions.md'));
 });
 
 test('loadBrainIndex: missing forge category emits a (missing) marker', () => {
@@ -87,17 +90,17 @@ test('loadBrainIndex: nonexistent scope adds nothing', () => {
 
 function scaffoldBrainForRegen(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-index-regen-'));
-  mkdirSync(join(root, 'brain', 'forge', 'themes'), { recursive: true });
-  mkdirSync(join(root, 'brain', '_raw', 'docs'), { recursive: true });
-  mkdirSync(join(root, 'brain', '_raw', 'cycles'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'cycles', 'themes'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'cycles', '_raw', 'docs'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'cycles', '_raw', 'cycles'), { recursive: true });
 
-  writeFileSync(join(root, 'brain', 'forge', 'themes', 't1.md'), '# t1\n');
-  writeFileSync(join(root, 'brain', 'forge', 'themes', 't2.md'), '# t2\n');
-  writeFileSync(join(root, 'brain', 'forge', 'themes', 'README.md'), '# template — excluded\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'themes', 't1.md'), '# t1\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'themes', 't2.md'), '# t2\n');
+  writeFileSync(join(root, 'brain', 'cycles', 'themes', 'README.md'), '# template — excluded\n');
 
-  mkdirSync(join(root, 'brain', 'projects', 'alpha', 'themes'), { recursive: true });
+  mkdirSync(join(root, 'projects', 'alpha', 'brain', 'themes'), { recursive: true });
   writeFileSync(
-    join(root, 'brain', 'projects', 'alpha', 'profile.md'),
+    join(root, 'projects', 'alpha', 'brain', 'profile.md'),
     `---
 project: alpha
 status: active
@@ -110,11 +113,11 @@ A simple example project. Stack is TypeScript.
 ## Taste signals
 `,
   );
-  writeFileSync(join(root, 'brain', 'projects', 'alpha', 'themes', 'a1.md'), '# a1\n');
+  writeFileSync(join(root, 'projects', 'alpha', 'brain', 'themes', 'a1.md'), '# a1\n');
 
-  mkdirSync(join(root, 'brain', 'projects', 'beta', 'themes'), { recursive: true });
+  mkdirSync(join(root, 'projects', 'beta', 'brain', 'themes'), { recursive: true });
   writeFileSync(
-    join(root, 'brain', 'projects', 'beta', 'profile.md'),
+    join(root, 'projects', 'beta', 'brain', 'profile.md'),
     `---
 project: beta
 ---
@@ -126,12 +129,12 @@ A second project for testing.
   );
 
   // contamination dir — must be EXCLUDED from the regenerated index.
-  mkdirSync(join(root, 'brain', 'projects', '__chained_test_proj_1', 'themes'), {
+  mkdirSync(join(root, 'projects', '__chained_test_proj_1', 'brain', 'themes'), {
     recursive: true,
   });
 
-  writeFileSync(join(root, 'brain', '_raw', 'docs', 'r1.md'), '# raw\n');
-  writeFileSync(join(root, 'brain', '_raw', 'cycles', 'c1.md'), '# cycle\n');
+  writeFileSync(join(root, 'brain', 'cycles', '_raw', 'docs', 'r1.md'), '# raw\n');
+  writeFileSync(join(root, 'brain', 'cycles', '_raw', 'cycles', 'c1.md'), '# cycle\n');
 
   return root;
 }
@@ -148,9 +151,9 @@ test('regenerateBrainIndex: counts themes + projects + raw sources from filesyst
 test('regenerateBrainIndex: lists projects by name with one-paragraph hook', () => {
   const root = scaffoldBrainForRegen();
   const result = regenerateBrainIndex({ cwd: root });
-  assert.ok(result.content.includes('[alpha](./projects/alpha/profile.md)'));
+  assert.ok(result.content.includes('[alpha](../projects/alpha/brain/profile.md)'));
   assert.ok(result.content.includes('A simple example project.'));
-  assert.ok(result.content.includes('[beta](./projects/beta/profile.md)'));
+  assert.ok(result.content.includes('[beta](../projects/beta/brain/profile.md)'));
   // Contamination dir must NOT appear in the index.
   assert.ok(!result.content.includes('__chained_test_proj'));
 });

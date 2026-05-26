@@ -1,6 +1,6 @@
 ---
 name: brain-query
-description: Efficient lookup against the brain. Mandated as the first action of every other skill. Consults the structural graph (brain/graphify-out/graph.json via real safishamsi/graphify) first, then falls back to keyword scan over themes. Logs gaps so the next ingest pass can fill them.
+description: Efficient lookup against the brain. Mandated as the first action of every other skill. Consults the structural graph first (per-brain graphify-out/, via real safishamsi/graphify), then falls back to keyword scan over themes. Logs gaps so the next ingest pass can fill them. Accepts a scope parameter to target the right brain: forge-dev, cycles, project, or all.
 phase: brain
 surface: unattended
 model: claude-haiku-4-5
@@ -26,8 +26,22 @@ The graph fills the gap forge has been carrying manually via `related_themes` fr
 ## Inputs
 
 - A natural-language question or list of questions.
-- Optional: project scope (constrains query to `brain/projects/<name>/`).
-- Optional: category scope (`pattern` | `antipattern` | `decision` | `operation` | `reference`).
+- Optional: `scope` — which brain(s) to search. Values:
+  - `forge-dev` — forge code + ADRs + engineering notes (`brain/forge-dev/`, forge source tree). Never read during a cycle.
+  - `cycles` — cycle-derived patterns, antipatterns, operations, raw archives (`brain/cycles/`). Read by planners.
+  - `project` — project-specific themes and profile (`<project-repo>/brain/`, accessed via the cycle's worktree). Read by planners, dev-loop, reviewer, reflector during a cycle.
+  - `all` — union of all three (default when no scope given; emits a single-line warning).
+- Optional: `project` name — required when `scope=project`; resolves the project-repo brain path.
+- Optional: category filter (`pattern` | `antipattern` | `decision` | `operation` | `reference`).
+
+**Role defaults** (the calling skill or orchestrator should supply these):
+
+| Role | Default scope |
+|---|---|
+| architect / PM | `cycles,project` (Brain 2 + the cycle's Brain 3) |
+| reflector | `all` (loose read access; reflector is operator-coupled) |
+| dev-loop / reviewer | `project` (Brain 3 of the cycle's project ONLY) |
+| forge-dev session (no cycle) | `forge-dev,cycles` (Brain 1 + Brain 2) |
 
 ## Outputs
 
@@ -62,13 +76,20 @@ Primary owner of [`benchmarks/brain/`](../../benchmarks/brain/) — `questions.j
 
 Three steps. Strict order. No alternation between graphify and grep.
 
-1. **Graph-first identify.** Run ONE `graphify` call against
-   `brain/graphify-out/graph.json` (canonical; routed via the
-   `./graphify-out` symlink per C21a). Pick the operation by phrasing:
-   - structural / "what bridges A and B" → `cd /home/parso/forge && graphify path "<A>" "<B>"`
-   - "describe <X>" / "what's near <X>" → `cd /home/parso/forge && graphify explain "<X>"`
-   - "what implements/uses <X>" → `cd /home/parso/forge && graphify affected "<X>"`
-   - free-form content question → `cd /home/parso/forge && graphify query "<the-question>"`
+1. **Graph-first identify.** Resolve which graph(s) to consult based on the active scope:
+
+   | Scope | Graph path |
+   |---|---|
+   | `forge-dev` | `brain/forge-dev/graphify-out/graph.json` |
+   | `cycles` | `brain/cycles/graphify-out/graph.json` |
+   | `project` | `<project-repo>/brain/graphify-out/graph.json` |
+   | `all` | run each in turn; union the candidate sources |
+
+   Run ONE `graphify` call per graph. Pick the operation by question phrasing:
+   - structural / "what bridges A and B" → `graphify path "<A>" "<B>" --graph <path>`
+   - "describe <X>" / "what's near <X>" → `graphify explain "<X>" --graph <path>`
+   - "what implements/uses <X>" → `graphify affected "<X>" --graph <path>`
+   - free-form content question → `graphify query "<the-question>" --graph <path>`
 
    The graph returns a small subgraph of node ids + source files. Those
    files are your candidate sources — typically 2–5 themes. Read them with
@@ -108,19 +129,25 @@ option in this skill — the graph is the index. If after one
 
 ## Looking up by graph node id
 
-The graph keys nodes by relative posix path. To resolve a slug to a node id:
+The graph keys nodes by relative posix path. Node id conventions after the three-brain restructure:
 
-- forge theme: `brain/forge/themes/<slug>.md`
-- project theme: `brain/projects/<project>/themes/<slug>.md`
-- profile: `brain/projects/<project>/profile.md`
-- category index: `brain/forge/<category>.md` (categories: `patterns`, `antipatterns`, `decisions`, `operations`, `reference`).
+| Brain | Theme node id |
+|---|---|
+| cycles | `brain/cycles/themes/<slug>.md` |
+| forge-dev | `brain/forge-dev/{log,decisions,reference}.md` or `<forge-source-path>` |
+| project | `brain/themes/<slug>.md` (relative to the project repo root) |
+
+Category indexes:
+- cycles: `brain/cycles/{patterns,antipatterns,decisions,operations}.md`
+- forge-dev: `brain/forge-dev/{decisions,reference}.md`
+- project: `brain/profile.md` (relative to the project repo root)
 
 If you don't know the exact slug, use the navigation indexes (`forge brain index`) to find candidates, then resolve.
 
 ## Constraints
 
 - **Cite, don't paraphrase deeply.** The caller can read the linked file. Synthesis is a one-paragraph answer + source list, not a full essay.
-- **Cite theme pages and project profiles only.** Valid `sources` entries are `brain/forge/themes/<slug>.md` and `brain/projects/<name>/{profile.md,themes/<slug>.md}`. Never cite `brain/_raw/*` (those are inputs to synthesis, not citations) or category indexes (`brain/forge/{patterns,antipatterns,decisions,operations,reference}.md`, `brain/forge/themes/README.md`, `brain/INDEX.md`) — they're navigation, not knowledge.
+- **Cite theme pages and project profiles only.** Valid `sources` entries are `brain/cycles/themes/<slug>.md`, `brain/forge-dev/{log.md,decisions.md,reference.md}`, and `<project-repo>/brain/{profile.md,themes/<slug>.md}`. Never cite `brain/cycles/_raw/*` (those are inputs to synthesis, not citations) or category indexes (`brain/cycles/{patterns,antipatterns,decisions,operations}.md`, `brain/INDEX.md`) — they're navigation, not knowledge.
 - **Be exhaustive on theme coverage.** If a question spans multiple themes (e.g. a pattern + its antipattern + the operation that prevents it), cite all of them. The benchmark scores recall (did you find every expected theme), so under-citing is the failure mode to avoid. Citing 1–2 extras is acceptable; missing the corrective antipattern is not. **The graph is your insurance against this failure mode** — running `neighbours` on a top keyword hit will surface the corrective antipattern via the `related_themes` edge.
 - **Graph-first is a routing decision, not a budget.** Do not skip the keyword scan when the graph returned a thin result; combine both. Skipping costs recall and is the more damaging failure mode than over-citing.
 - **Fast model by default.** Haiku is the default; per-skill override via the calling skill's frontmatter if a question genuinely needs more.
@@ -128,9 +155,12 @@ If you don't know the exact slug, use the navigation indexes (`forge brain index
 - **No web fallback in this skill.** Broader research is the *calling* skill's responsibility (after this skill's gap event is logged); separation of concerns.
 - **The graph is structural; the themes are content.** Don't try to answer narrative questions from the graph alone; don't try to answer structural questions from grep alone. Use each for what it's for.
 - **Trust graphify's own confidence tiers.** Edges are tagged `EXTRACTED` (direct from source, canonical), `INFERRED` (secondary), `AMBIGUOUS` (lowest). Consume them as-is; do NOT build a parallel filter layer (operator principle 2026-05-23 — graphify owns the confidence model). Cite higher-confidence edges first when synthesising.
-- **Scope is load-bearing — respect it strictly.** When the caller supplies `scope: <project>`, your cited sources MUST come from `brain/projects/<project>/profile.md` or `brain/projects/<project>/themes/`. You may reference a forge-wide theme ONLY IF an in-scope theme explicitly links to it via `related_themes` or a `[[wikilink]]`. Do NOT pull in forge-wide concepts (Given-When-Then ACs, declarative-vs-imperative specs, 80% coverage gates, etc.) that aren't documented inside the project's own sub-wiki — that's hallucination by the project's standards even though the concept is real elsewhere. If the project's themes don't ground a claim, omit the claim or flag the gap.
+- **Scope is load-bearing — respect it strictly.** When the caller supplies `scope: project`, your cited sources MUST come from `<project-repo>/brain/profile.md` or `<project-repo>/brain/themes/`. You may reference a cycles-brain theme ONLY IF an in-scope theme explicitly links to it via `related_themes` or a `[[wikilink]]`. Do NOT pull in forge-dev concepts (ADRs, phase code symbols, etc.) that aren't documented inside the project's own brain — that's hallucination by the project's standards even though the concept is real elsewhere. If the project's themes don't ground a claim, omit the claim or flag the gap.
+- **Missing scope defaults to `all` + warn.** If no scope is provided and no cycle context is available, search all three brains and emit: `[brain-query] no scope supplied — searching all three brains; supply --scope to reduce noise`. Include a `scope` field in the output showing what was actually searched.
 
 ## Sources
 
-- See [`brain/graphify-out/graph.json`](../../brain/graphify-out/graph.json) for the structural index this skill consults first.
-- See [`skills/brain-graph/SKILL.md`](../brain-graph/SKILL.md) for how the graph is built and queried (wraps real `safishamsi/graphify` Python CLI).
+- `brain/forge-dev/graphify-out/graph.json` — structural index for forge code + ADRs.
+- `brain/cycles/graphify-out/graph.json` — structural index for cycle themes.
+- `<project-repo>/brain/graphify-out/graph.json` — structural index for project brain + project source tree.
+- See [`skills/brain-graph/SKILL.md`](../brain-graph/SKILL.md) for how each graph is built and maintained (wraps real `safishamsi/graphify` Python CLI).

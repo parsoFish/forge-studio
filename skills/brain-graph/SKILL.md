@@ -1,6 +1,6 @@
 ---
 name: brain-graph
-description: Structural index over the brain via real `safishamsi/graphify` — nodes/edges over themes/profiles/raw sources with local tree-sitter extraction (no API key needed) and an interactive HTML view. Sits alongside the narrative wiki (C20 dual-index).
+description: Three separate structural indexes over the brain via real `safishamsi/graphify` — one per brain (forge-dev, cycles, project). Nodes/edges over themes/profiles/raw sources with local tree-sitter extraction (no API key needed) and an interactive HTML view. Sits alongside the narrative wiki (C20 dual-index).
 phase: brain
 surface: unattended
 model: claude-haiku-4-5
@@ -10,22 +10,25 @@ model: claude-haiku-4-5
 
 ## Single responsibility
 
-Maintain `brain/graphify-out/graph.json` — the canonical structural
-index built by the real **graphify** CLI (`safishamsi/graphify`,
-Python, MIT, YC S26) over the **forge-root tree walk**
-(C20-C22 + C21a).
+Maintain **three** scope-clean structural indexes, one per brain, each
+built by the real **graphify** CLI (`safishamsi/graphify`, Python,
+MIT, YC S26):
+
+| Brain | Graph path | Corpus |
+|---|---|---|
+| forge-dev (Brain 1) | `brain/forge-dev/graphify-out/graph.json` | `orchestrator/`, `cli/`, `skills/`, `loops/`, `docs/`, `ARCHITECTURE.md`, `CLAUDE.md`, `PRINCIPLES.md`, `brain/forge-dev/` |
+| cycles (Brain 2) | `brain/cycles/graphify-out/graph.json` | `brain/cycles/` |
+| project (Brain 3) | `<project-repo>/brain/graphify-out/graph.json` | `<project-repo>/brain/` + `<project-repo>/` source tree |
 
 Sits **alongside** the narrative wiki, not replacing it. Per C20:
 
 - The Karpathy markdown wiki (themes + categories + INDEX.md) holds
   narrative knowledge.
-- This graph holds structural relationships (god nodes, communities,
-  shortest paths, surprising cross-file connections) — and per C21a,
-  spans the whole forge architecture (code + skills + docs + brain),
-  so themes that reference a module get a real edge to its code.
+- These graphs hold structural relationships (god nodes, communities,
+  shortest paths, surprising cross-file connections) within their scope.
 
-`brain-query` consults the graph **first** for structural questions
-and falls back to keyword scan over themes.
+`brain-query` consults the right graph(s) **first** for structural
+questions, keyed by the `scope` parameter.
 
 ## Inputs
 
@@ -36,11 +39,11 @@ and falls back to keyword scan over themes.
 
 ## Outputs
 
-- `brain/graphify-out/graph.json` — **committed**, canonical structural
-  index (C21).
-- `brain/graphify-out/graph.html` — interactive view (gitignored).
-- `brain/graphify-out/GRAPH_REPORT.md` — text report (gitignored).
-- Appends a one-line entry to `brain/log.md` after `update`.
+- `brain/forge-dev/graphify-out/graph.json` — **committed**, Brain 1 structural index.
+- `brain/cycles/graphify-out/graph.json` — **committed**, Brain 2 structural index.
+- `<project-repo>/brain/graphify-out/graph.json` — **committed inside the project repo**, Brain 3 per project.
+- Each directory also contains `graph.html` (gitignored), `GRAPH_REPORT.md` (gitignored), `manifest.json` (gitignored).
+- Appends a one-line entry to `brain/forge-dev/log.md` after `update`.
 
 ## Event-log entries to emit
 
@@ -72,38 +75,54 @@ etc. is set.)
 
 ## The operations
 
-### `update` — rebuild the graph
+### `update` — rebuild the graphs
+
+All three graphs are rebuilt by `scripts/brain-graphify-all.sh`
+(the post-commit hook calls this automatically):
 
 ```bash
-cd /home/parso/forge && graphify update .
+cd /home/parso/forge && bash scripts/brain-graphify-all.sh
 ```
 
-Walks the **forge root** corpus (C21a, 2026-05-23):
-`orchestrator/`, `skills/`, `loops/`, `docs/`, `benchmarks/` (harness
-only — fixtures excluded), `brain/`, plus root-level `ARCHITECTURE.md`
-/ `CLAUDE.md` / `PRINCIPLES.md`. Output is routed through the
-`graphify-out → brain/graphify-out` symlink at forge root, so the
-canonical `graph.json` still lives at `brain/graphify-out/graph.json`
-(per C21).
+To rebuild a single brain manually:
+
+**Brain 1 (forge-dev) —** forge code + ADRs + engineering notes:
+```bash
+cd /home/parso/forge && graphify update . \
+  --output brain/forge-dev/graphify-out \
+  --include 'orchestrator/**' --include 'cli/**' --include 'skills/**' \
+  --include 'loops/**' --include 'docs/**' --include 'brain/forge-dev/**' \
+  --include 'ARCHITECTURE.md' --include 'CLAUDE.md' --include 'PRINCIPLES.md'
+```
+
+**Brain 2 (cycles) —** cycle themes and archives:
+```bash
+cd /home/parso/forge && graphify update brain/cycles \
+  --output brain/cycles/graphify-out
+```
+
+**Brain 3 (project) —** project brain + source tree (run inside the project repo):
+```bash
+cd <project-repo> && graphify update . \
+  --output brain/graphify-out
+```
+Hook install for a project repo: `cd <project-repo> && graphify hook install`.
 
 Extracts AST + frontmatter + markdown links via tree-sitter, writes
-`brain/graphify-out/{graph.json, graph.html, GRAPH_REPORT.md,
-manifest.json}`. Idempotent. No API cost.
+`{graph.json, graph.html, GRAPH_REPORT.md, manifest.json}`. Idempotent. No API cost.
 
-Use `graphify update . --force` after a refactor that DELETES content
+Use `graphify update ... --force` after a refactor that DELETES content
 (otherwise graphify guards against shrinking the graph).
 
-**Exclusions** (declared via `.graphifyignore` files in subdirectories
-where they're needed; everything else flows through `.gitignore`):
+**Exclusions** (declared via `.graphifyignore` files):
 
-- `brain/_archive/.graphifyignore` — frozen historical state.
-- `brain/graphify-out/.graphifyignore` — graphify's own output (no
-  self-recursion).
-- `benchmarks/.graphifyignore` — `*/fixtures/` (test inputs, not
-  architecture).
+- `brain/forge-dev/graphify-out/.graphifyignore` — graphify's own output (no self-recursion).
+- `brain/cycles/graphify-out/.graphifyignore` — same.
+- `brain/cycles/_raw/.graphifyignore` — raw cycle archives are inputs to synthesis, not indexed.
+- `<project-repo>/brain/graphify-out/.graphifyignore` — same.
 
 > **Query operations live in `brain-query`.** This skill owns BUILD +
-> MAINTENANCE; querying the resulting `graph.json` (`graphify query` /
+> MAINTENANCE; querying the resulting `graph.json` files (`graphify query` /
 > `path` / `explain` / `affected`) is the `brain-query` skill's
 > responsibility. See [`../brain-query/SKILL.md`](../brain-query/SKILL.md).
 
@@ -131,20 +150,19 @@ hooks themselves are not version-controlled.
 Confirm installation: `graphify hook status`. Output lives at
 `~/.cache/graphify-rebuild.log`.
 
-### Merge driver — kill conflicts on the committed `graph.json`
+### Merge driver — kill conflicts on committed `graph.json` files
 
-`brain/graphify-out/graph.json` is committed (C21) and changes on every
-content edit, so it merge-conflicts easily. The graphify merge driver
-union-merges the two sides. Per-clone setup:
+Each committed `graph.json` changes on every content edit. The graphify
+merge driver union-merges the two sides. Per-clone setup:
 
 ```bash
 git config merge.graphify.name "graphify graph.json union-merger"
 git config merge.graphify.driver "graphify merge-driver %O %A %B"
 ```
 
-`.gitattributes` already routes `brain/graphify-out/graph.json` through
+`.gitattributes` routes each `*/graphify-out/graph.json` through
 `merge=graphify` — only the local `.git/config` install is needed per
-clone.
+clone. Run this in both the forge repo and each project repo.
 
 ### Freshness check
 
@@ -176,19 +194,25 @@ return thin results.
 3. **No reinvention.** forge does NOT carry its own graph walker. The
    real `graphify` CLI is the single source of truth. The S1.4
    deterministic walker (`orchestrator/brain-graph.ts`) is REMOVED —
-   the archived output lives at `brain/_archive/2026-05-23/graph.json.s1.4-deterministic-walker.json`
-   for historical comparison only.
+   the archived output lived at `brain/_archive/2026-05-23/` (deleted
+   in the Tier 4 restructure; recoverable at git tag
+   `brain-pre-restructure`).
 
 ## Constraints
 
 - **Additive, not replacing.** The narrative wiki (themes + indexes) is
-  the source of truth for *what* the brain knows. The graph is the
+  the source of truth for *what* the brain knows. The graphs are the
   source of truth for *how* the brain's knowledge is connected.
 - **Cite, don't paraphrase.** Graph queries return node ids (paths);
   the caller reads the linked theme for the actual content.
 - **Local-by-default.** Tree-sitter extraction needs no network.
   LLM-backed extraction is an opt-in upgrade.
-- **Per C21**, `brain/graphify-out/graph.json` is committed
+- **Three graphs, three scopes.** Each graph is rebuilt independently;
+  a cycles-brain commit rebuilds only `brain/cycles/graphify-out/`.
+  The `scripts/brain-graphify-all.sh` wrapper rebuilds all forge-side
+  graphs together; project graphs are rebuilt by the project's own
+  post-commit hook.
+- **Per C21**, each `*/graphify-out/graph.json` is committed
   (canonical); `graph.html`, `GRAPH_REPORT.md`, `cache/`, and
   `manifest.json` are gitignored.
 

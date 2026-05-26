@@ -189,18 +189,19 @@ function checkC3(dir: string): ClauseResult {
 
 // --- C4: machine-consumable architecture context (HARD) ---
 
-function checkC4(dir: string, projectName: string, forgeRoot: string): ClauseResult {
+function checkC4(dir: string, projectName: string, _forgeRoot: string): ClauseResult {
   const base = { clause: 'C4' as const, title: 'Machine-readable architecture context', hard: true };
   const roadmap = join(dir, 'roadmap.md');
-  const brainProfile = resolve(forgeRoot, 'brain', 'projects', projectName, 'profile.md');
+  // Brain 3 now lives inside the project repo itself (three-brain restructure 2026-05-26).
+  const brainProfile = join(dir, 'brain', 'profile.md');
   const hasRoadmap = existsSync(roadmap);
   const hasBrain = existsSync(brainProfile);
   if (hasRoadmap && hasBrain) {
-    return { ...base, pass: true, detail: `roadmap.md + brain sub-wiki present (brain/projects/${projectName}/profile.md)` };
+    return { ...base, pass: true, detail: `roadmap.md + brain sub-wiki present (${projectName}/brain/profile.md)` };
   }
   const missing: string[] = [];
   if (!hasRoadmap) missing.push('roadmap.md (in project root)');
-  if (!hasBrain) missing.push(`brain/projects/${projectName}/profile.md (brain sub-wiki)`);
+  if (!hasBrain) missing.push(`brain/profile.md (project brain — three-brain model, Brain 3)`);
   return {
     ...base,
     pass: false,
@@ -294,15 +295,16 @@ function readQualityGateCmd(dir: string): { source: string; cmd: string } | null
  */
 function checkBrainStaleness(
   dir: string,
-  projectName: string,
-  forgeRoot: string,
+  _projectName: string,
+  _forgeRoot: string,
 ): ClauseResult {
   const base = {
     clause: 'BRAIN' as const,
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
-  const themesDir = resolve(forgeRoot, 'brain', 'projects', projectName, 'themes');
+  // Brain 3 now lives inside the project repo itself (three-brain restructure 2026-05-26).
+  const themesDir = join(dir, 'brain', 'themes');
   if (!existsSync(themesDir)) {
     return { ...base, pass: true, detail: 'no project brain themes to check' };
   }

@@ -33,7 +33,7 @@ import {
 // ---------- fixture builder ----------
 
 type ThemeSpec = {
-  /** Relative path under brain/ (e.g. `forge/themes/foo.md`). */
+  /** Relative path under brain/ (e.g. `cycles/themes/foo.md`). */
   path: string;
   /** Frontmatter as a partial object — title/description/category/created_at/updated_at default to valid values when omitted. */
   fm?: Partial<{
@@ -65,15 +65,23 @@ function buildBrainFixture(spec: BrainFixtureSpec): string {
     writeFileSync(join(brain, 'INDEX.md'), '# Brain\n\nnavigation hub.\n');
   }
 
-  // Forge category indexes — default to empty stubs so checkIndexSync has a target.
-  for (const cat of ['patterns', 'antipatterns', 'decisions', 'operations', 'reference']) {
-    const p = join(brain, 'forge', `${cat}.md`);
-    mkdirSync(join(brain, 'forge'), { recursive: true });
-    if (!spec.extra?.some((e) => e.path === `forge/${cat}.md`)) {
+  // Cycle-level category indexes — default to empty stubs so checkIndexSync has a target.
+  for (const cat of ['patterns', 'antipatterns', 'decisions', 'operations']) {
+    const p = join(brain, 'cycles', `${cat}.md`);
+    mkdirSync(join(brain, 'cycles'), { recursive: true });
+    if (!spec.extra?.some((e) => e.path === `cycles/${cat}.md`)) {
       writeFileSync(p, `# ${cat}\n`);
     }
   }
-  mkdirSync(join(brain, 'forge', 'themes'), { recursive: true });
+  // forge-dev/ category indexes
+  for (const cat of ['decisions', 'reference']) {
+    const p = join(brain, 'forge-dev', `${cat}.md`);
+    mkdirSync(join(brain, 'forge-dev'), { recursive: true });
+    if (!spec.extra?.some((e) => e.path === `forge-dev/${cat}.md`)) {
+      writeFileSync(p, `# ${cat}\n`);
+    }
+  }
+  mkdirSync(join(brain, 'cycles', 'themes'), { recursive: true });
   mkdirSync(join(brain, 'projects'), { recursive: true });
 
   for (const t of spec.themes) {
@@ -116,7 +124,7 @@ function cleanup(root: string): void {
 
 test('checkFrontmatter: clean theme produces no findings', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/clean.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/clean.md', fm: { category: 'pattern' } }],
   });
   try {
     const findings = checkFrontmatter(root);
@@ -129,10 +137,10 @@ test('checkFrontmatter: clean theme produces no findings', () => {
 test('checkFrontmatter: rejects category outside the whitelist (snapshot/process/bug-candidate)', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/snap.md', fm: { category: 'snapshot' } },
-      { path: 'forge/themes/proc.md', fm: { category: 'process' } },
-      { path: 'forge/themes/bug.md', fm: { category: 'bug-candidate' } },
-      { path: 'forge/themes/ok.md', fm: { category: 'pattern' } },
+      { path: 'cycles/themes/snap.md', fm: { category: 'snapshot' } },
+      { path: 'cycles/themes/proc.md', fm: { category: 'process' } },
+      { path: 'cycles/themes/bug.md', fm: { category: 'bug-candidate' } },
+      { path: 'cycles/themes/ok.md', fm: { category: 'pattern' } },
     ],
   });
   try {
@@ -151,7 +159,7 @@ test('checkFrontmatter: rejects category outside the whitelist (snapshot/process
 test('checkFrontmatter: flags missing required field (description)', () => {
   const root = buildBrainFixture({ themes: [] });
   // Hand-write a theme with no description.
-  const file = join(root, 'brain', 'forge', 'themes', 'no-desc.md');
+  const file = join(root, 'brain', 'cycles', 'themes', 'no-desc.md');
   writeFileSync(
     file,
     `---
@@ -178,9 +186,9 @@ body.
 
 test('checkIndexSync: theme indexed in its category index produces no findings', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/myp.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/myp.md', fm: { category: 'pattern' } }],
     extra: [
-      { path: 'forge/patterns.md', content: '# patterns\n\n- [`myp`](./themes/myp.md) — example.\n' },
+      { path: 'cycles/patterns.md', content: '# patterns\n\n- [`myp`](./themes/myp.md) — example.\n' },
     ],
   });
   try {
@@ -193,7 +201,7 @@ test('checkIndexSync: theme indexed in its category index produces no findings',
 
 test('checkIndexSync: theme with category=pattern but missing from forge/patterns.md flags', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/orphaned-pattern.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/orphaned-pattern.md', fm: { category: 'pattern' } }],
   });
   try {
     const findings = checkIndexSync(root);
@@ -208,8 +216,8 @@ test('checkIndexSync: theme with category=pattern but missing from forge/pattern
 test('checkSourceLinks: resolved relative link produces no findings', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/a.md', fm: { category: 'pattern' }, body: '## Sources\n\n- [other](./b.md)\n' },
-      { path: 'forge/themes/b.md', fm: { category: 'pattern' } },
+      { path: 'cycles/themes/a.md', fm: { category: 'pattern' }, body: '## Sources\n\n- [other](./b.md)\n' },
+      { path: 'cycles/themes/b.md', fm: { category: 'pattern' } },
     ],
   });
   try {
@@ -223,7 +231,7 @@ test('checkSourceLinks: resolved relative link produces no findings', () => {
 test('checkSourceLinks: broken relative link errors', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/a.md', fm: { category: 'pattern' }, body: '## Sources\n\n- [gone](./does-not-exist.md)\n' },
+      { path: 'cycles/themes/a.md', fm: { category: 'pattern' }, body: '## Sources\n\n- [gone](./does-not-exist.md)\n' },
     ],
   });
   try {
@@ -240,7 +248,7 @@ test('checkStaleness: theme citing an existing path produces no error', () => {
   const root = buildBrainFixture({
     themes: [
       {
-        path: 'forge/themes/cite.md',
+        path: 'cycles/themes/cite.md',
         fm: { category: 'pattern' },
         body: '## Sources\n\n- `orchestrator/cycle.ts` — main cycle runner.\n',
       },
@@ -257,28 +265,20 @@ test('checkStaleness: theme citing an existing path produces no error', () => {
   }
 });
 
-test('checkStaleness: theme citing a deleted-in-project path flags', () => {
+test('checkStaleness: cycles theme citing a deleted forge-side path flags', () => {
   const root = buildBrainFixture({
     themes: [
       {
-        path: 'projects/myproj/themes/stale.md',
+        path: 'cycles/themes/stale.md',
         fm: { category: 'antipattern' },
-        body: '## Sources\n\n- `src/DeletedFile.ts` — was here.\n',
-      },
-    ],
-    extra: [
-      {
-        path: 'projects/myproj/profile.md',
-        content: '---\nproject: myproj\n---\n# myproj\n',
+        body: '## Sources\n\n- `orchestrator/DeletedFile.ts` — was here.\n',
       },
     ],
   });
   try {
-    // Project repo at <forgeRoot>/projects/myproj/ — exists but src/DeletedFile.ts does NOT.
-    mkdirSync(join(root, 'projects', 'myproj', 'src'), { recursive: true });
-    // No DeletedFile.ts on disk → staleness check should flag.
+    // orchestrator/DeletedFile.ts does NOT exist in the temp forge root.
     const findings = checkStaleness(root);
-    assert.ok(findings.some((f) => f.file.endsWith('stale.md') && /stale|missing|delet/i.test(f.message)));
+    assert.ok(findings.some((f) => f.file.endsWith('stale.md') && /stale|missing/i.test(f.message)));
   } finally {
     cleanup(root);
   }
@@ -288,9 +288,9 @@ test('checkStaleness: theme citing a deleted-in-project path flags', () => {
 
 test('checkOrphans: theme reachable from a category index produces no finding', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/reach.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/reach.md', fm: { category: 'pattern' } }],
     extra: [
-      { path: 'forge/patterns.md', content: '# patterns\n\n- [`reach`](./themes/reach.md) — yes.\n' },
+      { path: 'cycles/patterns.md', content: '# patterns\n\n- [`reach`](./themes/reach.md) — yes.\n' },
     ],
   });
   try {
@@ -303,7 +303,7 @@ test('checkOrphans: theme reachable from a category index produces no finding', 
 
 test('checkOrphans: theme not linked from any index flags', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/lonely.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/lonely.md', fm: { category: 'pattern' } }],
   });
   try {
     const findings = checkOrphans(root);
@@ -317,7 +317,7 @@ test('checkOrphans: theme not linked from any index flags', () => {
 
 test('checkLengthSoftCap: short theme produces no finding', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/short.md', fm: { category: 'pattern' }, body: '# x\n' }],
+    themes: [{ path: 'cycles/themes/short.md', fm: { category: 'pattern' }, body: '# x\n' }],
   });
   try {
     const findings = checkLengthSoftCap(root);
@@ -332,8 +332,8 @@ test('checkLengthSoftCap: > 100 lines errors; 61-99 lines warns', () => {
   const midBody = Array.from({ length: 75 }, (_, i) => `line ${i}`).join('\n');
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/long.md', fm: { category: 'pattern' }, body: longBody },
-      { path: 'forge/themes/mid.md', fm: { category: 'pattern' }, body: midBody },
+      { path: 'cycles/themes/long.md', fm: { category: 'pattern' }, body: longBody },
+      { path: 'cycles/themes/mid.md', fm: { category: 'pattern' }, body: midBody },
     ],
   });
   try {
@@ -381,11 +381,11 @@ test('checkContradictions: pattern + antipattern with overlapping keywords flags
   const root = buildBrainFixture({
     themes: [
       {
-        path: 'forge/themes/x-pattern.md',
+        path: 'cycles/themes/x-pattern.md',
         fm: { category: 'pattern', keywords: ['k1', 'k2', 'k3'] },
       },
       {
-        path: 'forge/themes/x-antipattern.md',
+        path: 'cycles/themes/x-antipattern.md',
         fm: { category: 'antipattern', keywords: ['k1', 'k2', 'k3'] },
       },
     ],
@@ -405,11 +405,11 @@ test('checkContradictions: pattern + antipattern with no keyword overlap produce
   const root = buildBrainFixture({
     themes: [
       {
-        path: 'forge/themes/y-pattern.md',
+        path: 'cycles/themes/y-pattern.md',
         fm: { category: 'pattern', keywords: ['a', 'b', 'c'] },
       },
       {
-        path: 'forge/themes/y-antipattern.md',
+        path: 'cycles/themes/y-antipattern.md',
         fm: { category: 'antipattern', keywords: ['d', 'e', 'f'] },
       },
     ],
@@ -427,8 +427,8 @@ test('checkContradictions: pattern + antipattern with no keyword overlap produce
 test('runBrainLint: full scope catches a mix of violations + clean themes', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/snap.md', fm: { category: 'snapshot' } }, // 1 category error
-      { path: 'forge/themes/ok.md', fm: { category: 'pattern' } }, // orphan flag (not in patterns.md)
+      { path: 'cycles/themes/snap.md', fm: { category: 'snapshot' } }, // 1 category error
+      { path: 'cycles/themes/ok.md', fm: { category: 'pattern' } }, // orphan flag (not in patterns.md)
     ],
   });
   // Add a contamination dir.
@@ -445,12 +445,12 @@ test('runBrainLint: full scope catches a mix of violations + clean themes', () =
 
 test('runBrainLint: clean corpus exits 0', () => {
   const root = buildBrainFixture({
-    themes: [{ path: 'forge/themes/c1.md', fm: { category: 'pattern' } }],
+    themes: [{ path: 'cycles/themes/c1.md', fm: { category: 'pattern' } }],
     extra: [
-      { path: 'forge/patterns.md', content: '# patterns\n\n- [`c1`](./themes/c1.md) — yes.\n' },
+      { path: 'cycles/patterns.md', content: '# patterns\n\n- [`c1`](./themes/c1.md) — yes.\n' },
       {
         path: 'INDEX.md',
-        content: '# Brain\n\n- [c1](./forge/themes/c1.md)\n',
+        content: '# Brain\n\n- [c1](./cycles/themes/c1.md)\n',
       },
     ],
   });
@@ -467,15 +467,15 @@ test('runBrainLint: clean corpus exits 0', () => {
 test('runBrainLint: single-file scope walks one file only', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/snap.md', fm: { category: 'snapshot' } },
-      { path: 'forge/themes/proc.md', fm: { category: 'process' } },
+      { path: 'cycles/themes/snap.md', fm: { category: 'snapshot' } },
+      { path: 'cycles/themes/proc.md', fm: { category: 'process' } },
     ],
   });
   try {
     const result = runBrainLint({
       cwd: root,
       scope: 'single-file',
-      file: 'brain/forge/themes/snap.md',
+      file: 'brain/cycles/themes/snap.md',
     });
     const violationFiles = new Set(result.findings.map((f) => f.file));
     assert.ok(Array.from(violationFiles).every((f) => f.endsWith('snap.md')), 'only snap.md walked');
@@ -487,7 +487,7 @@ test('runBrainLint: single-file scope walks one file only', () => {
 test('runBrainLint: forge-only scope skips project themes', () => {
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/forge-snap.md', fm: { category: 'snapshot' } },
+      { path: 'cycles/themes/forge-snap.md', fm: { category: 'snapshot' } },
       { path: 'projects/myproj/themes/proj-snap.md', fm: { category: 'snapshot' } },
     ],
     extra: [{ path: 'projects/myproj/profile.md', content: '# x\n' }],
@@ -501,23 +501,19 @@ test('runBrainLint: forge-only scope skips project themes', () => {
   }
 });
 
-test('runBrainLint: project-only scope walks only the named project', () => {
+test('runBrainLint: project-only scope returns no findings (project themes are in separate repos)', () => {
+  // After the three-brain restructure, project themes live inside the project repo's own
+  // brain/ directory and are NOT scanned by forge-side brain-lint. The project-only scope
+  // is preserved for CLI backwards compat but returns no findings from forge.
   const root = buildBrainFixture({
     themes: [
-      { path: 'forge/themes/forge-snap.md', fm: { category: 'snapshot' } },
-      { path: 'projects/p1/themes/p1-snap.md', fm: { category: 'snapshot' } },
-      { path: 'projects/p2/themes/p2-snap.md', fm: { category: 'snapshot' } },
-    ],
-    extra: [
-      { path: 'projects/p1/profile.md', content: '# p1\n' },
-      { path: 'projects/p2/profile.md', content: '# p2\n' },
+      { path: 'cycles/themes/forge-snap.md', fm: { category: 'snapshot' } },
     ],
   });
   try {
     const result = runBrainLint({ cwd: root, scope: 'project-only', project: 'p1' });
-    assert.ok(result.findings.some((f) => f.file.endsWith('p1-snap.md')));
-    assert.ok(!result.findings.some((f) => f.file.endsWith('p2-snap.md')));
-    assert.ok(!result.findings.some((f) => f.file.endsWith('forge-snap.md')));
+    assert.ok(!result.findings.some((f) => f.file.endsWith('forge-snap.md')), 'forge themes excluded from project-only scope');
+    assert.equal(result.findings.filter((f) => /p1/.test(f.file)).length, 0);
   } finally {
     cleanup(root);
   }

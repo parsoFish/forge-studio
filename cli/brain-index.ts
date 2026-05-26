@@ -28,27 +28,28 @@ export type BrainCategory = 'pattern' | 'antipattern' | 'decision' | 'operation'
 export type LoadBrainIndexOptions = {
   /** Forge root. Defaults to `process.cwd()`. */
   cwd?: string;
-  /** Project scope. When set, also loads `brain/projects/<scope>/{profile,patterns,antipatterns,decisions}.md`. */
+  /** Project scope. When set, also loads `projects/<scope>/brain/{profile,patterns,antipatterns,decisions}.md` (project-repo brain layout). */
   scope?: string | null;
-  /** Category narrowing. When set, only loads `brain/INDEX.md` + the matching forge category index — keeps the prefix small enough that small models can find candidates without scanning 5×. */
+  /** Category narrowing. When set, only loads `brain/INDEX.md` + the matching cycles category index — keeps the prefix small enough that small models can find candidates without scanning 5×. */
   category?: BrainCategory | null;
 };
 
 const FORGE_CATEGORY_INDEXES = [
   'brain/INDEX.md',
-  'brain/forge/patterns.md',
-  'brain/forge/antipatterns.md',
-  'brain/forge/decisions.md',
-  'brain/forge/operations.md',
-  'brain/forge/reference.md',
+  'brain/cycles/patterns.md',
+  'brain/cycles/antipatterns.md',
+  'brain/cycles/decisions.md',
+  'brain/cycles/operations.md',
+  'brain/forge-dev/decisions.md',
+  'brain/forge-dev/reference.md',
 ] as const;
 
 const CATEGORY_TO_INDEX: Record<BrainCategory, string> = {
-  pattern: 'brain/forge/patterns.md',
-  antipattern: 'brain/forge/antipatterns.md',
-  decision: 'brain/forge/decisions.md',
-  operation: 'brain/forge/operations.md',
-  reference: 'brain/forge/reference.md',
+  pattern: 'brain/cycles/patterns.md',
+  antipattern: 'brain/cycles/antipatterns.md',
+  decision: 'brain/cycles/decisions.md',
+  operation: 'brain/cycles/operations.md',
+  reference: 'brain/forge-dev/reference.md',
 };
 
 const PROJECT_INDEX_FILES = [
@@ -73,7 +74,8 @@ export function loadBrainIndex(opts: LoadBrainIndexOptions = {}): string {
 
   if (opts.scope) {
     for (const file of PROJECT_INDEX_FILES) {
-      const rel = `brain/projects/${opts.scope}/${file}`;
+      // Project brains live inside the project repo at projects/<scope>/brain/<file>
+      const rel = `projects/${opts.scope}/brain/${file}`;
       const full = resolve(cwd, rel);
       if (existsSync(full)) sections.push(renderSection(cwd, rel));
     }
@@ -176,11 +178,12 @@ function readProjectDescription(profilePath: string): string {
   }
 }
 
-function inventoryProjects(brainRoot: string): Array<{ name: string; description: string }> {
-  const projectsRoot = join(brainRoot, 'projects');
+function inventoryProjects(cwd: string): Array<{ name: string; description: string }> {
+  const projectsRoot = join(cwd, 'projects');
   if (!existsSync(projectsRoot)) return [];
   const out: Array<{ name: string; description: string }> = [];
   for (const entry of readdirSync(projectsRoot).sort()) {
+    if (entry === 'README.md') continue;
     const dir = join(projectsRoot, entry);
     let st;
     try {
@@ -189,10 +192,10 @@ function inventoryProjects(brainRoot: string): Array<{ name: string; description
       continue;
     }
     if (!st.isDirectory()) continue;
-    // Skip contamination dirs — they should be scrubbed, not listed.
+    // Skip contamination dirs.
     if (/^__/.test(entry)) continue;
-    // Need a profile.md to be a "real" sub-wiki.
-    const profile = join(dir, 'profile.md');
+    // Need a brain/profile.md to be a "real" project with a brain.
+    const profile = join(dir, 'brain', 'profile.md');
     if (!existsSync(profile)) continue;
     out.push({ name: entry, description: readProjectDescription(profile) });
   }
@@ -206,21 +209,21 @@ export function regenerateBrainIndex(
   const brainRoot = join(cwd, 'brain');
   const indexPath = join(brainRoot, 'INDEX.md');
 
-  const forgeThemeCount = countMarkdownFiles(join(brainRoot, 'forge', 'themes'), {
+  const forgeThemeCount = countMarkdownFiles(join(brainRoot, 'cycles', 'themes'), {
     exclude: new Set(['README.md']),
   });
-  const projects = inventoryProjects(brainRoot);
+  const projects = inventoryProjects(cwd);
   let projectThemeCount = 0;
   for (const p of projects) {
-    projectThemeCount += countMarkdownFiles(join(brainRoot, 'projects', p.name, 'themes'), {
+    projectThemeCount += countMarkdownFiles(join(cwd, 'projects', p.name, 'brain', 'themes'), {
       exclude: new Set(['README.md']),
     });
   }
-  const rawCount = countAllRawSources(join(brainRoot, '_raw'));
+  const rawCount = countAllRawSources(join(brainRoot, 'cycles', '_raw'));
 
   const projectListing = projects
     .map((p) =>
-      `- [${p.name}](./projects/${p.name}/profile.md)${p.description ? ` — ${p.description}` : ''}`,
+      `- [${p.name}](../projects/${p.name}/brain/profile.md)${p.description ? ` — ${p.description}` : ''}`,
     )
     .join('\n');
 
@@ -228,43 +231,54 @@ export function regenerateBrainIndex(
 
 > The brain is forge's persistent memory. This is the navigation hub: from here, drill into a category index → a theme page → the raw sources behind it.
 
-**Status:** Generated by \`forge brain index --write\`. The brain holds **${forgeThemeCount} forge-level theme pages**, **${projectThemeCount} project-level theme pages** (across ${projects.length} sub-wikis), **${rawCount} raw sources** (\`_raw/docs/\`, \`_raw/web/\`, \`_raw/v1-wiki/\`, \`_raw/cycles/\`, \`_raw/projects/\`), and a benchmark question set. See [\`docs/seeding-plan.md\`](../docs/seeding-plan.md) and [\`log.md\`](./log.md).
+**Status:** Generated by \`forge brain index --write\`. Three-brain model (Tier 4 restructure 2026-05-26):
+- **Brain 1 (forge-dev):** forge code + ADRs + engineering notes at \`brain/forge-dev/\`.
+- **Brain 2 (cycles):** cycle-derived patterns, antipatterns, operations, raw archives at \`brain/cycles/\` (**${forgeThemeCount} theme pages**, **${rawCount} raw cycle archives**).
+- **Brain 3 (per project):** project brain lives inside each project repo at \`projects/<name>/brain/\` (**${projectThemeCount} total project-level theme pages** across ${projects.length} active project(s)).
+
+See [\`docs/seeding-plan.md\`](../docs/seeding-plan.md) and [\`brain/forge-dev/log.md\`](./forge-dev/log.md).
 
 ## How to use this wiki
 
-1. Start here. Pick a category or project below.
+1. Start here. Pick a category below or a project.
 2. Open the category index — it lists theme pages with one-line descriptions.
 3. Open a theme page — it summarises the topic in 15-40 lines and links to raw sources.
-4. Follow raw links into [\`_raw/\`](./_raw/) when the theme page isn't enough.
-5. For keyword search across raw: \`grep -r '<term>' brain/_raw/\`.
+4. Follow raw links into [\`cycles/_raw/\`](./cycles/_raw/) when the theme page isn't enough.
+5. For keyword search across raw: \`grep -r '<term>' brain/cycles/_raw/\`.
 
-## Forge-system knowledge
+## Cycle knowledge (Brain 2)
 
-- [Patterns](./forge/patterns.md) — proven approaches that work.
-- [Antipatterns](./forge/antipatterns.md) — proven approaches that don't.
-- [Decisions](./forge/decisions.md) — ADRs and the reasoning behind durable choices.
-- [Operations](./forge/operations.md) — how to run / monitor / recover the system.
-- [Reference](./forge/reference.md) — system overviews, profiles, comparisons, glossaries.
+- [Patterns](./cycles/patterns.md) — proven approaches that work.
+- [Antipatterns](./cycles/antipatterns.md) — proven approaches that don't.
+- [Decisions](./cycles/decisions.md) — per-cycle architectural/design decisions log.
+- [Operations](./cycles/operations.md) — how to run / monitor / recover the system.
 
-## Per-project sub-wikis
+## Forge-dev knowledge (Brain 1)
 
-Each project has a \`profile.md\` (who / what / taste / hard-constraints) and a \`themes/\` directory with project-specific patterns, antipatterns, and decisions.
+- [Decisions](./forge-dev/decisions.md) — forge architecture ADRs index.
+- [Reference](./forge-dev/reference.md) — system overviews, external resources.
+- [Log](./forge-dev/log.md) — phase closure history.
+
+## Per-project brains (Brain 3)
+
+Each project has a \`brain/profile.md\` and a \`brain/themes/\` directory inside the project's own repo. These are **not part of the forge repo** — they travel with the project.
 
 ${projectListing}
 
 ## Conventions
 
-- **Three layers**: \`_raw/\` (immutable raw sources) → \`forge/themes/\` and \`projects/<name>/themes/\` (15-40-line theme pages indexing the raw layer) → category index pages and this INDEX (pure navigation).
+- **Three brains, three scopes**: forge-dev (Brain 1) — forge code + ADRs; cycles (Brain 2) — cross-cycle knowledge; project (Brain 3) — per-project knowledge inside the project repo.
+- **Planner phases** read Brain 2 + Brain 3; **dev-loop/reviewer** reads Brain 3 only; **reflector** reads all three.
 - **No long summaries** — many small theme pages > few large summaries (Karpathy).
-- **Theme page format** — see [\`forge/themes/README.md\`](./forge/themes/README.md).
 - **Lint rules** — see [\`LINT.md\`](./LINT.md).
-- **Operations log** — append significant operations to [\`log.md\`](./log.md).
+- **Operations log** — append significant operations to [\`forge-dev/log.md\`](./forge-dev/log.md).
 
 ## Maintenance
 
 - \`forge brain index --write\` — regenerate this file from the filesystem.
 - \`forge brain lint\` — run structural integrity checks; flags orphans, malformed frontmatter, broken citations, contamination, oversized themes.
-- \`brain-query\` / \`brain-ingest\` skills — query the brain / ingest new sources.
+- \`bash scripts/brain-graphify-all.sh\` — rebuild Brain 1 + Brain 2 graphify indexes.
+- \`brain-query --scope=<scope>\` / \`brain-ingest\` skills — query the brain / ingest new sources.
 `;
 
   let changed = false;

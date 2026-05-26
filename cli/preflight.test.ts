@@ -19,8 +19,8 @@ function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
 }
 
-/** A project dir that satisfies every clause. forgeRoot points at a fake
- *  brain so C4's sub-wiki check passes without touching the live brain. */
+/** A project dir that satisfies every clause. The project's brain is now
+ *  inside the project repo itself (Brain 3 / three-brain restructure 2026-05-26). */
 function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
   const dir = tmp();
   const forgeRoot = tmp();
@@ -35,8 +35,9 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\n');
-  mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
-  writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
+  // Brain 3: profile lives inside the project repo at brain/profile.md.
+  mkdirSync(join(dir, 'brain'), { recursive: true });
+  writeFileSync(join(dir, 'brain', 'profile.md'), '# profile\n');
   // A GitHub remote (C6) — set on a real git repo so `git remote get-url` works.
   execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main']);
   execFileSync('git', ['-C', dir, 'remote', 'add', 'origin', 'https://github.com/acme/x.git']);
@@ -203,11 +204,12 @@ test('C4 (HARD): missing roadmap.md ⇒ fail + ok=false', () => {
 test('C4 (HARD): missing brain sub-wiki ⇒ fail', () => {
   const p = happyProject();
   try {
-    rmSync(join(p.forgeRoot, 'brain'), { recursive: true, force: true });
+    // Brain 3 now lives in the project dir itself; remove it to test the hard fail.
+    rmSync(join(p.dir, 'brain'), { recursive: true, force: true });
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C4').pass, false);
     assert.equal(r.ok, false);
-    assert.match(clause(r, 'C4').detail, /profile\.md|sub-wiki/);
+    assert.match(clause(r, 'C4').detail, /profile\.md|sub-wiki|brain/);
   } finally {
     p.cleanup();
   }
@@ -236,8 +238,9 @@ test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-s
     writeFileSync(join(dir, '.gitignore'), ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
     writeFileSync(join(dir, 'roadmap.md'), '# r\n');
     writeFileSync(join(dir, 'CLAUDE.md'), '# c\n');
-    mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
-    writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# p\n');
+    // Brain 3 lives in the project dir (three-brain restructure 2026-05-26).
+    mkdirSync(join(dir, 'brain'), { recursive: true });
+    writeFileSync(join(dir, 'brain', 'profile.md'), '# p\n');
     // No git repo / no remote at all.
     const r = runPreflight(dir, { forgeRoot });
     const c = clause(r, 'C6');
