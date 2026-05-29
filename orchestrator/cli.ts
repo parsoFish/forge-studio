@@ -173,7 +173,7 @@ Usage:
                                           --via-pr opens a draft PR on the project repo; falls back to local-edit if no origin
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
-  forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (7 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
+  forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
                                           (structural graph owned by the real safishamsi/graphify CLI — run: bash scripts/brain-graphify-all.sh)
   forge brain bench:promote --cycle <id>  Walk reflector-emitted brain-bench candidates past the operator; promote into benchmarks/brain/questions.json
                                           Caps: ≤1 per cycle, ≤4 per calendar month. Accuracy floor 94.4%; promotion reverted on regression.
@@ -1121,7 +1121,8 @@ function cmdBrainIndex(rest: string[]): void {
     const result = regenerateBrainIndex({ cwd: FORGE_ROOT, write: true });
     console.log(
       `brain-index: ${result.changed ? 'updated' : 'unchanged'} ${result.path}\n` +
-        `  ${result.stats.forgeThemeCount} forge themes, ` +
+        `  ${result.stats.cyclesThemeCount} cycles themes, ` +
+        `${result.stats.forgeDevThemeCount} forge-dev themes, ` +
         `${result.stats.projectThemeCount} project themes, ` +
         `${result.stats.rawCount} raw sources, ` +
         `${result.stats.projects.length} sub-wikis`,

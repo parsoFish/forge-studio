@@ -64,7 +64,7 @@ npm install              # install Claude Agent SDK + minimal deps
 npm run build            # compile TypeScript
 npm test                 # run scaffold smoke tests
 forge --help             # CLI surface
-forge brain lint         # structural integrity checks on brain/ (9 checks; exit non-zero on errors)
+forge brain lint         # structural integrity checks on brain/ (8 checks; exit non-zero on errors)
 forge brain index --write  # regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
 ```
 
@@ -118,7 +118,7 @@ Where to look for as-built detail:
 Three knowledge graphs after the Tier 4 brain restructure (2026-05-26):
 - **Brain 1 (forge-dev):** `brain/forge-dev/graphify-out/` — forge TypeScript source + ADRs (3,566 nodes).
 - **Brain 2 (cycles):** `brain/cycles/graphify-out/` — cycle-derived themes + raw archives (518 nodes).
-- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — whole-project knowledge (source code + brain themes). trafficGame: 2,578 nodes; terraform: 6,015 nodes; claude-harness: 553 nodes.
+- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — whole-project knowledge (source code + brain themes). trafficGame: 2,578 nodes; terraform-provider-betterado: 6,015 nodes; claude-harness: 553 nodes.
 
 The wrapper script `bash scripts/brain-graphify-all.sh` rebuilds Brain 1 + 2; use `--all` to also rebuild all managed project brains.
 

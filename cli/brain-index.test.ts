@@ -98,6 +98,10 @@ function scaffoldBrainForRegen(): string {
   writeFileSync(join(root, 'brain', 'cycles', 'themes', 't2.md'), '# t2\n');
   writeFileSync(join(root, 'brain', 'cycles', 'themes', 'README.md'), '# template — excluded\n');
 
+  // Brain 1 (forge-dev) themes — decision/reference categories live here.
+  mkdirSync(join(root, 'brain', 'forge-dev', 'themes'), { recursive: true });
+  writeFileSync(join(root, 'brain', 'forge-dev', 'themes', 'd1.md'), '# d1\n');
+
   mkdirSync(join(root, 'projects', 'alpha', 'brain', 'themes'), { recursive: true });
   writeFileSync(
     join(root, 'projects', 'alpha', 'brain', 'profile.md'),
@@ -142,7 +146,8 @@ A second project for testing.
 test('regenerateBrainIndex: counts themes + projects + raw sources from filesystem', () => {
   const root = scaffoldBrainForRegen();
   const result = regenerateBrainIndex({ cwd: root });
-  assert.equal(result.stats.forgeThemeCount, 2, 'two forge themes (README excluded)');
+  assert.equal(result.stats.cyclesThemeCount, 2, 'two cycles themes (README excluded)');
+  assert.equal(result.stats.forgeDevThemeCount, 1, 'one forge-dev theme (d1.md)');
   assert.equal(result.stats.projectThemeCount, 1, 'one project theme (alpha/a1.md)');
   assert.equal(result.stats.projects.length, 2, 'alpha + beta (contamination excluded)');
   assert.equal(result.stats.rawCount, 2, 'two raw sources');

@@ -194,17 +194,6 @@ function parseTheme(file: string): {
   }
 }
 
-function projectOfTheme(file: string, brainRoot: string): string | null {
-  const rel = relative(brainRoot, file);
-  const parts = rel.split(/[/\\]/);
-  // Old layout: brain/projects/<name>/themes/<file>.md
-  if (parts[0] === 'projects' && parts[2] === 'themes') {
-    return parts[1] ?? null;
-  }
-  // New layout: project themes live in separate repos, not scanned from forge.
-  return null;
-}
-
 // ---------- checkFrontmatter ----------
 
 export function checkFrontmatter(forgeRoot: string): Finding[] {
@@ -431,9 +420,6 @@ export function checkStaleness(forgeRoot: string): Finding[] {
     const cited = extractCitedPaths(parsed.content);
     if (cited.length === 0) continue;
 
-    const project = projectOfTheme(file, brainRoot);
-    const projectRepo = project ? resolve(forgeRoot, 'projects', project) : null;
-
     for (const p of cited) {
       // Skip URLs and absolute-system paths.
       if (p.startsWith('http://') || p.startsWith('https://')) continue;
@@ -455,20 +441,8 @@ export function checkStaleness(forgeRoot: string): Finding[] {
         }
         continue;
       }
-
-      // Project-scoped path: must have a project repo to check against.
-      if (!project) continue;
-      if (!projectRepo || !existsSync(projectRepo)) continue; // no tree to verify
-
-      const target = resolve(projectRepo, p);
-      if (!existsSync(target)) {
-        findings.push({
-          category: 'flag',
-          file,
-          message: `stale citation (missing in project): ${p}`,
-          check: 'checkStaleness',
-        });
-      }
+      // Project-scoped citations can't be verified from the forge side —
+      // project themes (Brain 3) live in their own repos. Skip them.
     }
   }
 
@@ -753,12 +727,13 @@ function filterFindingsByScope(
     case 'full':
       return findings;
     case 'forge-only': {
-      // In the three-brain model, forge-side themes live in brain/cycles/themes/.
-      const cyclesPrefix = join(brainRoot, 'cycles') + sep;
-      return findings.filter(
-        (f) =>
-          f.file.startsWith(cyclesPrefix) ||
-          f.file.startsWith(cyclesPrefix.replace(/\//g, '\\')),
+      // Forge-side themes live in both forge sub-wikis (three-brain model):
+      // brain/cycles/themes/ (Brain 2) and brain/forge-dev/themes/ (Brain 1).
+      const prefixes = THEME_SUBDIRS.map((sub) => join(brainRoot, sub) + sep);
+      return findings.filter((f) =>
+        prefixes.some(
+          (p) => f.file.startsWith(p) || f.file.startsWith(p.replace(/\//g, '\\')),
+        ),
       );
     }
     case 'project-only': {

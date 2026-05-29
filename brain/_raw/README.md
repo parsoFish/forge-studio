@@ -1,8 +1,17 @@
-# Brain — Raw Layer
+# Brain — Raw Layer (forge-dev ingest corpus)
 
 > **Immutable.** Append-only. Never modified, never deleted, never re-themed in place.
 
-This directory holds the ground-truth sources the brain's theme pages index. Anything ingested by `brain-ingest` lands here as one or more markdown files, with provenance preserved.
+This directory holds the ground-truth **forge-engineering** sources the brain's
+theme pages index — third-party docs, web research, v1-wiki snapshots, ADR
+ingests. Anything ingested by `brain-ingest` for forge itself lands here with
+provenance preserved.
+
+> **Note (three-brain model, ADR 018):** this top-level `brain/_raw/` is the
+> raw layer for **forge-dev / cycle knowledge**. It is distinct from
+> `brain/cycles/_raw/`, which holds the per-cycle event-log **archives** (Brain
+> 2). Don't confuse the two: `_raw/` here = ingested reference material;
+> `cycles/_raw/` = cycle archives.
 
 ## Conventions
 
@@ -26,7 +35,6 @@ Created on demand by ingest. Common ones:
 
 - `_raw/web/` — web fetches.
 - `_raw/docs/` — third-party documentation.
-- `_raw/cycles/` — archived cycle event logs (one per cycle).
 - `_raw/papers/` — research papers.
 - `_raw/chats/` — saved Claude/ChatGPT conversations relevant to forge.
 - `_raw/repos/` — README/architecture extracts from reference projects.

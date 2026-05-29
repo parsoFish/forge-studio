@@ -13,22 +13,11 @@ _logs/
 _queue/
 _worktrees/
 _review/
-# Excludes /projects/* (managed projects), NOT brain/projects/<name>/themes/
-# (per-project sub-wikis — load-bearing). Graphify's matcher tests every
-# path COMPONENT against the pattern, so a bare `projects/` would catch
-# both `/projects` AND `/brain/projects` — a real bug. The `*` suffix
-# anchors the pattern by requiring a slash-and-something following,
-# which only matches the top-level `projects/<name>` form.
+# Excludes the managed projects under /projects/* (each carries its own
+# Brain 3, graphed separately inside the project repo). The `*` suffix
+# anchors to the top-level `projects/<name>` form so the matcher doesn't
+# also catch an unrelated nested `projects/` path component.
 projects/*
-benchmarks/*/results/
-benchmarks/*/results-negatives/
-benchmarks/*/results-judged/
-benchmarks/*/fixtures/**/__pycache__/
-benchmarks/*/fixtures/**/.pytest_cache/
-benchmarks/*/fixtures/**/AGENT.md
-benchmarks/*/fixtures/**/fix_plan.md
-benchmarks/*/fixtures/**/PROMPT.md
-benchmarks/*/fixtures/**/.forge/
 forge.config.json
 .DS_Store
 .vscode/

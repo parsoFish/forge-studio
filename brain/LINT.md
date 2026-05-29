@@ -9,7 +9,7 @@
 1. **Frontmatter present and valid.**
    - Required fields: `title`, `description`, `category`, `created_at`, `updated_at`.
    - `category` must be one of: `pattern`, `antipattern`, `decision`, `operation`, `reference`.
-2. **Indexed in exactly one category index.** A theme page with `category: pattern` must appear once on `forge/patterns.md` (or the per-project equivalent), and not on any other category index.
+2. **Indexed in exactly one category index.** Each category lives in its owning sub-wiki (three-brain model, ADR 018): `pattern`/`antipattern`/`operation` themes live in `cycles/` and index into `cycles/{patterns,antipatterns,operations}.md`; `decision`/`reference` themes live in `forge-dev/` and index into `forge-dev/{decisions,reference}.md`. A theme must appear once on its category index and not on any other.
 3. **Length ≤ 60 lines.** Soft cap; warn at 60, error at 100. Long pages should be split.
 4. **At least one source link.** A theme page that doesn't link to anything in `_raw/` is summarising rather than indexing — reject.
 5. **No source link broken.** Every link target must exist.
@@ -26,16 +26,17 @@
 1. **Index entries match theme pages.** Every theme page in the corresponding category appears as a line in the index; no extra lines pointing at non-existent pages.
 2. **One-line entries.** Each entry: `- [\`<slug>\`](./themes/<slug>.md) — <description>`. Multi-line entries reject.
 
-### Per-project sub-wikis
+### Per-project brains (Brain 3)
 
-1. **`profile.md` exists.** Every `projects/<name>/` directory must have a profile.
-2. **Profile frontmatter present.** Mirrors theme-page rules (see profile template in `brain/projects/README.md`).
-3. **Same category-index discipline as forge-level.**
+Project brains now live in each project's **own repo** at `projects/<name>/brain/`
+(three-brain model, ADR 018) — they are not part of the forge repo and are linted
+inside the project repo, not forge-side. Each carries its own `profile.md` +
+`themes/` and follows the same theme-page + category-index discipline.
 
 ### INDEX.md
 
-1. **Lists all categories.** `patterns.md`, `antipatterns.md`, `decisions.md`, `operations.md` (forge level).
-2. **Lists all per-project sub-wikis** with one-line descriptions.
+1. **Lists all categories** across the two forge sub-wikis: `cycles/{patterns,antipatterns,operations}.md` (Brain 2) and `forge-dev/{decisions,reference}.md` (Brain 1).
+2. **Reports per-brain counts** (themes, raw sources) with one-line descriptions.
 
 ### Conflicts
 
