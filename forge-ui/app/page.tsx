@@ -18,7 +18,6 @@ import {
 } from '@/lib/bridge-client';
 import { CycleToasts } from '@/components/Toasts';
 import { AgentGraphCanvas } from '@/components/AgentGraphCanvas';
-import { VerdictForm } from '@/components/VerdictForm';
 import { ArchitectLauncher } from '@/components/ArchitectLauncher';
 import { SchedulerBanner } from '@/components/SchedulerBanner';
 import { fetchWiGraph, type WiGraph } from '@/lib/wi-graph';
@@ -231,11 +230,10 @@ export default function Page() {
 
       <CyclesTab cycles={allCycles} activeId={activeCycleId} onSelect={setActiveCycleId} />
 
-      {activeCycle?.status === 'ready-for-review' && (
-        <section style={{ marginTop: 24 }} data-section="verdict-form">
-          <VerdictForm initiativeId={activeCycle.initiativeId} cycleId={activeCycle.cycleId} />
-        </section>
-      )}
+      {/* The inline review verdict box was retired (ADR 020 cleanup) — the
+          review human moment runs via /forge-review (own session), merging the
+          PR in GitHub, or a future standalone review screen mirroring
+          /architect/[sessionId]. */}
 
       {/* Phase B: agent-flow-style live React Flow pipeline graph. Phase
           spine on top, features branching off dev-loop, WIs below, and
@@ -274,6 +272,28 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
   );
 }
 
+// ----- Initiative pane (grouped-by-project roadmap) -----------------------
+
+const CYCLE_STATUS_META: Record<Cycle['status'], { color: string; label: string; rank: number }> = {
+  'in-flight': { color: '#1f6feb', label: 'running', rank: 0 },
+  'ready-for-review': { color: '#d29922', label: 'review', rank: 1 },
+  pending: { color: '#6e7681', label: 'queued', rank: 2 },
+  done: { color: '#2ea043', label: 'done', rank: 3 },
+  failed: { color: '#f85149', label: 'failed', rank: 4 },
+};
+
+/** Strip the `INIT-YYYY-MM-DD-` prefix to the readable slug; fall back to the id. */
+function initiativeSlug(initiativeId: string): string {
+  const m = /^INIT-\d{4}-\d{2}-\d{2}-(.+)$/.exec(initiativeId);
+  return m ? m[1] : initiativeId;
+}
+
+/**
+ * The initiative pane — cycles grouped into projects with a roadmap-style
+ * track per project. Each project header carries a status tally; each cycle is
+ * a status-coloured card sorted by lifecycle rank (running → review → queued →
+ * done → failed). Projects with active work float to the top.
+ */
 function CyclesTab({
   cycles,
   activeId,
@@ -290,51 +310,98 @@ function CyclesTab({
       </div>
     );
   }
+
+  // Group by project.
+  const groups = new Map<string, Cycle[]>();
+  for (const c of cycles) {
+    const key = c.project ?? '(no project)';
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(c);
+  }
+  const sortedGroups = [...groups.entries()]
+    .map(([project, list]) => {
+      const sorted = [...list].sort(
+        (a, b) => CYCLE_STATUS_META[a.status].rank - CYCLE_STATUS_META[b.status].rank,
+      );
+      const hasActive = sorted.some((c) => c.status === 'in-flight' || c.status === 'ready-for-review');
+      return { project, list: sorted, hasActive };
+    })
+    .sort((a, b) =>
+      a.hasActive !== b.hasActive ? (a.hasActive ? -1 : 1) : a.project.localeCompare(b.project),
+    );
+
   return (
     <div
-      style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
       data-section="cycles-tab"
       data-cycles-count={cycles.length}
+      data-project-count={sortedGroups.length}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
     >
-      {cycles.map((c) => {
-        const active = c.cycleId === activeId;
+      {sortedGroups.map(({ project, list }) => {
+        const tally = list.reduce<Record<string, number>>((acc, c) => {
+          acc[c.status] = (acc[c.status] ?? 0) + 1;
+          return acc;
+        }, {});
         return (
-          <button
-            key={c.cycleId}
-            data-cycle-id={c.cycleId}
-            data-cycle-initiative-id={c.initiativeId}
-            data-cycle-status={c.status}
-            data-cycle-project={c.project ?? ''}
-            data-cycle-active={active ? 'true' : 'false'}
-            onClick={() => onSelect(c.cycleId)}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              border: '1px solid ' + (active ? '#58a6ff' : '#30363d'),
-              background: active ? '#0d1f3a' : '#161b22',
-              color: '#e6edf3',
-              borderRadius: 6,
-              cursor: 'pointer',
-            }}
-            title={c.initiativeId}
+          <div
+            key={project}
+            data-project-group={project}
+            data-project-cycle-count={list.length}
+            style={{ border: '1px solid #21262d', borderRadius: 8, padding: '10px 12px', background: '#0b0f14' }}
           >
-            <span style={{ marginRight: 6 }}>{statusGlyph(c.status)}</span>
-            {c.project ?? '(no project)'} · <span style={{ color: '#8b949e' }}>{c.initiativeId}</span>
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3' }}>{project}</span>
+              <span style={{ display: 'flex', gap: 8 }}>
+                {(Object.keys(CYCLE_STATUS_META) as Cycle['status'][])
+                  .filter((s) => tally[s])
+                  .map((s) => (
+                    <span key={s} title={CYCLE_STATUS_META[s].label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#8b949e' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: CYCLE_STATUS_META[s].color }} />
+                      {tally[s]}
+                    </span>
+                  ))}
+              </span>
+            </div>
+            <div data-project-track style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {list.map((c) => {
+                const active = c.cycleId === activeId;
+                const meta = CYCLE_STATUS_META[c.status];
+                return (
+                  <button
+                    key={c.cycleId}
+                    data-cycle-id={c.cycleId}
+                    data-cycle-initiative-id={c.initiativeId}
+                    data-cycle-status={c.status}
+                    data-cycle-project={c.project ?? ''}
+                    data-cycle-active={active ? 'true' : 'false'}
+                    onClick={() => onSelect(c.cycleId)}
+                    title={c.initiativeId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px 6px 10px',
+                      fontSize: 12,
+                      borderLeft: `3px solid ${meta.color}`,
+                      border: '1px solid ' + (active ? '#58a6ff' : '#30363d'),
+                      borderLeftWidth: 3,
+                      borderLeftColor: meta.color,
+                      background: active ? '#0d1f3a' : '#161b22',
+                      color: '#e6edf3',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{initiativeSlug(c.initiativeId)}</span>
+                    <span style={{ fontSize: 10, color: meta.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{meta.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </div>
   );
-}
-
-function statusGlyph(s: Cycle['status']): string {
-  switch (s) {
-    case 'in-flight': return '▶';
-    case 'ready-for-review': return '⏸';
-    case 'done': return '✓';
-    case 'failed': return '✗';
-    case 'pending': return '○';
-  }
 }
 
 function shortTime(iso: string | undefined): string {

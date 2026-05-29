@@ -173,12 +173,19 @@ Section + component anchors (post-2026-05-25 cascade-tree layout —
 the old state-machine + activity-sidebar + standalone wi-graph
 sections were merged into a single hex pipeline):
 
-- `[data-section="cycles-tab"]` — live + recent cycle buttons.
+- `[data-section="cycles-tab"]` — the initiative pane: cycles grouped into
+  per-project roadmap tracks. Carries `data-cycles-count` + `data-project-count`.
+  Each group is `[data-project-group=<name>][data-project-cycle-count]` with a
+  status tally header and a `[data-project-track]` of status-coloured cycle
+  cards: `[data-cycle-id][data-cycle-initiative-id][data-cycle-status][data-cycle-project][data-cycle-active]`.
 - `[data-section="pipeline-tree"]` — the cascading hex view (phases
   on top, features branching off dev-loop post-PM, WIs branching off
   features) hosted by `[data-component="agent-hex-canvas"]`.
-- `[data-section="verdict-form"]` — appears when active cycle is
-  `ready-for-review`.
+- *(retired, ADR 020 cleanup)* the inline review verdict box
+  (`[data-section="verdict-form"]` / `[data-component="verdict-form"]`) was
+  removed. The review human moment runs via `/forge-review` (own session),
+  merging the PR in GitHub, or a future standalone review screen mirroring
+  `/architect/[sessionId]`.
 - `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
   the primary dashboard, mounted above the cycles tab. Compact by design — the
   heavy interview + PLAN-gate UI lives on the dedicated screen. Carries
@@ -205,8 +212,7 @@ sections were merged into a single hex pipeline):
 - WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-feature-id][data-wi-deps]`.
 - Artifact badges overlaid on the canvas: `[data-overlay="plan-badge"]` (under architect), `[data-overlay="demo-badge"]` (under review-loop).
 - Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
-- Components: `[data-component="verdict-form"][data-form-state]`,
-  `[data-component="scheduler-banner"][data-banner-state]`,
+- Components: `[data-component="scheduler-banner"][data-banner-state]`,
   `[data-component="toasts"][data-toast-count]`.
 
 Phase, feature, and WI statuses share a single 5-state vocabulary

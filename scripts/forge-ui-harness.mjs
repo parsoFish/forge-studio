@@ -1231,37 +1231,18 @@ async function JOURNEY(ui, page) {
       await page.locator(`[data-cycle-id="${cycle.cycleId}"]`).first().click().catch(() => { /* */ });
     }
     await expectStatus('JOURNEY', page, cycle.cycleId, 'ready-for-review');
-    if (page) {
-      await page.waitForSelector('[data-component="verdict-form"]', { timeout: 5000 }).catch(() => { /* */ });
-    }
-    await pauseAndCaptureJourney(page, 'J10-verdict-form');
+    await pauseAndCaptureJourney(page, 'J10-ready-for-review');
 
-    // ---- 11: fill rationale + APPROVE (bridge now accepts ready-for-review) ----
-    await narrate('Step 11: operator types rationale and clicks "approve and merge".');
-    let approveClicked = false;
-    if (page) {
-      try {
-        await page.locator('[data-component="verdict-form"] textarea').first().fill('LGTM — meets every acceptance criterion in PLAN.md.');
-        await page.locator('[data-component="verdict-form"] button:has-text("approve")').first().click({ timeout: 3000 });
-        // Wait for the form to flip to data-form-state="submitted".
-        await page.waitForFunction(
-          () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-state') === 'submitted',
-          undefined,
-          { timeout: 5000 },
-        ).catch(() => { /* */ });
-        approveClicked = true;
-      } catch (err) {
-        log('JOURNEY', `approve click failed (will fall back to file write): ${err.message}`);
-      }
-    }
-    if (!approveClicked) {
-      // Belt-and-braces: write the verdict file directly so the cycle
-      // can still progress in the (rare) case the click didn't take.
-      writeFileSync(
-        join(QDIR('ready-for-review'), `${cycle.initiativeId}.verdict-response.md`),
-        '---\nverdict: approve\nrationale: |\n  LGTM — meets every acceptance criterion in PLAN.md.\n---\n',
-      );
-    }
+    // ---- 11: operator approves the PR. The inline in-UI verdict box was
+    // retired (ADR 020 cleanup) — review now happens in the operator's own
+    // session (`/forge-review`), via merging the PR in GitHub, or a future
+    // standalone review screen. The harness writes the verdict file directly
+    // to drive the journey forward.
+    await narrate('Step 11: operator approves the PR (via /forge-review or merging in GitHub).');
+    writeFileSync(
+      join(QDIR('ready-for-review'), `${cycle.initiativeId}.verdict-response.md`),
+      '---\nverdict: approve\nrationale: |\n  LGTM — meets every acceptance criterion in PLAN.md.\n---\n',
+    );
     await pauseAndCaptureJourney(page, 'J11-verdict-submitted');
 
     // ---- 12: closure starts ----
