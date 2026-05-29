@@ -25,6 +25,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { resolve } from 'node:path';
 
 import type { EventLogEntry } from '../orchestrator/logging.ts';
+import { cyclesThemesDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
 export type RetentionTag = 'load-bearing' | 'interesting' | 'routine';
 
@@ -78,7 +79,7 @@ export function assignRetention(
 
 /**
  * Scan theme files in the cycle's project + forge namespaces and return the
- * subset whose body or frontmatter references this cycle id (`_raw/cycles/
+ * subset whose body or frontmatter references this cycle id (`cycles/_raw/
  * <id>.md` OR `_logs/<id>/...`). Used to populate `cited_by` on the cycle
  * archive.
  *
@@ -96,12 +97,11 @@ export function collectCitedBy(opts: {
   sinceMs: number;
 }): string[] {
   const { forgeRoot, projectName, cycleId, sinceMs } = opts;
-  const brainRoot = resolve(forgeRoot, 'brain');
   const cited: string[] = [];
 
   const candidateDirs = [
-    resolve(brainRoot, 'projects', projectName, 'themes'),
-    resolve(brainRoot, 'cycles', 'themes'),
+    projectThemesDir(forgeRoot, projectName),
+    cyclesThemesDir(forgeRoot),
   ];
 
   for (const dir of candidateDirs) {
@@ -126,7 +126,7 @@ export function collectCitedBy(opts: {
         continue;
       }
       if (
-        body.includes(`_raw/cycles/${cycleId}`) ||
+        body.includes(`cycles/_raw/${cycleId}`) ||
         body.includes(`_logs/${cycleId}/`) ||
         body.includes(`Cycle ${cycleId}`) ||
         body.includes(cycleId)

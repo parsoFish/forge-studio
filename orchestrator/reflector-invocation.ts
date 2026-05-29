@@ -152,7 +152,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '- `## User questions` — questions you wrote, plus answers from `user-feedback.md` (stage 2).',
     '- `## User feedback` — free-form user input from `user-feedback.md` (stage 3).',
     '',
-    '**Brain-query first (REQUIRED, mandatory).** Your first tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` whose description matches a pattern you observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. This is unconditional, not "when unsure". The bench AND production both gate on this signal.',,
+    '**Brain-query first (REQUIRED, mandatory).** Your first tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` whose description matches a pattern you observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. This is unconditional, not "when unsure". Production gates on this signal.',
     '',
     'Hard rules:',
     '- **No `gh` operations.** The reviewer already merged. Reflection is post-merge log-and-continue.',

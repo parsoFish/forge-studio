@@ -47,7 +47,7 @@ export type WriteRecapInput = {
    * the themes dir, same data flow as retention tagging.
    */
   themesWritten: string[];
-  /** Path to the cycle archive (`brain/_raw/cycles/<id>.md`). */
+  /** Path to the cycle archive (`brain/cycles/_raw/<id>.md`). */
   cycleArchivePath: string;
   /**
    * Outcome of the post-reflection brain-lint pass (S6A). The recap surfaces

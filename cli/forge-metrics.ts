@@ -28,6 +28,7 @@ import type { EventLogEntry } from '../orchestrator/logging.ts';
 import { summariseCycle, type CycleMetrics } from './metrics.ts';
 import { parseManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
 import { parseWorkItem, type WorkItem } from '../orchestrator/work-item.ts';
+import { cycleArchivePath, cycleArchiveRelPath } from '../orchestrator/brain-paths.ts';
 
 export type CycleReportInput = {
   cycleId: string;
@@ -547,9 +548,9 @@ function renderAppendix(
     }
   }
   if (manifest) {
-    const cycleArchive = resolve(forgeRoot, 'brain', '_raw', 'cycles', `${cycleId}.md`);
+    const cycleArchive = cycleArchivePath(forgeRoot, cycleId);
     if (existsSync(cycleArchive)) {
-      lines.push(`- **Cycle archive** — \`brain/_raw/cycles/${cycleId}.md\``);
+      lines.push(`- **Cycle archive** — \`${cycleArchiveRelPath(cycleId)}\``);
     }
   }
   if (prUrl) lines.push(`- **Pull request** — ${prUrl}`);

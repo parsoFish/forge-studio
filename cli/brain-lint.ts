@@ -31,6 +31,8 @@ import { dirname, join, relative, resolve, basename, sep } from 'node:path';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
+import { cyclesRawDir } from '../orchestrator/brain-paths.ts';
+
 // ---------- types ----------
 
 export type FindingCategory = 'auto-fix' | 'flag' | 'error';
@@ -101,15 +103,6 @@ function readThemeFiles(brainRoot: string): string[] {
     for (const entry of readdirSync(cyclesThemes)) {
       if (entry === 'README.md' || !entry.endsWith('.md')) continue;
       files.push(join(cyclesThemes, entry));
-    }
-  }
-
-  // forge/themes/ — kept as fallback while migration is in progress; can be removed after Phase 2
-  const forgeThemes = join(brainRoot, 'forge', 'themes');
-  if (existsSync(forgeThemes)) {
-    for (const entry of readdirSync(forgeThemes)) {
-      if (entry === 'README.md' || !entry.endsWith('.md')) continue;
-      files.push(join(forgeThemes, entry));
     }
   }
 
@@ -356,13 +349,9 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
     }
 
     for (const slug of wikilinks) {
-      // Try cycles/themes/<slug>.md (new layout) and forge/themes/<slug>.md (legacy fallback).
-      const candidates = [
-        join(brainRoot, 'cycles', 'themes', `${slug}.md`),
-        join(brainRoot, 'forge', 'themes', `${slug}.md`),
-      ];
-      // Project themes are in separate repos; can't resolve from forge.
-      const hit = candidates.some((c) => existsSync(c));
+      // Resolve against cycles/themes/<slug>.md. Project themes (Brain 3)
+      // live in separate repos and can't be resolved from forge.
+      const hit = existsSync(join(brainRoot, 'cycles', 'themes', `${slug}.md`));
       if (!hit) {
         findings.push({
           category: 'error',
@@ -485,14 +474,6 @@ function collectIndexLinkTargets(brainRoot: string): Set<string> {
     }
   }
 
-  // Legacy forge/ dir (fallback during migration)
-  const forgeDir = join(brainRoot, 'forge');
-  if (existsSync(forgeDir)) {
-    for (const entry of readdirSync(forgeDir)) {
-      if (entry.endsWith('.md')) indexFiles.push(join(forgeDir, entry));
-    }
-  }
-
   // Project category indexes now live in separate repos; not scanned from forge.
 
   for (const f of indexFiles) {
@@ -610,7 +591,7 @@ const CLEANUP_ROUTINE_MIN_AGE_DAYS = 30;
 
 export function checkCleanupCandidates(forgeRoot: string): Finding[] {
   const findings: Finding[] = [];
-  const cyclesDir = join(forgeRoot, 'brain', '_raw', 'cycles');
+  const cyclesDir = cyclesRawDir(forgeRoot);
   if (!existsSync(cyclesDir)) return findings;
   let entries: string[];
   try {
@@ -746,15 +727,12 @@ function filterFindingsByScope(
     case 'full':
       return findings;
     case 'forge-only': {
-      // In the three-brain model, forge-side themes live in brain/cycles/themes/ (and legacy brain/forge/themes/).
+      // In the three-brain model, forge-side themes live in brain/cycles/themes/.
       const cyclesPrefix = join(brainRoot, 'cycles') + sep;
-      const legacyForgePrefix = join(brainRoot, 'forge') + sep;
       return findings.filter(
         (f) =>
           f.file.startsWith(cyclesPrefix) ||
-          f.file.startsWith(legacyForgePrefix) ||
-          f.file.startsWith(cyclesPrefix.replace(/\//g, '\\')) ||
-          f.file.startsWith(legacyForgePrefix.replace(/\//g, '\\')),
+          f.file.startsWith(cyclesPrefix.replace(/\//g, '\\')),
       );
     }
     case 'project-only': {
@@ -779,7 +757,7 @@ function filterFindingsByScope(
         } catch {
           continue;
         }
-        if (body.includes(`_raw/cycles/${cycleId}`) || body.includes(cycleId)) {
+        if (body.includes(`cycles/_raw/${cycleId}`) || body.includes(cycleId)) {
           touched.add(file);
         }
       }

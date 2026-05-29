@@ -47,6 +47,7 @@ import {
   type RetentionTag,
 } from '../../cli/cycle-retention.ts';
 import { writeCycleRecap } from '../../cli/cycle-recap.ts';
+import { cyclesThemesDir } from '../brain-paths.ts';
 
 /**
  * Defaults for the live reflector invocation. The reflector is a one-shot SDK
@@ -667,7 +668,7 @@ function emitBenchCandidates(opts: {
       return 0;
     }
     const projectThemes = listFreshThemes(themesDir, sinceMs);
-    const forgeThemes = listFreshThemes(resolve(forgeRoot, 'brain', 'forge', 'themes'), sinceMs);
+    const forgeThemes = listFreshThemes(cyclesThemesDir(forgeRoot), sinceMs);
     const writtenThemes = [...projectThemes, ...forgeThemes];
     if (writtenThemes.length === 0) {
       // No themes this cycle ⇒ no gaps filled ⇒ no candidates.
