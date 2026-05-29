@@ -8,11 +8,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
-import { recordBrainGateResult } from './cycle.ts';
+import { recordBrainGateResult, snapshotCycleArtefacts } from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
@@ -102,3 +102,37 @@ test('recordBrainGateResult: parentEventId is propagated for child-event correla
 // `computeAdaptiveReviewIterationCap` was reviewer-internal logic that
 // moves away with the Ralph-reviewer deletion. The new router-driven
 // review phase doesn't iterate (the unifier owns iteration in S4 mode).
+
+// ADR 021: snapshotCycleArtefacts mirrors the tracked demo bundle + the
+// architect PLAN.html into _logs/<cycleId>/artifacts/ so the bridge can serve
+// them to the in-UI review screen.
+test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _logs/<cycleId>/artifacts', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'snap-test-'));
+  const worktree = join(root, 'wt');
+  const projectRepo = join(root, 'proj');
+  const initiativeId = 'INIT-2026-05-30-snap';
+  const cycleId = `TEST-snap-${process.pid}-${initiativeId}`;
+  // tracked demo bundle in the worktree
+  mkdirSync(join(worktree, 'demo', initiativeId), { recursive: true });
+  writeFileSync(join(worktree, 'demo', initiativeId, 'demo.json'), '{"title":"t"}');
+  writeFileSync(join(worktree, 'demo', initiativeId, 'DEMO.html'), '<html></html>');
+  // architect session whose manifests/ holds this initiative
+  mkdirSync(join(projectRepo, '_architect', 'sid1', 'manifests'), { recursive: true });
+  writeFileSync(join(projectRepo, '_architect', 'sid1', 'manifests', `${initiativeId}.md`), '# manifest');
+  writeFileSync(join(projectRepo, '_architect', 'sid1', 'PLAN.html'), '<html>plan</html>');
+
+  const forgeRoot = resolve(import.meta.dirname, '..');
+  const artifacts = join(forgeRoot, '_logs', cycleId, 'artifacts');
+  try {
+    await snapshotCycleArtefacts(
+      { initiativeId, manifestPath: 'm', projectRepoPath: projectRepo, worktreePath: worktree },
+      cycleId,
+    );
+    assert.ok(existsSync(join(artifacts, 'demo.json')), 'demo.json mirrored');
+    assert.ok(existsSync(join(artifacts, 'DEMO.html')), 'DEMO.html mirrored');
+    assert.ok(existsSync(join(artifacts, 'PLAN.html')), 'PLAN.html mirrored');
+  } finally {
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});

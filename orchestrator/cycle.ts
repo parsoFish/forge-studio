@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger } from './logging.ts';
@@ -255,7 +255,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
  * surfaced via the returned promise rejection so the caller can decide
  * whether to log them.
  */
-async function snapshotCycleArtefacts(
+export async function snapshotCycleArtefacts(
   input: CycleInput,
   cycleId: string,
 ): Promise<void> {
@@ -271,13 +271,35 @@ async function snapshotCycleArtefacts(
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  // Demo bundle: the reviewer's recording + source script + README. Real
-  // showcase content for the report's "Verification" section.
-  const demoSrc = resolve(input.worktreePath, '.forge', 'demos', input.initiativeId);
+  // Demo bundle (ADR 021): the unifier writes the TRACKED demo at
+  // <worktree>/demo/<initiativeId>/ (demo.json + derived DEMO.md/DEMO.html +
+  // any media). Mirror it into _logs/<cycleId>/artifacts/ so the bridge can
+  // serve it to the in-UI review screen (`/api/artifact/<cycleId>/<file>`).
+  // (Previously copied a stale `.forge/demos/` path into `_logs/<cycleId>/demo/`,
+  // which nothing populated or served — the root cause of the blank review demo.)
+  const artifactsDst = resolve(cycleLogDir, 'artifacts');
+  const demoSrc = resolve(input.worktreePath, 'demo', input.initiativeId);
   if (existsSync(demoSrc)) {
-    const demoDst = resolve(cycleLogDir, 'demo');
-    cpSync(demoSrc, demoDst, { recursive: true, force: true });
+    cpSync(demoSrc, artifactsDst, { recursive: true, force: true });
   }
+
+  // Architect PLAN.html (best-effort): resolve the session that produced this
+  // initiative by finding the `_architect/<sid>/` whose `manifests/` holds it,
+  // so the review screen's "view plan" link works too.
+  try {
+    const archRoot = resolve(input.projectRepoPath, '_architect');
+    if (existsSync(archRoot)) {
+      for (const sid of readdirSync(archRoot)) {
+        const draftManifest = resolve(archRoot, sid, 'manifests', `${input.initiativeId}.md`);
+        const planHtml = resolve(archRoot, sid, 'PLAN.html');
+        if (existsSync(draftManifest) && existsSync(planHtml)) {
+          mkdirSync(artifactsDst, { recursive: true });
+          cpSync(planHtml, resolve(artifactsDst, 'PLAN.html'), { force: true });
+          break;
+        }
+      }
+    }
+  } catch { /* best-effort — never block the cycle on plan mirroring */ }
 
   // PR description draft: useful for the report's "What landed" section.
   const prSrc = resolve(input.worktreePath, '.forge', 'pr-description.md');
