@@ -179,11 +179,19 @@ sections were merged into a single hex pipeline):
   features) hosted by `[data-component="agent-hex-canvas"]`.
 - `[data-section="verdict-form"]` — appears when active cycle is
   `ready-for-review`.
-- `[data-section="architect"]` — the in-UI architect surface (ADR 020),
-  mounted above the cycles tab. Carries `data-architect-session-count` +
-  `data-pending-plan-count`. Children:
+- `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
+  the primary dashboard, mounted above the cycles tab. Compact by design — the
+  heavy interview + PLAN-gate UI lives on the dedicated screen. Carries
+  `data-architect-session-count` + `data-pending-plan-count`. Children:
   - `[data-section="new-idea"][data-new-idea-ready]` — idea entry box.
-  - Per session: `[data-architect-session-id][data-architect-phase][data-architect-project]`.
+  - One slim row per active session, linking to `/architect/<sid>`:
+    `[data-architect-session-id][data-architect-phase][data-architect-project]`
+    with a `[data-action="open-plan"]` (green, when `awaiting-verdict`) or
+    `[data-action="open-architect"]` button.
+- `[data-page="architect-session"][data-session-id][data-architect-phase][data-page-ready]`
+  — the dedicated plan screen (`app/architect/[sessionId]`). Holds the focused
+  architect hex `[data-component="architect-hex"][data-architect-phase][data-architect-active]`
+  (with `[data-tool-burst]` chips) plus the phase-appropriate feedback surface:
   - `[data-section="architect-interview"][data-architect-round][data-questions-answered]`
     with per-question `[data-question-index][data-question-resolved]` and
     per-option `[data-option-label][data-option-selected]`.
