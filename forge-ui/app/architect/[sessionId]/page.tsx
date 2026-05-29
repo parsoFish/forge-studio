@@ -131,7 +131,23 @@ export default function ArchitectSessionPage({
               />
             )}
 
-            {session.phase === 'finalizing' && <Status label="Approved — finalizing manifests…" />}
+            {(session.phase === 'finalizing' || session.phase === 'committed') && (
+              <div
+                data-section="architect-status"
+                style={{ border: '1px solid #2ea04366', borderRadius: 10, padding: '16px 18px', background: '#07140d', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+              >
+                <span style={{ fontSize: 13, color: '#3fb950' }}>
+                  Approved — manifests queued; the autonomous loop is building it now.
+                </span>
+                <Link
+                  href="/"
+                  data-action="watch-it-build"
+                  style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 600, color: '#fff', background: '#238636', border: '1px solid #30363d', borderRadius: 6, padding: '6px 14px', textDecoration: 'none' }}
+                >
+                  Watch it build →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}

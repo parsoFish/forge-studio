@@ -41,9 +41,11 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
           setLoaded(true);
         })
         .catch(() => { if (!cancelled) setLoaded(true); });
+      // Re-fetch the demo too — a send-back → dev-loop rerun re-renders demo.json
+      // (ADR 021 step 12); the screen updates live without a reload.
+      fetchDemoModel(cycleId).then((d) => { if (!cancelled) setDemo(d); }).catch(() => {});
     };
     refresh();
-    fetchDemoModel(cycleId).then((d) => { if (!cancelled) setDemo(d); }).catch(() => {});
     fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
     const sub = subscribe({
       onMessage: (msg) => {

@@ -47,9 +47,12 @@ const STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
 const CYCLE_ID = `${STAMP}_${INIT}`;
 const CYCLE_LOG = join(FORGE_ROOT, '_logs', CYCLE_ID);
 
-// Watchable pacing — the recording is for a human to follow, not a regression.
-const DWELL = 2600;       // between beats
-const THINK = 1100;       // between live bursts so the hex visibly pulses
+// Watchable pacing — the recording is a continuous clip a human follows, so
+// each beat dwells like a person actually working through that page.
+const READ = 4200;  // a page the operator reads carefully (plan, demo)
+const WORK = 3200;  // watching autonomous work happen (events fire during this)
+const ACT = 1500;   // a brief beat after an action (a click, an answer)
+const THINK = 1000; // between live tool bursts so the hex visibly pulses
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const QDIR = (q) => join(FORGE_ROOT, '_queue', q);
 
@@ -76,6 +79,11 @@ function archEvent(sid, eventType, message, metadata = {}) {
  *  pause between each (step 2: reviewing the project + exploring edge cases). */
 async function burst(sid, tools) {
   for (const t of tools) { archEvent(sid, 'tool_use', `tool.${t}`, { tool: t }); await sleep(THINK); }
+}
+/** Fire a sequence of cycle events with a gap between each, so the live hex
+ *  pipeline visibly advances as work is (mock-)done rather than jumping. */
+async function paced(thunks, gap = THINK) {
+  for (const fn of thunks) { fn(); await sleep(gap); }
 }
 
 function writeQuestions(sid) {
@@ -243,7 +251,7 @@ async function main() {
     writeStatus(sid, { phase: 'awaiting-answers', round: 1, idea: IDEA });
     archEvent(sid, 'log', 'interview round 1 — 2 question(s) for the operator');
     await page.waitForSelector('[data-section="architect-interview"]', { timeout: 15000 });
-    await sleep(DWELL);
+    await sleep(READ);
     await frame(page, 'step03-architect-questions', 'Step 3 — the architect returns clarifying questions');
 
     // STEP 4 — operator answers; planning stage rolls them in.
@@ -252,10 +260,11 @@ async function main() {
     await sleep(THINK);
     await frame(page, 'step04-operator-answers', 'Step 4 — the operator answers; the architect will roll the answers into planning');
     await page.locator('[data-action="submit-answers"]').click();
-    await sleep(800);
+    await sleep(ACT);
+    // The architect takes its planning turn; the screen updates live (WS) — no reload.
     writeStatus(sid, { phase: 'drafting', round: 2, idea: IDEA });
     archEvent(sid, 'start', 'architect turn (phase=drafting) — rolling in answers');
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-section="architect-interview"]', { state: 'detached', timeout: 8000 }).catch(() => {});
     await burst(sid, ['Read', 'Edit']);
     await frame(page, 'step04b-planning', 'Step 4 — planning stage: the architect drafts with the answers folded in');
 
@@ -265,7 +274,7 @@ async function main() {
     writePlan(sid, 1);
     archEvent(sid, 'log', 'plan-emitted (council surfaced 2 design decisions)');
     await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
-    await sleep(DWELL);
+    await sleep(READ);
     await frame(page, 'step05-council-plan', 'Step 5 — the council reviewed the draft; the plan presents options shaped by its feedback');
 
     // STEP 6 — on operator feedback, the architect reruns the last step.
@@ -273,130 +282,150 @@ async function main() {
       .fill('Make the toggle keyboard-accessible and confirm focus order before drafting.').catch(() => {});
     await frame(page, 'step06-send-back', 'Step 6 — the operator sends the plan back with feedback');
     await page.locator('[data-action="revise-plan"]').click();
-    await sleep(900);
-    // Rerun the last step: re-council + re-plan, then re-present.
+    await sleep(ACT);
+    // The architect reruns the last step (re-council + re-plan); the screen
+    // transitions live through "drafting" back to a fresh PLAN gate.
     writeStatus(sid, { phase: 'drafting', round: 3, idea: IDEA });
     archEvent(sid, 'start', 'architect turn (phase=drafting) — rerun with operator feedback');
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-section="plan-gate"]', { state: 'detached', timeout: 8000 }).catch(() => {});
     await burst(sid, ['Read', 'council', 'council']);
     writePlan(sid, 2);
     archEvent(sid, 'log', 'plan-emitted (revised — keyboard-accessible)');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
-    await sleep(DWELL);
+    await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="false"]', { timeout: 15000 });
+    await sleep(READ);
     await frame(page, 'step06b-replan', 'Step 6 — the architect reran the last step; the revised plan is re-presented');
 
-    // STEP 7 — on operator approval → PM.
+    // STEP 7 — on operator approval → PM. Approve, then take the natural
+    // in-UI transition ("Watch it build →") back to the dashboard (client-side,
+    // no reload) — the journey stays one continuous clip.
     await page.locator('[data-escalation-id="esc-0"] input[type="radio"]').first().check();
     await page.locator('[data-escalation-id="esc-1"] input[type="radio"]').first().check();
     await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="true"]', { timeout: 5000 });
-    await sleep(THINK);
+    await sleep(ACT);
     await frame(page, 'step07-approve', 'Step 7 — the operator resolves the decisions and approves');
     await page.locator('[data-action="approve-plan"]').click();
-    await sleep(800);
+    await sleep(ACT);
+    // Emulate finalize → the autonomous loop claims the initiative.
     mkdirSync(QDIR('pending'), { recursive: true });
     execSync(`cp ${join(archDir(sid), 'manifests', `${INIT}.md`)} ${join(QDIR('pending'), `${INIT}.md`)}`);
     writeStatus(sid, { phase: 'committed', round: 3, idea: IDEA });
     cycleEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
     moveManifest('pending', 'in-flight');
-    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+    // The screen flips to "Approved — Watch it build →" once finalize lands; take it.
+    await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 15000 });
+    await sleep(ACT);
+    await page.locator('[data-action="watch-it-build"]').click(); // natural transition → dashboard
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
-    await sleep(DWELL);
-    await frame(page, 'step07b-to-pm', 'Step 7 — approved; the initiative is queued and the autonomous cycle begins');
+    await sleep(ACT);
+    await frame(page, 'step07b-to-pm', 'Step 7 — approved; "Watch it build →" lands on the dashboard, cycle live');
 
-    // STEP 8 — PM plans features + work items.
-    cycleEvent('project-manager', 'start', 'pm phase start');
-    cycleEvent('project-manager', 'tool_use', 'pm.brain-query', { metadata: { tool: 'brain-query' } });
-    cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-1' } });
-    cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-2' } });
-    cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1', feature_id: 'FEAT-1' } });
-    cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2', feature_id: 'FEAT-2' } });
-    cycleEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.31, duration_ms: 28000, metadata: { work_item_count: 2 } });
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
-    await sleep(DWELL);
-    await frame(page, 'step08-pm', 'Step 8 — the PM plans 2 features + work items for the initiative');
+    // STEP 8 — PM plans features + work items (events stream live to the pipeline).
+    await paced([
+      () => cycleEvent('project-manager', 'start', 'pm phase start'),
+      () => cycleEvent('project-manager', 'tool_use', 'pm.brain-query', { metadata: { tool: 'brain-query' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-1' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-2' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1', feature_id: 'FEAT-1' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2', feature_id: 'FEAT-2' } }),
+      () => cycleEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.31, duration_ms: 28000, metadata: { work_item_count: 2 } }),
+    ]);
+    await sleep(WORK);
+    await frame(page, 'step08-pm', 'Step 8 — the PM plans 2 features + work items (the pipeline advances live)');
 
     // STEP 9 — developer loop progresses WIs, respecting dependencies (WI-2 depends on WI-1).
-    cycleEvent('developer-loop', 'start', 'dev-loop start');
-    cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-1', tool: 'Edit' } });
-    cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', { iteration: 1, metadata: { work_item_id: 'WI-1' } });
-    cycleEvent('developer-loop', 'log', 'WI-1 complete; WI-2 unblocked (depends_on FEAT-1)', { metadata: { work_item_id: 'WI-1' } });
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await sleep(DWELL);
-    await frame(page, 'step09-dev-loop', 'Step 9 — the dev-loop progresses work items, respecting dependencies (WI-2 waits on WI-1)');
-    cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } });
-    cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', { iteration: 1, metadata: { work_item_id: 'WI-2' } });
+    await paced([
+      () => cycleEvent('developer-loop', 'start', 'dev-loop start'),
+      () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-1', tool: 'Edit' } }),
+      () => cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', { iteration: 1, metadata: { work_item_id: 'WI-1' } }),
+      () => cycleEvent('developer-loop', 'log', 'WI-1 complete; WI-2 unblocked (depends_on FEAT-1)', { metadata: { work_item_id: 'WI-1' } }),
+    ]);
+    await sleep(WORK);
+    await frame(page, 'step09-dev-loop', 'Step 9 — the dev-loop progresses work items, respecting dependencies (WI-2 waited on WI-1)');
+    await paced([
+      () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
+      () => cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', { iteration: 1, metadata: { work_item_id: 'WI-2' } }),
+    ]);
 
     // STEP 10 — unifier reviews + loops to clean the output.
-    cycleEvent('developer-loop', 'log', 'unifier.start — reviewing the merged work-item output');
-    cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test' } });
-    cycleEvent('developer-loop', 'log', 'unifier.gate — initiative gate green; cleaning output');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await sleep(DWELL);
+    await paced([
+      () => cycleEvent('developer-loop', 'log', 'unifier.start — reviewing the merged work-item output'),
+      () => cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test' } }),
+      () => cycleEvent('developer-loop', 'log', 'unifier.gate — initiative gate green; cleaning output'),
+    ]);
+    await sleep(WORK);
     await frame(page, 'step10-unifier-clean', 'Step 10 — the unifier reviews the whole branch and loops to clean the output');
 
-    // STEP 11 — unifier runs the demo skill → forge-ui-themed demo page.
-    cycleEvent('developer-loop', 'log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)');
-    cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } });
-    writeDemoJson(1);
-    cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 });
-    cycleEvent('review-loop', 'start', 'review-loop start');
-    cycleEvent('review-loop', 'log', 'reviewer.pr-opened');
-    cycleEvent('review-loop', 'end', 'review-loop end', { cost_usd: 0.21 });
-    cycleEvent('closure', 'start', 'closure.start');
-    cycleEvent('closure', 'log', 'closure.manifest-moved-to-ready-for-review');
-    cycleEvent('closure', 'end', 'closure.end');
+    // STEP 11 — unifier runs the demo skill → forge-ui-themed demo page; cycle ready.
+    await paced([
+      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
+      () => cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
+      () => { writeDemoJson(1); cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }); },
+      () => cycleEvent('review-loop', 'start', 'review-loop start'),
+      () => cycleEvent('review-loop', 'log', 'reviewer.pr-opened'),
+      () => cycleEvent('review-loop', 'end', 'review-loop end', { cost_usd: 0.21 }),
+      () => cycleEvent('closure', 'start', 'closure.start'),
+      () => cycleEvent('closure', 'log', 'closure.manifest-moved-to-ready-for-review'),
+      () => cycleEvent('closure', 'end', 'closure.end'),
+    ]);
     moveManifest('in-flight', 'ready-for-review');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-action="open-review"]', { timeout: 15000 });
-    await sleep(DWELL);
-    await frame(page, 'step11-demo-ready', 'Step 11 — the unifier ran the demo skill; the cycle is ready and a "Review →" entry appears');
+    await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
+    await sleep(WORK);
+    await frame(page, 'step11-demo-ready', 'Step 11 — the unifier ran the demo skill; a "Review →" entry appears');
 
     // STEP 12 — operator reviews; Ralph dev-loops rerun with operator input until approve.
-    await page.goto(`${watch.uiUrl}/review/${encodeURIComponent(CYCLE_ID)}`, { waitUntil: 'domcontentloaded' });
+    await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click(); // natural transition → review
     await page.waitForSelector('main[data-page="review-cycle"][data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await sleep(DWELL);
+    await sleep(READ);
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
-    // Send back once → a dev-loop reruns → the demo updates → re-review.
-    await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check(); // send back
+    // Send back with a new acceptance criterion.
+    await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();
     await page.locator('[data-component="verdict-form"] textarea').fill('Close — but the toggle must be operable by keyboard before this merges.');
     await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0).fill('settings');
     await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1).fill('using only the keyboard');
     await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2).fill('the toggle is reachable and operable');
+    await sleep(ACT);
     await frame(page, 'step12b-send-back', 'Step 12 — operator sends back with a new acceptance criterion (keyboard access)');
     await page.locator('[data-action="send-back"]').click();
-    await sleep(900);
-    // Ralph dev-loop reruns on the operator input, then re-demos.
+    await sleep(ACT);
+    // Return to the dashboard (natural) while the dev-loop reruns on the feedback.
+    await page.locator('[data-action="back-to-dashboard"]').click();
+    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
     moveManifest('ready-for-review', 'in-flight');
-    cycleEvent('developer-loop', 'start', 'dev-loop rerun — addressing review feedback');
-    cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } });
-    cycleEvent('developer-loop', 'log', 'unifier.demo-skill — re-rendering demo.json (keyboard access)');
-    writeDemoJson(2);
-    cycleEvent('developer-loop', 'end', 'ralph.end (round 2)');
+    await paced([
+      () => cycleEvent('developer-loop', 'start', 'dev-loop rerun — addressing review feedback'),
+      () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
+      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — re-rendering demo.json (keyboard access)'),
+      () => { writeDemoJson(2); cycleEvent('developer-loop', 'end', 'ralph.end (round 2)'); },
+    ]);
     moveManifest('in-flight', 'ready-for-review');
-    await page.goto(`${watch.uiUrl}/review/${encodeURIComponent(CYCLE_ID)}`, { waitUntil: 'domcontentloaded' });
+    await sleep(WORK);
+    await frame(page, 'step12c-rerun', 'Step 12 — the dev-loop reran on the operator feedback; back to "Review →"');
+    // Re-review: the updated demo + a fresh verdict.
+    await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click();
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await sleep(DWELL);
-    await frame(page, 'step12c-re-review', 'Step 12 — the dev-loop reran on the feedback; the updated demo is re-presented');
+    await sleep(READ);
+    await frame(page, 'step12d-re-review', 'Step 12 — the operator re-reviews the updated demo (now keyboard-accessible)');
 
-    // STEP 13 — on approval → reflect.
+    // STEP 13 — on approval → reflect → done.
     await page.locator('[data-component="verdict-form"] textarea').fill('LGTM — follows the OS, persists, and is keyboard-accessible. All ACs met.');
+    await sleep(ACT);
     await frame(page, 'step13-approve', 'Step 13 — the operator approves');
     await page.locator('[data-action="approve-and-merge"]').click();
     await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
-    await sleep(800);
     cycleEvent('closure', 'log', 'closure.pr-merged');
     moveManifest('ready-for-review', 'done');
-    cycleEvent('reflection', 'start', 'reflection.start');
-    cycleEvent('reflection', 'tool_use', 'tool.Write', { metadata: { tool: 'Write brain theme' } });
-    cycleEvent('reflection', 'end', 'reflection.end', { cost_usd: 0.12 });
-    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 30000 });
+    await paced([
+      () => cycleEvent('reflection', 'start', 'reflection.start'),
+      () => cycleEvent('reflection', 'tool_use', 'tool.Write', { metadata: { tool: 'Write brain theme' } }),
+      () => cycleEvent('reflection', 'end', 'reflection.end', { cost_usd: 0.12 }),
+    ]);
+    await sleep(ACT);
+    await page.locator('[data-action="back-to-dashboard"]').click(); // natural transition → dashboard
+    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"][data-cycle-status="done"]`, { timeout: 15000 }).catch(() => {});
-    await sleep(DWELL);
-    await frame(page, 'step13b-reflect-done', 'Step 13 — approved → reflect phase runs → cycle done. Journey complete.');
+    await sleep(WORK);
+    await frame(page, 'step13b-reflect-done', 'Step 13 — approved → reflect runs → cycle done. Journey complete.');
 
     console.log('\n[e2e] journey complete.');
   } finally {

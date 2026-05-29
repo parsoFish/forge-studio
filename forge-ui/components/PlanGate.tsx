@@ -171,7 +171,7 @@ export function PlanGate({
       {error && <div style={{ color: '#f85149', fontSize: 12, marginBottom: 8 }}>{error}</div>}
       {done && (
         <div data-plan-verdict-submitted={done} style={{ color: '#3fb950', fontSize: 12, marginBottom: 8 }}>
-          {done === 'approve' ? 'Approved — finalizing.' : done === 'revise' ? 'Sent back for another turn.' : 'Rejected.'}
+          {done === 'approve' ? 'Approved — manifests queued, the autonomous loop is starting…' : done === 'revise' ? 'Sent back — the architect is taking another turn.' : 'Rejected.'}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchCost,
@@ -395,7 +396,7 @@ function CyclesTab({
                       <span style={{ fontSize: 10, color: meta.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>{meta.label}</span>
                     </button>
                     {reviewable && (
-                      <a
+                      <Link
                         href={`/review/${encodeURIComponent(c.cycleId)}`}
                         data-action="open-review"
                         title="Review this PR"
@@ -414,7 +415,7 @@ function CyclesTab({
                         }}
                       >
                         Review →
-                      </a>
+                      </Link>
                     )}
                   </span>
                 );
