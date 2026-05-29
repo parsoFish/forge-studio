@@ -1,0 +1,192 @@
+/**
+ * Unified structured demo model (ADR 021).
+ *
+ * The unifier authors ONE structured `demo.json` to this schema — the schema is
+ * the contract that fixes the previous free-form `DEMO.md` inconsistency. The
+ * review screen renders it natively, and forge derives `DEMO.md` + `DEMO.html`
+ * from the same source (so the unifier authors once). `DemoModel` is the
+ * unifier-authorable *subset* of `DemoComparisonModel`
+ * ([cli/demo-html.ts](./demo-html.ts)) — forge fills the render-only fields
+ * (`generatedAt`, build statuses) when adapting it for `renderComparisonHtml`.
+ *
+ * Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 checkpoint
+ * (each with `label` + `caption`). Media (before/after images/video) + harness
+ * `metrics` are OPTIONAL — the explicitly-triggered demo-capture skill fills
+ * media when relevant. `validateDemoModel` mirrors `validateManifest`'s
+ * fail-fast-with-messages contract.
+ */
+
+import type {
+  DemoComparisonModel,
+  DemoCheckpoint,
+  HarnessMetricRow,
+} from './demo-html.ts';
+import { renderComparisonHtml } from './demo-html.ts';
+
+export type DemoModelCheckpoint = {
+  label: string;
+  kind?: 'screenshot' | 'video' | 'harness';
+  caption: string;
+  beforeNote?: string;
+  afterNote?: string;
+  /** Harness metric rows (paired before/after). Optional. */
+  metrics?: HarnessMetricRow[];
+  /** Optional captured media — `data:image/...` ONLY (validator rejects schemes). */
+  beforeImage?: string | null;
+  afterImage?: string | null;
+  /** Optional video — relative sibling path only (never a scheme-bearing URL). */
+  beforeVideoSrc?: string | null;
+  afterVideoSrc?: string | null;
+};
+
+export type DemoModel = {
+  title: string;
+  essence: string;
+  project: string;
+  initiativeId?: string;
+  baseRef?: string;
+  changedRef?: string;
+  checkpoints: DemoModelCheckpoint[];
+  /** `git diff --stat baseRef..changedRef`. Required — grounds the demo. */
+  diffStat: string;
+  acceptanceCriteria?: string[];
+};
+
+const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
+
+/**
+ * Validate an authored `demo.json`. Returns an array of human-readable errors;
+ * empty ⇒ valid. Never throws. Required core only; media/metrics optional.
+ */
+export function validateDemoModel(raw: unknown): string[] {
+  const errors: string[] = [];
+  if (!raw || typeof raw !== 'object') return ['demo.json must be a JSON object'];
+  const m = raw as Record<string, unknown>;
+
+  const reqStr = (field: string): void => {
+    const v = m[field];
+    if (typeof v !== 'string' || v.trim().length === 0) {
+      errors.push(`${field} is required (non-empty string)`);
+    }
+  };
+  reqStr('title');
+  reqStr('essence');
+  reqStr('project');
+  reqStr('diffStat');
+
+  const cps = m.checkpoints;
+  if (!Array.isArray(cps) || cps.length === 0) {
+    errors.push('checkpoints must be a non-empty array (≥1 before/after checkpoint)');
+  } else {
+    cps.forEach((c, i) => {
+      const cp = c as Record<string, unknown>;
+      const at = `checkpoints[${i}]`;
+      if (typeof cp.label !== 'string' || cp.label.trim() === '') errors.push(`${at}.label is required`);
+      if (typeof cp.caption !== 'string' || cp.caption.trim() === '') errors.push(`${at}.caption is required`);
+      if (cp.kind !== undefined && !VALID_KINDS.has(cp.kind as string)) {
+        errors.push(`${at}.kind must be one of screenshot|video|harness`);
+      }
+      // Media, when present, must be inline data: URIs (no scheme-bearing/remote
+      // refs) — mirrors the esc() discipline in demo-html.ts.
+      for (const f of ['beforeImage', 'afterImage'] as const) {
+        const v = cp[f];
+        if (v != null && (typeof v !== 'string' || !v.startsWith('data:image/'))) {
+          errors.push(`${at}.${f} must be a data:image/... URI when set`);
+        }
+      }
+      for (const f of ['beforeVideoSrc', 'afterVideoSrc'] as const) {
+        const v = cp[f];
+        if (v != null && (typeof v !== 'string' || /^[a-z]+:/i.test(v) || v.startsWith('/'))) {
+          errors.push(`${at}.${f} must be a relative sibling path when set`);
+        }
+      }
+      if (cp.metrics !== undefined && !Array.isArray(cp.metrics)) {
+        errors.push(`${at}.metrics must be an array when set`);
+      }
+    });
+  }
+
+  if (m.acceptanceCriteria !== undefined && !Array.isArray(m.acceptanceCriteria)) {
+    errors.push('acceptanceCriteria must be an array of strings when set');
+  }
+  return errors;
+}
+
+/** Adapt the authorable `DemoModel` to the full `DemoComparisonModel` the
+ *  renderer expects, filling render-only fields with neutral defaults (no build
+ *  was run unless the capture skill populated media). */
+export function toComparisonModel(model: DemoModel, generatedAt: string): DemoComparisonModel {
+  return {
+    title: model.title,
+    initiativeId: model.initiativeId,
+    project: model.project,
+    baseRef: model.baseRef ?? 'main',
+    changedRef: model.changedRef ?? 'HEAD',
+    essence: model.essence,
+    generatedAt,
+    baselineBuild: { ok: true },
+    changedBuild: { ok: true },
+    checkpoints: model.checkpoints.map<DemoCheckpoint>((c) => ({
+      label: c.label,
+      kind: c.kind ?? 'screenshot',
+      metrics: c.metrics ?? null,
+      caption: c.caption,
+      beforeImage: c.beforeImage ?? null,
+      afterImage: c.afterImage ?? null,
+      beforeVideoSrc: c.beforeVideoSrc ?? null,
+      afterVideoSrc: c.afterVideoSrc ?? null,
+      beforeNote: c.beforeNote,
+      afterNote: c.afterNote,
+    })),
+    diffStat: model.diffStat,
+    acceptanceCriteria: model.acceptanceCriteria,
+  };
+}
+
+/** Render the self-contained DEMO.html from a `DemoModel` (reuses the existing
+ *  comparison renderer). `generatedAt` is injected (no `Date.now()` in here). */
+export function renderDemoHtml(model: DemoModel, generatedAt: string): string {
+  return renderComparisonHtml(toComparisonModel(model, generatedAt));
+}
+
+/** Render a derived DEMO.md (the PR-self-contained convenience). Markdown only;
+ *  media is referenced as relative links (matching the unifier's prior
+ *  visibility-agnostic convention) rather than embedded. */
+export function renderDemoMarkdown(model: DemoModel): string {
+  const lines: string[] = [];
+  lines.push(`# ${model.title}`);
+  lines.push('');
+  lines.push(`> _Derived from \`demo.json\` (ADR 021). Essence:_ ${model.essence}`);
+  lines.push('');
+  for (const c of model.checkpoints) {
+    lines.push(`## ${c.caption}`);
+    lines.push('');
+    if (c.beforeNote) lines.push(`- **Before:** ${c.beforeNote}`);
+    if (c.afterNote) lines.push(`- **After:** ${c.afterNote}`);
+    if (c.beforeImage || c.beforeVideoSrc) lines.push(`- Before media: \`${c.label}\` (before)`);
+    if (c.afterImage || c.afterVideoSrc) lines.push(`- After media: \`${c.label}\` (after)`);
+    if (c.metrics && c.metrics.length > 0) {
+      lines.push('');
+      lines.push('| metric | before | after | Δ | parity |');
+      lines.push('|---|---|---|---|---|');
+      for (const r of c.metrics) {
+        const d = r.deltaPct === null ? '—' : `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%`;
+        lines.push(`| ${r.label} | ${r.before ?? '—'} | ${r.after ?? '—'} | ${d} | ${r.parity} |`);
+      }
+    }
+    lines.push('');
+  }
+  if (model.acceptanceCriteria && model.acceptanceCriteria.length > 0) {
+    lines.push('## Acceptance criteria');
+    lines.push('');
+    for (const ac of model.acceptanceCriteria) lines.push(`- ${ac}`);
+    lines.push('');
+  }
+  lines.push('## Changed files');
+  lines.push('');
+  lines.push('```');
+  lines.push(model.diffStat);
+  lines.push('```');
+  lines.push('');
+  return lines.join('\n');
+}
