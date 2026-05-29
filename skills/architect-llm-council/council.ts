@@ -44,9 +44,29 @@ export type Flag = {
   appliedFix: string;
 };
 
+/**
+ * Phase C — optional per-option visual the PLAN page renders as a comparative
+ * panel. The Design critic authors `mockup-html` for UI-facing options (a
+ * self-contained inline HTML/CSS sketch, rendered in a sandboxed iframe); the
+ * Eng/DX critics author `diagram` (mermaid/ASCII) or `code` (a representative
+ * snippet) for backend/infra options. `none` falls back to rationale text.
+ */
+export type OptionVisual = {
+  kind: 'mockup-html' | 'diagram' | 'code' | 'none';
+  /** Inline HTML (sandboxed), mermaid/ASCII diagram source, or a code snippet. */
+  content: string;
+  caption?: string;
+  /** Language hint for `code` visuals (e.g. `ts`). */
+  language?: string;
+};
+
 export type EscalationOption = {
   label: string;
   rationale: string;
+  /** Phase C — optional visual fidelity (mockup / diagram / code / none). */
+  visual?: OptionVisual;
+  /** Phase C — short pros/cons for the comparative panel. */
+  tradeoffs?: { pros?: string[]; cons?: string[] };
 };
 
 export type Escalation = {
@@ -133,6 +153,24 @@ const STRUCTURED_OUTPUT_SCHEMA = {
               properties: {
                 label: { type: 'string' },
                 rationale: { type: 'string' },
+                // Phase C — optional comparative-panel visual + tradeoffs.
+                visual: {
+                  type: 'object',
+                  properties: {
+                    kind: { type: 'string', enum: ['mockup-html', 'diagram', 'code', 'none'] },
+                    content: { type: 'string' },
+                    caption: { type: 'string' },
+                    language: { type: 'string' },
+                  },
+                  required: ['kind', 'content'],
+                },
+                tradeoffs: {
+                  type: 'object',
+                  properties: {
+                    pros: { type: 'array', items: { type: 'string' } },
+                    cons: { type: 'array', items: { type: 'string' } },
+                  },
+                },
               },
               required: ['label', 'rationale'],
             },
@@ -409,6 +447,14 @@ function renderCriticPrompt(
     '',
     '- `flags`: mechanical issues you can auto-resolve. For each, supply an `id`, a short `description`, and the `appliedFix` (a one-line description of the fix you would apply).',
     '- `escalations`: taste decisions only the user can make. For each, supply `critic` (your name), the `question`, and 2-4 `options` each with a `label` and `rationale`.',
+    '- For each option, ALSO supply (when it genuinely helps the operator compare):',
+    '  - `tradeoffs`: short `pros` / `cons` bullet arrays.',
+    '  - `visual`: the right fidelity for THIS decision —',
+    '    - UI-facing options → `{ kind: "mockup-html", content }` where `content` is a SELF-CONTAINED inline HTML/CSS sketch of what the option looks like (no scripts, no external assets; it renders in a sandboxed iframe). Style it in the forge dark palette so it blends with the operator UI: background #0d1117, text #c9d1d9, muted #8b949e, borders #21262d, accent #1f6feb.',
+    '    - architecture/data-flow options → `{ kind: "diagram", content }` with a mermaid or ASCII diagram.',
+    '    - code-shape options → `{ kind: "code", content, language }` with a short representative snippet.',
+    '    - otherwise omit `visual` (or use `{ kind: "none", content: "" }`) and let the rationale stand.',
+    '  Pick visuals where they help a decision; do not fabricate mockups for purely mechanical choices.',
     '',
     'Do not invent new requirements. Improve what is there; do not expand scope.',
     '',

@@ -696,12 +696,12 @@ test('renderPlanHtml: escalation options render as cards (no naked bullet lists)
       ],
     }],
   }));
-  // Critic chip + question + options block surface
+  // Critic chip + question + comparative option cards (Phase C structure)
   assert.match(html, /class="critic-chip">ceo</);
   assert.match(html, /One initiative or two\?/);
   assert.match(html, /class="option"/);
   assert.match(html, /<span class="label">one<\/span>/);
-  assert.match(html, /<span class="rationale">easier review<\/span>/);
+  assert.match(html, /<div class="rationale">easier review<\/div>/);
   assert.match(html, /<span class="label">two<\/span>/);
 });
 
@@ -738,4 +738,85 @@ test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md and council-trans
   const html = readFileSync(join(sessionDir, 'PLAN.html'), 'utf8');
   assert.match(html, /^<!DOCTYPE html>/);
   assert.match(html, /<title>PLAN — 2026-05-24T00-00-00 — project-y<\/title>/);
+});
+
+// ---------------------------------------------------------------------------
+// 17. Phase C — comparative design-decision panels (open_escalations)
+// ---------------------------------------------------------------------------
+
+function fxOpenEscalations() {
+  return [
+    {
+      critic: 'design',
+      question: 'How should the cost breakdown surface?',
+      options: [
+        { label: 'Toggled panel', rationale: 'Keeps the canvas clean.', visual: { kind: 'mockup-html' as const, content: '<div style="padding:8px;font:12px sans-serif">$1.46 total</div>', caption: 'Top-right card' }, tradeoffs: { pros: ['Clean canvas'], cons: ['One more click'] } },
+        { label: 'Always-on sidebar', rationale: 'Zero clicks to see cost.', visual: { kind: 'mockup-html' as const, content: '<aside style="border-left:2px solid #888;padding:6px">cost rail</aside>' }, tradeoffs: { pros: ['Always visible'], cons: ['Eats space'] } },
+      ],
+    },
+    {
+      critic: 'eng',
+      question: 'Where should per-tool events be persisted?',
+      options: [
+        { label: 'JSONL append', rationale: 'Durable + replayable.', visual: { kind: 'diagram' as const, content: 'agent -> emit -> events.jsonl -> bridge -> UI' } },
+        { label: 'Ephemeral channel', rationale: 'Leaner log.', visual: { kind: 'code' as const, content: 'channel.publish(toolEvent)', language: 'ts' } },
+      ],
+    },
+    {
+      critic: 'ceo',
+      question: 'Ship MVP first or full scope?',
+      options: [
+        { label: 'MVP first', rationale: 'Faster feedback.' },
+        { label: 'Full scope', rationale: 'Fewer follow-ups.' },
+      ],
+    },
+  ];
+}
+
+test('renderPlanHtml: design decisions render as comparative panels with per-option visuals', () => {
+  const html = renderPlanHtml(fxSession({ open_escalations: fxOpenEscalations() }));
+  // Section + per-decision identity
+  assert.match(html, /data-section="design-decisions"/);
+  assert.match(html, /data-decision-count="3"/);
+  assert.match(html, /data-escalation-id="esc-0"/);
+  assert.match(html, /data-escalation-question="How should the cost breakdown surface\?"/);
+  // Per-option identity + visual kind
+  assert.match(html, /data-option-label="Toggled panel"/);
+  assert.match(html, /data-option-visual-kind="mockup-html"/);
+  assert.match(html, /data-option-visual-kind="diagram"/);
+  assert.match(html, /data-option-visual-kind="code"/);
+  assert.match(html, /data-option-visual-kind="none"/); // the CEO MVP option has no visual
+  // Visuals render in the right containers
+  assert.match(html, /<iframe class="mockup" sandbox=""/);
+  assert.match(html, /<pre class="diagram">/);
+  assert.match(html, /<pre class="code" data-lang="ts">/);
+  // Tradeoffs + selectable radios
+  assert.match(html, /<ul class="tradeoffs">/);
+  assert.match(html, /<li class="pro">Clean canvas<\/li>/);
+  assert.match(html, /<input type="radio" name="decision-0"/);
+});
+
+test('renderPlanHtml: mockup HTML is sandboxed (escaped into srcdoc, no live parent script)', () => {
+  const html = renderPlanHtml(fxSession({
+    open_escalations: [{
+      critic: 'design',
+      question: 'q',
+      options: [{ label: 'A', rationale: 'r', visual: { kind: 'mockup-html', content: '<script>alert(1)</script><b>hi</b>' } }],
+    }],
+  }));
+  // sandbox attribute present (empty = no scripts / no same-origin)
+  assert.match(html, /<iframe class="mockup" sandbox=""/);
+  // the script tag must be escaped inside the srcdoc attribute, never a live tag in the parent doc
+  assert.ok(!html.includes('<script>alert(1)</script>'), 'raw script must not appear in the parent document');
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('renderPlanHtml: backward-compatible with plain options (no visual / tradeoffs)', () => {
+  const html = renderPlanHtml(fxSession({
+    open_escalations: [{ critic: 'ceo', question: 'pick one', options: [{ label: 'A', rationale: 'ra' }, { label: 'B', rationale: 'rb' }] }],
+  }));
+  assert.match(html, /data-section="design-decisions"/);
+  assert.match(html, /data-option-label="A"/);
+  assert.match(html, /data-option-visual-kind="none"/);
+  assert.ok(!html.includes('<iframe class="mockup"'), 'no mockup iframe when options carry no visual');
 });

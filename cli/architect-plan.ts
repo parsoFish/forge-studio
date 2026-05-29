@@ -46,7 +46,7 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import type { Flag, Escalation, CriticVerdict } from '../skills/architect-llm-council/council.ts';
+import type { Flag, Escalation, CriticVerdict, OptionVisual } from '../skills/architect-llm-council/council.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -431,6 +431,58 @@ function esc(s: string): string {
 }
 
 /**
+ * Phase C — render an option's visual (mockup / diagram / code) for the
+ * comparative panel. `mockup-html` goes in a sandboxed iframe (no scripts, no
+ * same-origin); diagram/code render as preformatted text to stay zero-dep.
+ */
+function renderOptionVisual(v?: OptionVisual): string {
+  if (!v || v.kind === 'none' || !v.content) return '';
+  const cap = v.caption ? `<div class="cap">${esc(v.caption)}</div>` : '';
+  if (v.kind === 'mockup-html') {
+    return `<div class="opt-visual"><iframe class="mockup" sandbox="" title="mockup" srcdoc="${esc(v.content)}"></iframe>${cap}</div>`;
+  }
+  if (v.kind === 'code') {
+    const lang = v.language ? ` data-lang="${esc(v.language)}"` : '';
+    return `<div class="opt-visual"><pre class="code"${lang}><code>${esc(v.content)}</code></pre>${cap}</div>`;
+  }
+  return `<div class="opt-visual"><pre class="diagram">${esc(v.content)}</pre>${cap}</div>`;
+}
+
+function renderTradeoffs(t?: { pros?: string[]; cons?: string[] }): string {
+  const pros = t?.pros ?? [];
+  const cons = t?.cons ?? [];
+  if (pros.length === 0 && cons.length === 0) return '';
+  return `<ul class="tradeoffs">${pros.map((p) => `<li class="pro">${esc(p)}</li>`).join('')}${cons.map((c) => `<li class="con">${esc(c)}</li>`).join('')}</ul>`;
+}
+
+/**
+ * Phase C — one escalated decision as a comparative panel: the question + its
+ * 2-4 options side by side, each a selectable card with rationale, tradeoffs,
+ * and the option's visual. The radio is purely visual in the static file; the
+ * in-UI gate (Phase D) wires selection to the commit. `data-*` mirrors the
+ * decision/option identity for the gate + automation.
+ */
+function renderEscalationCard(e: Escalation, i: number): string {
+  const name = `decision-${i}`;
+  const opts = e.options
+    .map(
+      (o) => `      <label class="option" data-option-label="${esc(o.label)}" data-option-visual-kind="${esc(o.visual?.kind ?? 'none')}">
+        <div class="opt-head"><input type="radio" name="${esc(name)}" value="${esc(o.label)}"><span class="label">${esc(o.label)}</span></div>
+        <div class="rationale">${esc(o.rationale)}</div>
+        ${renderTradeoffs(o.tradeoffs)}
+        ${renderOptionVisual(o.visual)}
+      </label>`,
+    )
+    .join('\n');
+  return `    <div class="escalation" data-decision="${i}" data-escalation-id="esc-${i}" data-escalation-question="${esc(e.question)}">
+      <div class="q"><span class="critic-chip">${esc(e.critic)}</span>${esc(e.question)}</div>
+      <div class="options">
+${opts}
+      </div>
+    </div>`;
+}
+
+/**
  * Render a feature dependency graph as inline SVG. Replaces the
  * informational cycle-diagram (operator pushback 2026-05-23: irrelevant —
  * the operator knows where they are in the cycle). The graph IS the value
@@ -575,31 +627,19 @@ export function renderPlanHtml(session: ArchitectSession): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PLAN — ${esc(session.session_id)} — ${esc(session.project)}</title>
 <style>
+  /* Unified with the forge-ui dark stage so PLAN/DEMO + the live view share
+     one theme inside the same app. Dark-only (the app has no light mode). */
   :root {
-    --bg: #fafaf7;
-    --fg: #1d1d1f;
-    --muted: #6a6a6f;
-    --border: #d8d8d2;
-    --accent: #5a4cad;
-    --brain: #ad6fff;
-    --user: #1a8a52;
-    --warn: #c47a1e;
-    --code-bg: #f1efe9;
-    --card-bg: #ffffff;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #161617;
-      --fg: #ececec;
-      --muted: #9a9a9a;
-      --border: #2d2d31;
-      --accent: #a293ff;
-      --brain: #c79bff;
-      --user: #6dd2a0;
-      --warn: #e0a35a;
-      --code-bg: #1f1f22;
-      --card-bg: #1d1d1f;
-    }
+    --bg: #0a0e14;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #21262d;
+    --accent: #1f6feb;
+    --brain: #d2a8ff;
+    --user: #2ea043;
+    --warn: #d29922;
+    --code-bg: #0a0f16;
+    --card-bg: #11161d;
   }
   * { box-sizing: border-box; }
   body {
@@ -710,19 +750,39 @@ export function renderPlanHtml(session: ArchitectSession): string {
   }
   .escalation .options {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    align-items: start;
   }
   .escalation .option {
+    display: block;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    padding: 0.7rem 0.85rem;
     font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .escalation .option .label { font-weight: 600; display: block; margin-bottom: 0.2rem; }
+  .escalation .option:hover { border-color: var(--accent); }
+  .escalation .option:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
+  .escalation .option .label { font-weight: 600; }
   .escalation .option .rationale { color: var(--muted); }
+  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.5rem 0 0; font-size: 0.78rem; display: grid; gap: 0.15rem; }
+  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.35rem; }
+  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.35rem; }
+  .escalation .option .opt-visual { margin-top: 0.6rem; }
+  .escalation .option .opt-visual iframe.mockup {
+    width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117;
+  }
+  .escalation .option .opt-visual pre.code,
+  .escalation .option .opt-visual pre.diagram {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
+  }
+  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.72rem; font-style: italic; margin-top: 0.3rem; }
   /* Drawers */
   details {
     background: var(--card-bg);
@@ -869,10 +929,10 @@ ${session.initiatives.map((i, idx) => {
   </div>
 
   ${open.length === 0 ? '' : `
-  <h2>Open escalations</h2>
-  <p class="meta">These taste decisions the council surfaced are unresolved. Resolve each inline in PLAN.md with <code>&lt;!-- review: ... --&gt;</code> before approving, or explicitly defer in your verdict.</p>
-  <div class="escalations">
-${open.map((e) => `    <div class="escalation"><span class="critic-chip">${esc(e.critic)}</span><div class="q" style="display:inline">${esc(e.question)}</div><div class="options">${e.options.map((o) => `<div class="option"><span class="label">${esc(o.label)}</span><span class="rationale">${esc(o.rationale)}</span></div>`).join('')}</div></div>`).join('\n')}
+  <h2>Design decisions</h2>
+  <p class="meta">The council surfaced these taste decisions. Compare the options side by side — pick the one you want for each. (In the forge UI the selection is applied at approval; in this standalone file, resolve inline in PLAN.md with <code>&lt;!-- review: ... --&gt;</code>.)</p>
+  <div class="escalations" data-section="design-decisions" data-decision-count="${open.length}">
+${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
   </div>`}
 
   <hr style="margin: 3rem 0 1.5rem; border: none; border-top: 1px solid var(--border);">
