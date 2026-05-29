@@ -7,16 +7,19 @@ import {
   fetchEvents,
   fetchManifest,
   subscribe,
+  fetchArchitectSessions,
   type CostSummary,
   type Cycle,
   type CycleListSnapshot,
   type EventLogEntry,
   type ConnectionState,
   type InitiativeFeature,
+  type ArchitectSessionSummary,
 } from '@/lib/bridge-client';
 import { CycleToasts } from '@/components/Toasts';
 import { AgentGraphCanvas } from '@/components/AgentGraphCanvas';
 import { VerdictForm } from '@/components/VerdictForm';
+import { ArchitectPanel } from '@/components/ArchitectPanel';
 import { SchedulerBanner } from '@/components/SchedulerBanner';
 import { fetchWiGraph, type WiGraph } from '@/lib/wi-graph';
 import { useGraphModel } from '@/lib/use-graph-model';
@@ -29,6 +32,9 @@ export default function Page() {
   // into ≤4 state flushes/sec so the graph re-derives at a bounded cadence.
   const { events, append: appendEvent, reset: resetEvents } = useBatchedEvents();
   const [connState, setConnState] = useState<ConnectionState>('connecting');
+  // ADR 020 — in-UI architect sessions. Fetched on mount + on every
+  // `architect-list-changed` WS message (the runner checkpoints between turns).
+  const [architectSessions, setArchitectSessions] = useState<ArchitectSessionSummary[]>([]);
 
   // The WS handler captures activeCycleId via a ref so we don't churn the
   // subscription every time the operator clicks a different cycle.
@@ -42,6 +48,9 @@ export default function Page() {
     fetchCycles()
       .then((s) => { if (!cancelled) setSnapshot(s); })
       .catch(() => { /* bridge offline — connState will report */ });
+    fetchArchitectSessions()
+      .then((s) => { if (!cancelled) setArchitectSessions(s); })
+      .catch(() => { /* ignore */ });
 
     const sub = subscribe({
       onState: setConnState,
@@ -50,6 +59,8 @@ export default function Page() {
           setSnapshot(msg.cycles);
         } else if (msg.type === 'cycle-list-changed') {
           fetchCycles().then(setSnapshot).catch(() => { /* ignore */ });
+        } else if (msg.type === 'architect-list-changed') {
+          fetchArchitectSessions().then(setArchitectSessions).catch(() => { /* ignore */ });
         } else if (msg.type === 'event' && msg.cycleId === activeCycleIdRef.current) {
           appendEvent(msg.event);
         }
@@ -86,6 +97,13 @@ export default function Page() {
   }, [activeCycleId]);
 
   const allCycles = useMemo(() => [...snapshot.live, ...snapshot.recent], [snapshot]);
+  // Project names the operator has worked with — feeds the new-idea datalist.
+  const knownProjects = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of allCycles) if (c.project) names.add(c.project);
+    for (const s of architectSessions) names.add(s.project);
+    return [...names].sort();
+  }, [allCycles, architectSessions]);
   const defaultActive = useMemo(
     () => snapshot.live[0] ?? snapshot.recent[0] ?? null,
     [snapshot],
@@ -208,6 +226,8 @@ export default function Page() {
       </header>
 
       <SchedulerBanner />
+
+      <ArchitectPanel sessions={architectSessions} knownProjects={knownProjects} />
 
       <CyclesTab cycles={allCycles} activeId={activeCycleId} onSelect={setActiveCycleId} />
 

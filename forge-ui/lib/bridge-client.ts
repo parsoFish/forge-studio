@@ -43,7 +43,8 @@ export type EventLogEntry = {
 export type BridgeMessage =
   | { type: 'snapshot'; cycles: CycleListSnapshot }
   | { type: 'event'; cycleId: string; event: EventLogEntry }
-  | { type: 'cycle-list-changed' };
+  | { type: 'cycle-list-changed' }
+  | { type: 'architect-list-changed' };
 
 export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridge';
 
@@ -198,6 +199,128 @@ export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boo
   if (!base) return { ok: false, error: 'no bridge configured' };
   try {
     const res = await fetch(`${base}/api/verdict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ---- Architect (ADR 020) -------------------------------------------------
+
+export type ArchitectPhase =
+  | 'interviewing'
+  | 'awaiting-answers'
+  | 'drafting'
+  | 'awaiting-verdict'
+  | 'finalizing'
+  | 'committed'
+  | 'rejected';
+
+export type ArchitectQuestion = {
+  question: string;
+  header: string;
+  options: { label: string; description: string }[];
+};
+
+export type ArchitectEscalation = {
+  id: string;
+  critic: string;
+  question: string;
+  options: { label: string; rationale: string }[];
+};
+
+export type ArchitectSessionSummary = {
+  sessionId: string;
+  project: string;
+  projectRepoPath: string;
+  phase: ArchitectPhase;
+  round: number;
+  idea: string;
+  questions: ArchitectQuestion[] | null;
+  escalations: ArchitectEscalation[] | null;
+  planUrl: string | null;
+};
+
+export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {
+  const base = await resolveBridgeUrl();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/api/architect/sessions`);
+    if (!res.ok) return [];
+    const body = (await res.json()) as { sessions: ArchitectSessionSummary[] };
+    return body.sessions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Absolutise a bridge-relative `planUrl` (e.g. `/api/architect/file/...`) for
+ *  an iframe `src`. Returns '' when no bridge is configured. */
+export async function architectFileUrl(relative: string): Promise<string> {
+  const base = await resolveBridgeUrl();
+  return base ? `${base}${relative}` : '';
+}
+
+export async function startArchitect(input: {
+  project: string;
+  idea: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/architect/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as { ok?: boolean; sessionId?: string; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok, sessionId: body.sessionId };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+export async function postArchitectAnswers(input: {
+  project: string;
+  sessionId: string;
+  answers: { question: string; answer: string }[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/architect/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+export type PlanVerdict = {
+  project: string;
+  sessionId: string;
+  kind: 'approve' | 'revise' | 'reject';
+  selections?: Record<string, string>;
+  rationale?: string;
+};
+
+export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/plan-verdict`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
