@@ -1,9 +1,9 @@
 /**
  * Stop conditions for the Ralph loop. The loop exits when any one fires.
  *
- * Each condition is a pure function over loop state. Wedged-detector and
- * quality-gates each shell out to side effects (file diff, test runner) but
- * report a boolean.
+ * Each condition is a pure function over loop state. The quality-gates
+ * condition shells out to side effects (file diff, test runner) but reports a
+ * boolean.
  */
 
 import { execFileSync } from 'node:child_process';

@@ -39,7 +39,7 @@ Fix required four separate changes:
 
 Core lesson: **every automated loop needs a termination condition based on objective evidence of progress, not just "the agent says it's done."**
 
-In v2 the fix is structural: Ralph's wedged-loop detector + orchestrator-verified quality gates + worktree-per-claim from the unattended scheduler — all three together close this hole.
+In v2 the fix is structural: Ralph's iteration-budget bound + orchestrator-verified quality gates + worktree-per-claim from the unattended scheduler — all three together close this hole. (The original design used a dedicated wedged-detector here; it was removed in the Tier 2 thinning — see [[wedged-loop-detector]].)
 
 ## Sources
 
@@ -47,6 +47,6 @@ In v2 the fix is structural: Ralph's wedged-loop detector + orchestrator-verifie
 
 ## See also
 
-- [[wedged-loop-detector]] — the structural fix in v2.
+- [[wedged-loop-detector]] — the no-progress bound (dedicated detector removed; iteration budget now).
 - [[quality-gates-orchestrator-verified]] — the trust-model fix.
 - [[gh-cli-and-worktrees]] — the isolation that makes SHA-guard work.

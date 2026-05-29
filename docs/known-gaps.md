@@ -76,15 +76,19 @@ resume.
 - **Direction:** rebase the preserved branch onto current main at the start of a
   resume (or detect divergence and surface a clear "rebase needed" action).
 
-### 5. Stale / contradictory brain content from incomplete removals — MEDIUM
-`brain/cycles/themes/wedged-loop-detector.md` is still a `pattern` theme
+### 5. Stale / contradictory brain content from incomplete removals — ✅ RESOLVED 2026-05-29
+~~`brain/cycles/themes/wedged-loop-detector.md` is still a `pattern` theme
 describing wedged-detection as a live Ralph stop-condition, though the thinning
-removed it; it contradicts `agent-stuck-no-detection.md`, and `grep wedged`
-still finds residual code refs (`orchestrator/scheduler.ts`,
-`loops/ralph/runner.ts`, `developer-loop.ts`, `LoopResult.'wedged'`). `forge
-brain lint` catches the contradiction (1 flag) but it's unresolved.
-- **Direction:** finish the wedged removal — delete/recategorize the theme,
-  drop the dangling `'wedged'` status, scrub residual refs.
+removed it; it contradicts `agent-stuck-no-detection.md`.~~ Fixed: the canonical
+theme now documents the removal + rationale (kept as the record of *why* not to
+re-add it), and the live-claims in `agent-stuck-no-detection`, `ralph-loop-pattern`,
+`quality-gates-orchestrator-verified`, `review-fix-loop-spinning`, `patterns.md`,
+and the `stop-conditions.ts` doc comment were corrected. The lint contradiction
+flag cleared (13 → 12 flags, still 0 errors). The `LoopResult.'wedged'` status
+the deferred-defects note worried about was already gone (`status` is
+`'complete' | 'failed'`); the only remaining `'wedged'` ref is the *intentional*
+backward-compat in `cli/cycle-retention.ts` (retention of historical archives
+that legitimately recorded `stop_reason: 'wedged'`) — left in place by design.
 
 ### 6. Thin observability around stalls & retries — MEDIUM
 Root-causing the cascade-v4 baseline failure required manual archaeology (read

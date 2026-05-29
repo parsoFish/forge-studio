@@ -24,7 +24,7 @@
 - [`declarative-specs-vs-imperative`](./themes/declarative-specs-vs-imperative.md) — Describe desired state; let the agent iterate. Bad specs → mediocre results.
 - [`skills-as-agent-surface`](./themes/skills-as-agent-surface.md) — Every "agent" is a Claude Code skill (SKILL.md).
 - [`llm-council-pattern`](./themes/llm-council-pattern.md) — Multi-perspective critic chain (CEO/eng/design/DX) used by architect.
-- [`wedged-loop-detector`](./themes/wedged-loop-detector.md) — Stop condition for non-converging Ralph loops.
+- [`wedged-loop-detector`](./themes/wedged-loop-detector.md) — the dedicated no-progress detector was removed (Tier 2 thinning); iteration budget is the sole bound now.
 - [`quality-gates-orchestrator-verified`](./themes/quality-gates-orchestrator-verified.md) — Acceptance-criterion verification runs in orchestrator, not agent.
 
 ### Orchestration & infra

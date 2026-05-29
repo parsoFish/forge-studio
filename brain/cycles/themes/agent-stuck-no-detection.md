@@ -11,7 +11,6 @@ keywords:
   - timeout
   - no-progress
   - diagnostic-capture
-  - wedged
   - $8-12-waste
 created_at: 2026-05-04T19:30:00.000Z
 updated_at: 2026-05-04T19:30:00.000Z
@@ -36,7 +35,7 @@ Secondary benefit — **learning generation**: each stuck event produces a struc
 
 Agents can also self-report: *"If you are unable to make progress after 5 attempts at the same error, output STUCK: <structured diagnosis>."*
 
-In v2 the wedged-loop detector in [`loops/ralph/stop-conditions.ts`](../../../loops/ralph/stop-conditions.ts) implements this heuristic: 3 consecutive iterations with no `fix_plan.md` progress AND no files changed → wedged. The diagnostic-capture and learning-generation surface land in the reflector skill.
+Early v2 implemented this heuristic as a wedged-loop detector in `loops/ralph/stop-conditions.ts` (3 consecutive iterations with no `fix_plan.md` progress AND no files changed → wedged), but it was **removed** in the Tier 2 thinning (2026-05-26) as fragile — the iteration budget is now the sole no-progress bound (see [[wedged-loop-detector]]). The diagnostic-capture and learning-generation surface land in the reflector skill.
 
 ## Sources
 
@@ -44,6 +43,6 @@ In v2 the wedged-loop detector in [`loops/ralph/stop-conditions.ts`](../../../lo
 
 ## See also
 
-- [[wedged-loop-detector]] — v2's implementation.
+- [[wedged-loop-detector]] — why the dedicated v2 detector was removed.
 - [[rate-limit-no-backoff]] — sister waste category.
 - [[design-is-the-bottleneck]] — root cause for many "stuck" events is unclear acceptance criteria.

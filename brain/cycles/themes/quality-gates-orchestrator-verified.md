@@ -44,5 +44,5 @@ Trade-off: makes acceptance-criteria authoring discipline more important — vag
 ## See also
 
 - [[ralph-loop-pattern]] — the loop the gate stops.
-- [[wedged-loop-detector]] — the other primary stop condition.
+- [[wedged-loop-detector]] — note: the dedicated no-progress detector was removed; iteration budget is the other bound now.
 - [[spec-driven-work-items]] — where verifiable criteria live.
