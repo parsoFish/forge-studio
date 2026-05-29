@@ -10,7 +10,7 @@
 > Its only handoff to forge is the files it writes
 > (`_queue/pending/INIT-*.md` + roadmap rows), which the scheduler picks
 > up unattended. Design of record:
-> [`brain/forge/themes/human-interaction-via-own-session.md`](../../brain/forge/themes/human-interaction-via-own-session.md)
+> [`brain/forge-dev/themes/human-interaction-via-own-session.md`](../../brain/forge-dev/themes/human-interaction-via-own-session.md)
 > (resolves retro Q4; US-3.1 / US-1.0).
 
 ## Purpose

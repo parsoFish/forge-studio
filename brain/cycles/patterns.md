@@ -71,6 +71,12 @@
 - [`avoid-hand-rolling-tools`](./themes/avoid-hand-rolling-tools.md) — User principle 1: plug into battle-tested community tools.
 - [`simplicity-as-architecture`](./themes/simplicity-as-architecture.md) — User principle 2: every "no" defends the small core.
 
+### UI / browser harness
+
+- [`dom-as-metrics-for-headless-driven-uis`](./themes/dom-as-metrics-for-headless-driven-uis.md) — Mirror every load-bearing UI state to `data-*` attributes so headless/LLM-driven probes drive the page by reading structured DOM, not scraped text.
+- [`fixed-port-takeover-for-pinned-browser-tabs`](./themes/fixed-port-takeover-for-pinned-browser-tabs.md) — Pin known dev-server ports and kill prior listeners so a single browser tab survives across re-runs.
+- [`windows-browser-to-wsl-via-window-location`](./themes/windows-browser-to-wsl-via-window-location.md) — A Windows browser reaches a WSL2-hosted dev server via `localhost` (auto-forwarded), not `127.0.0.1` (Windows loopback).
+
 ## Format
 
 Each entry on this index is one line:

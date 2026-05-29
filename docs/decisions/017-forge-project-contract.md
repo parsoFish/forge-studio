@@ -13,7 +13,7 @@ must first satisfy a set of structural properties. Each property is the
 generalisation of a specific trafficGame blocker that had to be fixed
 before unattended runs worked (full evidence:
 `_logs/2026-05-16_trafficgame-arc-reflection/retro.md` §3; durable record:
-brain theme [`forge-project-onboarding-contract`](../../brain/forge/themes/forge-project-onboarding-contract.md)):
+brain theme [`forge-project-onboarding-contract`](../../brain/forge-dev/themes/forge-project-onboarding-contract.md)):
 
 - trafficGame's ~18k-LOC / 106-file test suite broke the per-iteration
   quality gate until it was ripped down to a fast unit suite.
@@ -128,8 +128,8 @@ review redesign).
 
 ## References
 
-- [`brain/forge/themes/forge-project-onboarding-contract.md`](../../brain/forge/themes/forge-project-onboarding-contract.md) — the C1–C6 contract, design of record.
-- [`brain/forge/themes/human-directed-work-as-initiatives.md`](../../brain/forge/themes/human-directed-work-as-initiatives.md) — the blurred-lines antipattern; the origin tag (G6) is the cohort-separation sibling that makes the autonomous mode this contract gates measurable.
+- [`brain/forge-dev/themes/forge-project-onboarding-contract.md`](../../brain/forge-dev/themes/forge-project-onboarding-contract.md) — the C1–C6 contract, design of record.
+- [`brain/cycles/themes/human-directed-work-as-initiatives.md`](../../brain/cycles/themes/human-directed-work-as-initiatives.md) — the blurred-lines antipattern; the origin tag (G6) is the cohort-separation sibling that makes the autonomous mode this contract gates measurable.
 - `_logs/2026-05-16_trafficgame-arc-reflection/retro.md` §3 (C1–C6 derivation), §6 closure goals G2 (contract sufficiency) and G6 (origin tagging).
 - [`docs/forge-user-stories.md`](../forge-user-stories.md) US-4.1 — the operator-facing requirement.
 - [`orchestrator/preflight.ts`](../../orchestrator/preflight.ts) — the implementation; [`orchestrator/preflight.test.ts`](../../orchestrator/preflight.test.ts) — clause-by-clause tests.

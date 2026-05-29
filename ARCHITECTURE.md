@@ -104,7 +104,7 @@ via the **`/forge-architect`** slash command
 Its only handoff to forge is the files it writes
 (`_queue/pending/INIT-*.md` + roadmap rows); the scheduler picks those
 up unattended. Design of record:
-[`brain/cycles/themes/human-interaction-via-own-session.md`](./brain/cycles/themes/human-interaction-via-own-session.md)
+[`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)
 (resolves retro Q4; US-3.1 / US-1.0).
 
 ### 3. Project Manager *(unattended)*
@@ -175,7 +175,7 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 Three human interaction points, each run in the **operator's own Claude
 session** as a slash command — never a forge-spawned agent and never a
 bench simulator in production
-([`brain/cycles/themes/human-interaction-via-own-session.md`](./brain/cycles/themes/human-interaction-via-own-session.md)):
+([`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)):
 
 | Moment | Command | File handoff |
 |---|---|---|

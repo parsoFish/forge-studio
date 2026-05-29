@@ -229,7 +229,7 @@ The exploration-initiative shape requires:
    there's no metric_command to put in the manifest. See
    [holistic-metrics-onboarding](./holistic-metrics-onboarding.md).
 2. **A parametric-design-search harness** — generic or project-local.
-   See [parametric-design-search](./parametric-design-search.md).
+   See [parametric-design-search](../../cycles/themes/parametric-design-search.md).
 3. **The architect skill must read the brain themes for prior
    hypotheses** so it can propose new ones (not just enumerate
    existing failures). The brain-first-research clause already
@@ -252,7 +252,7 @@ the trafficGame arc — an operator-driven multi-session conversation
 that succeeds but pollutes the autonomy signal.
 
 Distinguishing the two operational modes structurally (per
-[human-directed-work-as-initiatives](./human-directed-work-as-initiatives.md)'s
+[human-directed-work-as-initiatives](../../cycles/themes/human-directed-work-as-initiatives.md)'s
 `origin` tag) is the start; building the second pipeline shape is
 the finish.
 
@@ -261,7 +261,7 @@ the finish.
 - PR #57 (merged 2026-05-23) — the trafficGame arc that ran as
   exploration but had no forge shape for it.
 - [`projects/trafficGame/brain/themes/2026-05-23-grading-frontier-infrastructure.md`](../../../projects/trafficGame/brain/themes/2026-05-23-grading-frontier-infrastructure.md) — the project-local instance.
-- [`brain/_raw/cycles/2026-05-23_trafficgame-elevation-grading-arc.md`](../_raw/2026-05-23_trafficgame-elevation-grading-arc.md) — the cycle archive.
+- [`brain/cycles/_raw/2026-05-23_trafficgame-elevation-grading-arc.md`](../../cycles/_raw/2026-05-23_trafficgame-elevation-grading-arc.md) — the cycle archive.
 
 ## See also
 

@@ -4,7 +4,7 @@
 planner/architect and reflector**; the dev-loop and reviewer
 deliberately do NOT read the brain (their intent is wholly in the
 work items the planner authored). See the brain-read-policy theme
-(`brain/cycles/themes/brain-read-policy.md`) and F-34 / F-41.
+(`brain/forge-dev/themes/brain-read-policy.md`) and F-34 / F-41.
 Amended 2026-05-26 — three-brain model (ADR 018): dev-loop and reviewer
 MAY read Brain 3 (`<project-repo>/brain/`) for supplemental project
 context, but this is advisory not mandatory. The forge brain (Brains 1+2)

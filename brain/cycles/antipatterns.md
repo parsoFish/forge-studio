@@ -25,6 +25,8 @@
 ### Operational discipline
 
 - [`human-directed-work-as-initiatives`](./themes/human-directed-work-as-initiatives.md) — Hand-directed project surgery routed through the pipeline pollutes autonomy metrics; needs an `origin` tag.
+- [`pm-bounded-brain-query`](./themes/pm-bounded-brain-query.md) — 9+ brain-query calls in one cycle signals exploration confusion, not depth; the PM SKILL caps it at ≤3 queries.
+- [`quality-gate-cmd-must-assert-new-work`](./themes/quality-gate-cmd-must-assert-new-work.md) — A `quality_gate_cmd` like `go test ./...` false-passes when zero tests were added; the gate must assert the expected new artefact landed.
 
 ## Format
 

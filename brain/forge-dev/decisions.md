@@ -17,7 +17,7 @@ The full ADR set lives in [`docs/decisions/`](../../../docs/decisions/). This in
 - [`holistic-metrics-onboarding`](./themes/holistic-metrics-onboarding.md) — A new contract clause (C7) — projects declare a holistic metric command + locked baselines + regression budget. Tests verify "did this break"; metrics verify "did this help". Derived from the trafficGame collision/elevation arc.
 - [`exploration-vs-implementation-initiatives`](./themes/exploration-vs-implementation-initiatives.md) — Exploration initiatives (sweep parameter space for a measurable outcome) need a different pipeline shape than implementation initiatives. Counterfactual reconstruction of the trafficGame arc's structure.
 
-> Most ADRs surface as `pattern`-categorised theme pages indexed in [`patterns.md`](./patterns.md). This index is reserved for theme pages whose primary frame is "we chose X over Y because Z" — i.e. the *why* of a decision rather than the *what* of a pattern.
+> Most ADRs surface as `pattern`-categorised theme pages indexed in [`patterns.md`](../cycles/patterns.md). This index is reserved for theme pages whose primary frame is "we chose X over Y because Z" — i.e. the *why* of a decision rather than the *what* of a pattern.
 
 ## Format
 

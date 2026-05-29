@@ -91,18 +91,38 @@ const CATEGORY_TO_INDEX_FILE: Record<string, string> = {
   reference: 'reference.md',
 };
 
+/**
+ * Which brain sub-wiki owns each theme category (three-brain model, ADR 018).
+ * Cycle-derived knowledge (patterns/antipatterns/operations) lives in Brain 2
+ * (`cycles/`); forge-engineering knowledge (decisions/reference) lives in
+ * Brain 1 (`forge-dev/`). Both the theme files and their category index sit in
+ * the owning sub-wiki.
+ */
+const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
+  pattern: 'cycles',
+  antipattern: 'cycles',
+  operation: 'cycles',
+  decision: 'forge-dev',
+  reference: 'forge-dev',
+};
+
+/** The two forge-side theme directories, relative to `brain/`. */
+const THEME_SUBDIRS = ['cycles', 'forge-dev'] as const;
+
 // ---------- helpers ----------
 
 function readThemeFiles(brainRoot: string): string[] {
   const files: string[] = [];
   if (!existsSync(brainRoot)) return files;
 
-  // cycles/themes/ — the primary forge-side theme store after the three-brain restructure
-  const cyclesThemes = join(brainRoot, 'cycles', 'themes');
-  if (existsSync(cyclesThemes)) {
-    for (const entry of readdirSync(cyclesThemes)) {
+  // Forge-side themes live in two sub-wikis (three-brain model, ADR 018):
+  // cycles/themes/ (Brain 2) and forge-dev/themes/ (Brain 1).
+  for (const sub of THEME_SUBDIRS) {
+    const dir = join(brainRoot, sub, 'themes');
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir)) {
       if (entry === 'README.md' || !entry.endsWith('.md')) continue;
-      files.push(join(cyclesThemes, entry));
+      files.push(join(dir, entry));
     }
   }
 
@@ -110,6 +130,15 @@ function readThemeFiles(brainRoot: string): string[] {
   // They are not linted from forge-side; lint them inside the project repo instead.
 
   return files;
+}
+
+/** Absolute path to a theme slug if it exists in either forge-side theme dir. */
+function findThemeBySlug(brainRoot: string, slug: string): string | null {
+  for (const sub of THEME_SUBDIRS) {
+    const candidate = join(brainRoot, sub, 'themes', `${slug}.md`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
 }
 
 /**
@@ -259,10 +288,7 @@ export function checkIndexSync(forgeRoot: string): Finding[] {
     const indexFile = CATEGORY_TO_INDEX_FILE[cat];
     if (!indexFile) continue;
 
-    const project = projectOfTheme(file, brainRoot);
-    const indexPath = project
-      ? join(brainRoot, 'projects', project, indexFile) // legacy; will be gone after Phase 2
-      : join(brainRoot, 'cycles', indexFile);
+    const indexPath = join(brainRoot, CATEGORY_TO_BRAIN_SUBDIR[cat] ?? 'cycles', indexFile);
 
     if (!existsSync(indexPath)) {
       findings.push({
@@ -349,9 +375,9 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
     }
 
     for (const slug of wikilinks) {
-      // Resolve against cycles/themes/<slug>.md. Project themes (Brain 3)
-      // live in separate repos and can't be resolved from forge.
-      const hit = existsSync(join(brainRoot, 'cycles', 'themes', `${slug}.md`));
+      // Resolve against either forge-side theme dir (cycles/ or forge-dev/).
+      // Project themes (Brain 3) live in separate repos — not resolvable here.
+      const hit = findThemeBySlug(brainRoot, slug) !== null;
       if (!hit) {
         findings.push({
           category: 'error',
