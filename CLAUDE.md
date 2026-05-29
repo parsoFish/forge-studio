@@ -232,3 +232,14 @@ produces a chromium-recorded synthetic journey under
 `forge-ui/.demo-shots/journey/`; `node scripts/verify-cycle.mjs <init>`
 runs a real cycle end-to-end with auto-approve + closure + reflection
 capture under `forge-ui/.demo-shots/verify/`.
+
+`node scripts/e2e-journey.mjs` is the **canonical end-to-end operator journey**
+through the centralised UI (ADR 020 + 021): dashboard new-idea → `/architect/<sid>`
+interview → PLAN gate approve → autonomous cycle on the grouped initiative pane
+→ `/review/<cycleId>` structured demo → approve → reflection. It emulates the
+architect runner's turns + the autonomous cycle by seeding the same files/events
+the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`), grounded in the real cycle
+event sequence; records a **video** + frame gallery + `index.html` under
+`forge-ui/.demo-shots/e2e/`, and cleans up its synthetic project/cycle/queue
+state afterwards. (`scripts/architect-gallery.mjs` covers just the architect +
+review screens.)
