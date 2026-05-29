@@ -16,7 +16,7 @@
  * fail-fast-with-messages contract.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type {
@@ -144,6 +144,86 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
     diffStat: model.diffStat,
     acceptanceCriteria: model.acceptanceCriteria,
   };
+}
+
+export type CapturedMedia = {
+  label: string;
+  beforeImage?: string | null;
+  afterImage?: string | null;
+};
+
+/** Per-image inline cap (bytes) — keep demo.json from ballooning. */
+const MAX_INLINE_IMAGE_BYTES = 1_500_000;
+
+function pngToDataUri(file: string): string | null {
+  try {
+    const buf = readFileSync(file);
+    if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null;
+    return `data:image/png;base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect captured before/after PNGs from a capture bundle (the
+ * `generateComparisonDemo` output dir, with `before/<label>.png` +
+ * `after/<label>.png`) into `CapturedMedia[]`, keyed by filename stem. Used by
+ * `forge demo capture` to back-fill `demo.json`. Best-effort; never throws.
+ */
+export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
+  const byLabel = new Map<string, CapturedMedia>();
+  const scan = (side: 'before' | 'after'): void => {
+    const dir = join(bundleDir, side);
+    let names: string[] = [];
+    try { names = readdirSync(dir); } catch { return; }
+    for (const name of names) {
+      if (!name.toLowerCase().endsWith('.png')) continue;
+      const label = name.replace(/\.png$/i, '');
+      const uri = pngToDataUri(join(dir, name));
+      if (!uri) continue;
+      const entry = byLabel.get(label) ?? { label };
+      if (side === 'before') entry.beforeImage = uri;
+      else entry.afterImage = uri;
+      byLabel.set(label, entry);
+    }
+  };
+  scan('before');
+  scan('after');
+  return [...byLabel.values()];
+}
+
+/**
+ * Merge captured before/after media (data URIs) into a `DemoModel`'s
+ * checkpoints by `label`. Matching checkpoints gain their images; captured
+ * labels with no matching checkpoint are appended as screenshot checkpoints so
+ * nothing captured is dropped. Pure + immutable — the media-capture skill
+ * (`forge demo capture`) calls this then re-renders the bundle.
+ */
+export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]): DemoModel {
+  const byLabel = new Map(captured.map((c) => [c.label, c]));
+  const matchedLabels = new Set<string>();
+  const checkpoints = model.checkpoints.map((cp) => {
+    const cap = byLabel.get(cp.label);
+    if (!cap) return cp;
+    matchedLabels.add(cp.label);
+    return {
+      ...cp,
+      kind: cp.kind === 'harness' ? cp.kind : 'screenshot',
+      beforeImage: cap.beforeImage ?? cp.beforeImage ?? null,
+      afterImage: cap.afterImage ?? cp.afterImage ?? null,
+    } satisfies DemoModelCheckpoint;
+  });
+  const appended = captured
+    .filter((c) => !matchedLabels.has(c.label) && (c.beforeImage || c.afterImage))
+    .map<DemoModelCheckpoint>((c) => ({
+      label: c.label,
+      kind: 'screenshot',
+      caption: c.label,
+      beforeImage: c.beforeImage ?? null,
+      afterImage: c.afterImage ?? null,
+    }));
+  return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
 
 /** Render the self-contained DEMO.html from a `DemoModel` (reuses the existing

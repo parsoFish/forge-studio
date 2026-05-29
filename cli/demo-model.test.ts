@@ -15,6 +15,7 @@ import {
   renderDemoMarkdown,
   renderDemoHtml,
   renderDemoBundle,
+  mergeCapturedMedia,
   toComparisonModel,
   type DemoModel,
 } from './demo-model.ts';
@@ -137,6 +138,24 @@ test('renderDemoBundle: missing demo.json → clear error', () => {
   const res = renderDemoBundle(join(dir, 'sub'), 'T');
   assert.equal(res.ok, false);
   assert.match(res.errors[0], /demo\.json not found/);
+});
+
+test('mergeCapturedMedia: fills images on matching checkpoints + appends unmatched', () => {
+  const m = validModel(); // checkpoint label 'toggle'
+  const merged = mergeCapturedMedia(m, [
+    { label: 'toggle', beforeImage: 'data:image/png;base64,B', afterImage: 'data:image/png;base64,A' },
+    { label: 'extra', afterImage: 'data:image/png;base64,X' },
+  ]);
+  const toggle = merged.checkpoints.find((c) => c.label === 'toggle')!;
+  assert.equal(toggle.beforeImage, 'data:image/png;base64,B');
+  assert.equal(toggle.afterImage, 'data:image/png;base64,A');
+  const extra = merged.checkpoints.find((c) => c.label === 'extra')!;
+  assert.ok(extra, 'unmatched captured label appended');
+  assert.equal(extra.afterImage, 'data:image/png;base64,X');
+  // The merged model still validates (images are data: URIs).
+  assert.deepEqual(validateDemoModel(merged), []);
+  // Original is untouched (immutability).
+  assert.equal(m.checkpoints[0].beforeImage, undefined);
 });
 
 test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {

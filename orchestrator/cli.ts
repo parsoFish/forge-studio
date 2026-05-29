@@ -920,10 +920,51 @@ async function cmdDemo(rest: string[]): Promise<void> {
     return;
   }
 
+  // ADR 021: `forge demo capture <init>` is the media-capture skill's engine —
+  // it runs the two-worktree + Playwright before/after capture and back-fills
+  // the captured images into the unifier's demo.json, then re-renders the
+  // bundle. Best-effort: any failure leaves demo.json notes-only and exits 0
+  // (capture must never fail a cycle).
+  if (rest[0] === 'capture') {
+    const initiativeId = rest[1];
+    if (!initiativeId) {
+      console.error('forge demo capture: usage: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
+      process.exit(2);
+    }
+    const demoDir = flagValue(rest, '--dir') ?? join('demo', initiativeId);
+    const jsonPath = join(demoDir, 'demo.json');
+    if (!existsSync(jsonPath)) {
+      console.error(`forge demo capture: ${jsonPath} not found — author demo.json first. Skipping (best-effort).`);
+      return;
+    }
+    const projectArg = flagValue(rest, '--project');
+    const projectRepoPath = projectArg ? resolve('projects', projectArg) : process.cwd();
+    const baseRef = flagValue(rest, '--base') ?? 'main';
+    const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
+    try {
+      const { generateComparisonDemo } = await import('../cli/demo.ts');
+      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle } = await import('../cli/demo-model.ts');
+      const bundleDir = join(demoDir, '.capture');
+      await generateComparisonDemo({
+        projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef,
+        outDir: bundleDir, initiativeId, build: true,
+      });
+      const captured = collectCapturedMedia(bundleDir);
+      const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
+      writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
+      const r = renderDemoBundle(demoDir, new Date().toISOString());
+      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md/DEMO.html' : 'render failed: ' + r.errors.join('; ')}`);
+    } catch (err) {
+      console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
+    }
+    return; // never a hard failure
+  }
+
   const [project, baseRef, changedRef] = rest;
   if (!project || !baseRef || !changedRef) {
     console.error('forge demo: usage: demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]');
     console.error('       or: demo render <initiative-id> [--dir <demoDir>]');
+    console.error('       or: demo capture <initiative-id> [--project <name>] [--dir <demoDir>]');
     process.exit(2);
   }
   const projectRepoPath = resolve('projects', project);
