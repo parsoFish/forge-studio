@@ -381,6 +381,47 @@ export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean
   }
 }
 
+// ---- Reflection (the third human moment, in-UI) -------------------------
+
+export type ReflectionData = {
+  cycleId: string;
+  questions: ArchitectQuestion[];
+  answered: boolean;
+};
+
+export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {
+  const base = await resolveBridgeUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/reflect/${encodeURIComponent(cycleId)}`);
+    if (!res.ok) return null;
+    return (await res.json()) as ReflectionData;
+  } catch {
+    return null;
+  }
+}
+
+export async function postReflectionAnswers(input: {
+  cycleId: string;
+  answers: { question: string; answer: string }[];
+  freeform?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/reflect/${encodeURIComponent(input.cycleId)}/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: input.answers, freeform: input.freeform }),
+    });
+    const body = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+    return { ok: !!body.ok };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ---- WebSocket subscription ---------------------------------------------
 
 export type Subscription = { close: () => void };

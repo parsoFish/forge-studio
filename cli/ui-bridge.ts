@@ -517,6 +517,7 @@ async function handleHttp(
 
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
+  if (await handleReflect(req, res, ctx, url, method)) return;
 
   // Scheduler lifecycle.
   if (method === 'GET' && url === '/api/scheduler/status') {
@@ -847,6 +848,52 @@ async function handleArchitect(
       }
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, kind: body.kind });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---- Reflection routes (the third human moment, in-UI) --------------------
+//
+// The reflector emits `_logs/<cycleId>/user-questions.json` (StructuredQuestion[])
+// as its Stage-2 file handoff; the operator's answers land in
+// `user-feedback.md`. The /reflect/<cycleId> page renders the questions and
+// POSTs the answers here — converting the `/forge-reflect` slash command into
+// an in-UI page, consistent with the in-UI architect + review moments.
+async function handleReflect(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
+    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
+    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }); return true; }
+    const dir = join(ctx.logsRoot, cycleId);
+    const questions = readJsonFile<unknown[]>(join(dir, 'user-questions.json')) ?? [];
+    const answered = existsSync(join(dir, 'user-feedback.md'));
+    sendJson(res, 200, { cycleId, questions, answered });
+    return true;
+  }
+
+  if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
+    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
+    try {
+      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
+      const dir = join(ctx.logsRoot, cycleId);
+      if (!existsSync(dir)) { sendJson(res, 404, { error: 'cycle not found', cycleId }); return true; }
+      const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
+      for (const a of body.answers ?? []) {
+        lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
+      }
+      lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
+      writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
+      sendJson(res, 200, { ok: true });
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
     }

@@ -29,6 +29,7 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
   const [demo, setDemo] = useState<DemoModel | null>(null);
   const [events, setEvents] = useState<EventLogEntry[]>([]);
   const [nowMs, setNowMs] = useState(0);
+  const [approved, setApproved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,10 +106,20 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
             )}
 
             {ready ? (
-              <ReviewVerdictForm initiativeId={cycle.initiativeId} />
+              <ReviewVerdictForm initiativeId={cycle.initiativeId} onSubmitted={(kind) => { if (kind === 'approve') setApproved(true); }} />
             ) : (
               <div style={{ border: '1px solid #30363d', borderRadius: 10, padding: '14px 18px', background: '#0d1117', fontSize: 13, color: '#8b949e' }}>
                 This cycle is <strong style={{ color: '#e6edf3' }}>{cycle.status}</strong> — a verdict is only needed once it reaches <code>ready-for-review</code>.
+              </div>
+            )}
+
+            {approved && (
+              <div style={{ border: '1px solid #2ea04366', borderRadius: 10, padding: '14px 18px', background: '#07140d', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ fontSize: 13, color: '#3fb950' }}>Approved — merged. One last step: reflect on the cycle.</span>
+                <Link href={`/reflect/${encodeURIComponent(cycleId)}`} data-action="open-reflect"
+                  style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 600, color: '#fff', background: '#8957e5', border: '1px solid #30363d', borderRadius: 6, padding: '6px 14px', textDecoration: 'none' }}>
+                  Reflect on this cycle →
+                </Link>
               </div>
             )}
           </div>

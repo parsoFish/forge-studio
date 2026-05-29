@@ -47,7 +47,14 @@ related_themes:
 > screen renders a structured `demo.json` + the verdict form) to tighten
 > iteration. The same load-bearing property holds: the PR is still created +
 > merged on approve, and there is **no auto-approve** — the operator's verdict
-> gates the merge. Reflection remains an own-session slash command as below.
+> gates the merge.
+>
+> **Amended again 2026-05-30.** The **reflection** moment also moved into the
+> forge UI (the `/reflect/[cycleId]` screen renders the reflector's Stage-2
+> `user-questions.json` and writes `user-feedback.md`). All three human moments
+> now run in-UI on dedicated screens; the invariant below — explicit,
+> operator-initiated, impossible to silently auto-satisfy — holds on every one
+> (reflection still only writes the brain after the operator submits feedback).
 
 Forge has exactly **three deliberate human interaction moments**. The
 operator's direction: each is performed in the operator's **own Claude
@@ -59,7 +66,7 @@ implementation is a **slash command** per moment.
 |---|---|---|---|
 | Roadmap / architect | **in-UI architect** ([ADR 020](../../../docs/decisions/020-architect-in-ui.md); was `/forge-architect`) | brain, `projects/<name>/roadmap.md`, prior initiatives, `_architect/<sid>/answers.json` | `_queue/pending/INIT-*.md` + roadmap rows (only on explicit operator approve) |
 | Review feedback & merge | **in-UI review screen** ([ADR 021](../../../docs/decisions/021-local-review-and-unified-demo.md); was `/forge-review` on the PR) | the cycle's structured `demo.json` + status | verdict (approve → PR merged on close / send-back) submitted locally; no auto-approve |
-| Reflection feedback | `/forge-reflect <id>` | `_logs/<id>/user-questions.md` | `_logs/<id>/user-feedback.md` |
+| Reflection feedback | **in-UI reflect screen** (2026-05-30; was `/forge-reflect`) | `_logs/<id>/user-questions.json` | `_logs/<id>/user-feedback.md` (then reflector reruns) |
 
 Why this matters: the trafficGame arc blurred autonomous forge with
 hand-directed work because the human moments had no clean surface — the
