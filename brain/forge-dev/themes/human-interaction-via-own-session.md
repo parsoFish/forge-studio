@@ -20,7 +20,7 @@ keywords:
   - three-moments
   - file-handoff
 created_at: 2026-05-16T00:00:00.000Z
-updated_at: 2026-05-29T00:00:00.000Z
+updated_at: 2026-05-30T00:00:00.000Z
 related_themes:
   - review-phase-target-design
   - forge-current-architecture-as-built
@@ -40,8 +40,14 @@ related_themes:
 > scheduler / `runCycle`), and there is no auto-approve (the operator must
 > resolve every escalation on the PLAN gate before any manifest is queued). The
 > interview uses the same **file-based handoff** the reflector uses
-> (`questions.json` ↔ `answers.json`). Review + reflection remain own-session
-> slash commands as below.
+> (`questions.json` ↔ `answers.json`).
+>
+> **Amended again 2026-05-30 ([ADR 021](../../../docs/decisions/021-local-review-and-unified-demo.md)).**
+> The **review** moment also moved *into the forge UI* (the `/review/[cycleId]`
+> screen renders a structured `demo.json` + the verdict form) to tighten
+> iteration. The same load-bearing property holds: the PR is still created +
+> merged on approve, and there is **no auto-approve** — the operator's verdict
+> gates the merge. Reflection remains an own-session slash command as below.
 
 Forge has exactly **three deliberate human interaction moments**. The
 operator's direction: each is performed in the operator's **own Claude
@@ -52,7 +58,7 @@ implementation is a **slash command** per moment.
 | Moment | Surface | Reads | Writes / effect |
 |---|---|---|---|
 | Roadmap / architect | **in-UI architect** ([ADR 020](../../../docs/decisions/020-architect-in-ui.md); was `/forge-architect`) | brain, `projects/<name>/roadmap.md`, prior initiatives, `_architect/<sid>/answers.json` | `_queue/pending/INIT-*.md` + roadmap rows (only on explicit operator approve) |
-| Review feedback & merge | `/forge-review <id>` | the project-repo PR + initiative branch | PR feedback for the review agent to process, OR the operator merges the PR in GitHub (which closes review) |
+| Review feedback & merge | **in-UI review screen** ([ADR 021](../../../docs/decisions/021-local-review-and-unified-demo.md); was `/forge-review` on the PR) | the cycle's structured `demo.json` + status | verdict (approve → PR merged on close / send-back) submitted locally; no auto-approve |
 | Reflection feedback | `/forge-reflect <id>` | `_logs/<id>/user-questions.md` | `_logs/<id>/user-feedback.md` |
 
 Why this matters: the trafficGame arc blurred autonomous forge with
@@ -65,12 +71,12 @@ production system must therefore have NO auto-approve verdict path and
 NO bench-simulator wired into a live cycle; simulators belong only to
 benchmarks.
 
-This composes with [[review-phase-target-design]] (the PR is the review
-surface; `/forge-review` is how the operator engages it) and turns the
+This composes with [[review-phase-target-design]] and turns the
 "architect is out-of-cycle, hand-run" honest-finding into a *designed*
-property rather than an accident. It does not wire the architect into
-`runCycle` — keeping it a human moment is the intent; the slash command
-is its first-class home.
+property. The original slash-command home for each moment is now,
+per ADR 020/021, an in-UI screen for architect + review (reflection
+stays a slash command) — but the **impossible-to-auto-satisfy** invariant
+above is the load-bearing part and is preserved on every surface.
 
 ## Sources
 

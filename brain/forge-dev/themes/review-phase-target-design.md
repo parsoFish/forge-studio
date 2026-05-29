@@ -21,7 +21,7 @@ keywords:
   - C6
   - merge-boundary
 created_at: 2026-05-16T00:00:00.000Z
-updated_at: 2026-05-16T00:00:00.000Z
+updated_at: 2026-05-30T00:00:00.000Z
 related_themes:
   - merge-boundary-stacked-initiative-failure
   - forge-project-onboarding-contract
@@ -30,6 +30,15 @@ related_themes:
 ---
 
 # Review-phase target design
+
+> **Amended 2026-05-30 ([ADR 021](../../../docs/decisions/021-local-review-and-unified-demo.md)).**
+> The "**PR-as-feedback-surface, user-triggered**" part below is superseded: the
+> operator's review *interaction* now happens **locally in the forge UI** (the
+> `/review/[cycleId]` screen renders a structured `demo.json` + the verdict
+> form), to tighten iteration. Everything else holds — the review phase still
+> assesses the branch against intent, still **creates the PR** with the demo,
+> and closure still merges it on approve with **no auto-merge / no auto-approve**.
+> Only the surface the operator uses to review moved (PR thread → local screen).
 
 The operator's authoritative direction after working the trafficGame arc.
 It replaces the as-built review loop (PR created **and** auto-merged
