@@ -898,9 +898,32 @@ function flagValue(rest: string[], flag: string): string | undefined {
 }
 
 async function cmdDemo(rest: string[]): Promise<void> {
+  // ADR 021: `forge demo render <init>` derives DEMO.md + DEMO.html from the
+  // unifier-authored `demo/<init>/demo.json`. Run from the worktree root (or
+  // pass --dir). The unifier authors demo.json once and runs this to emit the
+  // committed derived artifacts.
+  if (rest[0] === 'render') {
+    const initiativeId = rest[1];
+    if (!initiativeId) {
+      console.error('forge demo render: usage: demo render <initiative-id> [--dir <demoDir>]');
+      process.exit(2);
+    }
+    const demoDir = flagValue(rest, '--dir') ?? join('demo', initiativeId);
+    const { renderDemoBundle } = await import('../cli/demo-model.ts');
+    const res = renderDemoBundle(demoDir, new Date().toISOString());
+    if (!res.ok) {
+      console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
+      for (const e of res.errors) console.error(`  - ${e}`);
+      process.exit(1);
+    }
+    for (const p of res.wrote) console.log(`wrote ${p}`);
+    return;
+  }
+
   const [project, baseRef, changedRef] = rest;
   if (!project || !baseRef || !changedRef) {
     console.error('forge demo: usage: demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]');
+    console.error('       or: demo render <initiative-id> [--dir <demoDir>]');
     process.exit(2);
   }
   const projectRepoPath = resolve('projects', project);

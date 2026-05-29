@@ -100,7 +100,7 @@ export function buildUnifierSystemPrompt(): string {
     '**The orchestrator decides when to stop, not you.** It runs four composed gates between your iterations:',
     '1. `initiative_gate` — the project quality-gate command against the whole branch.',
     '2. `demo_runs_clean` — the project demo-command exits 0 (excused for shape "none").',
-    '3. `pr_self_contained` — `demo/<initiative-id>/DEMO.md` exists, `.forge/pr-description.md` has substantive Why/What/How/Demo sections.',
+    '3. `pr_self_contained` — `demo/<initiative-id>/demo.json` exists and validates against the structured demo schema (ADR 021), and `.forge/pr-description.md` has substantive Why/What/How/Demo sections.',
     '4. `branches_in_sync` — `origin/<branch>` == local HEAD; main == merge-base.',
     '',
     'All four must pass for the unifier to exit clean. There is a runaway-bound on iterations (no $ cap per CONTRACTS.md C19) — treat it as a backstop, not a target.',
@@ -173,7 +173,10 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '',
     '1. Confirm the initiative was met (read the merged WI commits + run',
     '   the gate to verify they still pass together).',
-    '2. **Produce the demo bundle** at `demo/' + input.initiativeId + '/DEMO.md`.',
+    '2. **Author the structured demo** at `demo/' + input.initiativeId + '/demo.json`',
+    '   (the schema below — this is the contract), then run',
+    '   `forge demo render ' + input.initiativeId + '` to emit the derived',
+    '   `DEMO.md` + `DEMO.html`.',
     '3. **Write the PR description** at `.forge/pr-description.md`',
     '   (substantive Why/What/How/Demo sections; must include `## Demo`).',
     '4. Commit + push.',
@@ -185,17 +188,26 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '## ⚠ WRITE-FIRST DISCIPLINE — DRAFT WITHIN 2 TOOL CALLS',
     '',
     '**Iteration 1, tool call #1 or #2: `Write` a SKELETON of**',
-    '`demo/' + input.initiativeId + '/DEMO.md` **AND** `.forge/pr-description.md`.',
-    'Five lines each is fine. Placeholder content is fine. The point is to',
-    'have something on disk that the gate will see; you refine it in',
-    'subsequent iterations.',
+    '`demo/' + input.initiativeId + '/demo.json` **AND** `.forge/pr-description.md`.',
+    'A minimal valid demo.json is fine. Placeholder prose is fine. The point is',
+    'to have something on disk that the gate will see; you refine it in',
+    'subsequent iterations (then re-run `forge demo render`).',
     '',
-    'Example acceptable iter-1 skeleton:',
+    'Minimal valid iter-1 demo.json skeleton (the required core; see the full',
+    'schema below):',
     '',
-    '```',
-    '# DEMO',
-    '',
-    '_(placeholder — fills in iteration 2+)_',
+    '```json',
+    '{',
+    '  "title": "<one-line essence>",',
+    '  "essence": "<what behaviour changed and why it matters>",',
+    '  "project": "<project name from the manifest>",',
+    '  "initiativeId": "' + input.initiativeId + '",',
+    '  "diffStat": "<git diff --stat main...HEAD>",',
+    '  "checkpoints": [',
+    '    { "label": "main", "caption": "<what this demonstrates>",',
+    '      "beforeNote": "<prior behaviour>", "afterNote": "<new behaviour>" }',
+    '  ]',
+    '}',
     '```',
     '',
     'and',
@@ -264,35 +276,57 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     .join('\n');
 }
 
+/**
+ * ADR 021: the demo author is unified around ONE structured `demo.json`
+ * (validated against the schema — this is the contract that fixes free-form
+ * inconsistency). `forge demo render` derives DEMO.md/DEMO.html. The per-shape
+ * guidance now describes how to FILL THE SCHEMA + when to invoke the
+ * media-capture skill, not how to free-form a markdown file.
+ */
 function demoInstructionsForShape(shape: DemoShape): string {
+  const schema = [
+    '   **`demo/<initiative-id>/demo.json` schema (the contract):**',
+    '   - `title` (string, required) — one-line essence.',
+    '   - `essence` (string, required) — what behaviour changed and why it matters.',
+    '   - `project` (string, required), `initiativeId`, `baseRef`, `changedRef`.',
+    '   - `diffStat` (string, required) — output of `git diff --stat main...HEAD`.',
+    '   - `checkpoints` (array, ≥1 required) — each `{ label, caption, beforeNote?, afterNote?, kind?: screenshot|video|harness, metrics?, beforeImage?, afterImage? }`. Describe BEHAVIOUR (before vs after), never "what is broken".',
+    '   - `acceptanceCriteria` (string[], optional).',
+    '   After writing demo.json, run `Bash forge demo render <initiative-id>` to emit DEMO.md + DEMO.html, then commit all three.',
+  ].join('\n');
   switch (shape) {
     case 'browser':
       return [
-        '   - Write a Playwright spec (e.g. `demo/<initiative-id>/demo.spec.ts`).',
-        '   - Run the project\'s preview command in the background, then `npx playwright test --trace=on`.',
-        '   - Capture screenshots/videos under `demo/<initiative-id>/`.',
-        '   - Write `demo/<initiative-id>/DEMO.md` with relative-link images.',
+        '   This is a VISUAL initiative — fill demo.json checkpoints AND capture media:',
+        '   - Author the structured checkpoints (label + caption + before/after notes).',
+        '   - **Invoke the media-capture skill** to fill before/after screenshots: `Bash forge demo capture <initiative-id>` (best-effort; back-fills `beforeImage`/`afterImage`).',
+        schema,
       ].join('\n');
     case 'harness':
       return [
-        '   - Run the project\'s demo command (typically a test harness) against baseline AND HEAD.',
-        '   - Scrape stable, regex-extractable result lines from each run.',
-        '   - Write a before/after table to `demo/<initiative-id>/DEMO.md`. No media required.',
+        '   Behaviour measurable at the test layer — fill demo.json with harness metrics:',
+        '   - Run the project\'s demo/harness command against baseline AND HEAD, scrape stable result lines.',
+        '   - Encode them as a `harness` checkpoint with `metrics: [{ label, before, after, deltaPct, parity }]`.',
+        schema,
       ].join('\n');
     case 'cli-diff':
       return [
-        '   - Run the project\'s demo command twice (baseline and HEAD).',
-        '   - Capture stdout from each; render a unified diff into `demo/<initiative-id>/DEMO.md`.',
+        '   - Run the project\'s demo command twice (baseline + HEAD); capture stdout.',
+        '   - Encode the before/after in checkpoint `beforeNote`/`afterNote` (or a metrics row). No media required.',
+        schema,
       ].join('\n');
     case 'artifact':
       return [
-        '   - Run the project\'s demo command; capture the produced file or stdout block.',
-        '   - Embed it inline in `demo/<initiative-id>/DEMO.md`.',
+        '   - Run the project\'s demo command; capture the produced file/stdout block.',
+        '   - Summarise it in a checkpoint caption + before/after notes. No media required.',
+        schema,
       ].join('\n');
     case 'none':
       return [
-        '   - This is an infra-only initiative. No media required.',
-        '   - Write `demo/<initiative-id>/DEMO.md` as a rationale block: "what would a reviewer have to grep to convince themselves this works", with a short justification.',
+        '   - Infra-only initiative. No media. A single checkpoint whose caption +',
+        '     afterNote is a rationale block ("what would a reviewer grep to convince',
+        '     themselves this works") satisfies the schema.',
+        schema,
       ].join('\n');
   }
 }

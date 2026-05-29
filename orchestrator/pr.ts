@@ -164,16 +164,16 @@ export function embedDemoInPr(
  * classified `dev-loop-unifier-demo-failed` event.
  *
  * Returns the tracked-demo directory path on success (so callers don't
- * recompute it). The shape: "none" case is special-cased — the unifier
- * still writes a `DEMO.md` rationale block in that case, so the same
- * assertion (file existence) holds.
+ * recompute it). ADR 021: the structured `demo.json` is the contract the
+ * unifier must author (DEMO.md is derived from it via `forge demo render`);
+ * this asserts the structured source exists.
  */
 export function assertTrackedDemoExists(worktreePath: string, initiativeId: string): string {
   const dir = join(worktreePath, 'demo', initiativeId);
-  const demoMd = join(dir, 'DEMO.md');
-  if (!existsSync(demoMd)) {
+  const demoJson = join(dir, 'demo.json');
+  if (!existsSync(demoJson)) {
     throw new Error(
-      `assertTrackedDemoExists: ${demoMd} is missing — the dev-loop unifier did not author the demo bundle. ` +
+      `assertTrackedDemoExists: ${demoJson} is missing — the dev-loop unifier did not author the structured demo (demo.json). ` +
         `Classify as dev-loop-unifier-demo-failed.`,
     );
   }

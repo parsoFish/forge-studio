@@ -16,6 +16,9 @@
  * fail-fast-with-messages contract.
  */
 
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type {
   DemoComparisonModel,
   DemoCheckpoint,
@@ -147,6 +150,40 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
  *  comparison renderer). `generatedAt` is injected (no `Date.now()` in here). */
 export function renderDemoHtml(model: DemoModel, generatedAt: string): string {
   return renderComparisonHtml(toComparisonModel(model, generatedAt));
+}
+
+export type RenderDemoBundleResult = {
+  ok: boolean;
+  errors: string[];
+  wrote: string[];
+};
+
+/**
+ * Read `<demoDir>/demo.json`, validate it, and (when valid) write the derived
+ * `DEMO.md` + `DEMO.html` alongside it. The unifier authors `demo.json` once and
+ * runs this (via `forge demo render`) to emit the derived artifacts it commits.
+ * Never throws — returns the validation errors so the caller can surface them.
+ */
+export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDemoBundleResult {
+  const jsonPath = join(demoDir, 'demo.json');
+  if (!existsSync(jsonPath)) {
+    return { ok: false, errors: [`demo.json not found at ${jsonPath}`], wrote: [] };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(jsonPath, 'utf8'));
+  } catch (err) {
+    return { ok: false, errors: [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`], wrote: [] };
+  }
+  const errors = validateDemoModel(parsed);
+  if (errors.length > 0) return { ok: false, errors, wrote: [] };
+
+  const model = parsed as DemoModel;
+  const mdPath = join(demoDir, 'DEMO.md');
+  const htmlPath = join(demoDir, 'DEMO.html');
+  writeFileSync(mdPath, renderDemoMarkdown(model));
+  writeFileSync(htmlPath, renderDemoHtml(model, generatedAt));
+  return { ok: true, errors: [], wrote: [mdPath, htmlPath] };
 }
 
 /** Render a derived DEMO.md (the PR-self-contained convenience). Markdown only;

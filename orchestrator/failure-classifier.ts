@@ -66,7 +66,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       if (msg.includes('developer-loop') && msg.includes('total failure')) { devLoopTotalFailure = true; ev(e); }
       // F1.I1: distinguish unifier-no-demo from generic reviewer failure.
       // Order matters — check the more specific signature first.
-      if (msg.includes('reviewer.pr-open-failed') || msg.includes('DEMO.md') || msg.includes('pr-description.md')) {
+      if (msg.includes('reviewer.pr-open-failed') || msg.includes('DEMO.md') || msg.includes('demo.json') || msg.includes('pr-description.md')) {
         unifierNoDemo = true; ev(e);
       } else if (msg.includes('review') && msg.includes('failed')) {
         reviewFailed = true; ev(e);

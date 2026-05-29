@@ -282,7 +282,7 @@ test('alignLocalToRemote: best-effort — returns aligned even when nothing to d
 
 // ---- S4: assertTrackedDemoExists + embedDemoInPr (pure composer) ----
 
-test('assertTrackedDemoExists: throws when demo/<id>/DEMO.md is missing', () => {
+test('assertTrackedDemoExists: throws when demo/<id>/demo.json is missing', () => {
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     assert.throws(
@@ -294,11 +294,11 @@ test('assertTrackedDemoExists: throws when demo/<id>/DEMO.md is missing', () => 
   }
 });
 
-test('assertTrackedDemoExists: returns the demo dir when DEMO.md exists', () => {
+test('assertTrackedDemoExists: returns the demo dir when demo.json exists (ADR 021)', () => {
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     mkdirSync(join(proj, 'demo', 'INIT-ok'), { recursive: true });
-    writeFileSync(join(proj, 'demo', 'INIT-ok', 'DEMO.md'), '# Demo\n');
+    writeFileSync(join(proj, 'demo', 'INIT-ok', 'demo.json'), '{"title":"t"}\n');
     const dir = assertTrackedDemoExists(proj, 'INIT-ok');
     assert.equal(dir, join(proj, 'demo', 'INIT-ok'));
   } finally {

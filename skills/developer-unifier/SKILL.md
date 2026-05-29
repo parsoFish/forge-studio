@@ -24,19 +24,25 @@ and prove it cohesive:
    tree as it stands. If it's red, fix what's needed — within the existing
    `files_in_scope` of any WI in the initiative. Do NOT add new files
    outside the union of all WIs' `files_in_scope`.
-3. **Produce the demo** at `demo/<initiative-id>/`:
+3. **Author the structured demo** at `demo/<initiative-id>/demo.json` (ADR 021):
    - This directory must be **tracked** (committed on the branch). The
      unifier is the only sub-phase that writes to a tracked path.
-   - Write `DEMO.md` with relative-link images for visibility-agnostic
-     rendering (GitHub renders `![](./x.png)` on the blob page even for
-     private repos; raw URLs would 404 through the image proxy).
-   - The demo style is dictated by the project's `demo.shape` in
-     `.forge/project.json`:
-     - **browser** — Playwright spec capturing the rendered change.
-     - **harness** — Go-test (or similar) output before/after table.
-     - **cli-diff** — captured stdout before/after.
-     - **artifact** — produced file or output block embedded inline.
-     - **none** — a `DEMO.md` rationale block; no media required.
+   - `demo.json` is the **single source of truth** and the contract — it is
+     schema-validated by the `pr_self_contained` gate (`validateDemoModel`).
+     Required core: `title`, `essence`, `project`, `diffStat`, and ≥1
+     `checkpoints[]` entry (`label` + `caption`, plus `beforeNote`/`afterNote`
+     describing before-vs-after **behaviour**, never "what is broken").
+   - Run `forge demo render <initiative-id>` to derive `DEMO.md` + `DEMO.html`
+     from `demo.json`, then commit all three. **Never hand-write DEMO.md** — it
+     is derived, so the PR artifact and the in-UI review render never drift.
+   - The project's `demo.shape` in `.forge/project.json` decides HOW you fill
+     the checkpoints (not a different file format):
+     - **browser** — fill checkpoints + invoke the media-capture skill
+       (`forge demo capture <initiative-id>`) to back-fill before/after images.
+     - **harness** — a `kind: 'harness'` checkpoint carrying `metrics[]`
+       (before/after + parity), scraped from the project's measurement command.
+     - **cli-diff** / **artifact** — before/after notes (no media required).
+     - **none** — a single rationale checkpoint (caption + afterNote).
 4. **Write the PR body** at `.forge/pr-description.md`:
    - Sections: `## Why` (non-empty), `## What`, `## How`, `## Demo` (must
      reference `demo/<initiative-id>/DEMO.md` via a relative link).
@@ -94,7 +100,8 @@ a future initiative.
 ## Outputs (per iteration)
 
 Always:
-- `<worktree>/demo/<initiative-id>/DEMO.md` (tracked).
+- `<worktree>/demo/<initiative-id>/demo.json` (tracked) — the structured
+  source; `DEMO.md` + `DEMO.html` are derived from it via `forge demo render`.
 - `<worktree>/.forge/pr-description.md` (gitignored under `.forge/`, but
   read by the review phase for `gh pr create --body-file`).
 - One conventional-commits commit on the initiative branch (if any
@@ -105,8 +112,8 @@ Composed gates checked by the orchestrator after each iteration:
 - `initiative_gate` — project quality-gate against branch tip.
 - `demo_runs_clean` — `demo.command` (per `.forge/project.json`) exits 0;
   excused when `demo.shape: "none"`.
-- `pr_self_contained` — `demo/<initiative-id>/DEMO.md` exists,
-  `.forge/pr-description.md` has substantive Why/What/How/Demo sections.
+- `pr_self_contained` — `demo/<initiative-id>/demo.json` exists + validates
+  (ADR 021), `.forge/pr-description.md` has substantive Why/What/How/Demo sections.
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` ==
   merge-base.
 

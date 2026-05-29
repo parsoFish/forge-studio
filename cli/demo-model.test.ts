@@ -6,10 +6,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   validateDemoModel,
   renderDemoMarkdown,
   renderDemoHtml,
+  renderDemoBundle,
   toComparisonModel,
   type DemoModel,
 } from './demo-model.ts';
@@ -104,6 +109,34 @@ test('renderDemoHtml: produces self-contained HTML carrying the essence', () => 
   const html = renderDemoHtml(validModel(), '2026-05-30T00:00:00.000Z');
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /follows the OS by default/);
+});
+
+test('renderDemoBundle: valid demo.json → writes derived DEMO.md + DEMO.html', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
+  writeFileSync(join(dir, 'demo.json'), JSON.stringify(validModel()));
+  const res = renderDemoBundle(dir, '2026-05-30T00:00:00.000Z');
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.errors, []);
+  assert.ok(existsSync(join(dir, 'DEMO.md')));
+  assert.ok(existsSync(join(dir, 'DEMO.html')));
+  assert.match(readFileSync(join(dir, 'DEMO.md'), 'utf8'), /Dark mode toggle/);
+});
+
+test('renderDemoBundle: invalid demo.json → errors, writes nothing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
+  writeFileSync(join(dir, 'demo.json'), JSON.stringify({ title: 'x' }));
+  const res = renderDemoBundle(dir, 'T');
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.length > 0);
+  assert.ok(!existsSync(join(dir, 'DEMO.md')));
+});
+
+test('renderDemoBundle: missing demo.json → clear error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
+  mkdirSync(join(dir, 'sub'), { recursive: true });
+  const res = renderDemoBundle(join(dir, 'sub'), 'T');
+  assert.equal(res.ok, false);
+  assert.match(res.errors[0], /demo\.json not found/);
 });
 
 test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {

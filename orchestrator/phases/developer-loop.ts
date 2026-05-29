@@ -44,6 +44,7 @@ import {
   UNIFIER_MODEL,
 } from '../unifier-invocation.ts';
 import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
+import { validateDemoModel } from '../../cli/demo-model.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -919,10 +920,20 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     }
   }
 
-  // 3. pr_self_contained
-  const demoMdPath = join(worktreePath, 'demo', initiativeId, 'DEMO.md');
+  // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
+  //    is derived. The gate validates demo.json against the schema — the
+  //    structural check that fixes free-form demo inconsistency.)
+  const demoJsonPath = join(worktreePath, 'demo', initiativeId, 'demo.json');
   const prDescPath = join(worktreePath, '.forge', 'pr-description.md');
-  const demoMdExists = existsSync(demoMdPath);
+  let demoErrors: string[] = ['demo.json missing'];
+  if (existsSync(demoJsonPath)) {
+    try {
+      demoErrors = validateDemoModel(JSON.parse(readFileSync(demoJsonPath, 'utf8')));
+    } catch (err) {
+      demoErrors = [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`];
+    }
+  }
+  const demoOk = demoErrors.length === 0;
   let prBodyOk = false;
   if (existsSync(prDescPath)) {
     let body = '';
@@ -933,7 +944,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     }
     prBodyOk = body.length >= 300 && /^## Demo\b/m.test(body);
   }
-  if (!demoMdExists || !prBodyOk) {
+  if (!demoOk || !prBodyOk) {
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
@@ -942,10 +953,12 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       event_type: 'error',
       input_refs: [worktreePath],
       output_refs: [],
-      message: 'unifier.gate.pr-not-self-contained',
+      // Keep the 'demo.json' token so the failure-classifier catches it.
+      message: 'unifier.gate.pr-not-self-contained (demo.json / pr-description)',
       metadata: {
         failure_class: 'dev-loop-unifier-demo-failed',
-        demo_md_exists: demoMdExists,
+        demo_json_ok: demoOk,
+        demo_errors: demoErrors,
         pr_body_ok: prBodyOk,
       },
     });
