@@ -78,7 +78,7 @@ test('cost-tick: emits a cost_tick when cycle cost changes (S7 / C14)', () => {
 // 2. Debounce: rapid cost-changes within 1s collapse to one tick.
 // ---------------------------------------------------------------------------
 
-test('cost-tick: debounces rapid cost changes within 1s to a single emit', { skip: 'S7 partial — operator to finish (implementation emits per change; test expects collapse)' }, () => {
+test('cost-tick: debounces rapid cost changes within 1s to a single emit', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-cost-tick-'));
   try {
     const logger = createLogger('cycle-ct-debounce', join(root, '_logs'));

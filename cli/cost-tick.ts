@@ -51,7 +51,10 @@ type Partition = {
   cycleCostUsd: number;
   wiCostUsd: number;
   lastEmittedCycleCost: number | null;
-  lastEmittedAt: number;
+  /** Clock value of the last emit, or `null` if never emitted. `null` (not 0)
+   * is the sentinel so a synthetic clock starting at t=0 can't be mistaken for
+   * "never emitted" and bypass the debounce window. */
+  lastEmittedAt: number | null;
 };
 
 export type CostTickSubscription = {
@@ -113,7 +116,7 @@ export function createCostTickConsumer(
     // Only when cost changed AND we're outside the debounce window.
     if (p.lastEmittedCycleCost !== null && p.cycleCostUsd === p.lastEmittedCycleCost) return;
     const t = now();
-    if (p.lastEmittedAt !== 0 && t - p.lastEmittedAt < debounceMs) return;
+    if (p.lastEmittedAt !== null && t - p.lastEmittedAt < debounceMs) return;
     emit(p);
   }
 
@@ -141,7 +144,7 @@ export function createCostTickConsumer(
             cycleCostUsd: 0,
             wiCostUsd: 0,
             lastEmittedCycleCost: null,
-            lastEmittedAt: 0,
+            lastEmittedAt: null,
           } satisfies Partition);
         cyclePart.cycleCostUsd += cost;
         cyclePart.initiativeId = initiativeId; // last-write-wins; cycle should be stable
@@ -159,7 +162,7 @@ export function createCostTickConsumer(
               cycleCostUsd: 0,
               wiCostUsd: 0,
               lastEmittedCycleCost: null,
-              lastEmittedAt: 0,
+              lastEmittedAt: null,
             } satisfies Partition);
           wiPart.cycleCostUsd = cyclePart.cycleCostUsd; // mirror cycle total
           wiPart.wiCostUsd += cost;
