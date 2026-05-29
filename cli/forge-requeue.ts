@@ -29,6 +29,13 @@ export type RequeueOptions = {
   forgeRoot?: string;
   /** Reset retry_count to 0 (default false: keep prior count + append to previous_failure_modes). */
   resetRetries?: boolean;
+  /**
+   * ADR 019: resume the next cycle from the unifier sub-phase instead of a
+   * full re-run. Sets `resume_from: unifier` on the manifest AND preserves the
+   * worktree (the per-WI commits live there) — so step 5's worktree removal is
+   * skipped. Use after a unifier-only gate failure to salvage the WI work.
+   */
+  resumeFromUnifier?: boolean;
 };
 
 export type RequeueResult = {
@@ -92,6 +99,9 @@ export function runRequeue(
     ...manifest,
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
+    // ADR 019: stamp the resume marker so the scheduler runs the cycle from
+    // the unifier sub-phase against the preserved worktree.
+    ...(opts.resumeFromUnifier ? { resume_from: 'unifier' as const } : {}),
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
@@ -112,10 +122,12 @@ export function runRequeue(
     }
   }
 
-  // 5. Remove the worktree.
+  // 5. Remove the worktree — UNLESS resuming from the unifier, where the
+  //    preserved worktree IS the salvaged WI work the resume runs against
+  //    (ADR 019). Removing it would force the very full re-run resume avoids.
   let worktreeRemoved = false;
   const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
-  if (existsSync(worktreePath)) {
+  if (!opts.resumeFromUnifier && existsSync(worktreePath)) {
     // Try `git worktree remove --force` first (handles git registry); fall
     // back to rm -rf if that fails (orphan dir).
     const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';

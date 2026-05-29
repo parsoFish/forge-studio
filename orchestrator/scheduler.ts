@@ -501,12 +501,27 @@ async function runOne(
   try {
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
-    wtHandle = worktree.add({
-      projectRepoPath: manifest.projectRepoPath,
-      branch: `forge/${manifest.initiativeId}`,
-      worktreesRoot: cfg.worktreesRoot,
-      initiativeId: manifest.initiativeId,
-    });
+    const branch = `forge/${manifest.initiativeId}`;
+    const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
+    // ADR 019: on resume-from-unifier reuse the preserved worktree (it already
+    // holds the per-WI commits) rather than `worktree.add` — adding onto an
+    // already-checked-out path fails ("already exists"). If the worktree was
+    // GC'd, fall through to `worktree.add`, which re-checks-out the surviving
+    // branch (the per-WI commits are durable on the ref).
+    const liveWorktree =
+      manifest.resumeFrom === 'unifier' &&
+      worktree.list(manifest.projectRepoPath).some((w) => resolve(w.path) === expectedWtPath);
+    if (liveWorktree) {
+      if (tee) console.log(`[serve] resume-from-${manifest.resumeFrom}: reusing preserved worktree ${expectedWtPath}`);
+      wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
+    } else {
+      wtHandle = worktree.add({
+        projectRepoPath: manifest.projectRepoPath,
+        branch,
+        worktreesRoot: cfg.worktreesRoot,
+        initiativeId: manifest.initiativeId,
+      });
+    }
     // F-24: link the project's installed dependencies into the worktree.
     // `git worktree add` only checks out tracked files, but `node_modules/`
     // is gitignored — without this, `npm test` fails at module resolution
@@ -520,6 +535,9 @@ async function runOne(
       manifestPath,
       projectRepoPath: manifest.projectRepoPath,
       worktreePath: wtHandle.path,
+      // ADR 019: thread the resume marker into the cycle so it skips PM +
+      // per-WI dev-loop and runs only the unifier + downstream phases.
+      resumeFrom: manifest.resumeFrom,
       eventTee: tee,
       // File-based verdict provider — writes a prompt file next to the
       // manifest in `_queue/in-flight/`, polls for the operator's response.
@@ -622,6 +640,8 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
+  /** ADR 019: when 'unifier', resume the cycle from the unifier sub-phase against the preserved worktree. */
+  resumeFrom?: 'unifier';
 };
 
 function parseManifest(path: string): ParsedManifest {
@@ -639,6 +659,7 @@ function parseManifest(path: string): ParsedManifest {
     initiativeId: fm.initiative_id,
     project: fm.project,
     projectRepoPath: fm.project_repo_path ?? resolve('projects', fm.project),
+    resumeFrom: fm.resume_from === 'unifier' ? 'unifier' : undefined,
   };
 }
 

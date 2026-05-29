@@ -61,6 +61,15 @@ export type CycleInput = {
    * hook for the holistic refinement described in the review-phase redesign.
    */
   spawnAlignmentDevLoop?: boolean;
+  /**
+   * ADR 019: resume a previously-stalled cycle from a later phase instead of
+   * re-running it from scratch. `'unifier'` skips the architect, PM, and
+   * per-WI dev-loop — the WI commits already exist on the preserved branch —
+   * and runs only the unifier sub-phase + downstream reviewer/closure/
+   * reflector. Absent ⇒ normal full cycle. Set by the scheduler from the
+   * manifest's `resume_from` field (`forge requeue --resume-from=unifier`).
+   */
+  resumeFrom?: 'unifier';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**

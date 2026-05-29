@@ -1247,21 +1247,37 @@ async function cmdWatch(rest: string[]): Promise<void> {
 function cmdRequeue(rest: string[]): void {
   const initInput = rest.find((a) => !a.startsWith('--'));
   const resetRetries = rest.includes('--reset-retries');
+  // ADR 019: --resume-from=unifier (or --resume-from unifier) resumes the next
+  // cycle from the unifier sub-phase against the preserved worktree.
+  const resumeIdx = rest.findIndex((a) => a === '--resume-from' || a.startsWith('--resume-from='));
+  let resumeFromUnifier = false;
+  if (resumeIdx !== -1) {
+    const arg = rest[resumeIdx];
+    const value = arg.includes('=') ? arg.split('=')[1] : rest[resumeIdx + 1];
+    if (value !== 'unifier') {
+      console.error(`forge requeue: --resume-from only supports 'unifier' (got '${value ?? ''}')`);
+      process.exit(2);
+    }
+    resumeFromUnifier = true;
+  }
   if (rest.includes('--help') || rest.includes('-h') || !initInput) {
-    console.log(`forge requeue <init-id-or-handle> [--reset-retries]
+    console.log(`forge requeue <init-id-or-handle> [--reset-retries] [--resume-from=unifier]
   Recover a stuck initiative back to the pending queue. Idempotent.
   Moves manifest from any queue dir → _queue/pending/, deletes stranded
   verdict files, removes the worktree, and (optionally) resets
   retry_count to 0. Appends a 'requeued-from-<dir>-<date>' marker to
   previous_failure_modes for the forensic trail.
-    --reset-retries  Set retry_count to 0 (default: preserve prior count).`);
+    --reset-retries        Set retry_count to 0 (default: preserve prior count).
+    --resume-from=unifier  Resume from the unifier sub-phase (ADR 019): skip
+                           PM + per-WI dev-loop and PRESERVE the worktree so
+                           the salvaged WI commits drive the resumed unifier.`);
     if (!initInput) process.exit(2);
     return;
   }
   void import('../cli/forge-requeue.ts').then(({ runRequeue }) => {
     try {
-      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries });
-      console.log(`requeued ${r.initiativeId}`);
+      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries, resumeFromUnifier });
+      console.log(`requeued ${r.initiativeId}${resumeFromUnifier ? ' (resume-from=unifier)' : ''}`);
       console.log(`  from: ${r.fromQueueDir}/ → pending/`);
       console.log(`  worktree removed: ${r.worktreeRemoved}`);
       console.log(`  verdict files removed: ${r.verdictsRemoved.length}`);

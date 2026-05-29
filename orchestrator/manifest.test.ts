@@ -247,6 +247,18 @@ test('validateManifest: rejects an unrecognised origin', () => {
   assert.ok(errors.some((e) => /origin must be one of/i.test(e)), errors.join('; '));
 });
 
+test('ADR 019: resume_from round-trips and is omitted when absent', () => {
+  // Absent → not serialised.
+  const plain = serializeManifest(fixture());
+  assert.ok(!/resume_from:/.test(plain), 'resume_from should be absent by default');
+  assert.equal(parseManifest(plain).resume_from, undefined);
+
+  // Present → serialised + parsed back.
+  const resuming = serializeManifest({ ...fixture(), resume_from: 'unifier' });
+  assert.match(resuming, /resume_from: unifier/);
+  assert.equal(parseManifest(resuming).resume_from, 'unifier');
+});
+
 test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-origin-'));
   try {

@@ -114,13 +114,19 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
   }
 
   const ordered = topologicalOrder(items);
+  // ADR 019: resume-from-unifier skips the per-WI dev-loop entirely — the WI
+  // commits already exist on the preserved branch from the prior cycle. We
+  // still read + validate the WI set above (the unifier uses it for context),
+  // but run the per-WI loop over an empty list so only the unifier executes.
+  const resumeFromUnifier = input.resumeFrom === 'unifier';
+  const toRun = resumeFromUnifier ? [] : ordered;
   const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const systemPrompt = buildDevSystemPrompt(forgeRoot);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
   const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null }> = [];
 
-  for (const wi of ordered) {
+  for (const wi of toRun) {
     const wiStart = logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -417,6 +423,10 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
       work_item_count: items.length,
       complete: completeCount,
       failed: items.length - completeCount,
+      // ADR 019: flag resume runs so the report/UI can distinguish a
+      // unifier-only resume (0 WIs run, commits already on branch) from a
+      // genuine 0/N total failure.
+      resumed: resumeFromUnifier,
     },
   });
 
@@ -426,7 +436,9 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
   // emit the partial outcome and hand off to the unifier.
-  if (completeCount === 0 && items.length > 0) {
+  // ADR 019: on resume-from-unifier zero WIs run by design (their commits are
+  // already on the branch), so the total-failure guard must not fire.
+  if (!resumeFromUnifier && completeCount === 0 && items.length > 0) {
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );

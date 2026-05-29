@@ -129,7 +129,14 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
-      await runProjectManager(inputWithGate, logger);
+      // ADR 019: on resume-from-unifier the architect + PM already ran in the
+      // prior (stalled) cycle and their output (the WI specs) survives in the
+      // preserved worktree's `.forge/work-items/`. Skip PM; the dev-loop
+      // detects `resumeFrom` and runs only the unifier against the existing
+      // per-WI commits.
+      if (input.resumeFrom !== 'unifier') {
+        await runProjectManager(inputWithGate, logger);
+      }
       await runDeveloperLoop(inputWithGate, logger);
       // Safety net: commit any uncommitted dev-loop work before the reviewer
       // starts. The dev-loop's prompt tells the agent to commit per

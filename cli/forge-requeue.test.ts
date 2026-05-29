@@ -114,6 +114,28 @@ test('runRequeue: removes orphan worktree dir if present', () => {
   }
 });
 
+test('runRequeue --resume-from=unifier: stamps resume_from AND preserves the worktree', () => {
+  const root = setupForgeRoot();
+  try {
+    const file = 'INIT-2026-05-24-rq-test.md';
+    const wt = join(root, '_worktrees', 'INIT-2026-05-24-rq-test');
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: wt }));
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
+
+    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromUnifier: true });
+
+    // ADR 019: worktree is the salvaged work — it must NOT be removed.
+    assert.equal(r.worktreeRemoved, false);
+    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-unifier');
+    // resume_from stamped into the moved manifest.
+    const moved = readFileSync(join(root, '_queue', 'pending', file), 'utf8');
+    assert.match(moved, /^resume_from:\s*unifier\s*$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runRequeue: throws when manifest is not in any queue dir', () => {
   const root = setupForgeRoot();
   try {
