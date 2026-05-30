@@ -84,9 +84,12 @@ const PHASE_DX = 168;
 const PHASE_Y = 70;
 const PHASE_ACTIVE = 116;
 const PHASE_IDLE = 88;
+const FEATURE_Y = 208;
+const FEATURE_ACTIVE = 104;
+const FEATURE_IDLE = 82;
 const WI_ACTIVE = 132;
 const WI_IDLE = 92;
-const WI_Y0 = 330;
+const WI_Y0 = 360;
 const TOOL_W = 168;
 const TOOL_H = 30;
 const BUBBLE_W = 210;
@@ -103,7 +106,7 @@ const STATUS_GLOW: Record<string, string> = {
 type Tab = 'none' | 'cost' | 'files' | 'activity';
 
 export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
-  const { phaseStates, cost, workItems, events, cycleId, selectedWiId, onSelectWi } = props;
+  const { phaseStates, cost, features, workItems, featureStatuses, events, cycleId, selectedWiId, onSelectWi } = props;
   const [tab, setTab] = useState<Tab>('none');
 
   // 400ms tick drives the burst fade-out (events age past the window).
@@ -156,6 +159,30 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
     }
     return m;
   }, [workItems, devLoopX]);
+
+  // Feature layer between the dev-loop phase and the WIs: each feature sits
+  // centred over its own work items (so the WIs read as that feature's
+  // children). Features with no WIs yet spread evenly under the dev-loop.
+  const featureCenter = useMemo(() => {
+    const m = new Map<string, { x: number; y: number }>();
+    if (features.length === 0) return m;
+    const wiXByFeature = new Map<string, number[]>();
+    for (const w of workItems) {
+      if (!w.featureId) continue;
+      const c = wiCenter.get(w.id);
+      if (!c) continue;
+      const arr = wiXByFeature.get(w.featureId) ?? [];
+      arr.push(c.x);
+      wiXByFeature.set(w.featureId, arr);
+    }
+    features.forEach((f, i) => {
+      const xs = wiXByFeature.get(f.featureId);
+      const x = xs && xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length
+        : devLoopX + (i - (features.length - 1) / 2) * (FEATURE_ACTIVE + 70);
+      m.set(f.featureId, { x, y: FEATURE_Y });
+    });
+    return m;
+  }, [features, workItems, wiCenter, devLoopX]);
 
   const ownerCenter = useCallback(
     (kind: 'wi' | 'phase', id: string): { x: number; y: number } | undefined =>
@@ -231,6 +258,24 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
       });
     });
 
+    // feature hexes — the layer between the dev-loop phase and its WIs
+    for (const f of features) {
+      const c = featureCenter.get(f.featureId);
+      if (!c) continue;
+      const st = featureStatuses[f.featureId] ?? 'pending';
+      const size = st === 'active' ? FEATURE_ACTIVE : FEATURE_IDLE;
+      nodes.push({
+        id: `feature:${f.featureId}`,
+        type: 'hex',
+        position: { x: c.x - size / 2, y: c.y - size / 2 },
+        data: { kind: 'feature', id: f.featureId, label: f.title || f.featureId, status: st, costUsd: 0, active: st === 'active', size, deps: f.dependsOn },
+        width: size,
+        height: size,
+        draggable: false,
+        selectable: false,
+      });
+    }
+
     // WI hexes (+ reasoning bubble for the active one)
     for (const w of workItems) {
       const c = wiCenter.get(w.id) ?? { x: devLoopX, y: WI_Y0 };
@@ -276,7 +321,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
       });
     }
     return nodes;
-  }, [phaseStates, cost, workItems, wiCenter, wiActivity, bursts, burstPos, phaseCenter, devLoopX, selectedWiId, onSelectWi]);
+  }, [phaseStates, cost, features, featureCenter, featureStatuses, workItems, wiCenter, wiActivity, bursts, burstPos, phaseCenter, devLoopX, selectedWiId, onSelectWi]);
 
   const rfEdges = useMemo<Edge[]>(() => {
     const edges: Edge[] = [];
@@ -285,11 +330,22 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
     for (let i = 0; i < PHASE_ORDER.length - 1; i += 1) {
       edges.push({ id: `pc-${i}`, source: `phase:${PHASE_ORDER[i]}`, target: `phase:${PHASE_ORDER[i + 1]}`, sourceHandle: 'sr', targetHandle: 'tl', type: 'default', style: thin });
     }
-    // dev-loop → root WIs: bottom-of-mainline → top-of-WI
+    // dev-loop → feature (the layer), then feature → its root WIs.
+    const featureIds = new Set(features.map((f) => f.featureId));
+    for (const f of features) {
+      edges.push({ id: `df-${f.featureId}`, source: 'phase:developer-loop', target: `feature:${f.featureId}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
+    }
     const wiIds = new Set(workItems.map((w) => w.id));
     for (const w of workItems) {
       const isRoot = !w.dependsOn.some((d) => wiIds.has(d));
-      if (isRoot) edges.push({ id: `dw-${w.id}`, source: 'phase:developer-loop', target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
+      if (!isRoot) continue;
+      // Root WIs hang off their feature when it's materialised; otherwise
+      // straight off the dev-loop (graceful when no features are defined).
+      if (w.featureId && featureIds.has(w.featureId)) {
+        edges.push({ id: `fw-${w.id}`, source: `feature:${w.featureId}`, target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
+      } else {
+        edges.push({ id: `dw-${w.id}`, source: 'phase:developer-loop', target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
+      }
     }
     // WI deps: bottom-of-parent → top-of-child
     for (const w of workItems) for (const d of w.dependsOn) if (wiIds.has(d)) edges.push({ id: `wd-${d}-${w.id}`, source: `wi:${d}`, target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
@@ -307,7 +363,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
       edges.push({ id: `bb-${w.id}`, source: `wi:${w.id}`, sourceHandle: side === 'right' ? 'sr' : 'sl', target: `bubble:${w.id}`, targetHandle: side === 'right' ? 'tl' : 'tr', type: 'default', style: { stroke: '#30363d', strokeWidth: 1, strokeDasharray: '3 3' } });
     }
     return edges;
-  }, [workItems, bursts, wiActivity, burstPos, bubbleSideByWi]);
+  }, [features, workItems, bursts, wiActivity, burstPos, bubbleSideByWi]);
 
   const fitSignal = `${workItems.length}:${activeWiIds.join(',')}:${phaseStates.map((p) => p.status[0]).join('')}`;
   const hasContent = workItems.length > 0 || phaseStates.some((p) => p.status !== 'pending');
@@ -381,7 +437,7 @@ function TopBar({ totals, tab, onTab }: { totals: { agents: number; tokens: numb
 // ===== hex node (phase or WI) ===============================================
 
 type HexData = {
-  kind: 'phase' | 'wi';
+  kind: 'phase' | 'wi' | 'feature';
   id: string;
   label: string;
   status: WiStatus;
@@ -399,11 +455,14 @@ function HexNode({ data }: NodeProps<HexData>): JSX.Element {
   const onClick = useCallback(() => data.onSelect?.(data.id), [data]);
   const glow = STATUS_GLOW[data.status] ?? '#475059';
   const isWi = data.kind === 'wi';
+  const isFeature = data.kind === 'feature';
   const tokens = data.tokens ?? 0;
   const frac = isWi ? Math.max(0.02, Math.min(1, tokens / TOKEN_CAP)) : data.status === 'complete' ? 1 : data.active ? 0.5 : 0.02;
   const S = data.size;
   const dataAttrs = isWi
     ? { 'data-wi-hex': data.id, 'data-wi-id': data.id, 'data-wi-status': data.status, 'data-wi-feature-id': data.featureId ?? '', 'data-wi-deps': (data.deps ?? []).join(',') }
+    : isFeature
+    ? { 'data-feature-hex': data.id, 'data-feature-id': data.id, 'data-feature-status': data.status, 'data-feature-deps': (data.deps ?? []).join(',') }
     : { 'data-phase-hex': data.id, 'data-phase': data.id, 'data-phase-status': data.status, 'data-phase-cost-usd': data.costUsd || '' };
   return (
     <div {...dataAttrs} onClick={onClick} style={{ width: S, position: 'relative', cursor: isWi && data.onSelect ? 'pointer' : 'default', textAlign: 'center' }}>
@@ -418,8 +477,8 @@ function HexNode({ data }: NodeProps<HexData>): JSX.Element {
 
       {data.costUsd > 0 && <div style={costPill}>${data.costUsd.toFixed(isWi ? 3 : 2)}</div>}
       <Hexagon size={S} glow={glow} frac={frac} active={data.active} selected={!!data.selected} />
-      <div style={{ marginTop: 5, fontSize: isWi ? 12 : 11, color: data.status === 'pending' ? '#6e7681' : '#c9d1d9', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${data.id}${isWi ? `: ${data.label}` : ''}`}>
-        {isWi ? truncate(data.label, 16) : data.label}
+      <div style={{ marginTop: 5, fontSize: isWi ? 12 : 11, color: data.status === 'pending' ? '#6e7681' : '#c9d1d9', fontFamily: MONO, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${data.id}${isWi || isFeature ? `: ${data.label}` : ''}`}>
+        {isWi || isFeature ? truncate(data.label, 16) : data.label}
       </div>
       {isWi && (
         <>

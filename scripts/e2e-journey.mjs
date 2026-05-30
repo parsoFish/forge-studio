@@ -394,12 +394,10 @@ async function main() {
       () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
       () => { writeDemoJson(1); cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }); },
+      // Review phase OPENS (hex goes blue) — but it does NOT close out until the
+      // operator finishes reviewing (the closeout fires on approve, step 13).
       () => cycleEvent('review-loop', 'start', 'review-loop start'),
       () => cycleEvent('review-loop', 'log', 'reviewer.pr-opened'),
-      () => cycleEvent('review-loop', 'end', 'review-loop end', { cost_usd: 0.21 }),
-      () => cycleEvent('closure', 'start', 'closure.start'),
-      () => cycleEvent('closure', 'log', 'closure.manifest-moved-to-ready-for-review'),
-      () => cycleEvent('closure', 'end', 'closure.end'),
     ]);
     moveManifest('in-flight', 'ready-for-review');
     await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
@@ -447,8 +445,12 @@ async function main() {
     await frame(page, 'step13-approve', 'Step 13 — the operator approves');
     await page.locator('[data-action="approve-and-merge"]').click();
     await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
-    // Closure merges; the reflector emits its Stage-2 questions (the human moment).
+    // NOW the review phase closes out (it stayed blue all through the operator's
+    // review): the review-loop ends + closure merges → the review hex goes green.
+    cycleEvent('review-loop', 'end', 'review-loop end — operator approved', { cost_usd: 0.21 });
+    cycleEvent('closure', 'start', 'closure.start');
     cycleEvent('closure', 'log', 'closure.pr-merged');
+    cycleEvent('closure', 'end', 'closure.end');
     moveManifest('ready-for-review', 'done');
     cycleEvent('reflection', 'start', 'reflection.start');
     cycleEvent('reflection', 'tool_use', 'reflection.brain-query', { metadata: { tool: 'brain-query' } });
