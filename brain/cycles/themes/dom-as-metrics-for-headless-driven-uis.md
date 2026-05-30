@@ -6,7 +6,7 @@ description: >-
   reading structured DOM rather than scraping rendered text or guessing
   selectors. Pattern from anthropics/cwc-workshops `how-we-claude-code`.
   Applied to forge-ui (Move 2) and used as the wait/assertion source for
-  scripts/forge-ui-demo.mjs.
+  scripts/e2e-journey.mjs.
 category: pattern
 keywords:
   - dom
@@ -56,7 +56,7 @@ Convention: **always update the `data-*` attribute alongside any visual change**
 — when the verdict form's label flips to "submitting…", `data-form-state` flips
 to `submitting` in the same render.
 
-`scripts/forge-ui-demo.mjs` drives chromium and replaces every timing-based
+`scripts/e2e-journey.mjs` drives chromium and replaces every timing-based
 sleep with a `data-*` wait (e.g. `waitForFunction(() => main.dataset
 .activeCycleId === id)`). That killed three flake classes: click outracing
 render, fetch-not-resolved "loading…" shots, and forms caught mid-render.
@@ -72,5 +72,5 @@ matters for a demo flow — have the demo wait on it instead of sleeping.
 
 - [[brain-first-research]] (mirror discipline: keep the source of truth singular, read from it)
 - [[windows-browser-to-wsl-via-window-location]] (`data-bridge-url` is one of these probes)
-- demo: [`scripts/forge-ui-demo.mjs`](../../../scripts/forge-ui-demo.mjs)
+- harness: [`scripts/e2e-journey.mjs`](../../../scripts/e2e-journey.mjs) (the consolidated UI-emulation + regression harness)
 - pattern source: [anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code)

@@ -104,6 +104,14 @@ on real merged cycles (brain themes accumulate the evidence). Benches
 will be rebuilt later, anchored on actual past successful cycle
 artifacts rather than hand-curated fixtures.
 
+**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md)):**
+the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
+fills the gap — `claude-harness` is forge's standing real-capability regression
+harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached
+PR/merge, dev-loop N/N, project tests green post-merge, cost under ceiling), not
+synthetic rubrics. Tiered (frozen-SHA routine / full-greenfield release), run as
+a manual gate before pointing forge at a real project.
+
 Where to look for as-built detail:
 
 - Code structure: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`PRINCIPLES.md`](./PRINCIPLES.md), [ADRs](./docs/decisions/).
@@ -223,23 +231,29 @@ only — sibling units stay in their own state independently. See
 [`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts).
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change. The harness
-[`scripts/forge-ui-harness.mjs`](./scripts/forge-ui-harness.mjs) +
-real-cycle wrapper [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
-read these attributes to wait deterministically instead of using
-timing-based sleeps. `node scripts/forge-ui-harness.mjs --demo`
-produces a chromium-recorded synthetic journey under
-`forge-ui/.demo-shots/journey/`; `node scripts/verify-cycle.mjs <init>`
-runs a real cycle end-to-end with auto-approve + closure + reflection
-capture under `forge-ui/.demo-shots/verify/`.
+`data-*` attribute** alongside any visual change. After a sprawl of
+ad-hoc demo/capture scripts, the harness surface is **two scripts only**
+(2026-05-30 consolidation):
 
-`node scripts/e2e-journey.mjs` is the **canonical end-to-end operator journey**
-through the centralised UI (ADR 020 + 021): dashboard new-idea → `/architect/<sid>`
-interview → PLAN gate approve → autonomous cycle on the grouped initiative pane
-→ `/review/<cycleId>` structured demo → approve → reflection. It emulates the
-architect runner's turns + the autonomous cycle by seeding the same files/events
-the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`), grounded in the real cycle
-event sequence; records a **video** + frame gallery + `index.html` under
-`forge-ui/.demo-shots/e2e/`, and cleans up its synthetic project/cycle/queue
-state afterwards. (`scripts/architect-gallery.mjs` covers just the architect +
-review screens.)
+1. **UI-emulation harness** — [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs)
+   (`npm run ui:journey`) is the **canonical end-to-end operator journey**
+   through the centralised UI (ADR 020 + 021): dashboard new-idea →
+   `/architect/<sid>` interview → PLAN gate approve → autonomous cycle on the
+   grouped initiative pane → `/review/<cycleId>` structured demo → approve →
+   reflection. It emulates the architect runner's turns + the autonomous cycle
+   by seeding the same files/events the real phases write
+   (`FORGE_ARCHITECT_NO_SPAWN=1`), grounded in the real cycle event sequence.
+   It is BOTH the watchable demo (records a **video** + frame gallery +
+   `index.html` under `forge-ui/.demo-shots/e2e/`) AND the **UI regression
+   harness**: the old `forge-ui-harness.mjs` S1–S4 `data-*` assertions (status
+   transitions, ≥5 phase hexes, materialised feature/WI hexes, the per-phase
+   cost rollup) were merged in as a soft-collecting layer — the video always
+   finishes, and a non-zero exit flags any DOM-as-metrics regression. Cleans up
+   its synthetic project/cycle/queue state afterwards.
+
+2. **Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
+   (`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
+   project (auto-approve + closure + reflection capture). This is the standing
+   regression harness for forge's actual capabilities (ADR 022): it runs
+   claude-harness initiatives and asserts real-cycle *outcomes*, tiered
+   (frozen-SHA routine / full-greenfield release), as a manual gate.

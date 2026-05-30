@@ -51,13 +51,18 @@ state machine flips status. The numeric prefix is capture order.
 
 ## How it was recorded
 
-[`scripts/record-cycle-ui.mjs`](../../scripts/record-cycle-ui.mjs):
+[`scripts/verify-cycle.mjs`](../../scripts/verify-cycle.mjs) — the
+real-capability harness (ADR 022), which consolidated the old
+`record-cycle-ui.mjs` recorder:
 
 ```bash
-node scripts/record-cycle-ui.mjs INIT-<your-initiative-id>
+node scripts/verify-cycle.mjs INIT-<your-initiative-id> [--base-sha <sha>] [--cost-ceiling <usd>]
 ```
 
 Spawns `forge watch --no-open` (UI on 4124, bridge on 4123), opens
-playwright at 1600×2400 with video recording, spawns `forge serve --once`
-to claim and run the pending manifest, polls the page's `data-*`
-attributes for phase transitions, and saves frames + video.
+playwright with video recording, spawns `forge serve --once` to claim and
+run the pending manifest, polls the page's `data-*` attributes for phase
+transitions, auto-approves at `ready-for-review`, and saves frames + video.
+It also asserts the real-cycle **outcomes** (reached merge, dev-loop N/N,
+project tests green, cost under ceiling) and writes a pass/fail
+`summary.json`.

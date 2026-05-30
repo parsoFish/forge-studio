@@ -23,8 +23,8 @@
     "forge": "node --experimental-strip-types orchestrator/cli.ts",
     "forge:brain:lint": "node --experimental-strip-types cli/brain-lint.ts",
     "forge:brain:index": "node --experimental-strip-types cli/brain-index.ts",
-    "forge-ui:demo": "node scripts/forge-ui-demo.mjs",
-    "forge-ui:harness": "node scripts/forge-ui-harness.mjs",
+    "ui:journey": "node scripts/e2e-journey.mjs",
+    "verify:cycle": "node scripts/verify-cycle.mjs",
     "brain:scrub": "node --experimental-strip-types scripts/brain-scrub-test-contamination.ts"
   },
   "dependencies": {

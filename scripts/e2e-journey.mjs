@@ -25,6 +25,13 @@
  * by seeding the same files/events the real phases write (or will write, for
  * the aspirational steps), grounded in the real cycle event sequence.
  *
+ * This is also the UI REGRESSION HARNESS (the old scripts/forge-ui-harness.mjs
+ * S1–S4 checks were merged in here, 2026-05-30): alongside recording the video
+ * it asserts the DOM-as-metrics invariants at each beat (status transitions,
+ * ≥5 phase hexes, materialised feature/WI hexes, the per-phase cost rollup).
+ * Assertions are SOFT — they record into `failures[]` and log ✓/✗ so the video
+ * always finishes; a non-zero exit at the end flags any regression for CI.
+ *
  * Output: forge-ui/.demo-shots/e2e/{video/journey.webm, frames/*.png, index.html}.
  * Cleans up the throwaway projects/_e2e-demo/ + _logs/_queue state afterwards.
  */
@@ -223,6 +230,37 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <h2>frames</h2>${figs}</body></html>`);
 }
 
+// ---- assertions (the regression layer, merged from forge-ui-harness) -------
+// Soft asserts: every check runs and records, the video always finishes, and a
+// non-zero exit at the end flags any DOM-as-metrics invariant that regressed.
+const failures = [];
+function check(cond, msg) {
+  if (cond) { console.log(`  ✓ ${msg}`); }
+  else { failures.push(msg); console.error(`  ✗ ${msg}`); }
+}
+async function countAtLeast(page, selector, n, msg) {
+  const got = await page.evaluate((s) => document.querySelectorAll(s).length, selector);
+  check(got >= n, `${msg} (found ${got}, want ≥${n})`);
+}
+/** Poll the dashboard cycle card for an expected data-cycle-status. */
+async function expectCycleStatus(page, status) {
+  try {
+    await page.waitForFunction(
+      ({ id, s }) => document.querySelector(`[data-cycle-id="${id}"]`)?.getAttribute('data-cycle-status') === s,
+      { id: CYCLE_ID, s: status }, { timeout: 8000 },
+    );
+    check(true, `cycle status → ${status}`);
+  } catch {
+    const got = await page.evaluate((id) => document.querySelector(`[data-cycle-id="${id}"]`)?.getAttribute('data-cycle-status') ?? '(absent)', CYCLE_ID);
+    check(false, `cycle status → ${status} (got "${got}")`);
+  }
+}
+/** Highest data-phase-cost-usd across the pipeline hexes (the cost rollup, S3). */
+async function maxPhaseCost(page) {
+  return page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('[data-phase-hex]')]
+    .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)));
+}
+
 // ---- the journey ----------------------------------------------------------
 
 async function main() {
@@ -346,6 +384,9 @@ async function main() {
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
     await sleep(ACT);
     await frame(page, 'step07b-to-pm', 'Step 7 — approved; "Watch it build →" lands on the dashboard, cycle live');
+    // S1 + S4: the cycle is live and the pipeline spine renders for it.
+    await expectCycleStatus(page, 'in-flight');
+    await countAtLeast(page, '[data-phase-hex]', 5, 'pipeline spine shows ≥5 phase hexes');
 
     // STEP 8 — PM plans features + work items (events stream live to the pipeline).
     await paced([
@@ -359,6 +400,9 @@ async function main() {
     ]);
     await sleep(WORK);
     await frame(page, 'step08-pm', 'Step 8 — the PM plans 2 features + work items (the pipeline advances live)');
+    // S4: PM decomposition materialised the feature + WI tiers on the canvas.
+    await countAtLeast(page, '[data-feature-hex]', 2, 'PM materialised ≥2 feature hexes');
+    await countAtLeast(page, '[data-wi-hex]', 2, 'PM materialised ≥2 WI hexes');
 
     // STEP 9 — developer loop progresses WIs, respecting dependencies. WI-1
     // runs and goes GREEN (per-WI `end`); only THEN does WI-2 (depends_on
@@ -403,6 +447,10 @@ async function main() {
     await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
     await sleep(WORK);
     await frame(page, 'step11-demo-ready', 'Step 11 — the unifier ran the demo skill; a "Review →" entry appears');
+    // S1 + S3: the cycle is reviewable and the per-phase cost rollup is live
+    // (architect / PM / dev-loop have all reported cost by now).
+    await expectCycleStatus(page, 'ready-for-review');
+    check(await maxPhaseCost(page) > 0, 'cost rollup: a phase hex shows cost > 0');
 
     // STEP 12 — operator reviews; Ralph dev-loops rerun with operator input until approve.
     await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click(); // natural transition → review
@@ -484,6 +532,10 @@ async function main() {
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"][data-cycle-status="done"]`, { timeout: 15000 }).catch(() => {});
     await sleep(WORK);
     await frame(page, 'step13e-cycle-complete', 'Done — the full cycle, every phase green with its cost, in the hex pane');
+    // S1 + S3 + S4 final: cycle done, the spine intact, total cost accrued.
+    await expectCycleStatus(page, 'done');
+    await countAtLeast(page, '[data-phase-hex]', 5, 'completed cycle still shows ≥5 phase hexes');
+    check(await maxPhaseCost(page) > 0, 'completed cycle shows accrued per-phase cost');
 
     console.log('\n[e2e] journey complete.');
   } finally {
@@ -508,6 +560,14 @@ async function main() {
   if (videoName) { renameSync(join(VIDEO, videoName), join(VIDEO, 'journey.webm')); videoName = 'video/journey.webm'; }
   writeIndex(videoName);
   console.log(`[e2e] OK — ${OUT}/index.html (${captions.length} frames + video)`);
+
+  if (failures.length) {
+    console.error(`\n[e2e] ${failures.length} DOM-as-metrics assertion(s) FAILED:`);
+    for (const f of failures) console.error(`   ✗ ${f}`);
+    process.exitCode = 1;
+  } else {
+    console.log('[e2e] all DOM-as-metrics assertions passed ✓');
+  }
 }
 
 main().catch((err) => { console.error(err); rmSync(projectRoot, { recursive: true, force: true }); process.exit(1); });

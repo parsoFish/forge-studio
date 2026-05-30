@@ -1,22 +1,35 @@
 #!/usr/bin/env node
 /**
- * verify-cycle — autonomous-overnight wrapper around the recorder.
+ * verify-cycle — forge's REAL-CAPABILITY regression harness (ADR 022).
+ *
+ * Runs a real forge cycle end-to-end against the claude-harness corpus and
+ * asserts real-cycle OUTCOMES — not synthetic rubrics — then records the run
+ * and writes a pass/fail verdict. The four gate assertions (ADR 022 §1):
+ *   1. the cycle reached merge (finalStatus `done`);
+ *   2. the dev-loop completed N/N work items (no complete:0 / failed);
+ *   3. the project's own tests are green post-merge (npm test in the repo);
+ *   4. total cycle cost is under the declared ceiling.
  *
  * Usage:
- *   node scripts/verify-cycle.mjs <initiative-id>
+ *   node scripts/verify-cycle.mjs <initiative-id> [options]
  *
- * Differs from `record-cycle-ui.mjs` in that:
- *   1. Auto-approves the cycle when it lands at `ready-for-review`
- *      (runs `forge review <id> --approve --auto-verify`).
- *   2. Keeps capturing frames through closure + reflection (the post-
- *      operator-approval phases) by polling phase-states until the
- *      cycle log emits `cycle.end`.
- *   3. Writes a manifest summary at the end so the operator can see
- *      the cycle's final state when they wake up.
+ * Options:
+ *   --tier routine|release  routine (default): reset the harness repo to
+ *                           --base-sha and re-run one corpus initiative.
+ *                           release: greenfield — drive the 5-initiative
+ *                           ROADMAP by invoking the runner per initiative in
+ *                           order against an empty repo.
+ *   --base-sha <sha>        base commit to reset the harness repo to (routine).
+ *   --cost-ceiling <usd>    fail the gate above this total cost (default 25).
+ *   --project <name>        managed project to run against (default claude-harness).
+ *   --force-reset           allow resetting a repo with uncommitted changes.
  *
- * Output dir: forge-ui/.demo-shots/verify/<initiative-id>/
+ * The manifest is staged from the corpus (_queue/done/) into _queue/pending/
+ * if not already pending. Tiered + manual-gate per ADR 022. It auto-approves at
+ * ready-for-review and captures closure + reflection through `cycle.end`.
  *
- * Manifest for <initiative-id> must already exist in _queue/pending/.
+ * Output: forge-ui/.demo-shots/verify/<initiative-id>/ (video, frames,
+ * index.html, summary.json with the verdict). Exits non-zero if the gate fails.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -27,11 +40,21 @@ import { chromium } from 'playwright-core';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const initiativeId = process.argv[2];
+const argv = process.argv.slice(2);
+const initiativeId = argv.find((a) => !a.startsWith('--'));
 if (!initiativeId) {
-  console.error('usage: node scripts/verify-cycle.mjs <initiative-id>');
+  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--force-reset]');
   process.exit(1);
 }
+function flag(name, def) {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : def;
+}
+const TIER = flag('tier', 'routine');
+const BASE_SHA = flag('base-sha', null);
+const COST_CEILING = parseFloat(flag('cost-ceiling', '25')) || 25;
+const PROJECT = flag('project', 'claude-harness');
+const FORCE_RESET = argv.includes('--force-reset');
 
 const OUT_DIR = join(FORGE_ROOT, 'forge-ui/.demo-shots/verify', initiativeId);
 const VIDEO_DIR = join(OUT_DIR, 'video');
@@ -39,6 +62,109 @@ const FRAMES_DIR = join(OUT_DIR, 'frames');
 
 function log(msg) { console.log(`[verify ${new Date().toISOString().slice(11, 19)}] ${msg}`); }
 async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// ---- ADR 022 runner: corpus staging, repo reset, outcome assertions --------
+
+function git(repoPath, args) {
+  const r = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
+  return { ok: r.status === 0, stdout: (r.stdout ?? '').trim(), stderr: (r.stderr ?? '').trim() };
+}
+
+/** The harness project's repo path — from the manifest's project_repo_path, else projects/<PROJECT>. */
+function projectRepoPath() {
+  for (const q of ['pending', 'done', 'in-flight', 'ready-for-review', 'failed']) {
+    const p = join(FORGE_ROOT, '_queue', q, `${initiativeId}.md`);
+    if (existsSync(p)) {
+      const m = readFileSync(p, 'utf8').match(/project_repo_path:\s*(.+)/);
+      if (m) return resolve(FORGE_ROOT, m[1].trim());
+    }
+  }
+  return join(FORGE_ROOT, 'projects', PROJECT);
+}
+
+/** Stage the initiative manifest from the corpus (_queue/done/) into pending/. */
+function stageManifest() {
+  const pending = join(FORGE_ROOT, '_queue', 'pending', `${initiativeId}.md`);
+  if (existsSync(pending)) { log('manifest already in _queue/pending/'); return true; }
+  const done = join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`);
+  if (!existsSync(done)) {
+    log(`manifest not in pending/ or done/ — stage ${initiativeId}.md first`);
+    return false;
+  }
+  mkdirSync(dirname(pending), { recursive: true });
+  // Reset the lifecycle field for a fresh run; the rest of the corpus manifest is reused as-is.
+  const body = readFileSync(done, 'utf8').replace(/^phase:.*$/m, 'phase: pending');
+  writeFileSync(pending, body);
+  log(`staged corpus manifest → _queue/pending/${initiativeId}.md`);
+  return true;
+}
+
+/** Routine tier: hard-reset the harness repo to BASE_SHA (guarded against a dirty tree). */
+function resetRepo(repoPath) {
+  if (!existsSync(join(repoPath, '.git'))) { log(`reset skipped — ${repoPath} is not a git repo`); return true; }
+  const dirty = git(repoPath, ['status', '--porcelain']).stdout;
+  if (dirty && !FORCE_RESET) {
+    log(`refusing to reset ${repoPath}: uncommitted changes (pass --force-reset to override)`);
+    return false;
+  }
+  log(`resetting ${repoPath} → ${BASE_SHA} (reset --hard + clean -fd)`);
+  if (!git(repoPath, ['reset', '--hard', BASE_SHA]).ok) { log('reset failed'); return false; }
+  git(repoPath, ['clean', '-fd']);
+  return true;
+}
+
+/** Sum cost_usd across the cycle's event log. */
+function sumCycleCost(cycleId) {
+  try {
+    let total = 0;
+    for (const line of readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n')) {
+      if (!line) continue;
+      try { const e = JSON.parse(line); if (typeof e.cost_usd === 'number') total += e.cost_usd; } catch { /* */ }
+    }
+    return total;
+  } catch { return 0; }
+}
+
+/** Work-item completion from the event log: { total, complete, failed }. */
+function wiOutcomes(cycleId) {
+  const emitted = new Set();
+  const ended = new Map(); // wiId -> failed?
+  try {
+    for (const line of readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n')) {
+      if (!line) continue;
+      let e; try { e = JSON.parse(line); } catch { continue; }
+      const wi = e.metadata?.work_item_id;
+      if (typeof wi !== 'string') continue;
+      if (e.event_type === 'log' && /work-item-emitted/.test(e.message ?? '')) emitted.add(wi);
+      if (e.phase === 'developer-loop' && e.event_type === 'end') ended.set(wi, e.metadata?.status === 'failed');
+    }
+  } catch { /* */ }
+  const total = Math.max(emitted.size, ended.size);
+  const complete = [...ended.values()].filter((f) => !f).length;
+  const failed = [...ended.values()].filter((f) => f).length;
+  return { total, complete, failed };
+}
+
+/** Run the project's own test suite (the golden-file assertion, for claude-trail). */
+function runProjectTests(repoPath) {
+  if (!existsSync(join(repoPath, 'package.json'))) return { ran: false, ok: true };
+  log(`running project tests in ${repoPath} (npm test)…`);
+  const r = spawnSync('npm', ['test'], { cwd: repoPath, encoding: 'utf8', timeout: 5 * 60_000 });
+  return { ran: true, ok: r.status === 0 };
+}
+
+/** The ADR 022 gate: four binary, outcome-only assertions. */
+function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
+  const wi = wiOutcomes(cycleId);
+  const tests = runProjectTests(repoPath);
+  const checks = [
+    { name: 'cycle reached merge (done)', pass: finalStatus === 'done', detail: `finalStatus=${finalStatus}` },
+    { name: 'dev-loop completed N/N work items', pass: wi.total > 0 && wi.complete === wi.total && wi.failed === 0, detail: `${wi.complete}/${wi.total} complete, ${wi.failed} failed` },
+    { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? 'npm test passed' : 'npm test FAILED') : 'no package.json — skipped' },
+    { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
+  ];
+  return { checks, wi };
+}
 
 async function startWatch() {
   // Reuse existing forge watch on 4124/4123 if up; else spawn.
@@ -214,6 +340,17 @@ async function main() {
   mkdirSync(VIDEO_DIR, { recursive: true });
   mkdirSync(FRAMES_DIR, { recursive: true });
 
+  // ADR 022 pre-run: stage the corpus manifest + reset the repo per tier.
+  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}`);
+  const repoPath = projectRepoPath();
+  if (!stageManifest()) process.exit(1);
+  if (TIER === 'routine') {
+    if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
+    else { log('routine tier without --base-sha: running against the current repo state'); }
+  } else if (TIER === 'release') {
+    log('release tier: greenfield rebuild — drive the 5-initiative ROADMAP by invoking the runner per initiative in order (docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md).');
+  }
+
   log('starting forge watch…');
   const watch = await startWatch();
   log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
@@ -360,21 +497,37 @@ async function main() {
   writeIndexHtml();
   log(`index → ${join(OUT_DIR, 'index.html')}`);
 
-  // Final state report.
+  // ---- ADR 022 gate: outcome assertions ----
   const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
   const finalEvents = await cycleEventCountFromLog(cycleId);
+  const cost = sumCycleCost(cycleId);
+  const { checks, wi } = assessOutcomes({ finalStatus, cost, repoPath, cycleId });
+  const gatePassed = checks.every((c) => c.pass);
+
+  log(`--- verdict (${TIER} tier) ---`);
+  for (const c of checks) log(`  ${c.pass ? '✓' : '✗'} ${c.name} — ${c.detail}`);
+
   const summary = {
     initiativeId,
     cycleId,
+    project: PROJECT,
+    tier: TIER,
+    baseSha: BASE_SHA,
     finalStatus,
     totalEvents: finalEvents,
+    costUsd: Number(cost.toFixed(4)),
+    costCeilingUsd: COST_CEILING,
+    workItems: wi,
+    checks,
+    gate: gatePassed ? 'pass' : 'fail',
     framesCaptured: readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.png')).length,
     completedAt: new Date().toISOString(),
   };
   writeFileSync(join(OUT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
   log(`summary → ${join(OUT_DIR, 'summary.json')}`);
-  log(`final status: ${finalStatus}, ${finalEvents} events, ${summary.framesCaptured} frames`);
-  log('done');
+  log(`final status: ${finalStatus}, $${cost.toFixed(2)}, ${finalEvents} events, ${summary.framesCaptured} frames`);
+  log(`done — gate ${gatePassed ? 'PASS ✓' : 'FAIL ✗'}`);
+  if (!gatePassed) process.exitCode = 1;
 }
 
 main().catch((err) => {
