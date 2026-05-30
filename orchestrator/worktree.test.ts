@@ -111,3 +111,24 @@ test('selfHealWorktreeState: orphan dir (not in registry) → removed', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('selfHealWorktreeState: REGISTERED leftover worktree → removed so the retry can re-add (F-W5-5)', () => {
+  const { dir, repo } = initBareIshRepo();
+  try {
+    const wtRoot = join(dir, '_wt');
+    // A prior (failed) cycle for this initiative left a REGISTERED worktree.
+    const prior = add({ projectRepoPath: repo, branch: 'forge/init-retry', worktreesRoot: wtRoot, initiativeId: 'INIT-retry' });
+    assert.ok(existsSync(prior.path));
+    assert.ok(list(repo).some((w) => resolve(w.path) === resolve(prior.path)), 'registered before heal');
+    // Previously this was left in place (it's "known"), so the retry's
+    // `worktree add` failed "already exists". Self-heal must now clear it.
+    selfHealWorktreeState(repo, prior.path);
+    assert.equal(existsSync(prior.path), false, 'registered worktree dir removed');
+    assert.equal(list(repo).some((w) => resolve(w.path) === resolve(prior.path)), false, 'registry entry gone');
+    // A fresh add to the same path now succeeds — the cycle can restart clean.
+    const fresh = add({ projectRepoPath: repo, branch: 'forge/init-retry', worktreesRoot: wtRoot, initiativeId: 'INIT-retry' });
+    assert.ok(existsSync(fresh.path), 'fresh worktree re-created after heal');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

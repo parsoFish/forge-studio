@@ -78,12 +78,20 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
   } catch {
     /* non-fatal */
   }
-  // If `path` exists but is NOT in `git worktree list`, it's an orphan.
-  // Removing it is the only safe option — a fresh `worktree add` would
-  // EADDR otherwise.
+  // Clear `path` so a fresh `worktree add` can't collide with a leftover.
   if (existsSync(path)) {
     const known = list(projectRepoPath).some((w) => resolve(w.path) === resolve(path));
-    if (!known) {
+    if (known) {
+      // A REGISTERED worktree from a prior (failed/abandoned) cycle of this
+      // same initiative. F-W5-5: the auto-retry path left it behind, so the
+      // re-run's `worktree add` failed "already exists" and the cycle never
+      // restarted. Remove it cleanly (registry + dir), then prune.
+      try { execFileSync('git', ['-C', projectRepoPath, 'worktree', 'remove', '--force', path], { stdio: 'pipe' }); } catch { /* */ }
+      try { execFileSync('git', ['-C', projectRepoPath, 'worktree', 'prune'], { stdio: 'pipe' }); } catch { /* */ }
+    }
+    // Whether it was a registered worktree just removed, or an orphan dir git
+    // never knew about, make sure the path is gone before the fresh add.
+    if (existsSync(path)) {
       try { rmSync(path, { recursive: true, force: true }); } catch { /* */ }
     }
   }
