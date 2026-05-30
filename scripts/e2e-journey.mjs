@@ -36,20 +36,35 @@
  * Cleans up the throwaway projects/_e2e-demo/ + _logs/_queue state afterwards.
  */
 import { spawn, execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, appendFileSync, rmSync, readdirSync, renameSync } from 'node:fs';
+import { mkdirSync, writeFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PROJECT = '_e2e-demo';
+const PROJECT = 'claude-harness';
 const projectRoot = join(FORGE_ROOT, 'projects', PROJECT);
+// SAFETY: this harness seeds + then deletes scratch. A REAL project (git-backed)
+// must NEVER have its directory removed — only the demo's own scratch (the one
+// architect session it creates, its cycle log, its queue manifest). A synthetic
+// throwaway project (no .git) is fully removed as before. cleanProjectDir() is
+// the ONLY place the project dir may be rm'd, and it refuses a git-backed dir.
+const IS_SYNTHETIC = !existsSync(join(projectRoot, '.git'));
+function cleanProjectDir() {
+  if (IS_SYNTHETIC) rmSync(projectRoot, { recursive: true, force: true });
+}
+/** Remove only the demo's seeded architect session from a real project (never
+ *  _archived/ or other sessions). No-op for a synthetic project (whole dir goes). */
+function cleanSeededSession(sid) {
+  if (IS_SYNTHETIC || !sid) return;
+  try { rmSync(join(projectRoot, '_architect', sid), { recursive: true, force: true }); } catch { /* */ }
+}
 const OUT = join(FORGE_ROOT, 'forge-ui/.demo-shots/e2e');
 const FRAMES = join(OUT, 'frames');
 const VIDEO = join(OUT, 'video');
-const IDEA = 'Add a dark-mode toggle to the settings page that follows the OS by default.';
+const IDEA = 'Add a --compact flag to claude-trail: a 3-line glance view (title / verdict / cost) of a cycle, instead of the full multi-section trail. Default output unchanged.';
 const DATE = new Date().toISOString().slice(0, 10);
-const INIT = `INIT-${DATE}-e2e-dark-mode`;
+const INIT = `INIT-${DATE}-e2e-compact-flag`;
 const STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
 const CYCLE_ID = `${STAMP}_${INIT}`;
 const CYCLE_LOG = join(FORGE_ROOT, '_logs', CYCLE_ID);
@@ -95,15 +110,15 @@ async function paced(thunks, gap = THINK) {
 
 function writeQuestions(sid) {
   writeFileSync(join(archDir(sid), 'questions.json'), JSON.stringify([
-    { question: 'Should dark mode follow the OS setting by default?', header: 'OS sync',
+    { question: 'Which sections should --compact include?', header: 'Sections',
       options: [
-        { label: 'Follow OS', description: 'Match the system theme automatically on first load.' },
-        { label: 'Manual only', description: 'Default to light; the operator toggles it explicitly.' },
+        { label: 'Title + verdict + cost', description: 'A 3-line terminal glance: "# Trail — INIT-X", "Verdict: approve", "Total: $0.24".' },
+        { label: 'Full Summary block', description: 'Keep the whole ## Summary section — about 6 lines.' },
       ] },
-    { question: 'Where should the toggle live?', header: 'Placement',
+    { question: 'How should --compact interact with --format json?', header: 'JSON compat',
       options: [
-        { label: 'Settings page', description: 'A row in the existing settings form.' },
-        { label: 'Top nav', description: 'A persistent icon button in the header.' },
+        { label: 'Markdown-only — error on json', description: '--compact is a display shortcut; combining with --format json exits non-zero.' },
+        { label: 'Orthogonal — both work', description: 'Emit a minimal JSON object with the compact fields.' },
       ] },
   ], null, 2));
 }
@@ -113,23 +128,23 @@ function writePlan(sid, round) {
   writeFileSync(join(dir, 'manifests', `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
-    'origin: architect', 'features:', '  - feature_id: FEAT-1', '    title: Theme context + OS sync', '    depends_on: []',
-    '  - feature_id: FEAT-2', '    title: Settings toggle UI', '    depends_on: [FEAT-1]', '---', '',
-    '# Dark mode toggle', '', 'GIVEN settings WHEN toggled THEN the theme persists across reloads.',
+    'origin: architect', 'features:', '  - feature_id: FEAT-1', '    title: renderCompact() + --compact flag', '    depends_on: []',
+    '  - feature_id: FEAT-2', '    title: Flag-conflict error paths', '    depends_on: [FEAT-1]', '---', '',
+    '# claude-trail --compact', '', 'GIVEN a cycle WHEN `claude-trail <id> --compact` THEN it prints the title, verdict, and total cost only.',
   ].join('\n'));
   writeFileSync(join(dir, 'PLAN.html'), `<!doctype html><html><head><meta charset="utf-8"><style>
     body{font:14px ui-sans-serif,system-ui;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
     h1{font-size:18px}h2{font-size:14px;color:#d2a8ff}.card{border:1px solid #30363d;border-radius:8px;padding:14px;margin:12px 0;background:#161b22}
     .r{color:#7ee787}</style></head>
-    <body><h1>PLAN — dark-mode toggle ${round > 1 ? '<span class="r">(revised)</span>' : ''}</h1>
-    <p>Operator brief: a dark-mode toggle that follows the OS by default.</p>
-    <div class="card"><h2>FEAT-1 Theme context + OS sync</h2><p>GIVEN settings WHEN toggled THEN theme persists across reloads.</p></div>
-    <div class="card"><h2>FEAT-2 Settings toggle UI</h2><p>Depends on FEAT-1. A row in the settings form.</p></div></body></html>`);
+    <body><h1>PLAN — claude-trail --compact ${round > 1 ? '<span class="r">(revised)</span>' : ''}</h1>
+    <p>Operator brief: a 3-line glance view (title / verdict / cost) for claude-trail, default output unchanged.</p>
+    <div class="card"><h2>FEAT-1 renderCompact() + --compact flag</h2><p>GIVEN a cycle WHEN --compact THEN print title + verdict + total cost only.</p></div>
+    <div class="card"><h2>FEAT-2 Flag-conflict error paths</h2><p>Depends on FEAT-1. --compact errors when combined with --format json / --out / --since.</p></div></body></html>`);
   writeFileSync(join(dir, 'escalations.json'), JSON.stringify([
-    { id: 'esc-0', critic: 'design', question: 'Default theme on first load?',
-      options: [{ label: 'Follow OS', rationale: 'Least surprise; matches platform conventions.' }, { label: 'Light', rationale: 'Keeps the brand default for new users.' }] },
-    { id: 'esc-1', critic: 'eng', question: 'Persist the preference where?',
-      options: [{ label: 'localStorage', rationale: 'Zero backend; instant.' }, { label: 'User profile', rationale: 'Syncs across devices; needs an API call.' }] },
+    { id: 'esc-0', critic: 'design', question: 'What does --compact show when the cycle has no verdict yet?',
+      options: [{ label: 'Placeholders', rationale: 'Keep the strict 3-line shape: "Verdict: (unknown)", "Total: $0.00".' }, { label: 'Error', rationale: 'Refuse — --compact is for completed cycles only.' }] },
+    { id: 'esc-1', critic: 'eng', question: 'Should --compact compose with --out (write to file)?',
+      options: [{ label: 'Reject --out', rationale: 'Pure terminal-glance; stay stdout-only + single-cycle.' }, { label: 'Support --out', rationale: 'Pipe a compact summary to a file for CI/Slack.' }] },
   ], null, 2));
   writeStatus(sid, { phase: 'awaiting-verdict', round, idea: IDEA });
 }
@@ -153,19 +168,19 @@ function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
   writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
-    title: `Dark-mode toggle that follows the OS${revision > 1 ? ' (round ' + revision + ')' : ''}`,
-    essence: 'Adds a settings toggle; the theme now persists and defaults to the OS preference on first load.',
+    title: `claude-trail --compact: a 3-line glance view${revision > 1 ? ' (round ' + revision + ')' : ''}`,
+    essence: 'Running `claude-trail <id> --compact` now prints a terse 3-line summary (title / Verdict / Cost) instead of the full multi-section trail. Mutually exclusive with --format json / --out / --since; default output unchanged.',
     project: PROJECT, initiativeId: INIT, baseRef: 'main', changedRef: `forge/${INIT}`,
-    diffStat: ' src/theme.ts        | 38 ++++++++\n src/SettingsRow.tsx | 21 +++++\n 2 files changed, 59 insertions(+)',
-    acceptanceCriteria: ['GIVEN settings WHEN the toggle is flipped THEN the theme persists across reloads'],
+    diffStat: ' src/trail.ts                 | 18 ++++\n src/cli.ts                   | 30 ++++--\n tests/compact-flag.test.ts   | 292 +++++++++\n 3 files changed, 334 insertions(+)',
+    acceptanceCriteria: ['GIVEN a cycle WHEN `claude-trail <id> --compact` THEN stdout is exactly the title, Verdict, and Total cost (3 lines)'],
     checkpoints: [
-      { label: 'sync', kind: 'harness', caption: 'Theme resolves from the OS preference on first load',
+      { label: 'compact', kind: 'harness', caption: 'The 3-line glance matches the golden byte-for-byte',
         metrics: [
-          { label: 'first-paint theme matches OS', before: 'no', after: 'yes', deltaPct: null, parity: 'diverged' },
-          { label: 'preference persisted across reload', before: 'no', after: 'yes', deltaPct: null, parity: 'diverged' },
+          { label: 'compact output is 3 lines', before: 'n/a', after: 'yes', deltaPct: null, parity: 'diverged' },
+          { label: 'full trail output unchanged (no regression)', before: 'yes', after: 'yes', deltaPct: null, parity: 'match' },
         ] },
-      { label: 'toggle', kind: 'screenshot', caption: 'The settings row gains a dark-mode toggle',
-        beforeNote: 'No theme control existed in settings.', afterNote: `A labelled toggle persists the choice.${revision > 1 ? ' Now also keyboard-accessible per review.' : ''}` },
+      { label: 'conflicts', kind: 'screenshot', caption: '--compact errors cleanly when combined with --format json / --out / --since',
+        beforeNote: 'No compact mode existed.', afterNote: `--compact prints title+verdict+cost; conflicting flags exit non-zero.${revision > 1 ? ' Error message now names both flags per review.' : ''}` },
     ],
   }, null, 2));
 }
@@ -264,7 +279,7 @@ async function maxPhaseCost(page) {
 // ---- the journey ----------------------------------------------------------
 
 async function main() {
-  rmSync(projectRoot, { recursive: true, force: true });
+  cleanProjectDir(); // synthetic only — a real (git-backed) project dir is preserved
   mkdirSync(join(projectRoot, '_architect'), { recursive: true });
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(FRAMES, { recursive: true });
@@ -280,6 +295,7 @@ async function main() {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
 
+  let createdSid = null;
   try {
     // STEP 1 — new idea provided.
     await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
@@ -298,6 +314,7 @@ async function main() {
     await page.locator('[data-action="start-architect"]').click();
     await page.waitForURL(/\/architect\//, { timeout: 15000 });
     const sid = decodeURIComponent(page.url().split('/architect/')[1]);
+    createdSid = sid; // tracked so cleanup can scope to this session on a real project
     console.log(`[e2e] architect session: ${sid}`);
 
     // STEP 2 — architect reviews the project + explores edge cases (live hex bursts).
@@ -340,7 +357,7 @@ async function main() {
 
     // STEP 6 — on operator feedback, the architect reruns the last step.
     await page.locator('[data-component="plan-gate"] [data-field="rationale"], [data-section="plan-gate"] [data-field="rationale"]').first()
-      .fill('Make the toggle keyboard-accessible and confirm focus order before drafting.').catch(() => {});
+      .fill('Also reject --compact --out (not just --format json) — keep it stdout-only — before drafting.').catch(() => {});
     await frame(page, 'step06-send-back', 'Step 6 — the operator sends the plan back with feedback');
     await page.locator('[data-action="revise-plan"]').click();
     await sleep(ACT);
@@ -351,7 +368,7 @@ async function main() {
     await page.waitForSelector('[data-section="plan-gate"]', { state: 'detached', timeout: 8000 }).catch(() => {});
     await burst(sid, ['Read', 'council', 'council']);
     writePlan(sid, 2);
-    archEvent(sid, 'log', 'plan-emitted (revised — keyboard-accessible)');
+    archEvent(sid, 'log', 'plan-emitted (revised — --compact also rejects --out)');
     await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="false"]', { timeout: 15000 });
     await sleep(READ);
     await frame(page, 'step06b-replan', 'Step 6 — the architect reran the last step; the revised plan is re-presented');
@@ -460,12 +477,12 @@ async function main() {
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
     // Send back with a new acceptance criterion.
     await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();
-    await page.locator('[data-component="verdict-form"] textarea').fill('Close — but the toggle must be operable by keyboard before this merges.');
-    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0).fill('settings');
-    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1).fill('using only the keyboard');
-    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2).fill('the toggle is reachable and operable');
+    await page.locator('[data-component="verdict-form"] textarea').fill('Close — but the --compact + --format json error must name BOTH flags before this merges.');
+    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0).fill('a cycle dir and the flags --compact --format json');
+    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1).fill('claude-trail is run');
+    await page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2).fill('it exits non-zero and stderr names both --compact and json');
     await sleep(ACT);
-    await frame(page, 'step12b-send-back', 'Step 12 — operator sends back with a new acceptance criterion (keyboard access)');
+    await frame(page, 'step12b-send-back', 'Step 12 — operator sends back with a new acceptance criterion (error must name both flags)');
     await page.locator('[data-action="send-back"]').click();
     await sleep(ACT);
     // Return to the dashboard (natural) while the dev-loop reruns on the feedback.
@@ -475,7 +492,7 @@ async function main() {
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop rerun — addressing review feedback'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
-      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — re-rendering demo.json (keyboard access)'),
+      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — re-rendering demo.json (error names both flags)'),
       () => { writeDemoJson(2); cycleEvent('developer-loop', 'end', 'ralph.end (round 2)'); },
     ]);
     moveManifest('in-flight', 'ready-for-review');
@@ -485,10 +502,10 @@ async function main() {
     await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click();
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await sleep(READ);
-    await frame(page, 'step12d-re-review', 'Step 12 — the operator re-reviews the updated demo (now keyboard-accessible)');
+    await frame(page, 'step12d-re-review', 'Step 12 — the operator re-reviews the updated demo (error now names both flags)');
 
     // STEP 13 — approve → merge → reflect (its own page) → done.
-    await page.locator('[data-component="verdict-form"] textarea').fill('LGTM — follows the OS, persists, and is keyboard-accessible. All ACs met.');
+    await page.locator('[data-component="verdict-form"] textarea').fill('LGTM — 3-line glance, default output unchanged, and the conflict error names both flags. All ACs met.');
     await sleep(ACT);
     await frame(page, 'step13-approve', 'Step 13 — the operator approves');
     await page.locator('[data-action="approve-and-merge"]').click();
@@ -514,7 +531,7 @@ async function main() {
     await sleep(READ);
     await frame(page, 'step13c-reflect-page', 'Step 13 — the reflection screen asks how the cycle went');
     await page.locator('[data-question-index="0"] input[type="radio"]').first().check();
-    await page.locator('[data-field="freeform"]').fill('Dependency ordering held; the keyboard-access send-back was the right call.');
+    await page.locator('[data-field="freeform"]').fill('Dependency ordering held; the error-message send-back was the right call.');
     await sleep(ACT);
     await page.locator('[data-action="submit-reflection"]').click();
     await page.waitForSelector('[data-section="reflect-done"]', { timeout: 10000 }).catch(() => {});
@@ -542,17 +559,15 @@ async function main() {
     await ctx.close();
     await browser.close();
     try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* */ }
-    rmSync(projectRoot, { recursive: true, force: true });
+    cleanProjectDir();            // synthetic only — preserves a real project dir
+    cleanSeededSession(createdSid); // real project: drop only THIS demo's session
     rmSync(CYCLE_LOG, { recursive: true, force: true });
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
       try { rmSync(join(QDIR(q), `${INIT}.verdict-response.md`), { force: true }); } catch { /* */ }
     }
-    try {
-      for (const d of readdirSync(join(FORGE_ROOT, '_logs'))) {
-        if (d.startsWith('_architect-')) rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
-      }
-    } catch { /* */ }
+    // Only the demo's own architect-session log (not every _architect-* in _logs).
+    if (createdSid) { try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${createdSid}`), { recursive: true, force: true }); } catch { /* */ } }
   }
 
   const vids = readdirSync(VIDEO).filter((f) => f.endsWith('.webm'));
@@ -570,4 +585,4 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); rmSync(projectRoot, { recursive: true, force: true }); process.exit(1); });
+main().catch((err) => { console.error(err); cleanProjectDir(); process.exit(1); });
