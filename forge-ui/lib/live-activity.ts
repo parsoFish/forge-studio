@@ -85,7 +85,7 @@ export function toolColour(name: string): string {
   return TOOL_COLOURS[name] ?? '#8b949e';
 }
 
-export type WiActivity = { costUsd: number; tokens: number; lastReasoning: string };
+export type WiActivity = { costUsd: number; tokens: number; lastReasoning: string; lastReasoningAt: string };
 
 /**
  * Per-work-item cost + token totals + latest reasoning text, summed from the
@@ -99,12 +99,13 @@ export function derivePerWiActivity(events: readonly EventLogEntry[]): Record<st
     const md = e.metadata as { work_item_id?: string; last_assistant_text?: string } | undefined;
     const wi = md?.work_item_id;
     if (typeof wi !== 'string') continue;
-    const a = out[wi] ?? { costUsd: 0, tokens: 0, lastReasoning: '' };
+    const a = out[wi] ?? { costUsd: 0, tokens: 0, lastReasoning: '', lastReasoningAt: '' };
     if (typeof e.cost_usd === 'number') a.costUsd += e.cost_usd;
     if (typeof e.tokens_in === 'number') a.tokens += e.tokens_in;
     if (typeof e.tokens_out === 'number') a.tokens += e.tokens_out;
     if (typeof md?.last_assistant_text === 'string' && md.last_assistant_text) {
       a.lastReasoning = md.last_assistant_text;
+      a.lastReasoningAt = e.started_at;
     }
     out[wi] = a;
   }

@@ -487,6 +487,11 @@ const wrapperStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
+  // Fill the overlay it's mounted in so the list + detail get real estate.
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  boxSizing: 'border-box',
 };
 
 const chipBarStyle: CSSProperties = {
@@ -530,16 +535,20 @@ const chipStyle: CSSProperties = {
 
 const gridStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '60% 40%',
+  gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
   gap: 12,
-  minHeight: 320,
+  // Fill the remaining height of the wrapper so both columns scroll
+  // independently instead of being clipped to a fixed 320/480px.
+  flex: 1,
+  minHeight: 0,
 };
 
 const listStyle: CSSProperties = {
   border: '1px solid #21262d',
   borderRadius: 6,
   padding: 6,
-  maxHeight: 480,
+  height: '100%',
+  minHeight: 0,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
@@ -552,7 +561,8 @@ const detailStyle: CSSProperties = {
   border: '1px solid #21262d',
   borderRadius: 6,
   padding: 10,
-  maxHeight: 480,
+  height: '100%',
+  minHeight: 0,
   overflowY: 'auto',
   background: '#0c1115',
 };

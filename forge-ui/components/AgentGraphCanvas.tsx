@@ -68,6 +68,13 @@ export type AgentGraphCanvasProps = {
 
 const TOKEN_CAP = 200_000;
 const BURST_WINDOW_MS = 3500;
+// Reasoning bubbles fade as the thought ages but never fully vanish while the
+// WI is still active — floored so the latest reasoning stays readable.
+const BUBBLE_FADE_MS = 7000;
+function bubbleOpacity(ageMs: number): number {
+  if (!Number.isFinite(ageMs) || ageMs <= 0) return 1;
+  return Math.max(0.4, 1 - (ageMs / BUBBLE_FADE_MS) * 0.6);
+}
 
 type Dir = 'up' | 'down' | 'left' | 'right';
 const DIR_ANGLE: Record<Dir, number> = { up: 270, down: 90, left: 180, right: 0 };
@@ -122,7 +129,9 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
     const id = setInterval(() => {
       const now = Date.now();
       setNowMs(now);
-      if (!lastEventMs || now - lastEventMs > BURST_WINDOW_MS) clearInterval(id);
+      // Keep ticking long enough for both the tool-burst AND the (longer)
+      // reasoning-bubble fade to complete before idling.
+      if (!lastEventMs || now - lastEventMs > Math.max(BURST_WINDOW_MS, BUBBLE_FADE_MS)) clearInterval(id);
     }, 400);
     return () => clearInterval(id);
   }, [lastEventMs]);
@@ -130,7 +139,13 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
   const wiActivity = useMemo(() => derivePerWiActivity(events), [events]);
   const activeWiIds = useMemo(() => workItems.filter((w) => w.status === 'active').map((w) => w.id), [workItems]);
   const activeWiId = activeWiIds[0] ?? null;
-  const bursts = useMemo(() => deriveLiveToolBursts(events, nowMs, { windowMs: BURST_WINDOW_MS }), [events, nowMs]);
+  // Cap concurrent bursts so the canvas stays legible — the live picture is
+  // "what's firing right now", not every tool call (operator 2026-05-30: the
+  // activity view must be clean + clear). Per-owner + global caps keep it sparse.
+  const bursts = useMemo(
+    () => deriveLiveToolBursts(events, nowMs, { windowMs: BURST_WINDOW_MS, perOwner: 2, total: 6 }),
+    [events, nowMs],
+  );
 
   const activeUnits = activeWiIds.length + phaseStates.filter((p) => p.status === 'active' && p.phase !== 'developer-loop').length;
   const totals = useMemo(() => deriveStageTotals(events, activeUnits || 1), [events, activeUnits]);
@@ -306,10 +321,13 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
           id: `bubble:${w.id}`,
           type: 'bubble',
           position: { x: bx, y: c.y - 26 },
-          data: { text: act.lastReasoning, side },
+          data: { text: act.lastReasoning, side, opacity: bubbleOpacity(nowMs - Date.parse(act.lastReasoningAt)) },
           width: BUBBLE_W,
           draggable: false,
           selectable: false,
+          // Above every hex — reasoning/tool callouts must never hide behind a
+          // neighbouring hex (operator 2026-05-30).
+          zIndex: 1000,
         });
       }
     }
@@ -327,6 +345,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         height: TOOL_H,
         draggable: false,
         selectable: false,
+        zIndex: 1001,
       });
     }
     return nodes;
@@ -409,7 +428,9 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
 
         {tab === 'cost' && <CostPanel cost={cost} workItems={workItems} wiActivity={wiActivity} totals={totals} onClose={() => setTab('none')} />}
         <div style={panelOverlay(tab === 'files')}><FileHeatmap events={events} /></div>
-        <div style={panelOverlay(tab === 'activity')}><ActivityPanel events={events} selectedWiId={selectedWiId ?? null} /></div>
+        {/* The activity view is the operator's PRIMARY window into live work
+            (operator 2026-05-30) — give it the canvas, not a 380px sliver. */}
+        <div style={activityOverlay(tab === 'activity')}><ActivityPanel events={events} selectedWiId={selectedWiId ?? null} /></div>
       </div>
       <TimelineScrubber events={events} />
     </div>
@@ -545,13 +566,43 @@ function ToolBurstNode({ data }: NodeProps<{ tool: string; summary: string; owne
   );
 }
 
-function BubbleNode({ data }: NodeProps<{ text: string; side?: 'left' | 'right' }>): JSX.Element {
+function BubbleNode({ data }: NodeProps<{ text: string; side?: 'left' | 'right'; opacity?: number }>): JSX.Element {
+  // Solid (not see-through) so it reads cleanly over the canvas + connectors;
+  // an accent rail + shadow lift it off the grid; the text clamps to 3 lines so
+  // a long reasoning blurb never sprawls; opacity fades as the thought ages
+  // (floored, smooth transition). Layered above hexes via the node zIndex.
+  // (operator 2026-05-30: the activity view must be clean, legible, and fade.)
   return (
-    <div style={{ width: BUBBLE_W, background: '#0d131bee', border: '1px solid #2b333c', borderRadius: 8, padding: '7px 10px' }}>
+    <div
+      data-reasoning-bubble
+      style={{
+        width: BUBBLE_W,
+        background: '#0b0f16fa',
+        border: '1px solid #303a45',
+        borderLeft: '3px solid #1f6feb',
+        borderRadius: 8,
+        padding: '7px 11px',
+        boxShadow: '0 4px 16px #000a',
+        opacity: data.opacity ?? 1,
+        transition: 'opacity 300ms linear',
+      }}
+    >
       <Handle id="tl" type="target" position={Position.Left} style={hiddenHandle} isConnectable={false} />
       <Handle id="tr" type="target" position={Position.Right} style={hiddenHandle} isConnectable={false} />
-      <div style={{ fontSize: 9, letterSpacing: 0.6, color: '#6e7681', marginBottom: 3, fontFamily: MONO }}>CLAUDE</div>
-      <div style={{ fontSize: 11, color: '#adbac7', lineHeight: 1.4 }}>{truncate(data.text, 120)}</div>
+      <div style={{ fontSize: 9, letterSpacing: 0.6, color: '#58a6ff', marginBottom: 3, fontFamily: MONO, fontWeight: 600 }}>CLAUDE</div>
+      <div
+        style={{
+          fontSize: 11,
+          color: '#c9d1d9',
+          lineHeight: 1.45,
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {data.text}
+      </div>
     </div>
   );
 }
@@ -639,6 +690,9 @@ const costPill: React.CSSProperties = { position: 'absolute', top: -13, left: '5
 const tokenTrack: React.CSSProperties = { height: 4, width: '74%', margin: '4px auto 0', background: '#11161d', borderRadius: 3, overflow: 'hidden' };
 const hiddenHandle: React.CSSProperties = { opacity: 0, width: 1, height: 1, border: 'none', background: 'transparent' };
 function panelOverlay(show: boolean): React.CSSProperties { return { position: 'absolute', top: 52, right: 16, width: 380, maxHeight: 540, overflow: 'auto', zIndex: 6, display: show ? 'block' : 'none' }; }
+// The activity tab fills the canvas working area (above the scrubber) so its
+// event list + detail pane are actually usable — it is the primary live view.
+function activityOverlay(show: boolean): React.CSSProperties { return { position: 'absolute', top: 52, left: 16, right: 16, bottom: 48, zIndex: 7, display: show ? 'flex' : 'none' }; }
 const costCard: React.CSSProperties = { position: 'absolute', top: 52, right: 16, width: 300, zIndex: 6, background: '#0a0f16f2', border: '1px solid #2b333c', borderRadius: 10, padding: 14, color: '#c9d1d9', fontFamily: MONO };
 const costSection: React.CSSProperties = { marginTop: 10, marginBottom: 4, fontSize: 9, letterSpacing: 0.6, color: '#6e7681' };
 const costRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' };
