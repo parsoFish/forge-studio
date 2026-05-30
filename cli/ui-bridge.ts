@@ -206,18 +206,21 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     tails.set(cycleId, state);
   };
 
+  // Tail only LIVE cycles (in-flight / ready-for-review), and only while at
+  // least one browser is connected: a terminal cycle's log is immutable and
+  // served on demand via /api/events, and with no client there is nobody to
+  // stream to. This drops the idle cost from ~RECENT_CYCLES_MAX statSync polls
+  // every TAIL_POLL_MS to zero when no UI is open, and to just the live set
+  // otherwise. (Architect-session tails are driven separately by
+  // ensureArchitectTail when the architect screen is open.)
   const startTailsForLive = (): void => {
-    const cycleIds = new Set<string>();
-    try {
-      for (const name of readdirSync(logsRoot)) {
-        const dir = join(logsRoot, name);
-        if (!statSync(dir).isDirectory()) continue;
-        if (existsSync(join(dir, 'events.jsonl'))) cycleIds.add(name);
-      }
-    } catch { /* no _logs dir yet */ }
-    // Limit to the most-recent N to avoid tailing the entire history on startup.
-    const sorted = [...cycleIds].sort().slice(-RECENT_CYCLES_MAX);
-    for (const id of sorted) ensureTailFor(id);
+    if (clients.size === 0) return;
+    for (const c of scanCycles().live) ensureTailFor(c.cycleId);
+  };
+
+  const stopAllTails = (): void => {
+    for (const t of tails.values()) if (t.timer) clearInterval(t.timer);
+    tails.clear();
   };
 
   const watchQueue = (): void => {
@@ -285,12 +288,16 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     clients.add(ws);
     const id = ++connectionSeq;
     if (debugWs) console.error(`[bridge] ws#${id} connect from ${req.socket.remoteAddress} clients=${clients.size}`);
+    // A watcher is now connected — begin streaming the live cycles.
+    startTailsForLive();
     ws.on('close', (code, reason) => {
       clients.delete(ws);
+      if (clients.size === 0) stopAllTails();
       if (debugWs) console.error(`[bridge] ws#${id} close code=${code} reason="${reason.toString()}" remaining=${clients.size}`);
     });
     ws.on('error', (err) => {
       clients.delete(ws);
+      if (clients.size === 0) stopAllTails();
       if (debugWs) console.error(`[bridge] ws#${id} error: ${err.message}`);
     });
     // Initial snapshot.
@@ -309,7 +316,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     http.once('listening', () => resolveListen());
     http.listen(port, '0.0.0.0');
   });
-  startTailsForLive();
+  // Live tails start lazily when the first browser connects (see the wss
+  // 'connection' handler); at startup we only wire the cheap fs.watch signals.
   watchQueue();
   watchArchitect();
 
