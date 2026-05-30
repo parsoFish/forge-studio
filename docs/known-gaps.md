@@ -131,3 +131,82 @@ cycle), so its auto-approve/closure tracking silently followed the wrong cycle.
   publishes the branch before the unifier.
 - claude-harness baseline (unwired `stats`, gitignored fixtures) — fixed +
   merged (project-side, not a forge gap).
+
+## 2026-05-31 — betterado onboarding run (first live-creds, real-cloud target)
+
+Operator drove an onboarding initiative against `terraform-provider-betterado`
+(a large vendored Go monorepo) with **live Azure DevOps creds in the cycle env**.
+Four cycle attempts; the 4th reached review with 5 genuinely-passing gomock unit
+tests (landed clean on `main`). The dev-loop's *code generation is not the
+problem* — every failure was in planning, gating, packaging, or hygiene around
+it. **All of these block roadmap-scale (multi-feature) reliability; none is a
+reason to retreat to single-WI initiatives — the single-feature run was a
+diagnostic to isolate variables, not a target.**
+
+1. **[HIGH] PM decomposition can hallucinate, ignoring the manifest.** On one run
+   the PM received a correct 3-feature manifest (task_group/release/live-harness)
+   and instead planned "create brain/profile.md / brain/themes / tracking file"
+   — work items unrelated to any manifest feature. This is the #1 roadmap-scale
+   risk: if the PM doesn't faithfully decompose the operator's manifest, scale is
+   impossible. Mitigation ideas: validate that each WI's `feature_id` maps to a
+   manifest feature AND the WI title is derived from that feature (reject/▼
+   re-plan if a WI references files outside the manifest's stated scope);
+   surface the PM's feature→WI mapping for a fast operator sanity check.
+
+2. **[HIGH] Gates must be auto-derived correctly for the project's test runner.**
+   The operator had to hand-discover that Go test-adding WIs need
+   `go test -tags all -run <Prefix> ./pkg/` (exact dir). Two traps bit us:
+   - A **bare package gate** passes at iter-0 when the package already has
+     sibling tests → forge's hollow-iter0 guard fails the WI (`gate-too-loose`).
+     Gates must FAIL on a clean tree → use `-run <NewPrefix>`.
+   - `-tags all` is mandatory where unit tests sit behind `//go:build` tags
+     (silently 0 tests otherwise).
+   The architect/PM should derive these from the project (`.forge/project.json` +
+   language detection), not depend on the operator encoding them in the manifest.
+
+3. **[HIGH] no-work-indicator poisons multi-package `go test` runs.**
+   `runGateCapturing` scans the **combined** output for `[no tests to run]` etc.
+   A `./pkg/...` wildcard that includes a test-less sibling/sub-package (e.g.
+   `taskagent/validate`) prints `[no tests to run]`, failing the gate **even
+   though the real tests passed** — it burned a correct agent for 5 iters/$3.32.
+   Fix: evaluate the indicator per-package, or don't fail if ≥1 package actually
+   ran tests. (Today's workaround: gate the exact package dir, never `/...`.)
+
+4. **[HIGH] PR hygiene — cycles commit build artifacts + delete tracked config.**
+   `cycle.ts` `git add -A` (autocommit safety-net) committed a **35 MB compiled
+   provider binary** + the whole `graphify-out/` + `.forge` scratch into the PR,
+   because the project `.gitignore` didn't cover them (the binary had been
+   renamed; gitignore lagged). Separately, `pr.ts` strips **all** of `.forge/`
+   as scratch — which **deletes the tracked `.forge/project.json` / `quality_gate_cmd`**
+   a Go project needs. Fixes: (a) `forge preflight` should flag a missing
+   build-artifact ignore (the onboarding gate today only checks forge scratch);
+   (b) exempt `.forge/project.json` + `.forge/quality_gate_cmd` from the `.forge/`
+   strip, or move project config out of the ignored dir entirely.
+
+5. **[MED] Unifier loop is the dominant cost and is opaque.** For a single-file
+   test change ($1.34 dev, 1 iter), the unifier ran **~$11.5 / ~15 iters / 19 min**
+   looping on `pr-not-self-contained` (demo.json / pr-description) — ~9× the
+   actual work, packaging-only. No per-iteration reason is surfaced, and the loop
+   isn't right-sized to the change. Fixes: bound/scale the unifier loop to diff
+   size, emit a per-iteration "why still looping" reason, cap demo effort for
+   trivial changes.
+
+6. **[MED] UI misreports the dev/unifier phase (operator-confirmed live).**
+   The unifier runs *inside* the `developer-loop` phase, so the dev hex shows
+   green while the unifier loops for ~19 min more — inaccurate. The activity tab
+   also fills with duplicates from the unifier's re-invocation iteration
+   renumbering ("Iteration 8 → re-invocation as iter 1") + `forge-autocommit WIP`
+   commits. Fixes: surface the unifier as a distinct sub-phase with its own
+   status; make the activity log one clean monotonic stream for the whole cycle.
+   (Already named as the step-10 gap in `docs/operator-journey.md`.)
+
+### Project-side findings (betterado — also in its Brain 3)
+- **Stale release acceptance HCL.** Live `terraform apply` of the basic release
+  definition failed on current ADO with `VS402982` (stage-level `retention_policy`
+  now required; pipeline-level deprecated) then `VS402877` (pre/post approvals now
+  required). `TestAccReleaseDefinition_basic`'s HCL is stale and would fail live.
+  Strong justification for the live harness; a work item for the release-acceptance
+  feature.
+- **Provider works live.** `betterado_project` created a real ADO project (10s),
+  confirmed via API GET + org-list + tf state, destroyed clean. Evidence bundle:
+  `/tmp/live-confirm/evidence/` (this session).

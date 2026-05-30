@@ -63,6 +63,31 @@ arc. It should become a written preflight (closure goal G2) and,
 because it is load-bearing, a candidate ADR-017. C1–C5 are met by
 trafficGame today; C6 is not met by forge.
 
+## Deepened 2026-05-31 (betterado onboarding run)
+
+Onboarding a *different* project form (a Go infra provider with live external
+resources) showed the six clauses were directionally right but under-specified.
+The conceptual, project-type-agnostic articulation now lives in
+[`docs/forge-project-contract.md`](../../../docs/forge-project-contract.md); deltas:
+
+- **C1 is about *discrimination*, not just speed.** The gate is forge's only
+  done-oracle: it must FAIL before the work exists and PASS only on real work.
+  Three silent-failure modes hit this run: *hollow* (green at iter-0 →
+  `gate-too-loose`), *false-pass* (exit 0 without running the new work), and
+  *poisoned* (a test-less sibling's "no tests to run" line fails a multi-target
+  run). Rule: scope the gate to the unit of change.
+- **C2 generalises to PR *hermeticity*.** `git add -A` + any un-ignored build
+  artifact (a renamed binary → a 35 MB blob) or generated output pollutes the PR.
+  Ignore anything a build/tool writes into the tree; force-track config in ignored
+  dirs.
+- **New C7 — external-resource model**: a creds-free in-loop gate + an isolated,
+  self-cleaning live confirmation layer; creds out-of-band; API responses are the
+  machine evidence.
+
+The deepened C1/C2 facets and all of C7 are **not yet machine-checked** by
+`forge preflight` — see [`docs/known-gaps.md`](../../../docs/known-gaps.md)
+§2026-05-31. (C6 is now satisfied post-Phase-6 — operator merges, no auto-merge.)
+
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the structural-prerequisite evidence.
