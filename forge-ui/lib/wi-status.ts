@@ -25,17 +25,21 @@ import type { EventLogEntry } from './bridge-client';
  * 'retrying' state can travel separately from the orchestrator's
  * top-level phase state.
  *
+ * Operator note 2026-05-30: amber ('retrying') is a WORKING state — the
+ * equivalent of blue, only flagging "this isn't the first attempt". The ONLY
+ * terminal states are green ('complete') and red ('failed'); amber never
+ * persists past an `end`. A unit that has terminally failed (its own `end`
+ * says so) is red immediately — it is NOT held amber waiting on a cycle-level
+ * verdict (that older gating left dead units stuck orange).
+ *
  *   - 'pending'  → no lifecycle events recorded for this unit yet
- *   - 'active'   → started, no terminal end
- *   - 'complete' → ended successfully
- *   - 'retrying' → had at least one non-expected error AND is either
- *     still running OR cycle has not yet emitted a terminal failure.
- *     This corresponds to a transient mid-cycle hiccup that the
- *     orchestrator is recovering from — operator note 2026-05-25:
- *     yellow until the cycle decides it's truly dead.
- *   - 'failed'   → terminal end with metadata.status === 'failed'
- *     AND the cycle has emitted its own terminal failure. Only this
- *     state surfaces red.
+ *   - 'active'   → started, working, first attempt (no terminal end, no error)
+ *   - 'retrying' → still running, but already had a failed attempt this run
+ *     (an error since the last start, or a prior end it is re-attempting).
+ *     A live/working tone — green/red still decide the terminal state.
+ *   - 'complete' → terminal end, succeeded (green)
+ *   - 'failed'   → terminal end, failed — metadata.status === 'failed' or an
+ *     error between the last start and that end (red)
  */
 export type WiStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';
 
@@ -45,7 +49,6 @@ export function derivePerWiStatus(
   events: readonly EventLogEntry[],
   wiIds: readonly string[],
 ): Record<string, WiStatus> {
-  const cycleFailed = cycleHasFailed(events);
   // Bucket lifecycle events by WI id once. We preserve insertion order from
   // the source array — callers should pass events in chronological order
   // (the bridge guarantees this since the JSONL log is append-only).
@@ -61,59 +64,41 @@ export function derivePerWiStatus(
 
   const out: Record<string, WiStatus> = {};
   for (const id of wiIds) {
-    out[id] = statusFor(buckets.get(id) ?? [], cycleFailed);
+    out[id] = statusFor(buckets.get(id) ?? []);
   }
   return out;
 }
 
-/**
- * Returns true iff the cycle has emitted a terminal failure (orchestrator
- * end with status: 'failed'). When false (still running OR ended
- * successfully), per-WI 'failed' is downgraded to 'retrying' (yellow)
- * since the orchestrator considers the failure recoverable in context.
- */
-export function cycleHasFailed(events: readonly EventLogEntry[]): boolean {
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const ev = events[i];
-    if (ev.event_type !== 'end') continue;
-    // Only the orchestrator's own end carries the cycle-level status.
-    if (ev.phase !== 'orchestrator') continue;
-    return ev.metadata?.status === 'failed';
-  }
-  return false;
-}
-
-function statusFor(events: readonly EventLogEntry[], cycleFailed: boolean): WiStatus {
+function statusFor(events: readonly EventLogEntry[]): WiStatus {
   if (events.length === 0) return 'pending';
 
-  // Look at the last 'end' (if any). If present, that's the terminal state
-  // for this run of the WI — its metadata.status tells us pass/fail. We
-  // also consider any 'error' event that arrived AFTER the most recent
-  // 'start' but BEFORE any subsequent 'end' as a fail signal — the
-  // orchestrator sometimes emits error then end-failed, sometimes just
-  // error with no end (mid-iteration crash).
+  // The last 'end' that is the freshest lifecycle signal is TERMINAL — it
+  // resolves to green or red, never amber (operator 2026-05-30). We treat the
+  // unit as failed if that end says so, or if an error fired between the last
+  // start and that end (error-then-end, or error with no clean end).
   const lastEndIdx = lastIndexOfType(events, 'end');
   const lastStartIdx = lastIndexOfType(events, 'start');
 
-  if (lastEndIdx >= 0 && (lastStartIdx < 0 || lastEndIdx > lastStartIdx)) {
-    // Terminal end is the freshest lifecycle signal.
-    const end = events[lastEndIdx];
-    const endIndicatesFailure =
-      end.metadata?.status === 'failed' || hasErrorBetween(events, lastStartIdx, lastEndIdx);
-    if (endIndicatesFailure) {
-      // Per operator note 2026-05-25: red only when the cycle itself
-      // has reported a terminal failure. Otherwise this WI is in a
-      // transient/retry state — surface yellow.
-      return cycleFailed ? 'failed' : 'retrying';
-    }
-    return 'complete';
+  if (lastEndIdx >= 0 && lastEndIdx > lastStartIdx) {
+    // The end's own status is authoritative — a unit that recovered from a
+    // mid-run error and still ended `complete` is green, not red.
+    const status = events[lastEndIdx].metadata?.status;
+    if (status === 'failed') return 'failed';
+    if (status === 'complete') return 'complete';
+    // Ambiguous end (no explicit pass/fail) → infer failure from an error
+    // between the last start and that end.
+    return hasErrorBetween(events, lastStartIdx, lastEndIdx) ? 'failed' : 'complete';
   }
 
-  // No terminal end ≥ last start → still active. If an error fired after
-  // the start with no end yet, the orchestrator is still running its
-  // recovery — yellow, never red, until cycle.end says otherwise.
-  if (lastStartIdx >= 0 && hasErrorBetween(events, lastStartIdx, events.length)) {
-    return cycleFailed ? 'failed' : 'retrying';
+  // Still running (no terminal end after the last start). Amber ('retrying')
+  // is a live, WORKING tone that only flags "not the first attempt": the unit
+  // is mid-flight but has already had a failed attempt this run — an error
+  // since the last start, OR a prior end it is now re-attempting. Otherwise
+  // it's a clean first attempt → blue ('active').
+  if (lastStartIdx >= 0) {
+    const erroredSinceStart = hasErrorBetween(events, lastStartIdx, events.length);
+    const reattempt = lastEndIdx >= 0 && lastEndIdx < lastStartIdx;
+    if (erroredSinceStart || reattempt) return 'retrying';
   }
   return 'active';
 }
