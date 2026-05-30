@@ -8,7 +8,7 @@ import {
   postReflectionAnswers,
   type ReflectionData,
 } from '@/lib/bridge-client';
-import { ReflectStageHex } from '@/components/ReflectStageHex';
+import { ReflectStageHex } from '@/components/MomentHex';
 import { ScreenShell } from '@/components/ScreenShell';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { useCycleEvents } from '@/lib/use-cycle-events';

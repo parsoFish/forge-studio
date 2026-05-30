@@ -7,7 +7,7 @@ import {
   fetchArchitectSessions,
   type ArchitectSessionSummary,
 } from '@/lib/bridge-client';
-import { ArchitectStageHex } from '@/components/ArchitectStageHex';
+import { ArchitectStageHex } from '@/components/MomentHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { PlanGate } from '@/components/PlanGate';
 import { ScreenShell } from '@/components/ScreenShell';

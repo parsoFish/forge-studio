@@ -9,7 +9,7 @@ import {
   type Cycle,
   type DemoModel,
 } from '@/lib/bridge-client';
-import { ReviewStageHex } from '@/components/ReviewStageHex';
+import { ReviewStageHex } from '@/components/MomentHex';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { ScreenShell } from '@/components/ScreenShell';

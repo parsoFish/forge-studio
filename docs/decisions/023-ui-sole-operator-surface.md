@@ -106,8 +106,20 @@ parallel screen/handler/codec stacks into one.
 > cleanly gated (a `hasOriginRemote()` branch, not entangled with the real-origin
 > path) and orthogonal to the operator-surface consolidation. Retained
 > intentionally; the §4 removal item is closed as "kept."
+> **HumanMoment generalization — CLOSED as superseded (2026-05-30).** Its premise
+> (three parallel screen/handler/codec stacks) was largely dissolved by the prior
+> passes: the **codec** layer is already one-liners on the shared `bridgeGet`/
+> `bridgePost` envelope; the **screen** layer already shares `ScreenShell` +
+> `useNowTicker` + `useCycleEvents` + `StageHex`; the **handler** layer is
+> genuinely different per moment (validate-ACs+lock+write vs spawn-runner-turn vs
+> write-feedback+rerun) and shouldn't be a tagged-union endpoint. A full
+> descriptor + generic `<HumanMomentScreen>` + unified endpoint would add an
+> indirection layer over intrinsically-distinct moments for ~20–40 lines and risk
+> the locked UI. Done instead (the light-touch win): the three per-moment hex
+> wrappers (`ArchitectStageHex`/`ReviewStageHex`/`ReflectStageHex`, ~149 lines, 3
+> files) were merged into one config-driven `components/MomentHex.tsx`.
 > Still deferred: `forge review --approve` (load-bearing — `verify-cycle.mjs`
-> auto-approves through it) and the HumanMoment generalization.
+> auto-approves through it).
 
 ## Consequences
 
