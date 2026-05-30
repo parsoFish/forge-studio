@@ -932,6 +932,17 @@ async function handleReflect(
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
       sendJson(res, 200, { ok: true });
+      // Parity with `forge reflect --rerun`: the reflector ingests the feedback
+      // file on rerun. Detached (don't block the HTTP response on a full
+      // reflector pass) + log-and-continue, so the UI owns reflection
+      // end-to-end without the operator touching the CLI.
+      void import('../orchestrator/forge-reflect-rerun.ts')
+        .then(({ rerunReflector }) =>
+          rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot }),
+        )
+        .catch((err) =>
+          console.error(`[bridge] reflect rerun failed for ${cycleId}: ${String(err)}`),
+        );
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
     }
