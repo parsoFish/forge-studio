@@ -30,7 +30,6 @@ import { runCycle } from './cycle.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig } from './notify.ts';
-import { makeFileVerdict } from './file-verdict.ts';
 import { loadConfig } from './config.ts';
 import {
   dispatchTerminalStatus,
@@ -539,15 +538,11 @@ async function runOne(
       // per-WI dev-loop and runs only the unifier + downstream phases.
       resumeFrom: manifest.resumeFrom,
       eventTee: tee,
-      // File-based verdict provider — writes a prompt file next to the
-      // manifest in `_queue/in-flight/`, polls for the operator's response.
-      // Replaces the prior auto-approving default that silently merged every
-      // initiative on round 1.
-      getVerdict: makeFileVerdict({
-        initiativeId: manifest.initiativeId,
-        queueRoot: cfg.queueRoot,
-        notifier: cfg.notify,
-      }),
+      // No verdict provider is threaded in: the review verdict arrives
+      // out-of-band as a UI action (the bridge writes verdict-response.md and
+      // the send-back loop re-enters via requeue with resume_from: unifier),
+      // so the cycle never blocks waiting on an operator. The reviewer phase
+      // opens the PR and stops at ready-for-review.
     });
 
     if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);

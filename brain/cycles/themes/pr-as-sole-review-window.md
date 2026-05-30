@@ -29,6 +29,15 @@ related_themes:
 
 # The PR must be the sole review window
 
+> **Superseded 2026-05-30 ([ADR 021](../../../docs/decisions/021-local-review-and-unified-demo.md) +
+> [ADR 023](../../../docs/decisions/023-ui-sole-operator-surface.md)).** Review moved
+> *into the forge UI* (`/review/[cycleId]` renders a structured `demo.json` + verdict
+> form); the UI is now the sole operator interaction surface. The PR-comment review
+> loop (and its `pr-verdict` / `review-router` machinery, now deleted) is retired.
+> The PR is still **created + merged** (the merge boundary is unchanged) — it is just
+> no longer the operator's *review window*. The pattern below is kept as historical
+> rationale for self-contained, visibility-aware demos, which the in-UI demo preserves.
+
 ## Pattern
 
 When the operator is actively engaged, the tightest review loop is the

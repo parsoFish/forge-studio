@@ -6,17 +6,16 @@
  * draft, and a pushable branch. The review phase's only job is to open the
  * PR and wait for the operator's verdict.
  *
- * On verdict:
- *   - approve → outcome `pr-open`; closure decides `merged` from a real
- *               GitHub-confirmed merge (G10 / G1, unchanged).
- *   - send-back → the new `review-router` writes `pr-feedback.md` (C3a)
- *                 and the next cycle invocation runs the unifier in
- *                 send-back mode via `unifierFeedbackRef` (C3b).
+ * The operator's verdict arrives out-of-band via the forge UI (the sole
+ * interaction surface): the UI bridge writes `verdict-response.md`, and:
+ *   - approve → closure decides `merged` from a real GitHub-confirmed merge
+ *               (G10 / G1, unchanged).
+ *   - send-back → the cycle is requeued with `resume_from: unifier`, which
+ *                 re-runs the unifier in send-back mode via
+ *                 `unifierFeedbackRef` (C3b).
  *
- * For an unattended cycle whose verdict-provider is `makeFileVerdict`, the
- * cycle simply exits at `ready-for-review` after PR open and waits for the
- * operator's nudge (`/forge-review <id>`); the router resumes the dev-loop
- * unifier with the new feedback.
+ * So this phase simply opens the PR and exits at `ready-for-review`; it never
+ * blocks waiting on the operator.
  */
 
 import { existsSync } from 'node:fs';

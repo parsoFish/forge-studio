@@ -55,8 +55,10 @@ import { runReflector } from './phases/reflector.ts';
 import { runClosure } from './phases/closure.ts';
 import { assertLocalRemoteSynced, pushInitiativeBranch } from './pr.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
-// The unifier sub-phase owns iteration in dev-loop space; the review phase
-// is now a thin non-LLM router (see orchestrator/review-router.ts).
+// The unifier sub-phase owns iteration in dev-loop space; the review phase is
+// now a thin, non-LLM PR-opener. The operator's verdict arrives out-of-band as
+// a UI action (the bridge writes verdict-response.md; send-back re-enters via
+// requeue with resume_from: unifier).
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();

@@ -15,7 +15,6 @@ import { resolve } from 'node:path';
 
 import type { EventLogger } from './logging.ts';
 import { parseManifest } from './manifest.ts';
-import type { GetVerdict } from './file-verdict.ts';
 
 export type CycleInput = {
   initiativeId: string;
@@ -24,17 +23,6 @@ export type CycleInput = {
   worktreePath: string;
   cycleId?: string;
   dryRun?: boolean;
-  /**
-   * Verdict provider for the review-Ralph loop. Production: file-based
-   * operator adapter (`makeFileVerdict`). Bench: simulator agent. When
-   * absent, the review-loop uses a default that approves on the first call
-   * — appropriate for the per-phase review-loop bench (which only tests
-   * stage 1) but NOT for end-to-end runs (the chained bench supplies a
-   * real simulator). NOTE (Phase 6 / G9): an `approve` verdict no longer
-   * causes a merge — it means the review gate passed and the PR is
-   * produced. The GitHub PR is the operator's merge surface.
-   */
-  getVerdict?: GetVerdict;
   /**
    * Operator-merge confirmation hook (Phase 6 / G9 / G10). The review
    * phase NEVER merges; the operator merges the PR in GitHub. The closure

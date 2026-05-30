@@ -55,6 +55,18 @@ related_themes:
 > now run in-UI on dedicated screens; the invariant below — explicit,
 > operator-initiated, impossible to silently auto-satisfy — holds on every one
 > (reflection still only writes the brain after the operator submits feedback).
+>
+> **Amended again 2026-05-30 ([ADR 023](../../../docs/decisions/023-ui-sole-operator-surface.md)).**
+> The forge **UI is now the *sole* operator interaction surface** — the
+> slash-command / PR-comment / CLI verdict mechanism is retired (not the
+> invariant). The verified-dead parts are removed: the PR-comment poller
+> (`review-router`), the PR-comment verdict provider (`pr-verdict`), the
+> never-invoked `getVerdict` provider seam, and the `/forge-review` command. The
+> remaining live CLI/slash fallbacks (`/forge-architect`, `/forge-reflect`,
+> `forge send-back`, `forge review --approve`, `forge architect commit`) are
+> sequenced for retirement behind a UI-parity check. **Load-bearing property is
+> unchanged and easier to guarantee**: one write-path per moment satisfies its
+> gate (no auto-approve, no simulator in production).
 
 Forge has exactly **three deliberate human interaction moments**. The
 operator's direction: each is performed in the operator's **own Claude
@@ -81,9 +93,9 @@ benchmarks.
 This composes with [[review-phase-target-design]] and turns the
 "architect is out-of-cycle, hand-run" honest-finding into a *designed*
 property. The original slash-command home for each moment is now,
-per ADR 020/021, an in-UI screen for architect + review (reflection
-stays a slash command) — but the **impossible-to-auto-satisfy** invariant
-above is the load-bearing part and is preserved on every surface.
+per ADR 020/021/023, an in-UI screen for all three moments (the UI is
+the sole interaction surface) — but the **impossible-to-auto-satisfy**
+invariant above is the load-bearing part and is preserved on every surface.
 
 ## Sources
 
