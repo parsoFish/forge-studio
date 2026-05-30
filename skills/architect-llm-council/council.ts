@@ -204,33 +204,42 @@ export async function runCouncil(input: CouncilInput): Promise<CouncilResult> {
 
   emit({ type: 'council.start' });
 
-  for (const critic of input.critics) {
-    emit({ type: 'council.critic-start', critic: critic.name });
-    const draftSlice = sliceDraft(input.draft, maxDraftChars);
-    if (draftSlice.truncated) {
-      emit({
-        type: 'council.draft-truncated',
-        critic: critic.name,
-        fromChars: input.draft.length,
-        toChars: draftSlice.text.length,
+  // Critics are independent reviews, so run them as PARALLEL sub-agents — the
+  // wall-clock is the slowest single critic, not the sum (the panel was serial
+  // before, which made a 4-critic council the architect's long pole; 2026-05-30,
+  // user-confirmed flow). Aggregation below iterates in critic order so flags /
+  // escalation dedup / perCritic stay deterministic regardless of finish order.
+  const outcomes = await Promise.all(
+    input.critics.map(async (critic) => {
+      emit({ type: 'council.critic-start', critic: critic.name });
+      const draftSlice = sliceDraft(input.draft, maxDraftChars);
+      if (draftSlice.truncated) {
+        emit({
+          type: 'council.draft-truncated',
+          critic: critic.name,
+          fromChars: input.draft.length,
+          toChars: draftSlice.text.length,
+        });
+      }
+      const outcome = await runOneCritic({
+        critic,
+        draft: draftSlice.text,
+        truncatedNote: draftSlice.note,
+        projectContext: input.projectContext,
+        queryFn,
+        maxTurns,
+        emit,
       });
-    }
+      if (outcome.fellBack) {
+        emit({ type: 'council.fallback-required', critic: critic.name, rawText: outcome.rawText });
+      }
+      emit({ type: 'council.critic-end', critic: critic.name, costUsd: outcome.costUsd });
+      return { critic, ...outcome };
+    }),
+  );
 
-    const { verdict, costUsd, fellBack, rawText } = await runOneCritic({
-      critic,
-      draft: draftSlice.text,
-      truncatedNote: draftSlice.note,
-      projectContext: input.projectContext,
-      queryFn,
-      maxTurns,
-      emit,
-    });
-
-    if (fellBack) {
-      emit({ type: 'council.fallback-required', critic: critic.name, rawText });
-      fallbackCritics.push(critic.name);
-    }
-
+  for (const { critic, verdict, costUsd, fellBack } of outcomes) {
+    if (fellBack) fallbackCritics.push(critic.name);
     totalCostUsd += costUsd;
     perCritic.push({ critic: critic.name, verdict, costUsd });
     flags.push(...verdict.flags);
@@ -240,7 +249,6 @@ export async function runCouncil(input: CouncilInput): Promise<CouncilResult> {
       seen.add(key);
       escalations.push(e);
     }
-    emit({ type: 'council.critic-end', critic: critic.name, costUsd });
   }
 
   emit({ type: 'council.end', totalCostUsd });

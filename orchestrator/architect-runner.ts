@@ -429,14 +429,21 @@ async function runDraftStep(args: {
   const datePart = created_at.slice(0, 10);
   const manifests = draftInitiatives.map((d) => buildManifest(d, status, datePart, created_at));
 
-  // Council reviews the combined draft body (existing helper, unchanged).
+  // The council reviews the FIRST draft once, to surface design decisions for
+  // the operator. When `resolvedDecisions` is present this is the FINALIZE pass:
+  // the operator has already resolved those decisions, so the architect just
+  // generates the final manifest to hand to the PM — re-running the council
+  // would re-litigate settled choices and cost a whole extra critic pass
+  // (2026-05-30, user-confirmed flow: council runs once, before selections).
   const combinedBody = manifests.map((m) => m.body).join('\n\n---\n\n');
-  const council = await runCouncil({
-    draft: combinedBody,
-    critics: defaultCritics(),
-    projectContext: `Project: ${status.project}\nVision: ${vision}`,
-    queryFn: councilQueryFn,
-  });
+  const council = resolvedDecisions
+    ? { flags: [], escalations: [], perCritic: [], totalCostUsd: 0, fallbackCritics: [] }
+    : await runCouncil({
+        draft: combinedBody,
+        critics: defaultCritics(),
+        projectContext: `Project: ${status.project}\nVision: ${vision}`,
+        queryFn: councilQueryFn,
+      });
   const councilTranscript: CouncilTranscript = {
     flags: council.flags,
     escalations: council.escalations,

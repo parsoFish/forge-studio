@@ -69,6 +69,38 @@ test('runCouncil: invokes critics in declared order', async () => {
   for (const c of captured) assert.match(c.prompt, /Add login/);
 });
 
+test('runCouncil: runs critics in parallel, not serially', async () => {
+  // Critics are independent reviews — they must run concurrently so the council
+  // wall-clock is the slowest single critic, not the sum (2026-05-30 flow).
+  const critics: Critic[] = ['ceo', 'eng', 'design', 'dx'].map((name) => ({
+    name,
+    prompt: name,
+    model: 'sonnet',
+  }));
+  let running = 0;
+  let maxConcurrent = 0;
+  const queryFn: CouncilQueryFn = () => {
+    async function* gen() {
+      running += 1;
+      maxConcurrent = Math.max(maxConcurrent, running);
+      await new Promise((r) => setTimeout(r, 15)); // hold the slot so peers overlap
+      running -= 1;
+      yield {
+        type: 'result',
+        subtype: 'success',
+        total_cost_usd: 0.01,
+        num_turns: 1,
+        structured_output: { flags: [], escalations: [] },
+      };
+    }
+    return gen();
+  };
+
+  await runCouncil({ draft: DRAFT, critics, queryFn });
+
+  assert.equal(maxConcurrent, critics.length, 'all critics must be in flight at once (parallel)');
+});
+
 test('runCouncil: auto-applies flags and aggregates escalations', async () => {
   const captured: CapturedInvocation[] = [];
   const critics: Critic[] = [

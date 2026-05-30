@@ -312,7 +312,14 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
     void options;
     return gen();
   };
-  const councilQueryFn = makeCouncilFn({ flags: [], escalations: [] });
+  // The council must NOT run on finalize — the operator already resolved its
+  // decisions; re-running it would re-litigate settled choices (2026-05-30
+  // user-confirmed flow: council runs once, before selections). Spy proves it.
+  let councilCalls = 0;
+  const councilQueryFn: CouncilQueryFn = (...args) => {
+    councilCalls += 1;
+    return makeCouncilFn({ flags: [], escalations: [] })(...args);
+  };
 
   const result = await runArchitectTurn({
     sessionId,
@@ -325,6 +332,7 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
   });
 
   assert.equal(result.phase, 'committed');
+  assert.equal(councilCalls, 0, 'council must not run on the finalize pass (decisions already resolved)');
   assert.equal(result.promotedManifestPaths?.length, 1);
   // The resolved decision was fed into the draft prompt.
   assert.match(draftPrompt, /Resolved design decisions/);
