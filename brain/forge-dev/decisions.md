@@ -16,6 +16,7 @@ The full ADR set lives in [`docs/decisions/`](../../../docs/decisions/). This in
 - [`chained-phase-benchmarks`](./themes/chained-phase-benchmarks.md) — An e2e test is a SEED at the front of the chain, not a benchmark; chain reuses only the existing per-phase rubrics; delete benchmarks/e2e's bespoke rubric; fix 3 drift corrections.
 - [`holistic-metrics-onboarding`](./themes/holistic-metrics-onboarding.md) — A new contract clause (C7) — projects declare a holistic metric command + locked baselines + regression budget. Tests verify "did this break"; metrics verify "did this help". Derived from the trafficGame collision/elevation arc.
 - [`exploration-vs-implementation-initiatives`](./themes/exploration-vs-implementation-initiatives.md) — Exploration initiatives (sweep parameter space for a measurable outcome) need a different pipeline shape than implementation initiatives. Counterfactual reconstruction of the trafficGame arc's structure.
+- [`2026-05-30-ui-validation-run-fixes`](./themes/2026-05-30-ui-validation-run-fixes.md) — The first real end-to-end UI cycle (W5, claude-harness) surfaced seven defects in never-before-exercised live paths; six fixed, reached a real merged PR. Load-bearing contracts to preserve.
 
 > Most ADRs surface as `pattern`-categorised theme pages indexed in [`patterns.md`](../cycles/patterns.md). This index is reserved for theme pages whose primary frame is "we chose X over Y because Z" — i.e. the *why* of a decision rather than the *what* of a pattern.
 
