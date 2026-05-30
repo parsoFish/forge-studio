@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import {
   fetchReflection,
-  fetchEvents,
   postReflectionAnswers,
-  subscribe,
   type ReflectionData,
-  type EventLogEntry,
 } from '@/lib/bridge-client';
 import { ReflectStageHex } from '@/components/ReflectStageHex';
+import { ScreenShell } from '@/components/ScreenShell';
+import { useNowTicker } from '@/lib/use-now-ticker';
+import { useCycleEvents } from '@/lib/use-cycle-events';
 
 /**
  * The standalone reflection screen — the third human moment, in-UI (converting
@@ -24,36 +24,22 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
   const cycleId = decodeURIComponent(params.cycleId);
   const [data, setData] = useState<ReflectionData | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [events, setEvents] = useState<EventLogEntry[]>([]);
-  const [nowMs, setNowMs] = useState(0);
   const [choices, setChoices] = useState<Record<number, string>>({});
   const [freeform, setFreeform] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nowMs = useNowTicker();
 
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => {
-      fetchReflection(cycleId).then((d) => { if (!cancelled) { setData(d); setLoaded(true); } }).catch(() => { if (!cancelled) setLoaded(true); });
-    };
-    refresh();
-    fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
-    const sub = subscribe({
-      onMessage: (msg) => {
-        if (msg.type === 'cycle-list-changed' || msg.type === 'snapshot') refresh();
-        else if (msg.type === 'event' && msg.cycleId === cycleId) {
-          setEvents((prev) => (prev.some((e) => e.event_id === msg.event.event_id) ? prev : [...prev, msg.event]));
-        }
-      },
-    });
-    return () => { cancelled = true; sub.close(); };
+  const loadData = useCallback(() => {
+    fetchReflection(cycleId)
+      .then((d) => { setData(d); setLoaded(true); })
+      .catch(() => setLoaded(true));
   }, [cycleId]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { loadData(); }, [loadData]);
+  const events = useCycleEvents(cycleId, (msg) => {
+    if (msg.type === 'cycle-list-changed' || msg.type === 'snapshot') loadData();
+  });
 
   const questions = data?.questions ?? [];
   const allAnswered = questions.length > 0 && questions.every((_, i) => choices[i]);
@@ -74,19 +60,13 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
   }
 
   return (
-    <main
-      data-page="reflect-cycle"
-      data-cycle-id={cycleId}
-      data-page-ready={loaded ? 'true' : 'false'}
-      data-reflect-answered={done ? 'true' : 'false'}
-      style={{ padding: '16px 24px', minHeight: '100vh', maxWidth: 1000, margin: '0 auto' }}
+    <ScreenShell
+      dataPage="reflect-cycle"
+      ready={loaded}
+      title="reflect"
+      idLabel={cycleId}
+      mainData={{ 'data-cycle-id': cycleId, 'data-reflect-answered': done ? 'true' : 'false' }}
     >
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
-        <Link href="/" data-action="back-to-dashboard" style={{ color: '#58a6ff', fontSize: 13, textDecoration: 'none' }}>← forge</Link>
-        <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>reflect</h1>
-        <span style={{ fontSize: 12, color: '#8b949e', fontFamily: 'ui-monospace, Menlo, monospace' }}>{cycleId}</span>
-      </header>
-
       {!loaded ? (
         <div style={{ color: '#8b949e', fontSize: 13 }}>Loading reflection…</div>
       ) : (
@@ -142,6 +122,6 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
           </div>
         </div>
       )}
-    </main>
+    </ScreenShell>
   );
 }

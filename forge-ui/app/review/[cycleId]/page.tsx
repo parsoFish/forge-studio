@@ -1,20 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import {
   fetchCycles,
-  fetchEvents,
   fetchDemoModel,
-  subscribe,
   type Cycle,
-  type EventLogEntry,
   type DemoModel,
 } from '@/lib/bridge-client';
 import { ReviewStageHex } from '@/components/ReviewStageHex';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
+import { ScreenShell } from '@/components/ScreenShell';
+import { useNowTicker } from '@/lib/use-now-ticker';
+import { useCycleEvents } from '@/lib/use-cycle-events';
 
 /**
  * ADR 021 — the standalone review screen. Aligned with the architect plan
@@ -27,63 +27,37 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
   const [cycle, setCycle] = useState<Cycle | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [demo, setDemo] = useState<DemoModel | null>(null);
-  const [events, setEvents] = useState<EventLogEntry[]>([]);
-  const [nowMs, setNowMs] = useState(0);
   const [approved, setApproved] = useState(false);
+  const nowMs = useNowTicker();
 
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => {
-      fetchCycles()
-        .then((snap) => {
-          if (cancelled) return;
-          const all = [...snap.live, ...snap.recent];
-          setCycle(all.find((c) => c.cycleId === cycleId) ?? null);
-          setLoaded(true);
-        })
-        .catch(() => { if (!cancelled) setLoaded(true); });
-      // Re-fetch the demo too — a send-back → dev-loop rerun re-renders demo.json
-      // (ADR 021 step 12); the screen updates live without a reload.
-      fetchDemoModel(cycleId).then((d) => { if (!cancelled) setDemo(d); }).catch(() => {});
-    };
-    refresh();
-    fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
-    const sub = subscribe({
-      onMessage: (msg) => {
-        if (msg.type === 'cycle-list-changed' || msg.type === 'snapshot') refresh();
-        else if (msg.type === 'event' && msg.cycleId === cycleId) {
-          setEvents((prev) => (prev.some((e) => e.event_id === msg.event.event_id) ? prev : [...prev, msg.event]));
-        }
-      },
-    });
-    return () => { cancelled = true; sub.close(); };
+  const loadData = useCallback(() => {
+    fetchCycles()
+      .then((snap) => {
+        const all = [...snap.live, ...snap.recent];
+        setCycle(all.find((c) => c.cycleId === cycleId) ?? null);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+    // Re-fetch the demo too — a send-back → dev-loop rerun re-renders demo.json
+    // (ADR 021 step 12); the screen updates live without a reload.
+    fetchDemoModel(cycleId).then((d) => setDemo(d)).catch(() => {});
   }, [cycleId]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { loadData(); }, [loadData]);
+  const events = useCycleEvents(cycleId, (msg) => {
+    if (msg.type === 'cycle-list-changed' || msg.type === 'snapshot') loadData();
+  });
 
   const ready = cycle?.status === 'ready-for-review';
 
   return (
-    <main
-      data-page="review-cycle"
-      data-cycle-id={cycleId}
-      data-cycle-status={cycle?.status ?? ''}
-      data-page-ready={loaded ? 'true' : 'false'}
-      style={{ padding: '16px 24px', minHeight: '100vh', maxWidth: 1100, margin: '0 auto' }}
+    <ScreenShell
+      dataPage="review-cycle"
+      ready={loaded}
+      title="review"
+      idLabel={cycle?.initiativeId ?? cycleId}
+      maxWidth={1100}
+      mainData={{ 'data-cycle-id': cycleId, 'data-cycle-status': cycle?.status ?? '' }}
     >
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
-        <Link href="/" data-action="back-to-dashboard" style={{ color: '#58a6ff', fontSize: 13, textDecoration: 'none' }}>
-          ← forge
-        </Link>
-        <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>review</h1>
-        <span style={{ fontSize: 12, color: '#8b949e', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-          {cycle?.initiativeId ?? cycleId}
-        </span>
-      </header>
-
       {!loaded ? (
         <div style={{ color: '#8b949e', fontSize: 13 }}>Loading cycle…</div>
       ) : !cycle ? (
@@ -125,6 +99,6 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
           </div>
         </div>
       )}
-    </main>
+    </ScreenShell>
   );
 }

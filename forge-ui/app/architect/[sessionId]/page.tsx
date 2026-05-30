@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import {
   fetchArchitectSessions,
-  fetchEvents,
-  subscribe,
   type ArchitectSessionSummary,
-  type EventLogEntry,
 } from '@/lib/bridge-client';
 import { ArchitectStageHex } from '@/components/ArchitectStageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { PlanGate } from '@/components/PlanGate';
+import { ScreenShell } from '@/components/ScreenShell';
+import { useNowTicker } from '@/lib/use-now-ticker';
+import { useCycleEvents } from '@/lib/use-cycle-events';
 
 /**
  * ADR 020 — the dedicated architect / plan screen. Keeps the primary dashboard
@@ -30,65 +30,36 @@ export default function ArchitectSessionPage({
 
   const [session, setSession] = useState<ArchitectSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [events, setEvents] = useState<EventLogEntry[]>([]);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const nowMs = useNowTicker();
 
   // Resolve this session from the full list; re-fetch on architect changes.
-  const refresh = useRef(() => {});
+  const loadSession = useCallback(() => {
+    fetchArchitectSessions()
+      .then((list) => {
+        setSession(list.find((s) => s.sessionId === sessionId) ?? null);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [sessionId]);
   useEffect(() => {
-    let cancelled = false;
-    refresh.current = () => {
-      fetchArchitectSessions()
-        .then((list) => {
-          if (cancelled) return;
-          setSession(list.find((s) => s.sessionId === sessionId) ?? null);
-          setLoaded(true);
-        })
-        .catch(() => { if (!cancelled) setLoaded(true); });
-    };
-    refresh.current();
-    fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
-
-    const sub = subscribe({
-      onMessage: (msg) => {
-        if (msg.type === 'architect-list-changed') {
-          refresh.current();
-        } else if (msg.type === 'event' && msg.cycleId === cycleId) {
-          // The live tail replays from offset 0, so dedup against the events
-          // already painted by the initial fetchEvents.
-          setEvents((prev) =>
-            prev.some((e) => e.event_id === msg.event.event_id) ? prev : [...prev, msg.event],
-          );
-        }
-      },
-    });
+    loadSession();
     // Poll fallback for a just-created session whose status.json is still settling.
-    const poll = setInterval(() => refresh.current(), 3000);
-    return () => { cancelled = true; sub.close(); clearInterval(poll); };
-  }, [sessionId, cycleId]);
-
-  // Ticker for the hex burst fade.
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
+    const poll = setInterval(loadSession, 3000);
+    return () => clearInterval(poll);
+  }, [loadSession]);
+  const events = useCycleEvents(cycleId, (msg) => {
+    if (msg.type === 'architect-list-changed') loadSession();
+  });
 
   return (
-    <main
-      data-page="architect-session"
-      data-session-id={sessionId}
-      data-architect-phase={session?.phase ?? ''}
-      data-page-ready={loaded ? 'true' : 'false'}
-      style={{ padding: '16px 24px', minHeight: '100vh', maxWidth: 1100, margin: '0 auto' }}
+    <ScreenShell
+      dataPage="architect-session"
+      ready={loaded}
+      title="architect"
+      idLabel={sessionId}
+      maxWidth={1100}
+      mainData={{ 'data-session-id': sessionId, 'data-architect-phase': session?.phase ?? '' }}
     >
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
-        <Link href="/" data-action="back-to-dashboard" style={{ color: '#58a6ff', fontSize: 13, textDecoration: 'none' }}>
-          ← forge
-        </Link>
-        <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>architect</h1>
-        <span style={{ fontSize: 12, color: '#8b949e', fontFamily: 'ui-monospace, Menlo, monospace' }}>{sessionId}</span>
-      </header>
-
       {!loaded ? (
         <div style={{ color: '#8b949e', fontSize: 13 }}>Loading session…</div>
       ) : !session ? (
@@ -151,7 +122,7 @@ export default function ArchitectSessionPage({
           </div>
         </div>
       )}
-    </main>
+    </ScreenShell>
   );
 }
 
