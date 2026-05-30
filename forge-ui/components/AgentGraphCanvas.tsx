@@ -35,7 +35,6 @@ import ReactFlow, {
   type NodeProps,
   type NodeTypes,
 } from 'reactflow';
-import dagre from 'dagre';
 import 'reactflow/dist/style.css';
 
 import type { CostSummary, EventLogEntry, InitiativeFeature } from '@/lib/bridge-client';
@@ -159,28 +158,40 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
   const devLoopX = PHASE_X0 + DEV_INDEX * PHASE_DX;
 
   const wiCenter = useMemo(() => {
+    // Lay all work items on ONE horizontal level (y = WI_Y0), ordered left→right
+    // by dependency (topological), so a dependent WI sits to the RIGHT of its
+    // prerequisite and the connectors carry the dependency — instead of a tall
+    // vertical column (operator 2026-05-30: same horizontal level, clean +
+    // informative). dagre stacked dependent ranks downward; this keeps height
+    // flat and trades it for width (the canvas pans/zooms).
     const m = new Map<string, { x: number; y: number }>();
     if (workItems.length === 0) return m;
-    const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: 'TB', nodesep: 130, ranksep: 170, marginx: 20, marginy: 20 });
-    g.setDefaultEdgeLabel(() => ({}));
     const ids = new Set(workItems.map((w) => w.id));
-    for (const w of workItems) g.setNode(w.id, { width: WI_ACTIVE, height: WI_ACTIVE });
-    for (const w of workItems) for (const d of w.dependsOn) if (ids.has(d)) g.setEdge(d, w.id);
-    dagre.layout(g);
-    let minX = Infinity;
-    let maxX = -Infinity;
+    const indeg = new Map<string, number>();
+    for (const w of workItems) indeg.set(w.id, 0);
     for (const w of workItems) {
-      const n = g.node(w.id);
-      if (!n) continue;
-      minX = Math.min(minX, n.x);
-      maxX = Math.max(maxX, n.x);
+      for (const d of w.dependsOn) if (ids.has(d)) indeg.set(w.id, (indeg.get(w.id) ?? 0) + 1);
     }
-    const shiftX = devLoopX - (minX + maxX) / 2;
-    for (const w of workItems) {
-      const n = g.node(w.id);
-      if (n) m.set(w.id, { x: n.x + shiftX, y: n.y + WI_Y0 });
+    // Kahn's topological sort, preserving the PM's emitted order among ready
+    // (no-incoming-edge) nodes so parallel WIs read in a stable order.
+    const order: string[] = [];
+    const seen = new Set<string>();
+    const ready = workItems.filter((w) => (indeg.get(w.id) ?? 0) === 0).map((w) => w.id);
+    ready.forEach((id) => seen.add(id));
+    while (ready.length) {
+      const id = ready.shift() as string;
+      order.push(id);
+      for (const w of workItems) {
+        if (!w.dependsOn.includes(id)) continue;
+        const next = (indeg.get(w.id) ?? 0) - 1;
+        indeg.set(w.id, next);
+        if (next <= 0 && !seen.has(w.id)) { seen.add(w.id); ready.push(w.id); }
+      }
     }
+    for (const w of workItems) if (!seen.has(w.id)) order.push(w.id); // cycle/leftover guard
+    const n = order.length;
+    const WI_DX = WI_ACTIVE + 78;
+    order.forEach((id, i) => m.set(id, { x: devLoopX + (i - (n - 1) / 2) * WI_DX, y: WI_Y0 }));
     return m;
   }, [workItems, devLoopX]);
 
@@ -375,8 +386,10 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         edges.push({ id: `dw-${w.id}`, source: 'phase:developer-loop', target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
       }
     }
-    // WI deps: bottom-of-parent → top-of-child
-    for (const w of workItems) for (const d of w.dependsOn) if (wiIds.has(d)) edges.push({ id: `wd-${d}-${w.id}`, source: `wi:${d}`, target: `wi:${w.id}`, sourceHandle: 'sb', targetHandle: 'tt', type: 'default', style: thin });
+    // WI deps: right-of-prerequisite → left-of-dependent. The WIs now sit on one
+    // horizontal level ordered by dependency, so the dep reads as a clean
+    // left→right connector (was bottom→top, for the old vertical stack).
+    for (const w of workItems) for (const d of w.dependsOn) if (wiIds.has(d)) edges.push({ id: `wd-${d}-${w.id}`, source: `wi:${d}`, target: `wi:${w.id}`, sourceHandle: 'sr', targetHandle: 'tl', type: 'default', style: thin });
     // owner → burst (thin, colour-coded, fading), leaving the open side
     for (const b of bursts) {
       const op = burstOpacity(b.ageMs);
