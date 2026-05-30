@@ -42,7 +42,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { fileVerdictPaths } from '../orchestrator/file-verdict.ts';
-import { daemonState } from '../orchestrator/daemon.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listArchitectSessions,
@@ -543,6 +543,36 @@ async function handleHttp(
       await sleep(800);
       const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
       sendJson(res, 200, { ok: true, started: true, state: after });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
+  // Pause / resume — toggle the `<queueRoot>/.paused` flag the scheduler
+  // reads each poll. In-flight cycles keep running; only new claims stop.
+  if (method === 'POST' && (url === '/api/scheduler/pause' || url === '/api/scheduler/resume')) {
+    try {
+      const pause = url.endsWith('/pause');
+      setPaused(pause, ctx.queueRoot, pause ? 'paused from UI' : '');
+      sendJson(res, 200, { ok: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
+  // Stop — SIGTERM the daemon; it drains in-flight cycles then exits. We
+  // don't block the request on the drain — the status poll reflects
+  // `running:false` once it's down.
+  if (method === 'POST' && url === '/api/scheduler/stop') {
+    try {
+      const pid = readPid(daemonPaths(ctx.forgeRoot).pidFile);
+      if (pid === null || !isAlive(pid)) {
+        clearPidFile(ctx.forgeRoot);
+        sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
+        return;
+      }
+      process.kill(pid, 'SIGTERM');
+      sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
     }

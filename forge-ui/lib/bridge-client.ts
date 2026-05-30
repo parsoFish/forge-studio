@@ -88,6 +88,47 @@ function clearBridgeCache(): void {
   cachedBridgeUrl = null;
 }
 
+// ---- fetch envelopes -----------------------------------------------------
+// Every read/write helper below shares one of these two shapes. Keeping the
+// envelope in one place means the "no bridge → fallback", "non-ok → fallback",
+// and "throw → fallback" semantics can't drift between endpoints.
+
+/** GET a bridge JSON endpoint; returns `fallback` on no-bridge / non-ok / throw. */
+async function bridgeGet<T>(path: string, fallback: T): Promise<T> {
+  const base = await resolveBridgeUrl();
+  if (!base) return fallback;
+  try {
+    const res = await fetch(`${base}${path}`);
+    if (!res.ok) return fallback;
+    return (await res.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * POST to a bridge endpoint (JSON body when provided, bare POST otherwise) and
+ * normalise the reply to the `{ ok, error }` envelope. `data` carries the
+ * parsed body for the rare caller that needs an extra field (e.g. sessionId).
+ */
+async function bridgePost(
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}${path}`, body === undefined
+      ? { method: 'POST' }
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: !!data.ok, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ---- HTTP API ------------------------------------------------------------
 
 export async function fetchCycles(): Promise<CycleListSnapshot> {
@@ -99,11 +140,10 @@ export async function fetchCycles(): Promise<CycleListSnapshot> {
 }
 
 export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
-  const base = await resolveBridgeUrl();
-  if (!base) return [];
-  const res = await fetch(`${base}/api/events/${encodeURIComponent(cycleId)}`);
-  if (!res.ok) return [];
-  const body = (await res.json()) as { events: EventLogEntry[] };
+  const body = await bridgeGet<{ events: EventLogEntry[] }>(
+    `/api/events/${encodeURIComponent(cycleId)}`,
+    { events: [] },
+  );
   return body.events;
 }
 
@@ -127,15 +167,10 @@ export type InitiativeManifestSummary = {
  * or all queue-state copies are gone).
  */
 export async function fetchManifest(initiativeId: string): Promise<InitiativeManifestSummary | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/manifest/${encodeURIComponent(initiativeId)}`);
-    if (!res.ok) return null;
-    return (await res.json()) as InitiativeManifestSummary;
-  } catch {
-    return null;
-  }
+  return bridgeGet<InitiativeManifestSummary | null>(
+    `/api/manifest/${encodeURIComponent(initiativeId)}`,
+    null,
+  );
 }
 
 export type CostSummary = {
@@ -146,15 +181,7 @@ export type CostSummary = {
 };
 
 export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/cost/${encodeURIComponent(cycleId)}`);
-    if (!res.ok) return null;
-    return (await res.json()) as CostSummary;
-  } catch {
-    return null;
-  }
+  return bridgeGet<CostSummary | null>(`/api/cost/${encodeURIComponent(cycleId)}`, null);
 }
 
 export type SchedulerStatus = {
@@ -164,28 +191,26 @@ export type SchedulerStatus = {
 };
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/scheduler/status`);
-    if (!res.ok) return null;
-    return (await res.json()) as SchedulerStatus;
-  } catch {
-    return null;
-  }
+  return bridgeGet<SchedulerStatus | null>('/api/scheduler/status', null);
 }
 
 export async function startScheduler(): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/scheduler/start`, { method: 'POST' });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return bridgePost('/api/scheduler/start');
+}
+
+/** Pause the scheduler (stops claiming new work; in-flight cycles keep going). */
+export async function pauseScheduler(): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/scheduler/pause');
+}
+
+/** Resume claiming pending work. */
+export async function resumeScheduler(): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/scheduler/resume');
+}
+
+/** Stop the daemon (SIGTERM — drains in-flight cycles, then exits). */
+export async function stopScheduler(): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/scheduler/stop');
 }
 
 export type AcceptanceCriterion = { given: string; when: string; then: string };
@@ -195,20 +220,7 @@ export type VerdictSubmission =
   | { kind: 'send-back'; initiativeId: string; rationale: string; acceptanceCriteria: AcceptanceCriterion[] };
 
 export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/verdict`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return bridgePost('/api/verdict', input);
 }
 
 // ---- Structured demo (ADR 021) ------------------------------------------
@@ -248,15 +260,7 @@ export type DemoModel = {
 /** Fetch the cycle's structured demo (mirrored into _logs/<cycle>/artifacts/
  *  by snapshotCycleArtefacts). Returns null when absent or unparseable. */
 export async function fetchDemoModel(cycleId: string): Promise<DemoModel | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(cycleId)}/demo.json`);
-    if (!res.ok) return null;
-    return (await res.json()) as DemoModel;
-  } catch {
-    return null;
-  }
+  return bridgeGet<DemoModel | null>(`/api/artifact/${encodeURIComponent(cycleId)}/demo.json`, null);
 }
 
 // ---- Architect (ADR 020) -------------------------------------------------
@@ -296,16 +300,11 @@ export type ArchitectSessionSummary = {
 };
 
 export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {
-  const base = await resolveBridgeUrl();
-  if (!base) return [];
-  try {
-    const res = await fetch(`${base}/api/architect/sessions`);
-    if (!res.ok) return [];
-    const body = (await res.json()) as { sessions: ArchitectSessionSummary[] };
-    return body.sessions ?? [];
-  } catch {
-    return [];
-  }
+  const body = await bridgeGet<{ sessions: ArchitectSessionSummary[] }>(
+    '/api/architect/sessions',
+    { sessions: [] },
+  );
+  return body.sessions ?? [];
 }
 
 /** Absolutise a bridge-relative `planUrl` (e.g. `/api/architect/file/...`) for
@@ -319,20 +318,9 @@ export async function startArchitect(input: {
   project: string;
   idea: string;
 }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/architect/start`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const body = (await res.json()) as { ok?: boolean; sessionId?: string; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok, sessionId: body.sessionId };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  const r = await bridgePost('/api/architect/start', input);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
 
 export async function postArchitectAnswers(input: {
@@ -340,20 +328,7 @@ export async function postArchitectAnswers(input: {
   sessionId: string;
   answers: { question: string; answer: string }[];
 }): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/architect/answer`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return bridgePost('/api/architect/answer', input);
 }
 
 export type PlanVerdict = {
@@ -365,20 +340,7 @@ export type PlanVerdict = {
 };
 
 export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/plan-verdict`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return bridgePost('/api/plan-verdict', input);
 }
 
 // ---- Reflection (the third human moment, in-UI) -------------------------
@@ -390,15 +352,7 @@ export type ReflectionData = {
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/reflect/${encodeURIComponent(cycleId)}`);
-    if (!res.ok) return null;
-    return (await res.json()) as ReflectionData;
-  } catch {
-    return null;
-  }
+  return bridgeGet<ReflectionData | null>(`/api/reflect/${encodeURIComponent(cycleId)}`, null);
 }
 
 export async function postReflectionAnswers(input: {
@@ -406,20 +360,10 @@ export async function postReflectionAnswers(input: {
   answers: { question: string; answer: string }[];
   freeform?: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}/api/reflect/${encodeURIComponent(input.cycleId)}/answer`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: input.answers, freeform: input.freeform }),
-    });
-    const body = (await res.json()) as { ok?: boolean; error?: string };
-    if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
-    return { ok: !!body.ok };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return bridgePost(`/api/reflect/${encodeURIComponent(input.cycleId)}/answer`, {
+    answers: input.answers,
+    freeform: input.freeform,
+  });
 }
 
 // ---- WebSocket subscription ---------------------------------------------
