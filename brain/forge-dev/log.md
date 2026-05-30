@@ -14,6 +14,12 @@ Types: `ingest`, `create-theme`, `update-theme`, `lint`, `structural`, `seed`.
 
 ---
 
+## [2026-05-29] create-theme | claude-harness cycle v4 reflection — 3 new themes, 1 cycle archive
+
+Reflected on `INIT-2026-05-29-claude-trail-verify-cascade-v4` (claude-harness, "verify cascade v4").
+22-event log. $0 cost (0 agent iterations — resumed with all 6 WIs pre-failed). Unifier: gate-too-loose instant stop.
+Outcome: pr-open. 3 antipattern themes: gate-too-loose stop, PR-despite-zero-completions, verification-goals-unexercised.
+
 ## [2026-05-26] create-theme | claude-harness cycle v3 reflection — 3 new themes, 1 cycle archive
 
 Reflected on `INIT-2026-05-26-claude-trail-verify-cascade-v3` (claude-harness, "verify cascade v3").
