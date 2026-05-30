@@ -42,6 +42,7 @@ import type { CostSummary, EventLogEntry, InitiativeFeature } from '@/lib/bridge
 import type { PhaseState, Phase } from '@/lib/phases';
 import { PHASE_ORDER } from '@/lib/phases';
 import type { WiStatus } from '@/lib/wi-status';
+import { statusGlow } from '@/lib/status-colors';
 import type { GraphWorkItem } from '@/lib/use-graph-model';
 import {
   deriveLiveToolBursts,
@@ -95,28 +96,36 @@ const TOOL_H = 30;
 const BUBBLE_W = 210;
 const DEV_INDEX = PHASE_ORDER.indexOf('developer-loop');
 
-const STATUS_GLOW: Record<string, string> = {
-  pending: '#475059',
-  active: '#1f6feb',
-  complete: '#2ea043',
-  retrying: '#d29922',
-  failed: '#f85149',
-};
-
 type Tab = 'none' | 'cost' | 'files' | 'activity';
 
 export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
   const { phaseStates, cost, features, workItems, featureStatuses, events, cycleId, selectedWiId, onSelectWi } = props;
   const [tab, setTab] = useState<Tab>('none');
 
-  // 400ms tick drives the burst fade-out (events age past the window).
+  // 400ms tick drives the burst fade-out (events age past the window). To
+  // avoid burning CPU re-rendering the whole graph on an idle/finished cycle
+  // left open in the dashboard, the ticker only runs while a burst could still
+  // be visible: it stops once the newest event has aged past the window, and
+  // re-arms when a new event arrives (the `lastEventMs` dep changes). Since
+  // nowMs feeds only the burst derivation below, a static cycle ticks zero times.
   const [nowMs, setNowMs] = useState(0);
+  const lastEventMs = useMemo(() => {
+    let max = 0;
+    for (const e of events) {
+      const t = e.started_at ? new Date(e.started_at).getTime() : 0;
+      if (t > max) max = t;
+    }
+    return max;
+  }, [events]);
   useEffect(() => {
-    const tick = () => setNowMs(Date.now());
-    tick();
-    const id = setInterval(tick, 400);
+    setNowMs(Date.now());
+    const id = setInterval(() => {
+      const now = Date.now();
+      setNowMs(now);
+      if (!lastEventMs || now - lastEventMs > BURST_WINDOW_MS) clearInterval(id);
+    }, 400);
     return () => clearInterval(id);
-  }, []);
+  }, [lastEventMs]);
 
   const wiActivity = useMemo(() => derivePerWiActivity(events), [events]);
   const activeWiIds = useMemo(() => workItems.filter((w) => w.status === 'active').map((w) => w.id), [workItems]);
@@ -453,7 +462,7 @@ type HexData = {
 
 function HexNode({ data }: NodeProps<HexData>): JSX.Element {
   const onClick = useCallback(() => data.onSelect?.(data.id), [data]);
-  const glow = STATUS_GLOW[data.status] ?? '#475059';
+  const glow = statusGlow(data.status);
   const isWi = data.kind === 'wi';
   const isFeature = data.kind === 'feature';
   const tokens = data.tokens ?? 0;

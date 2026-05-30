@@ -12,7 +12,16 @@ import type { EventLogEntry } from '@/lib/bridge-client';
  */
 
 const MONO = 'ui-monospace, Menlo, Consolas, monospace';
-const BURST_WINDOW_MS = 3500;
+export const BURST_WINDOW_MS = 3500;
+
+/**
+ * Did any event fire within the burst window of `nowMs`? Shared by the
+ * per-phase hex wrappers (architect / review / reflect) to decide whether the
+ * hex should read as "active" from recent tool activity.
+ */
+export function hasRecentActivity(events: readonly EventLogEntry[], nowMs: number): boolean {
+  return events.some((e) => e.started_at && nowMs - new Date(e.started_at).getTime() < BURST_WINDOW_MS);
+}
 
 export function StageHex({
   title,

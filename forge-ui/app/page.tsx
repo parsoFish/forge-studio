@@ -9,10 +9,10 @@ import {
   fetchManifest,
   subscribe,
   fetchArchitectSessions,
+  resolveBridgeUrl,
   type CostSummary,
   type Cycle,
   type CycleListSnapshot,
-  type EventLogEntry,
   type ConnectionState,
   type InitiativeFeature,
   type ArchitectSessionSummary,
@@ -24,6 +24,7 @@ import { SchedulerBanner } from '@/components/SchedulerBanner';
 import { fetchWiGraph, type WiGraph } from '@/lib/wi-graph';
 import { useGraphModel } from '@/lib/use-graph-model';
 import { useBatchedEvents } from '@/lib/use-batched-events';
+import { STATUS_COLOR } from '@/lib/status-colors';
 
 export default function Page() {
   const [snapshot, setSnapshot] = useState<CycleListSnapshot>({ live: [], recent: [] });
@@ -77,7 +78,7 @@ export default function Page() {
     return () => { cancelled = true; };
   }, [activeCycleId, resetEvents]);
 
-  // Operator-selected WI (set by clicking a WI node in WiGraphCanvas).
+  // Operator-selected WI (set by clicking a WI node in AgentGraphCanvas).
   // Flows into the ActivityPanel as the default work-item filter.
   const [selectedWiId, setSelectedWiId] = useState<string | null>(null);
 
@@ -142,8 +143,8 @@ export default function Page() {
   }, [activeCycle?.initiativeId]);
 
   // WI graph for the active cycle (PM emits `_logs/<id>/work-items-
-  // snapshot/_graph.md` at pm.end). Hoisted from the now-removed
-  // WiGraphCanvas. Polls until the bridge serves the graph, then stops.
+  // snapshot/_graph.md` at pm.end). Feeds the pipeline-tree WI tier.
+  // Polls until the bridge serves the graph, then stops.
   const [wiGraph, setWiGraph] = useState<WiGraph | null>(null);
   useEffect(() => {
     setWiGraph(null);
@@ -177,9 +178,7 @@ export default function Page() {
   const [bridgeUrlDebug, setBridgeUrlDebug] = useState<string>('');
   useEffect(() => {
     let cancelled = false;
-    import('@/lib/bridge-client').then(({ resolveBridgeUrl }) => {
-      resolveBridgeUrl().then((url) => { if (!cancelled) setBridgeUrlDebug(url || '(none)'); });
-    });
+    resolveBridgeUrl().then((url) => { if (!cancelled) setBridgeUrlDebug(url || '(none)'); });
     return () => { cancelled = true; };
   }, []);
 
@@ -276,11 +275,11 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 // ----- Initiative pane (grouped-by-project roadmap) -----------------------
 
 const CYCLE_STATUS_META: Record<Cycle['status'], { color: string; label: string; rank: number }> = {
-  'in-flight': { color: '#1f6feb', label: 'running', rank: 0 },
-  'ready-for-review': { color: '#d29922', label: 'review', rank: 1 },
-  pending: { color: '#6e7681', label: 'queued', rank: 2 },
-  done: { color: '#2ea043', label: 'done', rank: 3 },
-  failed: { color: '#f85149', label: 'failed', rank: 4 },
+  'in-flight': { color: STATUS_COLOR.active, label: 'running', rank: 0 },
+  'ready-for-review': { color: STATUS_COLOR.attention, label: 'review', rank: 1 },
+  pending: { color: STATUS_COLOR.idle, label: 'queued', rank: 2 },
+  done: { color: STATUS_COLOR.complete, label: 'done', rank: 3 },
+  failed: { color: STATUS_COLOR.failed, label: 'failed', rank: 4 },
 };
 
 /** Strip the `INIT-YYYY-MM-DD-` prefix to the readable slug; fall back to the id. */
@@ -426,11 +425,4 @@ function CyclesTab({
       })}
     </div>
   );
-}
-
-function shortTime(iso: string | undefined): string {
-  if (!iso) return '--:--:--';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toISOString().slice(11, 19);
 }

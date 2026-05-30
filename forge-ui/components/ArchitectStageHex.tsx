@@ -1,6 +1,7 @@
 'use client';
 
-import { StageHex } from './StageHex';
+import { StageHex, hasRecentActivity } from './StageHex';
+import { STATUS_COLOR } from '@/lib/status-colors';
 import type { ArchitectPhase, EventLogEntry } from '@/lib/bridge-client';
 
 /**
@@ -11,13 +12,13 @@ import type { ArchitectPhase, EventLogEntry } from '@/lib/bridge-client';
  */
 
 const PHASE_GLOW: Record<ArchitectPhase, string> = {
-  interviewing: '#1f6feb',
-  drafting: '#1f6feb',
-  finalizing: '#1f6feb',
-  'awaiting-answers': '#d29922',
-  'awaiting-verdict': '#d29922',
-  committed: '#2ea043',
-  rejected: '#f85149',
+  interviewing: STATUS_COLOR.active,
+  drafting: STATUS_COLOR.active,
+  finalizing: STATUS_COLOR.active,
+  'awaiting-answers': STATUS_COLOR.attention,
+  'awaiting-verdict': STATUS_COLOR.attention,
+  committed: STATUS_COLOR.complete,
+  rejected: STATUS_COLOR.failed,
 };
 
 const PHASE_FRAC: Record<ArchitectPhase, number> = {
@@ -50,14 +51,14 @@ export function ArchitectStageHex({
   nowMs: number;
 }): JSX.Element {
   const working = phase === 'interviewing' || phase === 'drafting' || phase === 'finalizing';
-  const recentActive = events.some((e) => e.started_at && nowMs - new Date(e.started_at).getTime() < 3500);
+  const recentActive = hasRecentActivity(events, nowMs);
   return (
     <StageHex
       title="architect"
       component="architect-hex"
       extraData={{ 'data-architect-phase': phase, 'data-architect-active': working || recentActive ? 'true' : 'false' }}
       statusLabel={PHASE_LABEL[phase] ?? phase}
-      glow={PHASE_GLOW[phase] ?? '#475059'}
+      glow={PHASE_GLOW[phase] ?? STATUS_COLOR.idle}
       frac={PHASE_FRAC[phase] ?? 0}
       active={working || recentActive}
       events={events}

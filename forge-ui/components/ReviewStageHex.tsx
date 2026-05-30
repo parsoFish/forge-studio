@@ -1,6 +1,7 @@
 'use client';
 
-import { StageHex } from './StageHex';
+import { StageHex, hasRecentActivity } from './StageHex';
+import { STATUS_COLOR } from '@/lib/status-colors';
 import type { Cycle, EventLogEntry } from '@/lib/bridge-client';
 
 /**
@@ -10,11 +11,11 @@ import type { Cycle, EventLogEntry } from '@/lib/bridge-client';
  * ready-for-review, green when merged, red on failure.
  */
 const STATUS: Record<Cycle['status'], { glow: string; frac: number; label: string }> = {
-  pending: { glow: '#6e7681', frac: 0.1, label: 'queued' },
-  'in-flight': { glow: '#1f6feb', frac: 0.5, label: 'building' },
-  'ready-for-review': { glow: '#d29922', frac: 0.85, label: 'your call' },
-  done: { glow: '#2ea043', frac: 1, label: 'merged' },
-  failed: { glow: '#f85149', frac: 1, label: 'failed' },
+  pending: { glow: STATUS_COLOR.idle, frac: 0.1, label: 'queued' },
+  'in-flight': { glow: STATUS_COLOR.active, frac: 0.5, label: 'building' },
+  'ready-for-review': { glow: STATUS_COLOR.attention, frac: 0.85, label: 'your call' },
+  done: { glow: STATUS_COLOR.complete, frac: 1, label: 'merged' },
+  failed: { glow: STATUS_COLOR.failed, frac: 1, label: 'failed' },
 };
 
 export function ReviewStageHex({
@@ -26,8 +27,8 @@ export function ReviewStageHex({
   events: EventLogEntry[];
   nowMs: number;
 }): JSX.Element {
-  const meta = STATUS[status] ?? { glow: '#475059', frac: 0, label: status };
-  const recentActive = events.some((e) => e.started_at && nowMs - new Date(e.started_at).getTime() < 3500);
+  const meta = STATUS[status] ?? { glow: STATUS_COLOR.idle, frac: 0, label: status };
+  const recentActive = hasRecentActivity(events, nowMs);
   return (
     <StageHex
       title="review"

@@ -68,7 +68,7 @@ export type FileHeat = {
 };
 
 /** Per-tool colour vocab mirroring agent-flow (Bash amber, write-family green, …). */
-export const TOOL_COLOURS: Record<string, string> = {
+const TOOL_COLOURS: Record<string, string> = {
   Bash: '#d29922',
   Edit: '#7ee787',
   Write: '#7ee787',
@@ -111,7 +111,7 @@ export function derivePerWiActivity(events: readonly EventLogEntry[]): Record<st
   return out;
 }
 
-export type StageTotals = { agents: number; tokens: number; costUsd: number };
+type StageTotals = { agents: number; tokens: number; costUsd: number };
 
 /** Top-bar rollup: active-agent count, total tokens, total cost across the cycle. */
 export function deriveStageTotals(
@@ -126,14 +126,6 @@ export function deriveStageTotals(
     if (typeof e.cost_usd === 'number') costUsd += e.cost_usd;
   }
   return { agents: activeAgentCount, tokens, costUsd };
-}
-
-/** First active WI id (graph centers its live activity here). */
-export function firstActiveWiId(workItemStatuses: Record<string, string>): string | null {
-  for (const [id, status] of Object.entries(workItemStatuses)) {
-    if (status === 'active') return id;
-  }
-  return null;
 }
 
 /**

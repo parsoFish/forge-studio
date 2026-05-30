@@ -1,6 +1,7 @@
 'use client';
 
-import { StageHex } from './StageHex';
+import { StageHex, hasRecentActivity } from './StageHex';
+import { STATUS_COLOR } from '@/lib/status-colors';
 import type { EventLogEntry } from '@/lib/bridge-client';
 
 /**
@@ -18,14 +19,14 @@ export function ReflectStageHex({
   events: EventLogEntry[];
   nowMs: number;
 }): JSX.Element {
-  const recentActive = events.some((e) => e.started_at && nowMs - new Date(e.started_at).getTime() < 3500);
+  const recentActive = hasRecentActivity(events, nowMs);
   return (
     <StageHex
       title="reflect"
       component="reflect-hex"
       extraData={{ 'data-reflect-answered': answered ? 'true' : 'false' }}
       statusLabel={answered ? 'reflected' : 'your input'}
-      glow={answered ? '#2ea043' : '#d29922'}
+      glow={answered ? STATUS_COLOR.complete : STATUS_COLOR.attention}
       frac={answered ? 1 : 0.6}
       active={!answered || recentActive}
       events={events}
