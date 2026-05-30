@@ -27,6 +27,7 @@ import {
 import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
+import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig } from './notify.ts';
@@ -114,6 +115,10 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
       cfg.notify,
     );
   }
+
+  // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
+  // while the daemon was down (operator merged, nothing re-confirmed it).
+  await runFinalizeSweep();
 
   const inFlight = new Map<string, Promise<void>>();
   let stop = false;
@@ -239,6 +244,8 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   // Cleared at shutdown so the process can exit cleanly.
   const recoverTimer = setInterval(() => {
     void runRecoverySweep(cfg);
+    // F-W5-7: also re-confirm ready-for-review cycles the operator has merged.
+    void runFinalizeSweep();
   }, cfg.recoverIntervalMs);
 
   console.log(
@@ -454,6 +461,25 @@ function formatDur(ms: number): string {
  * notify. Best-effort — sweep failures are logged via the notification path
  * but never throw.
  */
+/**
+ * F-W5-7 sweep: finalize ready-for-review cycles whose PR the operator has
+ * merged — closure aligns local↔remote + deletes the branch + moves to done/,
+ * and the reflector fires (reflection becomes available in the UI). Best-effort.
+ */
+async function runFinalizeSweep(): Promise<void> {
+  try {
+    for (const r of await finalizeMergedReadyForReview()) {
+      if (r.status === 'finalized') {
+        console.log(`[serve] finalized ${r.initiativeId} — operator merged the PR → done + reflection`);
+      } else if (r.status === 'error') {
+        console.error(`[serve] finalize ${r.initiativeId} failed: ${r.detail}`);
+      }
+    }
+  } catch {
+    /* sweep is best-effort — never throw out of setInterval */
+  }
+}
+
 async function runRecoverySweep(
   cfg: { queueRoot: string; staleHeartbeatMs: number; notify: NotifyConfig },
 ): Promise<void> {
