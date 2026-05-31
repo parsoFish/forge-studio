@@ -18,6 +18,16 @@
 > reflection fires only on a confirmed merge
 > (`brain/cycles/themes/review-phase-target-design.md`; the snapshot's §G
 > is now the as-built, not a target).
+>
+> **Refreshed 2026-05-31.** Two further shifts are now load-bearing: (d) the
+> **forge UI is the sole operator surface** — the three human moments are UI
+> screens, not slash commands ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md));
+> and (e) the **agent-composes-skills seam** — a thin orchestrator spawns each
+> phase as a clean, model-tiered **agent** that **composes skills/CLIs/MCP**, the
+> direction the high-level diagram below renders
+> ([ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md);
+> documented now, migrated incrementally). Where the prose below still says
+> "skill the user invokes" for the human moments, read (d)+(e).
 
 ## Overview
 
@@ -29,20 +39,85 @@ reflector as a first source of knowledge, and written to at the end of
 every cycle; the dev-loop and reviewer take their intent solely from
 the planner's work items.
 
-![forge2.0 architecture](./docs/architecture/forge2.0.drawio.png)
+> **High-level view (revamped 2026-05-31).** The diagram below is the canonical
+> one-glance picture, aligned to the **agent-composes-skills** model
+> ([ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)). It
+> supersedes the legacy swimlane `docs/architecture/forge2.0.drawio` (kept as
+> prior art). The structural drill-down (Context → Containers → Components) lives
+> in the C4 model [`docs/architecture/c4/`](./docs/architecture/c4/); the two
+> layers are kept in sync per [`docs/architecture/overview.md`](./docs/architecture/overview.md).
+
+```mermaid
+flowchart TB
+    OP(["Operator"])
+
+    subgraph UI["forge UI — the ONLY operator surface · ADR 023"]
+        direction LR
+        AR["1 · Architect<br/>idea to initiative"]
+        RV["5 · Review<br/>read demo, approve, merge"]
+        RF["6 · Reflect<br/>free-form feedback"]
+    end
+
+    ORCH["Orchestrator — thin coordination ONLY<br/>scheduler · _queue/ state machine · git worktrees · crash recovery<br/>picks a model tier and spawns each phase; owns no phase prompt · ADR 011-013"]
+
+    subgraph PHASES["Each phase = a clean, model-tiered AGENT that COMPOSES skills · ADR 024"]
+        direction LR
+        PM["2 · project-manager"]
+        DV["3 · developer-loop<br/>Ralph x N worktrees"]
+        UN["4 · unifier"]
+        RFL["reflector"]
+    end
+
+    subgraph CAP["Composable capabilities — skills · CLIs · MCP"]
+        direction LR
+        C1["brain-query"]
+        C2["demo"]
+        C3["gate-running"]
+        C4["code-review · tdd · …"]
+    end
+
+    BRAIN[("Brain — 3 scoped graphs<br/>forge-dev · cycles · per-project<br/>planners + reflector READ; dev-loop + reviewer do NOT · ADR 010")]
+    LOG[("Markdown artifacts + JSONL event log<br/>the inter-phase protocol · ADR 007/008")]
+
+    OP --> UI
+    AR -->|"writes _queue/pending/INIT-*.md"| ORCH
+    ORCH ==>|"spawn at model tier"| PM
+    PM ==> DV ==> UN
+    UN -->|"self-contained PR + structured demo"| RV
+    RV -->|"merge to closure"| RFL
+    PM -.-> CAP
+    DV -.-> CAP
+    UN -.-> CAP
+    RFL -.-> CAP
+    PM -.->|read| BRAIN
+    RFL <-.->|read / write| BRAIN
+    PHASES ==> LOG
+    LOG -.->|replay| RFL
+    RF --> RFL
+
+    classDef agent fill:#0d2b45,stroke:#58a6ff,color:#e6edf3;
+    classDef cap fill:#10231a,stroke:#2ea043,color:#e6edf3;
+    classDef store fill:#1b1b2b,stroke:#8957e5,color:#e6edf3;
+    classDef human fill:#2d2410,stroke:#d29922,color:#e6edf3;
+    class PM,DV,UN,RFL agent;
+    class C1,C2,C3,C4 cap;
+    class BRAIN,LOG store;
+    class OP,AR,RV,RF human;
+```
+
+The same flow in one line (terminal-friendly fallback): the operator works only
+on the **forge UI** (architect → review → reflect); a **thin orchestrator** spawns
+each phase as a **clean model-tiered agent** that **composes skills/CLIs/MCP**;
+agents flow over **markdown artifacts + the JSONL event log**; the **brain** is
+read by the planners + reflector and written by the reflector.
 
 ```
-                              ┌──────────┐
-                              │  Brain   │ ◄───────────────────────────┐
-                              │  (wiki)  │                              │
-                              └────┬─────┘                              │
-                                   │ queried by every phase             │ ingest
-                                   ▼                                    │
-   user ──► Architect ──► Project Manager ──► Developer Loop ──► Review Loop ──► Reflection
-              ▲                                                       ▲             ▲
-              │                                                       │             │
-            user                                                    user          user
-        (interactive)                                          (interactive)  (interactive)
+operator ─(UI only)─► ① architect ─INIT-*.md─► [orchestrator: spawn agent @ tier]
+        │                                            │
+        │                                            ▼
+        │                       ② PM ─► ③ dev-loop ─► ④ unifier ──► ⑤ review ──► ⑥ reflect
+        │                        └──── each agent composes skills ─────┘            │
+        └────────────────────────────  brain (3 scopes) ◄── read/write ────────────┘
 ```
 
 ### Artifact flow
@@ -174,16 +249,19 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 
 ### Unattended operation
 
-Three human interaction points, each run in the **operator's own Claude
-session** as a slash command — never a forge-spawned agent and never a
-bench simulator in production
-([`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)):
+Three human interaction points, all on the **forge UI** — the sole operator
+surface ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md); the
+slash-command / PR-comment ingress was retired). The load-bearing invariant is
+preserved: each moment is **explicit, operator-initiated, and impossible to
+silently auto-satisfy** (no auto-approve, no bench simulator in production —
+[`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)).
+The UI bridge writes the handoff files the phases already consume:
 
-| Moment | Command | File handoff |
+| Moment | UI screen | File handoff (written by the bridge) |
 |---|---|---|
-| Architect *(out-of-cycle — not wired into `runCycle`)* | [`/forge-architect`](./.claude/commands/forge-architect.md) | writes `_queue/pending/INIT-*.md` + roadmap rows |
-| Review *(engage the open PR)* | [`/forge-review <id>`](./.claude/commands/forge-review.md) | verdict-response file, or merge the PR in GitHub |
-| Reflection *(stage-3 feedback)* | [`/forge-reflect <id>`](./.claude/commands/forge-reflect.md) | writes `_logs/<id>/user-feedback.md` |
+| Architect *(out-of-cycle — file-checkpointed runner, [ADR 020](./docs/decisions/020-architect-in-ui.md))* | `/architect/<sid>` | writes `_queue/pending/INIT-*.md` + roadmap rows |
+| Review *(read the structured demo, approve/send-back; [ADR 021](./docs/decisions/021-local-review-and-unified-demo.md))* | `/review/<cycleId>` | `verdict-response.md`; approve → closure merges the PR |
+| Reflection *(stage-3 feedback)* | `/reflect/<cycleId>` | writes `_logs/<id>/user-feedback.md` |
 
 Everything else runs unattended for arbitrary durations via:
 

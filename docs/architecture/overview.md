@@ -13,9 +13,10 @@ Forge is visualised in **two layers**, by design (operator decision 2026-05-31):
    composes), the brain-read policy, the three human moments on the UI, and the
    contract families.
    The **technology doesn't matter** — it is chosen for the nicest result, not
-   bound to any one tool. The legacy `forge2.0.drawio` swimlane is the **prior art**
-   being revamped in the 2026-05-31 round (Phase H of the hardening plan); until
-   that lands it remains the embedded picture in `ARCHITECTURE.md`.
+   bound to any one tool. **As of 2026-05-31 this is the Mermaid diagram embedded
+   at the top of [`ARCHITECTURE.md`](../../ARCHITECTURE.md)** — text, so it renders
+   natively in GitHub + the Obsidian brain, diffs cleanly, and carries no binary.
+   It **supersedes** the legacy `forge2.0.drawio` swimlane (kept as prior art).
 
 2. **The C4 drill-down** — the [`c4/`](./c4/) model is the **structural system of
    record**: Context → Containers → Components + dynamic flows, generated from one

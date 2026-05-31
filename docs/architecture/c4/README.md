@@ -8,6 +8,16 @@
 > Purpose: a **shared visual baseline** to talk changes around, and a lens that
 > surfaces what could be **refined or simplified**. The single source of truth is
 > [`workspace.dsl`](./workspace.dsl); everything in `diagrams/` is generated from it.
+>
+> **This is the *drill-down* layer.** The one-glance, agent-composes-skills picture
+> ([ADR 024](../../decisions/024-phases-as-subagents-invoking-skills.md)) is the
+> Mermaid diagram at the top of [`ARCHITECTURE.md`](../../../ARCHITECTURE.md); the
+> two layers are kept in sync per [`../overview.md`](../overview.md). The C4 model
+> is broadly consistent already — the **Skill Catalog** view *is* "the agent
+> surface" — but the explicit ADR-024 framing (each phase = a clean, model-tiered
+> agent that composes skills) lands on the next `/c4` regeneration (Docker-gated;
+> see *How to regenerate*). The narrative + the SkillCatalog/EngineComponents
+> views are accurate today.
 
 ## How to view
 
