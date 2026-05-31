@@ -65,7 +65,16 @@ decision can be specified at both levels too.
   `_logs/2026-05-31T10-15-32_INIT-2026-05-31-release-definition-unit-tests/`
   (architect FEAT-1/2 titled WI-1/WI-2 → PM WI-1/WI-2, 1:1).
 
-## 2026-05-31 — unifier loops `branches-not-in-sync` because the per-iteration autocommit never pushes
+## 2026-05-31 — unifier loops `branches-not-in-sync` because the per-iteration autocommit never pushes — ✅ RESOLVED 2026-05-31
+
+**Resolved** by `43b5cfb` (direction (a): push inside the unifier's `onIteration`
+callback so the next gate check sees `origin == HEAD`; the strip is append-only so
+the push is always a fast-forward). **Verified end-to-end** by a
+`forge requeue --resume-from=unifier` (ADR 019) on the preserved worktree: the
+unifier passed in **1 iteration** (`stop_reason:quality-gates-pass`), **0**
+`branches-not-in-sync` events (was 4), and **PR #2** opened on
+parsoFish/terraform-provider-betterado carrying the 11 gomock tests + the demo
+bundle — resume cost $0.80. Original finding below for the record.
 
 Surfaced by the **second** release_definition dogfood re-run (the run that
 validated the Phase A–I hardening). The dev-loop delivered **2/2 WIs** (11 gomock
