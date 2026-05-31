@@ -63,7 +63,18 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     }
     if (e.event_type === 'error') {
       const blob = (msg + ' ' + JSON.stringify(md)).toLowerCase();
-      if (blob.includes('rate_limit') || blob.includes('rate-limit') || blob.includes('429')) { rateLimited = true; ev(e); }
+      // Transient API-pressure signatures: rate limits, usage limits, overload,
+      // and the idle-deadline abort (a usage-limit / network stall that would
+      // otherwise have hung the stream forever — known-gaps 2026-06-01).
+      if (
+        blob.includes('rate_limit') ||
+        blob.includes('rate-limit') ||
+        blob.includes('429') ||
+        blob.includes('529') ||
+        blob.includes('usage limit') ||
+        blob.includes('overloaded') ||
+        blob.includes('stream-deadline')
+      ) { rateLimited = true; ev(e); }
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
     }
     if (e.phase === 'orchestrator' && e.event_type === 'error') {
@@ -94,7 +105,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.
-  if (rateLimited) return T('transient', 'agent rate-limited', evidence);
+  if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (transient API pressure) — auto-retry', evidence);
   if (pmHiddenCoupling) return T('transient', 'PM emitted overlapping WIs (hidden coupling)', evidence);
   if (pmInvalidWorkItems) return T('transient', 'PM emitted schema-invalid WIs', evidence);
   if (brainSkipped) return T('transient', 'agent skipped brain reads', evidence);

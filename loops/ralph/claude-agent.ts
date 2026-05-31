@@ -15,6 +15,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
+import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
 
 /** Subset of the SDK's `query` shape we depend on — keeps the tests independent of SDK internals. */
@@ -59,6 +60,14 @@ export type ClaudeAgentOptions = {
   cacheable?: boolean;
   /** Inject a fake `query` for testing. */
   queryFn?: QueryFn;
+  /**
+   * Idle-deadline for the SDK stream (ms). If no message arrives for this long,
+   * the query is aborted and the iteration THROWS instead of hanging forever on
+   * a usage-limit / network stall (known-gaps 2026-06-01). Defaults to
+   * `DEFAULT_IDLE_DEADLINE_MS` (6 min). Not a total wall-clock — an actively
+   * streaming call keeps resetting it.
+   */
+  idleDeadlineMs?: number;
   /**
    * S7 / C13 — sidecar heartbeat callback. When provided, the agent
    * starts a `setInterval` BEFORE the SDK `query()` is awaited and clears
@@ -165,6 +174,11 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;
     if (opts.systemPrompt !== undefined) options.systemPrompt = opts.systemPrompt;
+    // Idle-deadline safety net: pass an AbortController the SDK honours so a
+    // stalled stream can be cancelled (kills the CLI subprocess) rather than
+    // hanging the iteration forever (known-gaps 2026-06-01).
+    const abortController = new AbortController();
+    options.abortController = abortController;
 
     const filesChanged = new Set<string>();
     let costUsd = 0;
@@ -213,7 +227,11 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
       }, intervalMs);
     }
 
-    for await (const msg of queryFn({ prompt, options })) {
+    for await (const msg of withIdleDeadline(queryFn({ prompt, options }), {
+      idleMs: opts.idleDeadlineMs,
+      label: 'ralph-iteration',
+      abortController,
+    })) {
       const m = msg as { type?: string };
       if (m.type === 'assistant') {
         const content = (m as { message?: { content?: unknown } }).message?.content;

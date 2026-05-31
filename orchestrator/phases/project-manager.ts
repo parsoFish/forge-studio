@@ -33,6 +33,7 @@ import {
 import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
+import { withIdleDeadline } from '../stream-deadline.ts';
 
 /**
  * Injection seam for tests. The live cycle uses `sdkQuery` from the
@@ -273,6 +274,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     maxTurns: PM_LIVE_MAX_TURNS,
     maxBudgetUsd: pmMaxBudgetUsd(manifest.cost_budget_usd),
   };
+  // Idle-deadline safety net: a stalled stream (usage limit / network) aborts +
+  // throws into cycle.ts → classifier (transient) instead of hanging the queue.
+  // betterado roadmap run stalled exactly here mid-PM (known-gaps 2026-06-01).
+  const abortController = new AbortController();
+  options.abortController = abortController;
 
   const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0, bashCalls: 0 };
   let costUsd = 0;
@@ -290,7 +296,10 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   });
   let pmToolSeq = 0;
 
-  for await (const msg of queryFn({ prompt, options }) as AsyncIterable<unknown>) {
+  for await (const msg of withIdleDeadline(queryFn({ prompt, options }) as AsyncIterable<unknown>, {
+    label: 'project-manager',
+    abortController,
+  })) {
     if (typeof msg !== 'object' || msg === null) continue;
     const m = msg as { type?: string; message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> }; subtype?: string; total_cost_usd?: number; duration_ms?: number };
     if (m.type === 'assistant') {
