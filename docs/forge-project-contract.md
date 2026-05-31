@@ -26,6 +26,36 @@ invariant; a Playwright component test, an HTTP contract test, a `go test`, and 
 pytest unit are all just *how* different project forms satisfy it. Onboarding =
 mapping each invariant onto the project's form.
 
+## The contract families (the interaction seams)
+
+The contract is not a flat checklist — it is the set of guarantees forge needs at
+each **seam where it touches the project**. Naming the seams makes onboarding a
+guided walk (one family at a time) rather than a clause hunt, and shows where the
+contract is still being deepened. There are three seams plus one cross-cutting
+conditional:
+
+| Family | The seam | Forge needs the project to guarantee… | Carried by |
+|--------|----------|----------------------------------------|------------|
+| **Planning** *(architecting)* | The architect + PM read the project to decompose an initiative into features → work items. | **Faithful, machine-readable, fresh planning inputs** — an accurate roadmap + a brain that cites live source, so the planner decomposes the *real* project instead of hallucinating. | **C4**, **BRAIN** |
+| **Development** | The unattended loop changes the project and judges + packages each change with no human in the inner loop. | **A truthful done-signal, a hermetic commit, decomposable source, a respected locked core, and a mergeable result.** | **C1**, **C2**, **C3**, **C5**, **C6** |
+| **Demo** | The review phase presents the change to the operator for the merge decision. | **The change is *demonstrable*** — the project exposes how it is tested, how a change is captured before→after, and how brand-new behaviour is shown. | *being deepened — see below* |
+| **External resources** *(conditional)* | Behaviour can only be verified against a live external system (cloud / DB / 3rd-party API). | **A two-layer verification model** (creds-free in-loop gate + operator-gated live confirmation). | **C7** |
+
+**Demo is the family deepened in the 2026-05-31 round.** It now has its own
+invariant (**Demo**, below), a canonical capability skill
+([`skills/demo/SKILL.md`](../skills/demo/SKILL.md)) that owns *how* forge runs a
+demo / what it must contain / how it maps to the review UI, and a structural
+project-side check (the advisory **DEMO** preflight clause). The deeper "does the
+before/after actually capture the delta" facet stays hand-verified during
+onboarding. The per-project gotchas still live in the project's brain (e.g.
+trafficGame's `demo-server-reuse-captures-stale-build`, betterado's
+`go-test-harness-demos`).
+
+The planning and development families are the mature ones (every C-clause below
+maps to a seam in the table); they are kept as the per-clause invariants because
+that is the granularity `forge preflight` checks. The family layer is the *map*;
+the C-clauses are the *territory*.
+
 ## The invariants
 
 ### C1 — A truthful done-signal (the quality gate)
@@ -115,11 +145,39 @@ project must define both:
   interactive web console, so machine evidence is API responses; screenshots of
   authenticated UIs are best-effort.
 
+### Demo — the project can show its change (the demo family)
+*(landed 2026-05-31)* The review phase must be able to show the operator the one
+behavioural delta the initiative produced, so the project must expose **how a
+change is demonstrated**. This is the project half of the demo contract; the forge
+half (what a demo must contain, effort tiers, the UI mapping) is owned by
+[`skills/demo/SKILL.md`](../skills/demo/SKILL.md). A project satisfies it by
+declaring, in `.forge/project.json`:
+
+- **`demo.shape`** — one of `browser | harness | cli-diff | artifact | none`. This
+  is the form-mapping for "demonstrable": a rendered UI a preview server can drive
+  (`browser`); a measurement command with scrapable output (`harness`); a CLI
+  whose stdout differs (`cli-diff`); a generated file (`artifact`); or an
+  infra-only change with no observable surface (`none`, a rationale-only demo).
+- **`demo.command`** — required for any shape ≠ `none`: how forge produces the
+  before/after.
+- **`demo.preview_command`** — required for `browser`: the dev/preview server forge
+  serves the built worktree on (never a reused stray dev server — see the
+  trafficGame stale-capture lesson).
+- A **valid prior state**: running the baseline must not error; the demo frames it
+  as *prior behaviour*, never *broken*.
+
+The point: the same gate that *proves* a change (C1) and the demo that *shows* it
+are two faces of the same guarantee. A project that can be gated but not
+demonstrated leaves the operator approving blind. `forge preflight` checks the
+structural part (the `demo` block) as the advisory **DEMO** clause.
+
 ## How forge enforces it
 
-`forge preflight <project>` checks C1–C6 structurally and **declines** on a hard
-failure (C1/C2/C4 hard; C3/C5/C6 advisory). The deepened facets of C1 (gate
-discrimination) and C2 (build-artifact hermeticity), and C7 entirely, are **not
+`forge preflight <project>` checks C1–C6 + the advisory **DEMO** clause (the
+`.forge/project.json` demo block) structurally and **declines** on a hard
+failure (C1/C2/C4 hard; C3/C5/C6/DEMO advisory). The deepened facets of C1 (gate
+discrimination) and C2 (build-artifact hermeticity), the deeper demo facet (does
+the before/after actually capture the delta), and C7 entirely, are **not
 yet machine-checked** — they're in the hardening backlog
 ([docs/known-gaps.md](./known-gaps.md), 2026-05-31). Until then, onboarding must
 verify them by hand (run the gate on a clean tree and confirm it *fails*; build

@@ -3,6 +3,21 @@
 **Status:** Accepted
 **Date:** 2026-05-17
 
+> **Amended 2026-05-31.** Two changes recorded after the betterado run, both in
+> [`docs/forge-project-contract.md`](../forge-project-contract.md): (a) a
+> conditional **C7 — external-resource model** clause (two-layer verification:
+> a creds-free in-loop gate + an operator-gated live-confirmation layer) for
+> projects that can only be verified against a live external system; and (b) a
+> **contract-families** framing that groups the clauses by the *interaction seam*
+> they guard — **planning** (C4 + BRAIN), **development** (C1/C2/C3/C5/C6), **demo**
+> (being deepened this round), **external resources** (C7). The C-clauses remain
+> the per-clause invariants `forge preflight` checks; the families are the
+> navigation onboarding follows. The **demo family** is promoted to its own clause
+> set in the 2026-05-31 round (project-side demo requirements + a canonical demo
+> skill), with the gate-discrimination facet of C1, the build-artifact facet of
+> C2, and C7 still hand-checked until machine-checks land
+> ([docs/known-gaps.md](../known-gaps.md) §2026-05-31).
+
 ## Context
 
 Forge v2 is designed to progress a project toward *more automated cycles
