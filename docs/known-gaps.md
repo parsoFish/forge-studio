@@ -65,6 +65,66 @@ decision can be specified at both levels too.
   `_logs/2026-05-31T10-15-32_INIT-2026-05-31-release-definition-unit-tests/`
   (architect FEAT-1/2 titled WI-1/WI-2 → PM WI-1/WI-2, 1:1).
 
+## 2026-05-31 — unifier loops `branches-not-in-sync` because the per-iteration autocommit never pushes
+
+Surfaced by the **second** release_definition dogfood re-run (the run that
+validated the Phase A–I hardening). The dev-loop delivered **2/2 WIs** (11 gomock
+tests, `dev-loop.delivered {files_changed:4, insertions:1253, commits:7}`), then the
+**unifier** looped on `unifier.gate.branches-not-in-sync` for its full
+(diff-scaled) cap of 4 iterations → `unifier.failed {stop_reason:iteration-budget}`
+→ the **delivery gate correctly blocked the PR** → cycle failed cleanly at $16.30.
+
+**Root cause (confirmed in code):** the unifier's composed gate sub-check #4,
+`branches_in_sync`, calls `assertLocalRemoteSynced` →
+`checkLocalRemoteSynced` ([`orchestrator/pr.ts:705`](./../orchestrator/pr.ts)),
+which is **strict**: when an origin remote exists it requires
+`origin/<branch> === local HEAD` exactly. But the Ralph runner runs
+`autoCommitWorktreeIfDirty` at the top of every iteration
+([`loops/ralph/runner.ts:226`](./../loops/ralph/runner.ts)) — it commits a
+`forge-autocommit: … WIP` safety-net commit **but does not push it**
+([`loops/ralph/stop-conditions.ts:359`](./../loops/ralph/stop-conditions.ts)).
+The unifier loop itself has **no push step** (unlike the per-WI loop, which pushes
+via `pushInitiativeBranch` after each WI). So the moment the unifier agent leaves
+the tree dirty (or commits without pushing), the autocommit puts local HEAD one
+commit *ahead* of origin → `branches_in_sync` is now **unsatisfiable for the rest
+of the loop**: every subsequent iteration re-autocommits, stays ahead, and the gate
+fails again until the cap. The work is real and the per-WI commits *were* pushed —
+only the unifier-stage commits are stranded local.
+
+- **Why it matters:** a genuinely-delivered branch (2/2 WIs green) is held back
+  from review by a gate that can never go green mid-loop. The diff-scaled cap
+  (Phase G) bounds the wasted spend (4 iters, not 15), and the delivery gate
+  (Phase E) correctly refuses to open a misleading PR — but the *outcome* is a
+  false-negative: review-ready work scored as `dev-loop-unifier-branch-divergence`.
+- **Direction (pick one, make it explicit):**
+  (a) **Push after the unifier autocommit** — when `autoCommitWorktreeIfDirty`
+  fires inside a loop whose gate includes `branches_in_sync` AND the project has an
+  origin remote, push the branch (mirror the per-WI `pushInitiativeBranch`). Keeps
+  `origin == HEAD` so the gate can pass. Cleanest; downside is WIP commits reach the
+  PR branch (acceptable — the unifier squashes/cleans before the PR anyway). OR
+  (b) **Relax `branches_in_sync` to "no divergence" mid-loop** — accept
+  *local-ahead-only* (origin is an ancestor of local) during the unifier loop, since
+  the dev-loop *close* (`assertDevLoopCloseSync`) and `openPullRequest` both push +
+  re-assert strict sync before the PR. Narrower change, but splits the invariant
+  into two strictness levels.
+  Either way the unifier must have a push step, or the strict check must move to a
+  point where a push has happened.
+- **What this run VALIDATED (the reason to keep it on record):** the `[no test
+  files]` fix (run #1) held — WIs proceeded 2/2; the **green baseline gate**, **PM
+  feature-coverage** (2 features → 2 WIs, no hallucination), **scoped discriminating
+  gates** (gate-recipes), the **diff-scaled unifier cap** (bounded the loop at 4),
+  **`dev-loop.delivered`** (recorded the real 1,253-line delivery), the **delivery
+  gate** (blocked the PR on unifier-not-passed — the exact quality-escape it exists
+  to prevent), and the **cost guard** ($16.30 < $25 ceiling) all fired correctly.
+- **Evidence:**
+  `_logs/2026-05-31T…_INIT-2026-05-31-release-definition-unit-tests/events.jsonl`
+  (the re-run: `dev-loop.delivered` then 4× `unifier.gate.branches-not-in-sync` →
+  `unifier.failed` → `delivery gate: unifier did not pass`),
+  `orchestrator/pr.ts` (`checkLocalRemoteSynced`, strict),
+  `loops/ralph/runner.ts:226` + `loops/ralph/stop-conditions.ts:359`
+  (`autoCommitWorktreeIfDirty`, commit-no-push),
+  `orchestrator/phases/developer-loop.ts:1185` (gate sub-check #4).
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
