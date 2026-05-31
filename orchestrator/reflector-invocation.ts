@@ -160,6 +160,7 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '- **No WI-spec edits.**',
     '- **No web tools.** `WebFetch` / `WebSearch` are disabled.',
     '- **Concrete actions, not vague intentions.** Themes must capture specific patterns / antipatterns / decisions, not platitudes.',
+    '- **Delivery truth comes from `dev-loop.delivered`, not per-WI status.** The event log carries a `dev-loop.delivered` event with the branch\'s git diff-stat (`files_changed` / `insertions` / `deletions` / `commits`). That event + the merged tree are the authoritative record of what landed. Per-WI `status: failed` counts can be **stale** after a resume — the work is committed on the branch from the prior cycle, but the status files were never rewritten. **NEVER write a "nothing delivered" / "empty branch" / "no implementation" theme if `dev-loop.delivered` shows `files_changed > 0` (or the merged tree contains the change).** If the status metadata and the diff disagree, the diff wins — and that contradiction is itself the antipattern worth capturing (stale-status-vs-real-delivery), NOT "the PR was empty".',
   ].join('\n');
 }
 
@@ -184,10 +185,18 @@ export type ReflectorUserPromptInput = {
   /** Where to write the cycle archive. Includes filename. */
   cycleArchiveRelPath: string;
   /**
-   * Where to write theme files. The reflector decides per-theme filenames; this
-   * is the directory root.
+   * Where to write PROJECT theme files (lessons about the project's own code /
+   * conventions / domain). The reflector decides per-theme filenames; this is
+   * the directory root.
    */
   themesDirRelPath: string;
+  /**
+   * Where to write FORGE-MACHINERY theme files (lessons about the orchestrator,
+   * gates, unifier, Ralph loop, scheduler, phase behaviour — NOT project
+   * knowledge). cascade-v4 #7: without an explicit path the reflector dumped
+   * forge lessons (e.g. `gate-too-loose`) into the project's Brain 3.
+   */
+  forgeThemesDirRelPath: string;
 };
 
 /**
@@ -213,12 +222,13 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     `- User questions (stage 2): \`${input.userQuestionsRelPath}\` — at most 4 numbered questions. Skip if none warranted.`,
     `- User feedback to read (stage 3 input): \`${input.userFeedbackRelPath}\` — pre-populated; if missing, treat as no feedback.`,
     `- Cycle archive: \`${input.cycleArchiveRelPath}\` — frontmatter mandatory.`,
-    `- Theme files: \`${input.themesDirRelPath}/<YYYY-MM-DD>-<slug>.md\` — at least one per significant pattern.`,
+    `- **Project** theme files: \`${input.themesDirRelPath}/<YYYY-MM-DD>-<slug>.md\` — lessons about THIS PROJECT's code / conventions / domain.`,
+    `- **Forge-machinery** theme files: \`${input.forgeThemesDirRelPath}/<YYYY-MM-DD>-<slug>.md\` — lessons about FORGE itself (orchestrator, gates, unifier, Ralph loop, scheduler, PM/reflector behaviour). These are NOT project knowledge — route them here, never into the project brain.`,
     '',
     '## What to do',
     '',
     '1. **Brain query** — run `brain-query` for prior retros, antipatterns surfaced, and outstanding gaps.',
-    `2. **Stage 1 (self-reflection)**: read \`${input.eventLogRelPath}\` end-to-end. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1.`,
+    `2. **Stage 1 (self-reflection)**: read \`${input.eventLogRelPath}\` end-to-end. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. **Read the \`dev-loop.delivered\` event for the authoritative git diff-stat of what landed, and cross-check it before any "nothing delivered" conclusion — per-WI status counts can be stale on a resume.** Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1.`,
     `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with the questions you can\'t answer from the brain alone. Cap at 4. Skip the file entirely if no such questions exist.`,
     `4. **Stage 3 (user feedback)**: read \`${input.userFeedbackRelPath}\`. If it exists, distil the answers into Section 2 of \`${input.retroRelPath}\` and the free-form feedback into Section 3. If missing, write \`_(no feedback supplied this cycle)_\` for both.`,
     `5. **Cycle archive**: write \`${input.cycleArchiveRelPath}\` with the frontmatter shown in the system prompt. Body: short summary + reference to the event log.`,
@@ -230,7 +240,7 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     '- Brain query MUST happen first. The bench gate fails otherwise.',
     '- Every theme MUST have resolvable evidence in `## Sources`. Vague observations get rejected.',
     '- If the cycle\'s event log contains any wedge or send-back event, ≥ 1 theme MUST carry `category: antipattern`.',
-    '- Themes go under `projects/<project>/brain/themes/`, NOT `brain/cycles/themes/`. Forge-wide lessons are captured separately in brain/cycles/themes/ by the reflector after the project cycle completes.',
+    '- **Scope each theme to the right brain (load-bearing, cascade-v4 #7).** A lesson about THE PROJECT (its code, conventions, domain, a bug in its source) → the project themes dir. A lesson about FORGE MACHINERY (the orchestrator, a gate behaviour like `gate-too-loose`, the unifier, the Ralph loop, the scheduler, PM/reflector behaviour, cycle mechanics) → the forge themes dir. Ask: "would this lesson be true for a DIFFERENT project too?" If yes, it is a forge lesson — it does NOT belong in this project\'s Brain 3.',
     '- One theme per file. Do not combine unrelated lessons.',
   ].join('\n');
 }

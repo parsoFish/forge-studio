@@ -102,6 +102,14 @@ export type InitiativeManifest = {
    * full run. Absent ⇒ normal full cycle.
    */
   resume_from?: 'unifier';
+  /**
+   * cascade-v4 #7: a throwaway / verification cycle (e.g. `verify-cycle.mjs`
+   * frozen-SHA routine runs) should NOT pollute the durable brain. When
+   * `disposable: true`, the reflector skips its theme + cycle-archive writes
+   * (it still runs closure/merge); the durable brain accretes only from real
+   * initiatives. Absent / false ⇒ normal reflection.
+   */
+  disposable?: boolean;
   // Optional runtime fields written by the scheduler
   claimed_at?: string;
   claimed_by?: string;
@@ -156,6 +164,7 @@ export function parseManifest(content: string): InitiativeManifest {
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
   if (data.resume_from === 'unifier') manifest.resume_from = 'unifier';
+  if (data.disposable === true) manifest.disposable = true;
   if (typeof data.retry_count === 'number') manifest.retry_count = data.retry_count;
   if (Array.isArray(data.previous_failure_modes)) {
     const modes = (data.previous_failure_modes as unknown[]).filter((s): s is string => typeof s === 'string');
@@ -189,6 +198,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   }
   if (m.resume_from === 'unifier') {
     data.resume_from = m.resume_from;
+  }
+  if (m.disposable === true) {
+    data.disposable = true;
   }
   if (typeof m.retry_count === 'number' && m.retry_count > 0) {
     data.retry_count = m.retry_count;

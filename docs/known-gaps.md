@@ -29,7 +29,15 @@ resume-from-unifier path, [ADR 019](./decisions/019-cycle-resume-from-unifier.md
 
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
-### 1. Reflector can write confidently-wrong themes from stale metadata — HIGH
+### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
+**Fixed (Phase F):** the dev-loop emits a `dev-loop.delivered` event at close —
+the authoritative git diff-stat of the branch's net contribution (files /
+insertions / deletions / commits), captured while the branch + base still exist
+(so it's correct even on a resume where per-WI status reads stale). The reflector
+prompt + skill now make this the source of completion truth: **never** write a
+"nothing delivered / empty branch" theme if `dev-loop.delivered` shows
+`files_changed > 0`; a status-vs-diff disagreement is itself the antipattern
+(stale-status-vs-real-delivery). Original below.
 On resume, WI-status files still read `failed:6` even though the branch carried
 975 lines of working, tested, *merged* code. The reflector trusted that
 metadata and wrote a durable antipattern theme (`pr-opened-despite-zero-wi-completions`)
@@ -120,12 +128,17 @@ cycle), so its auto-approve/closure tracking silently followed the wrong cycle.
   not the first match.
 
 ### 7. Lower-severity / housekeeping
-- **Throwaway cycles still accrete brain artifacts.** A cycle explicitly marked
-  "verification — throwaway" still wrote a `_raw` archive, a brain-log edit, and
-  three themes (one wrong). No notion of "don't reflect this into the durable brain."
-- **Reflector mis-scopes forge-machinery lessons into project brains.**
-  `gate-too-loose` is a fact about forge, but the reflector wrote it to
-  claude-harness's Brain 3. The three-brain scoping isn't enforced at write time.
+- **Throwaway cycles still accrete brain artifacts.** ✅ RESOLVED 2026-05-31 (Phase F):
+  a manifest `disposable: true` flag (parsed + serialized, round-tripped) makes
+  the reflector skip entirely — `reflector.skipped-disposable`, no themes, no
+  archive — while the cycle still merges/closes. `verify-cycle.mjs` throwaway runs
+  set it so the durable brain accretes only from real initiatives.
+- **Reflector mis-scopes forge-machinery lessons into project brains.** ✅ RESOLVED
+  2026-05-31 (Phase F): root cause was structural — the reflector was given only
+  the *project* themes dir as an output, so forge lessons (`gate-too-loose`) had
+  nowhere else to go. It now gets BOTH a project-themes and a forge-themes
+  (`brain/cycles/themes/`) output path with an explicit routing rule + litmus
+  ("would this lesson be true for a different project too?" → forge brain).
 - **`gate-too-loose` (and other iter-0 heuristics) assume fresh-work-from-zero**
   and misfire when state is pre-populated (e.g. on resume an immediate gate-pass
   looks identical to a no-op gate). ✅ **Mostly resolved 2026-05-31 (Phase D):**

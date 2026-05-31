@@ -126,6 +126,14 @@ summing to 1.0 with pass threshold 0.7.
    - Wedge events, recovery events, brain-gap counts, send-back rounds.
 3. Identify notable patterns: things that worked unusually well, things
    that wedged or burnt token, antipatterns observed.
+   - **Delivery truth = the `dev-loop.delivered` event (git diff-stat) + the
+     merged tree, NOT per-WI status counts.** Per-WI `status: failed` can be
+     stale after a resume (the work is committed on the branch from the prior
+     cycle but the status files were never rewritten). **Never** conclude
+     "nothing delivered / empty branch / no implementation" if `dev-loop.delivered`
+     shows `files_changed > 0`. If status and the diff disagree, the diff wins —
+     and that contradiction is the antipattern worth a theme (stale-status-vs-
+     real-delivery), not "the PR was empty" (cascade-v4 #1).
 4. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete
    observations, no hand-waving.
 
@@ -178,10 +186,16 @@ summing to 1.0 with pass threshold 0.7.
 ### Stage 4 — Brain writes (unattended)
 
 10. For each notable observation / pattern / antipattern from Stage 1, write
-    a theme file directly to
-    `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`. Required
-    frontmatter + a `## Sources` section listing ≥ 1 path that resolves to
-    either the cycle log or the cycle archive.
+    a theme file — **scoped to the right brain** (cascade-v4 #7):
+    - A lesson about **this project** (its code, conventions, domain, a bug in
+      its source) → `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`.
+    - A lesson about **forge machinery** (the orchestrator, a gate behaviour like
+      `gate-too-loose`, the unifier, the Ralph loop, the scheduler, PM/reflector
+      behaviour, cycle mechanics) → `brain/cycles/themes/<YYYY-MM-DD>-<slug>.md`.
+      Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If
+      yes, it is a forge lesson and does NOT belong in this project's Brain 3.
+    Either way: required frontmatter + a `## Sources` section listing ≥ 1 path
+    that resolves to the cycle log or the cycle archive.
 11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full
     provenance frontmatter.
 12. Append a short entry to `brain/forge-dev/log.md` summarising the cycle's deltas.

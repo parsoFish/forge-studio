@@ -525,6 +525,13 @@ export async function runDeveloperLoop(
   // one more commit + push. Both are idempotent reads against git state.
   assertDevLoopCloseSync(input.worktreePath, logger, input.initiativeId);
 
+  // cascade-v4 #1: emit the authoritative DELIVERY ground truth (git
+  // diff-stat of the branch's net contribution) while the branch + base still
+  // exist. The reflector grounds "what was delivered" in THIS event, not in
+  // per-WI status counts — which can read stale `failed:N` on a resume even
+  // though the branch carries merged, tested code (the cascade-v4 wrong-theme).
+  emitDeliverySummary(input, logger, start.event_id);
+
   // cascade-v4 #3: surface the unifier outcome so cycle.ts can gate PR
   // creation — a unifier that did not pass its composed gate must NOT yield a
   // reviewable (mergeable) PR.
@@ -548,6 +555,49 @@ export async function runDeveloperLoop(
  * `developer-loop-close-sync.test.ts`). Production callers should reach
  * this only via `runDeveloperLoop`'s close path.
  */
+/**
+ * cascade-v4 #1: emit `dev-loop.delivered` — the git-derived net contribution
+ * of the initiative branch (files changed, insertions, deletions, commits)
+ * against its base. This is the authoritative delivery signal the reflector
+ * cross-checks before drawing any "nothing delivered / empty branch"
+ * conclusion: per-WI status files can read stale `failed:N` after a resume
+ * even when the branch carries real merged code. Best-effort (git failures →
+ * zeros); never throws. Exported for unit testing.
+ */
+export function emitDeliverySummary(input: CycleInput, logger: EventLogger, parentEventId: string): void {
+  const wt = input.worktreePath;
+  const git = (args: string[]): string => {
+    try {
+      return execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' }).toString().trim();
+    } catch {
+      return '';
+    }
+  };
+  let base = '';
+  if (git(['rev-parse', '--verify', 'main'])) base = 'main';
+  else if (git(['rev-parse', '--verify', 'master'])) base = 'master';
+
+  let filesChanged = 0, insertions = 0, deletions = 0, commits = 0;
+  if (base) {
+    const shortstat = git(['diff', '--shortstat', `${base}...HEAD`]);
+    filesChanged = Number(shortstat.match(/(\d+) files? changed/)?.[1] ?? 0);
+    insertions = Number(shortstat.match(/(\d+) insertions?/)?.[1] ?? 0);
+    deletions = Number(shortstat.match(/(\d+) deletions?/)?.[1] ?? 0);
+    commits = Number(git(['rev-list', '--count', `${base}..HEAD`]) || '0') || 0;
+  }
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'developer-loop',
+    skill: 'developer-ralph',
+    event_type: 'log',
+    input_refs: [wt],
+    output_refs: [],
+    message: 'dev-loop.delivered',
+    metadata: { base: base || null, files_changed: filesChanged, insertions, deletions, commits },
+  });
+}
+
 export function assertDevLoopCloseSync(
   worktreePath: string,
   logger: EventLogger,

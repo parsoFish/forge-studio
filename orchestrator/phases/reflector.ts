@@ -121,6 +121,7 @@ export async function runReflector(
 
   let projectName: string;
   let origin: 'architect' | 'human-directed' = 'architect';
+  let disposable = false;
   try {
     const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
     projectName = manifest.project;
@@ -128,6 +129,7 @@ export async function runReflector(
     // reader (autonomous vs hand-directed) can split retros the same way
     // `forge metrics` splits cycles.
     origin = manifest.origin;
+    disposable = manifest.disposable ?? false;
   } catch (err) {
     logger.emit({
       initiative_id: input.initiativeId,
@@ -143,6 +145,25 @@ export async function runReflector(
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
 
+  // cascade-v4 #7: a throwaway / verification cycle must NOT pollute the durable
+  // brain. Skip reflection entirely (no themes, no cycle archive) — the cycle
+  // still merged + closed; we just don't accrete brain artifacts from a run that
+  // exists only to exercise the harness.
+  if (disposable) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'end',
+      input_refs: [manifestPath],
+      output_refs: [],
+      message: 'reflector.skipped-disposable',
+      metadata: { project: projectName, reason: 'manifest disposable: true — throwaway/verification cycle, not reflected into the durable brain' },
+    });
+    return { reflection_status: 'skipped', lint_status: 'skipped' };
+  }
+
   const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
   const cycleArchivePath = resolve(forgeRoot, 'brain', 'cycles', '_raw', `${cycleId}.md`);
   const themesDir = resolve(forgeRoot, 'projects', projectName, 'brain', 'themes');
@@ -152,6 +173,10 @@ export async function runReflector(
   // inside the agent and silently log-and-continue-fail.
   mkdirSync(resolve(forgeRoot, 'brain', 'cycles', '_raw'), { recursive: true });
   mkdirSync(themesDir, { recursive: true });
+  // cascade-v4 #7: the forge-machinery themes dir is a first-class reflector
+  // output so forge lessons route here instead of into the project's Brain 3.
+  const forgeThemesDir = cyclesThemesDir(forgeRoot);
+  mkdirSync(forgeThemesDir, { recursive: true });
   // F-12: touch brain-gaps.jsonl if absent. The reflector's user prompt
   // points it at this file; the bench fixtures pre-populate it. In live
   // cycles, gaps are agent-driven (brain-query SKILL writes to it). For the
@@ -177,6 +202,7 @@ export async function runReflector(
     retroRelPath: resolve(cycleLogDir, 'retro.md'),
     cycleArchiveRelPath: cycleArchivePath,
     themesDirRelPath: themesDir,
+    forgeThemesDirRelPath: forgeThemesDir,
   });
 
   const options: Record<string, unknown> = {
