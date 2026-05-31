@@ -27,6 +27,44 @@ resume-from-unifier path, [ADR 019](./decisions/019-cycle-resume-from-unifier.md
 
 ---
 
+## 2026-05-31 — architect/PM decomposition boundary is under-specified (the breakdown can happen twice)
+
+Surfaced by the operator watching the release_definition dogfood cycle. The
+intended hierarchy is **feature → WI → file** (`skills/architect/SKILL.md` §type:
+implementation): the **architect** produces an initiative's `features[]`; the
+**PM** decomposes each feature into atomic **work items**. The PM is correctly
+*bound* to the architect's features (it cannot invent or drop them — the Phase-C
+coverage + hallucination checks enforce that), so it does **not** regenerate the
+*feature* set. So far, so good — two distinct levels, each decided once.
+
+**The smell (real):** nothing pins the *granularity* of a feature vs a work item,
+so the architect can decompose all the way to **WI granularity**. In this cycle it
+emitted features literally titled `WI-1: Scaffold…` and `WI-2: …6 tests`, and the
+PM then mapped them **1:1** to WI-1/WI-2. The chunking decision was effectively
+made at the architect and **re-made** at the PM (which re-runs a full SDK
+decomposition pass to land in the same place, then adds ACs/gates/file-scope).
+Worse, the architect *may* also set per-feature `quality_gate_cmd` / `non_goals`
+(the C4 optional fields) — the very fields the PM sets per WI — so the gate
+decision can be specified at both levels too.
+
+- **Why it matters:** the operator's ask is "perform the breakdown once." Today,
+  for small initiatives, the architect and PM can both own the WI-sizing (and
+  potentially the gate) decision — duplicated reasoning + a duplicated SDK
+  decomposition pass + ambiguity about which level is authoritative.
+- **Direction (pick one, make it explicit in both skills):**
+  (a) The architect produces **coarse** features — capability/concern groupings,
+  explicitly NOT work items, no per-feature gates — and the PM owns ALL WI sizing
+  + gates (one breakdown, at the PM). OR
+  (b) When the architect's features already *are* WI-sized (small initiatives),
+  the PM **enriches** them into WIs (ACs/gates/scope) without re-deciding the
+  chunking — i.e. the PM stops being a second decomposition pass.
+  Either way: name the authoritative level for WI-sizing + the gate decision so it
+  is decided exactly once.
+- **Evidence:** `skills/architect/SKILL.md` (feature → WI → file; per-feature C4
+  fields), `skills/project-manager/SKILL.md` (decompose each feature → WIs),
+  `_logs/2026-05-31T10-15-32_INIT-2026-05-31-release-definition-unit-tests/`
+  (architect FEAT-1/2 titled WI-1/WI-2 → PM WI-1/WI-2, 1:1).
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
