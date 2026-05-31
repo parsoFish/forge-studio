@@ -65,7 +65,7 @@ const RECIPES: Record<ProjectLanguage, Omit<GateRecipe, 'language'>> = {
     traps: [
       '`-tags all` is mandatory where unit tests sit behind `//go:build` tags — without it the runner silently runs 0 tests and the gate false-passes.',
       'Scope to the exact package dir (e.g. `./azuredevops/internal/service/foo/`), NEVER `./...` — a test-less sibling package prints `[no tests to run]` and poisons the whole run, failing the gate even when the real tests pass.',
-      '`-run <NewTestPrefix>` must match a test that does NOT exist yet, so the gate FAILS on a clean tree. A bare `go test ./pkg/` passes at iter-0 on the package\'s existing tests → `gate-too-loose`.',
+'`-run <NewTestPrefix>` scopes to the new tests. NOTE: `go test` EXITS 0 on a clean tree when no test matches (`[no tests to run]`) or the package has no test files (`[no test files]`) — so it is forge\'s no-work scan, NOT the exit code, that makes the gate fail until real tests run. A bare `go test ./pkg/` that passes at iter-0 on the package\'s existing tests is the `gate-too-loose` case to avoid; scope to the new prefix.',
     ],
   },
   typescript: {

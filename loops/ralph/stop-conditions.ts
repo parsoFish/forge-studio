@@ -125,7 +125,10 @@ const GATE_OUTPUT_MAX = 4096;
  * enough that they can't appear in legitimate passing output.
  */
 const NO_WORK_INDICATORS: readonly string[] = [
-  '[no tests to run]',     // go test (with -run filter that matches nothing)
+  '[no tests to run]',     // go test (test files EXIST but -run filter matches nothing)
+  '[no test files]',       // go test on a package with ZERO _test.go files (fresh substrate);
+                           // Go exits 0 here, so without this a first-ever-test WI gets a hollow
+                           // iter-0 pass → false gate-too-loose (betterado release_def dogfood 2026-05-31)
   'no tests to run',       // go test (other forms)
   'no test files found',   // vitest / jest (matchPattern misses)
   'no tests ran',          // pytest (`pytest tests/` with empty collection)

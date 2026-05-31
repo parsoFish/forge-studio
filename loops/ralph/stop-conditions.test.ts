@@ -188,6 +188,39 @@ test('makeQualityGateFromCmd: multi-package run where NO package ran tests still
   }
 });
 
+test('makeQualityGateFromCmd: a package with ZERO test files ("[no test files]") is rejected (betterado release_def dogfood)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let captured: GateRunInfo | undefined;
+    // Exactly what `go test -tags all -run TestX ./fresh-pkg/...` prints when the
+    // package has no _test.go files: exit 0 + "[no test files]". A first-ever-test
+    // WI must NOT get a hollow iter-0 pass here.
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'printf "?   github.com/x/release\\t[no test files]\\n"; exit 0'],
+      (info) => { captured = info; },
+    );
+    assert.equal(gate(), false, 'a test-less package must reject (else false gate-too-loose blocks the first test)');
+    assert.equal(captured?.rejectReason, 'no-work-indicator');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: project gate where a test-less pkg + a passing pkg coexist still PASSES', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    // The release+taskagent project gate: release has no test files, taskagent ran tests.
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'printf "?   github.com/x/release\\t[no test files]\\nok  github.com/x/taskagent  0.20s\\n"; exit 0'],
+    );
+    assert.equal(gate(), true, 'a test-less sibling must not sink a gate where another package ran tests');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // -------------------------------------------------------------------------
 // Tightening 2: requiredPaths git-diff check
 // -------------------------------------------------------------------------
