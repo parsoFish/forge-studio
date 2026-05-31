@@ -279,12 +279,19 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
 /**
  * ADR 021: the demo author is unified around ONE structured `demo.json`
  * (validated against the schema — this is the contract that fixes free-form
- * inconsistency). `forge demo render` derives DEMO.md/DEMO.html. The per-shape
- * guidance now describes how to FILL THE SCHEMA + when to invoke the
- * media-capture skill, not how to free-form a markdown file.
+ * inconsistency). `forge demo render` derives DEMO.md/DEMO.html.
+ *
+ * The canonical demo capability — effort tiers, per-shape rules, the
+ * behavioural-delta discipline, media capture, and the UI mapping — lives in
+ * `skills/demo/SKILL.md` (ADR 024: a capability the unifier agent composes).
+ * The per-shape guidance below is its operational summary for the inline brief;
+ * keep the two in sync.
  */
 function demoInstructionsForShape(shape: DemoShape): string {
   const schema = [
+    '   **The demo contract is defined in `skills/demo/SKILL.md`** (the canonical',
+    '   demo capability: what every demo must contain, effort tiers scaled to the',
+    '   diff, per-shape rules, and how it maps to the review UI). Summary:',
     '   **`demo/<initiative-id>/demo.json` schema (the contract):**',
     '   - `title` (string, required) — one-line essence.',
     '   - `essence` (string, required) — what behaviour changed and why it matters.',
@@ -299,7 +306,7 @@ function demoInstructionsForShape(shape: DemoShape): string {
       return [
         '   This is a VISUAL initiative — fill demo.json checkpoints AND capture media:',
         '   - Author the structured checkpoints (label + caption + before/after notes).',
-        '   - **Invoke the media-capture skill** to fill before/after screenshots: `Bash forge demo capture <initiative-id>` (best-effort; back-fills `beforeImage`/`afterImage`).',
+        '   - **Run the demo skill\'s capture step** to fill before/after screenshots: `Bash forge demo capture <initiative-id>` (best-effort; back-fills `beforeImage`/`afterImage`; skip entirely for a trivial diff — see the effort tiers in skills/demo/SKILL.md).',
         schema,
       ].join('\n');
     case 'harness':

@@ -10,18 +10,21 @@
  * inspection and returns a structured report. No mutation, no network,
  * no SDK. The CLI wrapper (`orchestrator/cli.ts`) renders + sets exit code.
  *
- * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C3/C5/C6 are
- * advisory — surfaced as warnings, not blockers — because (C3) source size
- * is a heuristic, (C5) constraint-doc presence can't prove the harness
- * honours them, and (C6) is structurally satisfied by forge post-Phase-6
- * (no auto-merge; the operator merges the PR).
+ * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C3/C5/C6 +
+ * DEMO are advisory — surfaced as warnings, not blockers — because (C3) source
+ * size is a heuristic, (C5) constraint-doc presence can't prove the harness
+ * honours them, (C6) is structurally satisfied by forge post-Phase-6 (no
+ * auto-merge; the operator merges the PR), and (DEMO) a declared demo.shape
+ * can't prove the before/after actually captures the delta (hand-verified at
+ * onboarding). DEMO is the project half of the demo contract family; the forge
+ * half is skills/demo/SKILL.md.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, relative } from 'node:path';
 
-export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'BRAIN';
+export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'BRAIN' | 'DEMO';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -78,6 +81,14 @@ const C3_SKIP_DIRS = new Set([
 // commits orchestration state into the PR — the W4 reviewer-confusion bug).
 const SCRATCH_PATHS = ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
+// DEMO: the project must declare HOW its change is demonstrated, in
+// `.forge/project.json` `demo.shape`. This is the project half of the demo
+// contract family (docs/forge-project-contract.md); the forge half (what a
+// demo must contain) is skills/demo/SKILL.md. Advisory, because the structural
+// presence of a shape cannot prove the before/after actually captures the delta
+// (that facet is hand-verified during onboarding).
+const DEMO_SHAPES = ['browser', 'harness', 'cli-diff', 'artifact', 'none'];
+
 export function runPreflight(
   projectDir: string,
   opts: PreflightOptions = {},
@@ -93,6 +104,7 @@ export function runPreflight(
     checkC4(dir, projectName, forgeRoot),
     checkC5(dir),
     checkC6(dir),
+    checkDemo(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
 
@@ -253,6 +265,68 @@ function checkC6(dir: string): ClauseResult {
     detail:
       'forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface ' +
       'for the operator to merge. Add a GitHub `origin` remote. (Advisory.)',
+  };
+}
+
+// --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
+
+function checkDemo(dir: string): ClauseResult {
+  const base = {
+    clause: 'DEMO' as const,
+    title: 'Demonstrable change (.forge/project.json demo.shape)',
+    hard: false,
+  };
+  const cfgPath = join(dir, '.forge', 'project.json');
+  if (!existsSync(cfgPath)) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        'no .forge/project.json — the demo shape is undeclared, so forge cannot ' +
+        'tell how this project shows a change. The unifier falls back to a ' +
+        'notes-only demo and the operator may approve blind. Declare a demo.shape ' +
+        '(browser | harness | cli-diff | artifact | none). Advisory.',
+    };
+  }
+  let cfg: { demo?: { shape?: unknown; command?: unknown; preview_command?: unknown } };
+  try {
+    cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as typeof cfg;
+  } catch {
+    return { ...base, pass: false, detail: '.forge/project.json is not valid JSON — cannot read the demo shape. Advisory.' };
+  }
+  const demo = cfg.demo;
+  const shape = demo?.shape;
+  if (typeof shape !== 'string' || !DEMO_SHAPES.includes(shape)) {
+    return {
+      ...base,
+      pass: false,
+      detail: `.forge/project.json has no valid demo.shape (got ${JSON.stringify(shape)}); expected one of ${DEMO_SHAPES.join(' | ')}. Advisory.`,
+    };
+  }
+  const hasCommand = Array.isArray(demo?.command) && demo!.command.length > 0;
+  if (shape !== 'none' && !hasCommand) {
+    return {
+      ...base,
+      pass: false,
+      detail: `demo.shape "${shape}" needs a demo.command (how forge produces the before/after) — none declared. Advisory.`,
+    };
+  }
+  const hasPreview = Array.isArray(demo?.preview_command) && demo!.preview_command.length > 0;
+  if (shape === 'browser' && !hasPreview) {
+    return {
+      ...base,
+      pass: false,
+      detail: 'demo.shape "browser" needs a demo.preview_command (the dev/preview server forge serves the built worktree on) — none declared. Advisory.',
+    };
+  }
+  return {
+    ...base,
+    pass: true,
+    detail:
+      `demo.shape "${shape}" declared` +
+      (shape !== 'none' ? ' + command' : '') +
+      (shape === 'browser' ? ' + preview_command' : '') +
+      ' (forge can produce a demo; the before/after fidelity is hand-verified at onboarding)',
   };
 }
 

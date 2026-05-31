@@ -38,6 +38,12 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   // Brain 3: profile lives inside the project repo at brain/profile.md.
   mkdirSync(join(dir, 'brain'), { recursive: true });
   writeFileSync(join(dir, 'brain', 'profile.md'), '# profile\n');
+  // DEMO: a declared demo shape (the project half of the demo contract family).
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(
+    join(dir, '.forge', 'project.json'),
+    JSON.stringify({ demo: { shape: 'harness', command: ['npm', 'run', 'demo'] }, quality_gate_cmd: ['vitest', 'run'] }),
+  );
   // A GitHub remote (C6) — set on a real git repo so `git remote get-url` works.
   execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main']);
   execFileSync('git', ['-C', dir, 'remote', 'add', 'origin', 'https://github.com/acme/x.git']);
@@ -62,7 +68,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'] as ClauseId[]) {
+    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'DEMO'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -251,6 +257,68 @@ test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-s
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('DEMO (ADVISORY): no .forge/project.json warns but does NOT flip ok', () => {
+  const p = happyProject();
+  try {
+    rmSync(join(p.dir, '.forge', 'project.json'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO');
+    assert.equal(c.pass, false);
+    assert.equal(c.hard, false);
+    assert.equal(r.ok, true, 'DEMO is advisory — must not flip ok');
+    assert.match(c.detail, /demo shape is undeclared|notes-only/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO (ADVISORY): browser shape without preview_command warns', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ demo: { shape: 'browser', command: ['npm', 'run', 'demo'] }, quality_gate_cmd: ['vitest', 'run'] }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO');
+    assert.equal(c.pass, false);
+    assert.equal(r.ok, true);
+    assert.match(c.detail, /preview_command/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO (ADVISORY): a non-none shape without a command warns', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ demo: { shape: 'cli-diff' }, quality_gate_cmd: ['vitest', 'run'] }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'DEMO').pass, false);
+    assert.equal(r.ok, true);
+    assert.match(clause(r, 'DEMO').detail, /demo\.command/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO (ADVISORY): shape "none" is valid with no command', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ demo: { shape: 'none' }, quality_gate_cmd: ['vitest', 'run'] }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'DEMO').pass, true);
+  } finally {
+    p.cleanup();
   }
 });
 

@@ -135,6 +135,11 @@ The unifier owns:
   `## Demo` section).
 - A closing commit `feat(<initiative-id>): unify and demo` if any changes.
 
+The demo contract — what `demo.json` must contain, effort tiers scaled to the
+diff, per-shape rules, media capture, and the review-UI mapping — is owned by
+[`skills/demo/SKILL.md`](../../skills/demo/SKILL.md) (the canonical demo
+capability the unifier agent composes, ADR 024).
+
 Iteration cap: **3** (no $ cap per CONTRACTS.md C19). Composed gates that
 must all pass for the unifier to exit clean: `initiative_gate`,
 `demo_runs_clean`, `pr_self_contained`, `branches_in_sync`.

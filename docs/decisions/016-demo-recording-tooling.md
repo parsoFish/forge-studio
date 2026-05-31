@@ -1,9 +1,22 @@
 # ADR 016 — Demo recording tooling for the reviewer phase
 
-**Status:** Accepted
+**Status:** Superseded (2026-05-31) — see below
 **Date:** 2026-05-09
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; the "bench scores"/"bench reads" references below are historical. The demo-recording decision itself stands; demo quality is now judged on real merged cycles + the human-review stage rather than a synthetic bench.
+> **Superseded 2026-05-31 by [ADR 021](./021-local-review-and-unified-demo.md) +
+> the canonical [`skills/demo/SKILL.md`](../../skills/demo/SKILL.md).** The demo is
+> now **one structured artefact** (`demo.json` → derived `DEMO.md`/`DEMO.html`,
+> rendered natively in the review UI), authored by the developer-unifier; the
+> `<project>/.forge/demos/<id>/` bundle layout (§2) is replaced by a tracked
+> `demo/<initiative-id>/` (born committed). Two things from this ADR **survive** as
+> the implementation behind `forge demo capture` (the optional, `browser`-shape
+> media-capture step): Playwright for rendered UI, VHS for terminal/CLI. The
+> behavioural-delta discipline, per-shape rules, effort tiers, and UI mapping now
+> live in the `demo` skill, not split across this ADR + an inline prompt. Read this
+> ADR for the *recording-tool* rationale (Playwright vs VHS); read the `demo` skill
+> + ADR 021 for the *current* demo contract.
+>
+> Note (2026-05-25): the `benchmarks/` harnesses were removed; the "bench scores"/"bench reads" references below are historical.
 
 ## Context
 

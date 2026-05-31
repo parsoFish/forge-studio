@@ -146,6 +146,14 @@ and the ADRs before acting.
    demo-model.ts | demo-runtime.ts | demo-script.ts` — ~7 modules across two layers.
    Largest single surface for one feature. Candidate for consolidation behind one
    demo module.
+   *(Partly actioned 2026-05-31 — Phase B of the hardening plan.* The **skill**
+   layer is now **one** canonical `skills/demo/SKILL.md` (the orphaned spec-author
+   skill was deleted; `skills/demo-capture` was folded in), and it is the single
+   source of the demo contract (ADR 016 superseded by it + ADR 021). The CLI
+   modules remain as the *implementation* behind `forge demo render|capture` —
+   `demo-model.ts` is the schema/renderer; `demo.ts | demo-script.ts |
+   demo-runtime.ts | demo-html.ts` are the optional media-capture engine. Further
+   collapsing the CLI modules is still open.)*
 
 3. **Multiple verdict-ingestion paths.** "Operator says approve / send-back" arrives
    via `file-verdict.ts`, `pr-verdict.ts`, `review-router.ts` (PR-comment poller),
