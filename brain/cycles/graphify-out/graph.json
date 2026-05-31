@@ -178,7 +178,7 @@
       "label": "Process discipline",
       "file_type": "document",
       "source_file": "patterns.md",
-      "source_location": "L61",
+      "source_location": "L62",
       "id": "cycles_patterns_process_discipline",
       "community": 1,
       "norm_label": "process discipline"
@@ -187,7 +187,7 @@
       "label": "Principles",
       "file_type": "document",
       "source_file": "patterns.md",
-      "source_location": "L69",
+      "source_location": "L70",
       "id": "cycles_patterns_principles",
       "community": 1,
       "norm_label": "principles"
@@ -196,7 +196,7 @@
       "label": "UI / browser harness",
       "file_type": "document",
       "source_file": "patterns.md",
-      "source_location": "L74",
+      "source_location": "L75",
       "id": "cycles_patterns_ui_browser_harness",
       "community": 1,
       "norm_label": "ui / browser harness"
@@ -205,7 +205,7 @@
       "label": "Format",
       "file_type": "document",
       "source_file": "patterns.md",
-      "source_location": "L80",
+      "source_location": "L81",
       "id": "cycles_patterns_format",
       "community": 1,
       "norm_label": "format"
@@ -214,7 +214,7 @@
       "label": "code:markdown (- [`<theme-slug>`](./themes/<theme-slug>.md) \u2014 one-line hook)",
       "file_type": "document",
       "source_file": "patterns.md",
-      "source_location": "L84",
+      "source_location": "L85",
       "id": "cycles_patterns_codeblock_1",
       "community": 1,
       "norm_label": "code:markdown (- [`<theme-slug>`](./themes/<theme-slug>.md) \u2014 one-line hook)"
@@ -568,6 +568,42 @@
       "source_location": "L67",
       "id": "raw_init_2026_05_25_claude_trail_cost_only_event_log_reference",
       "community": 10,
+      "norm_label": "event log reference"
+    },
+    {
+      "label": "2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "file_type": "document",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L1",
+      "id": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_md",
+      "community": 93,
+      "norm_label": "2026-05-29t09-59-14_init-2026-05-29-claude-trail-verify-cascade-v4.md"
+    },
+    {
+      "label": "Cycle 2026-05-29T09-59-14 \u2014 INIT-2026-05-29-claude-trail-verify-cascade-v4",
+      "file_type": "document",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L17",
+      "id": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_cycle_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4",
+      "community": 93,
+      "norm_label": "cycle 2026-05-29t09-59-14 \u2014 init-2026-05-29-claude-trail-verify-cascade-v4"
+    },
+    {
+      "label": "Summary",
+      "file_type": "document",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L19",
+      "id": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_summary",
+      "community": 93,
+      "norm_label": "summary"
+    },
+    {
+      "label": "Event log reference",
+      "file_type": "document",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L25",
+      "id": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_event_log_reference",
+      "community": 93,
       "norm_label": "event log reference"
     },
     {
@@ -1579,28 +1615,28 @@
       "norm_label": "wedged-loop-detector.md"
     },
     {
-      "label": "Wedged loop detector",
+      "label": "No dedicated wedged-detector \u2014 iteration budget is the sole no-progress bound",
       "file_type": "document",
       "source_file": "themes/wedged-loop-detector.md",
-      "source_location": "L22",
-      "id": "themes_wedged_loop_detector_wedged_loop_detector",
+      "source_location": "L23",
+      "id": "themes_wedged_loop_detector_no_dedicated_wedged_detector_iteration_budget_is_the_sole_no_progress_bound",
       "community": 88,
-      "norm_label": "wedged loop detector"
+      "norm_label": "no dedicated wedged-detector \u2014 iteration budget is the sole no-progress bound"
     },
     {
-      "label": "Sources",
+      "label": "The wedged-detector was removed (Tier 2 thinning, 2026-05-26)",
       "file_type": "document",
       "source_file": "themes/wedged-loop-detector.md",
-      "source_location": "L36",
-      "id": "themes_wedged_loop_detector_sources",
+      "source_location": "L35",
+      "id": "themes_wedged_loop_detector_the_wedged_detector_was_removed_tier_2_thinning_2026_05_26",
       "community": 88,
-      "norm_label": "sources"
+      "norm_label": "the wedged-detector was removed (tier 2 thinning, 2026-05-26)"
     },
     {
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/wedged-loop-detector.md",
-      "source_location": "L41",
+      "source_location": "L53",
       "id": "themes_wedged_loop_detector_see_also",
       "community": 88,
       "norm_label": "see also"
@@ -1843,7 +1879,7 @@
       "label": "Pattern",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L32",
+      "source_location": "L41",
       "id": "themes_pr_as_sole_review_window_pattern",
       "community": 13,
       "norm_label": "pattern"
@@ -1852,7 +1888,7 @@
       "label": "The load-bearing mechanism: demo IN the PR",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L41",
+      "source_location": "L50",
       "id": "themes_pr_as_sole_review_window_the_load_bearing_mechanism_demo_in_the_pr",
       "community": 13,
       "norm_label": "the load-bearing mechanism: demo in the pr"
@@ -1861,7 +1897,7 @@
       "label": "The hard-won lesson: visibility matters",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L48",
+      "source_location": "L57",
       "id": "themes_pr_as_sole_review_window_the_hard_won_lesson_visibility_matters",
       "community": 13,
       "norm_label": "the hard-won lesson: visibility matters"
@@ -1870,7 +1906,7 @@
       "label": "Evidence",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L62",
+      "source_location": "L71",
       "id": "themes_pr_as_sole_review_window_evidence",
       "community": 13,
       "norm_label": "evidence"
@@ -1879,7 +1915,7 @@
       "label": "As-built (2026-05-18 \u2014 P3 landed)",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L71",
+      "source_location": "L78",
       "id": "themes_pr_as_sole_review_window_as_built_2026_05_18_p3_landed",
       "community": 13,
       "norm_label": "as-built (2026-05-18 \u2014 p3 landed)"
@@ -1888,7 +1924,7 @@
       "label": "Sources",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L93",
+      "source_location": "L94",
       "id": "themes_pr_as_sole_review_window_sources",
       "community": 13,
       "norm_label": "sources"
@@ -1897,7 +1933,7 @@
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/pr-as-sole-review-window.md",
-      "source_location": "L107",
+      "source_location": "L106",
       "id": "themes_pr_as_sole_review_window_see_also",
       "community": 13,
       "norm_label": "see also"
@@ -1957,73 +1993,37 @@
       "norm_label": "parametric design search"
     },
     {
-      "label": "The pattern",
-      "file_type": "document",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L46",
-      "id": "themes_parametric_design_search_the_pattern",
-      "community": 3,
-      "norm_label": "the pattern"
-    },
-    {
-      "label": "code:block1 (function runSweep({)",
-      "file_type": "document",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L48",
-      "id": "themes_parametric_design_search_codeblock_1",
-      "community": 3,
-      "norm_label": "code:block1 (function runsweep({)"
-    },
-    {
       "label": "Why this is a tight loop",
       "file_type": "document",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L73",
+      "source_location": "L49",
       "id": "themes_parametric_design_search_why_this_is_a_tight_loop",
       "community": 3,
       "norm_label": "why this is a tight loop"
     },
     {
-      "label": "Generalisation to other projects",
-      "file_type": "document",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L95",
-      "id": "themes_parametric_design_search_generalisation_to_other_projects",
-      "community": 3,
-      "norm_label": "generalisation to other projects"
-    },
-    {
       "label": "What forge should provide",
       "file_type": "document",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L117",
+      "source_location": "L57",
       "id": "themes_parametric_design_search_what_forge_should_provide",
       "community": 3,
       "norm_label": "what forge should provide"
     },
     {
-      "label": "Anti-pattern: don't sweep without a regression budget",
+      "label": "Anti-patterns",
       "file_type": "document",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L139",
-      "id": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_a_regression_budget",
+      "source_location": "L68",
+      "id": "themes_parametric_design_search_anti_patterns",
       "community": 3,
-      "norm_label": "anti-pattern: don't sweep without a regression budget"
-    },
-    {
-      "label": "Anti-pattern: don't sweep without visualising",
-      "file_type": "document",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L153",
-      "id": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_visualising",
-      "community": 3,
-      "norm_label": "anti-pattern: don't sweep without visualising"
+      "norm_label": "anti-patterns"
     },
     {
       "label": "Sources",
       "file_type": "document",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L161",
+      "source_location": "L80",
       "id": "themes_parametric_design_search_sources",
       "community": 3,
       "norm_label": "sources"
@@ -2032,7 +2032,7 @@
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L167",
+      "source_location": "L86",
       "id": "themes_parametric_design_search_see_also",
       "community": 3,
       "norm_label": "see also"
@@ -3121,7 +3121,7 @@
       "label": "Agent stuck without detection \u2014 silent build/test loops",
       "file_type": "document",
       "source_file": "themes/agent-stuck-no-detection.md",
-      "source_location": "L24",
+      "source_location": "L23",
       "id": "themes_agent_stuck_no_detection_agent_stuck_without_detection_silent_build_test_loops",
       "community": 43,
       "norm_label": "agent stuck without detection \u2014 silent build/test loops"
@@ -3130,7 +3130,7 @@
       "label": "Sources",
       "file_type": "document",
       "source_file": "themes/agent-stuck-no-detection.md",
-      "source_location": "L41",
+      "source_location": "L40",
       "id": "themes_agent_stuck_no_detection_sources",
       "community": 43,
       "norm_label": "sources"
@@ -3139,7 +3139,7 @@
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/agent-stuck-no-detection.md",
-      "source_location": "L45",
+      "source_location": "L44",
       "id": "themes_agent_stuck_no_detection_see_also",
       "community": 43,
       "norm_label": "see also"
@@ -3424,6 +3424,60 @@
       "norm_label": "see also"
     },
     {
+      "label": "real-capability-harness.md",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L1",
+      "id": "themes_real_capability_harness_md",
+      "community": 92,
+      "norm_label": "real-capability-harness.md"
+    },
+    {
+      "label": "Real-capability harness \u2014 self-verify forge against a real repo",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L32",
+      "id": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "community": 92,
+      "norm_label": "real-capability harness \u2014 self-verify forge against a real repo"
+    },
+    {
+      "label": "The discipline",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L49",
+      "id": "themes_real_capability_harness_the_discipline",
+      "community": 92,
+      "norm_label": "the discipline"
+    },
+    {
+      "label": "Why this is NOT the 2026-05-25 benches trap",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L69",
+      "id": "themes_real_capability_harness_why_this_is_not_the_2026_05_25_benches_trap",
+      "community": 92,
+      "norm_label": "why this is not the 2026-05-25 benches trap"
+    },
+    {
+      "label": "How to apply",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L88",
+      "id": "themes_real_capability_harness_how_to_apply",
+      "community": 92,
+      "norm_label": "how to apply"
+    },
+    {
+      "label": "See also",
+      "file_type": "document",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L101",
+      "id": "themes_real_capability_harness_see_also",
+      "community": 92,
+      "norm_label": "see also"
+    },
+    {
       "label": "cycle-event-log-replay.md",
       "file_type": "document",
       "source_file": "themes/cycle-event-log-replay.md",
@@ -3661,7 +3715,7 @@
       "label": "Why this matters for forge",
       "file_type": "document",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L38",
+      "source_location": "L35",
       "id": "themes_dom_as_metrics_for_headless_driven_uis_why_this_matters_for_forge",
       "community": 12,
       "norm_label": "why this matters for forge"
@@ -3670,43 +3724,16 @@
       "label": "How forge applies it",
       "file_type": "document",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L53",
+      "source_location": "L47",
       "id": "themes_dom_as_metrics_for_headless_driven_uis_how_forge_applies_it",
       "community": 12,
       "norm_label": "how forge applies it"
     },
     {
-      "label": "code:block1 (data-conn-state              connecting | open | reconnectin)",
-      "file_type": "document",
-      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L57",
-      "id": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_1",
-      "community": 12,
-      "norm_label": "code:block1 (data-conn-state              connecting | open | reconnectin)"
-    },
-    {
-      "label": "The waits the demo uses",
-      "file_type": "document",
-      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L89",
-      "id": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses",
-      "community": 12,
-      "norm_label": "the waits the demo uses"
-    },
-    {
-      "label": "code:js (await page.waitForFunction()",
-      "file_type": "document",
-      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L95",
-      "id": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_2",
-      "community": 12,
-      "norm_label": "code:js (await page.waitforfunction()"
-    },
-    {
       "label": "How to extend",
       "file_type": "document",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L107",
+      "source_location": "L64",
       "id": "themes_dom_as_metrics_for_headless_driven_uis_how_to_extend",
       "community": 12,
       "norm_label": "how to extend"
@@ -3715,7 +3742,7 @@
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L118",
+      "source_location": "L71",
       "id": "themes_dom_as_metrics_for_headless_driven_uis_see_also",
       "community": 12,
       "norm_label": "see also"
@@ -3823,7 +3850,7 @@
       "label": "Diagnostic surface",
       "file_type": "document",
       "source_file": "themes/windows-browser-to-wsl-via-window-location.md",
-      "source_location": "L89",
+      "source_location": "L83",
       "id": "themes_windows_browser_to_wsl_via_window_location_diagnostic_surface",
       "community": 20,
       "norm_label": "diagnostic surface"
@@ -3832,7 +3859,7 @@
       "label": "See also",
       "file_type": "document",
       "source_file": "themes/windows-browser-to-wsl-via-window-location.md",
-      "source_location": "L102",
+      "source_location": "L91",
       "id": "themes_windows_browser_to_wsl_via_window_location_see_also",
       "community": 20,
       "norm_label": "see also"
@@ -4043,6 +4070,96 @@
       "id": "themes_roadmap_simplification_convergence_see_also",
       "community": 80,
       "norm_label": "see also"
+    },
+    {
+      "label": "Wedged loop detector",
+      "file_type": "document",
+      "source_file": "themes/wedged-loop-detector.md",
+      "source_location": "L22",
+      "community": 88,
+      "norm_label": "wedged loop detector",
+      "id": "themes_wedged_loop_detector_wedged_loop_detector"
+    },
+    {
+      "label": "Sources",
+      "file_type": "document",
+      "source_file": "themes/wedged-loop-detector.md",
+      "source_location": "L36",
+      "community": 88,
+      "norm_label": "sources",
+      "id": "themes_wedged_loop_detector_sources"
+    },
+    {
+      "label": "The pattern",
+      "file_type": "document",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L46",
+      "community": 3,
+      "norm_label": "the pattern",
+      "id": "themes_parametric_design_search_the_pattern"
+    },
+    {
+      "label": "code:block1 (function runSweep({)",
+      "file_type": "document",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L48",
+      "community": 3,
+      "norm_label": "code:block1 (function runsweep({)",
+      "id": "themes_parametric_design_search_codeblock_1"
+    },
+    {
+      "label": "Generalisation to other projects",
+      "file_type": "document",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L95",
+      "community": 3,
+      "norm_label": "generalisation to other projects",
+      "id": "themes_parametric_design_search_generalisation_to_other_projects"
+    },
+    {
+      "label": "Anti-pattern: don't sweep without a regression budget",
+      "file_type": "document",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L139",
+      "community": 3,
+      "norm_label": "anti-pattern: don't sweep without a regression budget",
+      "id": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_a_regression_budget"
+    },
+    {
+      "label": "Anti-pattern: don't sweep without visualising",
+      "file_type": "document",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L153",
+      "community": 3,
+      "norm_label": "anti-pattern: don't sweep without visualising",
+      "id": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_visualising"
+    },
+    {
+      "label": "code:block1 (data-conn-state              connecting | open | reconnectin)",
+      "file_type": "document",
+      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
+      "source_location": "L57",
+      "community": 12,
+      "norm_label": "code:block1 (data-conn-state              connecting | open | reconnectin)",
+      "id": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_1"
+    },
+    {
+      "label": "The waits the demo uses",
+      "file_type": "document",
+      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
+      "source_location": "L89",
+      "community": 12,
+      "norm_label": "the waits the demo uses",
+      "id": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses"
+    },
+    {
+      "label": "code:js (await page.waitForFunction()",
+      "file_type": "document",
+      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
+      "source_location": "L95",
+      "community": 12,
+      "norm_label": "code:js (await page.waitforfunction()",
+      "id": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_2"
     },
     {
       "label": "chained-phase-benchmarks.md",
@@ -4872,9 +4989,9 @@
       "source_file": "patterns.md",
       "source_location": "L74",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cycles_patterns_theme_pages",
-      "target": "cycles_patterns_ui_browser_harness",
-      "confidence_score": 1.0
+      "target": "cycles_patterns_ui_browser_harness"
     },
     {
       "relation": "contains",
@@ -5225,6 +5342,36 @@
       "confidence_score": 1.0,
       "source": "raw_init_2026_05_25_claude_trail_cost_only_commit_log_cycle_2_only",
       "target": "raw_init_2026_05_25_claude_trail_cost_only_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_md",
+      "target": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_cycle_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_cycle_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4",
+      "target": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_summary",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "_raw/2026-05-29T09-59-14_INIT-2026-05-29-claude-trail-verify-cascade-v4.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_cycle_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4",
+      "target": "raw_2026_05_29t09_59_14_init_2026_05_29_claude_trail_verify_cascade_v4_event_log_reference",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -6200,6 +6347,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/wedged-loop-detector.md",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "themes_wedged_loop_detector_md",
+      "target": "themes_wedged_loop_detector_no_dedicated_wedged_detector_iteration_budget_is_the_sole_no_progress_bound",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/wedged-loop-detector.md",
       "source_location": "L22",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -6210,11 +6367,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/wedged-loop-detector.md",
-      "source_location": "L36",
+      "source_location": "L35",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "themes_wedged_loop_detector_wedged_loop_detector",
-      "target": "themes_wedged_loop_detector_sources"
+      "source": "themes_wedged_loop_detector_no_dedicated_wedged_detector_iteration_budget_is_the_sole_no_progress_bound",
+      "target": "themes_wedged_loop_detector_the_wedged_detector_was_removed_tier_2_thinning_2026_05_26",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/wedged-loop-detector.md",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "themes_wedged_loop_detector_no_dedicated_wedged_detector_iteration_budget_is_the_sole_no_progress_bound",
+      "target": "themes_wedged_loop_detector_see_also",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -6540,31 +6707,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L46",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "themes_parametric_design_search_parametric_design_search",
-      "target": "themes_parametric_design_search_the_pattern"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "themes/parametric-design-search.md",
       "source_location": "L73",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "themes_parametric_design_search_parametric_design_search",
       "target": "themes_parametric_design_search_why_this_is_a_tight_loop"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L95",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "themes_parametric_design_search_parametric_design_search",
-      "target": "themes_parametric_design_search_generalisation_to_other_projects"
     },
     {
       "relation": "contains",
@@ -6580,21 +6727,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L139",
+      "source_location": "L68",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "themes_parametric_design_search_parametric_design_search",
-      "target": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_a_regression_budget"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "themes/parametric-design-search.md",
-      "source_location": "L153",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "themes_parametric_design_search_parametric_design_search",
-      "target": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_visualising"
+      "target": "themes_parametric_design_search_anti_patterns",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -6620,11 +6757,41 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/parametric-design-search.md",
-      "source_location": "L48",
+      "source_location": "L46",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "themes_parametric_design_search_the_pattern",
-      "target": "themes_parametric_design_search_codeblock_1"
+      "source": "themes_parametric_design_search_parametric_design_search",
+      "target": "themes_parametric_design_search_the_pattern"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L95",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_parametric_design_search_parametric_design_search",
+      "target": "themes_parametric_design_search_generalisation_to_other_projects"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L139",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_parametric_design_search_parametric_design_search",
+      "target": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_a_regression_budget"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L153",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_parametric_design_search_parametric_design_search",
+      "target": "themes_parametric_design_search_anti_pattern_don_t_sweep_without_visualising"
     },
     {
       "relation": "contains",
@@ -7829,6 +7996,56 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "themes_real_capability_harness_md",
+      "target": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "target": "themes_real_capability_harness_the_discipline",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "target": "themes_real_capability_harness_why_this_is_not_the_2026_05_25_benches_trap",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L88",
+      "weight": 1.0,
+      "source": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "target": "themes_real_capability_harness_how_to_apply",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/real-capability-harness.md",
+      "source_location": "L101",
+      "weight": 1.0,
+      "source": "themes_real_capability_harness_real_capability_harness_self_verify_forge_against_a_real_repo",
+      "target": "themes_real_capability_harness_see_also",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "themes/cycle-event-log-replay.md",
       "source_location": "L22",
       "weight": 1.0,
@@ -8050,16 +8267,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L89",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "themes_dom_as_metrics_for_headless_driven_uis_md",
-      "target": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
       "source_location": "L107",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -8080,21 +8287,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L57",
+      "source_location": "L89",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "themes_dom_as_metrics_for_headless_driven_uis_how_forge_applies_it",
-      "target": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_1"
+      "source": "themes_dom_as_metrics_for_headless_driven_uis_md",
+      "target": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
-      "source_location": "L95",
+      "source_location": "L57",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses",
-      "target": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_2"
+      "source": "themes_dom_as_metrics_for_headless_driven_uis_how_forge_applies_it",
+      "target": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_1"
     },
     {
       "relation": "contains",
@@ -8375,6 +8582,36 @@
       "confidence_score": 1.0,
       "source": "themes_roadmap_simplification_convergence_roadmaps_converge_on_simplification_before_features",
       "target": "themes_roadmap_simplification_convergence_see_also"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/wedged-loop-detector.md",
+      "source_location": "L36",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_wedged_loop_detector_wedged_loop_detector",
+      "target": "themes_wedged_loop_detector_sources"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/parametric-design-search.md",
+      "source_location": "L48",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_parametric_design_search_the_pattern",
+      "target": "themes_parametric_design_search_codeblock_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "themes/dom-as-metrics-for-headless-driven-uis.md",
+      "source_location": "L95",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "themes_dom_as_metrics_for_headless_driven_uis_the_waits_the_demo_uses",
+      "target": "themes_dom_as_metrics_for_headless_driven_uis_codeblock_2"
     },
     {
       "relation": "contains",
@@ -8948,5 +9185,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "618be2a1f2c3527a57180493a6cb0390e9153521"
+  "built_at_commit": "77a7d1d2a9981395c7bc4c773dec566f757f6be7"
 }
