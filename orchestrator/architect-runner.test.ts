@@ -347,6 +347,74 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
   assert.equal(readStatus(sessionDir)?.phase, 'committed');
 });
 
+test('drafting: architect emits cross-initiative build order → manifest depends_on_initiatives', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  // Resolved-decisions block makes the finalize pass skip the council.
+  writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- none\n');
+
+  const queryFn: CouncilQueryFn = ({ prompt }) => {
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = prompt.includes('draft the initiative')
+        ? {
+            vision: 'Green CI first, then the feature.',
+            initiatives: [
+              {
+                slug: 'ci-green',
+                title: 'Green the CI',
+                iteration_budget: 3,
+                cost_budget_usd: 4,
+                features: [{ title: 'Fix fmt + lint' }],
+                body: '## CI\n\nGIVEN red CI WHEN fixed THEN checks pass.',
+              },
+              {
+                slug: 'release-folder',
+                title: 'release_folder resource',
+                iteration_budget: 5,
+                cost_budget_usd: 8,
+                // valid dep + a self-ref + an unknown ref — last two must drop.
+                depends_on: ['ci-green', 'release-folder', 'does-not-exist'],
+                features: [{ title: 'CRUD + tests' }],
+                body: '## release_folder\n\nGIVEN green CI WHEN added THEN resource works.',
+              },
+            ],
+          }
+        : null;
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  const pending = join(queueRoot, 'pending');
+  const byId = Object.fromEntries(
+    readdirSync(pending)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => {
+        const m = parseManifest(readFileSync(join(pending, f), 'utf8'));
+        return [m.initiative_id, m];
+      }),
+  );
+  const ids = Object.keys(byId);
+  const ci = ids.find((id) => id.endsWith('-ci-green'))!;
+  const folder = ids.find((id) => id.endsWith('-release-folder'))!;
+  assert.ok(ci && folder, 'both initiatives promoted');
+  // The dependent carries the prerequisite's full id; self + unknown refs dropped.
+  assert.deepEqual(byId[folder].depends_on_initiatives, [ci]);
+  // The independent prerequisite carries no dependency.
+  assert.equal(byId[ci].depends_on_initiatives, undefined);
+});
+
 // ---------------------------------------------------------------------------
 // Waiting / terminal phases are no-ops
 // ---------------------------------------------------------------------------

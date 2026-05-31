@@ -337,6 +337,12 @@ type DraftInitiative = {
   title: string;
   iteration_budget: number;
   cost_budget_usd: number;
+  /**
+   * Slugs of OTHER initiatives in this same draft that must merge before this
+   * one is claimed (build order). Maps to the manifest's
+   * `depends_on_initiatives` (F-25 scheduler gate). Empty = runs in parallel.
+   */
+  depends_on?: string[];
   features: { title: string; depends_on?: number[] }[];
   body: string;
 };
@@ -354,6 +360,7 @@ const DRAFT_SCHEMA = {
           title: { type: 'string' },
           iteration_budget: { type: 'number' },
           cost_budget_usd: { type: 'number' },
+          depends_on: { type: 'array', items: { type: 'string' } },
           features: {
             type: 'array',
             items: {
@@ -410,7 +417,33 @@ async function runDraftStep(args: {
       '`slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), ' +
       'a `features` list (each with a title and optional `depends_on` referencing ' +
       'earlier feature indices), and a markdown `body` spec with concrete, ' +
-      'Given-When-Then acceptance criteria. Dependencies must be explicit.',
+      'Given-When-Then acceptance criteria.',
+    '',
+    '### Build order (cross-initiative dependencies)',
+    "If a later initiative would fail without an earlier one merged first — a " +
+      'green-CI gate before feature work, a base resource before the data source ' +
+      'that reads it — set that initiative\'s `depends_on` to the earlier ' +
+      'initiative slug(s). Leave it empty for initiatives that can run in ' +
+      'parallel. The scheduler runs independent initiatives concurrently and ' +
+      'holds dependents until their prerequisites merge, so under-declaring ' +
+      'order causes parallel failures and over-declaring serialises needlessly.',
+    '',
+    '### Size — what an initiative / feature / work item IS',
+    '- **Initiative**: one coherent, releasable capability you could describe in ' +
+      'a sentence and review as a single PR-worthy outcome (functionality + its ' +
+      'tests + its docs). It is the unit of build order above. A roadmap is many ' +
+      'initiatives; a single-feature initiative is perfectly normal.',
+    '- **Feature**: an OPTIONAL coarse grouping = one vertical, independently-' +
+      'demonstrable slice. Use it only when an initiative has multiple distinct ' +
+      'concerns. A one-feature initiative, or a feature that is a single work ' +
+      'item, is normal and expected — do NOT split to hit a count.',
+    '- **Work item** (the PM derives these later from your features): the atomic ' +
+      'verifiable change — the smallest diff that lands as one mergeable ' +
+      'commit-set and is proven by one sharp test/gate, roughly a focused ' +
+      'half-day. Title features at THIS grain when an initiative is small; the ' +
+      'PM enriches them rather than re-decomposing.',
+    'Split a feature into multiple work items only when two parts change ' +
+      'genuinely independent files/surfaces — never to reach a number.',
   ].join('\n');
 
   const draft = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
@@ -427,7 +460,12 @@ async function runDraftStep(args: {
 
   const created_at = new Date().toISOString();
   const datePart = created_at.slice(0, 10);
-  const manifests = draftInitiatives.map((d) => buildManifest(d, status, datePart, created_at));
+  // Slug set lets buildManifest resolve `depends_on` refs to sibling initiatives
+  // (and drop refs to slugs not in this draft, which would block forever).
+  const knownSlugs = new Set(draftInitiatives.map((d) => slugify(d.slug || d.title)));
+  const manifests = draftInitiatives.map((d) =>
+    buildManifest(d, status, datePart, created_at, knownSlugs),
+  );
 
   // The council reviews the FIRST draft once, to surface design decisions for
   // the operator. When `resolvedDecisions` is present this is the FINALIZE pass:
@@ -567,6 +605,7 @@ function buildManifest(
   status: ArchitectStatus,
   datePart: string,
   created_at: string,
+  knownSlugs?: Set<string>,
 ): InitiativeManifest {
   const slug = slugify(d.slug || d.title);
   const features: Feature[] = (d.features.length ? d.features : [{ title: d.title }]).map(
@@ -577,6 +616,16 @@ function buildManifest(
         .filter((n) => Number.isInteger(n) && n >= 0 && n < d.features.length && n !== i)
         .map((n) => `FEAT-${n + 1}`),
     }),
+  );
+  // Resolve cross-initiative `depends_on` slug refs → full initiative_ids.
+  // Drop self-refs and refs to slugs not in this draft (would block forever).
+  const dependsOnInitiatives = Array.from(
+    new Set(
+      (d.depends_on ?? [])
+        .map((s) => slugify(s))
+        .filter((dep) => dep && dep !== slug && (knownSlugs ? knownSlugs.has(dep) : true))
+        .map((dep) => `INIT-${datePart}-${dep}`),
+    ),
   );
   return {
     initiative_id: `INIT-${datePart}-${slug}`,
@@ -589,6 +638,7 @@ function buildManifest(
     origin: 'architect',
     features,
     body: d.body,
+    ...(dependsOnInitiatives.length > 0 ? { depends_on_initiatives: dependsOnInitiatives } : {}),
   };
 }
 
