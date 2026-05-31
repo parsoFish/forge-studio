@@ -94,7 +94,8 @@ The pattern is the **default mechanism**, not an aspiration:
 ## Sources
 
 - `orchestrator/pr.ts` (`embedDemoInPr`, `ensurePullRequest`) +
-  `orchestrator/pr-verdict.ts` (`makePrCommentVerdict`, `parseVerdictComment`).
+  the since-deleted orchestrator/pr-verdict.ts (`makePrCommentVerdict`,
+  `parseVerdictComment` — removed in ADR 023, the PR-comment verdict path).
 - `orchestrator/unifier-invocation.ts` + `orchestrator/file-verdict.ts` — gate
   ensure-PR step + provider selection + `detectFalselyCompleteWorkItems` (P2).
   (The former reviewer-stage2 module was archived 2026-05-23 in S4 when the

@@ -78,7 +78,7 @@ work item. Reviewer ← manifest + work-item set. Reflector ↔ brain.
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: F-34/F-41 strip-backs + operator confirmation.
-- [`architecture.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/architecture.md) — §F brain read/write topology + the index-guardrail caveat.
+- [`architecture.md`](../../../_logs/_archived/2026-05-16_trafficgame-arc-reflection/architecture.md) — §F brain read/write topology + the index-guardrail caveat.
 
 ## See also
 

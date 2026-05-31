@@ -30,7 +30,7 @@ The system runs unattended. Human input is needed at three moments (architect, r
 
 Triggers: initiative moved to `_queue/ready-for-review/`, initiative moved to `_queue/failed/`, scheduler crashed and recovered with N orphaned items.
 
-Adding a new provider (email, ntfy.sh, IM bridges) is a single file in `orchestrator/notify.<provider>.ts` plus a config entry.
+Adding a new provider (email, ntfy.sh, IM bridges) is a single `notify.<provider>.ts`-style module under `orchestrator/` plus a config entry.
 
 Trade-off: desktop notification on remote/headless machine is silent. Document `webhook` as recommended for headless. No retry on webhook failure (yet).
 

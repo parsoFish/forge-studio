@@ -33,6 +33,18 @@ related_themes:
 
 # An e2e test is a seed, not a separate benchmark
 
+> **Superseded 2026-05-25 (system removed) — kept as the design record.** The
+> entire synthetic `benchmarks/` system this theme designs was **removed**
+> ([ADR 005](../../../docs/decisions/005-phase-isolation-with-benchmarks.md)
+> amendment): the per-phase + e2e benches had begun *teaching* the phases toward
+> the bench shape rather than measuring real outcomes. Phase quality is now judged
+> on **real merged cycles** + the real-capability harness
+> ([ADR 022](../../../docs/decisions/022-real-capability-harness.md), `claude-harness`).
+> The benchmark scorer files named below (the benchmarks/*/scoring.ts paths) are
+> **removed** — cited as the historical design, not live code. Read this only for
+> the *rationale* (why a chained bench reused per-phase rubrics rather than owning
+> an e2e rubric).
+
 The operator's correction, load-bearing: a chained benchmark must
 **purely tie the existing per-phase benchmarks together** and must NOT
 introduce an end-to-end benchmark that owns its own fixtures or scoring.
@@ -40,9 +52,9 @@ introduce an end-to-end benchmark that owns its own fixtures or scoring.
 **The model.** An end-to-end test is **one seed** (an architect-level
 intent/prompt) fed into the **front** of the chain. The chain *is* the
 existing per-phase benches in sequence: the architect bench scores the
-generated manifest with `benchmarks/architect/scoring.ts`; that manifest
+generated manifest with benchmarks/architect/scoring.ts; that manifest
 is the **input** to the project-manager bench (replacing its golden
-fixture), scored with `benchmarks/project-manager/scoring.ts`; its WIs
+fixture), scored with benchmarks/project-manager/scoring.ts; its WIs
 feed the developer-loop bench; that branch feeds the review-loop bench;
 that merged state feeds the reflection bench — each scored by its
 **existing pure** `caseScore`. There is **no separate e2e rubric** and
@@ -54,7 +66,7 @@ output.
 **Eliminate the standalone e2e benchmark.** `benchmarks/e2e/` today owns
 a `slugifier-basic` fixture **and** a bespoke rubric (gate
 `cycle_completed` + merged/converged/spec_satisfied/cost/no_regression).
-That is the anti-pattern. Delete `benchmarks/e2e/scoring.ts` and the
+That is the anti-pattern. Delete benchmarks/e2e/scoring.ts and the
 fixture's status as a self-scored unit; the slugifier intent becomes one
 chain *seed*. Only its **plumbing** survives, relocated to
 `benchmarks/_lib/`: the smart gh-shim,
@@ -74,11 +86,11 @@ no longer reads brain, [[brain-read-policy]]; false-red); (3) replace
 review-loop's one-shot `sdkQuery` with the real `runReviewer` path
 (false-green). The removed F-36 path validator was never benched.
 Closure goals G11 (bench fidelity) + G12 (chained = existing benches
-only; no `benchmarks/e2e/scoring.ts` or any chained-only rubric).
+only; no benchmarks/e2e/scoring.ts or any chained-only rubric).
 
 ## Sources
 
-- [`benchmark-alignment.md`](../../../_logs/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md) — §A drift table, §C corrected design, G11/G12.
+- [`benchmark-alignment.md`](../../../_logs/_archived/2026-05-16_trafficgame-arc-reflection/benchmark-alignment.md) — §A drift table, §C corrected design, G11/G12.
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the F-24…F-44 changes that caused the drift.
 
 ## See also

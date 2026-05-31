@@ -53,8 +53,8 @@ value. Every initiative must check the metric and either preserve the baseline
 within a declared tolerance or document + deliberately update it. Concretely:
 
 - **A metric command** — like `npm test` for C1 but for holistic performance
-  (trafficGame's is the sweep harness + locked `docs/baselines/*.md`; ~10 s with
-  8 workers, cheap enough to run per-PR).
+  (trafficGame's is the sweep harness + locked baseline files under
+  `docs/baselines/`; ~10 s with 8 workers, cheap enough to run per-PR).
 - **Locked baseline files** — machine- and human-readable, committed to the repo
   so architect/PM/dev-loop read them as brain context.
 - **A regression budget** — explicit (trafficGame uses ±1% on its locks);

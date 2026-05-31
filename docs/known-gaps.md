@@ -200,6 +200,24 @@ diagnostic to isolate variables, not a target.**
    status; make the activity log one clean monotonic stream for the whole cycle.
    (Already named as the step-10 gap in `docs/operator-journey.md`.)
 
+### Housekeeping found + fixed 2026-05-31 (pre-cycle hardening, Phase B)
+- **`forge brain lint` had regressed to 9 errors (was 0 on 2026-05-29) — now back
+  to 0.** The 9 errors were `checkSourceLinks` **broken links**: nine durable
+  themes linked `../../../_logs/2026-05-16_trafficgame-arc-reflection/{retro,architecture,benchmark-alignment}.md`,
+  which forge's retention had moved to `_logs/_archived/…`. Re-pointed all nine to
+  the archived path. Separately cleared the 7 `checkStaleness` **flags** (advisory):
+  reworded two coarse false-positives (a `notify.<provider>.ts` template, a
+  `docs/baselines/*.md` glob) and bannered the two themes that document removed
+  systems (`chained-phase-benchmarks` → the deleted `benchmarks/`; the already-
+  superseded `pr-as-sole-review-window` → the deleted `pr-verdict.ts`), de-formatting
+  the removed-file path tokens per the §5 deletion-documenting convention. **Lint
+  is now 0 errors / 0 staleness; 11 length soft-caps remain (advisory, tolerated).**
+- **Residual (not a blocker):** durable brain themes still *link into* gitignored
+  `_logs/_archived/`, which retention could prune again → the same break could
+  recur. Deeper fix: durable themes should cite the tracked `brain/_raw/cycles/…`
+  archive (they already do, alongside the `_logs` link) and reference the retro
+  sub-sections as prose rather than hard-linking ephemeral logs. Left as-is for now.
+
 ### Project-side findings (betterado — also in its Brain 3)
 - **Stale release acceptance HCL.** Live `terraform apply` of the basic release
   definition failed on current ADO with `VS402982` (stage-level `retention_policy`
