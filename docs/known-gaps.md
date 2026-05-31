@@ -134,6 +134,70 @@ only the unifier-stage commits are stranded local.
   (`autoCommitWorktreeIfDirty`, commit-no-push),
   `orchestrator/phases/developer-loop.ts:1185` (gate sub-check #4).
 
+## 2026-05-31 — the quality gate ≠ the project's own CI (forge shipped a PR the project CI rejects)
+
+Surfaced taking the release_definition PR to completion through review. The forge
+offline gate for betterado is `go test -tags all ./release/... ./taskagent/...` —
+it proves the *tests pass* but never runs the project's **own CI checks**. When the
+PR opened, betterado's CI (`make fmtcheck` inside the `test` job, plus `go-lint` /
+`terrafmt`) went red — and one failure, the new test file not being `gofmt`-clean,
+was **introduced by forge** (the dev-loop wrote an unformatted file and nothing in
+the gate caught it). A reviewer had to `gofmt` it by hand before merge.
+
+- **Why it matters:** "review-ready" should mean "passes the project's merge bar,"
+  but forge's gate is narrower than the project's CI. forge can hand the operator a
+  PR that the project's own pipeline rejects — exactly the kind of quality escape the
+  delivery gate was meant to stop, one layer up.
+- **Direction:** the contract's C1 (the gate proves the change) should align the
+  per-WI gate with the project's CI contract — at minimum run the language formatter
+  (`gofmt`/`prettier`/`black`) and, where cheap, the project's lint, as part of the
+  gate or a pre-PR check. Onboarding should capture the project's CI command(s) as a
+  contract clause so the gate can include them.
+- **Evidence:** PR parsoFish/terraform-provider-betterado#2 (`go-lint`/`terrafmt`/
+  `fmtcheck` red); the `gofmt` reviewer-fix commit on the cycle branch.
+- **Note (project-side, betterado):** `go-lint` + `terrafmt` + the other 3 `fmtcheck`
+  files (`provider.go`, `resource_release_definition.go`, `resource_task_group.go`)
+  are **pre-existing fork debt** — betterado's CI has never been green since the fork
+  added classic-release resources. A betterado CI-cleanup initiative (gofmt the tree,
+  fix errcheck/unused/staticcheck, terrafmt the examples) is a good
+  *properly-sized* unit of work (see the initiative-size feedback) — tracked for
+  betterado's own backlog, not forge's.
+
+## 2026-05-31 — the demo phase produces thin demos for projects that CAN show live/visual evidence
+
+Surfaced by the operator's review of the release_definition demo (a `harness` table
+of test-name PASS/missing) — underwhelming *right after* tightening the demo phase.
+Two coupled gaps:
+
+1. **The demo shape vocabulary** (`browser | harness | cli-diff | artifact | none`)
+   has no category for **"live external system: API responses + external-UI
+   screenshots."** `browser` assumes a *local* preview server forge drives; betterado's
+   real evidence is a resource it creates in a live, hosted ADO org, visible via the
+   REST API **and** the dev.azure.com portal. So betterado got classified `harness`
+   ("Go test-harness, no web UI") and the demo skill even encodes that as a lesson —
+   **underselling** a project that is very much visually demo-able.
+2. **The demo phase doesn't compose a project-side demo skill.** The "demo as a
+   contract" design wants forge's demo skill (the forge half) to compose the
+   *project's* demo skill (the project half). Today the project half is only a
+   `demo.shape` + `demo.command` in `.forge/project.json` — declarative, not a
+   capability. betterado now has `.claude/skills/ado-demo/SKILL.md` (live apply → API
+   GET + portal screenshots; tests-only → API double-confirm), composing its existing
+   `ado-api-explorer` + `ado-browser-inspector` skills — but **nothing in forge wires
+   the demo phase to discover and compose it.**
+
+- **Why it matters:** the demo exists to make review *less* of a bottleneck. A
+  test-name table for a change that could show the actual release pipeline in the ADO
+  portal defeats the purpose — the operator approves on a weaker signal than the
+  project can produce.
+- **Direction:** (a) add a demo shape (or sub-mode) for live-system evidence
+  (API + external-UI screenshots); (b) have the demo phase agent discover a project
+  demo skill (e.g. `.forge/project.json` `demo.skill` → compose it) so the project
+  defines *how* it shows a change; (c) onboarding builds that project demo skill as a
+  contract deliverable. See the operator feedback captured in memory.
+- **Evidence:** `projects/terraform-provider-betterado/.claude/skills/ado-demo/SKILL.md`
+  (the project half, written 2026-05-31), `.forge/project.json` `demo` block,
+  `skills/demo/SKILL.md` (forge half — currently shape-based), the PR #2 `demo.json`.
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
