@@ -10,11 +10,27 @@ export const PHASE_ORDER = [
   'architect',
   'project-manager',
   'developer-loop',
+  'unifier',
   'review-loop',
   'reflection',
 ] as const;
 
 export type Phase = (typeof PHASE_ORDER)[number];
+
+/**
+ * betterado #6: the unifier runs as a sub-phase of the developer-loop (its
+ * events carry `phase: 'developer-loop'`, `skill: 'developer-unifier'`), so the
+ * dev-loop hex went GREEN at the per-WI completion `end` while the unifier kept
+ * looping for many minutes — a misleading display. Surface the unifier as its
+ * OWN hex by routing `developer-unifier`-skill events to the `unifier` phase.
+ * Keeps the backend event phase ('developer-loop') unchanged — only the UI's
+ * phase-status derivation splits them — so nothing server-side (e.g. the
+ * failure-classifier's `phase === 'developer-loop'` rules) is affected.
+ */
+function phaseForEvent(e: EventLogEntry): string {
+  if (e.skill === 'developer-unifier') return 'unifier';
+  return canonicalPhase(e.phase);
+}
 
 /**
  * Map a raw event phase to the spine phase it renders under. Operator
@@ -59,6 +75,10 @@ function cycleTerminallyFailed(events: readonly EventLogEntry[]): boolean {
  *  status, any failed units, or fewer completed units than it took on. */
 function endMetaIndicatesFailure(meta: EventLogEntry['metadata']): boolean {
   if (!meta) return false;
+  // A resume-from-unifier dev-loop ran 0 per-WI Ralphs BY DESIGN (their commits
+  // are already on the preserved branch), so its `complete:0 / failed:N` end is
+  // not a failure — don't redden the dev-loop hex on a legitimate resume.
+  if (meta.resumed === true) return false;
   if (meta.status === 'failed') return true;
   if (typeof meta.failed === 'number' && meta.failed > 0) return true;
   if (
@@ -72,7 +92,7 @@ export function derivePhaseStates(events: readonly EventLogEntry[]): PhaseState[
   const cycleFailed = cycleTerminallyFailed(events);
   const seen = new Map<Phase, PhaseAccum>();
   for (const e of events) {
-    const phase = canonicalPhase(e.phase);
+    const phase = phaseForEvent(e);
     if (!isPhase(phase)) continue;
     const entry = seen.get(phase) ?? { firstAt: e.started_at, lastAt: e.started_at, ended: false, errored: false, endFailed: false };
     entry.lastAt = e.started_at;

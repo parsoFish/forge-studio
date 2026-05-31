@@ -117,7 +117,12 @@ the deferred-defects note worried about was already gone (`status` is
 backward-compat in `cli/cycle-retention.ts` (retention of historical archives
 that legitimately recorded `stop_reason: 'wedged'`) — left in place by design.
 
-### 6. Thin observability around stalls & retries — MEDIUM
+### 6. Thin observability around stalls & retries — ✅ RESOLVED 2026-05-31 (Phases D + G)
+**Fixed:** (a) "baseline already red" is now a distinct terminal failure mode
+(Phase D — `dev-loop.baseline-red` + classifier). (b) `verify-cycle.mjs` now
+selects the **newest** cycle for an initiative (prefer a live cycle, else newest
+by `startedAt`) instead of `.find()`-ing the first match — it no longer latches
+onto the stale stopped cycle after a resume (Phase G). Original below.
 Root-causing the cascade-v4 baseline failure required manual archaeology (read
 the event log, run `npm test` in the worktree by hand); forge surfaced only
 "failed". And `scripts/verify-cycle.mjs` latched onto the **stale** cycle id
@@ -240,7 +245,13 @@ diagnostic to isolate variables, not a target.**
    (b) exempt `.forge/project.json` + `.forge/quality_gate_cmd` from the `.forge/`
    strip, or move project config out of the ignored dir entirely.
 
-5. **[MED] Unifier loop is the dominant cost and is opaque.** For a single-file
+5. **[MED] Unifier loop is the dominant cost and is opaque. — ✅ MOSTLY RESOLVED 2026-05-31 (Phase G)**
+   *Fixed:* `unifierIterationCap` scales the cap to the branch diff — trivial (≤2
+   files) → 4, small (≤10) → 8, larger → 15 (send-back keeps the full cap) — so a
+   one-file change can't thrash 15×. The chosen `iteration_cap` is surfaced on
+   `unifier.start`. Pairs with Phase B's demo effort-tiers (trivial → notes-only,
+   no media capture). *Residual:* a crisp per-iteration "why still looping" reason
+   beyond the existing per-iteration gate events is not yet emitted. For a single-file
    test change ($1.34 dev, 1 iter), the unifier ran **~$11.5 / ~15 iters / 19 min**
    looping on `pr-not-self-contained` (demo.json / pr-description) — ~9× the
    actual work, packaging-only. No per-iteration reason is surfaced, and the loop
@@ -248,7 +259,16 @@ diagnostic to isolate variables, not a target.**
    size, emit a per-iteration "why still looping" reason, cap demo effort for
    trivial changes.
 
-6. **[MED] UI misreports the dev/unifier phase (operator-confirmed live).**
+6. **[MED] UI misreports the dev/unifier phase (operator-confirmed live). — ✅ MOSTLY RESOLVED 2026-05-31 (Phase G)**
+   *Fixed (the misleading hex):* the unifier is now its OWN UI phase/hex —
+   `derivePhaseStates` routes `skill: developer-unifier` events to a distinct
+   `unifier` phase (the dev-loop hex completes at the per-WI loop's end; the
+   unifier hex stays active until `unifier.end`). Backend event phase is
+   unchanged (no ripple to the failure-classifier). Also: a resume's
+   `complete:0/failed:N/resumed` dev-loop end no longer reddens the hex.
+   *Residual (deferred — pure UI, needs the browser journey harness to verify):*
+   the activity tab still shows duplicate iteration renumbering + `forge-autocommit`
+   WIP-commit noise. Not a correctness issue; cosmetic stream-cleanliness.
    The unifier runs *inside* the `developer-loop` phase, so the dev hex shows
    green while the unifier loops for ~19 min more — inaccurate. The activity tab
    also fills with duplicates from the unifier's re-invocation iteration

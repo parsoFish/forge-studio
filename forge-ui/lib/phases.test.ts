@@ -95,3 +95,49 @@ test('expected_fail error does not tint the phase → ends complete', () => {
 test('closure events fold into review-loop phase', () => {
   assert.equal(statusOf([ev('closure', 'start')], 'review-loop'), 'active');
 });
+
+// betterado #6: the unifier is its own hex (skill developer-unifier → 'unifier'),
+// so the dev-loop hex no longer shows green while the unifier still loops.
+function unifierEv(event_type: string, metadata: Record<string, unknown> = {}): EventLogEntry {
+  return { ...ev('developer-loop', event_type, metadata), skill: 'developer-unifier' };
+}
+
+test('unifier is a distinct phase: dev-loop complete while unifier still active', () => {
+  const events = [
+    ev('developer-loop', 'start'),
+    ev('developer-loop', 'end', { work_item_count: 2, complete: 2, failed: 0 }), // per-WI loop done
+    unifierEv('start'), // unifier running, no end yet
+  ];
+  assert.equal(statusOf(events, 'developer-loop'), 'complete');
+  assert.equal(statusOf(events, 'unifier'), 'active');
+});
+
+test('unifier hex completes on unifier.end', () => {
+  const events = [
+    ev('developer-loop', 'start'),
+    ev('developer-loop', 'end', { work_item_count: 1, complete: 1, failed: 0 }),
+    unifierEv('start'),
+    unifierEv('end', { status: 'complete' }),
+  ];
+  assert.equal(statusOf(events, 'unifier'), 'complete');
+});
+
+test('unifier.failed reddens the unifier hex (not the dev-loop hex)', () => {
+  const events = [
+    ev('developer-loop', 'start'),
+    ev('developer-loop', 'end', { work_item_count: 1, complete: 1, failed: 0 }),
+    unifierEv('start'),
+    unifierEv('error', { status: 'failed' }),
+    ev('orchestrator', 'error', {}), // delivery gate threw
+  ];
+  assert.equal(statusOf(events, 'developer-loop'), 'complete');
+  assert.equal(statusOf(events, 'unifier'), 'failed');
+});
+
+test('resume-from-unifier: dev-loop end complete:0/failed:N/resumed is NOT a failure', () => {
+  const events = [
+    ev('developer-loop', 'start'),
+    ev('developer-loop', 'end', { work_item_count: 2, complete: 0, failed: 2, resumed: true }),
+  ];
+  assert.equal(statusOf(events, 'developer-loop'), 'complete');
+});

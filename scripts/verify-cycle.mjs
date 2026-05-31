@@ -226,8 +226,16 @@ async function findCycleIdForInitiative(bridgeUrl, initiativeId, deadlineMs) {
       const res = await fetch(`${bridgeUrl}/api/cycles`);
       if (res.ok) {
         const body = await res.json();
-        const all = [...(body.live ?? []), ...(body.recent ?? [])];
-        const match = all.find((c) => c.initiativeId === initiativeId);
+        // cascade-v4 #6: pick the NEWEST cycle for the initiative, not the first
+        // match. A resume/retry leaves the prior stopped cycle in `recent`; a
+        // plain .find() over [...live, ...recent] grabbed that stale one and the
+        // harness then tracked the wrong cycle. Prefer a live (currently-running)
+        // cycle; otherwise the most-recently-started finished one.
+        const byNewest = (arr) =>
+          [...arr]
+            .filter((c) => c.initiativeId === initiativeId)
+            .sort((a, b) => String(b.startedAt ?? '').localeCompare(String(a.startedAt ?? '')))[0];
+        const match = byNewest(body.live ?? []) ?? byNewest(body.recent ?? []);
         if (match) return match.cycleId;
       }
     } catch { /* */ }

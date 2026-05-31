@@ -818,6 +818,35 @@ export function assertGreenBaseline(
   );
 }
 
+/**
+ * betterado #5: scale the unifier iteration cap to the branch's diff size so a
+ * trivial (packaging-only) change can't thrash for the full cap (~15 iters /
+ * ~$11 observed on a one-file test change). Tiers by files changed on
+ * `main...HEAD`: trivial (≤2) → 4, small (≤10) → 8, larger → the full cap.
+ * Send-back rounds keep the full cap (operator feedback may need several
+ * passes). Best-effort: any measurement failure falls back to the full cap so a
+ * real change is never under-budgeted. Exported for unit testing.
+ */
+export function unifierIterationCap(worktreePath: string, sendBackMode: boolean): number {
+  if (sendBackMode) return UNIFIER_DEFAULT_ITERATION_CAP;
+  const git = (args: string[]): string => {
+    try {
+      return execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).toString().trim();
+    } catch {
+      return '';
+    }
+  };
+  let base = '';
+  if (git(['rev-parse', '--verify', 'main'])) base = 'main';
+  else if (git(['rev-parse', '--verify', 'master'])) base = 'master';
+  if (!base) return UNIFIER_DEFAULT_ITERATION_CAP;
+  const files = Number(git(['diff', '--shortstat', `${base}...HEAD`]).match(/(\d+) files? changed/)?.[1] ?? 0);
+  if (files === 0) return UNIFIER_DEFAULT_ITERATION_CAP; // couldn't measure ⇒ don't under-budget
+  if (files <= 2) return 4;
+  if (files <= 10) return 8;
+  return UNIFIER_DEFAULT_ITERATION_CAP;
+}
+
 export async function runUnifier(
   input: CycleInput,
   logger: EventLogger,
@@ -857,6 +886,13 @@ export async function runUnifier(
     (['npm', 'test'] as string[]);
   const feedbackRef = input.unifierFeedbackRef;
 
+  // betterado #5: right-size the unifier loop to the diff. A trivial change (a
+  // one-file test add) was burning ~15 iters / ~$11 packaging-only because the
+  // cap was a flat 15. Scale it to the branch's diff size so packaging-only work
+  // can't thrash for 9× the actual work. Send-back rounds keep the full cap
+  // (the operator's feedback may legitimately need several passes).
+  const iterationCap = unifierIterationCap(input.worktreePath, feedbackRef != null);
+
   const start = logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
@@ -866,7 +902,7 @@ export async function runUnifier(
     input_refs: [input.worktreePath, input.manifestPath],
     output_refs: [],
     message: feedbackRef ? 'unifier.start (send-back)' : 'unifier.start',
-    metadata: { demo_shape: demoShape, feedback_ref: feedbackRef ?? null },
+    metadata: { demo_shape: demoShape, feedback_ref: feedbackRef ?? null, iteration_cap: iterationCap },
   });
 
   // Stamp PROMPT.md / AGENT.md / fix_plan.md for the unifier.
@@ -874,7 +910,7 @@ export async function runUnifier(
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
     worktreePath: input.worktreePath,
-    iterationBudget: UNIFIER_DEFAULT_ITERATION_CAP,
+    iterationBudget: iterationCap,
     demoShape,
     qualityGateCmd,
     feedbackRef,
@@ -929,7 +965,7 @@ export async function runUnifier(
         workItemSpecPath: promptPath,
         worktreePath: input.worktreePath,
         initiativeBudget: {
-          iterations: UNIFIER_DEFAULT_ITERATION_CAP,
+          iterations: iterationCap,
           usd: Number.POSITIVE_INFINITY,
         },
         brainQueryResults: '',
