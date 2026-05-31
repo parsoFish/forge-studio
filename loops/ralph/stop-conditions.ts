@@ -136,6 +136,25 @@ const NO_WORK_INDICATORS: readonly string[] = [
 ];
 
 /**
+ * Positive evidence that tests ACTUALLY EXECUTED somewhere in the output.
+ * betterado #3: a `go test ./...` run that includes a test-less sibling
+ * package prints `[no tests to run]` for that package while OTHER packages
+ * ran real tests and passed — so a no-work indicator must NOT reject the whole
+ * gate when there is also evidence tests ran. We only reject a no-work
+ * indicator when NONE of these match (i.e. the whole run found no tests).
+ * Patterns require a NON-ZERO count where the runner prints one.
+ */
+const WORK_HAPPENED_PATTERNS: readonly RegExp[] = [
+  /^ok\s+\S+\s+[\d.]+s\s*$/m,                 // go: a package that passed with tests (no trailing "[no tests to run]")
+  /^ok\s+\S+\s+\(cached\)\s*$/m,              // go: cached pass
+  /\b[1-9]\d*\s+(passed|passing)\b/i,          // vitest / jest / mocha / pytest "N passed"
+  /^#\s+pass\s+[1-9]\d*/m,                      // node:test TAP summary "# pass N"
+  /test result:\s+ok\.\s+[1-9]\d*\s+passed/i,  // cargo "test result: ok. N passed"
+  /\brunning\s+[1-9]\d*\s+tests?\b/i,          // cargo "running N tests"
+  /\bcollected\s+[1-9]\d*\s+item/i,            // pytest "collected N items"
+];
+
+/**
  * Tightening options for `makeQualityGateFromCmd`. When all are absent the
  * gate's pass/fail is the exit-code alone (pre-tightening behaviour); when
  * present each layer adds a fail-closed check on top of exit 0.
@@ -251,8 +270,17 @@ function runGateCapturing(
         : options?.noWorkIndicators ?? NO_WORK_INDICATORS;
     if (indicators.length > 0) {
       const combined = (stdout + ' ' + stderr).toLowerCase();
-      for (const ind of indicators) {
-        if (combined.includes(ind.toLowerCase())) {
+      const matchedIndicator = indicators.find((ind) => combined.includes(ind.toLowerCase()));
+      if (matchedIndicator) {
+        // betterado #3: a no-work indicator from ONE target (a test-less
+        // sibling package in a multi-package `go test` run) must not reject
+        // the whole gate when ANOTHER target actually ran tests. Only reject
+        // when there is NO positive evidence tests executed anywhere — i.e.
+        // the WHOLE run found no tests (the genuine hollow-gate case).
+        const ranTestsSomewhere = WORK_HAPPENED_PATTERNS.some(
+          (re) => re.test(stdout) || re.test(stderr),
+        );
+        if (!ranTestsSomewhere) {
           passed = false;
           exitCode = -2; // synthetic — distinguishes tightening rejection from a real non-zero exit
           rejectReason = 'no-work-indicator';
@@ -260,10 +288,12 @@ function runGateCapturing(
           stderr =
             stderr +
             (stderr.endsWith('\n') ? '' : '\n') +
-            `[forge gate-tightening] REJECTED: gate exited 0 but stdout/stderr contains no-work indicator "${ind}". The test runner found no tests to execute.\n` +
-            `  ACTION REQUIRED before exiting this iteration: write at least one test that actually runs against the code you just changed (or the code declared in files_in_scope). A test that runs and asserts on real behaviour — not a placeholder. Do NOT exit until the gate sees executed tests.`;
-          break;
+            `[forge gate-tightening] REJECTED: gate exited 0 but stdout/stderr contains no-work indicator "${matchedIndicator}" and NO evidence any tests ran. The test runner found no tests to execute.\n` +
+            `  ACTION REQUIRED before exiting this iteration: write at least one test that actually runs against the code you just changed (or the code declared in files_in_scope). A test that runs and asserts on real behaviour — not a placeholder. Do NOT exit until the gate sees executed tests.\n` +
+            `  (If this is a multi-package run where a sibling has no tests, scope the gate to the exact package dir — never \`./...\` — so a test-less sibling can't mask the real result.)`;
         }
+        // else: a no-work indicator appeared but tests demonstrably ran
+        // elsewhere (mixed multi-target run) — accept the gate.
       }
     }
 

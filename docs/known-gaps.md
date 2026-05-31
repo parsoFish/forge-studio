@@ -42,7 +42,13 @@ planner risk: a future planner reading that theme would be misled.
   conclusions.
 - **Evidence:** `projects/claude-harness/brain/themes/2026-05-29-pr-opened-despite-zero-wi-completions.md` (the wrong theme); `orchestrator/phases/developer-loop.ts` (resume skips per-WI status writes).
 
-### 2. Red-baseline blindness, discovered late and burned expensively — HIGH
+### 2. Red-baseline blindness, discovered late and burned expensively — ✅ RESOLVED 2026-05-31
+**Fixed (Phase D):** `runDeveloperLoop` now runs the project-level gate ONCE at
+dev-loop start (`assertGreenBaseline`, skipped on resume — the worktree there
+already carries WI commits) and **fails fast** with a distinct
+`dev-loop.baseline-red` event + the `baseline-already-red` terminal classification
+(carries the gate stderr so the operator can tell a real failure from missing
+deps / a flake). No more discovering it at the unifier. Below is the original.
 Per-WI gates are scoped to each WI's own new test file; the full suite runs
 **only** at the unifier. So a pre-existing red baseline (or a flake, or an env
 dependency) is invisible until after all WI work is done, and the unifier then
@@ -109,7 +115,18 @@ cycle), so its auto-approve/closure tracking silently followed the wrong cycle.
   claude-harness's Brain 3. The three-brain scoping isn't enforced at write time.
 - **`gate-too-loose` (and other iter-0 heuristics) assume fresh-work-from-zero**
   and misfire when state is pre-populated (e.g. on resume an immediate gate-pass
-  looks identical to a no-op gate).
+  looks identical to a no-op gate). ✅ **Mostly resolved 2026-05-31 (Phase D):**
+  the concrete live case was the **unifier** — on a resume-from-unifier the prior
+  cycle's `demo.json`/`pr-description.md` are on the preserved branch, so its
+  iter-0 gate passed and was mis-flagged `gate-too-loose`. The unifier's
+  `runRalph` now passes `failOnHollowIter0Gate: false` (aligning code with the
+  runner's already-documented intent; per-WI Ralphs keep the check on, and they
+  don't run on resume). Residual: a *per-WI* gate could still pass at iter-0 if a
+  cycle-2+ WI points at a pre-existing test — mitigated by the PM prompt's
+  "point at a NEW test" rule, not structurally enforced. The broader "C1
+  discrimination" stays **runtime-enforced** (iter-0 hollow check + the new
+  baseline gate) and **onboarding-hand-checked**; it is deliberately NOT a
+  `preflight` gate-run (ADR 017 keeps preflight cheap + side-effect-free).
 
 ---
 
@@ -164,7 +181,14 @@ diagnostic to isolate variables, not a target.**
    The architect/PM should derive these from the project (`.forge/project.json` +
    language detection), not depend on the operator encoding them in the manifest.
 
-3. **[HIGH] no-work-indicator poisons multi-package `go test` runs.**
+3. **[HIGH] no-work-indicator poisons multi-package `go test` runs. — ✅ RESOLVED 2026-05-31**
+   *Fixed (Phase D):* the no-work-indicator scan in `loops/ralph/stop-conditions.ts`
+   now only rejects when there is **no positive evidence tests ran anywhere**
+   (a `WORK_HAPPENED_PATTERNS` check) — so a test-less sibling's `[no tests to
+   run]` can't fail a run where another package passed. An all-empty multi-package
+   run still rejects (discrimination held). Belt-and-braces with the Phase-C
+   gate-recipe that steers Go gates to the exact package dir, never `./...`.
+   Original below.
    `runGateCapturing` scans the **combined** output for `[no tests to run]` etc.
    A `./pkg/...` wildcard that includes a test-less sibling/sub-package (e.g.
    `taskagent/validate`) prints `[no tests to run]`, failing the gate **even

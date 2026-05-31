@@ -122,6 +122,19 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
   // but run the per-WI loop over an empty list so only the unifier executes.
   const resumeFromUnifier = input.resumeFrom === 'unifier';
   const toRun = resumeFromUnifier ? [] : ordered;
+
+  // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
+  // On a fresh (non-resume) dev-loop the worktree sits at the initiative
+  // branch's base (== main's HEAD) before any WI commit, so the project-level
+  // gate here measures the *baseline*. A pre-existing red suite (or missing
+  // deps / a gitignored fixture) is otherwise invisible until the unifier,
+  // which then can't tell "my changes broke it" from "it was already broken"
+  // and burns its whole budget. Fail fast with a distinct diagnosis instead.
+  // Skipped on resume (the branch already carries the WI commits — not a baseline).
+  if (!resumeFromUnifier) {
+    assertGreenBaseline(input, logger, start.event_id);
+  }
+
   const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const systemPrompt = buildDevSystemPrompt(forgeRoot);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
@@ -657,6 +670,93 @@ function emitGateEvent(
  * operator sees the state via `forge review --inspect`. The failure event
  * is the diagnostic record.
  */
+/**
+ * cascade-v4 #2: run the project-level quality gate ONCE at dev-loop start to
+ * prove the baseline is green before any WI work. Throws (failing the cycle
+ * fast) if it is red, emitting a distinct `dev-loop.baseline-red` event the
+ * failure-classifier surfaces as the `baseline-already-red` terminal mode —
+ * with the gate's stderr so the operator can tell a real pre-existing failure
+ * from missing deps / a flaky test. Uses the same gate the unifier runs
+ * (projectConfig.quality_gate_cmd ?? cycle qualityGateCmd); skips cleanly when
+ * no project-level gate is configured (the per-WI gates carry it then).
+ */
+export function assertGreenBaseline(
+  input: CycleInput,
+  logger: EventLogger,
+  parentEventId: string,
+): void {
+  let projectConfig: ProjectConfig | null = null;
+  try {
+    projectConfig = loadProjectConfig(input.projectRepoPath);
+  } catch {
+    /* tolerate — fall back to the cycle-level gate below */
+  }
+  const baselineCmd = projectConfig?.quality_gate_cmd ?? input.qualityGateCmd ?? null;
+  if (!baselineCmd || baselineCmd.length === 0) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'log',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'dev-loop.baseline-skipped',
+      metadata: { reason: 'no project-level quality_gate_cmd configured' },
+    });
+    return;
+  }
+
+  // Pure exit-code check (noWorkIndicators: null) — the baseline question is
+  // "is HEAD green", not "does the gate discriminate" (that is the per-WI
+  // gate's job, enforced by the iter-0 hollow check).
+  let info: GateRunInfo | undefined;
+  const passed = makeQualityGateFromCmd(
+    input.worktreePath,
+    [...baselineCmd],
+    (i) => { info = i; },
+    { noWorkIndicators: null },
+  )();
+
+  if (passed) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'log',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'dev-loop.baseline-green',
+      metadata: { command: baselineCmd, duration_ms: info?.durationMs },
+    });
+    return;
+  }
+
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'developer-loop',
+    skill: 'developer-ralph',
+    event_type: 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: 'dev-loop.baseline-red',
+    metadata: {
+      command: baselineCmd,
+      exit_code: info?.exitCode,
+      stdout_tail: info?.stdoutTail ?? '',
+      stderr_tail: info?.stderrTail ?? '',
+    },
+  });
+  throw new Error(
+    `developer-loop: baseline already red — the project quality gate (${baselineCmd.join(' ')}) ` +
+      `fails at HEAD before any work item runs (exit ${info?.exitCode ?? '?'}). Fix the baseline ` +
+      `(pre-existing test failure, missing deps, or a flaky/env-dependent test) before re-running. ` +
+      `Forge cannot distinguish a change-induced break from a pre-broken baseline once WI work starts.`,
+  );
+}
+
 export async function runUnifier(
   input: CycleInput,
   logger: EventLogger,
@@ -775,6 +875,14 @@ export async function runUnifier(
         cycleId: logger.cycleId,
         initiativeId: input.initiativeId,
         qualityGate: unifierGate,
+        // The unifier's gate (demo.json + pr-description present & valid) can
+        // legitimately PASS at iter-0 — it is not a write-a-failing-test loop,
+        // and on a resume-from-unifier the prior cycle's demo/PR are already on
+        // the preserved branch. So the iter-0 hollow-gate check would misfire as
+        // `gate-too-loose` (cascade-v4 #7, iter-0-on-resume). Disable it here;
+        // the per-WI Ralphs keep it on. (Aligns the code with the runner's
+        // documented intent — previously the default true left this live.)
+        failOnHollowIter0Gate: false,
         // (Tier 2 thinning 2026-05-26): wedged-detection was removed
         // from the runner entirely; the unifier no longer needs the
         // Infinity override because the check is gone.

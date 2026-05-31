@@ -156,6 +156,38 @@ test('makeQualityGateFromCmd: a custom noWorkIndicators array overrides the defa
   }
 });
 
+test('makeQualityGateFromCmd: multi-package run — one pkg ran tests, a sibling had none → PASSES (betterado #3)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let captured: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'printf "ok  pkg1  0.10s\\nok  pkg2  0.003s [no tests to run]\\n"; exit 0'],
+      (info) => { captured = info; },
+    );
+    assert.equal(gate(), true, 'a test-less sibling must not reject when another package ran tests');
+    assert.equal(captured?.rejectReason, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: multi-package run where NO package ran tests still rejects (discrimination held)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let captured: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'printf "ok  pkg1  0.003s [no tests to run]\\nok  pkg2  0.002s [no tests to run]\\n"; exit 0'],
+      (info) => { captured = info; },
+    );
+    assert.equal(gate(), false, 'all-empty multi-package run is still a hollow gate');
+    assert.equal(captured?.rejectReason, 'no-work-indicator');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // -------------------------------------------------------------------------
 // Tightening 2: requiredPaths git-diff check
 // -------------------------------------------------------------------------

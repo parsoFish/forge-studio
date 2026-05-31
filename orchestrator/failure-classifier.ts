@@ -35,7 +35,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let pmBudgetExhausted = false, pmFeatureHallucination = false, pmFeatureCoverage = false;
   let gateMissingScript = false, worktreeNoDeps = false;
   let agentThrew = false, devLoopTotalFailure = false, reviewFailed = false;
-  let unifierNoDemo = false;
+  let unifierNoDemo = false, baselineRed = false;
 
   for (const e of events) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -53,6 +53,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
     if (e.phase === 'project-manager' && e.message === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
     if (e.phase === 'project-manager' && e.message === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
+    if (e.phase === 'developer-loop' && e.message === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
@@ -78,6 +79,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
+  if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (pmFeatureHallucination) return T('terminal', 'PM emitted a feature_id not in the manifest', evidence);
   if (pmFeatureCoverage) return T('terminal', 'PM left a declared feature with no work items — incomplete decomposition (dropped a feature)', evidence);
   if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
