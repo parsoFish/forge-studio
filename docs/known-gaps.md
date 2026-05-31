@@ -198,6 +198,24 @@ Two coupled gaps:
   (the project half, written 2026-05-31), `.forge/project.json` `demo` block,
   `skills/demo/SKILL.md` (forge half — currently shape-based), the PR #2 `demo.json`.
 
+## 2026-05-31 — two machinery findings the release_definition reflector surfaced (persisted from a gitignored retro)
+
+The `retro.md` for the release_definition cycle lives under gitignored `_logs/`, so
+two forge-machinery observations are recorded here to survive:
+
+1. **Cycle report shows the wrong quality-gate command.** The report renders
+   `(default: npm test if package.json exists)` as the quality gate, but the actual
+   gate run was the Go command from the manifest — `quality_gate_cmd` isn't
+   propagating to the report renderer. Misleads the operator about what was proven.
+   *(Display/config-surface bug; the gate itself ran correctly.)*
+2. **Unifier briefly orients in the forge root, not the worktree.** The unifier's
+   first Bash commands ran `cd /home/parso/forge && git log …` before correcting to
+   the worktree — read-only, self-corrected, no harm, but it inflated iteration-1's
+   command count and is a context-orientation smell worth tightening in the unifier
+   prompt (anchor it to `worktreePath` up front).
+
+Both are low-severity; #1 is the more operator-visible (a review reads the report).
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
