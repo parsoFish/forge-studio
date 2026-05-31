@@ -1014,6 +1014,31 @@ export async function runUnifier(
               last_assistant_text: info.lastAssistantText,
             },
           });
+          // Finding #2 (2026-05-31 dogfood): the runner's per-iteration
+          // autocommit (loops/ralph/runner.ts) commits a `forge-autocommit:` WIP
+          // safety-net WITHOUT pushing, and the unifier loop previously only
+          // pushed once at close — so mid-loop local HEAD sat one commit ahead of
+          // origin and the gate's strict `branches_in_sync` sub-check
+          // (origin == HEAD, orchestrator/pr.ts) was unsatisfiable for the rest of
+          // the loop. The unifier then looped to its cap on `branches-not-in-sync`
+          // even though the work was delivered. Push after every iteration (the
+          // strip is append-only, so this is always a fast-forward) so the NEXT
+          // gate check sees origin == HEAD. Mirrors the per-WI loop, which already
+          // pushes per WI. No-origin projects (claude-harness) no-op the push.
+          const iterSync = pushInitiativeBranch(input.worktreePath);
+          if (!iterSync.pushed) {
+            logger.emit({
+              initiative_id: input.initiativeId,
+              parent_event_id: start.event_id,
+              phase: 'developer-loop',
+              skill: 'developer-unifier',
+              event_type: 'log',
+              input_refs: [input.worktreePath],
+              output_refs: [],
+              message: 'unifier.iter-sync-push-skipped',
+              metadata: { iteration, reason: iterSync.reason },
+            });
+          }
         },
       },
       agent,
