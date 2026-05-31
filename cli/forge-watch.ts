@@ -118,48 +118,80 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
 }
 
 /**
- * Kill any process listening on the given TCP port (Linux/macOS via
- * lsof). Logs how many it killed. Lets `forge watch` re-runs replace
- * a previously-running bridge / dev server on a fixed port so the
- * operator's pinned browser tab auto-reconnects.
+ * Find the PIDs LISTENing on a TCP port, trying multiple tools so the
+ * takeover works across environments. `lsof` is tried first (works on most
+ * macOS/Linux), but on **WSL2** (and some container / restricted-procfs
+ * setups) lsof cannot enumerate network sockets at all — `lsof -tiTCP:<port>`
+ * returns empty even when a server is bound — so we fall back to `ss`
+ * (netlink-based, reliable on Linux/WSL2) and finally `fuser`.
  *
- * If lsof isn't installed or the port is free, this is a no-op — the
- * later bind will surface any unexpected conflict via EADDRINUSE.
+ * Surfaced 2026-05-31: a stale forge-ui `next-server` held :4124 and every
+ * `forge watch` died with EADDRINUSE because the lsof-only takeover found
+ * nothing to kill — directly blocking the UI, forge's sole operator surface.
+ *
+ * Returns a de-duplicated list of PID strings; empty when the port is free
+ * (or no available tool can see it).
  */
-export function takeoverPort(port: number, label: string): void {
-  // 1. Find any listener on the port.
-  let pids: string[];
+export function findListenerPids(port: number): string[] {
+  const dedupe = (pids: string[]): string[] => [...new Set(pids.map((p) => p.trim()).filter(Boolean))];
+
+  // 1. lsof — first choice on macOS/Linux.
   try {
     const out = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
-    pids = out.trim().split('\n').filter(Boolean);
-  } catch {
-    return; // lsof exits non-zero when no match — port is free.
-  }
+    const pids = dedupe(out.trim().split('\n'));
+    if (pids.length) return pids;
+  } catch { /* no match, or lsof is blind to the socket (WSL2) — fall through */ }
+
+  // 2. ss — reads via netlink, sees sockets lsof misses on WSL2. The
+  //    `sport = :<port>` filter matches the port exactly (not :<port>0…);
+  //    process info renders as `users:(("name",pid=NNN,fd=M))`.
+  try {
+    const out = execSync(`ss -ltnpH 'sport = :${port}'`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    const pids = dedupe([...out.matchAll(/pid=(\d+)/g)].map((m) => m[1]));
+    if (pids.length) return pids;
+  } catch { /* ss absent or no match — fall through */ }
+
+  // 3. fuser — last resort; prints space-separated PIDs on stdout.
+  try {
+    const out = execSync(`fuser ${port}/tcp 2>/dev/null`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    const pids = dedupe(out.trim().split(/\s+/));
+    if (pids.length) return pids;
+  } catch { /* fuser absent or no match */ }
+
+  return [];
+}
+
+/**
+ * Kill any process listening on the given TCP port so `forge watch` re-runs
+ * can rebind a fixed port and the operator's pinned browser tab
+ * auto-reconnects. Discovery is multi-tool (see {@link findListenerPids}) so
+ * it works on WSL2 where lsof is blind to sockets.
+ *
+ * If no available tool can see a listener (port free), this is a no-op — the
+ * later bind surfaces any unexpected conflict via EADDRINUSE.
+ */
+export function takeoverPort(port: number, label: string): void {
+  const pids = findListenerPids(port);
   if (pids.length === 0) return;
   console.log(`[forge watch] ${label}: taking over port ${port} from ${pids.length} existing process(es)`);
 
-  // 2. SIGTERM all listeners. Many use Node which traps SIGTERM and exits
-  //    cleanly, releasing the socket.
+  // SIGTERM all listeners. Node servers trap SIGTERM and exit cleanly,
+  // releasing the socket.
   for (const pid of pids) {
     try { process.kill(Number(pid), 'SIGTERM'); } catch { /* */ }
   }
 
-  // 3. Wait for the port to actually become listenable, escalating to
-  //    SIGKILL after 1.5s if listeners are still alive. Then keep
-  //    waiting (up to ~3s total) for the kernel to release the socket.
+  // Wait for the port to actually become listenable, escalating to SIGKILL
+  // after 1.5s if listeners survive. Re-discover before SIGKILL so a
+  // respawned listener (new PID) is still caught. Keep waiting (up to ~3s
+  // total) for the kernel to release the socket.
   const overallDeadline = Date.now() + 3000;
   let escalated = false;
   while (Date.now() < overallDeadline) {
-    const stillListening = (() => {
-      try {
-        const out = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
-        return out.trim().split('\n').filter(Boolean).length > 0;
-      } catch { return false; }
-    })();
-    if (!stillListening) return;
+    if (findListenerPids(port).length === 0) return;
     if (!escalated && Date.now() > overallDeadline - 1500) {
       escalated = true;
-      for (const pid of pids) {
+      for (const pid of findListenerPids(port)) {
         try { process.kill(Number(pid), 'SIGKILL'); } catch { /* */ }
       }
     }
