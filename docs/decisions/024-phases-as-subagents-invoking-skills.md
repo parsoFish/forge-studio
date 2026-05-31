@@ -106,6 +106,19 @@ path until later rounds. Every migration must pass the two standing harnesses
 (`npm run ui:journey`, `npm run verify:cycle`) with no regression before the next
 phase is migrated.
 
+> **Landed 2026-05-31 (first concrete instance).** The seam is now a real
+> primitive: `orchestrator/phase-agent.ts` defines `PhaseAgentSpec` (phase +
+> the skill it composes + a model **tier** + tool policy) and `modelForSpec`
+> (tier → concrete model id, one place). The **unifier** is migrated:
+> `unifierAgentSpec` declares it (composes `skills/developer-unifier/SKILL.md` at
+> the `sonnet` tier), the orchestrator spawns it from the spec
+> (`developer-loop.ts: runUnifier`), and `UNIFIER_MODEL` now *derives* from the
+> spec's tier. Behaviour-preserving (still Sonnet, same tools) + unit-tested
+> (`phase-agent.test.ts`); landed verified by `tsc` + the unit suite, with the
+> full real-cycle / browser harness run **staged** for a dedicated authorized
+> session. The other phases (PM, dev-loop, reflector) adopt `PhaseAgentSpec`
+> next, one at a time behind the harness gate.
+
 ## Consequences
 
 - **Intent has one home; capabilities are shared.** A phase's intent is its agent

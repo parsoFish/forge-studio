@@ -38,11 +38,10 @@ import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch }
 import {
   buildUnifierSystemPrompt,
   prepareUnifierWorkspace,
-  UNIFIER_ALLOWED_TOOLS,
   UNIFIER_DEFAULT_ITERATION_CAP,
-  UNIFIER_DISALLOWED_TOOLS,
-  UNIFIER_MODEL,
+  unifierAgentSpec,
 } from '../unifier-invocation.ts';
+import { modelForSpec } from '../phase-agent.ts';
 import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel } from '../../cli/demo-model.ts';
 import type { CycleInput } from '../cycle-context.ts';
@@ -902,7 +901,15 @@ export async function runUnifier(
     input_refs: [input.worktreePath, input.manifestPath],
     output_refs: [],
     message: feedbackRef ? 'unifier.start (send-back)' : 'unifier.start',
-    metadata: { demo_shape: demoShape, feedback_ref: feedbackRef ?? null, iteration_cap: iterationCap },
+    metadata: {
+      demo_shape: demoShape,
+      feedback_ref: feedbackRef ?? null,
+      iteration_cap: iterationCap,
+      // ADR 024 seam observability: the agent + tier the orchestrator spawned.
+      agent_skill: unifierAgentSpec.skill,
+      agent_tier: unifierAgentSpec.tier,
+      model: modelForSpec(unifierAgentSpec),
+    },
   });
 
   // Stamp PROMPT.md / AGENT.md / fix_plan.md for the unifier.
@@ -927,10 +934,13 @@ export async function runUnifier(
     skill: 'developer-unifier',
   });
 
+  // ADR 024 seam: spawn the unifier from its declarative PhaseAgentSpec — the
+  // orchestrator picks the model tier + tool policy and points the clean agent
+  // at the skill it composes; it authors no intent here.
   const agent = createClaudeAgent({
-    model: UNIFIER_MODEL,
-    allowedTools: [...UNIFIER_ALLOWED_TOOLS],
-    disallowedTools: [...UNIFIER_DISALLOWED_TOOLS],
+    model: modelForSpec(unifierAgentSpec),
+    allowedTools: [...unifierAgentSpec.allowedTools],
+    disallowedTools: [...unifierAgentSpec.disallowedTools],
     permissionMode: 'acceptEdits',
     systemPrompt,
     maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
