@@ -129,6 +129,15 @@ export type PmUserPromptInput = {
     cargoToml?: string;
     treeListing?: string;
   };
+  /**
+   * Language-derived quality-gate recipe (betterado #2). The live caller
+   * detects the project's language and renders `renderGateRecipeBlock(...)`;
+   * surfaced verbatim so the PM writes a discriminating, scoped per-WI gate
+   * (e.g. Go's `-tags all -run <NewPrefix> ./pkg/`) without the operator
+   * hand-encoding it. Optional — omitted callers fall back to the generic
+   * gate guidance already in the prompt.
+   */
+  gateRecipe?: string;
 };
 
 /**
@@ -184,9 +193,12 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
           '',
           `The architect's manifest declares exactly these feature IDs — your work items' \`feature_id\` field MUST be drawn from this set. Inventing a \`FEAT-N\` outside this list is a hard error and aborts the cycle. Read the manifest body to learn what each one means; do NOT add new ones, do NOT rename them.`,
           '',
+          `**Cover every feature.** Each feature below MUST receive **≥1 work item** — leaving a declared feature undecomposed is a hard error and aborts the cycle (the orchestrator checks coverage and re-plans). Decompose the manifest's features and **only** those — do not plan project-setup / brain / tracking-file busywork the manifest didn't ask for. If a feature genuinely needs no code, still emit one WI stating why and what it verifies; never silently drop it.`,
+          '',
           knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
         ]
       : []),
+    ...(input.gateRecipe ? ['', input.gateRecipe] : []),
     ...(manifestType === 'exploration'
       ? [
           '',
@@ -354,6 +366,30 @@ export function renderPmHallucinationRetryAugment(args: {
     args.knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
     '',
     "If a WI you wrote previously would have fitted a manifest feature you missed, re-map it to the correct existing FEAT-id. **Do not invent new feature IDs**, even if you believe one is needed — the architect contract is binding; if the manifest is genuinely incomplete, surface the gap in the first WI's body and proceed against the existing features only.",
+  ].join('\n');
+}
+
+/**
+ * Faithful-decomposition retry (coverage variant). The orchestrator catches a
+ * first pass that left ≥1 manifest feature with **zero** work items — the PM
+ * dropped/ignored a declared feature (the betterado failure mode: it planned
+ * unrelated work and never decomposed task_group/release/live-harness). Re-invoke
+ * the PM with this augment naming the uncovered features verbatim.
+ */
+export function renderPmCoverageRetryAugment(args: {
+  knownFeatureIds: readonly string[];
+  uncovered: readonly string[];
+}): string {
+  return [
+    '## RETRY pass — you left declared features with NO work items',
+    '',
+    `Every feature the manifest declares **must** be decomposed into ≥1 work item. Your previous decomposition produced **zero** work items for: ${args.uncovered.map((f) => `\`${f}\``).join(', ')}. The orchestrator has wiped your previous \`.forge/work-items/\` output. Re-decompose the initiative from scratch, covering **every** feature.`,
+    '',
+    'The manifest declares exactly these features — each needs at least one WI:',
+    '',
+    args.knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
+    '',
+    "Do **not** invent new feature IDs and do **not** plan work outside the manifest's features (no project-setup / brain / tracking-file busywork the manifest didn't ask for). If a feature genuinely needs no code, still emit one WI that states why and what it verifies — never silently drop it.",
   ].join('\n');
 }
 

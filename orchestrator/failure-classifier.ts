@@ -32,7 +32,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
 
   let trivialPass = false, brainSkipped = false, rateLimited = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false, pmCapped = false;
-  let pmBudgetExhausted = false, pmFeatureHallucination = false;
+  let pmBudgetExhausted = false, pmFeatureHallucination = false, pmFeatureCoverage = false;
   let gateMissingScript = false, worktreeNoDeps = false;
   let agentThrew = false, devLoopTotalFailure = false, reviewFailed = false;
   let unifierNoDemo = false;
@@ -52,6 +52,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (pmErr && Array.isArray(md.hidden_coupling_violations) && md.hidden_coupling_violations.length > 0) { pmHiddenCoupling = true; ev(e); }
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
     if (e.phase === 'project-manager' && e.message === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
+    if (e.phase === 'project-manager' && e.message === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
@@ -78,6 +79,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (pmFeatureHallucination) return T('terminal', 'PM emitted a feature_id not in the manifest', evidence);
+  if (pmFeatureCoverage) return T('terminal', 'PM left a declared feature with no work items — incomplete decomposition (dropped a feature)', evidence);
   if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
   if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
   if (agentThrew) return T('terminal', 'agent threw a non-rate-limit error', evidence);

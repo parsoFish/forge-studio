@@ -314,7 +314,7 @@ export function readWorkItemsFromDir(dir: string): {
   const items: WorkItem[] = [];
   const parseErrors: Record<string, string> = {};
   const files = readdirSync(dir)
-    .filter((f) => f.endsWith('.md') && f !== '_graph.md')
+    .filter((f) => f.endsWith('.md') && f !== '_graph.md' && f !== '_coverage.md')
     .sort();
 
   for (const file of files) {

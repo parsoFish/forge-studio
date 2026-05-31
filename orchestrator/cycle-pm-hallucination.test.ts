@@ -218,13 +218,14 @@ test('runProjectManager: hallucinates FEAT-5 on pass 1, recovers on retry', asyn
           { wiId: 'WI-3', featureId: 'FEAT-5' }, // hallucinated
         ],
       },
-      // Pass 2: clean — only manifest-known feature IDs.
+      // Pass 2: clean — every manifest feature covered, no invented IDs.
       {
         initiativeId: h.input.initiativeId,
         wis: [
           { wiId: 'WI-1', featureId: 'FEAT-1' },
           { wiId: 'WI-2', featureId: 'FEAT-2' },
           { wiId: 'WI-3', featureId: 'FEAT-3' },
+          { wiId: 'WI-4', featureId: 'FEAT-4' },
         ],
       },
     ]);
@@ -312,6 +313,8 @@ test('runProjectManager: clean first pass needs no retry', async () => {
         wis: [
           { wiId: 'WI-1', featureId: 'FEAT-1' },
           { wiId: 'WI-2', featureId: 'FEAT-2' },
+          { wiId: 'WI-3', featureId: 'FEAT-3' },
+          { wiId: 'WI-4', featureId: 'FEAT-4' },
         ],
       },
     ]);
@@ -322,6 +325,107 @@ test('runProjectManager: clean first pass needs no retry', async () => {
     const events = readEvents(h.logger);
     const retry = events.find((e) => e.message === 'pm.feature-hallucination-retry');
     assert.equal(retry, undefined, 'must not retry when the first pass is clean');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('runProjectManager: drops FEAT-3/FEAT-4 on pass 1 (coverage gap), recovers on retry', async () => {
+  const h = setupHarness();
+  try {
+    const { queryFn, callCount } = makeStubQueryFn([
+      // Pass 1: only FEAT-1/FEAT-2 — FEAT-3 + FEAT-4 left undecomposed (the
+      // betterado failure: the PM ignored declared features). No invented IDs.
+      {
+        initiativeId: h.input.initiativeId,
+        wis: [
+          { wiId: 'WI-1', featureId: 'FEAT-1' },
+          { wiId: 'WI-2', featureId: 'FEAT-2' },
+        ],
+      },
+      // Pass 2: every feature covered.
+      {
+        initiativeId: h.input.initiativeId,
+        wis: [
+          { wiId: 'WI-1', featureId: 'FEAT-1' },
+          { wiId: 'WI-2', featureId: 'FEAT-2' },
+          { wiId: 'WI-3', featureId: 'FEAT-3' },
+          { wiId: 'WI-4', featureId: 'FEAT-4' },
+        ],
+      },
+    ]);
+
+    await runProjectManager(h.input, h.logger, { queryFn });
+    assert.equal(callCount(), 2, 'expected two SDK passes (one coverage retry)');
+
+    const events = readEvents(h.logger);
+    const retryEvent = events.find((e) => e.message === 'pm.feature-coverage-retry');
+    assert.ok(retryEvent, 'expected pm.feature-coverage-retry log event');
+    assert.deepEqual(
+      (retryEvent.metadata as { uncovered_feature_ids: string[] }).uncovered_feature_ids,
+      ['FEAT-3', 'FEAT-4'],
+    );
+    // It is NOT a hallucination — must not emit the hallucination retry.
+    assert.equal(
+      events.filter((e) => e.message === 'pm.feature-hallucination-retry').length,
+      0,
+      'a coverage gap is not a hallucination',
+    );
+    assert.equal(
+      events.filter((e) => e.message === 'pm.feature-coverage').length,
+      0,
+      'must not emit terminal pm.feature-coverage on a recovered pass',
+    );
+
+    // The operator sanity-check artifact reflects pass 2's full coverage.
+    const coverage = readFileSync(resolve(h.worktree, '.forge', 'work-items', '_coverage.md'), 'utf8');
+    assert.match(coverage, /All features covered/);
+    assert.match(coverage, /FEAT-4/);
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('runProjectManager: persistent coverage gap throws + emits terminal pm.feature-coverage', async () => {
+  const h = setupHarness();
+  try {
+    const { queryFn, callCount } = makeStubQueryFn([
+      {
+        initiativeId: h.input.initiativeId,
+        wis: [
+          { wiId: 'WI-1', featureId: 'FEAT-1' },
+          { wiId: 'WI-2', featureId: 'FEAT-2' },
+        ],
+      },
+      {
+        initiativeId: h.input.initiativeId,
+        wis: [
+          { wiId: 'WI-1', featureId: 'FEAT-1' },
+          { wiId: 'WI-2', featureId: 'FEAT-2' },
+          { wiId: 'WI-3', featureId: 'FEAT-3' }, // FEAT-4 STILL dropped
+        ],
+      },
+    ]);
+
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { queryFn }),
+      /feature-coverage gap persisted/,
+    );
+    assert.equal(callCount(), 2, 'expected two SDK passes (no further retries)');
+
+    const events = readEvents(h.logger);
+    const terminal = events.find((e) => e.message === 'pm.feature-coverage');
+    assert.ok(terminal, 'expected terminal pm.feature-coverage event');
+    assert.equal(terminal.event_type, 'error');
+    assert.deepEqual(
+      (terminal.metadata as { uncovered_feature_ids: string[] }).uncovered_feature_ids,
+      ['FEAT-4'],
+    );
+
+    const classification = classifyCycleFailure(events);
+    assert.equal(classification.kind, 'terminal');
+    assert.equal(classification.recoverable, false);
+    assert.match(classification.reason, /no work items|dropped a feature|undecomposed/i);
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
