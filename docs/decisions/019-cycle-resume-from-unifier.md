@@ -4,6 +4,18 @@
 - **Date:** 2026-05-29
 - **Supersedes / amends:** extends ADR 011 (unattended scheduler), ADR 012 (crash recovery). Builds on the worktree-preservation-on-`failed` behaviour added 2026-05-25 (scheduler.ts).
 
+> **Amended 2026-05-31 (resume rebase).** As first written this ADR did **no
+> rebase**, so the dev-loop-close invariant (`main == merge-base`) failed the
+> moment another cycle merged to `main` between the stall and the resume —
+> wasting the whole resumed unifier run before failing at the close (known-gaps
+> #4). The resume path now rebases the preserved initiative branch onto current
+> `main` at the **start** of the resume (`rebasePreservedBranchOntoMain`,
+> `orchestrator/pr.ts`): no divergence → no-op; clean → rebase + `--force-with-lease`
+> push of the *initiative branch only* (never main), fully unattended; conflict →
+> abort + a classified, actionable `resume-needs-rebase` terminal failure (the
+> operator rebases by hand, then re-resumes). This makes concurrent unattended
+> resume work for the non-conflicting case instead of always dying at the close.
+
 ## Context
 
 A forge cycle is `PM → developer-loop(per-WI + unifier) → reviewer → closure → reflector`. The **unifier** is a sub-phase of the developer-loop that runs *after* every work-item (WI) has been delivered and committed to the initiative branch. It merges the WI work, runs the full project quality gate (`npm test`), produces the demo bundle + PR description, and opens the PR.

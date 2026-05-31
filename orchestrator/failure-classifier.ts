@@ -35,7 +35,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let pmBudgetExhausted = false, pmFeatureHallucination = false, pmFeatureCoverage = false;
   let gateMissingScript = false, worktreeNoDeps = false;
   let agentThrew = false, devLoopTotalFailure = false, reviewFailed = false;
-  let unifierNoDemo = false, baselineRed = false;
+  let unifierNoDemo = false, baselineRed = false, unifierNotPassed = false, resumeNeedsRebase = false;
 
   for (const e of events) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -54,6 +54,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'project-manager' && e.message === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
     if (e.phase === 'project-manager' && e.message === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
     if (e.phase === 'developer-loop' && e.message === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
+    if (e.phase === 'developer-loop' && e.message === 'unifier.failed') { unifierNotPassed = true; ev(e); }
+    if (e.phase === 'orchestrator' && e.message === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
@@ -80,6 +82,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
+  if (resumeNeedsRebase) return T('terminal', 'resume blocked — the preserved branch conflicts with current main (another cycle merged during the stall); rebase the initiative branch onto main by hand, then re-resume', evidence);
   if (pmFeatureHallucination) return T('terminal', 'PM emitted a feature_id not in the manifest', evidence);
   if (pmFeatureCoverage) return T('terminal', 'PM left a declared feature with no work items — incomplete decomposition (dropped a feature)', evidence);
   if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
@@ -87,6 +90,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (agentThrew) return T('terminal', 'agent threw a non-rate-limit error', evidence);
   if (devLoopTotalFailure) return T('terminal', 'dev-loop completed 0/N work items', evidence);
   if (unifierNoDemo) return T('terminal', 'unifier did not author the PR — DEMO.md / pr-description.md missing because dev-loop WIs failed to produce their declared paths', evidence);
+  if (unifierNotPassed) return T('terminal', 'unifier did not pass its composed gate (tests / demo / self-contained PR / branch-sync) — branch not review-ready, PR creation blocked at the delivery gate', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.

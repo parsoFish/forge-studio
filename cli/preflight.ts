@@ -24,7 +24,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, relative } from 'node:path';
 
-export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'BRAIN' | 'DEMO';
+import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
+
+export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -89,6 +91,22 @@ const SCRATCH_PATHS = ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 // (that facet is hand-verified during onboarding).
 const DEMO_SHAPES = ['browser', 'harness', 'cli-diff', 'artifact', 'none'];
 
+// ARTIFACTS (advisory): build outputs & generated files must be gitignored,
+// else `git add -A` (the dev-loop autocommit safety-net + PR assembly) sweeps
+// them into the PR — the betterado run committed a 35 MB renamed provider
+// binary this way (#4). preflight cannot run a build, so the check is
+// structural: for the detected language, does .gitignore mention ANY of the
+// characteristic build-output patterns? Zero coverage ⇒ warn. Conservative:
+// presence of any one hint clears it (we only flag the "no coverage at all" case).
+const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = {
+  typescript: ['dist', 'build', '.tsbuildinfo', 'coverage', 'out', '.next', 'lib/'],
+  javascript: ['dist', 'build', 'coverage', 'out', '.next'],
+  go: ['*.exe', '*.test', '*.out', 'bin/', '/bin', 'dist'], // Go binaries vary; any binary-ish ignore counts
+  python: ['__pycache__', '.pyc', 'dist', 'build', '.egg-info', '.coverage', '.pytest_cache'],
+  rust: ['target'],
+  unknown: [],
+};
+
 export function runPreflight(
   projectDir: string,
   opts: PreflightOptions = {},
@@ -105,6 +123,7 @@ export function runPreflight(
     checkC5(dir),
     checkC6(dir),
     checkDemo(dir),
+    checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
 
@@ -327,6 +346,39 @@ function checkDemo(dir: string): ClauseResult {
       (shape !== 'none' ? ' + command' : '') +
       (shape === 'browser' ? ' + preview_command' : '') +
       ' (forge can produce a demo; the before/after fidelity is hand-verified at onboarding)',
+  };
+}
+
+// --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---
+
+function checkBuildArtifacts(dir: string): ClauseResult {
+  const base = {
+    clause: 'ARTIFACTS' as const,
+    title: 'Build artifacts gitignored (no stray outputs in the PR)',
+    hard: false,
+  };
+  const lang = detectProjectLanguage(dir);
+  const hints = BUILD_ARTIFACT_HINTS[lang];
+  if (lang === 'unknown' || hints.length === 0) {
+    return { ...base, pass: true, detail: 'no language-specific build-output check (unknown project shape)' };
+  }
+  const giPath = join(dir, '.gitignore');
+  if (!existsSync(giPath)) {
+    // C2 already hard-fails on a missing .gitignore; don't double-report.
+    return { ...base, pass: true, detail: 'no .gitignore (already flagged by C2)' };
+  }
+  const gi = readFileSync(giPath, 'utf8').toLowerCase();
+  const covered = hints.some((h) => gi.includes(h.toLowerCase()));
+  if (covered) {
+    return { ...base, pass: true, detail: `.gitignore covers ${lang} build outputs` };
+  }
+  return {
+    ...base,
+    pass: false,
+    detail:
+      `.gitignore has NONE of the characteristic ${lang} build-output patterns (${hints.join(', ')}). ` +
+      `A compiled binary / dist / coverage left un-ignored will be swept into the PR by \`git add -A\` ` +
+      `(betterado committed a 35 MB binary this way). Advisory — add the build-output ignores for this project.`,
   };
 }
 

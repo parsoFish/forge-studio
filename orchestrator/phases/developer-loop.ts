@@ -90,7 +90,10 @@ const DEV_AGENT_CRASH_MAX_RETRIES = 2;
 const DEV_AGENT_CRASH_BACKOFF_MS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): Promise<void> {
+export async function runDeveloperLoop(
+  input: CycleInput,
+  logger: EventLogger,
+): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null }> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
     initiative_id: input.initiativeId,
@@ -504,7 +507,7 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
       metadata: push.pushed ? { branch: push.branch } : { reason: push.reason },
     });
   }
-  await runUnifier(input, logger, start.event_id);
+  const unifierOutcome = await runUnifier(input, logger, start.event_id);
 
   // S1.3: at dev-loop close the local↔remote invariant MUST hold —
   // `origin/<branch>` == local HEAD AND `main` == merge-base. A per-WI
@@ -521,6 +524,14 @@ export async function runDeveloperLoop(input: CycleInput, logger: EventLogger): 
   // cycle-level one runs AFTER `commitDevLoopBoundary` may have added
   // one more commit + push. Both are idempotent reads against git state.
   assertDevLoopCloseSync(input.worktreePath, logger, input.initiativeId);
+
+  // cascade-v4 #3: surface the unifier outcome so cycle.ts can gate PR
+  // creation — a unifier that did not pass its composed gate must NOT yield a
+  // reviewable (mergeable) PR.
+  return {
+    unifierSucceeded: unifierOutcome.succeeded,
+    unifierFailureClass: unifierOutcome.failureClass,
+  };
 }
 
 /**
@@ -761,7 +772,7 @@ export async function runUnifier(
   input: CycleInput,
   logger: EventLogger,
   parentEventId: string,
-): Promise<void> {
+): Promise<{ succeeded: boolean; failureClass: string | null }> {
   // Wipe per-WI scratch files before stamping the unifier's prompts. The
   // unifier is a fresh mission with a different role; without this the
   // agent would inherit the last WI's ticked checklist.
@@ -968,6 +979,8 @@ export async function runUnifier(
       failure_class: failureClass,
     },
   });
+
+  return { succeeded, failureClass };
 }
 
 type ComposedUnifierGateInput = {

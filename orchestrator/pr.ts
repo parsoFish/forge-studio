@@ -450,6 +450,15 @@ export type PushResult =
  * strips any tracked `.forge/` from the index and commits the removal so
  * scratch can never be pushed. Best-effort — never blocks a push.
  */
+/**
+ * betterado #4: a project may force-track its forge config INSIDE the ignored
+ * `.forge/` dir (`.forge/project.json` + `.forge/quality_gate_cmd` — load-bearing,
+ * read every cycle). A blanket `git rm -r --cached .forge` deleted those from the
+ * branch (the betterado PR lost its project config). Strip the scratch but EXEMPT
+ * the tracked config.
+ */
+const PROTECTED_FORGE_CONFIG: readonly string[] = ['.forge/project.json', '.forge/quality_gate_cmd'];
+
 export function stripForgeScratchFromBranch(worktreePath: string): void {
   try {
     const tracked = execFileSync('git', ['ls-files', '.forge'], {
@@ -458,7 +467,12 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
       encoding: 'utf8',
     }).trim();
     if (!tracked) return;
-    execFileSync('git', ['rm', '-r', '--cached', '--quiet', '--ignore-unmatch', '.forge'], {
+    const toStrip = tracked
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((f) => f && !PROTECTED_FORGE_CONFIG.includes(f));
+    if (toStrip.length === 0) return; // only protected config tracked — nothing to strip
+    execFileSync('git', ['rm', '--cached', '--quiet', '--ignore-unmatch', ...toStrip], {
       cwd: worktreePath,
       stdio: 'pipe',
     });
@@ -471,7 +485,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
         'user.name=forge',
         'commit',
         '-m',
-        'chore: drop gitignored .forge/ scratch from branch (prevents cross-initiative add/add conflicts)',
+        'chore: drop gitignored .forge/ scratch from branch (keeps tracked .forge/project.json + quality_gate_cmd)',
       ],
       { cwd: worktreePath, stdio: 'pipe' },
     );
@@ -503,6 +517,85 @@ export function pushInitiativeBranch(worktreePath: string): PushResult {
     const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
     return { pushed: false, reason: stderr || e.message || 'git push failed' };
   }
+}
+
+export type ResumeRebaseResult = {
+  ok: boolean;
+  /** True if a rebase actually replayed commits (main had moved). */
+  rebased: boolean;
+  /** The base branch rebased onto (origin/main, main, …). */
+  base: string;
+  reason?: string;
+};
+
+/**
+ * cascade-v4 #4: on a resume-from-unifier, another cycle may have merged to
+ * `main` between the stall and the resume — so the preserved initiative branch
+ * no longer has `main` as its merge-base, and the dev-loop-close invariant
+ * (`main == merge-base`) fails at the END of the resumed cycle, wasting the
+ * whole unifier run. Rebase the preserved branch onto current main at the START
+ * of the resume instead:
+ *   - no divergence (base is an ancestor of HEAD) → no-op, ok.
+ *   - clean rebase → replay the branch's commits onto main + force-with-lease
+ *     push (the initiative branch only — never main); fully unattended.
+ *   - conflict → abort and return ok:false with a clear "rebase needed" reason
+ *     the caller surfaces as the `resume-needs-rebase` action (operator rebases
+ *     by hand, then re-resumes). Never force-pushes a conflicted state.
+ */
+export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebaseResult {
+  const branch = currentBranch(worktreePath);
+  const git = (args: string[]): string =>
+    execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).toString();
+  let base = 'main';
+  try {
+    git(['rev-parse', '--verify', 'main']);
+  } catch {
+    try { git(['rev-parse', '--verify', 'master']); base = 'master'; }
+    catch { return { ok: false, rebased: false, base: 'main', reason: 'no main/master branch to rebase onto' }; }
+  }
+  if (!branch) return { ok: false, rebased: false, base, reason: 'detached HEAD or not a git repo' };
+
+  // Pick up other cycles' merges: fetch + rebase onto origin/<base> when a
+  // remote exists; otherwise local <base> (the gh-shim local-merge model).
+  let target = base;
+  if (hasOriginRemote(worktreePath)) {
+    try { git(['fetch', 'origin', base]); target = `origin/${base}`; }
+    catch { target = base; }
+  }
+
+  // No divergence: target is already an ancestor of HEAD — nothing to do.
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', target, 'HEAD'], { cwd: worktreePath, stdio: 'pipe' });
+    return { ok: true, rebased: false, base: target };
+  } catch { /* diverged → attempt a clean rebase */ }
+
+  try {
+    git(['rebase', target]);
+  } catch (err) {
+    try { git(['rebase', '--abort']); } catch { /* leave it; surfaced below */ }
+    const e = err as { stderr?: Buffer | string; message?: string };
+    const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
+    return {
+      ok: false, rebased: false, base: target,
+      reason: `rebase onto ${target} conflicted — manual rebase required before re-resuming: ${(stderr || e.message || '').slice(0, 300)}`,
+    };
+  }
+
+  // Rebase rewrote history → the branch must be force-pushed (with lease, never
+  // plain --force) so origin/<branch> matches. Only the initiative branch.
+  if (hasOriginRemote(worktreePath)) {
+    try {
+      git(['push', '--force-with-lease', '--set-upstream', 'origin', branch]);
+    } catch (err) {
+      const e = err as { stderr?: Buffer | string; message?: string };
+      const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
+      return {
+        ok: false, rebased: true, base: target,
+        reason: `rebased onto ${target} locally but force-with-lease push failed (someone else moved the branch?): ${(stderr || e.message || '').slice(0, 300)}`,
+      };
+    }
+  }
+  return { ok: true, rebased: true, base: target };
 }
 
 function hasOriginRemote(worktreePath: string): boolean {

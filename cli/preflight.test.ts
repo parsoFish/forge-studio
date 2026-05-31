@@ -31,7 +31,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(
     join(dir, '.gitignore'),
-    ['node_modules/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+    ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\n');
@@ -68,7 +68,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'DEMO'] as ClauseId[]) {
+    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'DEMO', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -317,6 +317,35 @@ test('DEMO (ADVISORY): shape "none" is valid with no command', () => {
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'DEMO').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('ARTIFACTS (ADVISORY): a Go project whose .gitignore lacks any binary ignore warns', () => {
+  const p = happyProject();
+  try {
+    // Make it a Go project; keep only forge-scratch ignores (no binary/build outputs).
+    writeFileSync(join(p.dir, 'go.mod'), 'module example.com/x\n');
+    writeFileSync(join(p.dir, '.gitignore'), ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'ARTIFACTS');
+    assert.equal(c.pass, false);
+    assert.equal(c.hard, false);
+    assert.equal(r.ok, true, 'ARTIFACTS is advisory — must not flip ok');
+    assert.match(c.detail, /build-output|binary|git add -A/i);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('ARTIFACTS (ADVISORY): a Go project that ignores its binary outputs passes', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, 'go.mod'), 'module example.com/x\n');
+    writeFileSync(join(p.dir, '.gitignore'), ['/bin/', '*.test', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'ARTIFACTS').pass, true);
   } finally {
     p.cleanup();
   }

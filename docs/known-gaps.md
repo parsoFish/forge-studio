@@ -61,7 +61,14 @@ failed 5+ times unable to fix what it didn't cause.)
   establish a known-green baseline; if it's already red, fail fast with that
   diagnosis instead of discovering it at the unifier.
 
-### 3. PR can open despite the unifier failing / zero delivery — MEDIUM/HIGH
+### 3. PR can open despite the unifier failing / zero delivery — ✅ RESOLVED 2026-05-31
+**Fixed (Phase E):** a **delivery gate** at the dev→review boundary in `cycle.ts`.
+`runDeveloperLoop` now returns the unifier outcome (`runUnifier` surfaces
+`{ succeeded, failureClass }`); if the unifier did not pass its composed gate the
+cycle **throws before the reviewer runs** — no PR is opened — and the
+`unifier.failed` event classifies as a terminal `unifier-did-not-pass`. The
+demo-missing case was already blocked by `assertTrackedDemoExists`; this closes
+the demo-present-but-gate-failed escape. Original below.
 The unifier's `log-and-continue` semantics mean a unifier gate failure does not
 stop the pipeline, and the resume path bypasses the dev-loop's only
 `completeCount === 0 → total failure` guard. On cascade-v4 the review-router
@@ -73,7 +80,13 @@ operator could merge.
   (vs. partial-completion) should block PR creation, or at minimum annotate the
   PR with "unifier did not pass."
 
-### 4. Resume-from-unifier assumes `main` has not moved — MEDIUM
+### 4. Resume-from-unifier assumes `main` has not moved — ✅ RESOLVED 2026-05-31
+**Fixed (Phase E):** the resume path rebases the preserved branch onto current
+`main` at the **start** (`rebasePreservedBranchOntoMain`, `pr.ts`): no divergence
+→ no-op; clean → rebase + `--force-with-lease` push of the initiative branch only
+→ unattended; conflict → abort + a terminal `resume-needs-rebase` action. No more
+dying at the close invariant after wasting the resumed unifier run. ADR 019
+amended. Original below.
 [ADR 019](./decisions/019-cycle-resume-from-unifier.md) does no rebase. The
 dev-loop-close invariant (`main == merge-base`) fails the moment another cycle
 merges to main between the stall and the resume. Hit during the cascade-v4
@@ -196,7 +209,14 @@ diagnostic to isolate variables, not a target.**
    Fix: evaluate the indicator per-package, or don't fail if ≥1 package actually
    ran tests. (Today's workaround: gate the exact package dir, never `/...`.)
 
-4. **[HIGH] PR hygiene — cycles commit build artifacts + delete tracked config.**
+4. **[HIGH] PR hygiene — cycles commit build artifacts + delete tracked config. — ✅ RESOLVED 2026-05-31**
+   *Fixed (Phase E):* (a) `stripForgeScratchFromBranch` now **exempts**
+   `.forge/project.json` + `.forge/quality_gate_cmd` (lists tracked `.forge/`
+   files and strips all but the protected config) — no longer deletes a Go
+   project's config from the PR. (b) `forge preflight` gained an advisory
+   **ARTIFACTS** clause: for the detected language, it flags a `.gitignore` with
+   no build-output coverage (so a stray binary/dist can't be swept in by
+   `git add -A` — the 35 MB betterado binary). Original below.
    `cycle.ts` `git add -A` (autocommit safety-net) committed a **35 MB compiled
    provider binary** + the whole `graphify-out/` + `.forge` scratch into the PR,
    because the project `.gitignore` didn't cover them (the binary had been

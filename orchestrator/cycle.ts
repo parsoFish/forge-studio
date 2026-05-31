@@ -53,7 +53,7 @@ import { runDeveloperLoop } from './phases/developer-loop.ts';
 import { runReviewer } from './phases/reviewer.ts';
 import { runReflector } from './phases/reflector.ts';
 import { runClosure } from './phases/closure.ts';
-import { assertLocalRemoteSynced, pushInitiativeBranch } from './pr.ts';
+import { assertLocalRemoteSynced, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener. The operator's verdict arrives out-of-band as
@@ -136,10 +136,35 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       // preserved worktree's `.forge/work-items/`. Skip PM; the dev-loop
       // detects `resumeFrom` and runs only the unifier against the existing
       // per-WI commits.
-      if (input.resumeFrom !== 'unifier') {
+      if (input.resumeFrom === 'unifier') {
+        // cascade-v4 #4: another cycle may have merged to main during the stall,
+        // so the preserved branch no longer has main as its merge-base — the
+        // dev-loop-close invariant would fail at the END of this resumed cycle,
+        // wasting the unifier run. Rebase the preserved branch onto current main
+        // NOW (clean → force-with-lease push the initiative branch; conflict →
+        // fail fast with a clear, actionable resume-needs-rebase signal).
+        const rebase = rebasePreservedBranchOntoMain(inputWithGate.worktreePath);
+        logger.emit({
+          initiative_id: input.initiativeId,
+          phase: 'orchestrator',
+          skill: 'cycle',
+          event_type: rebase.ok ? 'log' : 'error',
+          input_refs: [inputWithGate.worktreePath],
+          output_refs: [],
+          message: rebase.ok
+            ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
+            : 'cycle.resume-needs-rebase',
+          metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
+        });
+        if (!rebase.ok) {
+          throw new Error(
+            `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
+          );
+        }
+      } else {
         await runProjectManager(inputWithGate, logger);
       }
-      await runDeveloperLoop(inputWithGate, logger);
+      const devLoopOutcome = await runDeveloperLoop(inputWithGate, logger);
       // Safety net: commit any uncommitted dev-loop work before the reviewer
       // starts. The dev-loop's prompt tells the agent to commit per
       // iteration, but if it skips, source files would not reach the PR.
@@ -154,6 +179,22 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       // HEAD and `main` == merge-base (no divergence). A violation throws
       // and is classified — the branch is not in a reviewable state.
       enforceDevLoopCloseInvariant(inputWithGate.worktreePath, logger, inputWithGate.initiativeId);
+
+      // cascade-v4 #3: DELIVERY GATE. A unifier that did not pass its composed
+      // gate (project tests green + structured demo + self-contained PR +
+      // branches synced) has NOT produced a review-ready branch. Letting the
+      // reviewer open a PR here is the quality escape an inattentive operator
+      // could merge (final gate fails, mergeable PR still appears). Block PR
+      // creation with a classified failure instead — the manifest routes to
+      // triage, not to a misleading "ready" PR. (Demo-missing was already
+      // blocked by openPullRequest's assertTrackedDemoExists; this closes the
+      // demo-present-but-gate-failed gap.)
+      if (!devLoopOutcome.unifierSucceeded) {
+        throw new Error(
+          `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
+            `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
+        );
+      }
 
       // Review phase: assess the branch holistically vs intent, refine
       // (may spawn a dev-loop), produce the demo-embedded PR, then STOP.
