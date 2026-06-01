@@ -114,88 +114,40 @@ Classify based on the operator's brief. When in doubt, default to
 (The `architect.plan-approved` / `plan-revised` / `plan-rejected` events are
 emitted by the runner's finalize step, not by this skill.)
 
-## Benchmark suite
+## What to return each turn
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
+The runner appends a per-turn task block telling you whether it needs the
+**interview step** or the **draft step** (the exact JSON shapes are in Surface
+above; the size + dependency guidance is in that draft task block). Brain-query
+is your mandatory first action (above). Within a turn:
 
-Was `benchmarks/architect/` — `prompts.json` fixtures + `score.ts`. (The since-moot S2B note about migrating the bench surface to consume PLAN.md directly is dropped — live runs go through PLAN.md → the runner's finalize.)
+- **Interview step** — ask only questions that *unblock* the draft, 1-4 at a
+  time, prioritising: scope edge (in/out?), success signal (done when?),
+  prior-art (already attempted?), hard constraints (any no-goes?). Set
+  `done: true` as soon as you can draft without unresolved scope / success /
+  constraint ambiguity — don't ask to merely refine.
+- **Draft step** — return coherent, releasable initiatives, each with concrete
+  Given-When-Then acceptance criteria in its body and explicit build order
+  (`depends_on`) where a later initiative needs an earlier one merged first.
 
-## Process
-
-1. **Brain query first** (mandatory).
-2. **Brief + interview** (cwc Amendment 1 — see
-   [S2A-CWC-AMENDMENTS.md](../../docs/planning/2026-05-20-refinement/S2A-CWC-AMENDMENTS.md)).
-
-   - Restate the operator's brief in your own words as a single paragraph.
-     This becomes `ArchitectSession.vision` later.
-   - **Invoke `AskUserQuestion` at least once** with 1-4 questions targeting
-     the highest-leverage ambiguities in this order: scope edge (what's in,
-     what's out?), success signal (when is this done?), prior-art tax
-     (anything already attempted?), hard constraints (any no-goes?).
-   - Continue the interview only while questions are unblocking — stop
-     as soon as you have enough or the operator signals stop. STOP when:
-     (a) the operator answers "just draft" or similar,
-     (b) you have enough to draft a manifest without unresolved scope /
-         success-signal / constraint ambiguity,
-     (c) the next question would only refine, not unblock.
-   - Free-form chat between `AskUserQuestion` calls is fine.
-   - Capture every round into `ArchitectSession.interview` as an array of
-     `{ question, answer }` pairs. Use `"[operator skipped]"` verbatim as
-     the answer if the operator declined to choose (e.g. typed "Other"
-     with no content, or said "skip" / "just draft").
-3. **Invoke `architect-llm-council`** via [`runCouncil()`](../architect-llm-council/council.ts)
-   to apply CEO/eng/design/DX critics. The council resolves mechanical issues
-   (`flags`) and surfaces only taste decisions (`escalations`). Use the
-   defaults; if a critic surfaces a `council.fallback-required` event, paste
-   its raw text into PLAN.md as an inline escalation for the operator.
-4. **Read project metrics** (if any). Open `<projectRepoPath>/.forge/project.json`;
-   if it carries a `metrics` block, hold the `command` / `baselines_dir` /
-   `tolerance_pct` values for the PLAN.md project-metrics section.
-5. **Iterate** with the user on the surfaced decisions. Stay terse — the user's
-   time at the keyboard is the scarce resource.
-6. **Build draft initiatives.** For each:
-   - Generate the ID as `INIT-<YYYY-MM-DD>-<slug>` (matches the manifest schema's
-     `INIT-\d{4}-\d{2}-\d{2}-<slug>` pattern).
-   - Build the manifest as a typed
-     [`InitiativeManifest`](../../orchestrator/manifest.ts): `initiative_id`,
-     `project`, `project_repo_path`, `created_at` (ISO-8601), `iteration_budget`,
-     `cost_budget_usd`, `phase: 'pending'`, `origin: 'architect'`, `features[]`
-     (each with `feature_id`, `title`, `depends_on`), and the spec body. Include
-     the C4 per-feature optional fields (`quality_gate_cmd`, `non_goals`,
-     `hard_constraints`) when the council surfaced binding constraints.
-   - Write the manifest as a draft to
-     `<projectRepoPath>/_architect/<session-id>/manifests/<id>.md`. Do NOT call
-     `writeManifest()` — that promotes to the queue, which is the CLI's job.
-7. **Emit PLAN.md.** Build the `ArchitectSession` struct and call
-   `writePlanDoc(session, projectRepoPath)` from `orchestrator/architect-plan.ts`.
-   This writes PLAN.md + `council-transcript.md` to the session dir.
-8. **Update `projects/<name>/roadmap.md`** per
-   [ADR 014](../../docs/decisions/014-roadmap-format.md). The rows still go in
-   (the operator sees the plan via roadmap + PLAN.md both); the approve flow
-   doesn't re-touch them.
-9. **Log `architect.plan-emitted`** to the event log.
-10. **Hand off to the operator.** The runner writes `PLAN.md` + `PLAN.html` to
-   `<projectRepoPath>/_architect/<session-id>/` and the UI surfaces them on the
-   `/architect/<sid>` plan gate. The operator reviews PLAN.html, resolves the
-   council's design decisions, and clicks **approve / revise / reject** there —
-   the runner's finalize step ingests that verdict (promoting the manifests to
-   `_queue/pending/` only on approve).
-
-   Stop. The scheduler picks up nothing until the operator approves in the UI.
+The runner owns the mechanics around you — it renders the questions, builds the
+manifests, runs the council, writes PLAN.md/PLAN.html, updates the roadmap, emits
+the events, and (only on operator **approve**) promotes the manifests. You never
+call `AskUserQuestion`, `runCouncil`, or `writePlanDoc` yourself.
 
 ## Constraints
 
-- **Initiatives are coherent and releasable.** Size each one for the work it
-  actually needs — forge handles 1→N features just fine. The reference for
-  what shape lands is past successful initiatives in this project (or, for
-  a fresh project, similar projects): query `projects/<project>/brain/themes/`
-  and `brain/cycles/themes/` via `brain-query` to see what has worked. Don't
-  invent caps or floors from thin air.
-- **Acceptance criteria are concrete.** Vague criteria propagate downstream
-  and break the developer loop. Reject your own draft if you can't write a
+- **Initiatives are coherent and releasable**, sized for the work they actually
+  need (the draft task block gives the initiative / feature / work-item size
+  north-stars — a one-feature initiative is normal). The reference for what
+  shape lands is past successful initiatives: query `projects/<project>/brain/themes/`
+  and `brain/cycles/themes/` via `brain-query`.
+- **Acceptance criteria are concrete.** Vague criteria propagate downstream and
+  break the developer loop. Reject your own draft if you can't write a
   Given-When-Then for it.
-- **Dependencies are explicit.** Use the manifest's `features[].depends_on` —
-  the project manager and scheduler rely on it.
+- **Dependencies are explicit at both levels.** Within an initiative, order work
+  with `features[].depends_on`; across initiatives, set each initiative's
+  `depends_on` so the scheduler holds dependents until their prerequisites merge.
 - **Aggregate footprint is informational** (per
   [C19](../../docs/planning/2026-05-20-refinement/CONTRACTS.md)). PLAN.md
   surfaces the total iteration budget and per-initiative estimated cost as

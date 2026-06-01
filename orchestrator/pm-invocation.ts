@@ -195,6 +195,8 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
           '',
           `**Cover every feature.** Each feature below MUST receive **≥1 work item** — leaving a declared feature undecomposed is a hard error and aborts the cycle (the orchestrator checks coverage and re-plans). Decompose the manifest's features and **only** those — do not plan project-setup / brain / tracking-file busywork the manifest didn't ask for. If a feature genuinely needs no code, still emit one WI stating why and what it verifies; never silently drop it.`,
           '',
+          `**ENRICH, don't re-decide the chunking.** A work item is the smallest diff that lands as one mergeable commit-set proven by one sharp gate. When a feature is already that size — a single coherent change — emit **one** work item that *enriches* it (acceptance criteria + a discriminating gate + file scope), do NOT split it to reach a count. A one-work-item feature is normal and expected. Split into multiple WIs only when two parts change genuinely independent files/surfaces.`,
+          '',
           knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
         ]
       : []),
