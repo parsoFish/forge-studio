@@ -216,6 +216,49 @@ two forge-machinery observations are recorded here to survive:
 
 Both are low-severity; #1 is the more operator-visible (a review reads the report).
 
+## 2026-06-01 — the dev-loop under-produces on NET-NEW code (the next bottleneck after the orchestration fixes)
+
+Surfaced by the betterado roadmap re-run after Wave-1/2 landed (the orchestration —
+deps DAG, deterministic finalize, deps-gating — all validated). Two initiatives
+reached the dev-loop and BOTH failed 0/1 at ~$9-10, and the pattern is the same
+class: **net-new code**, where forge's earlier betterado successes were all
+*tests-for-an-existing-resource*.
+
+1. **From-scratch resource: over-research, under-produce.** `release-folder` (a new
+   `betterado_release_folder` CRUD resource + 5 tests, sized as ONE WI) burned all 5
+   iterations *researching* — the agent's own iteration texts: "let me check the
+   release SDK… the utils package… the Folder struct + docs" — and **never wrote
+   `resource_release_folder.go` or its tests**. The gate (`go test -run
+   ^TestReleaseFolder ./release/`) kept hitting `[no tests to run]` → no-work
+   rejection ×5. Direction: (a) budget from-scratch-resource WIs higher than
+   tests-for-existing WIs; (b) add a **write-first nudge** to the per-WI dev-loop
+   prompt (`loops/ralph/PROMPT.md.tmpl` / dev-invocation) — the unifier has one;
+   the dev-loop, on a big from-scratch WI, researches to budget exhaustion;
+   (c) reconsider decomposing a from-scratch resource into schema→CRUD→tests WIs.
+   NOTE the tension with the new PM "enrich, don't split" rule (`pm-invocation.ts`):
+   its "split only when parts touch independent files" heuristic doesn't capture
+   "one file, but too much work for one WI" — a from-scratch resource is one `.go`
+   file yet too big for one WI/budget.
+2. **Sweeping-cleanup WI mis-scoped.** `ci-green`'s WI gate was module-wide
+   (`golangci-lint run ./azuredevops/...`) but its `files_in_scope` was ~6 files;
+   the linter flags errcheck/unused/SA1019/gofmt across MANY out-of-scope files the
+   dev-loop can't touch → the gate is **structurally unsatisfiable** within the WI's
+   scope (2-iter budget for a whole-fork cleanup). Direction: a sweeping/mechanical
+   cleanup needs a file-scope covering EVERY flagged file (or a gate scoped to the
+   file-scope). Also: forge's gate accepted a WI using **`go build ./...`** which
+   betterado's `CLAUDE.md` explicitly forbids ("fills the drive") — the project's
+   documented build constraints should feed the gate (ties to the gate≠project-CI
+   finding above).
+
+**What this is NOT:** an orchestration regression. The scheduler claimed only the
+unblocked root and HELD the dependents; both failures were classified + capped (no
+hang — #6 held); the dependency contract correctly kept the leaves blocked on the
+failed prerequisite. The orchestration refinements work; the dev-loop execution on
+*from-scratch* work is the next layer. Evidence: decision log
+`docs/autonomous-runs/2026-06-01-overnight.md`; cycle logs
+`_logs/2026-06-01T13-18-09_INIT-2026-06-01-ci-green/`,
+`_logs/2026-06-01T13-36-…_INIT-2026-06-01-release-folder/`.
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
