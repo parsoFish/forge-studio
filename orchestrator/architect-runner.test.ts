@@ -415,6 +415,73 @@ test('drafting: architect emits cross-initiative build order → manifest depend
   assert.equal(byId[ci].depends_on_initiatives, undefined);
 });
 
+test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions, no 2nd LLM draft', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  // Pre-seed the approved draft manifest (as the awaiting-verdict draft would
+  // have written) so finalize takes the deterministic branch.
+  const manifestsDir = join(sessionDir, 'manifests');
+  mkdirSync(manifestsDir, { recursive: true });
+  const seeded = [
+    '---',
+    'initiative_id: INIT-2026-05-29-seeded',
+    'project: demo',
+    `project_repo_path: ${projectRoot}`,
+    "created_at: '2026-05-29T10:00:00.000Z'",
+    'iteration_budget: 4',
+    'cost_budget_usd: 6',
+    'phase: pending',
+    'origin: architect',
+    'features:',
+    '  - feature_id: FEAT-1',
+    '    title: Seeded feature',
+    '    depends_on: []',
+    '---',
+    '',
+    '## Seeded body',
+    '',
+    'GIVEN x WHEN y THEN z.',
+  ].join('\n');
+  writeFileSync(join(manifestsDir, 'INIT-2026-05-29-seeded.md'), seeded);
+  // Resolved decisions on disk.
+  writeFileSync(
+    join(sessionDir, 'escalations.json'),
+    JSON.stringify([{ id: 'esc-0', critic: 'design', question: 'Default theme?', options: [] }]),
+  );
+  writeFileSync(join(sessionDir, 'selections.json'), JSON.stringify({ 'esc-0': 'Follow OS' }));
+
+  // A queryFn that FAILS the test if any draft/SDK turn is attempted.
+  let sdkCalls = 0;
+  const queryFn: CouncilQueryFn = () => {
+    sdkCalls += 1;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0, structured_output: null };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'committed');
+  assert.equal(sdkCalls, 0, 'deterministic finalize must NOT run a second LLM draft');
+  const pending = join(queueRoot, 'pending');
+  const queued = readdirSync(pending).filter((f) => f.endsWith('.md'));
+  assert.deepEqual(queued, ['INIT-2026-05-29-seeded.md'], 'promotes EXACTLY the approved draft');
+  const m = parseManifest(readFileSync(join(pending, queued[0]), 'utf8'));
+  assert.match(m.body, /## Seeded body/, 'keeps the approved body');
+  assert.match(m.body, /Resolved design decisions/, 'appends the resolved decisions');
+  assert.match(m.body, /Follow OS/);
+});
+
 // ---------------------------------------------------------------------------
 // Waiting / terminal phases are no-ops
 // ---------------------------------------------------------------------------

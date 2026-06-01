@@ -64,6 +64,7 @@ import {
 } from '../cli/architect-plan.ts';
 import {
   serializeManifest,
+  parseManifest,
   type InitiativeManifest,
   type Feature,
 } from './manifest.ts';
@@ -507,6 +508,11 @@ async function runDraftStep(args: {
       title: f.title,
       depends_on: f.depends_on,
     })),
+    // Carry cross-initiative build order through to the PLAN render. The
+    // renderer's "Depends on" column reads this; without it the plan showed
+    // every initiative as "—" even when the manifests DID carry deps
+    // (operator catch, 2026-06-01).
+    depends_on_initiatives: m.depends_on_initiatives,
     body: m.body,
   }));
 
@@ -564,10 +570,31 @@ async function runFinalizeStep(args: {
   const { input, paths, status, logger } = args;
   const resolved = readResolvedDecisions(paths.sessionDir);
 
-  // Regenerate manifests with the resolved decisions baked in, then promote.
-  const draftResult = await runDraftStep({ ...args, resolvedDecisions: resolved });
-  // runDraftStep leaves phase=awaiting-verdict; finalize promotes + advances.
+  // DETERMINISTIC FINALIZE (#3, 2026-06-01). "Approve" must promote EXACTLY the
+  // plan the operator saw. Previously this ran a SECOND LLM draft with the
+  // resolved decisions in the prompt — which silently drifted the betterado plan
+  // from 5 initiatives to 4 and let a council "delete this initiative" verdict
+  // leak into the queue. Instead: read the already-approved draft manifests,
+  // mechanically append the resolved decisions to each body, and promote those
+  // unchanged. No second non-deterministic draft on the hot path.
   const queueRoot = input.queueRoot ?? resolve('_queue');
+  const manifestFiles = existsSync(paths.manifestsDir)
+    ? readdirSync(paths.manifestsDir).filter((f) => f.endsWith('.md'))
+    : [];
+  if (manifestFiles.length === 0) {
+    // No draft on disk (e.g. an operator who drafted directly with no prior
+    // awaiting-verdict turn). Fall back to one draft pass so finalize still
+    // produces manifests — the deterministic branch above is the common path.
+    await runDraftStep({ ...args, resolvedDecisions: resolved });
+  } else if (resolved) {
+    for (const f of manifestFiles) {
+      const p = join(paths.manifestsDir, f);
+      const m = parseManifest(readFileSync(p, 'utf8'));
+      if (m.body.includes('## Resolved design decisions')) continue;
+      const body = `${m.body}\n\n## Resolved design decisions (operator)\n\n${resolved}\n`;
+      writeFileSync(p, serializeManifest({ ...m, body }));
+    }
+  }
   const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
@@ -591,7 +618,7 @@ async function runFinalizeStep(args: {
   return {
     phase: 'committed',
     wrote: writtenManifestPaths,
-    planPath: draftResult.planPath,
+    planPath: paths.planPath,
     promotedManifestPaths: writtenManifestPaths,
   };
 }
