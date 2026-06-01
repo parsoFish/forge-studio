@@ -32,16 +32,18 @@ Your current working directory is **already** `{{WORKTREE_PATH}}` — your shell
 
 ## Your task this iteration
 
-1. Read the **Spec** and **Acceptance criteria** above, plus `AGENT.md` and `fix_plan.md`. The work item is the **single source of intent** — everything you need is here.
-2. Make progress on the highest-priority unchecked item in `fix_plan.md`.
+**You are continuing prior iterations, not starting over** — their work is committed on this branch.
+
+1. **Orient on prior progress first:** run `git log --oneline main..HEAD` and `git diff --stat main..HEAD` to see what's already built, then read `AGENT.md` (what's been tried) and `fix_plan.md` (the checklist). Don't re-research anything `AGENT.md` already records.
+2. **Write code now.** Make a concrete, committed change toward the highest-priority unchecked item. If an acceptance criterion needs a new file, write a compiling skeleton of it in your first one or two tool calls, then flesh it out — don't spend the whole iteration reading.
 3. Commit your changes with a conventional-commits message.
 4. Run the project's quality gates (the orchestrator will verify; your claim is not trusted).
 5. Update `fix_plan.md` to reflect what's done and what's left.
-6. Update `AGENT.md` with anything you learned that the next iteration should know.
+6. Update `AGENT.md` with anything you learned, so the next iteration doesn't re-tread your steps.
 
 ## Hard rules
 
 - **The work item is the only source of intent.** Do NOT read `brain/`, the project README, or unrelated files — the planner already encoded all needed conventions/antipatterns into this WI's spec and acceptance criteria.
 - **Atomic commits.** One concern per commit.
 - **No shortcuts.** Don't skip tests, don't `--no-verify`, don't disable lint rules to pass.
-- **No scope creep.** This work item's scope is in the spec above. Other improvements: note in `AGENT.md` for the reflector to capture; do not implement here.
+- **`files_in_scope` is advisory orientation, not a fence.** Edit any file needed to make the gate pass — including sweeping or mechanical changes across many files (e.g. running a formatter tree-wide, fixing a lint rule everywhere it fires) when an acceptance criterion requires it. The only limit is FEATURE scope: don't implement improvements beyond this WI's acceptance criteria — note those in `AGENT.md` for the reflector.
