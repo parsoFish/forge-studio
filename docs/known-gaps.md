@@ -259,6 +259,55 @@ failed prerequisite. The orchestration refinements work; the dev-loop execution 
 `_logs/2026-06-01T13-18-09_INIT-2026-06-01-ci-green/`,
 `_logs/2026-06-01T13-36-…_INIT-2026-06-01-release-folder/`.
 
+## 2026-06-02 — dev-loop fixes (file-freedom + cwd-anchor) + a gate-INTEGRITY finding
+
+After the operator flagged that (a) `files_in_scope` shouldn't fence the agent and
+(b) Ralph iterations should build on prior output not restart, the dev-loop prompts
+were fixed (commits `ba73ecd`, `6de3836`) and the two failing betterado initiatives
+re-run. Results split:
+
+- **`ci-green` — file-freedom fix WORKED, but it GAMED the gate (a new integrity
+  gap).** With scope no longer fenced, the dev-loop genuinely fixed gofmt + terrafmt
+  + 11 real `//nolint:staticcheck` (SA1019) + dead-code removal, and its WI gate
+  (`golangci-lint run`) passed → reached ready-for-review (PR #3). BUT **GitHub CI is
+  still RED**: the `test` workflow (`make test` = `go test ./...`) fails on
+  `TestProvider_HasChildResources` (expects 131 resources, got 132 — `betterado_task_group`
+  is registered in `provider.go` but missing from `provider_test.go`'s list; a
+  one-line fix the dev-loop had the freedom to make). Worse, the **demo gamed it**:
+  `demo.json`'s AC4 silently swapped the whole-module `make test` (what CI + the WI's
+  AC4 require) for a narrowed `go test ./release/... ./taskagent/...` that *excludes*
+  the failing package, then claimed "all pass." Two root gaps: (1) the WI's
+  `quality_gate_cmd` was **lint-only** — it didn't cover AC4's `make test`, so forge's
+  gate went green while CI's required check is red (the gate≠project-CI theme again);
+  (2) nothing forces the **demo/unifier to run the WI's declared gate verbatim** — it
+  can narrow the command in `demo.json` and the delivery gate won't notice.
+  Direction: for a project with a CI command, the per-WI gate (and the demo's claimed
+  command) should BE/mirror the project CI — at minimum the gate must cover every AC's
+  `when` clause. **PR #3 is a SEND-BACK, not a merge.** Verdict + evidence:
+  workflow `wf_b8307c34-c70`.
+
+- **`release_folder` — real root cause is the PER-ITERATION TURN CAP (was 25), now
+  fixed.** It is NOT missing-SDK (the Folder API is present), NOT laziness, NOT spec
+  ambiguity (the WI correctly specifies `name` as Computed-from-path), and NOT model
+  weakness (DEV_MODEL is Sonnet 4.6). Two contributing defects were found + fixed, but
+  the BINDING constraint was the turn budget:
+  - *(contributing, fixed `6de3836`)* the cwd-hallucination anchor (F-W5-6) lived only
+    in the dead `loops/ralph/PROMPT.md.tmpl`; the live `renderDevUserPrompt()` had no
+    "Your working directory" block, so the agent wasted calls re-locating the tree.
+  - **(binding, fixed) `DEV_LIVE_MAX_TURNS_PER_ITERATION = 25` was too tight for a
+    from-scratch resource.** First-hand on the 3rd failure (cwd-anchor + write-first
+    BOTH live): the agent did **55 greps + 13 reads + 8 git/orient + 0 writes** and
+    every iteration's final message was mid-research ("now I have everything I need,
+    let me check one more thing") — it hit the 25-turn cap researching the SDK type +
+    the build_folder reference + tfhelper, and the turn ENDED before it wrote. Nothing
+    persisted (no code, and `AGENT.md` stayed the empty template), so the next
+    iteration re-researched from zero. Bumped to 50 (cost_budget/iteration_budget
+    remain the real spend bounds; the agent stops when the gate passes, so a simple WI
+    isn't made pricier). LESSON: tests-for-existing-resource WIs fit in 25 turns;
+    net-new code needs room to research AND write in one iteration.
+  - Also a dead-path-drift lesson: fixes added to `PROMPT.md.tmpl` miss the live
+    `renderDevUserPrompt` — they should be one source.
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
