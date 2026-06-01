@@ -10,11 +10,13 @@ import {
 
 /**
  * ADR 020 — the in-UI PLAN gate. Shows the comparative PLAN.html (Phase C) in a
- * `sandbox=""` iframe for reading, plus an interactive decision list (one radio
- * group per council escalation). **Approve** enables only once every decision
- * is resolved; approving POSTs the selections, which feed one more architect
- * turn that bakes them into the manifests and promotes them to `_queue/pending/`.
- * Send-back / Reject are also available. There is no auto-approve.
+ * `sandbox=""` iframe for reading, plus the SINGLE interactive decision surface:
+ * one row of side-by-side pros/cons option cards per council escalation (operator
+ * pref 2026-06-01 — the PLAN.html preview is read-only; this is the one place a
+ * decision is resolved). **Approve** enables only once every decision is resolved;
+ * approving POSTs the selections, which feed one more architect turn that bakes
+ * them into the manifests and promotes them to `_queue/pending/`. Send-back /
+ * Reject are also available. There is no auto-approve.
  */
 export function PlanGate({
   project,
@@ -113,33 +115,32 @@ export function PlanGate({
               key={e.id}
               data-escalation-id={e.id}
               data-decision-resolved={selections[e.id] ? 'true' : 'false'}
-              style={{ border: '1px solid #21262d', borderRadius: 6, padding: 10, margin: '0 0 10px' }}
+              style={{ border: '1px solid #21262d', borderRadius: 8, padding: 12, margin: '0 0 12px' }}
             >
               <legend style={{ fontSize: 12, color: '#e6edf3', padding: '0 4px' }}>
                 {e.question} <span style={{ color: '#8b949e' }}>({e.critic})</span>
               </legend>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* Options laid out HORIZONTALLY — one row, side-by-side columns that
+                  do not wrap (operator pref: full pros/cons card per option). */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridAutoFlow: 'column',
+                  gridAutoColumns: `minmax(0, 1fr)`,
+                  gap: 10,
+                  alignItems: 'stretch',
+                }}
+              >
                 {e.options.map((opt) => {
                   const selected = selections[e.id] === opt.label;
                   return (
-                    <label
+                    <OptionCard
                       key={opt.label}
-                      data-option-label={opt.label}
-                      data-option-selected={selected ? 'true' : 'false'}
-                      style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}
-                    >
-                      <input
-                        type="radio"
-                        name={`esc-${e.id}`}
-                        checked={selected}
-                        onChange={() => setSelections((s) => ({ ...s, [e.id]: opt.label }))}
-                        style={{ marginTop: 2 }}
-                      />
-                      <span>
-                        <span style={{ fontSize: 13, color: '#e6edf3' }}>{opt.label}</span>
-                        <span style={{ display: 'block', fontSize: 12, color: '#8b949e' }}>{opt.rationale}</span>
-                      </span>
-                    </label>
+                      escId={e.id}
+                      opt={opt}
+                      selected={selected}
+                      onSelect={() => setSelections((s) => ({ ...s, [e.id]: opt.label }))}
+                    />
                   );
                 })}
               </div>
@@ -204,6 +205,74 @@ export function PlanGate({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One option as a vertical pros/cons card. Cards are laid out side-by-side by
+ * the parent grid (one row per decision); each card stretches to equal height.
+ * The radio input is preserved (the e2e-journey harness `.check()`s
+ * `[data-escalation-id] input[type="radio"]`), and `data-option-label` /
+ * `data-option-selected` mirror the selection for DOM-as-metrics automation.
+ */
+function OptionCard({
+  escId,
+  opt,
+  selected,
+  onSelect,
+}: {
+  escId: string;
+  opt: ArchitectEscalation['options'][number];
+  selected: boolean;
+  onSelect: () => void;
+}): JSX.Element {
+  const pros = opt.tradeoffs?.pros ?? [];
+  const cons = opt.tradeoffs?.cons ?? [];
+  return (
+    <label
+      data-option-label={opt.label}
+      data-option-selected={selected ? 'true' : 'false'}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        cursor: 'pointer',
+        minWidth: 0,
+        border: `1px solid ${selected ? '#2f81f7' : '#30363d'}`,
+        boxShadow: selected ? '0 0 0 1px #2f81f7' : 'none',
+        borderRadius: 6,
+        padding: 10,
+        background: selected ? '#0d1b2e' : '#0d1117',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="radio"
+          name={`esc-${escId}`}
+          checked={selected}
+          onChange={onSelect}
+          style={{ flex: '0 0 auto' }}
+        />
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3', minWidth: 0, overflowWrap: 'anywhere' }}>
+          {opt.label}
+        </span>
+      </div>
+      <span style={{ fontSize: 12, color: '#8b949e', overflowWrap: 'anywhere' }}>{opt.rationale}</span>
+      {(pros.length > 0 || cons.length > 0) && (
+        <ul data-option-tradeoffs style={{ listStyle: 'none', padding: 0, margin: '2px 0 0', fontSize: 11.5, display: 'grid', gap: 2 }}>
+          {pros.map((p, i) => (
+            <li key={`p${i}`} className="pro" style={{ color: '#7ee787', overflowWrap: 'anywhere' }}>
+              <span style={{ color: '#2ea043', marginRight: 5 }}>✓</span>{p}
+            </li>
+          ))}
+          {cons.map((c, i) => (
+            <li key={`c${i}`} className="con" style={{ color: '#ffa198', overflowWrap: 'anywhere' }}>
+              <span style={{ color: '#cf222e', marginRight: 5 }}>✕</span>{c}
+            </li>
+          ))}
+        </ul>
+      )}
+    </label>
   );
 }
 

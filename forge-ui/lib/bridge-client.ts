@@ -284,7 +284,12 @@ export type ArchitectEscalation = {
   id: string;
   critic: string;
   question: string;
-  options: { label: string; rationale: string }[];
+  options: {
+    label: string;
+    rationale: string;
+    /** Phase C — short pros/cons surfaced on each option card (council `tradeoffs`). */
+    tradeoffs?: { pros?: string[]; cons?: string[] };
+  }[];
 };
 
 export type ArchitectSessionSummary = {

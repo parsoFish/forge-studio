@@ -627,8 +627,9 @@ function fxOpenEscalations() {
 
 test('renderPlanHtml: design decisions render as comparative panels with per-option visuals', () => {
   const html = renderPlanHtml(fxSession({ open_escalations: fxOpenEscalations() }));
-  // Section + per-decision identity
-  assert.match(html, /data-section="design-decisions"/);
+  // Read-only preview section (resolution moved to the gate) + per-decision identity
+  assert.match(html, /data-section="design-decisions-preview"/);
+  assert.match(html, /data-readonly="true"/);
   assert.match(html, /data-decision-count="3"/);
   assert.match(html, /data-escalation-id="esc-0"/);
   assert.match(html, /data-escalation-question="How should the cost breakdown surface\?"/);
@@ -642,10 +643,11 @@ test('renderPlanHtml: design decisions render as comparative panels with per-opt
   assert.match(html, /<iframe class="mockup" sandbox=""/);
   assert.match(html, /<pre class="diagram">/);
   assert.match(html, /<pre class="code" data-lang="ts">/);
-  // Tradeoffs + selectable radios
+  // Tradeoffs render; the preview is READ-ONLY (resolution moved to the gate),
+  // so it carries no radio inputs (operator pref 2026-06-01).
   assert.match(html, /<ul class="tradeoffs">/);
   assert.match(html, /<li class="pro">Clean canvas<\/li>/);
-  assert.match(html, /<input type="radio" name="decision-0"/);
+  assert.ok(!/<input type="radio"/.test(html), 'PLAN.html preview must not duplicate the gate radios');
 });
 
 test('renderPlanHtml: mockup HTML is sandboxed (escaped into srcdoc, no live parent script)', () => {
@@ -667,7 +669,7 @@ test('renderPlanHtml: backward-compatible with plain options (no visual / tradeo
   const html = renderPlanHtml(fxSession({
     open_escalations: [{ critic: 'ceo', question: 'pick one', options: [{ label: 'A', rationale: 'ra' }, { label: 'B', rationale: 'rb' }] }],
   }));
-  assert.match(html, /data-section="design-decisions"/);
+  assert.match(html, /data-section="design-decisions-preview"/);
   assert.match(html, /data-option-label="A"/);
   assert.match(html, /data-option-visual-kind="none"/);
   assert.ok(!html.includes('<iframe class="mockup"'), 'no mockup iframe when options carry no visual');

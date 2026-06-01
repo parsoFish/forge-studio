@@ -430,22 +430,22 @@ function renderTradeoffs(t?: { pros?: string[]; cons?: string[] }): string {
 }
 
 /**
- * Phase C — one escalated decision as a comparative panel: the question + its
- * 2-4 options side by side, each a selectable card with rationale, tradeoffs,
- * and the option's visual. The radio is purely visual in the static file; the
- * in-UI gate (Phase D) wires selection to the commit. `data-*` mirrors the
- * decision/option identity for the gate + automation.
+ * Phase C — one escalated decision as a READ-ONLY comparative panel: the
+ * question + its 2-4 options side by side, each card showing rationale,
+ * tradeoffs, and the option's visual. Resolution happens on the `/architect`
+ * plan-gate cards (the single interactive surface — operator pref 2026-06-01);
+ * this preview deliberately has NO radio input. `data-*` mirrors the
+ * decision/option identity for automation.
  */
 function renderEscalationCard(e: Escalation, i: number): string {
-  const name = `decision-${i}`;
   const opts = e.options
     .map(
-      (o) => `      <label class="option" data-option-label="${esc(o.label)}" data-option-visual-kind="${esc(o.visual?.kind ?? 'none')}">
-        <div class="opt-head"><input type="radio" name="${esc(name)}" value="${esc(o.label)}"><span class="label">${esc(o.label)}</span></div>
+      (o) => `      <div class="option" data-option-label="${esc(o.label)}" data-option-visual-kind="${esc(o.visual?.kind ?? 'none')}">
+        <div class="opt-head"><span class="label">${esc(o.label)}</span></div>
         <div class="rationale">${esc(o.rationale)}</div>
         ${renderTradeoffs(o.tradeoffs)}
         ${renderOptionVisual(o.visual)}
-      </label>`,
+      </div>`,
     )
     .join('\n');
   return `    <div class="escalation" data-decision="${i}" data-escalation-id="esc-${i}" data-escalation-question="${esc(e.question)}">
@@ -722,12 +722,14 @@ export function renderPlanHtml(session: ArchitectSession): string {
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  /* Options side-by-side in a single row (no wrap to 2 rows) — operator pref. */
   .escalation .options {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 0.75rem;
     margin-top: 0.75rem;
-    align-items: start;
+    align-items: stretch;
   }
   .escalation .option {
     display: block;
@@ -736,11 +738,8 @@ export function renderPlanHtml(session: ArchitectSession): string {
     border-radius: 6px;
     padding: 0.7rem 0.85rem;
     font-size: 0.85rem;
-    cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    min-width: 0;
   }
-  .escalation .option:hover { border-color: var(--accent); }
-  .escalation .option:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .escalation .option .opt-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
   .escalation .option .label { font-weight: 600; }
   .escalation .option .rationale { color: var(--muted); }
@@ -902,9 +901,9 @@ ${session.initiatives.map((i, idx) => {
   </div>
 
   ${open.length === 0 ? '' : `
-  <h2>Design decisions</h2>
-  <p class="meta">The council surfaced these taste decisions. Compare the options side by side — pick the one you want for each on the <code>/architect</code> plan gate; your selection is applied at approval.</p>
-  <div class="escalations" data-section="design-decisions" data-decision-count="${open.length}">
+  <h2>Design decisions <span class="badge">preview</span></h2>
+  <p class="meta">The council surfaced these taste decisions. This is a read-only comparison — resolve each one (pros &amp; cons side by side) on the <code>/architect</code> plan gate; your selection is applied at approval.</p>
+  <div class="escalations" data-section="design-decisions-preview" data-readonly="true" data-decision-count="${open.length}">
 ${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
   </div>`}
 
