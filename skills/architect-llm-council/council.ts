@@ -27,6 +27,8 @@
 
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
+import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
+
 export type Critic = {
   /** Stable identifier — `ceo`, `eng`, etc. Used for de-duplicating escalations. */
   name: string;
@@ -381,11 +383,18 @@ async function invokeCritic(
     _criticName: params.criticName,
   };
   if (params.outputFormat) options.outputFormat = params.outputFormat;
+  // Idle-deadline (#6-extend, 2026-06-01): guard the council critic SDK calls
+  // against a usage-limit / network stall (abort + throw rather than hang).
+  const abortController = new AbortController();
+  options.abortController = abortController;
 
   let verdict: CriticVerdict | null = null;
   let costUsd = 0;
   let rawText = '';
-  for await (const msg of queryFn({ prompt: params.prompt, options })) {
+  for await (const msg of withIdleDeadline(queryFn({ prompt: params.prompt, options }), {
+    label: `council-${params.criticName}`,
+    abortController,
+  })) {
     const m = msg as {
       type?: string;
       subtype?: string;

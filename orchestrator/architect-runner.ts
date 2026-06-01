@@ -69,6 +69,7 @@ import {
   type Feature,
 } from './manifest.ts';
 import { promoteManifests } from './promote-manifests.ts';
+import { withIdleDeadline } from './stream-deadline.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
@@ -718,10 +719,18 @@ async function runStructured<T>(args: {
     outputFormat: { type: 'json_schema', schema: args.schema },
     maxTurns: 30,
   };
+  // Idle-deadline (#6-extend, 2026-06-01): the architect's structured interview /
+  // draft SDK calls were the one stream loop not yet guarded — a usage-limit
+  // stall here would hang the architect turn forever. Abort + throw on a stall.
+  const abortController = new AbortController();
+  options.abortController = abortController;
   let structured: T | null = null;
   let rawText = '';
   let toolSeq = 0;
-  for await (const msg of args.queryFn({ prompt: args.prompt, options })) {
+  for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
+    label: 'architect-structured',
+    abortController,
+  })) {
     const m = msg as {
       type?: string;
       structured_output?: unknown;
