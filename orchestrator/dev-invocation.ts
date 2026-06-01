@@ -106,6 +106,14 @@ export type DevUserPromptInput = {
   workItemSpecRelPath: string;
   /** Worktree-relative path the agent runs in (usually `.`). */
   worktreeRelPath: string;
+  /**
+   * ABSOLUTE worktree path. Anchors the agent's cwd so it doesn't guess
+   * non-existent sandbox paths (/root/repo, /workspace, …) and burn the
+   * iteration re-finding the tree. (F-W5-6's cwd block lived only in the
+   * dead PROMPT.md.tmpl path; the live render — this fn — was missing it,
+   * which exhausted release_folder's budget on re-orientation, 2026-06-02.)
+   */
+  worktreePath: string;
   iteration: number;
   iterationBudget: number;
   costBudgetUsd: number;
@@ -132,6 +140,12 @@ export function renderDevUserPrompt(input: DevUserPromptInput): string {
     `# Work Item — ${input.workItemId}`,
     '',
     `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}** · Cost budget remaining: **$${input.costBudgetUsd.toFixed(2)}**`,
+    '',
+    '## ⚠️ Your working directory',
+    '',
+    `Your current working directory is **already** \`${input.worktreePath}\` — your shell starts there and every tool runs there.`,
+    '',
+    '- Reference files **relative to it** (`AGENT.md`, `fix_plan.md`, `azuredevops/…`, `.forge/work-items/…`). Do NOT prepend an absolute prefix, and do NOT guess paths like `/workspaces/…`, `/repo/…`, `/workspace/…`, `/root/…` — they do not exist here. If ever unsure, run `pwd` once, then keep using relative paths. Don\'t spend tool calls re-locating the tree — you are already in it.',
     '',
     '## Spec',
     '',
@@ -203,6 +217,7 @@ export function prepareDevWorkspace(input: PrepareDevWorkspaceInput): PreparedDe
       workItemId: workItem.work_item_id,
       workItemSpecRelPath: input.workItemSpecRelPath,
       worktreeRelPath: '.',
+      worktreePath: input.worktreePath,
       iteration: 0,
       iterationBudget: input.iterationBudget,
       costBudgetUsd: input.costBudgetUsd,
