@@ -52,7 +52,6 @@ import {
   type WiActivity,
 } from '@/lib/live-activity';
 import { FileHeatmap } from '@/components/FileHeatmap';
-import { ActivityPanel } from '@/components/ActivityPanel';
 
 export type AgentGraphCanvasProps = {
   phaseStates: PhaseState[];
@@ -105,14 +104,11 @@ const TOOL_H = 30;
 const BUBBLE_W = 210;
 const DEV_INDEX = PHASE_ORDER.indexOf('developer-loop');
 
-type Tab = 'none' | 'cost' | 'files' | 'activity';
+type Tab = 'none' | 'cost' | 'files';
 
 export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
   const { phaseStates, cost, features, workItems, featureStatuses, events, cycleId, selectedHex, onSelectHex } = props;
   const [tab, setTab] = useState<Tab>('none');
-  // The selected WI id (when a WI hex is selected) seeds the full-tab
-  // ActivityPanel's work-item filter, preserving the pre-Feature-#9 behaviour.
-  const selectedWiId = selectedHex?.kind === 'wi' ? selectedHex.id : null;
 
   // 400ms tick drives the burst fade-out (events age past the window). To
   // avoid burning CPU re-rendering the whole graph on an idle/finished cycle
@@ -447,9 +443,10 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
 
         {tab === 'cost' && <CostPanel cost={cost} workItems={workItems} wiActivity={wiActivity} totals={totals} onClose={() => setTab('none')} />}
         <div style={panelOverlay(tab === 'files')}><FileHeatmap events={events} /></div>
-        {/* The activity view is the operator's PRIMARY window into live work
-            (operator 2026-05-30) — give it the canvas, not a 380px sliver. */}
-        <div style={activityOverlay(tab === 'activity')}><ActivityPanel events={events} selectedWiId={selectedWiId ?? null} /></div>
+        {/* The standalone Activity tab was removed (operator 2026-06-02): every
+            hex (phase / feature / work-item) is now clickable and opens the
+            HexDetailDrawer with a per-hex activity stream, which supersedes a
+            global activity view. */}
       </div>
       <TimelineScrubber events={events} />
     </div>
@@ -461,7 +458,6 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
 function TopBar({ totals, tab, onTab }: { totals: { agents: number; tokens: number; costUsd: number }; tab: Tab; onTab: (t: Tab) => void }): JSX.Element {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'files', label: 'Files' },
-    { key: 'activity', label: 'Activity' },
     { key: 'cost', label: '$Cost' },
   ];
   return (
@@ -711,7 +707,6 @@ const hiddenHandle: React.CSSProperties = { opacity: 0, width: 1, height: 1, bor
 function panelOverlay(show: boolean): React.CSSProperties { return { position: 'absolute', top: 52, right: 16, width: 380, maxHeight: 540, overflow: 'auto', zIndex: 6, display: show ? 'block' : 'none' }; }
 // The activity tab fills the canvas working area (above the scrubber) so its
 // event list + detail pane are actually usable — it is the primary live view.
-function activityOverlay(show: boolean): React.CSSProperties { return { position: 'absolute', top: 52, left: 16, right: 16, bottom: 48, zIndex: 7, display: show ? 'flex' : 'none' }; }
 const costCard: React.CSSProperties = { position: 'absolute', top: 52, right: 16, width: 300, zIndex: 6, background: '#0a0f16f2', border: '1px solid #2b333c', borderRadius: 10, padding: 14, color: '#c9d1d9', fontFamily: MONO };
 const costSection: React.CSSProperties = { marginTop: 10, marginBottom: 4, fontSize: 9, letterSpacing: 0.6, color: '#6e7681' };
 const costRow: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' };

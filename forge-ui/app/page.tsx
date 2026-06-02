@@ -300,7 +300,7 @@ export default function Page() {
           />
         </div>
         {selectedHex && (
-          <div style={{ position: 'relative', flex: '0 0 380px', minHeight: 0 }}>
+          <div style={{ position: 'relative', flex: '0 0 460px', minHeight: 0 }}>
             <HexDetailDrawer
               hex={selectedHex}
               cycleId={activeCycleId}

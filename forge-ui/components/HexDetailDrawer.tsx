@@ -190,7 +190,9 @@ function kindBadge(kind: SelectedHex['kind']): React.CSSProperties {
 }
 
 const drawerStyle: React.CSSProperties = {
-  position: 'absolute', top: 0, right: 0, bottom: 0, width: 380, zIndex: 20,
+  // Widened 380→460 (operator 2026-06-02: the inspection detail was too narrow).
+  // The canvas stays visible to the left; this is a flex sibling, not an overlay.
+  position: 'absolute', top: 0, right: 0, bottom: 0, width: 460, zIndex: 20,
   background: '#0b0f14f7', borderLeft: '1px solid #21262d', boxShadow: '-8px 0 24px #0008',
   display: 'flex', flexDirection: 'column', color: '#e6edf3',
 };
@@ -209,6 +211,7 @@ const gwtKey: React.CSSProperties = { color: '#58a6ff', fontFamily: MONO, fontSi
 const fileListStyle: React.CSSProperties = { margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 2 };
 const fileItemStyle: React.CSSProperties = { fontSize: 11, fontFamily: MONO, color: '#adbac7', wordBreak: 'break-all' };
 const gateStyle: React.CSSProperties = { margin: 0, padding: 8, background: '#161b22', border: '1px solid #21262d', borderRadius: 4, color: '#a5d6ff', fontSize: 11, fontFamily: MONO, whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
-// The scoped ActivityPanel needs a sized box (it fills height:100%); give it a
-// fixed tall region inside the scrollable drawer body.
-const activityWrapStyle: React.CSSProperties = { height: 360, minHeight: 240, display: 'flex' };
+// The scoped ActivityPanel fills height:100%; give it a generous tall region so
+// its now-VERTICAL list + full-width detail blade are both readable. The drawer
+// body scrolls if the definition + this exceed the viewport.
+const activityWrapStyle: React.CSSProperties = { height: 460, minHeight: 320, display: 'flex' };

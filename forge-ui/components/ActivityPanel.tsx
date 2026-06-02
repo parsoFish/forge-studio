@@ -92,6 +92,21 @@ export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: Act
     return sorted.slice(0, 100);
   }, [filtered]);
 
+  // Collapse consecutive rows with identical (phase, event_type, message) into a
+  // single row with a ×N count (operator 2026-06-02: "most messages appear to be
+  // duplicated"). Sampled tool_use / repeated gate.fail lines were the worst
+  // offenders. The kept representative is the newest of the run (list is desc).
+  const deduped = useMemo<readonly { event: EventLogEntry; count: number }[]>(() => {
+    const out: { event: EventLogEntry; count: number }[] = [];
+    const key = (e: EventLogEntry): string => `${e.phase}|${e.event_type}|${e.message ?? ''}`;
+    for (const e of visible) {
+      const last = out[out.length - 1];
+      if (last && key(last.event) === key(e)) last.count += 1;
+      else out.push({ event: e, count: 1 });
+    }
+    return out;
+  }, [visible]);
+
   const selectedEvent = useMemo<EventLogEntry | null>(() => {
     if (!selectedEventId) return null;
     return events.find((e) => e.event_id === selectedEventId) ?? null;
@@ -202,15 +217,16 @@ export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: Act
 
       <div style={gridStyle}>
         <div style={listStyle} data-section="events-list">
-          {visible.length === 0 ? (
+          {deduped.length === 0 ? (
             <div style={{ color: '#8b949e', fontFamily: monoStack, fontSize: 12 }} data-events-empty="true">
               (no events match the active filters)
             </div>
           ) : (
-            visible.map((e) => (
+            deduped.map(({ event: e, count }) => (
               <EventRow
                 key={e.event_id}
                 event={e}
+                count={count}
                 selected={e.event_id === selectedEventId}
                 onClick={() => setSelectedEventId(e.event_id)}
               />
@@ -283,10 +299,12 @@ function Chip({
 
 function EventRow({
   event,
+  count,
   selected,
   onClick,
 }: {
   event: EventLogEntry;
+  count: number;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -298,6 +316,7 @@ function EventRow({
       data-event-phase={event.phase}
       data-event-type={event.event_type}
       data-event-selected={selected ? 'true' : 'false'}
+      data-event-count={count}
       style={{
         ...eventRowStyle,
         background: selected ? 'rgba(88, 166, 255, 0.10)' : 'transparent',
@@ -310,10 +329,21 @@ function EventRow({
       <span style={{ color: '#e6edf3', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {truncate(event.message ?? '', 80)}
       </span>
+      {count > 1 && <span style={countBadgeStyle}>×{count}</span>}
       <span style={{ color: '#6e7681', marginLeft: 8 }}>{'>'}</span>
     </button>
   );
 }
+
+const countBadgeStyle: CSSProperties = {
+  marginLeft: 6,
+  padding: '0 6px',
+  borderRadius: 8,
+  background: '#21262d',
+  border: '1px solid #30363d',
+  color: '#8b949e',
+  fontSize: 10,
+};
 
 function EventDetail({ event }: { event: EventLogEntry }) {
   const wi = readWorkItemId(event);
@@ -552,12 +582,14 @@ const chipStyle: CSSProperties = {
   lineHeight: 1.4,
 };
 
+// VERTICAL stack (operator 2026-06-02): the panel now lives only in the
+// narrow hex-detail drawer, where a side-by-side list|detail split left the
+// inspection blade far too thin to read. Stack them — list on top, the
+// inspected row's detail BELOW at full drawer width.
 const gridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
-  gap: 12,
-  // Fill the remaining height of the wrapper so both columns scroll
-  // independently instead of being clipped to a fixed 320/480px.
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
   flex: 1,
   minHeight: 0,
 };
@@ -566,8 +598,10 @@ const listStyle: CSSProperties = {
   border: '1px solid #21262d',
   borderRadius: 6,
   padding: 6,
-  height: '100%',
-  minHeight: 0,
+  // Cap the list to the top ~40% so the (full-width) detail below gets room;
+  // the list scrolls within its cap.
+  flex: '1 1 40%',
+  minHeight: 80,
   overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
@@ -580,8 +614,8 @@ const detailStyle: CSSProperties = {
   border: '1px solid #21262d',
   borderRadius: 6,
   padding: 10,
-  height: '100%',
-  minHeight: 0,
+  flex: '1 1 60%',
+  minHeight: 120,
   overflowY: 'auto',
   background: '#0c1115',
 };
