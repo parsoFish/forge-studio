@@ -14,6 +14,14 @@ Types: `ingest`, `create-theme`, `update-theme`, `lint`, `structural`, `seed`.
 
 ---
 
+## [2026-05-31] create-theme | terraform-provider-betterado release_definition substrate — 3 project themes, 1 forge theme, 1 cycle archive
+
+Reflected on `INIT-2026-05-31-release-definition-unit-tests` (betterado, "release_definition unit tests").
+57-event log. $0.80 total cost. Resume cycle: unifier confirmed delivery in 1 iteration.
+Delivered: 1008-line test file, 11 gomock tests, 1 production fix (type-switch in expandWorkflowTask).
+New project themes: `release-definition-unit-test-substrate`, `characterization-tests-reveal-production-bugs`.
+New forge theme: `quality-gate-cmd-not-in-report` (antipattern — report shows npm default not manifest gate).
+
 ## [2026-05-29] create-theme | claude-harness cycle v4 reflection — 3 new themes, 1 cycle archive
 
 Reflected on `INIT-2026-05-29-claude-trail-verify-cascade-v4` (claude-harness, "verify cascade v4").
