@@ -43,6 +43,9 @@ export type RequeueResult = {
   fromQueueDir: string;
   toQueueDir: string;
   worktreeRemoved: boolean;
+  /** True if the stale initiative branch was deleted (non-resume only) so the
+   *  re-run branches fresh from current main. */
+  branchDeleted: boolean;
   verdictsRemoved: string[];
   retryCountBefore: number;
   retryCountAfter: number;
@@ -122,16 +125,22 @@ export function runRequeue(
     }
   }
 
-  // 5. Remove the worktree — UNLESS resuming from the unifier, where the
-  //    preserved worktree IS the salvaged WI work the resume runs against
-  //    (ADR 019). Removing it would force the very full re-run resume avoids.
+  // 5. Remove the worktree AND delete the initiative branch — UNLESS resuming
+  //    from the unifier, where the preserved worktree + branch ARE the salvaged
+  //    WI work the resume runs against (ADR 019). Deleting the branch on a
+  //    normal re-run is load-bearing: otherwise the next `git worktree add`
+  //    reuses the STALE branch (based on whatever main was at the original run)
+  //    instead of branching fresh from CURRENT main — and if main has since
+  //    advanced (another cycle merged, or an operator commit), the resumed
+  //    branch diverges and the unifier's branches_in_sync gate hard-fails
+  //    (`main != merge-base`). Fresh-from-main on every non-resume re-run.
+  //    (2026-06-02: this exact divergence sank the ci-green re-run.)
   let worktreeRemoved = false;
+  let branchDeleted = false;
   const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
-  if (!opts.resumeFromUnifier && existsSync(worktreePath)) {
-    // Try `git worktree remove --force` first (handles git registry); fall
-    // back to rm -rf if that fails (orphan dir).
-    const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
-    if (projectRepoPath && existsSync(projectRepoPath)) {
+  const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
+  if (!opts.resumeFromUnifier) {
+    if (existsSync(worktreePath) && projectRepoPath && existsSync(projectRepoPath)) {
       try {
         execFileSync('git', ['-C', projectRepoPath, 'worktree', 'remove', '--force', worktreePath], { stdio: 'pipe' });
         worktreeRemoved = true;
@@ -141,6 +150,19 @@ export function runRequeue(
     if (existsSync(worktreePath)) {
       try { rmSync(worktreePath, { recursive: true, force: true }); worktreeRemoved = true; } catch { /* */ }
     }
+    // Delete the stale initiative branch (local + remote) so the re-run's
+    // worktree add recreates it fresh from current main. Best-effort: the
+    // branch may not exist, or there may be no origin remote.
+    if (projectRepoPath && existsSync(projectRepoPath)) {
+      const branch = `forge/${initiativeId}`;
+      try {
+        execFileSync('git', ['-C', projectRepoPath, 'branch', '-D', branch], { stdio: 'pipe' });
+        branchDeleted = true;
+      } catch { /* no local branch — fine */ }
+      try {
+        execFileSync('git', ['-C', projectRepoPath, 'push', 'origin', '--delete', branch], { stdio: 'pipe' });
+      } catch { /* no remote / no remote branch — fine */ }
+    }
   }
 
   return {
@@ -148,6 +170,7 @@ export function runRequeue(
     fromQueueDir,
     toQueueDir: 'pending',
     worktreeRemoved,
+    branchDeleted,
     verdictsRemoved,
     retryCountBefore,
     retryCountAfter,

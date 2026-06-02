@@ -1283,6 +1283,7 @@ function cmdRequeue(rest: string[]): void {
       console.log(`requeued ${r.initiativeId}${resumeFromUnifier ? ' (resume-from=unifier)' : ''}`);
       console.log(`  from: ${r.fromQueueDir}/ → pending/`);
       console.log(`  worktree removed: ${r.worktreeRemoved}`);
+      console.log(`  branch deleted (fresh-from-main on re-run): ${r.branchDeleted}`);
       console.log(`  verdict files removed: ${r.verdictsRemoved.length}`);
       console.log(`  retry_count: ${r.retryCountBefore} → ${r.retryCountAfter}`);
       console.log(`  previous_failure_modes: ${r.previousFailureModesAfter.join(', ')}`);
