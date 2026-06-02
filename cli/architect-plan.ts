@@ -40,6 +40,7 @@
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
+import { topoLevels } from '../orchestrator/dep-levels.ts';
 import type { Flag, Escalation, CriticVerdict, OptionVisual } from '../skills/architect-llm-council/council.ts';
 
 // ---------------------------------------------------------------------------
@@ -477,35 +478,15 @@ function renderFeatureDepGraphSvg(init: ProposedInitiative): string {
     return '<p class="empty">No features.</p>';
   }
 
-  // Topological levels: feature.level = 1 + max(level of deps within this init).
-  // Deps that reference unknown FEAT-ids (shouldn't happen for valid manifests)
-  // are skipped silently — the layout still renders.
-  const idToFeat = new Map(features.map((f) => [f.feature_id, f]));
-  const levels = new Map<string, number>();
-  const compute = (id: string, stack: Set<string>): number => {
-    const cached = levels.get(id);
-    if (cached !== undefined) return cached;
-    if (stack.has(id)) return 0; // cycle protection (shouldn't happen)
-    stack.add(id);
-    const f = idToFeat.get(id);
-    if (!f) return 0;
-    const depLevels = f.depends_on.filter((d) => idToFeat.has(d)).map((d) => compute(d, stack));
-    const lvl = depLevels.length === 0 ? 0 : Math.max(...depLevels) + 1;
-    stack.delete(id);
-    levels.set(id, lvl);
-    return lvl;
-  };
-  for (const f of features) compute(f.feature_id, new Set());
-
-  // Bucket features by level for vertical placement.
-  const byLevel = new Map<number, ProposedFeature[]>();
-  for (const f of features) {
-    const lvl = levels.get(f.feature_id) ?? 0;
-    const bucket = byLevel.get(lvl) ?? [];
-    bucket.push(f);
-    byLevel.set(lvl, bucket);
-  }
-  const maxLevel = Math.max(...levels.values());
+  // Topological levels via the shared SSOT (orchestrator/dep-levels.ts): a
+  // feature's level = 1 + max(level of its deps within this init); deps to
+  // unknown FEAT-ids are skipped; cycles are defended against. Same algorithm
+  // the forge-ui roadmap spine mirrors.
+  const { byLevel, maxLevel } = topoLevels(
+    features,
+    (f) => f.feature_id,
+    (f) => f.depends_on,
+  );
   const maxRowsInAnyLevel = Math.max(...Array.from(byLevel.values()).map((b) => b.length));
 
   // Layout constants.

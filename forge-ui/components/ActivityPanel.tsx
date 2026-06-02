@@ -3,12 +3,21 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 
 import type { EventLogEntry } from '@/lib/bridge-client';
+import { eventMatchesHex, type SelectedHex } from '@/lib/hex-detail';
 
 // ---- public surface -----------------------------------------------------
 
 export type ActivityPanelProps = {
   events: EventLogEntry[];
   selectedWiId?: string | null;
+  /**
+   * Feature #9: when set, the panel is the SCOPED activity tracker for one
+   * selected hex (rendered inside the hex-detail drawer). Events are
+   * pre-filtered to that hex via `eventMatchesHex` and the chip bar is hidden —
+   * the scope is fixed by the clicked hex, not the chips. When absent the
+   * panel is the full chip-driven Activity tab (unchanged behaviour).
+   */
+  scopeHex?: SelectedHex | null;
 };
 
 /**
@@ -28,13 +37,21 @@ export type ActivityPanelProps = {
  *  - Errors-only: a separate toggle pill. When on, supersedes the
  *    event-type filter (only event_type === 'error' rows pass).
  */
-export function ActivityPanel({ events, selectedWiId }: ActivityPanelProps) {
+export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: ActivityPanelProps) {
   // ---- chip state -------------------------------------------------------
   const [activePhases, setActivePhases] = useState<ReadonlySet<string>>(() => new Set());
   const [activeTypes, setActiveTypes] = useState<ReadonlySet<string>>(() => new Set());
   const [activeWi, setActiveWi] = useState<string | null>(selectedWiId ?? null);
   const [errorsOnly, setErrorsOnly] = useState<boolean>(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
+  // Feature #9: in scoped (drawer) mode the panel only ever sees the events
+  // belonging to the selected hex; the chip filters below then operate on that
+  // already-scoped slice. In full-tab mode `events === allEvents`.
+  const events = useMemo<EventLogEntry[]>(
+    () => (scopeHex ? allEvents.filter((e) => eventMatchesHex(e, scopeHex)) : allEvents),
+    [allEvents, scopeHex],
+  );
 
   // ---- derive available chips ------------------------------------------
   const phasesInData = useMemo<readonly string[]>(() => {
@@ -101,6 +118,7 @@ export function ActivityPanel({ events, selectedWiId }: ActivityPanelProps) {
       data-events-shown={visible.length}
       data-events-total={events.length}
     >
+      {!scopeHex && (
       <div style={chipBarStyle}>
         <ChipGroup label="phase">
           <Chip
@@ -180,6 +198,7 @@ export function ActivityPanel({ events, selectedWiId }: ActivityPanelProps) {
           />
         </ChipGroup>
       </div>
+      )}
 
       <div style={gridStyle}>
         <div style={listStyle} data-section="events-list">

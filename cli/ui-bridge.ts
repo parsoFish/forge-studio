@@ -41,6 +41,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { fileVerdictPaths } from '../orchestrator/file-verdict.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
@@ -54,6 +55,12 @@ import {
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
+// Feature #8 — daemon-stall liveness. Mirrors orchestrator/scheduler.ts's
+// staleHeartbeatMs default (5min). The UI flips to `daemon-stalled` only at a
+// GENEROUS multiple of that so a slow-but-alive cycle never false-alarms — the
+// stall surface is for "the daemon process is wedged / dead", not slowness.
+const DEFAULT_STALE_HEARTBEAT_MS = 5 * 60_000;
+const STALL_MULTIPLE = 6;
 
 type Cycle = {
   cycleId: string;
@@ -62,6 +69,9 @@ type Cycle = {
   status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
+  /** Feature #10: cross-initiative dependency edges (manifest
+   *  `depends_on_initiatives`) — drives the UI's per-project roadmap spine. */
+  dependsOnInitiatives?: string[];
 };
 
 type WsOutbound =
@@ -138,7 +148,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       }
     }
 
-    const queueStatusFor = (initId: string): { status: Cycle['status']; project?: string } | null => {
+    const queueStatusFor = (initId: string): { status: Cycle['status']; project?: string; dependsOnInitiatives?: string[] } | null => {
       const fn = `${initId}.md`;
       const lookups: Array<[string, Cycle['status']]> = [
         [queuePaths.inFlight, 'in-flight'],
@@ -151,8 +161,13 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
         const fp = join(dir, fn);
         if (existsSync(fp)) {
           let project: string | undefined;
-          try { project = parseManifest(readFileSync(fp, 'utf8')).project; } catch { /* ignore */ }
-          return { status, project };
+          let dependsOnInitiatives: string[] | undefined;
+          try {
+            const m = parseManifest(readFileSync(fp, 'utf8'));
+            project = m.project;
+            dependsOnInitiatives = m.depends_on_initiatives;
+          } catch { /* ignore */ }
+          return { status, project, dependsOnInitiatives };
         }
       }
       return null;
@@ -168,6 +183,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
           initiativeId: info.initiativeId,
           project: q.project,
           status: q.status,
+          dependsOnInitiatives: q.dependsOnInitiatives,
         },
         mtime: info.mtime,
       });
@@ -179,9 +195,14 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       const id = name.replace(/\.md$/, '');
       if (seenInits.has(id)) continue;
       let project: string | undefined;
-      try { project = parseManifest(readFileSync(join(queuePaths.inFlight, name), 'utf8')).project; } catch { /* */ }
+      let dependsOnInitiatives: string[] | undefined;
+      try {
+        const m = parseManifest(readFileSync(join(queuePaths.inFlight, name), 'utf8'));
+        project = m.project;
+        dependsOnInitiatives = m.depends_on_initiatives;
+      } catch { /* */ }
       candidates.push({
-        cycle: { cycleId: id, initiativeId: id, project, status: 'in-flight' },
+        cycle: { cycleId: id, initiativeId: id, project, status: 'in-flight', dependsOnInitiatives },
         mtime: Date.now(),
       });
     }
@@ -196,6 +217,34 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     }
     return { live, recent };
   });
+
+  // Feature #8 — max heartbeat age across in-flight cycles, from the
+  // `.heartbeat` file (mtime = last beat) the scheduler writes alongside each
+  // in-flight manifest. Authoritative liveness signal; cheaper than scanning
+  // every cycle's events. Never throws — a stat error skips that cycle.
+  const computeLiveness = (): LivenessReport => {
+    const staleHeartbeatMs = DEFAULT_STALE_HEARTBEAT_MS;
+    const stallThresholdMs = staleHeartbeatMs * STALL_MULTIPLE;
+    let maxAge = 0;
+    let count = 0;
+    const now = Date.now();
+    for (const filename of listInFlight(queuePaths)) {
+      const hbPath = join(queuePaths.inFlight, filename + '.heartbeat');
+      if (!existsSync(hbPath)) continue;
+      try {
+        const age = now - statSync(hbPath).mtimeMs;
+        count += 1;
+        if (age > maxAge) maxAge = age;
+      } catch { /* skip unreadable heartbeat */ }
+    }
+    return {
+      inFlightCount: count,
+      maxHeartbeatAgeMs: count > 0 ? maxAge : 0,
+      staleHeartbeatMs,
+      stallThresholdMs,
+      stalled: count > 0 && maxAge > stallThresholdMs,
+    };
+  };
 
   const ensureTailFor = (cycleId: string): void => {
     if (tails.has(cycleId)) return;
@@ -269,6 +318,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
       scanCycles,
+      liveness: computeLiveness,
       logsRoot,
       forgeRoot,
       queueRoot: queuePaths.root,
@@ -339,8 +389,23 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
 // ---- HTTP handlers ---------------------------------------------------------
 
+type LivenessReport = {
+  /** in-flight cycles considered (those with a `.heartbeat` file). */
+  inFlightCount: number;
+  /** max heartbeat age across in-flight cycles, ms (0 when none in flight). */
+  maxHeartbeatAgeMs: number;
+  /** the project's stale threshold (default 5min). */
+  staleHeartbeatMs: number;
+  /** the generous stall threshold (6× stale) the UI flips state at. */
+  stallThresholdMs: number;
+  /** true when maxHeartbeatAgeMs > stallThresholdMs AND a cycle is in flight. */
+  stalled: boolean;
+};
+
 type HttpContext = {
   scanCycles: () => { live: Cycle[]; recent: Cycle[] };
+  /** Feature #8 — daemon-stall liveness across in-flight cycles. */
+  liveness: () => LivenessReport;
   logsRoot: string;
   forgeRoot: string;
   queueRoot: string;
@@ -389,6 +454,17 @@ async function handleHttp(
   }
   if (method === 'GET' && url === '/api/cycles') {
     sendJson(res, 200, ctx.scanCycles());
+    return;
+  }
+  // Feature #8 — daemon-stall liveness. The scheduler writes a `.heartbeat`
+  // file (mtime = last beat) alongside each in-flight manifest. The max age
+  // across in-flight cycles is the freshest signal that the daemon is making
+  // progress; when it exceeds a GENEROUS multiple of staleHeartbeatMs the UI
+  // surfaces a daemon-stalled state. forge does NOT hand-roll a watchdog — the
+  // OS supervisor (systemd / pm2) restarts `forge serve`; this endpoint only
+  // SURFACES the stall to the operator (see docs/operations/serve-supervision.md).
+  if (method === 'GET' && url === '/api/liveness') {
+    sendJson(res, 200, ctx.liveness());
     return;
   }
   if (method === 'GET' && url.startsWith('/api/events/')) {
@@ -476,6 +552,48 @@ async function handleHttp(
     try {
       const raw = readFileSync(filePath, 'utf8');
       sendJson(res, 200, { cycleId, mermaid: raw });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return;
+  }
+  // Feature #9: single work-item definition for the hex-detail drawer. Serves
+  // the on-disk WI snapshot the PM emitted — preferring the immutable cycle
+  // snapshot (`_logs/<cycleId>/work-items-snapshot/<wiId>.md`), falling back to
+  // the live worktree spec (`_worktrees/<initiativeId>/.forge/work-items/<wiId>.md`)
+  // while the cycle is still in-flight (the snapshot is only mirrored at cycle
+  // end). The cycleId encodes the initiativeId as `<timestamp>_<INIT-...>`.
+  if (method === 'GET' && url.startsWith('/api/work-item/')) {
+    const rest = decodeURIComponent(url.slice('/api/work-item/'.length));
+    const slash = rest.indexOf('/');
+    if (slash < 0) {
+      sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' });
+      return;
+    }
+    const cycleId = rest.slice(0, slash);
+    const wiId = rest.slice(slash + 1);
+    if (!cycleId || !wiId || !/^WI-\d+$/.test(wiId)) {
+      sendJson(res, 400, { error: 'cycleId and a WI-<n> wiId are required' });
+      return;
+    }
+    const snapshotPath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', `${wiId}.md`);
+    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
+    const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`);
+    const found = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
+    if (!found) {
+      sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId });
+      return;
+    }
+    try {
+      const w = parseWorkItem(readFileSync(found, 'utf8'));
+      sendJson(res, 200, {
+        work_item_id: w.work_item_id,
+        feature_id: w.feature_id,
+        acceptance_criteria: w.acceptance_criteria,
+        files_in_scope: w.files_in_scope,
+        quality_gate_cmd: w.quality_gate_cmd ?? [],
+        body: w.body,
+      });
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
     }

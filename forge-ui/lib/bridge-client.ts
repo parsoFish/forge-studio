@@ -19,6 +19,13 @@ export type Cycle = {
   status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
+  /**
+   * Feature #10: cross-initiative dependency edges (manifest
+   * `depends_on_initiatives`). Drives the per-project roadmap spine's
+   * topological level ordering. Empty / absent = no prerequisites (the
+   * initiative lays flat at level 0).
+   */
+  dependsOnInitiatives?: string[];
 };
 
 export type CycleListSnapshot = { live: Cycle[]; recent: Cycle[] };
@@ -46,7 +53,10 @@ export type BridgeMessage =
   | { type: 'cycle-list-changed' }
   | { type: 'architect-list-changed' };
 
-export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridge';
+// `daemon-stalled` (Feature #8): the bridge is reachable but the scheduler
+// daemon's heartbeats have gone stale past a generous threshold — the daemon
+// process is wedged / dead. Distinct from `reconnecting` (bridge unreachable).
+export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridge' | 'daemon-stalled';
 
 // ---- runtime bridge URL --------------------------------------------------
 
@@ -173,6 +183,32 @@ export async function fetchManifest(initiativeId: string): Promise<InitiativeMan
   );
 }
 
+// ---- Work-item definition (Feature #9 — hex-detail drawer) ---------------
+
+export type WorkItemAcceptanceCriterion = { given: string; when: string; then: string };
+
+export type WorkItemDetail = {
+  work_item_id: string;
+  feature_id: string;
+  acceptance_criteria: WorkItemAcceptanceCriterion[];
+  files_in_scope: string[];
+  quality_gate_cmd: string[];
+  body: string;
+};
+
+/**
+ * Fetch a single work item's on-disk definition (acceptance criteria,
+ * files_in_scope, quality_gate_cmd, body) for the hex-detail drawer. Reads the
+ * immutable cycle snapshot if present, else the live worktree spec. Returns
+ * null when the bridge is offline or the WI isn't found yet (pre-PM emission).
+ */
+export async function fetchWorkItem(cycleId: string, wiId: string): Promise<WorkItemDetail | null> {
+  return bridgeGet<WorkItemDetail | null>(
+    `/api/work-item/${encodeURIComponent(cycleId)}/${encodeURIComponent(wiId)}`,
+    null,
+  );
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;
@@ -182,6 +218,22 @@ export type CostSummary = {
 
 export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
   return bridgeGet<CostSummary | null>(`/api/cost/${encodeURIComponent(cycleId)}`, null);
+}
+
+// ---- Daemon-stall liveness (Feature #8) ----------------------------------
+
+export type LivenessReport = {
+  inFlightCount: number;
+  maxHeartbeatAgeMs: number;
+  staleHeartbeatMs: number;
+  stallThresholdMs: number;
+  stalled: boolean;
+};
+
+/** Fetch the daemon-stall liveness report (max heartbeat age across in-flight
+ *  cycles vs the stall threshold). Returns null when the bridge is offline. */
+export async function fetchLiveness(): Promise<LivenessReport | null> {
+  return bridgeGet<LivenessReport | null>('/api/liveness', null);
 }
 
 export type SchedulerStatus = {

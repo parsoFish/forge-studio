@@ -40,6 +40,7 @@ import 'reactflow/dist/style.css';
 import type { CostSummary, EventLogEntry, InitiativeFeature } from '@/lib/bridge-client';
 import type { PhaseState, Phase } from '@/lib/phases';
 import { PHASE_ORDER } from '@/lib/phases';
+import type { HexKind, SelectedHex } from '@/lib/hex-detail';
 import type { WiStatus } from '@/lib/wi-status';
 import { statusGlow } from '@/lib/status-colors';
 import type { GraphWorkItem } from '@/lib/use-graph-model';
@@ -61,8 +62,10 @@ export type AgentGraphCanvasProps = {
   featureStatuses: Record<string, WiStatus>;
   events: EventLogEntry[];
   cycleId: string | null;
-  selectedWiId?: string | null;
-  onSelectWi?: (wiId: string) => void;
+  /** Feature #9 — the operator-clicked hex (phase / feature / wi), or null. */
+  selectedHex?: SelectedHex | null;
+  /** Called when ANY hex is clicked. */
+  onSelectHex?: (hex: SelectedHex) => void;
 };
 
 const TOKEN_CAP = 200_000;
@@ -105,8 +108,11 @@ const DEV_INDEX = PHASE_ORDER.indexOf('developer-loop');
 type Tab = 'none' | 'cost' | 'files' | 'activity';
 
 export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
-  const { phaseStates, cost, features, workItems, featureStatuses, events, cycleId, selectedWiId, onSelectWi } = props;
+  const { phaseStates, cost, features, workItems, featureStatuses, events, cycleId, selectedHex, onSelectHex } = props;
   const [tab, setTab] = useState<Tab>('none');
+  // The selected WI id (when a WI hex is selected) seeds the full-tab
+  // ActivityPanel's work-item filter, preserving the pre-Feature-#9 behaviour.
+  const selectedWiId = selectedHex?.kind === 'wi' ? selectedHex.id : null;
 
   // 400ms tick drives the burst fade-out (events age past the window). To
   // avoid burning CPU re-rendering the whole graph on an idle/finished cycle
@@ -285,7 +291,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         id: `phase:${phase}`,
         type: 'hex',
         position: { x: c.x - size / 2, y: c.y - size / 2 },
-        data: { kind: 'phase', id: phase, label: shortPhase(phase), status: st, costUsd: cost?.perPhase?.[phase]?.cost_usd ?? 0, active: st === 'active', size },
+        data: { kind: 'phase', id: phase, label: shortPhase(phase), status: st, costUsd: cost?.perPhase?.[phase]?.cost_usd ?? 0, active: st === 'active', size, selected: selectedHex?.kind === 'phase' && selectedHex.id === phase, onSelect: onSelectHex },
         width: size,
         height: size,
         draggable: false,
@@ -303,7 +309,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         id: `feature:${f.featureId}`,
         type: 'hex',
         position: { x: c.x - size / 2, y: c.y - size / 2 },
-        data: { kind: 'feature', id: f.featureId, label: f.title || f.featureId, status: st, costUsd: 0, active: st === 'active', size, deps: f.dependsOn },
+        data: { kind: 'feature', id: f.featureId, label: f.title || f.featureId, status: st, costUsd: 0, active: st === 'active', size, deps: f.dependsOn, selected: selectedHex?.kind === 'feature' && selectedHex.id === f.featureId, onSelect: onSelectHex },
         width: size,
         height: size,
         draggable: false,
@@ -320,7 +326,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         id: `wi:${w.id}`,
         type: 'hex',
         position: { x: c.x - size / 2, y: c.y - size / 2 },
-        data: { kind: 'wi', id: w.id, label: w.title || w.id, status: w.status ?? 'pending', costUsd: act?.costUsd ?? 0, tokens: act?.tokens ?? 0, active: w.status === 'active', size, featureId: w.featureId, deps: w.dependsOn, selected: w.id === selectedWiId, onSelect: onSelectWi },
+        data: { kind: 'wi', id: w.id, label: w.title || w.id, status: w.status ?? 'pending', costUsd: act?.costUsd ?? 0, tokens: act?.tokens ?? 0, active: w.status === 'active', size, featureId: w.featureId, deps: w.dependsOn, selected: selectedHex?.kind === 'wi' && selectedHex.id === w.id, onSelect: onSelectHex },
         width: size,
         height: size,
         draggable: false,
@@ -360,7 +366,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
       });
     }
     return nodes;
-  }, [phaseStates, cost, features, featureCenter, featureStatuses, workItems, wiCenter, wiActivity, bursts, burstPos, phaseCenter, devLoopX, selectedWiId, onSelectWi]);
+  }, [phaseStates, cost, features, featureCenter, featureStatuses, workItems, wiCenter, wiActivity, bursts, burstPos, phaseCenter, devLoopX, selectedHex, onSelectHex]);
 
   const rfEdges = useMemo<Edge[]>(() => {
     const edges: Edge[] = [];
@@ -480,7 +486,7 @@ function TopBar({ totals, tab, onTab }: { totals: { agents: number; tokens: numb
 // ===== hex node (phase or WI) ===============================================
 
 type HexData = {
-  kind: 'phase' | 'wi' | 'feature';
+  kind: HexKind;
   id: string;
   label: string;
   status: WiStatus;
@@ -491,11 +497,11 @@ type HexData = {
   featureId?: string;
   deps?: string[];
   selected?: boolean;
-  onSelect?: (id: string) => void;
+  onSelect?: (hex: SelectedHex) => void;
 };
 
 function HexNode({ data }: NodeProps<HexData>): JSX.Element {
-  const onClick = useCallback(() => data.onSelect?.(data.id), [data]);
+  const onClick = useCallback(() => data.onSelect?.({ kind: data.kind, id: data.id }), [data]);
   const glow = statusGlow(data.status);
   const isWi = data.kind === 'wi';
   const isFeature = data.kind === 'feature';
@@ -508,7 +514,7 @@ function HexNode({ data }: NodeProps<HexData>): JSX.Element {
     ? { 'data-feature-hex': data.id, 'data-feature-id': data.id, 'data-feature-status': data.status, 'data-feature-deps': (data.deps ?? []).join(',') }
     : { 'data-phase-hex': data.id, 'data-phase': data.id, 'data-phase-status': data.status, 'data-phase-cost-usd': data.costUsd || '' };
   return (
-    <div {...dataAttrs} onClick={onClick} style={{ width: S, position: 'relative', cursor: isWi && data.onSelect ? 'pointer' : 'default', textAlign: 'center' }}>
+    <div {...dataAttrs} data-hex-selected={data.selected ? 'true' : 'false'} onClick={onClick} style={{ width: S, position: 'relative', cursor: data.onSelect ? 'pointer' : 'default', textAlign: 'center' }}>
       {/* targets */}
       <Handle id="tt" type="target" position={Position.Top} style={hiddenHandle} isConnectable={false} />
       <Handle id="tl" type="target" position={Position.Left} style={hiddenHandle} isConnectable={false} />
