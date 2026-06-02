@@ -427,6 +427,14 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
           nodes={rfNodes}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
+          onNodeClick={(_, node) => {
+            // Single click path for every hex kind. Defining this handler is also
+            // what makes ReactFlow set `pointer-events:all` on non-selectable,
+            // non-draggable wrappers (phase + feature hexes) — without it their
+            // clicks were swallowed and only WI hexes opened the detail drawer.
+            const d = node.data as Partial<HexData>;
+            if (d.onSelect && d.kind && d.id) d.onSelect({ kind: d.kind, id: d.id });
+          }}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           proOptions={{ hideAttribution: true }}
@@ -497,7 +505,11 @@ type HexData = {
 };
 
 function HexNode({ data }: NodeProps<HexData>): JSX.Element {
-  const onClick = useCallback(() => data.onSelect?.({ kind: data.kind, id: data.id }), [data]);
+  // Click routing lives on the ReactFlow instance (`onNodeClick`), NOT here:
+  // phase/feature hexes are `selectable:false` + `draggable:false`, so ReactFlow
+  // gives their wrapper `pointer-events:none` and an inner-div onClick would
+  // never fire (only the default-selectable WI hexes worked). A node-level
+  // handler forces `pointer-events:all` on every wrapper — one uniform path.
   const glow = statusGlow(data.status);
   const isWi = data.kind === 'wi';
   const isFeature = data.kind === 'feature';
@@ -510,7 +522,7 @@ function HexNode({ data }: NodeProps<HexData>): JSX.Element {
     ? { 'data-feature-hex': data.id, 'data-feature-id': data.id, 'data-feature-status': data.status, 'data-feature-deps': (data.deps ?? []).join(',') }
     : { 'data-phase-hex': data.id, 'data-phase': data.id, 'data-phase-status': data.status, 'data-phase-cost-usd': data.costUsd || '' };
   return (
-    <div {...dataAttrs} data-hex-selected={data.selected ? 'true' : 'false'} onClick={onClick} style={{ width: S, position: 'relative', cursor: data.onSelect ? 'pointer' : 'default', textAlign: 'center' }}>
+    <div {...dataAttrs} data-hex-selected={data.selected ? 'true' : 'false'} style={{ width: S, position: 'relative', cursor: data.onSelect ? 'pointer' : 'default', textAlign: 'center' }}>
       {/* targets */}
       <Handle id="tt" type="target" position={Position.Top} style={hiddenHandle} isConnectable={false} />
       <Handle id="tl" type="target" position={Position.Left} style={hiddenHandle} isConnectable={false} />

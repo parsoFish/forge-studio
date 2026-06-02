@@ -275,6 +275,24 @@ async function maxPhaseCost(page) {
   return page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('[data-phase-hex]')]
     .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)));
 }
+/** Click the first hex matching `hexSelector` and assert the HexDetailDrawer
+ *  opens with the expected kind. Guards the regression where only WI hexes were
+ *  clickable (phase/feature wrappers had pointer-events:none). Closes after. */
+async function expectHexOpensDrawer(page, hexSelector, kind, label) {
+  const el = page.locator(hexSelector).first();
+  if ((await el.count()) === 0) { check(false, `${label}: no ${hexSelector} present to click`); return; }
+  await el.click();
+  try {
+    await page.waitForSelector(`[data-section="hex-detail"][data-hex-kind="${kind}"]`, { timeout: 5000 });
+    check(true, `${label}: clicking a ${kind} hex opens the detail drawer`);
+  } catch {
+    const got = await page.evaluate(() =>
+      document.querySelector('[data-section="hex-detail"]')?.getAttribute('data-hex-kind') ?? '(no drawer)');
+    check(false, `${label}: clicking a ${kind} hex opens the detail drawer (got kind="${got}")`);
+  }
+  const close = page.locator('[data-action="close-hex-detail"]');
+  if ((await close.count()) > 0) { await close.click(); await sleep(200); }
+}
 
 // ---- the journey ----------------------------------------------------------
 
@@ -420,6 +438,14 @@ async function main() {
     // S4: PM decomposition materialised the feature + WI tiers on the canvas.
     await countAtLeast(page, '[data-feature-hex]', 2, 'PM materialised ≥2 feature hexes');
     await countAtLeast(page, '[data-wi-hex]', 2, 'PM materialised ≥2 WI hexes');
+
+    // S5 (operator 2026-06-02): EVERY hex kind must open the HexDetailDrawer —
+    // not just work items. Regression guard for the pointer-events:none bug on
+    // non-selectable phase/feature wrappers.
+    await expectHexOpensDrawer(page, '[data-phase-hex]', 'phase', 'hex-detail');
+    await expectHexOpensDrawer(page, '[data-feature-hex]', 'feature', 'hex-detail');
+    await expectHexOpensDrawer(page, '[data-wi-hex]', 'wi', 'hex-detail');
+    await frame(page, 'step08b-hex-detail', 'Step 8b — every hex (phase / feature / work-item) opens the detail drawer');
 
     // STEP 9 — developer loop progresses WIs, respecting dependencies. WI-1
     // runs and goes GREEN (per-WI `end`); only THEN does WI-2 (depends_on
