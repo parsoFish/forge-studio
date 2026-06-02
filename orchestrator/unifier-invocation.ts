@@ -250,6 +250,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '',
     `- Initiative manifest: \`${input.manifestRelPath}\`.`,
     `- Quality-gate command: \`${input.qualityGateCmd.join(' ')}\`.`,
+    '  **The demo must demonstrate THIS command (the gate forge actually ran), verbatim — never a narrower one.** If a harness checkpoint claims a pass on a command that excludes part of what the gate covers (a single package when the gate is whole-module, lint-only when the gate is the full CI), that is dishonest and misleads the operator: forge gated on the real command, so the demo must too. Run the gate command as-is and report its real result.',
     '- Per-WI specs:',
     wiList,
     '- `AGENT.md` — institutional memory + prior iteration notes.',

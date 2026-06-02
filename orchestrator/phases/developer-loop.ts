@@ -72,18 +72,24 @@ function wipeRalphScratch(worktreePath: string): void {
  * runtime safety bound (not a budget).
  */
 const DEV_LIVE_DEFAULT_ITERATIONS_PER_WI = 5;
-// Per-iteration tool-call cap. Was 25 — too tight for a FROM-SCRATCH resource
-// WI, where one iteration must both research (the SDK type + a reference
-// resource + helpers) AND write the resource + tests. release_folder failed 3×
-// because the agent (Sonnet) exhausted all 25 turns on grep/read every
-// iteration and the turn ended BEFORE it ever wrote a file — so nothing
-// persisted and the next iteration re-researched from zero (2026-06-02
-// first-hand diagnosis: 55 greps + 13 reads + 0 writes per run). Tests-for-an-
-// existing-resource WIs fit easily in 25; net-new code needs room to write.
-// The cost_budget + iteration_budget remain the real spend bounds; this is a
-// safety cap, so widening it lets a complex WI converge without raising the
-// floor cost of a simple one (the agent stops when the gate passes).
-const DEV_LIVE_MAX_TURNS_PER_ITERATION = 50;
+// Per-iteration tool-call cap — a SAFETY BACKSTOP, not the working bound.
+//
+// The SDK counts every tool call as one "turn" regardless of cost, so a flat
+// cap penalises a cheap Grep/Read exactly like an expensive generation
+// (Write/Edit) — which is wrong: a from-scratch WI legitimately needs to
+// explore a lot (the SDK type, a reference resource, helpers) BEFORE it writes.
+// At 25 the agent exhausted the cap on exploration and the turn ended before it
+// ever wrote a file (release_folder, 2026-06-02: 55 greps + 13 reads + 0
+// writes/run); at 50 it converged in one iteration. The general fix (operator
+// steer 2026-06-02): don't let cheap exploration eat the budget meant for
+// impactful work. Since the SDK can't reweight its own turn counter, make the
+// cap a HIGH backstop so exploration never prematurely ends an iteration, and
+// let the TOKEN-WEIGHTED cost bound (the WI's cost_budget_usd) be the real
+// limit — generation costs far more tokens than a grep, so cost already counts
+// "impactful" work and treats cheap turns as nearly free. iteration_budget +
+// cost_budget remain the spend bounds; the idle-deadline (stream-deadline.ts)
+// still aborts a genuine no-output stall.
+const DEV_LIVE_MAX_TURNS_PER_ITERATION = 120;
 
 // F-44: the Claude Code agent subprocess intermittently dies on spawn
 // ("Claude Code process exited with code 1", iterations:0, stop_reason
