@@ -328,6 +328,22 @@ re-run. Results split:
   (`make test` whole-module), so forge's gate goes red until the count test is fixed —
   and the demo must run the declared gate verbatim, not a narrowed one.
 
+**✅ RESOLVED + VALIDATED 2026-06-02** (`f3ed6cd`, `4b0193ae`, `df79ab5`):
+- **Gate-mirrors-CI**: `.forge/project.json` gains `ci_gate` (the full CI command);
+  `pm-invocation` requires a CI-green WI to use it verbatim (never a narrow proxy);
+  `dev-invocation` tells the agent to run the project's auto-fixers (`make fmt` /
+  `make terrafmt`) on a format/lint failure; `unifier-invocation` forbids the demo
+  from claiming a pass on a narrower command than the gate.
+- **Turn-cap → backstop** (`DEV_LIVE_MAX_TURNS_PER_ITERATION` 25→120): cheap
+  exploration no longer prematurely ends an iteration; the token-weighted cost_budget
+  is the real bound (operator steer: don't count cheap greps like impactful generation).
+- **Stale-base on re-run** (`forge requeue` now deletes the branch on a non-resume
+  re-run → fresh-from-current-main; resume still preserves it).
+- **End-to-end proof**: ci-green re-ran, the dev-loop adopted the full-CI gate, ran
+  `make fmt`/`terrafmt` + fixed the `provider_test.go` count, and produced **PR #5 with
+  all 4 GitHub CI checks green** — merged to betterado `main`. The demo ran the full CI
+  verbatim. The original gate-gaming can't recur (forge's authoritative gate IS the CI).
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
