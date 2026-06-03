@@ -90,7 +90,11 @@ const C3_SKIP_DIRS = new Set([
 // bug). Checked via git-truth: a path violates C2 if it is tracked by git
 // (`git ls-files --error-unmatch` succeeds) OR not ignored by git
 // (`git check-ignore -q` fails), in either case relative to the project dir.
-const SCRATCH_PATHS = ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+// NOTE: the scratch dir is `.forge/work-items/` (regenerated per cycle), NOT
+// `.forge/` wholesale — `.forge/project.json` + `.forge/quality_gate_cmd` are
+// tracked CONTRACT CONFIG every conformant project keeps, so flagging `.forge/`
+// here false-failed them.
+const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
 // DEMO: DEMO_SHAPES and validateProjectConfig are imported from
 // orchestrator/project-config.ts (single source of truth — CON-2).
@@ -219,9 +223,16 @@ function checkC2(dir: string): ClauseResult {
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith('#'));
-    const missing = SCRATCH_PATHS.filter(
-      (p) => !lines.some((l) => l === p || l === p.replace(/\/$/, '') || l === `/${p}`),
-    );
+    // A scratch path is covered if .gitignore lists it OR an ancestor dir of it
+    // (e.g. `.forge/` covers `.forge/work-items/`).
+    const isCovered = (p: string): boolean => {
+      const stripped = p.replace(/^\//, '').replace(/\/$/, '');
+      return lines.some((l) => {
+        const ln = l.replace(/^\//, '').replace(/\/$/, '');
+        return ln === stripped || stripped.startsWith(`${ln}/`);
+      });
+    };
+    const missing = SCRATCH_PATHS.filter((p) => !isCovered(p));
     if (missing.length > 0) {
       return {
         ...base,
