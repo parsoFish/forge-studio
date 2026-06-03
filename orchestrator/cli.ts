@@ -940,22 +940,6 @@ function cmdBrain(rest: string[]): void {
   const sub = rest[0];
   if (sub === 'index') return cmdBrainIndex(rest.slice(1));
   if (sub === 'lint') return cmdBrainLint(rest.slice(1));
-  if (sub === 'graph') {
-    // Per C20-C22 + post-S1.4 migration: the structural graph is owned by
-    // the real `safishamsi/graphify` Python CLI, not by an orchestrator shim.
-    // Pass through to `graphify` for any sub-op the operator wants; forge
-    // does NOT carry its own graph walker.
-    console.error(
-      `forge brain graph: this surface is owned by the real graphify CLI. Use it directly:
-  bash scripts/brain-graphify-all.sh     # rebuild Brain 1 (forge-dev) + Brain 2 (cycles)
-  bash scripts/brain-graphify-all.sh --all  # also rebuild all Brain 3 (per-project)
-  graphify query "<q>" --graph brain/forge-dev/graphify-out/graph.json
-  graphify path "<a>" "<b>" --graph brain/forge-dev/graphify-out/graph.json
-  graphify explain "<node>" --graph brain/forge-dev/graphify-out/graph.json
-See skills/brain-graph/SKILL.md for the operator runbook.`,
-    );
-    process.exit(2);
-  }
   console.error('forge brain: subcommands: index | lint');
   process.exit(2);
 }

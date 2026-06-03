@@ -47,23 +47,6 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
   }
 }
 
-/**
- * The single source of truth for notification config. Both the scheduler
- * and the cycle's merge-notify call resolve through here so there is one
- * sink, not a hardcoded literal that ignores `forge.config.json`
- * (US-7.1 — one notify sink). Defaults: desktop on, no webhook.
- */
-export function resolveNotifyConfig(path = 'forge.config.json'): {
-  desktop: boolean;
-  webhook_url: string | null;
-} {
-  const n = loadConfig(path).notify ?? {};
-  return {
-    desktop: n.desktop ?? true,
-    webhook_url: n.webhook_url ?? null,
-  };
-}
-
 export type EnvAssertionMode = 'warn' | 'throw';
 
 /**
