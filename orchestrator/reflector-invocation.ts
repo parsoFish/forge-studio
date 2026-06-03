@@ -2,19 +2,18 @@
  * Shared reflector invocation contract — system prompt + user prompt builders +
  * tool config.
  *
- * Both the bench harness (benchmarks/reflection/sdk.ts) and the live
- * orchestrator (orchestrator/cycle.ts:runReflector) call into this module.
- * Single source of truth for what the reflector agent sees, so the bench
- * reflects production exactly.
+ * Single source of truth for what the reflector agent sees. Called by the live
+ * orchestrator (orchestrator/phases/reflector.ts).
  *
  * The reflector is a **one-shot SDK invocation** (not a Ralph loop) that runs
  * after a successful merge. It consumes the cycle's event log + closed manifest
  * + merged tree and emits brain theme updates that feed future cycles.
  *
- * Stages 2 + 3 (interactive user-Q&A) use **file-based handoff**, not turn-by-
- * turn chat: the agent writes its questions into `user-questions.md`, then
- * reads `user-feedback.md` (canned by the bench simulator; written by a real
- * user in production). Stdin/CLI transport is deferred.
+ * Stages 2 + 3 (interactive user-Q&A) use **file-based handoff** (decision D5):
+ * the agent writes its questions into `user-questions.md`, then reads
+ * `user-feedback.md` (written by the operator in production). The orchestrator
+ * derives `user-questions.json` post-exit so the in-UI /reflect screen can
+ * render the structured operator handoff. Stdin/CLI transport is deferred.
  */
 
 import { readFileSync } from 'node:fs';
@@ -116,8 +115,13 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     'You are a **one-shot reflector** — not a Ralph loop. Run the four-stage process described in the skill contract, then exit. The orchestrator does not call you a second time.',
     '',
     '**File-based interactivity (stages 2 + 3).** You do NOT call `AskUserQuestion`. Instead:',
-    '- **Stage 2**: write your structured questions (max 4) into `_logs/<cycle-id>/user-questions.md`. One numbered question per heading. Skip stage 2 entirely if you cannot identify any non-brain-resolvable questions.',
-    '- **Stage 3**: after writing questions, read `_logs/<cycle-id>/user-feedback.md`. This file is pre-populated (by the bench simulator or by the user before the next cycle). Treat its contents as the user\'s answers + free-form feedback, and incorporate them into `retro.md` Section 2 + Section 3.',
+    '- **Stage 2**: write your structured questions (max 4) into `_logs/<cycle-id>/user-questions.md`. One numbered question per `## N. <header>` heading, body under it. The orchestrator derives `user-questions.json` from this file post-exit.',
+    '- **Guaranteed seed questions (always include unless the cycle had trivially zero work):**',
+    '  1. "Was the work-item decomposition the right size?" — too-few WIs (over-bundled), right-sized, or too-many (over-fragmented)?',
+    '  2. "Did the implementation match the design intent?" — exact match, minor divergence, or significant divergence worth a theme?',
+    '  3. "Did the cycle stay aligned with the initiative\'s original goals?" — yes, partial drift, or significant scope creep?',
+    '  Add project-grounded follow-up questions beyond these (cap at 4 total). Skip ALL questions only when the cycle had literally zero deliverables.',
+    '- **Stage 3**: after writing questions, read `_logs/<cycle-id>/user-feedback.md`. Treat its contents as the user\'s answers + free-form feedback, and incorporate them into `retro.md` Section 2 + Section 3.',
     '- If `user-feedback.md` does not exist when you go to read it, write retro.md sections 2 + 3 as `_(no feedback supplied this cycle)_` and continue.',
     '',
     '**Direct-write brain.** Write theme markdown files directly to `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`. Required frontmatter: `title`, `description`, `category` (one of `pattern`, `antipattern`, `decision`, `operation`, `reference`), `created_at`, `updated_at`. The brain-ingest sub-skill is NOT invoked in this pass.',

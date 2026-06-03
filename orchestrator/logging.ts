@@ -63,7 +63,12 @@ export type EventType =
    * Debounce ≤ 1/s; only emit when cost changed. Metadata:
    * `{ cycle_cost_usd, wi_cost_usd? }`.
    */
-  | 'cost_tick';
+  | 'cost_tick'
+  /**
+   * Emitted when a planner phase (architect/PM) queries the brain index.
+   * Metadata: `{ session_id?, project? }`.
+   */
+  | 'brain-query';
 
 export type EventLogEntry = {
   event_id: string;

@@ -11,14 +11,13 @@
  *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  *   forge brain lint  [--scope <s>]         structural integrity checks on brain/
- *   forge brain bench:promote --cycle <id>  operator-gated promotion of reflector-emitted bench-growth candidates
  *
  * (The structural graph (per C20-C22) is owned by the real `safishamsi/graphify`
  * Python CLI directly — `cd brain && graphify {update,query,path,explain} ...`.
  * forge does NOT carry a graph shim. See skills/brain-graph/SKILL.md.)
  */
 
-import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, openSync } from 'node:fs';
+import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, openSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import { runCycle } from './cycle.ts';
@@ -29,15 +28,7 @@ import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
-import {
-  runPromote,
-  makeInteractivePrompter,
-  closeInteractivePrompter,
-  makeLatestResultAccuracy,
-  type PromoteDecision,
-  type PromptOperator,
-} from '../cli/brain-bench-promote.ts';
-import { runPreflight, formatPreflightReport } from '../cli/preflight.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { fileVerdictPaths } from './file-verdict.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -151,8 +142,10 @@ Usage:
   forge review <initiative-id-or-handle>  Print the open verdict prompt and the response file's path
                                           Accepts canonical INIT-…, handle proj#N, name alias, or unique substring.
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
-  forge demo <project> <baseRef> <changedRef> [--initiative <id-or-handle>] [--out <dir>] [--build] [--brief <file>]
-                                          Generate a self-contained before/after comparison demo (HTML)
+  forge demo render <initiative-id> [--dir <demoDir>]
+                                          Render DEMO.md/DEMO.html from demo.json (unifier-authored)
+  forge demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]
+                                          Capture before/after screenshots and back-fill demo.json
   forge architect run <session-id> [--project <name>]
                                           ADR 020: the architect runs in the forge UI. Advances ONE turn of the
                                           file-checkpointed runner (interview → draft → finalize). Spawned by the
@@ -161,8 +154,6 @@ Usage:
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
                                           (structural graph owned by the real safishamsi/graphify CLI — run: bash scripts/brain-graphify-all.sh)
-  forge brain bench:promote --cycle <id>  Walk reflector-emitted brain-bench candidates past the operator; promote into benchmarks/brain/questions.json
-                                          Caps: ≤1 per cycle, ≤4 per calendar month. Accuracy floor 94.4%; promotion reverted on regression.
   forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
                                           Bring up the forge operator UI (foreground; Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
@@ -881,13 +872,12 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const baseRef = flagValue(rest, '--base') ?? 'main';
     const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
     try {
-      const { generateComparisonDemo } = await import('../cli/demo.ts');
+      const { captureCheckpoints } = await import('../cli/demo.ts');
       const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle } = await import('../cli/demo-model.ts');
       const bundleDir = join(demoDir, '.capture');
-      await generateComparisonDemo({
-        projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef,
-        outDir: bundleDir, initiativeId, build: true,
-      });
+      const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
+      const labels = (demoJson?.checkpoints ?? []).map((c: { label?: string }) => c.label).filter(Boolean) as string[];
+      await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, build: true });
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
@@ -899,48 +889,9 @@ async function cmdDemo(rest: string[]): Promise<void> {
     return; // never a hard failure
   }
 
-  const [project, baseRef, changedRef] = rest;
-  if (!project || !baseRef || !changedRef) {
-    console.error('forge demo: usage: demo <project> <baseRef> <changedRef> [--initiative <id>] [--out <dir>] [--build] [--brief <file>]');
-    console.error('       or: demo render <initiative-id> [--dir <demoDir>]');
-    console.error('       or: demo capture <initiative-id> [--project <name>] [--dir <demoDir>]');
-    process.exit(2);
-  }
-  const projectRepoPath = resolve('projects', project);
-  if (!existsSync(join(projectRepoPath, '.git'))) {
-    console.error(`forge demo: ${projectRepoPath} is not a git repo (clone the project into projects/${project}/ first)`);
-    process.exit(2);
-  }
-  const rawInitiative = flagValue(rest, '--initiative');
-  const initiativeId = rawInitiative ? resolveOrExit(rawInitiative, 'demo') : undefined;
-  const out = flagValue(rest, '--out') ?? join('_logs', 'demos', `${project}-${Date.now()}`);
-  const briefFile = flagValue(rest, '--brief');
-  const brief = briefFile && existsSync(briefFile) ? readFileSync(briefFile, 'utf8') : undefined;
-  const build = rest.includes('--build');
-
-  console.log(`forge demo: ${project}  ${baseRef} → ${changedRef}  (out: ${resolve(out)})`);
-  const { generateComparisonDemo } = await import('../cli/demo.ts');
-  try {
-    const res = await generateComparisonDemo({
-      projectRepoPath,
-      project,
-      baseRef,
-      changedRef,
-      outDir: out,
-      initiativeId,
-      brief,
-      build,
-    });
-    console.log('');
-    console.log(`✅ before/after demo: ${res.htmlPath}`);
-    console.log(`   open: xdg-open ${res.htmlPath}`);
-    console.log(`   baseline build: ${res.baselineBuild.ok ? 'ok' : 'FAILED — ' + res.baselineBuild.detail}`);
-    console.log(`   changed  build: ${res.changedBuild.ok ? 'ok' : 'FAILED — ' + res.changedBuild.detail}`);
-    console.log(`   agent cost: $${res.agentCostUsd.toFixed(2)}`);
-  } catch (err) {
-    console.error(`forge demo: failed: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  }
+  console.error('forge demo: usage: demo render <initiative-id> [--dir <demoDir>]');
+  console.error('       or: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
+  process.exit(2);
 }
 
 /**
@@ -969,6 +920,10 @@ function cmdPreflight(rest: string[]): void {
   }
   const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT });
   console.log(formatPreflightReport(report));
+  // CON-5: write the verdict event as JSONL so callers can audit preflight outcomes.
+  const verdictLogDir = join(FORGE_ROOT, '_logs', 'preflight');
+  mkdirSync(verdictLogDir, { recursive: true });
+  appendFileSync(join(verdictLogDir, 'verdicts.jsonl'), JSON.stringify(buildVerdictEvent(report)) + '\n');
   // Hard-clause failure ⇒ forge declines (non-zero so callers can gate).
   process.exit(report.ok ? 0 : 1);
 }
@@ -985,10 +940,6 @@ function cmdBrain(rest: string[]): void {
   const sub = rest[0];
   if (sub === 'index') return cmdBrainIndex(rest.slice(1));
   if (sub === 'lint') return cmdBrainLint(rest.slice(1));
-  if (sub === 'bench:promote' || sub === 'bench-promote') {
-    void cmdBrainBenchPromote(rest.slice(1));
-    return;
-  }
   if (sub === 'graph') {
     // Per C20-C22 + post-S1.4 migration: the structural graph is owned by
     // the real `safishamsi/graphify` Python CLI, not by an orchestrator shim.
@@ -1005,114 +956,8 @@ See skills/brain-graph/SKILL.md for the operator runbook.`,
     );
     process.exit(2);
   }
-  console.error('forge brain: subcommands: index | lint | bench:promote');
+  console.error('forge brain: subcommands: index | lint');
   process.exit(2);
-}
-
-/**
- * `forge brain bench:promote --cycle <id>` — walks the reflector's
- * candidate file at `_logs/<id>/brain-bench-candidates.jsonl` past the
- * operator (keep/drop/edit per row, default drop) and lands accepted
- * candidates in `benchmarks/brain/questions.json`. Gated by per-cycle
- * (≤1) + monthly (≤4 excluding manual-seed-*) caps + the 94.4%
- * accuracy floor; reverts byte-for-byte on regression.
- *
- * Flags:
- *   --cycle <id>            REQUIRED. Cycle id whose candidates we promote.
- *   --auto-keep <indexes>   1-based comma list; keep these candidates without prompting.
- *   --auto-drop <indexes>   1-based comma list; drop these candidates without prompting.
- *   --skip-bench            Skip the accuracy gate (operator confirms they ran it).
- *   --help                  Show this help.
- */
-async function cmdBrainBenchPromote(rest: string[]): Promise<void> {
-  if (rest.includes('--help') || rest.includes('-h')) {
-    console.log(`forge brain bench:promote --cycle <id> [--auto-keep <n,n>] [--auto-drop <n,n>] [--skip-bench]
-  Walks _logs/<cycle-id>/brain-bench-candidates.jsonl past the operator.
-  Kept candidates land in benchmarks/brain/questions.json with source_cycle stamped.
-  Caps: ≤1 per cycle, ≤4 per calendar month (manual-seed-* exempt).
-  Accuracy floor: 94.4% (CLAUDE.md bar) — promotion reverted on regression.`);
-    return;
-  }
-
-  let cycleId: string | undefined;
-  const autoKeep = new Set<number>();
-  const autoDrop = new Set<number>();
-  let skipBench = false;
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (a === '--cycle') cycleId = rest[++i];
-    else if (a === '--auto-keep') {
-      const v = rest[++i];
-      if (v) v.split(',').forEach((n) => autoKeep.add(Number(n)));
-    } else if (a === '--auto-drop') {
-      const v = rest[++i];
-      if (v) v.split(',').forEach((n) => autoDrop.add(Number(n)));
-    } else if (a === '--skip-bench') {
-      skipBench = true;
-    }
-  }
-  if (!cycleId) {
-    console.error('forge brain bench:promote: missing --cycle <id>');
-    console.error('Usage: forge brain bench:promote --cycle <cycle-id>');
-    process.exit(2);
-  }
-  const candidatesPath = resolve(FORGE_ROOT, '_logs', cycleId, 'brain-bench-candidates.jsonl');
-  const questionsPath = resolve(FORGE_ROOT, 'benchmarks', 'brain', 'questions.json');
-
-  if (!existsSync(candidatesPath)) {
-    console.log(`(no candidates for cycle ${cycleId} — file: ${candidatesPath})`);
-    return;
-  }
-  if (!existsSync(questionsPath)) {
-    console.error(`forge brain bench:promote: questions.json missing at ${questionsPath}`);
-    process.exit(2);
-  }
-
-  // Build the prompter: prefer auto-keep/auto-drop indexes for deterministic
-  // CI runs; else interactive readline.
-  const interactivePrompter = autoKeep.size === 0 && autoDrop.size === 0
-    ? makeInteractivePrompter()
-    : null;
-  const prompter: PromptOperator = async ({ candidate, index, total }) => {
-    const oneBased = index + 1;
-    if (autoKeep.has(oneBased)) return { action: 'keep' } as PromoteDecision;
-    if (autoDrop.has(oneBased)) return { action: 'drop' } as PromoteDecision;
-    if (interactivePrompter) return interactivePrompter({ candidate, index, total });
-    return { action: 'drop' };
-  };
-
-  const result = await runPromote({
-    cycleId,
-    candidatesPath,
-    questionsPath,
-    deps: {
-      promptOperator: prompter,
-      runBenchAccuracy: skipBench
-        ? async () => 1.0 // operator vouches; gate is a noop
-        : makeLatestResultAccuracy(FORGE_ROOT),
-      nowIso: () => new Date().toISOString(),
-    },
-  });
-
-  closeInteractivePrompter();
-
-  if (result.kind === 'ok') {
-    if (result.promoted === 0) {
-      console.log(`(no promotions for cycle ${cycleId} — all candidates dropped or none present)`);
-    } else {
-      console.log(`promoted ${result.promoted} candidate(s): ${result.ids.join(', ')}`);
-      console.log(`questions.json updated. Recommend re-running: npm run bench:brain`);
-    }
-    return;
-  }
-  if (result.kind === 'cap-exceeded') {
-    console.error(`forge brain bench:promote: cap-exceeded (${result.cap}): ${result.reason}`);
-    process.exit(1);
-  }
-  // reverted
-  console.error(`forge brain bench:promote: ${result.reason}`);
-  console.error(`questions.json restored. No changes landed.`);
-  process.exit(1);
 }
 
 function cmdBrainIndex(rest: string[]): void {

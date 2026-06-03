@@ -10,9 +10,11 @@
  * (`generatedAt`, build statuses) when adapting it for `renderComparisonHtml`.
  *
  * Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 checkpoint
- * (each with `label` + `caption`). Media (before/after images/video) + harness
- * `metrics` are OPTIONAL — the explicitly-triggered demo-capture skill fills
- * media when relevant. `validateDemoModel` mirrors `validateManifest`'s
+ * (each with `label` + `caption`). Rich structured sections (`summary`,
+ * `apiDiff`, `testEvidence`, `filesChanged`) are optional but produce a much
+ * richer rendered HTML when present. Media (before/after images/video) +
+ * harness `metrics` are OPTIONAL — the explicitly-triggered demo-capture skill
+ * fills media when relevant. `validateDemoModel` mirrors `validateManifest`'s
  * fail-fast-with-messages contract.
  */
 
@@ -23,8 +25,14 @@ import type {
   DemoComparisonModel,
   DemoCheckpoint,
   HarnessMetricRow,
+  DemoSummarySection,
+  DemoApiDiffEntry,
+  TestResultRow,
 } from './demo-html.ts';
 import { renderComparisonHtml } from './demo-html.ts';
+
+// Re-export the rich section types so callers only need one import surface.
+export type { DemoSummarySection, DemoApiDiffEntry, TestResultRow } from './demo-html.ts';
 
 export type DemoModelCheckpoint = {
   label: string;
@@ -53,6 +61,27 @@ export type DemoModel = {
   /** `git diff --stat baseRef..changedRef`. Required — grounds the demo. */
   diffStat: string;
   acceptanceCriteria?: string[];
+
+  // ── Rich structured sections (REV-4 / D3) ──────────────────────────────
+  /** High-level summary bullets + PR/branch/SHA metadata. */
+  summary?: DemoSummarySection;
+  /**
+   * API or behaviour diff entries. Each shows a before/after pair for a
+   * changed endpoint, function signature, config key, or CLI flag.
+   * Syntax-highlighted in the rendered HTML (JSON detected automatically).
+   */
+  apiDiff?: DemoApiDiffEntry[];
+  /**
+   * Test evidence table. Each row is one test suite or key test case.
+   * Present iff the diff touches tests or coverage.
+   */
+  testEvidence?: TestResultRow[];
+  /**
+   * Summarised files-changed list beyond diffStat. Optional: if absent,
+   * the renderer derives this from diffStat. When present, these entries
+   * are shown with a richer annotation (e.g. "core logic", "new file").
+   */
+  filesChanged?: Array<{ path: string; note?: string }>;
 };
 
 const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
@@ -89,8 +118,6 @@ export function validateDemoModel(raw: unknown): string[] {
       if (cp.kind !== undefined && !VALID_KINDS.has(cp.kind as string)) {
         errors.push(`${at}.kind must be one of screenshot|video|harness`);
       }
-      // Media, when present, must be inline data: URIs (no scheme-bearing/remote
-      // refs) — mirrors the esc() discipline in demo-html.ts.
       for (const f of ['beforeImage', 'afterImage'] as const) {
         const v = cp[f];
         if (v != null && (typeof v !== 'string' || !v.startsWith('data:image/'))) {
@@ -112,6 +139,22 @@ export function validateDemoModel(raw: unknown): string[] {
   if (m.acceptanceCriteria !== undefined && !Array.isArray(m.acceptanceCriteria)) {
     errors.push('acceptanceCriteria must be an array of strings when set');
   }
+
+  // Validate optional rich sections (loose — don't break on partial data).
+  if (m.summary !== undefined) {
+    const s = m.summary as Record<string, unknown>;
+    if (!Array.isArray(s.bullets)) errors.push('summary.bullets must be an array of strings');
+  }
+  if (m.apiDiff !== undefined && !Array.isArray(m.apiDiff)) {
+    errors.push('apiDiff must be an array when set');
+  }
+  if (m.testEvidence !== undefined && !Array.isArray(m.testEvidence)) {
+    errors.push('testEvidence must be an array when set');
+  }
+  if (m.filesChanged !== undefined && !Array.isArray(m.filesChanged)) {
+    errors.push('filesChanged must be an array when set');
+  }
+
   return errors;
 }
 
@@ -143,6 +186,10 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
     })),
     diffStat: model.diffStat,
     acceptanceCriteria: model.acceptanceCriteria,
+    summary: model.summary,
+    apiDiff: model.apiDiff,
+    testEvidence: model.testEvidence,
+    filesChanged: model.filesChanged,
   };
 }
 
@@ -166,10 +213,10 @@ function pngToDataUri(file: string): string | null {
 }
 
 /**
- * Collect captured before/after PNGs from a capture bundle (the
- * `generateComparisonDemo` output dir, with `before/<label>.png` +
- * `after/<label>.png`) into `CapturedMedia[]`, keyed by filename stem. Used by
- * `forge demo capture` to back-fill `demo.json`. Best-effort; never throws.
+ * Collect captured before/after PNGs from a capture bundle
+ * (`before/<label>.png` + `after/<label>.png`) into `CapturedMedia[]`,
+ * keyed by filename stem. Used by `forge demo capture` to back-fill
+ * `demo.json`. Best-effort; never throws.
  */
 export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
   const byLabel = new Map<string, CapturedMedia>();
@@ -240,9 +287,10 @@ export type RenderDemoBundleResult = {
 
 /**
  * Read `<demoDir>/demo.json`, validate it, and (when valid) write the derived
- * `DEMO.md` + `DEMO.html` alongside it. The unifier authors `demo.json` once and
- * runs this (via `forge demo render`) to emit the derived artifacts it commits.
- * Never throws — returns the validation errors so the caller can surface them.
+ * `DEMO.md` + `DEMO.html` alongside it. The unifier authors `demo.json` once
+ * and runs this (via `forge demo render`) to emit the derived artifacts it
+ * commits. Never throws — returns the validation errors so the caller can
+ * surface them.
  */
 export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDemoBundleResult {
   const jsonPath = join(demoDir, 'demo.json');
@@ -267,16 +315,28 @@ export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDe
 }
 
 /** Render a derived DEMO.md (the PR-self-contained convenience). Markdown only;
- *  media is referenced as relative links (matching the unifier's prior
- *  visibility-agnostic convention) rather than embedded. */
+ *  media is referenced as relative links rather than embedded. */
 export function renderDemoMarkdown(model: DemoModel): string {
   const lines: string[] = [];
   lines.push(`# ${model.title}`);
   lines.push('');
   lines.push(`> _Derived from \`demo.json\` (ADR 021). Essence:_ ${model.essence}`);
   lines.push('');
+
+  if (model.summary) {
+    lines.push('## Summary');
+    lines.push('');
+    for (const b of model.summary.bullets) lines.push(`- ${b}`);
+    if (model.summary.prUrl) lines.push(`- PR: ${model.summary.prUrl}`);
+    if (model.summary.branch) lines.push(`- Branch: \`${model.summary.branch}\``);
+    if (model.summary.commitSha) lines.push(`- Commit: \`${model.summary.commitSha}\``);
+    lines.push('');
+  }
+
+  lines.push('## Visual Changes');
+  lines.push('');
   for (const c of model.checkpoints) {
-    lines.push(`## ${c.caption}`);
+    lines.push(`### ${c.caption}`);
     lines.push('');
     if (c.beforeNote) lines.push(`- **Before:** ${c.beforeNote}`);
     if (c.afterNote) lines.push(`- **After:** ${c.afterNote}`);
@@ -293,17 +353,62 @@ export function renderDemoMarkdown(model: DemoModel): string {
     }
     lines.push('');
   }
+
+  if (model.apiDiff && model.apiDiff.length > 0) {
+    lines.push('## API / Behaviour Diff');
+    lines.push('');
+    for (const e of model.apiDiff) {
+      lines.push(`### ${e.name} (${e.change})`);
+      lines.push('');
+      if (e.before !== undefined) {
+        lines.push('**Before:**');
+        lines.push('```');
+        lines.push(e.before);
+        lines.push('```');
+      }
+      if (e.after !== undefined) {
+        lines.push('**After:**');
+        lines.push('```');
+        lines.push(e.after);
+        lines.push('```');
+      }
+      lines.push('');
+    }
+  }
+
+  if (model.testEvidence && model.testEvidence.length > 0) {
+    lines.push('## Test Evidence');
+    lines.push('');
+    lines.push('| test | result | delta |');
+    lines.push('|---|---|---|');
+    for (const r of model.testEvidence) {
+      lines.push(`| ${r.name} | ${r.result} | ${r.delta ?? '—'} |`);
+    }
+    lines.push('');
+  }
+
   if (model.acceptanceCriteria && model.acceptanceCriteria.length > 0) {
     lines.push('## Acceptance criteria');
     lines.push('');
     for (const ac of model.acceptanceCriteria) lines.push(`- ${ac}`);
     lines.push('');
   }
-  lines.push('## Changed files');
+
+  lines.push('## Files Changed');
   lines.push('');
-  lines.push('```');
-  lines.push(model.diffStat);
-  lines.push('```');
+  if (model.filesChanged && model.filesChanged.length > 0) {
+    for (const f of model.filesChanged) {
+      lines.push(`- \`${f.path}\`${f.note ? ` — ${f.note}` : ''}`);
+    }
+    lines.push('');
+    lines.push('```');
+    lines.push(model.diffStat);
+    lines.push('```');
+  } else {
+    lines.push('```');
+    lines.push(model.diffStat);
+    lines.push('```');
+  }
   lines.push('');
   return lines.join('\n');
 }

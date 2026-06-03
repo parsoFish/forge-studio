@@ -55,6 +55,7 @@ import {
 export type { CouncilQueryFn } from '../skills/architect-llm-council/council.ts';
 import {
   writePlanDoc,
+  archiveSessionDir,
   sessionPaths,
   type ArchitectSession,
   type ProposedInitiative,
@@ -62,6 +63,7 @@ import {
   type CouncilTranscript,
   type InterviewRound,
 } from '../cli/architect-plan.ts';
+import { loadBrainIndex } from '../cli/brain-index.ts';
 import {
   serializeManifest,
   parseManifest,
@@ -135,6 +137,11 @@ export type RunArchitectTurnInput = {
   skillPromptPath?: string;
   /** Safety cap on interview rounds before forcing a draft. Default 4. */
   maxInterviewRounds?: number;
+  /**
+   * Forge root for brain-index loading (ARCH-1). Defaults to `process.cwd()`.
+   * Override in tests / bench so the brain index loads from the correct root.
+   */
+  brainCwd?: string;
 };
 
 export type RunArchitectTurnResult = {
@@ -162,6 +169,15 @@ export async function runArchitectTurn(
   const paths = sessionPaths(input.projectRoot, input.sessionId);
   const status = readStatus(paths.sessionDir);
   if (!status) {
+    // ARCH-6 idempotency: a rejected session is moved to _architect/_archived/.
+    // A repeat reject turn then finds no live status.json — if the archived copy
+    // was a rejected session, treat the turn as a no-op rather than throwing.
+    const archived = readStatus(
+      resolve(input.projectRoot, '_architect', '_archived', input.sessionId),
+    );
+    if (archived?.phase === 'rejected') {
+      return { phase: 'rejected', wrote: [] };
+    }
     throw new Error(
       `architect runner: no status.json at ${paths.sessionDir}. Has the session been started?`,
     );
@@ -174,6 +190,13 @@ export async function runArchitectTurn(
   const councilQueryFn = input.councilQueryFn ?? queryFn;
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
+  // ARCH-1: load brain navigation index at turn start and inject into prompts.
+  // Mirrors the PM/reflector pattern (pm-invocation.ts, reflector-invocation.ts).
+  // The index is cheap to read (a few small markdown files); we don't cache it
+  // across turns because each turn is a fresh process invocation.
+  const brainCwd = input.brainCwd ?? resolve('.');
+  const brainIndex = loadBrainIndex({ cwd: brainCwd, scope: status.project });
+
   const startEv = logger.emit({
     initiative_id: `architect-session-${input.sessionId}`,
     phase: 'architect',
@@ -183,6 +206,20 @@ export async function runArchitectTurn(
     output_refs: [],
     message: `architect turn (phase=${status.phase}, round=${status.round})`,
     metadata: { session_id: input.sessionId, phase: status.phase, round: status.round },
+  });
+
+  // ARCH-1: emit brain-query event so the planner brain-first mandate is
+  // traceable. The brain index is loaded above; the event records which
+  // project scope was consulted so the event log can detect brain-gaps.
+  logger.emit({
+    initiative_id: `architect-session-${input.sessionId}`,
+    phase: 'architect',
+    skill: 'architect-runner',
+    event_type: 'brain-query',
+    input_refs: [],
+    output_refs: [],
+    message: `brain-query (project=${status.project})`,
+    metadata: { session_id: input.sessionId, project: status.project },
   });
 
   // Per-tool telemetry so the architect hex streams live bursts (ADR 020). The
@@ -207,6 +244,7 @@ export async function runArchitectTurn(
       interview,
       queryFn,
       skillPromptPath: input.skillPromptPath,
+      brainIndex,
       onToolUse,
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
@@ -240,10 +278,32 @@ export async function runArchitectTurn(
       councilQueryFn,
       logger,
       resolvedDecisions: null,
+      brainIndex,
       onToolUse,
     });
   } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, councilQueryFn, logger, onToolUse });
+    result = await runFinalizeStep({ input, paths, status, queryFn, councilQueryFn, logger, brainIndex, onToolUse });
+  } else if (phase === 'rejected') {
+    // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
+    // phase=rejected before spawning this turn; we move the session dir to
+    // _architect/_archived/ so it no longer appears in listArchitectSessions.
+    // Best-effort — if the dir is already archived or missing, just return.
+    try {
+      const archivedPath = archiveSessionDir(input.projectRoot, input.sessionId);
+      logger.emit({
+        initiative_id: `architect-session-${input.sessionId}`,
+        phase: 'architect',
+        skill: 'architect-runner',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [archivedPath],
+        message: 'plan-rejected — session archived',
+        metadata: { session_id: input.sessionId, action: 'plan-rejected', archived_path: archivedPath },
+      });
+    } catch {
+      // Already archived or session dir gone — silently accept.
+    }
+    result = { phase: 'rejected', wrote: [] };
   } else {
     // No actionable work in a waiting/terminal phase — return the phase unchanged.
     result = { phase, wrote: [] };
@@ -291,14 +351,28 @@ async function runInterviewStep(args: {
   interview: InterviewRound[];
   queryFn: CouncilQueryFn;
   skillPromptPath?: string;
+  /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
+  brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, onToolUse } = args;
+  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse } = args;
   const skill = loadSkillPrompt(skillPromptPath);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
   const prompt = [
+    ...(brainIndex
+      ? [
+          '# Brain navigation index',
+          '',
+          'Read relevant brain theme files listed below before answering. Your first tool calls must be Read against brain/ paths.',
+          '',
+          brainIndex,
+          '',
+          '---',
+          '',
+        ]
+      : []),
     skill,
     '',
     '## Your task this turn: the interview step',
@@ -320,7 +394,7 @@ async function runInterviewStep(args: {
       'further questions would merely refine.',
   ].join('\n');
 
-  const out = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
+  const { output: out } = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
     queryFn,
     prompt,
     schema: INTERVIEW_SCHEMA,
@@ -391,13 +465,27 @@ async function runDraftStep(args: {
   councilQueryFn: CouncilQueryFn;
   logger: EventLogger;
   resolvedDecisions: string | null;
+  /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
+  brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
 }): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, councilQueryFn, logger, resolvedDecisions, onToolUse } = args;
+  const { input, paths, status, queryFn, councilQueryFn, logger, resolvedDecisions, brainIndex, onToolUse } = args;
   const interview = readInterview(paths.sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
   const prompt = [
+    ...(brainIndex
+      ? [
+          '# Brain navigation index',
+          '',
+          'Read relevant Brain 2 (brain/cycles/) and Brain 3 (projects/<project>/brain/) theme files listed below as your FIRST action. Record the paths you consulted — they surface in the PLAN\'s Brain context section.',
+          '',
+          brainIndex,
+          '',
+          '---',
+          '',
+        ]
+      : []),
     skill,
     '',
     '## Your task this turn: draft the initiative(s)',
@@ -448,7 +536,7 @@ async function runDraftStep(args: {
       'genuinely independent files/surfaces — never to reach a number.',
   ].join('\n');
 
-  const draft = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+  const { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
     queryFn,
     prompt,
     schema: DRAFT_SCHEMA,
@@ -517,13 +605,25 @@ async function runDraftStep(args: {
     body: m.body,
   }));
 
+  // ARCH-1: build brain_context from the brain/ paths the agent actually Read
+  // during the draft turn. Deduplicate paths; use a generic summary since the
+  // agent's Read content is not parsed here.
+  const seenPaths = new Set<string>();
+  const brain_context = brainReads
+    .filter((p) => {
+      if (seenPaths.has(p)) return false;
+      seenPaths.add(p);
+      return true;
+    })
+    .map((p) => ({ path: p, summary: 'consulted during architect draft' }));
+
   const session: ArchitectSession = {
     session_id: status.session_id,
     project: status.project,
     project_repo_path: status.project_repo_path,
     vision,
     interview,
-    brain_context: [],
+    brain_context,
     council: councilTranscript,
     initiatives: proposed,
     open_escalations: council.escalations,
@@ -566,6 +666,8 @@ async function runFinalizeStep(args: {
   queryFn: CouncilQueryFn;
   councilQueryFn: CouncilQueryFn;
   logger: EventLogger;
+  /** Brain navigation index; passed through to fallback draft step (ARCH-1). */
+  brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, logger } = args;
@@ -694,12 +796,18 @@ export function keyEscalations(escalations: Escalation[]): KeyedEscalation[] {
 // Structured-output query (mirrors council's parse path)
 // ---------------------------------------------------------------------------
 
+type StructuredResult<T> = {
+  output: T | null;
+  /** Brain paths Read by the agent during this turn (for brain_context). */
+  brainReads: string[];
+};
+
 async function runStructured<T>(args: {
   queryFn: CouncilQueryFn;
   prompt: string;
   schema: unknown;
   onToolUse?: (d: ToolUseLiveDetail) => void;
-}): Promise<T | null> {
+}): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
     // NOT by plan mode. F-W5-1 (2026-05-30, surfaced by the claude-harness UI
@@ -727,6 +835,7 @@ async function runStructured<T>(args: {
   let structured: T | null = null;
   let rawText = '';
   let toolSeq = 0;
+  const brainReads: string[] = [];
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: 'architect-structured',
     abortController,
@@ -734,7 +843,7 @@ async function runStructured<T>(args: {
     const m = msg as {
       type?: string;
       structured_output?: unknown;
-      message?: { content?: Array<{ type?: string; text?: string }> };
+      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
     };
     if (m.type === 'assistant') {
       // Stream tool_use blocks to the sink (drives the live architect hex).
@@ -744,6 +853,13 @@ async function runStructured<T>(args: {
         toolSeq += details.length;
       }
       for (const block of m.message?.content ?? []) {
+        if (block?.type === 'tool_use' && block.name === 'Read') {
+          // Collect brain/ reads for brain_context population (ARCH-1).
+          const inp = block.input as { file_path?: string } | undefined;
+          if (inp?.file_path && inp.file_path.includes('brain/')) {
+            brainReads.push(inp.file_path);
+          }
+        }
         if (block?.type === 'text' && typeof block.text === 'string') {
           rawText += (rawText ? '\n' : '') + block.text;
         }
@@ -756,9 +872,8 @@ async function runStructured<T>(args: {
     }
     break;
   }
-  if (structured) return structured;
-  // Fallback: parse a fenced ```json block from assistant text.
-  return parseFencedJson<T>(rawText);
+  const output = structured ?? parseFencedJson<T>(rawText);
+  return { output, brainReads };
 }
 
 function parseFencedJson<T>(text: string): T | null {

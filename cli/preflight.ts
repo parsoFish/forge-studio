@@ -1,32 +1,38 @@
 /**
  * forge↔project contract preflight (US-4.1 / ADR-017).
  *
- * Checks a project directory against the six-clause contract derived
- * empirically from the trafficGame arc (brain theme
- * `forge-project-onboarding-contract`; retro §3 C1–C6). A project either
- * passes or forge declines, naming the failing clause.
+ * Checks a project directory against the contract clauses derived empirically
+ * from the trafficGame arc (brain theme `forge-project-onboarding-contract`;
+ * retro §3 C1–C6) plus betterado-era additions (C7 conditional, C8 advisory).
+ * A project either passes or forge declines, naming the failing clause.
  *
- * Pure: `runPreflight()` does filesystem reads + one `git`/npm-script
- * inspection and returns a structured report. No mutation, no network,
- * no SDK. The CLI wrapper (`orchestrator/cli.ts`) renders + sets exit code.
+ * Pure: `runPreflight()` does filesystem reads + git inspection and returns a
+ * structured report. No mutation, no network, no SDK. The CLI wrapper
+ * (`orchestrator/cli.ts`) renders + sets exit code + writes the
+ * `preflight.verdict` JSONL event.
  *
- * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C3/C5/C6 +
+ * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C3/C5/C6/C8 +
  * DEMO are advisory — surfaced as warnings, not blockers — because (C3) source
  * size is a heuristic, (C5) constraint-doc presence can't prove the harness
  * honours them, (C6) is structurally satisfied by forge post-Phase-6 (no
- * auto-merge; the operator merges the PR), and (DEMO) a declared demo.shape
- * can't prove the before/after actually captures the delta (hand-verified at
- * onboarding). DEMO is the project half of the demo contract family; the forge
- * half is skills/demo/SKILL.md.
+ * auto-merge; the operator merges the PR), (C8) absence of an agent-instruction
+ * file is a gap but not a blocker, and (DEMO) a declared demo.shape can't prove
+ * the before/after actually captures the delta (hand-verified at onboarding).
+ * DEMO is the project half of the demo contract family; the forge half is
+ * skills/demo/SKILL.md.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { join, resolve, relative } from 'node:path';
 
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
+import {
+  validateProjectConfig,
+  DEMO_SHAPES,
+} from '../orchestrator/project-config.ts';
 
-export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -79,17 +85,20 @@ const C3_SKIP_DIRS = new Set([
   '.forge', 'test-results', '__pycache__', '.venv', 'target',
 ]);
 
-// C2: forge scratch the project .gitignore MUST exclude (else every cycle
-// commits orchestration state into the PR — the W4 reviewer-confusion bug).
+// C2: forge scratch the project repo MUST NOT track these paths (else every
+// cycle commits orchestration state into the PR — the W4 reviewer-confusion
+// bug). Checked via git-truth: a path violates C2 if it is tracked by git
+// (`git ls-files --error-unmatch` succeeds) OR not ignored by git
+// (`git check-ignore -q` fails), in either case relative to the project dir.
 const SCRATCH_PATHS = ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
-// DEMO: the project must declare HOW its change is demonstrated, in
-// `.forge/project.json` `demo.shape`. This is the project half of the demo
-// contract family (docs/forge-project-contract.md); the forge half (what a
-// demo must contain) is skills/demo/SKILL.md. Advisory, because the structural
-// presence of a shape cannot prove the before/after actually captures the delta
-// (that facet is hand-verified during onboarding).
-const DEMO_SHAPES = ['browser', 'harness', 'cli-diff', 'artifact', 'none'];
+// DEMO: DEMO_SHAPES and validateProjectConfig are imported from
+// orchestrator/project-config.ts (single source of truth — CON-2).
+
+// C8: the project must have a human-authored agent-instruction file at its
+// root. Research shows ~4pp uplift from human-authored AGENTS.md/CLAUDE.md;
+// auto-generated files hurt. Advisory: absence is a gap, not a hard block.
+const AGENT_INSTRUCTION_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const;
 
 // ARTIFACTS (advisory): build outputs & generated files must be gitignored,
 // else `git add -A` (the dev-loop autocommit safety-net + PR assembly) sweeps
@@ -122,6 +131,7 @@ export function runPreflight(
     checkC4(dir, projectName, forgeRoot),
     checkC5(dir),
     checkC6(dir),
+    checkC8(dir),
     checkDemo(dir),
     checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
@@ -171,23 +181,102 @@ function checkC1(dir: string): ClauseResult {
 
 // --- C2: scratch hygiene (HARD) ---
 
+/**
+ * Git-truth scratch hygiene check.
+ *
+ * A `.gitignore` text-scan is insufficient: git ignores are no-ops on
+ * already-tracked files, so a project can have the right `.gitignore` entries
+ * yet still commit forge scratch (e.g. betterado's AGENT.md was committed and
+ * C2 false-passed). We test git-truth instead:
+ *
+ * A scratch path is a VIOLATION if EITHER:
+ *   (a) `git ls-files --error-unmatch <path>` exits 0  → file is tracked, OR
+ *   (b) `git check-ignore -q <path>` exits non-zero    → file is not ignored.
+ *
+ * Both commands run with cwd = project dir. If the directory is not a git
+ * repo, we fall back to the `.gitignore` text-scan (best-effort).
+ */
 function checkC2(dir: string): ClauseResult {
-  const base = { clause: 'C2' as const, title: 'Scratch hygiene (.gitignore excludes forge scratch)', hard: true };
-  const giPath = join(dir, '.gitignore');
-  if (!existsSync(giPath)) {
-    return { ...base, pass: false, detail: 'no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR' };
+  const base = { clause: 'C2' as const, title: 'Scratch hygiene (forge scratch untracked + ignored)', hard: true };
+
+  // Determine whether this is a git repo at all.
+  const isRepo = spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], {
+    stdio: 'ignore',
+  }).status === 0;
+
+  if (!isRepo) {
+    // No git repo — fall back to .gitignore text-scan (best-effort).
+    const giPath = join(dir, '.gitignore');
+    if (!existsSync(giPath)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          'not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
+      };
+    }
+    const lines = readFileSync(giPath, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'));
+    const missing = SCRATCH_PATHS.filter(
+      (p) => !lines.some((l) => l === p || l === p.replace(/\/$/, '') || l === `/${p}`),
+    );
+    if (missing.length > 0) {
+      return {
+        ...base,
+        pass: false,
+        detail: `not a git repo; .gitignore does not exclude: ${missing.join(', ')}`,
+      };
+    }
+    return {
+      ...base,
+      pass: true,
+      detail: `not a git repo; .gitignore covers all forge scratch (${SCRATCH_PATHS.join(', ')})`,
+    };
   }
-  const lines = readFileSync(giPath, 'utf8')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith('#'));
-  const missing = SCRATCH_PATHS.filter(
-    (p) => !lines.some((l) => l === p || l === p.replace(/\/$/, '') || l === `/${p}`),
-  );
-  if (missing.length > 0) {
-    return { ...base, pass: false, detail: `.gitignore does not exclude: ${missing.join(', ')}` };
+
+  // Git-truth check: a scratch path violates C2 if tracked OR not ignored.
+  const violations: string[] = [];
+  for (const p of SCRATCH_PATHS) {
+    // Strip trailing slash for git commands (git ls-files doesn't match dirs with /).
+    const pathArg = p.replace(/\/$/, '');
+
+    const isTracked =
+      spawnSync('git', ['-C', dir, 'ls-files', '--error-unmatch', pathArg], {
+        stdio: 'ignore',
+      }).status === 0;
+
+    if (isTracked) {
+      violations.push(`${p} (tracked by git)`);
+      continue;
+    }
+
+    const isIgnored =
+      spawnSync('git', ['-C', dir, 'check-ignore', '-q', pathArg], {
+        stdio: 'ignore',
+      }).status === 0;
+
+    if (!isIgnored) {
+      violations.push(`${p} (not ignored by git)`);
+    }
   }
-  return { ...base, pass: true, detail: `.gitignore excludes all forge scratch (${SCRATCH_PATHS.join(', ')})` };
+
+  if (violations.length > 0) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `forge scratch violates git-truth hygiene: ${violations.join('; ')}. ` +
+        'Add these to .gitignore AND ensure they are not already tracked ' +
+        '(`git rm --cached <path>` if needed).',
+    };
+  }
+  return {
+    ...base,
+    pass: true,
+    detail: `git-truth: all forge scratch paths (${SCRATCH_PATHS.join(', ')}) are untracked + ignored`,
+  };
 }
 
 // --- C3: decomposed source under the project's size norm (ADVISORY) ---
@@ -287,8 +376,41 @@ function checkC6(dir: string): ClauseResult {
   };
 }
 
+// --- C8: agent-instruction file (ADVISORY) ---
+
+/**
+ * Advisory: the project must expose a human-authored AGENTS.md or CLAUDE.md
+ * at its root. Research shows ~4pp uplift from human-authored agent-instruction
+ * files; auto-generated files hurt. This clause requires *presence*, never
+ * auto-generation. Advisory (never blocks).
+ */
+function checkC8(dir: string): ClauseResult {
+  const base = { clause: 'C8' as const, title: 'Agent-instruction file (AGENTS.md or CLAUDE.md)', hard: false };
+  const found = AGENT_INSTRUCTION_CANDIDATES.find((f) => existsSync(join(dir, f)));
+  if (found) {
+    return {
+      ...base,
+      pass: true,
+      detail: `${found} present — build/test/lint commands and locked-core mandates available to the agent`,
+    };
+  }
+  return {
+    ...base,
+    pass: false,
+    detail:
+      `no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files ` +
+      `give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint ` +
+      `commands at the top and any locked-core mandates (e.g. "never edit tests to pass").`,
+  };
+}
+
 // --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
 
+/**
+ * Delegates validation to `validateProjectConfig` from orchestrator/project-config.ts
+ * (single source of truth). On a structural violation the throw is caught and
+ * downgraded to an advisory WARN — DEMO is never a hard blocker.
+ */
 function checkDemo(dir: string): ClauseResult {
   const base = {
     clause: 'DEMO' as const,
@@ -304,25 +426,39 @@ function checkDemo(dir: string): ClauseResult {
         'no .forge/project.json — the demo shape is undeclared, so forge cannot ' +
         'tell how this project shows a change. The unifier falls back to a ' +
         'notes-only demo and the operator may approve blind. Declare a demo.shape ' +
-        '(browser | harness | cli-diff | artifact | none). Advisory.',
+        `(${[...DEMO_SHAPES].join(' | ')}). Advisory.`,
     };
   }
-  let cfg: { demo?: { shape?: unknown; command?: unknown; preview_command?: unknown } };
+  let parsed: unknown;
   try {
-    cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as typeof cfg;
+    parsed = JSON.parse(readFileSync(cfgPath, 'utf8'));
   } catch {
-    return { ...base, pass: false, detail: '.forge/project.json is not valid JSON — cannot read the demo shape. Advisory.' };
-  }
-  const demo = cfg.demo;
-  const shape = demo?.shape;
-  if (typeof shape !== 'string' || !DEMO_SHAPES.includes(shape)) {
     return {
       ...base,
       pass: false,
-      detail: `.forge/project.json has no valid demo.shape (got ${JSON.stringify(shape)}); expected one of ${DEMO_SHAPES.join(' | ')}. Advisory.`,
+      detail: '.forge/project.json is not valid JSON — cannot read the demo shape. Advisory.',
     };
   }
-  const hasCommand = Array.isArray(demo?.command) && demo!.command.length > 0;
+  // Use the canonical validator from project-config.ts. Catch its throw and
+  // downgrade to advisory WARN so a missing quality_gate_cmd or bad sweep block
+  // does not block a project that has a valid demo shape.
+  let cfg: ReturnType<typeof validateProjectConfig>;
+  try {
+    cfg = validateProjectConfig(parsed);
+  } catch (err) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `.forge/project.json failed validation: ${err instanceof Error ? err.message : String(err)}. Advisory.`,
+    };
+  }
+  const { shape } = cfg.demo;
+  const hasCommand = Array.isArray(cfg.demo.command) && cfg.demo.command.length > 0;
+  const hasPreview = Array.isArray(cfg.demo.preview_command) && cfg.demo.preview_command.length > 0;
+  // These are already enforced by validateProjectConfig, but we re-check
+  // defensively and surface them as advisory here (the throw path above already
+  // catches hard violations).
   if (shape !== 'none' && !hasCommand) {
     return {
       ...base,
@@ -330,12 +466,12 @@ function checkDemo(dir: string): ClauseResult {
       detail: `demo.shape "${shape}" needs a demo.command (how forge produces the before/after) — none declared. Advisory.`,
     };
   }
-  const hasPreview = Array.isArray(demo?.preview_command) && demo!.preview_command.length > 0;
   if (shape === 'browser' && !hasPreview) {
     return {
       ...base,
       pass: false,
-      detail: 'demo.shape "browser" needs a demo.preview_command (the dev/preview server forge serves the built worktree on) — none declared. Advisory.',
+      detail:
+        'demo.shape "browser" needs a demo.preview_command (the dev/preview server forge serves the built worktree on) — none declared. Advisory.',
     };
   }
   return {
@@ -515,6 +651,38 @@ function gitRemoteUrl(dir: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Structured event emitted by `orchestrator/cli.ts` cmdPreflight after every
+ * run (CON-5). The CLI owns the write so preflight.ts stays pure (no IO side
+ * effects). Export the type + builder here so the CLI can import them.
+ */
+export type PreflightVerdictEvent = {
+  event_type: 'preflight.verdict';
+  project_dir: string;
+  project_name: string;
+  ok: boolean;
+  failing_clause_ids: ClauseId[];
+  warning_clause_ids: ClauseId[];
+  timestamp: string;
+};
+
+/** Build a `PreflightVerdictEvent` from a completed report. */
+export function buildVerdictEvent(r: PreflightReport): PreflightVerdictEvent {
+  return {
+    event_type: 'preflight.verdict',
+    project_dir: r.projectDir,
+    project_name: r.projectName,
+    ok: r.ok,
+    failing_clause_ids: r.clauses
+      .filter((c) => c.hard && !c.pass)
+      .map((c) => c.clause),
+    warning_clause_ids: r.clauses
+      .filter((c) => !c.hard && !c.pass)
+      .map((c) => c.clause),
+    timestamp: new Date().toISOString(),
+  };
 }
 
 /** Render a human-facing per-clause report. Returned, not printed (the CLI prints). */

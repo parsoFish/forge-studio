@@ -1,6 +1,7 @@
 /**
- * Tests for the unified structured demo model (ADR 021) — the schema validator
- * + the derived DEMO.md / DEMO.html renderers.
+ * Tests for the unified structured demo model (ADR 021 / REV-4) — the schema
+ * validator + the derived DEMO.md / DEMO.html renderers. Covers the new rich
+ * structured sections: summary, apiDiff, testEvidence, filesChanged.
  */
 
 import { test } from 'node:test';
@@ -42,8 +43,40 @@ function validModel(): DemoModel {
   };
 }
 
+function richModel(): DemoModel {
+  return {
+    ...validModel(),
+    summary: {
+      bullets: ['Adds dark mode toggle.', 'Persists choice in localStorage.'],
+      prUrl: 'https://github.com/org/repo/pull/99',
+      branch: 'forge/INIT-2026-05-30-dark-mode',
+      commitSha: 'abc1234',
+    },
+    apiDiff: [
+      {
+        name: 'GET /api/theme',
+        change: 'added',
+        after: '{ "mode": "dark" | "light" }',
+      },
+    ],
+    testEvidence: [
+      { name: 'theme.test.ts — persists preference', result: 'pass', delta: '+2 new tests' },
+    ],
+    filesChanged: [
+      { path: 'src/theme.ts', note: 'new toggle logic' },
+      { path: 'src/theme.test.ts', note: 'new tests' },
+    ],
+  };
+}
+
+// ── Validation — required core ────────────────────────────────────────────
+
 test('validateDemoModel: a complete core model is valid', () => {
   assert.deepEqual(validateDemoModel(validModel()), []);
+});
+
+test('validateDemoModel: a rich model with all optional sections is valid', () => {
+  assert.deepEqual(validateDemoModel(richModel()), []);
 });
 
 test('validateDemoModel: missing core fields are reported', () => {
@@ -86,6 +119,42 @@ test('validateDemoModel: video src must be a relative sibling path', () => {
   assert.deepEqual(validateDemoModel(ok), []);
 });
 
+// ── Validation — rich sections ────────────────────────────────────────────
+
+test('validateDemoModel: invalid summary (bullets not array) is reported', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.summary = { bullets: 'not-an-array' };
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('summary.bullets')));
+});
+
+test('validateDemoModel: apiDiff must be array when set', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.apiDiff = 'not-an-array';
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('apiDiff')));
+});
+
+test('validateDemoModel: testEvidence must be array when set', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.testEvidence = 42;
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('testEvidence')));
+});
+
+test('validateDemoModel: filesChanged must be array when set', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.filesChanged = 'not-array';
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('filesChanged')));
+});
+
+// ── renderDemoMarkdown ────────────────────────────────────────────────────
+
 test('renderDemoMarkdown: includes essence, captions, ACs, diffstat', () => {
   const md = renderDemoMarkdown(validModel());
   assert.match(md, /# Dark mode toggle/);
@@ -93,6 +162,35 @@ test('renderDemoMarkdown: includes essence, captions, ACs, diffstat', () => {
   assert.match(md, /Toggling dark mode in settings/);
   assert.match(md, /Acceptance criteria/);
   assert.match(md, /1 file changed/);
+});
+
+test('renderDemoMarkdown: renders summary bullets + PR meta when present', () => {
+  const md = renderDemoMarkdown(richModel());
+  assert.match(md, /## Summary/);
+  assert.match(md, /Adds dark mode toggle/);
+  assert.match(md, /PR: https:\/\/github\.com\/org\/repo\/pull\/99/);
+  assert.match(md, /Branch: `forge\/INIT-2026-05-30-dark-mode`/);
+  assert.match(md, /Commit: `abc1234`/);
+});
+
+test('renderDemoMarkdown: renders API Diff section when present', () => {
+  const md = renderDemoMarkdown(richModel());
+  assert.match(md, /## API \/ Behaviour Diff/);
+  assert.match(md, /GET \/api\/theme.*added/);
+  assert.match(md, /\*\*After:\*\*/);
+});
+
+test('renderDemoMarkdown: renders Test Evidence table when present', () => {
+  const md = renderDemoMarkdown(richModel());
+  assert.match(md, /## Test Evidence/);
+  assert.match(md, /\| test \| result \| delta \|/);
+  assert.match(md, /persists preference.*pass.*\+2 new tests/);
+});
+
+test('renderDemoMarkdown: renders annotated Files Changed when present', () => {
+  const md = renderDemoMarkdown(richModel());
+  assert.match(md, /## Files Changed/);
+  assert.match(md, /`src\/theme\.ts` — new toggle logic/);
 });
 
 test('renderDemoMarkdown: renders a harness metric table when present', () => {
@@ -106,21 +204,37 @@ test('renderDemoMarkdown: renders a harness metric table when present', () => {
   assert.match(md, /\| fps \| 30 \| 60 \| \+100\.0% \| diverged \|/);
 });
 
+// ── renderDemoHtml ────────────────────────────────────────────────────────
+
 test('renderDemoHtml: produces self-contained HTML carrying the essence', () => {
   const html = renderDemoHtml(validModel(), '2026-05-30T00:00:00.000Z');
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /follows the OS by default/);
 });
 
+test('renderDemoHtml: rich sections appear in HTML output', () => {
+  const html = renderDemoHtml(richModel(), '2026-05-30T00:00:00.000Z');
+  assert.match(html, /id="summary"/);
+  assert.match(html, /id="api-diff"/);
+  assert.match(html, /id="test-evidence"/);
+  assert.match(html, /id="files-changed"/);
+});
+
+// ── renderDemoBundle ──────────────────────────────────────────────────────
+
 test('renderDemoBundle: valid demo.json → writes derived DEMO.md + DEMO.html', () => {
   const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
-  writeFileSync(join(dir, 'demo.json'), JSON.stringify(validModel()));
+  writeFileSync(join(dir, 'demo.json'), JSON.stringify(richModel()));
   const res = renderDemoBundle(dir, '2026-05-30T00:00:00.000Z');
   assert.equal(res.ok, true);
   assert.deepEqual(res.errors, []);
   assert.ok(existsSync(join(dir, 'DEMO.md')));
   assert.ok(existsSync(join(dir, 'DEMO.html')));
-  assert.match(readFileSync(join(dir, 'DEMO.md'), 'utf8'), /Dark mode toggle/);
+  const md = readFileSync(join(dir, 'DEMO.md'), 'utf8');
+  assert.match(md, /Dark mode toggle/);
+  assert.match(md, /Summary/);
+  const html = readFileSync(join(dir, 'DEMO.html'), 'utf8');
+  assert.match(html, /id="api-diff"/);
 });
 
 test('renderDemoBundle: invalid demo.json → errors, writes nothing', () => {
@@ -140,6 +254,8 @@ test('renderDemoBundle: missing demo.json → clear error', () => {
   assert.match(res.errors[0], /demo\.json not found/);
 });
 
+// ── mergeCapturedMedia ────────────────────────────────────────────────────
+
 test('mergeCapturedMedia: fills images on matching checkpoints + appends unmatched', () => {
   const m = validModel(); // checkpoint label 'toggle'
   const merged = mergeCapturedMedia(m, [
@@ -158,6 +274,8 @@ test('mergeCapturedMedia: fills images on matching checkpoints + appends unmatch
   assert.equal(m.checkpoints[0].beforeImage, undefined);
 });
 
+// ── toComparisonModel ─────────────────────────────────────────────────────
+
 test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {
   const cm = toComparisonModel({ ...validModel(), baseRef: undefined, changedRef: undefined }, 'T');
   assert.equal(cm.generatedAt, 'T');
@@ -165,4 +283,13 @@ test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {
   assert.equal(cm.baseRef, 'main');
   assert.equal(cm.changedRef, 'HEAD');
   assert.equal(cm.checkpoints[0].kind, 'screenshot');
+});
+
+test('toComparisonModel: passes through rich sections to comparison model', () => {
+  const cm = toComparisonModel(richModel(), 'T');
+  assert.ok(cm.summary?.bullets.length === 2);
+  assert.equal(cm.summary?.prUrl, 'https://github.com/org/repo/pull/99');
+  assert.equal(cm.apiDiff?.length, 1);
+  assert.equal(cm.testEvidence?.length, 1);
+  assert.equal(cm.filesChanged?.length, 2);
 });

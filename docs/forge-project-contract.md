@@ -128,6 +128,25 @@ Forge must be able to produce a PR the operator can merge without stacking /
 auto-merge hazards. Post-Phase-6 forge satisfies this by not auto-merging (the
 operator merges); the project supplies a remote.
 
+### C8 — An agent-instruction file *(advisory, 2026-06-03)*
+The project must expose a **human-authored** `AGENTS.md` or `CLAUDE.md` at
+its root, with build/test/lint commands near the top and any locked-core
+mandates (e.g. "never edit tests to pass"; "user owns git").
+
+**Why**: human-authored agent-instruction files yield ~4pp task-completion
+uplift. Auto-generated files (e.g. forge-written scaffolding) have the
+*opposite* effect — they hurt. The clause requires *presence of a human-authored
+file*, never auto-generation. Forge must never create or overwrite this file;
+if it is missing, forge warns and the operator creates it.
+
+**Lifecycle note**: the forge scratch path `AGENT.md` (the per-cycle scratchpad
+forge writes during the dev-loop) is distinct from `AGENTS.md` / `CLAUDE.md`
+(the operator-authored instruction file). The scratchpad must be gitignored and
+untracked (C2); the instruction file must exist and remain human-authored (C8).
+The AGENT.md scratchpad lifecycle (when and where forge writes it) is owned by
+the unifier write-site — C8 only states the contract: the operator-authored
+file must be present at the project root.
+
 ### C7 — An external-resource model *(new dimension, 2026-05-31)*
 *Conditional — applies only to projects whose behaviour can only be verified
 against a live external system* (cloud, database, third-party API; e.g. an infra
@@ -173,15 +192,21 @@ structural part (the `demo` block) as the advisory **DEMO** clause.
 
 ## How forge enforces it
 
-`forge preflight <project>` checks C1–C6 + the advisory **DEMO** clause (the
+`forge preflight <project>` checks C1–C8 + the advisory **DEMO** clause (the
 `.forge/project.json` demo block) structurally and **declines** on a hard
-failure (C1/C2/C4 hard; C3/C5/C6/DEMO advisory). The deepened facets of C1 (gate
-discrimination) and C2 (build-artifact hermeticity), the deeper demo facet (does
-the before/after actually capture the delta), and C7 entirely, are **not
-yet machine-checked** — they're in the hardening backlog
-([docs/known-gaps.md](./known-gaps.md), 2026-05-31). Until then, onboarding must
-verify them by hand (run the gate on a clean tree and confirm it *fails*; build
-and confirm `git status` is clean).
+failure (C1/C2/C4 hard; C3/C5/C6/C8/DEMO advisory). The C2 check uses
+**git-truth** (`git ls-files --error-unmatch` + `git check-ignore -q`) rather
+than scanning `.gitignore` text — a `.gitignore` entry is a no-op on
+already-tracked files. The DEMO clause validation is delegated to
+`orchestrator/project-config.ts validateProjectConfig` (single source of truth).
+After each run, the CLI writes a `preflight.verdict` JSONL event.
+
+The deepened facets of C1 (gate discrimination) and C2 (build-artifact
+hermeticity), the deeper demo facet (does the before/after actually capture the
+delta), and C7 entirely, are **not yet machine-checked** — they're in the
+hardening backlog ([docs/known-gaps.md](./known-gaps.md), 2026-05-31). Until
+then, onboarding must verify them by hand (run the gate on a clean tree and
+confirm it *fails*; build and confirm `git status` is clean).
 
 ## The point: roadmap-scale, not single-WI
 
@@ -193,6 +218,8 @@ contract gap instead.
 
 ## See also
 - [ADR-017](./decisions/017-forge-project-contract.md) — the decision.
-- [`cli/preflight.ts`](../cli/preflight.ts) — the enforcement (C1–C6).
+- [`cli/preflight.ts`](../cli/preflight.ts) — the enforcement (C1–C8 + DEMO + ARTIFACTS + BRAIN).
+- [`orchestrator/project-config.ts`](../orchestrator/project-config.ts) — canonical DEMO_SHAPES + validateProjectConfig (imported by preflight).
+- [`docs/schemas/project-config.schema.json`](./schemas/project-config.schema.json) — operator-facing .forge/project.json schema.
 - brain `forge-dev/themes/forge-project-onboarding-contract.md` — origin (trafficGame).
 - [docs/known-gaps.md](./known-gaps.md) §2026-05-31 — the not-yet-enforced facets.

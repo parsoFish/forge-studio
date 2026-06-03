@@ -13,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   writeFileSync,
   existsSync,
   readdirSync,
@@ -575,4 +576,129 @@ test('listArchitectSessions discovers sessions across projects, skipping _archiv
   const projectsRoot = join(projectRoot, '..'); // the `projects/` parent in the fixture
   const found = listArchitectSessions(projectsRoot);
   assert.ok(found.some((s) => s.session_id === sessionId && s.project === 'demo'));
+});
+
+// ---------------------------------------------------------------------------
+// ARCH-1: brain-query event + brain_context population
+// ---------------------------------------------------------------------------
+
+test('ARCH-1: runner emits a brain-query event on every turn', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession();
+  const queryFn = makeQueryFn({
+    interview: { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
+  });
+
+  await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  const log = readFileSync(join(logsRoot, `_architect-${sessionId}`, 'events.jsonl'), 'utf8');
+  const events = log.trim().split('\n').map((l) => JSON.parse(l));
+  const brainEv = events.find((e) => e.event_type === 'brain-query');
+  assert.ok(brainEv, 'brain-query event must be emitted each turn');
+  assert.equal(brainEv.metadata?.project, 'demo');
+});
+
+test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+
+  // queryFn yields a brain/ Read tool_use block before the structured result.
+  const queryFn: CouncilQueryFn = ({ prompt }) => {
+    const structured = prompt.includes('the interview step')
+      ? { done: true }
+      : {
+          vision: 'Brain-aware plan.',
+          initiatives: [{
+            slug: 'feature-x',
+            title: 'Feature X',
+            iteration_budget: 3,
+            cost_budget_usd: 4,
+            features: [{ title: 'core' }],
+            body: '## Feature X\n\nGIVEN env WHEN used THEN works.',
+          }],
+        };
+    async function* gen(): AsyncGenerator<unknown> {
+      if (prompt.includes('draft the initiative')) {
+        // Simulate the agent reading a brain theme
+        yield {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'tool_use', name: 'Read', input: { file_path: 'brain/cycles/themes/wi-sizing.md' } },
+              { type: 'tool_use', name: 'Read', input: { file_path: 'projects/demo/brain/profile.md' } },
+              // A duplicate — should be deduped
+              { type: 'tool_use', name: 'Read', input: { file_path: 'brain/cycles/themes/wi-sizing.md' } },
+            ],
+          },
+        };
+      }
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot,
+    queryFn,
+    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  // brain_context should be non-empty and deduped
+  const planMd = readFileSync(result.planPath!, 'utf8');
+  assert.match(planMd, /brain\/cycles\/themes\/wi-sizing\.md/, 'brain theme path appears in PLAN.md brain context');
+  assert.match(planMd, /projects\/demo\/brain\/profile\.md/, 'project brain path appears in PLAN.md brain context');
+  // Duplicate is deduped — count occurrences of wi-sizing.md in the brain context section
+  const bcStart = planMd.indexOf('## Brain context');
+  const bcEnd = planMd.indexOf('\n## ', bcStart + 1);
+  const bcBlock = planMd.slice(bcStart, bcEnd >= 0 ? bcEnd : undefined);
+  const wiSizingCount = (bcBlock.match(/wi-sizing\.md/g) ?? []).length;
+  assert.equal(wiSizingCount, 1, 'duplicate brain read must be deduped in brain_context');
+});
+
+// ---------------------------------------------------------------------------
+// ARCH-6: rejected phase → archiveSessionDir
+// ---------------------------------------------------------------------------
+
+test('ARCH-6: rejected turn archives the session dir and does not throw', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ phase: 'rejected' });
+
+  const result = await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot,
+    queryFn: makeQueryFn({}),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'rejected');
+  // Session dir must be moved to _archived/
+  assert.ok(!existsSync(sessionDir), 'original session dir must be gone after archive');
+  const archivedDir = join(projectRoot, '_architect', '_archived', sessionId);
+  assert.ok(existsSync(archivedDir), 'session must be in _archived/');
+  // Archived session should no longer appear in listArchitectSessions
+  const projectsRoot = join(projectRoot, '..');
+  const found = listArchitectSessions(projectsRoot);
+  assert.ok(!found.some((s) => s.session_id === sessionId), 'archived session must not appear in active list');
+});
+
+test('ARCH-6: rejected turn on already-archived session does not throw (idempotent)', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ phase: 'rejected' });
+  // Pre-archive: move the dir to _archived/ so the session dir is already gone.
+  const archivedRoot = join(projectRoot, '_architect', '_archived');
+  mkdirSync(archivedRoot, { recursive: true });
+  renameSync(sessionDir, join(archivedRoot, sessionId));
+
+  // Should not throw — archiveSessionDir error is swallowed.
+  const result = await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot,
+    queryFn: makeQueryFn({}),
+    logger: logger(logsRoot, sessionId),
+  });
+  assert.equal(result.phase, 'rejected');
 });

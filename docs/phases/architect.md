@@ -1,50 +1,55 @@
 # Phase: Architect
 
-> *Human-in-the-loop.* Turns ideas into initiatives via interactive Claude Code skills.
+> *Human-in-the-loop.* Turns ideas into initiatives via the in-UI architect
+> runner (ADR 020).
 
 > **Intentionally out-of-cycle — a designed property, not a gap.** The
 > architect is **not** wired into `runCycle` and is never auto-invoked.
-> It is a deliberate human moment the operator runs in their own Claude
-> session via the **`/forge-architect`** slash command
-> ([`.claude/commands/forge-architect.md`](../../.claude/commands/forge-architect.md)).
-> Its only handoff to forge is the files it writes
-> (`_queue/pending/INIT-*.md` + roadmap rows), which the scheduler picks
-> up unattended. Design of record:
-> [`brain/forge-dev/themes/human-interaction-via-own-session.md`](../../brain/forge-dev/themes/human-interaction-via-own-session.md)
-> (resolves retro Q4; US-3.1 / US-1.0).
+> It is a deliberate human moment: the operator types an idea in the forge UI,
+> drives an interview, reviews PLAN.html, and approves or rejects. Only on
+> approve does the runner promote manifests to `_queue/pending/`, which the
+> scheduler picks up unattended. The next human touch is the review loop.
 
 ## Purpose
 
-Collaborate with the user during ideation sessions to update the project's roadmap and emit one or more **initiatives** — coherent, dependency-ordered collections of features that move a project to a desired state. Once an initiative is confirmed, it's queued for unattended execution; the next human touch is the review loop.
+Collaborate with the operator during ideation to emit one or more **initiatives** — coherent, dependency-ordered collections of coarse capability-features that move a project to a desired state. The architect emits features at the capability level; the PM owns all work-item sizing and gate selection. Once an initiative is approved, it's queued for unattended execution.
 
 ## Inputs
 
-- The user's free-form idea / brief / pain point.
-- The project's existing roadmap (`projects/<name>/roadmap.md`) — schema in [ADR 014](../decisions/014-roadmap-format.md).
-- Brain knowledge (queried via `brain-query`).
-- Past initiatives + retros for the project (`brain/projects/<name>/themes/`).
+- The operator's free-form idea / brief / pain point (entered via the forge UI).
+- Brain 2 (cycles) — `brain/cycles/themes/` patterns + antipatterns (read at turn start).
+- Brain 3 (project) — `projects/<name>/brain/profile.md` + `projects/<name>/brain/themes/` (read at turn start).
+- If continuing a prior `revise` round: `<projectRoot>/_architect/<session-id>/feedback.md`.
 
 ## Outputs
 
-- Updated `projects/<name>/roadmap.md` — schema in [ADR 014](../decisions/014-roadmap-format.md).
-- One or more `_queue/pending/<initiative-id>.md` manifests with frontmatter:
+- **`<projectRoot>/_architect/<session-id>/PLAN.md`** + sibling **`PLAN.html`** —
+  the operator's review artefact. PLAN.html is the rich viewer; PLAN.md is the
+  parse target for the runner.
+- **`<projectRoot>/_architect/<session-id>/manifests/INIT-*.md`** — draft
+  manifests, NOT yet in `_queue/pending/`. Promoted only on operator approve.
+- On approve: one or more **`_queue/pending/<initiative-id>.md`** manifests
+  with frontmatter:
   ```yaml
   ---
   initiative_id: INIT-<YYYYMMDD>-<slug>
   project: <project-name>
   created_at: <ISO-8601>
   iteration_budget: 50           # max Ralph iterations across the whole initiative
-  # cost_budget_usd: removed per CONTRACTS.md C19 (2026-05-23) — iteration cap is the sole bound.
+  cost_budget_usd: 5             # operator-set cost cap
   features:
     - feature_id: FEAT-1
-      title: ...
+      title: ...           # coarse capability-feature title; PM decomposes into WIs
       depends_on: []
     - feature_id: FEAT-2
       title: ...
       depends_on: [FEAT-1]
   ---
   ```
-- Frontmatter is followed by the markdown initiative spec (the LLM-Council-confirmed brief).
+- Frontmatter is followed by the markdown initiative spec (the council-confirmed brief).
+- **No roadmap.md write.** The roadmap is a derived view: the `_queue/` manifests
+  and their `depends_on_initiatives` chain, rendered by the forge UI. The architect
+  does not write or maintain any `roadmap.md`.
 
 ## Skills
 
@@ -72,11 +77,12 @@ Collaborate with the user during ideation sessions to update the project's roadm
 - **Vague acceptance criteria** — propagates downstream and breaks the developer loop. The council includes a critic specifically watching for this.
 - **Missing dependencies** — leads to parallel work-item collisions. The council includes a dependency-graph critic.
 
-## TODO (post-scaffold)
+## Status
 
-- [x] Implement the LLM Council critic chain in the council skill — done via [`skills/architect-llm-council/council.ts`](../../skills/architect-llm-council/council.ts) (`runCouncil()` + `defaultCritics()`).
-- [x] Initiative-manifest writer + validator — done via [`orchestrator/manifest.ts`](../../orchestrator/manifest.ts) (typed schema, depends_on cycle detection, budget validation, `writeManifest()`).
-- [x] CLI integration — `forge enqueue --from-manifest <path>` validates and enqueues a pre-formed manifest.
-- [ ] Populate `benchmarks/architect/prompts.json` with 5-10 sample ideas spanning different project types.
-- [x] Decide on the canonical roadmap-markdown format — done via [ADR 014](../decisions/014-roadmap-format.md).
-- [ ] Wire the architect skill's actual interactive loop in a Claude Code session (the SKILL.md is the prompt; the skill becomes invocable as `/architect` once registered with Claude Code's skill loader).
+All phase infrastructure is live as of 2026-06-02:
+- [x] In-UI architect runner (`orchestrator/architect-runner.ts`) — ADR 020.
+- [x] LLM Council critic chain — `skills/architect-llm-council/council.ts`.
+- [x] Rich PLAN.html viewer — `cli/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels).
+- [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
+- [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.
+- [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.

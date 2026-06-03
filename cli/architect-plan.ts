@@ -1,23 +1,15 @@
 /**
- * Architect plan-doc operator artefact — renderer + feedback parser + writer.
+ * Architect plan-doc operator artefact — renderer + writer.
  *
  * Stage S2A of the 2026-05-20 refinement batch. The architect's terminal step
- * is no longer "write manifests to `_queue/pending/`" — it's "write `PLAN.md`
- * (+ sibling `PLAN.html`) to `<projectRepoPath>/_architect/<session-id>/` for
- * the operator to review."
+ * is "write `PLAN.md` (+ sibling `PLAN.html`) to
+ * `<projectRepoPath>/_architect/<session-id>/` for the operator to review."
  *
  * Contracts honoured:
  *  - C12  — PLAN.md location is `<projectRoot>/_architect/<session-id>/PLAN.md`.
  *  - C19  — aggregate footprint is INFORMATIONAL ONLY (no gate, no threshold,
  *           no auto-escalation). The renderer pins this in the section title
  *           and body language; the test suite asserts the vocabulary.
- *  - C26  — if the session carries a `project_metrics` block (from
- *           `.forge/project.json`), the rendered PLAN.md surfaces the metric
- *           command + baselines_dir + tolerance alongside the manifest.
- *  - C27  — every session carries `type: 'implementation' | 'exploration'`.
- *           Exploration manifests render `parameter_space` + `hypothesis` +
- *           `metric_command` + `locked_baselines` and label `iteration_budget`
- *           as a hint not a contract.
  *
  * Cwc amendments (2026-05-24, see S2A-CWC-AMENDMENTS.md):
  *  - Amendment 1: the rendered "Operator brief + interview" section captures
@@ -34,7 +26,7 @@
  *
  * The PLAN is reviewed + approved on the in-UI `/architect/<sid>` plan gate
  * (ADR 020/023); the operator's verdict comes through the bridge, not via
- * PLAN.md HTML-comment annotations (that CLI input flow was retired).
+ * PLAN.md annotations.
  */
 
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
@@ -47,23 +39,10 @@ import type { Flag, Escalation, CriticVerdict, OptionVisual } from '../skills/ar
 // Public types
 // ---------------------------------------------------------------------------
 
-export type InitiativeType = 'implementation' | 'exploration';
-
 export type ProposedFeature = {
   feature_id: string;
   title: string;
   depends_on: string[];
-};
-
-export type ExplorationFields = {
-  /** Markdown bullet list describing the parameter space. */
-  parameter_space: string;
-  /** One-line hypothesis the exploration is testing. */
-  hypothesis: string;
-  /** The metric command (same shape as `quality_gate_cmd`). */
-  metric_command: string[];
-  /** Paths to the baseline files this exploration is measured against. */
-  locked_baselines: string[];
 };
 
 export type ProposedInitiative = {
@@ -80,14 +59,6 @@ export type ProposedInitiative = {
   depends_on_initiatives?: string[];
   /** Raw manifest body — preserved verbatim in the PLAN.md drawer. */
   body: string;
-  /** Set when this initiative is C27 `type: exploration`. */
-  exploration?: ExplorationFields;
-};
-
-export type ProjectMetrics = {
-  command: string[];
-  baselines_dir: string;
-  tolerance_pct?: number;
 };
 
 export type CouncilTranscript = {
@@ -129,16 +100,12 @@ export type ArchitectSession = {
    * drafted directly_`.
    */
   interview?: InterviewRound[];
-  /** Brain entries the architect consulted while drafting. */
+  /** Brain entries the architect consulted while drafting (ARCH-1). */
   brain_context: BrainContextEntry[];
   /** Raw council output (flags / escalations / per-critic + total cost). */
   council: CouncilTranscript;
   /** One or more drafted initiatives — NOT yet written to `_queue/pending/`. */
   initiatives: ProposedInitiative[];
-  /** C27 discriminator. Defaults to `implementation` when undefined. */
-  type?: InitiativeType;
-  /** C26: when the project has a `metrics` block in `.forge/project.json`. */
-  project_metrics?: ProjectMetrics;
   /** Optional list of unresolved taste decisions the operator must settle. */
   open_escalations?: Escalation[];
 };
@@ -147,22 +114,13 @@ export type ArchitectSession = {
 // Render
 // ---------------------------------------------------------------------------
 
-const VERDICT_PLACEHOLDER = '<!-- verdict: approve | revise | reject -->';
-
 export function renderPlanDoc(session: ArchitectSession): string {
-  const type: InitiativeType = session.type ?? 'implementation';
   const parts: string[] = [];
 
-  // Operator-edited verdict marker — placed at the very top so a grep for
-  // `<!-- verdict:` is trivially first-hit. Order matters: the operator
-  // edits the inner text but should never need to scroll.
-  parts.push(VERDICT_PLACEHOLDER);
-  parts.push('');
   parts.push(`# Architect plan — ${session.session_id}`);
   parts.push('');
   parts.push(`- Project: \`${session.project}\``);
   parts.push(`- Repo: \`${session.project_repo_path}\``);
-  parts.push(`- Initiative type: \`${type}\``);
   parts.push('');
 
   // Operator quick-start — the plan is reviewed + approved on the in-UI plan gate.
@@ -273,11 +231,8 @@ export function renderPlanDoc(session: ArchitectSession): string {
   parts.push('|---|---|---|---|---|');
   for (const init of session.initiatives) {
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
-    const budgetLabel = type === 'exploration'
-      ? `${init.iteration_budget} (hint, not contract)`
-      : String(init.iteration_budget);
     parts.push(
-      `| \`${init.initiative_id}\` | ${init.title} | ${init.features.length} | ${budgetLabel} | ${dep} |`,
+      `| \`${init.initiative_id}\` | ${init.title} | ${init.features.length} | ${init.iteration_budget} | ${dep} |`,
     );
   }
   parts.push('');
@@ -286,41 +241,9 @@ export function renderPlanDoc(session: ArchitectSession): string {
   for (const init of session.initiatives) {
     parts.push(`### ${init.initiative_id} — drawer`);
     parts.push('');
-    if (type === 'exploration' && init.exploration) {
-      const ex = init.exploration;
-      parts.push('**Exploration fields (C27):**');
-      parts.push('');
-      parts.push(`- iteration budget: ${init.iteration_budget} (hint, not contract — C27 L9)`);
-      parts.push('- `parameter_space`:');
-      parts.push('');
-      for (const line of ex.parameter_space.split('\n')) {
-        parts.push(`  ${line}`);
-      }
-      parts.push('');
-      parts.push(`- \`hypothesis\`: ${ex.hypothesis}`);
-      parts.push(`- \`metric_command\`: \`${ex.metric_command.join(' ')}\``);
-      parts.push('- `locked_baselines`:');
-      for (const b of ex.locked_baselines) {
-        parts.push(`  - \`${b}\``);
-      }
-      parts.push('');
-    }
     parts.push('```markdown');
     parts.push(init.body.trimEnd());
     parts.push('```');
-    parts.push('');
-  }
-
-  // --- Project metrics (C26) ---
-  if (session.project_metrics) {
-    const m = session.project_metrics;
-    parts.push('## Project metrics (per .forge/project.json)');
-    parts.push('');
-    parts.push(`- \`command\`: \`${m.command.join(' ')}\``);
-    parts.push(`- \`baselines_dir\`: \`${m.baselines_dir}\``);
-    if (typeof m.tolerance_pct === 'number') {
-      parts.push(`- \`tolerance_pct\`: \`${m.tolerance_pct}\``);
-    }
     parts.push('');
   }
 
@@ -345,20 +268,15 @@ export function renderPlanDoc(session: ArchitectSession): string {
       `- Total estimated cost (partial — ${knownCostInitiatives.length}/${session.initiatives.length} initiatives have estimates): **$${totalEstimatedCost.toFixed(2)}**`,
     );
   }
-  if (type === 'exploration') {
-    parts.push(
-      '- _Note: this is an exploration initiative — iteration budgets are hints, not contracts (C27)._',
-    );
-  }
   parts.push('');
 
-  // --- Open escalations (operator must resolve) ---
+  // --- Open escalations (operator must resolve on the /architect gate) ---
   const open = session.open_escalations ?? [];
   if (open.length > 0) {
     parts.push('## Open escalations');
     parts.push('');
-    parts.push('_These taste decisions the council surfaced are unresolved. Resolve each inline ' +
-      'with `<!-- review: ... -->` before approving, or explicitly defer in your verdict._');
+    parts.push('_These taste decisions the council surfaced are unresolved. Resolve each ' +
+      'on the `/architect` plan gate — your selection is applied at approval._');
     parts.push('');
     for (const e of open) {
       parts.push(`- (${e.critic}) ${e.question}`);
@@ -557,23 +475,62 @@ ${nodes}
 }
 
 /**
- * Render a self-contained HTML viewer for the architect session. Zero
- * external deps — single HTML file, inline CSS, no JS framework. The
- * operator opens this in their browser; annotations still happen in
- * PLAN.md.
+ * D3 — Render a self-contained, genuinely rich HTML viewer for the architect
+ * session. Zero external deps — single HTML file, inline CSS. The operator
+ * opens this in their browser; it is read-only (verdict on the /architect
+ * plan-gate screen). Sections over paragraphs; cards not prose; empty
+ * sections collapsed.
  *
- * cwc Amendment 2 + 2026-05-23 dogfood pushback: the cycle position diagram
- * was dropped (operator already knows where they are). Replaced with an
- * actual visual feature dependency graph (inline SVG) per initiative —
- * the genuine HTML value markdown can't render.
+ * Structure (top-to-bottom):
+ *  1. Header — vision + initiative count + session metadata
+ *  2. Per-initiative CARDS — title, budget, depends-on, feature dep graph,
+ *     features list with acceptance-criteria drawer
+ *  3. Design decisions — COMPARATIVE CARDS side by side (pros/cons + visuals)
+ *  4. Brain context — what the architect consulted
+ *  5. Council transcript — per-critic accordion (collapsed)
+ *  6. Aggregate footprint — stacked bar (C19 informational)
+ *  7. Operator brief + interview table
  */
 export function renderPlanHtml(session: ArchitectSession): string {
-  const type: InitiativeType = session.type ?? 'implementation';
   const rounds = session.interview ?? [];
   const totalIterations = session.initiatives.reduce((s, i) => s + i.iteration_budget, 0);
   const knownCost = session.initiatives.filter((i) => typeof i.estimated_cost_usd === 'number');
   const totalEstimated = knownCost.reduce((s, i) => s + (i.estimated_cost_usd ?? 0), 0);
   const open = session.open_escalations ?? [];
+
+  // Per-initiative card: dep graph + features table + body drawer
+  function renderInitiativeCard(init: ProposedInitiative, idx: number): string {
+    const hue = (idx * 67) % 360;
+    const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
+    const featRows = init.features.map((f) =>
+      `<tr><td><code>${esc(f.feature_id)}</code></td><td>${esc(f.title)}</td><td>${f.depends_on.length ? f.depends_on.map((d) => `<code>${esc(d)}</code>`).join(', ') : '—'}</td></tr>`
+    ).join('\n');
+    return `<div class="init-card" data-initiative-id="${esc(init.initiative_id)}" style="--card-accent: hsl(${hue}, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">${esc(init.initiative_id)}</span>
+      <span class="init-title">${esc(init.title)}</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>${init.iteration_budget}</strong></span>
+      ${typeof init.cost_budget_usd === 'number' ? `<span class="chip">cap <strong>$${init.cost_budget_usd}</strong></span>` : ''}
+      ${dep !== '—' ? `<span class="chip dep-chip">after ${esc(dep)}</span>` : ''}
+    </div>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title">Feature dependency graph</div>
+    ${renderFeatureDepGraphSvg(init)}
+  </div>
+  <table class="features-table">
+    <thead><tr><th>Feature</th><th>Title</th><th>Depends on</th></tr></thead>
+    <tbody>${featRows}</tbody>
+  </table>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>${esc(init.body.trimEnd())}</pre>
+  </details>
+</div>`;
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -582,15 +539,13 @@ export function renderPlanHtml(session: ArchitectSession): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PLAN — ${esc(session.session_id)} — ${esc(session.project)}</title>
 <style>
-  /* Unified with the forge-ui dark stage so PLAN/DEMO + the live view share
-     one theme inside the same app. Dark-only (the app has no light mode). */
+  /* Unified with the forge-ui dark stage. Dark-only (the app has no light mode). */
   :root {
     --bg: #0a0e14;
     --fg: #e6edf3;
     --muted: #8b949e;
     --border: #21262d;
     --accent: #1f6feb;
-    --brain: #d2a8ff;
     --user: #2ea043;
     --warn: #d29922;
     --code-bg: #0a0f16;
@@ -604,200 +559,300 @@ export function renderPlanHtml(session: ArchitectSession): string {
     color: var(--fg);
     background: var(--bg);
     line-height: 1.55;
-    max-width: 1100px;
+    max-width: 1180px;
     margin-left: auto;
     margin-right: auto;
   }
-  h1 { font-size: 1.75rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
-  h2 { font-size: 1.25rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em; }
-  h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
-  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
-  .meta code { background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 3px; }
-  .notice {
-    background: var(--card-bg);
-    border-left: 3px solid var(--accent);
-    padding: 0.75rem 1rem;
-    margin: 1rem 0 1.5rem;
-    border-radius: 3px;
-    font-size: 0.9rem;
-  }
-  .notice code { background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 3px; }
-  /* Feature dependency graph */
-  .dep-graph-wrap {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-    margin: 0.75rem 0 1.25rem;
-    overflow-x: auto;
-  }
-  .dep-graph-title { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
-  svg.dep-graph { display: block; min-width: 100%; }
-  svg.dep-graph .node-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
-  svg.dep-graph .node-box.root { stroke: var(--accent); stroke-width: 2; }
-  svg.dep-graph .node-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 11px; font-weight: 600; fill: var(--accent); }
-  svg.dep-graph .node-title { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 11px; fill: var(--fg); }
-  svg.dep-graph .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
-  svg.dep-graph .arrowhead { fill: var(--muted); }
-  /* Tables */
-  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
-  th, td {
-    padding: 0.5rem 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-    font-size: 0.9rem;
-  }
-  th { font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  /* Footprint bar */
-  .footprint {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-  }
-  .footprint .bar {
-    display: flex;
-    width: 100%;
-    height: 1.5rem;
-    border-radius: 3px;
-    overflow: hidden;
-    margin: 0.5rem 0;
-    background: var(--code-bg);
-  }
-  .footprint .seg {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 500;
-    text-shadow: 0 0 2px rgba(0,0,0,0.5);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    padding: 0 0.25rem;
-  }
-  .footprint .summary { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
-  .footprint .info { color: var(--muted); font-size: 0.8rem; font-style: italic; margin-top: 0.5rem; }
-  /* Escalation cards */
-  .escalations { display: grid; gap: 1rem; }
-  .escalation {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-  }
-  .escalation .q {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-  }
-  .escalation .critic-chip {
-    display: inline-block;
-    font-size: 0.7rem;
-    background: var(--accent);
-    color: white;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    margin-right: 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  /* Options side-by-side in a single row (no wrap to 2 rows) — operator pref. */
-  .escalation .options {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    gap: 0.75rem;
-    margin-top: 0.75rem;
-    align-items: stretch;
-  }
-  .escalation .option {
-    display: block;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.7rem 0.85rem;
-    font-size: 0.85rem;
-    min-width: 0;
-  }
-  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
-  .escalation .option .label { font-weight: 600; }
-  .escalation .option .rationale { color: var(--muted); }
-  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.5rem 0 0; font-size: 0.78rem; display: grid; gap: 0.15rem; }
-  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.35rem; }
-  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.35rem; }
-  .escalation .option .opt-visual { margin-top: 0.6rem; }
-  .escalation .option .opt-visual iframe.mockup {
-    width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117;
-  }
-  .escalation .option .opt-visual pre.code,
-  .escalation .option .opt-visual pre.diagram {
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
-    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
-  }
-  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.72rem; font-style: italic; margin-top: 0.3rem; }
-  /* Drawers */
-  details {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    margin: 0.5rem 0;
-  }
-  details summary {
-    cursor: pointer;
-    font-weight: 500;
-    padding: 0.25rem 0;
-  }
-  details[open] summary { margin-bottom: 0.5rem; }
+  /* ── Typography ── */
+  h1 { font-size: 1.75rem; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.1rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em;
+       text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; font-size: 0.72rem; }
+  h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.5rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
   pre {
     background: var(--code-bg);
     padding: 0.75rem 1rem;
     border-radius: 4px;
     overflow-x: auto;
-    font-size: 0.8rem;
+    font-size: 0.79rem;
     line-height: 1.45;
+    margin: 0;
   }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
-  ul, ol { padding-left: 1.5rem; }
-  .empty { color: var(--muted); font-style: italic; }
+  ul, ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+  /* ── Badges & chips ── */
   .badge {
     display: inline-block;
     background: var(--code-bg);
     color: var(--muted);
     padding: 0.1rem 0.5rem;
     border-radius: 3px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   }
-  .badge.user { background: var(--user); color: white; }
-  .badge.warn { background: var(--warn); color: white; }
+  .chip {
+    display: inline-block;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+  }
+  .chip strong { color: var(--fg); }
+  .dep-chip { border-color: var(--warn); color: var(--warn); }
+  /* ── Notice ── */
+  .notice {
+    background: var(--card-bg);
+    border-left: 3px solid var(--accent);
+    padding: 0.65rem 1rem;
+    margin: 0.75rem 0 1.5rem;
+    border-radius: 3px;
+    font-size: 0.88rem;
+  }
+  /* ── Plan header ── */
+  .plan-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .plan-header .vision-block { flex: 1 1 55%; min-width: 260px; }
+  .plan-header .stats-block {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    min-width: 80px;
+  }
+  .stat-card .num { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .stat-card .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.2rem; }
+  .plan-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+  .plan-meta code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+  /* ── Initiative cards ── */
+  .init-cards { display: grid; gap: 1.25rem; }
+  .init-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--card-accent, var(--accent));
+    border-radius: 6px;
+    padding: 1rem 1.15rem 0.75rem;
+  }
+  .init-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .init-title-block { display: flex; flex-direction: column; gap: 0.25rem; }
+  .init-title { font-size: 1.05rem; font-weight: 600; }
+  .init-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.1rem; }
+  /* ── Dep graph ── */
+  .dep-graph-wrap {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.85rem;
+    overflow-x: auto;
+  }
+  .dep-graph-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  svg.dep-graph { display: block; min-width: 100%; }
+  svg.dep-graph .node-box { fill: var(--card-bg); stroke: var(--border); stroke-width: 1; }
+  svg.dep-graph .node-box.root { stroke: var(--accent); stroke-width: 2; }
+  svg.dep-graph .node-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 11px; font-weight: 600; fill: var(--accent); }
+  svg.dep-graph .node-title { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 11px; fill: var(--fg); }
+  svg.dep-graph .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+  svg.dep-graph .arrowhead { fill: var(--muted); }
+  /* ── Features table ── */
+  .features-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
+  .features-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .features-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  /* ── Tables (general) ── */
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+  th, td { padding: 0.45rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 0.88rem; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* ── Body drawer ── */
+  .body-drawer {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.4rem 0.75rem;
+  }
+  .body-drawer summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); padding: 0.2rem 0; }
+  .body-drawer[open] summary { margin-bottom: 0.5rem; }
+  /* ── Design decision cards ── */
+  .decisions { display: grid; gap: 1.25rem; }
+  .escalation {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .escalation .q { font-weight: 600; margin-bottom: 0.65rem; font-size: 0.95rem; }
+  .escalation .critic-chip {
+    display: inline-block;
+    font-size: 0.67rem;
+    background: var(--accent);
+    color: white;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    margin-right: 0.45rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .escalation .options {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  .escalation .option {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.83rem;
+  }
+  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+  .escalation .option .label { font-weight: 700; font-size: 0.88rem; }
+  .escalation .option .rationale { color: var(--muted); font-size: 0.82rem; }
+  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.55rem 0 0; font-size: 0.77rem; display: grid; gap: 0.15rem; }
+  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.3rem; }
+  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.3rem; }
+  .escalation .option .opt-visual { margin-top: 0.6rem; }
+  .escalation .option .opt-visual iframe.mockup { width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117; display: block; }
+  .escalation .option .opt-visual pre.code,
+  .escalation .option .opt-visual pre.diagram {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
+  }
+  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.7rem; font-style: italic; margin-top: 0.3rem; }
+  /* ── Council accordions ── */
+  details.council-critic {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    margin: 0.4rem 0;
+  }
+  details.council-critic summary { cursor: pointer; font-weight: 500; font-size: 0.88rem; padding: 0.25rem 0; }
+  details.council-critic[open] summary { margin-bottom: 0.5rem; }
+  /* ── Brain context ── */
+  .brain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.3rem; }
+  .brain-list li { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid #d2a8ff; border-radius: 4px; padding: 0.35rem 0.75rem; font-size: 0.83rem; }
+  .brain-list li code { color: #d2a8ff; }
+  /* ── Footprint bar ── */
+  .footprint { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+  .footprint .bar { display: flex; width: 100%; height: 1.5rem; border-radius: 3px; overflow: hidden; margin: 0.5rem 0; background: var(--code-bg); }
+  .footprint .seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 500; text-shadow: 0 0 2px rgba(0,0,0,.5); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 0.25rem; }
+  .footprint .summary { color: var(--muted); font-size: 0.83rem; margin-top: 0.25rem; }
+  .footprint .info { color: var(--muted); font-size: 0.78rem; font-style: italic; margin-top: 0.45rem; }
+  /* ── Misc ── */
+  .empty { color: var(--muted); font-style: italic; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0 1.25rem; }
+  .footer { color: var(--muted); font-size: 0.78rem; }
+  .footer code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
 </style>
 </head>
 <body>
-  <h1>Architect plan — ${esc(session.session_id)}</h1>
-  <div class="meta">
-    Project <code>${esc(session.project)}</code>
-    · Initiative type <code>${esc(type)}</code>
-    · Repo <code>${esc(session.project_repo_path)}</code>
+
+  <!-- ── 1. HEADER ── -->
+  <div class="plan-header">
+    <div class="vision-block">
+      <h1>Architect plan</h1>
+      <p style="color: var(--fg); font-size: 1rem; margin: 0.35rem 0 0.6rem; line-height: 1.5">${esc(session.vision.trim()).replace(/\n+/g, '</p><p style="color: var(--fg); font-size: 1rem; margin: 0.35rem 0 0.6rem; line-height: 1.5">')}</p>
+      <div class="plan-meta">
+        Session <code>${esc(session.session_id)}</code>
+        · Project <code>${esc(session.project)}</code>
+        · Repo <code>${esc(session.project_repo_path)}</code>
+      </div>
+    </div>
+    <div class="stats-block">
+      <div class="stat-card"><div class="num">${session.initiatives.length}</div><div class="lbl">initiative${session.initiatives.length === 1 ? '' : 's'}</div></div>
+      <div class="stat-card"><div class="num">${totalIterations}</div><div class="lbl">total budget</div></div>
+      ${knownCost.length === session.initiatives.length && session.initiatives.length > 0
+        ? `<div class="stat-card"><div class="num">$${totalEstimated.toFixed(0)}</div><div class="lbl">est. cost</div></div>`
+        : ''}
+      ${open.length > 0 ? `<div class="stat-card" style="border-color: var(--warn)"><div class="num" style="color: var(--warn)">${open.length}</div><div class="lbl">decisions</div></div>` : ''}
+    </div>
   </div>
 
   <div class="notice">
-    <strong>This is a read-only viewer.</strong> Review the plan on the
-    <code>/architect/${esc(session.session_id)}</code> screen in the forge UI and
-    approve / revise / reject there.
+    <strong>Read-only viewer.</strong> Review on the
+    <code>/architect/${esc(session.session_id)}</code> screen in the forge UI —
+    approve, revise, or reject there. Your selections on design decisions are
+    applied at approval.
   </div>
 
-  <h2>Feature dependency graph</h2>
-${session.initiatives.map((init) => `  <div class="dep-graph-wrap">
-    ${session.initiatives.length > 1 ? `<div class="dep-graph-title"><code>${esc(init.initiative_id)}</code> — ${esc(init.title)}</div>` : ''}
-    ${renderFeatureDepGraphSvg(init)}
-  </div>`).join('\n')}
+  <!-- ── 2. INITIATIVE CARDS ── -->
+  <h2>Proposed initiatives</h2>
+  <div class="init-cards">
+${session.initiatives.map((init, idx) => renderInitiativeCard(init, idx)).join('\n')}
+  </div>
 
+  <!-- ── 3. DESIGN DECISIONS (comparative cards) ── -->
+  ${open.length === 0 ? '' : `
+  <h2>Design decisions <span class="badge">${open.length} unresolved</span></h2>
+  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.85rem">
+    The council surfaced the following taste decisions. Options are shown side-by-side
+    with pros/cons and visual mockups where available. Resolve each one on the
+    <code>/architect</code> plan gate; your selection is applied at approval.
+  </p>
+  <div class="decisions" data-section="design-decisions-preview" data-readonly="true" data-decision-count="${open.length}">
+${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
+  </div>`}
+
+  <!-- ── 4. BRAIN CONTEXT ── -->
+  <h2>Brain context</h2>
+  ${session.brain_context.length === 0
+    ? '<p class="empty">No brain entries consulted (brain-gap event emitted).</p>'
+    : `<ul class="brain-list">
+${session.brain_context.map((e) => `    <li><code>${esc(e.path)}</code> — ${esc(e.summary)}</li>`).join('\n')}
+  </ul>`}
+
+  <!-- ── 5. COUNCIL TRANSCRIPT (collapsed) ── -->
+  <h2>Council transcript</h2>
+  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.6rem">Total cost <code>$${session.council.totalCostUsd.toFixed(4)}</code></p>
+  ${session.council.perCritic.map((cr) => `
+  <details class="council-critic">
+    <summary>${esc(capitaliseCritic(cr.critic))} critic — <code>$${cr.costUsd.toFixed(4)}</code></summary>
+    ${cr.verdict.flags.length === 0
+      ? '<p class="empty">No mechanical flags.</p>'
+      : `<h3>Flags (auto-resolved)</h3><ul>${cr.verdict.flags.map((f) => `<li><code>${esc(f.id)}</code> — ${esc(f.description)}. <em>Applied:</em> ${esc(f.appliedFix)}</li>`).join('')}</ul>`}
+    ${cr.verdict.escalations.length === 0
+      ? '<p class="empty">No taste escalations.</p>'
+      : `<h3>Escalations</h3><div class="decisions">${cr.verdict.escalations.map((e) => `<div class="escalation"><div class="q">${esc(e.question)}</div><div class="options">${e.options.map((o) => `<div class="option"><div class="opt-head"><span class="label">${esc(o.label)}</span></div><div class="rationale">${esc(o.rationale)}</div></div>`).join('')}</div></div>`).join('')}</div>`}
+  </details>`).join('')}
+
+  <!-- ── 6. AGGREGATE FOOTPRINT (C19 informational) ── -->
+  <h2>Aggregate footprint <span class="badge">informational</span></h2>
+  <div class="footprint">
+    <div class="summary">${session.initiatives.length} initiative${session.initiatives.length === 1 ? '' : 's'} · total iteration budget <strong>${totalIterations}</strong>${knownCost.length === session.initiatives.length && session.initiatives.length > 0 ? ` · total estimated cost <strong>$${totalEstimated.toFixed(2)}</strong>` : knownCost.length > 0 ? ` · partial estimated cost <strong>$${totalEstimated.toFixed(2)}</strong> (${knownCost.length}/${session.initiatives.length} have estimates)` : ''}</div>
+    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
+${session.initiatives.map((i, idx) => {
+      const pct = totalIterations > 0 ? (i.iteration_budget / totalIterations) * 100 : 0;
+      const hue = (idx * 67) % 360;
+      return `      <div class="seg" style="flex: ${i.iteration_budget}; background: hsl(${hue}, 55%, 50%);" title="${esc(i.initiative_id)} — ${i.iteration_budget} iterations">${pct >= 8 ? esc(i.initiative_id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')) : ''}</div>`;
+    }).join('\n')}
+    </div>
+    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+  </div>
+
+  <!-- ── 7. OPERATOR BRIEF + INTERVIEW ── -->
   <h2>Operator brief + interview</h2>
-  <p>${esc(session.vision.trim()).replace(/\n+/g, '</p><p>')}</p>
-  <h3>Interview</h3>
   ${rounds.length === 0
     ? '<p class="empty">No interview rounds — operator drafted directly.</p>'
     : `<table>
@@ -807,89 +862,8 @@ ${rounds.map((r, i) => `      <tr><td>${i + 1}</td><td>${esc(r.question)}</td><t
     </tbody>
   </table>`}
 
-  <h2>Brain context</h2>
-  ${session.brain_context.length === 0
-    ? '<p class="empty">No brain entries consulted (brain-gap event emitted).</p>'
-    : `<ul>
-${session.brain_context.map((e) => `    <li><code>${esc(e.path)}</code> — ${esc(e.summary)}</li>`).join('\n')}
-  </ul>`}
-
-  <h2>Council transcript</h2>
-  <p class="meta">Total cost <code>$${session.council.totalCostUsd.toFixed(4)}</code></p>
-  ${session.council.perCritic.map((cr) => `
-  <details>
-    <summary>${esc(capitaliseCritic(cr.critic))} critic — $${cr.costUsd.toFixed(4)}</summary>
-    ${cr.verdict.flags.length === 0
-      ? '<p class="empty">No mechanical flags.</p>'
-      : `<h3>Flags (auto-resolved)</h3><ul>${cr.verdict.flags.map((f) => `<li><code>${esc(f.id)}</code> — ${esc(f.description)}. <em>Applied:</em> ${esc(f.appliedFix)}</li>`).join('')}</ul>`}
-    ${cr.verdict.escalations.length === 0
-      ? '<p class="empty">No taste escalations.</p>'
-      : `<h3>Escalations</h3>${cr.verdict.escalations.map((e) => `<div class="escalation"><div class="q">${esc(e.question)}</div><div class="options">${e.options.map((o) => `<div class="option"><span class="label">${esc(o.label)}</span><span class="rationale">${esc(o.rationale)}</span></div>`).join('')}</div></div>`).join('')}`}
-  </details>`).join('')}
-
-  <h2>Proposed initiatives</h2>
-  <table>
-    <thead><tr><th>ID</th><th>Title</th><th>Features</th><th>Iteration budget</th><th>Depends on</th></tr></thead>
-    <tbody>
-${session.initiatives.map((i) => {
-    const dep = (i.depends_on_initiatives ?? []).join(', ') || '—';
-    const budgetLabel = type === 'exploration'
-      ? `${i.iteration_budget} <span class="badge warn">hint</span>`
-      : String(i.iteration_budget);
-    return `      <tr><td><code>${esc(i.initiative_id)}</code></td><td>${esc(i.title)}</td><td>${i.features.length}</td><td>${budgetLabel}</td><td>${esc(dep)}</td></tr>`;
-  }).join('\n')}
-    </tbody>
-  </table>
-
-  ${session.initiatives.map((i) => `
-  <details>
-    <summary>${esc(i.initiative_id)} — ${esc(i.title)} (manifest body)</summary>
-    ${type === 'exploration' && i.exploration ? `
-    <h3>Exploration fields (C27)</h3>
-    <ul>
-      <li>iteration budget: ${i.iteration_budget} <span class="badge warn">hint, not contract</span></li>
-      <li><code>hypothesis</code>: ${esc(i.exploration.hypothesis)}</li>
-      <li><code>metric_command</code>: <code>${esc(i.exploration.metric_command.join(' '))}</code></li>
-      <li><code>locked_baselines</code>: ${i.exploration.locked_baselines.map((b) => `<code>${esc(b)}</code>`).join(', ')}</li>
-    </ul>
-    <h4>Parameter space</h4>
-    <pre>${esc(i.exploration.parameter_space)}</pre>` : ''}
-    <h3>Manifest body</h3>
-    <pre>${esc(i.body.trimEnd())}</pre>
-  </details>`).join('')}
-
-  ${session.project_metrics ? `
-  <h2>Project metrics <span class="badge">.forge/project.json</span></h2>
-  <ul>
-    <li><code>command</code>: <code>${esc(session.project_metrics.command.join(' '))}</code></li>
-    <li><code>baselines_dir</code>: <code>${esc(session.project_metrics.baselines_dir)}</code></li>
-    ${typeof session.project_metrics.tolerance_pct === 'number'
-      ? `<li><code>tolerance_pct</code>: <code>${session.project_metrics.tolerance_pct}</code></li>`
-      : ''}
-  </ul>` : ''}
-
-  <h2>Aggregate footprint <span class="badge">informational</span></h2>
-  <div class="footprint">
-    <div class="summary">${session.initiatives.length} initiative${session.initiatives.length === 1 ? '' : 's'} · total iteration budget <strong>${totalIterations}</strong>${knownCost.length === session.initiatives.length && session.initiatives.length > 0 ? ` · total estimated cost <strong>$${totalEstimated.toFixed(2)}</strong>` : knownCost.length > 0 ? ` · partial estimated cost <strong>$${totalEstimated.toFixed(2)}</strong> (${knownCost.length}/${session.initiatives.length} initiatives have estimates)` : ''}</div>
-    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
-${session.initiatives.map((i, idx) => {
-    const pct = totalIterations > 0 ? (i.iteration_budget / totalIterations) * 100 : 0;
-    const hue = (idx * 47) % 360;
-    return `      <div class="seg" style="flex: ${i.iteration_budget}; background: hsl(${hue}, 55%, 50%);" title="${esc(i.initiative_id)} — ${i.iteration_budget} iterations">${pct >= 8 ? esc(i.initiative_id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')) : ''}</div>`;
-  }).join('\n')}
-    </div>
-    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.${type === 'exploration' ? ' Exploration initiative: iteration budgets are hints, not contracts (C27).' : ''}</div>
-  </div>
-
-  ${open.length === 0 ? '' : `
-  <h2>Design decisions <span class="badge">preview</span></h2>
-  <p class="meta">The council surfaced these taste decisions. This is a read-only comparison — resolve each one (pros &amp; cons side by side) on the <code>/architect</code> plan gate; your selection is applied at approval.</p>
-  <div class="escalations" data-section="design-decisions-preview" data-readonly="true" data-decision-count="${open.length}">
-${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
-  </div>`}
-
-  <hr style="margin: 3rem 0 1.5rem; border: none; border-top: 1px solid var(--border);">
-  <div class="meta">
+  <hr>
+  <div class="footer">
     Generated by the architect runner on ${new Date().toISOString()}.
     Reviewed + approved on the <code>/architect/${esc(session.session_id)}</code> screen.
   </div>

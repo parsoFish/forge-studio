@@ -1,10 +1,8 @@
 /**
- * Project-manager phase runner. Extracted from cycle.ts (Phase 3.4c step 3).
+ * Project-manager phase runner.
  *
  * Invokes the PM skill via the Claude Agent SDK, validates the emitted work
- * items, and emits decomposition telemetry. Behaviour is identical to the
- * prior in-cycle implementation — this module only relocates the code so the
- * orchestration spine stays thin.
+ * items, and emits decomposition telemetry.
  */
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -249,7 +247,6 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     manifestRelPath: input.manifestPath,
     worktreeRelPath: input.worktreePath,
     projectName: manifest.project,
-    manifestType: detectManifestType(manifest),
     knownFeatureIds: manifest.features.map((f) => f.feature_id),
     projectContext,
     gateRecipe,
@@ -280,7 +277,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   const abortController = new AbortController();
   options.abortController = abortController;
 
-  const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0, bashCalls: 0 };
+  const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0 };
   let costUsd = 0;
   let durationMs = 0;
   let resultSubtype: string | undefined;
@@ -576,12 +573,6 @@ function collectHallucinatedFeatureIds(
 }
 
 /**
- * Detect the C27 manifest discriminator. The architect's manifest
- * frontmatter may carry `type: implementation | exploration`. Read it
- * defensively — most current manifests omit it, in which case the default
- * is `implementation`.
- */
-/**
  * Read the project-shape context files off the worktree. Each is
  * optional — skipped if the file isn't present. Caps each file at
  * 8 KB so a freak large CLAUDE.md / package.json doesn't blow the
@@ -618,11 +609,3 @@ function readProjectContext(worktreePath: string): {
   };
 }
 
-function detectManifestType(manifest: InitiativeManifest): 'implementation' | 'exploration' {
-  // The current InitiativeManifest type doesn't yet expose `type:` (it
-  // arrives via S2B). Read the body for a frontmatter-shaped hint until
-  // the field lands in the schema — robust against partial migrations.
-  const m = manifest as unknown as { type?: string };
-  if (m.type === 'exploration') return 'exploration';
-  return 'implementation';
-}

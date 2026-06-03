@@ -4,5 +4,4 @@
 #   git config merge.graphify.name "graphify graph.json union-merger"
 #   git config merge.graphify.driver "graphify merge-driver %O %A %B"
 brain/forge-dev/graphify-out/graph.json merge=graphify
-brain/cycles/graphify-out/graph.json merge=graphify
 */brain/graphify-out/graph.json merge=graphify

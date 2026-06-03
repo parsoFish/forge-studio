@@ -54,11 +54,11 @@ single-file | cycle-touched-themes | cleanup-dry-run`. Default is `full`.
 
 > Note (2026-05-25): the `benchmarks/` harnesses (formerly shared with `brain-ingest` and `brain-query` under `benchmarks/brain/`) were removed. The lint checks are now covered by unit tests; phase quality is judged on real merged cycles.
 
-The 7 checks implemented in `orchestrator/brain-lint.ts` each have unit
-tests in `orchestrator/brain-lint.test.ts` (23 tests on the seven
+The 8 checks implemented in `cli/brain-lint.ts` each have unit
+tests in `cli/brain-lint.test.ts` (tests on the eight
 checks + the contradictions stretch-goal + scope filtering).
 
-## The 7 checks (defined in `orchestrator/brain-lint.ts`)
+## The 8 checks (defined in `cli/brain-lint.ts`)
 
 | Check | What it catches |
 |---|---|
@@ -68,7 +68,7 @@ checks + the contradictions stretch-goal + scope filtering).
 | `checkStaleness` | Cited paths missing from the project repo (resolved via `projects/<n>/brain/profile.md` → `<forgeRoot>/projects/<n>/`). Per council 01 staleness-mechanism fix: NOT against the forge root. |
 | `checkOrphans` | Themes not reachable from `INDEX.md` → category index → theme. |
 | `checkLengthSoftCap` | > 60 lines warn; > 100 lines error (per `brain/LINT.md` rule 3). |
-| `checkContamination` | Directories matching `__chained_test_proj_*` or `__bench_*` under `projects/`. |
+| `checkCleanupCandidates` | Themes that are good candidates for cleanup (dry-run scope). |
 | `checkContradictions` (warn-only) | Stretch: pattern + antipattern with ≥3 keyword overlaps. Per plan 01 downgrade — staleness is the load-bearing contradiction defence. |
 
 ## Process

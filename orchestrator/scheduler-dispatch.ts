@@ -174,13 +174,11 @@ export function decideAutoRetry(
 ): AutoRetryDecision {
   // Read manifest's current retry_count.
   let retryCount = 0;
-  let priorModes: string[] = [];
   try {
     const inFlightPath = join(paths.inFlight, filename);
     if (existsSync(inFlightPath)) {
       const m = parseFullManifest(readFileSync(inFlightPath, 'utf8'));
       retryCount = m.retry_count ?? 0;
-      priorModes = m.previous_failure_modes ?? [];
     }
   } catch {
     return { retry: false, reason: 'manifest read failed' };
@@ -218,7 +216,6 @@ export function decideAutoRetry(
   // another fresh sample, bounded by MAX_AUTO_RETRIES. The per-mode
   // anti-thrash check that used to live here was load-bearing only under
   // the prior 14-mode enum.
-  void priorModes;
   return {
     retry: true,
     mode: classificationMode,

@@ -4,9 +4,7 @@
  *
  * Extracted from cycle.ts (Phase 3 simplification) so the reviewer's
  * responsibility shrinks to assess + demo + open-PR, and the PR/merge
- * boundary is one named module. The create/merge split lets bench-mode
- * use a `gh` shim that records the operations locally without touching
- * real GitHub.
+ * boundary is one named module.
  *
  * Phase 6 (review-phase redesign) added the local↔remote sync primitives:
  *   - `pushInitiativeBranch` — dev-loop pushes per WI (G8 precondition).
@@ -21,16 +19,13 @@
  * after Phase 6 (G9): the GitHub PR is the operator's merge surface. It is
  * retained only for bench/operator-tool use and is unreachable from
  * `runReviewer` / `runCycle` / the scheduler.
+ *
+ * Production assumes a real GitHub remote. Projects without a GitHub
+ * remote (e.g. claude-harness fixtures) will no longer run locally.
  */
 
 import { execFileSync } from 'node:child_process';
 
-import {
-  shimPrCreate,
-  shimPrMerge,
-  shimPrViewForRef,
-  shimPrViewState,
-} from './gh-shim.ts';
 import {
   existsSync,
   mkdirSync,
@@ -253,15 +248,6 @@ export function openPullRequest(
     // .forge/pr-description.md add/add conflict across parallel initiatives).
     stripForgeScratchFromBranch(worktreePath);
 
-    // No-origin path: the gh-shim writes the same _pr-metadata.json
-    // that real `gh pr create` would have written, returns a
-    // synthetic URL. Skips both the push and the gh subprocess.
-    // 2026-05-24 (claude-harness cycle 1).
-    if (!hasOriginRemote(worktreePath)) {
-      const r = shimPrCreate(worktreePath, { bodyFile, title });
-      return r.ok ? r.stdout : null;
-    }
-
     // Push to origin (set-upstream so gh pr create knows the head ref).
     // Failures here propagate to the catch — a non-pushable branch is a
     // genuine merge blocker, not a soft warning.
@@ -299,19 +285,6 @@ export type PrRef = { owner: string; repo: string; number: number; url: string }
 export function prRef(worktreePath: string): PrRef | null {
   const branch = currentBranch(worktreePath);
   if (!branch) return null;
-  // No-origin path: read _pr-metadata.json via the shim. Same OPEN-vs-
-  // MERGED signal a real gh would surface.
-  if (!hasOriginRemote(worktreePath)) {
-    const r = shimPrViewForRef(worktreePath);
-    if (!r.ok) return null;
-    try {
-      const parsed = JSON.parse(r.stdout) as { n: number; u: string; s: string };
-      if (parsed.s !== 'OPEN') return null;
-      return { owner: 'local', repo: 'forge', number: parsed.n, url: parsed.u };
-    } catch {
-      return null;
-    }
-  }
   try {
     const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
       stdio: 'pipe',
@@ -370,14 +343,6 @@ export function ensurePullRequest(
  * unless the GitHub repo has "auto-delete head branches" enabled.
  */
 export function mergePullRequest(worktreePath: string): boolean {
-  // No-origin path: the shim does the local fast-forward + marks
-  // metadata merged. Same end-state as `gh pr merge` against a real
-  // remote (the cycle's branch is merged into main, ff-only).
-  if (!hasOriginRemote(worktreePath)) {
-    const r = shimPrMerge(worktreePath);
-    if (!r.ok) process.stderr.write(`[mergePullRequest:gh-shim] ${r.stderr}\n`);
-    return r.ok;
-  }
   try {
     execFileSync('gh', ['pr', 'merge', '--merge'], {
       cwd: worktreePath,
@@ -497,14 +462,6 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
 export function pushInitiativeBranch(worktreePath: string): PushResult {
   const branch = currentBranch(worktreePath);
   if (!branch) return { pushed: false, reason: 'detached HEAD or not a git repo' };
-  // Projects without an `origin` remote (the gh-shim local-merge model,
-  // claude-harness, e2e bench fixtures, …) treat push as a no-op: local
-  // IS the source of truth. Otherwise the dev-loop cascade-skips every
-  // WI after the first with `branch-push-failed-early-exit`.
-  // Surfaced 2026-05-24 by claude-harness cycle 1.
-  if (!hasOriginRemote(worktreePath)) {
-    return { pushed: true, branch };
-  }
   try {
     stripForgeScratchFromBranch(worktreePath);
     execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
@@ -555,13 +512,10 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
   }
   if (!branch) return { ok: false, rebased: false, base, reason: 'detached HEAD or not a git repo' };
 
-  // Pick up other cycles' merges: fetch + rebase onto origin/<base> when a
-  // remote exists; otherwise local <base> (the gh-shim local-merge model).
+  // Pick up other cycles' merges: fetch + rebase onto origin/<base>.
   let target = base;
-  if (hasOriginRemote(worktreePath)) {
-    try { git(['fetch', 'origin', base]); target = `origin/${base}`; }
-    catch { target = base; }
-  }
+  try { git(['fetch', 'origin', base]); target = `origin/${base}`; }
+  catch { target = base; }
 
   // No divergence: target is already an ancestor of HEAD — nothing to do.
   try {
@@ -583,7 +537,11 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
 
   // Rebase rewrote history → the branch must be force-pushed (with lease, never
   // plain --force) so origin/<branch> matches. Only the initiative branch.
-  if (hasOriginRemote(worktreePath)) {
+  // Skip the push if there is no origin remote (no-remote project or test fixture).
+  const hasOrigin = (() => {
+    try { git(['remote', 'get-url', 'origin']); return true; } catch { return false; }
+  })();
+  if (hasOrigin) {
     try {
       git(['push', '--force-with-lease', '--set-upstream', 'origin', branch]);
     } catch (err) {
@@ -596,18 +554,6 @@ export function rebasePreservedBranchOntoMain(worktreePath: string): ResumeRebas
     }
   }
   return { ok: true, rebased: true, base: target };
-}
-
-function hasOriginRemote(worktreePath: string): boolean {
-  try {
-    execFileSync('git', ['remote', 'get-url', 'origin'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export type LocalRemoteInvariant = {
@@ -652,14 +598,6 @@ export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvaria
   }
   if (!branch) {
     return { ok: false, branch, localHead, originHead, mergeBase, mainHead, detail: 'detached HEAD or not a git repo' };
-  }
-  // No-origin projects (claude-harness, e2e bench fixtures, anyone using
-  // the local-merge model): local IS the source of truth, so an absent
-  // `origin/<branch>` ref doesn't violate the invariant — it's the
-  // expected steady state. Mirrors the no-op in `pushInitiativeBranch`.
-  // Surfaced 2026-05-24 by claude-harness cycle 1.
-  if (!hasOriginRemote(worktreePath)) {
-    return { ok: true, branch, localHead, originHead, mergeBase, mainHead, detail: 'no origin remote — local-only project' };
   }
   if (!originHead) {
     return {
@@ -720,18 +658,6 @@ export function assertLocalRemoteSynced(worktreePath: string): LocalRemoteInvari
  * NOT be treated as merged. The caller routes a false to `ready-for-review/`.
  */
 export function confirmPrMerged(worktreePath: string): boolean {
-  // No-origin path: the shim's metadata is the only state. MERGED iff
-  // `mergePullRequest` (the shim's pr-merge) was previously dispatched.
-  if (!hasOriginRemote(worktreePath)) {
-    const r = shimPrViewState(worktreePath);
-    if (!r.ok) return false;
-    try {
-      const parsed = JSON.parse(r.stdout) as { state?: unknown };
-      return parsed.state === 'MERGED';
-    } catch {
-      return false;
-    }
-  }
   try {
     const out = execFileSync('gh', ['pr', 'view', '--json', 'state'], {
       cwd: worktreePath,

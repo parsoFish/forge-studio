@@ -3,19 +3,16 @@
  *
  * CLI: `forge brain lint [--scope <s>] [--project <name>] [--file <path>] [--cycle <id>] [--fix]`
  *
- * Implements the 9 checks from `docs/planning/2026-05-20-refinement/01-brain.md`
- * §"Brain-lint design", per `brain/LINT.md`:
+ * Implements 8 checks (per `brain/LINT.md`):
  *
  *   1. checkFrontmatter        — required fields + category whitelist
  *   2. checkIndexSync          — themes appear in their category index exactly once
  *   3. checkSourceLinks        — every link in `## Sources` and every wikilink resolves
- *   4. checkStaleness          — cited *project* paths still exist (resolved via project profile)
+ *   4. checkStaleness          — cited forge-internal paths still exist
  *   5. checkOrphans            — themes reachable from INDEX.md → category index → theme
  *   6. checkLengthSoftCap      — > 60 lines warn; > 100 lines error
- *   7. checkContamination      — `__chained_test_proj_*` and `__bench_*` dirs error
- *   8. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
- *   9. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
- *  (+ checkGraphFreshness per C21 — flags when graph.json's build SHA lags HEAD)
+ *   7. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
+ *   8. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
  *
  * Each check is a pure function `(forgeRoot) => Finding[]`. The CLI aggregates,
  * prints a human-readable report, and exits non-zero iff ≥1 error.
@@ -428,7 +425,7 @@ export function checkStaleness(forgeRoot: string): Finding[] {
       // Skip references to forge brain paths themselves — those are linked,
       // and checkSourceLinks already handles those.
       if (p.startsWith('brain/')) continue;
-      if (p.startsWith('docs/') || p.startsWith('orchestrator/') || p.startsWith('skills/') || p.startsWith('benchmarks/') || p.startsWith('loops/')) {
+      if (p.startsWith('docs/') || p.startsWith('orchestrator/') || p.startsWith('skills/') || p.startsWith('loops/')) {
         // Forge-internal path. Resolve against forge root.
         const target = resolve(forgeRoot, p);
         if (!existsSync(target)) {
@@ -539,28 +536,6 @@ export function checkLengthSoftCap(forgeRoot: string): Finding[] {
         file,
         message: `theme over soft cap: ${lines} body lines (> 60)`,
         check: 'checkLengthSoftCap',
-      });
-    }
-  }
-  return findings;
-}
-
-// ---------- checkContamination ----------
-
-const CONTAMINATION_PATTERNS = [/^__chained_test_proj_/, /^__bench_/];
-
-export function checkContamination(forgeRoot: string): Finding[] {
-  const findings: Finding[] = [];
-  const brainRoot = join(forgeRoot, 'brain');
-  const projectsRoot = join(brainRoot, 'projects');
-  if (!existsSync(projectsRoot)) return findings;
-  for (const entry of readdirSync(projectsRoot)) {
-    if (CONTAMINATION_PATTERNS.some((p) => p.test(entry))) {
-      findings.push({
-        category: 'error',
-        file: join(projectsRoot, entry),
-        message: `contamination dir from bench: ${entry}`,
-        check: 'checkContamination',
       });
     }
   }
@@ -779,7 +754,6 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...checkStaleness(opts.cwd),
     ...checkOrphans(opts.cwd),
     ...checkLengthSoftCap(opts.cwd),
-    ...checkContamination(opts.cwd),
     ...checkContradictions(opts.cwd),
     // S6A — cleanup-candidates only contributes when scope is
     // `cleanup-dry-run`; filterFindingsByScope drops everything else.

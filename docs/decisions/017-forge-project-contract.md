@@ -49,38 +49,40 @@ arc. The retro recorded it as closure goal **G2** (contract sufficiency)
 and explicitly flagged it as "load-bearing, a candidate ADR-017." It is
 also the precondition that makes the *autonomous* operating mode
 well-defined — the counterpart to G6's origin tagging
-([brain theme `human-directed-work-as-initiatives`](../../brain/forge/themes/human-directed-work-as-initiatives.md)),
+([brain theme `human-directed-work-as-initiatives`](../../brain/cycles/themes/human-directed-work-as-initiatives.md)),
 which separates autonomous cycles from hand-directed project surgery so
 "did forge get more autonomous" stays answerable.
 
 ## Decision
 
-A project must satisfy the **six-clause forge↔project contract** before
-forge attempts to progress it unattended. The contract is enforced by a
-written, checkable preflight: `forge preflight <project>`
-([`orchestrator/preflight.ts`](../../orchestrator/preflight.ts), wired in
+A project must satisfy the **forge↔project contract** before forge attempts
+to progress it unattended. The contract is enforced by a written, checkable
+preflight: `forge preflight <project>`
+([`cli/preflight.ts`](../../cli/preflight.ts), wired in
 [`orchestrator/cli.ts`](../../orchestrator/cli.ts)). The preflight is
-pure (`runPreflight()` returns a structured report; the CLI renders it and
-sets the exit code) so an unattended caller can gate on it.
+pure (`runPreflight()` returns a structured report; the CLI renders it,
+writes a `preflight.verdict` JSONL event, and sets the exit code) so an
+unattended caller can gate on it.
 
 | Clause | Requirement | Enforcement | Failure mode |
 |--------|-------------|-------------|--------------|
 | **C1** | Fast, trustworthy quality gate | **HARD** | One deterministic test command exists (`package.json` `test` script or a `.forge/quality_gate_cmd` sidecar — mirrors the manifest's `quality_gate_cmd` field). Heuristic for "plausibly fast": a single command (no `&&`/`;`/`\|`/`\|\|` chaining) that is not a primarily-e2e umbrella (`playwright`/`cypress`/`e2e`/`integration` as the *primary* command — the 18k-LOC-suite smell). We do not run it (could be minutes / require deps); the check is structural. |
-| **C2** | Scratch hygiene | **HARD** | Project `.gitignore` excludes `.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`. |
+| **C2** | Scratch hygiene | **HARD** | Forge scratch paths (`.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`) must be untracked **and** ignored by git. The check uses **git-truth** (`git ls-files --error-unmatch` + `git check-ignore -q`) rather than scanning `.gitignore` text — a `.gitignore` entry is a no-op on already-tracked files (betterado false-pass). |
 | **C3** | Decomposed source under the project's size norm | advisory | No source file egregiously over the size norm. Default ceiling **800 LOC** (the same ceiling forge holds on its own tree — coverage-matrix `SIMPL-LOC`; a defensible project default). Files ≥ **1600 LOC** (2×) are flagged as god-file class. Advisory, never fatal: the operator may have a justified exception and the PM's `detectHiddenCoupling` is the real runtime guard. |
-| **C4** | Machine-readable architecture context | **HARD** | A `roadmap.md` in the project root **and** a brain sub-wiki at `brain/projects/<name>/profile.md`. |
+| **C4** | Machine-readable architecture context | **HARD** | A `roadmap.md` in the project root **and** a brain sub-wiki at `brain/profile.md` (Brain 3 lives inside the project repo — three-brain restructure 2026-05-26). |
 | **C5** | Locked-core mandates the harness honours | advisory | A constraints doc exists (`CLAUDE.md` / `AGENTS.md` / `.forge/constraints.md` / `CONSTRAINTS.md`). Advisory because file presence cannot *prove* the harness honours the constraints — it only proves the operator declared them. |
 | **C6** | A satisfiable merge model | advisory | **Forge-side-satisfied** post-Phase-6: the review phase produces a demo-embedded PR and STOPS; the operator merges in GitHub; there is no auto-merge ([ADR 011 path](./011-unattended-scheduler.md), Phase-6 review redesign). The only project-side requirement is a GitHub remote so a PR surface exists; the preflight states the clause is forge-side-satisfied and checks the remote. |
-| **BRAIN** | Brain freshness (themes cite live source paths) | advisory | Added 2026-05-18. Scans `brain/projects/<name>/themes/*.md` for `src/`/`tests/` paths that no longer exist in the project tree. A theme that contradicts the code (left stale by a by-hand change that skipped the reflection phase) silently poisons the PM/architect (they read the brain first) — this surfaces it *before* a cycle. WARN-only: themes legitimately reference history, and the operator/reflection judges. Known coarse false-positive: a theme that *documents a deletion* must name the deleted path — phrase such references without an `src/…`-shaped token. Pairs with the `pm-thrash-no-converge` failure mode (capped + degenerate WIs ⇒ NOT auto-retried; recommends running `forge preflight` + sharpening the manifest). |
+| **C8** | Agent-instruction file | advisory | An `AGENTS.md` or `CLAUDE.md` exists at the project root with build/test/lint commands near the top. Advisory: research shows ~4pp task-completion uplift from human-authored agent-instruction files; auto-generated ones hurt. The clause requires *presence* (a human-authored file), never auto-generation. See `docs/forge-project-contract.md` §C8 for the full rationale. |
+| **BRAIN** | Brain freshness (themes cite live source paths) | advisory | Added 2026-05-18. Scans `brain/themes/*.md` in the project repo for `src/`/`tests/` paths that no longer exist in the project tree. A theme that contradicts the code (left stale by a by-hand change that skipped the reflection phase) silently poisons the PM/architect — this surfaces it *before* a cycle. WARN-only: themes legitimately reference history, and the operator/reflection judges. |
 
 Hard clauses (C1/C2/C4) fail the preflight and exit non-zero — forge
-**declines**, naming the failing clause. Advisory clauses (C3/C5/C6 +
+**declines**, naming the failing clause. Advisory clauses (C3/C5/C6/C8 +
 BRAIN) surface as warnings and never flip the verdict, because their
 checks are heuristic (C3), unprovable by inspection (C5), structurally
-owned by forge rather than the project (C6), or a freshness signal the
-operator judges (BRAIN). The contract proper remains the six C-clauses;
-BRAIN is an added advisory freshness check, not a seventh contract
-clause.
+owned by forge rather than the project (C6), a human-presence signal that
+cannot be auto-generated (C8), or a freshness signal the operator judges
+(BRAIN). The contract proper is the C-clauses; BRAIN is an added advisory
+freshness check, not a contract clause.
 
 This was empirically validated: `forge preflight trafficGame` reports
 **6/6 PASS** against the real project, confirming C1–C5 are met by
@@ -147,7 +149,9 @@ review redesign).
 - [`brain/cycles/themes/human-directed-work-as-initiatives.md`](../../brain/cycles/themes/human-directed-work-as-initiatives.md) — the blurred-lines antipattern; the origin tag (G6) is the cohort-separation sibling that makes the autonomous mode this contract gates measurable.
 - `_logs/2026-05-16_trafficgame-arc-reflection/retro.md` §3 (C1–C6 derivation), §6 closure goals G2 (contract sufficiency) and G6 (origin tagging).
 - [`docs/forge-user-stories.md`](../forge-user-stories.md) US-4.1 — the operator-facing requirement.
-- [`orchestrator/preflight.ts`](../../orchestrator/preflight.ts) — the implementation; [`orchestrator/preflight.test.ts`](../../orchestrator/preflight.test.ts) — clause-by-clause tests.
+- [`cli/preflight.ts`](../../cli/preflight.ts) — the implementation; [`cli/preflight.test.ts`](../../cli/preflight.test.ts) — clause-by-clause tests.
+- [`orchestrator/project-config.ts`](../../orchestrator/project-config.ts) — canonical `validateProjectConfig` + `DEMO_SHAPES` (single source of truth imported by preflight).
+- [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json) — operator-facing schema (includes `logging` block; no phantom C26/C27/C28 references).
 - [ADR 011](./011-unattended-scheduler.md) — the unattended scheduler path the contract gates entry to.
 - [ADR 014](./014-roadmap-format.md) — `roadmap.md` schema, the C4 artefact.
 - [ADR 015](./015-work-item-format.md) — work-item schema; the manifest `origin` field (G6) is a sibling schema addition.

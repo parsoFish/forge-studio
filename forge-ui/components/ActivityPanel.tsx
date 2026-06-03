@@ -9,88 +9,40 @@ import { eventMatchesHex, type SelectedHex } from '@/lib/hex-detail';
 
 export type ActivityPanelProps = {
   events: EventLogEntry[];
-  selectedWiId?: string | null;
   /**
-   * Feature #9: when set, the panel is the SCOPED activity tracker for one
-   * selected hex (rendered inside the hex-detail drawer). Events are
-   * pre-filtered to that hex via `eventMatchesHex` and the chip bar is hidden —
-   * the scope is fixed by the clicked hex, not the chips. When absent the
-   * panel is the full chip-driven Activity tab (unchanged behaviour).
+   * The panel is the SCOPED activity tracker for one selected hex (rendered
+   * inside the HexDetailDrawer). Events are pre-filtered to that hex via
+   * `eventMatchesHex`; the chip bar is absent — scope is fixed by the clicked
+   * hex, not user-driven chips.
    */
-  scopeHex?: SelectedHex | null;
+  scopeHex: SelectedHex;
 };
 
 /**
- * Filter chips + click-to-detail view over the event log.
+ * Scoped activity tracker rendered inside the HexDetailDrawer.
  *
- * MVP scope (see follow-up: animated timeline). This coexists with the
- * existing EventTail in page.tsx until that's swapped out.
- *
- * Chip-state contract:
- *  - Phase chips: multi-select. Empty selection = "all".
- *  - Event-type chips: multi-select over a STABLE chip set
- *    (the common COMMON_EVENT_TYPES list) so the row doesn't reflow
- *    when new event types appear mid-cycle. Empty selection = "all".
- *  - Work-item chips: single-select. Empty = "all WIs". `selectedWiId`
- *    seeds the initial selection (without re-applying when the operator
- *    clears it).
- *  - Errors-only: a separate toggle pill. When on, supersedes the
- *    event-type filter (only event_type === 'error' rows pass).
+ * Events are pre-filtered to the selected hex (phase / feature / WI) via
+ * `eventMatchesHex`. The operator can click any row to inspect its full
+ * metadata in the detail pane below.
  */
-export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: ActivityPanelProps) {
-  // ---- chip state -------------------------------------------------------
-  const [activePhases, setActivePhases] = useState<ReadonlySet<string>>(() => new Set());
-  const [activeTypes, setActiveTypes] = useState<ReadonlySet<string>>(() => new Set());
-  const [activeWi, setActiveWi] = useState<string | null>(selectedWiId ?? null);
-  const [errorsOnly, setErrorsOnly] = useState<boolean>(false);
+export function ActivityPanel({ events: allEvents, scopeHex }: ActivityPanelProps) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
-  // Feature #9: in scoped (drawer) mode the panel only ever sees the events
-  // belonging to the selected hex; the chip filters below then operate on that
-  // already-scoped slice. In full-tab mode `events === allEvents`.
+  // Only the events that belong to the selected hex.
   const events = useMemo<EventLogEntry[]>(
-    () => (scopeHex ? allEvents.filter((e) => eventMatchesHex(e, scopeHex)) : allEvents),
+    () => allEvents.filter((e) => eventMatchesHex(e, scopeHex)),
     [allEvents, scopeHex],
   );
 
-  // ---- derive available chips ------------------------------------------
-  const phasesInData = useMemo<readonly string[]>(() => {
-    const seen = new Set<string>();
-    for (const e of events) seen.add(e.phase);
-    return [...seen].sort();
-  }, [events]);
-
-  const wisInData = useMemo<readonly string[]>(() => {
-    const seen = new Set<string>();
-    for (const e of events) {
-      const wi = readWorkItemId(e);
-      if (wi) seen.add(wi);
-    }
-    return [...seen].sort();
-  }, [events]);
-
-  // ---- apply filters ---------------------------------------------------
-  const filtered = useMemo<readonly EventLogEntry[]>(() => {
-    return events.filter((e) => {
-      if (errorsOnly && e.event_type !== 'error') return false;
-      if (activePhases.size > 0 && !activePhases.has(e.phase)) return false;
-      if (!errorsOnly && activeTypes.size > 0 && !activeTypes.has(e.event_type)) return false;
-      if (activeWi) {
-        if (readWorkItemId(e) !== activeWi) return false;
-      }
-      return true;
-    });
-  }, [events, errorsOnly, activePhases, activeTypes, activeWi]);
-
   // Newest first, cap at 100.
   const visible = useMemo<readonly EventLogEntry[]>(() => {
-    const sorted = [...filtered].sort((a, b) => {
+    const sorted = [...events].sort((a, b) => {
       // started_at is ISO; lexicographic compare is correct for ISO 8601.
       if (a.started_at === b.started_at) return 0;
       return a.started_at < b.started_at ? 1 : -1;
     });
     return sorted.slice(0, 100);
-  }, [filtered]);
+  }, [events]);
 
   // Collapse consecutive rows with identical (phase, event_type, message) into a
   // single row with a ×N count (operator 2026-06-02: "most messages appear to be
@@ -112,20 +64,6 @@ export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: Act
     return events.find((e) => e.event_id === selectedEventId) ?? null;
   }, [events, selectedEventId]);
 
-  // ---- chip toggle helpers --------------------------------------------
-  const togglePhase = (p: string): void => {
-    setActivePhases((prev) => toggleInSet(prev, p));
-  };
-  const toggleType = (t: string): void => {
-    setActiveTypes((prev) => toggleInSet(prev, t));
-  };
-  const toggleWi = (wi: string): void => {
-    setActiveWi((prev) => (prev === wi ? null : wi));
-  };
-  const clearPhases = (): void => setActivePhases(new Set());
-  const clearTypes = (): void => setActiveTypes(new Set());
-  const clearWi = (): void => setActiveWi(null);
-
   return (
     <div
       style={wrapperStyle}
@@ -133,93 +71,11 @@ export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: Act
       data-events-shown={visible.length}
       data-events-total={events.length}
     >
-      {!scopeHex && (
-      <div style={chipBarStyle}>
-        <ChipGroup label="phase">
-          <Chip
-            kind="phase"
-            value="all"
-            active={activePhases.size === 0}
-            onClick={clearPhases}
-            label="all"
-          />
-          {phasesInData.map((p) => (
-            <Chip
-              key={p}
-              kind="phase"
-              value={p}
-              active={activePhases.has(p)}
-              onClick={() => togglePhase(p)}
-              label={p}
-              accent={phaseColor(p)}
-            />
-          ))}
-        </ChipGroup>
-
-        <ChipGroup label="event type">
-          <Chip
-            kind="event-type"
-            value="all"
-            active={activeTypes.size === 0}
-            onClick={clearTypes}
-            label="all"
-          />
-          {COMMON_EVENT_TYPES.map((t) => (
-            <Chip
-              key={t}
-              kind="event-type"
-              value={t}
-              active={activeTypes.has(t)}
-              onClick={() => toggleType(t)}
-              label={t}
-            />
-          ))}
-        </ChipGroup>
-
-        <ChipGroup label="work item">
-          <Chip
-            kind="wi"
-            value="all"
-            active={activeWi === null}
-            onClick={clearWi}
-            label="all"
-          />
-          {wisInData.length === 0 ? (
-            <span style={{ color: '#6e7681', fontSize: 11 }} data-chip-empty="wi">
-              (no work items)
-            </span>
-          ) : (
-            wisInData.map((wi) => (
-              <Chip
-                key={wi}
-                kind="wi"
-                value={wi}
-                active={activeWi === wi}
-                onClick={() => toggleWi(wi)}
-                label={wi}
-              />
-            ))
-          )}
-        </ChipGroup>
-
-        <ChipGroup label="">
-          <Chip
-            kind="errors-only"
-            value="on"
-            active={errorsOnly}
-            onClick={() => setErrorsOnly((v) => !v)}
-            label={errorsOnly ? 'errors only ✓' : 'errors only'}
-            accent="#ff7b72"
-          />
-        </ChipGroup>
-      </div>
-      )}
-
       <div style={gridStyle}>
         <div style={listStyle} data-section="events-list">
           {deduped.length === 0 ? (
             <div style={{ color: '#8b949e', fontFamily: monoStack, fontSize: 12 }} data-events-empty="true">
-              (no events match the active filters)
+              (no events for this hex)
             </div>
           ) : (
             deduped.map(({ event: e, count }) => (
@@ -249,53 +105,6 @@ export function ActivityPanel({ events: allEvents, selectedWiId, scopeHex }: Act
 }
 
 // ---- subcomponents ------------------------------------------------------
-
-function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={chipGroupStyle} data-chip-group={label || 'toggle'}>
-      {label && <span style={chipGroupLabelStyle}>{label}</span>}
-      <div style={chipRowStyle}>{children}</div>
-    </div>
-  );
-}
-
-type ChipKind = 'phase' | 'event-type' | 'wi' | 'errors-only';
-
-function Chip({
-  kind,
-  value,
-  active,
-  onClick,
-  label,
-  accent,
-}: {
-  kind: ChipKind;
-  value: string;
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  accent?: string;
-}) {
-  const borderColor = active ? (accent ?? '#58a6ff') : '#30363d';
-  const bg = active ? 'rgba(88, 166, 255, 0.12)' : 'transparent';
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-chip-kind={kind}
-      data-chip-value={value}
-      data-chip-active={active ? 'true' : 'false'}
-      style={{
-        ...chipStyle,
-        borderColor,
-        background: bg,
-        color: active && accent ? accent : '#e6edf3',
-      }}
-    >
-      {label}
-    </button>
-  );
-}
 
 function EventRow({
   event,
@@ -351,8 +160,8 @@ function EventDetail({ event }: { event: EventLogEntry }) {
   const cost = readNumberField(event.metadata, 'cost_usd');
   // Surface high-value per-iteration agent state up-front (operator
   // feedback 2026-05-24: "hard to discern from a single log"). These
-  // fields are emitted by orchestrator/phases/developer-loop.ts:248
-  // for every dev-loop iteration; the rest of metadata still renders
+  // fields are emitted by orchestrator/phases/developer-loop.ts for
+  // every dev-loop iteration; the rest of metadata still renders
   // below as raw JSON for completeness.
   const bashCommands = readStringArray(event.metadata, 'bash_commands');
   const toolsUsed = readStringArray(event.metadata, 'tools_used');
@@ -446,24 +255,6 @@ function DetailField({ label, value, accent }: { label: string; value: string; a
 
 // ---- helpers ------------------------------------------------------------
 
-const COMMON_EVENT_TYPES: readonly string[] = [
-  'start',
-  'end',
-  'log',
-  'error',
-  'tool_use',
-  'file_change',
-  'iteration',
-  'agent_heartbeat',
-];
-
-function toggleInSet<T>(prev: ReadonlySet<T>, value: T): ReadonlySet<T> {
-  const next = new Set(prev);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next;
-}
-
 function readWorkItemId(e: EventLogEntry): string | null {
   return readStringField(e.metadata, 'work_item_id');
 }
@@ -543,49 +334,10 @@ const wrapperStyle: CSSProperties = {
   boxSizing: 'border-box',
 };
 
-const chipBarStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 12,
-  paddingBottom: 8,
-  borderBottom: '1px solid #21262d',
-  overflowX: 'auto',
-};
-
-const chipGroupStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  minWidth: 0,
-};
-
-const chipGroupLabelStyle: CSSProperties = {
-  fontSize: 10,
-  letterSpacing: 0.5,
-  textTransform: 'uppercase',
-  color: '#6e7681',
-};
-
-const chipRowStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
-};
-
-const chipStyle: CSSProperties = {
-  fontFamily: monoStack,
-  fontSize: 11,
-  padding: '3px 10px',
-  borderRadius: 12,
-  border: '1px solid #30363d',
-  cursor: 'pointer',
-  lineHeight: 1.4,
-};
-
-// VERTICAL stack (operator 2026-06-02): the panel now lives only in the
-// narrow hex-detail drawer, where a side-by-side list|detail split left the
-// inspection blade far too thin to read. Stack them — list on top, the
-// inspected row's detail BELOW at full drawer width.
+// VERTICAL stack: the panel lives only in the narrow hex-detail drawer,
+// where a side-by-side list|detail split left the inspection blade far
+// too thin to read. List on top, inspected row's detail BELOW at full
+// drawer width.
 const gridStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

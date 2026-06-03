@@ -2,11 +2,10 @@
  * Post-cycle failure classification — `transient | terminal` only.
  *
  * Collapsed from a 14-mode taxonomy on 2026-05-24 (rebuild-review §3 #8).
- * The retry-count cap is the only thing bounding repeats; the per-mode
- * recommendation table + anti-thrash guard were future-proofing that
- * wasn't earning its keep. Defaults to `terminal` when no signature
- * matches — better to surface an unrecognised failure than to auto-retry
- * into the same hole.
+ * Further slimmed 2026-06-03: removed the 18-boolean intermediary layer;
+ * each signature is checked inline and returns directly. Defaults to
+ * `terminal` when no signature matches — better to surface an unrecognised
+ * failure than to auto-retry into the same hole.
  */
 
 import type { EventLogEntry } from './logging.ts';
@@ -30,12 +29,16 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   const evidence: string[] = [];
   const ev = (e: EventLogEntry): void => { if (evidence.length < 5) evidence.push(e.event_id); };
 
-  let trivialPass = false, brainSkipped = false, rateLimited = false;
-  let pmHiddenCoupling = false, pmInvalidWorkItems = false, pmCapped = false;
-  let pmBudgetExhausted = false, pmFeatureHallucination = false, pmFeatureCoverage = false;
+  // Collect the signals that affect the terminal/transient decision.
+  // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
-  let agentThrew = false, devLoopTotalFailure = false, reviewFailed = false;
-  let unifierNoDemo = false, baselineRed = false, unifierNotPassed = false, resumeNeedsRebase = false;
+  let baselineRed = false, resumeNeedsRebase = false;
+  let pmFeatureHallucination = false, pmFeatureCoverage = false;
+  let pmCapped = false, pmBudgetExhausted = false;
+  let pmHiddenCoupling = false, pmInvalidWorkItems = false;
+  let agentThrew = false, devLoopTotalFailure = false;
+  let unifierNoDemo = false, unifierNotPassed = false, reviewFailed = false;
+  let rateLimited = false, brainSkipped = false, trivialPass = false;
 
   for (const e of events) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -51,11 +54,11 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     }
     if (pmErr && Array.isArray(md.hidden_coupling_violations) && md.hidden_coupling_violations.length > 0) { pmHiddenCoupling = true; ev(e); }
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
-    if (e.phase === 'project-manager' && e.message === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
-    if (e.phase === 'project-manager' && e.message === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
-    if (e.phase === 'developer-loop' && e.message === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
-    if (e.phase === 'developer-loop' && e.message === 'unifier.failed') { unifierNotPassed = true; ev(e); }
-    if (e.phase === 'orchestrator' && e.message === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
+    if (e.phase === 'project-manager' && msg === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
+    if (e.phase === 'project-manager' && msg === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
+    if (e.phase === 'developer-loop' && msg === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
+    if (e.phase === 'developer-loop' && msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
+    if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }

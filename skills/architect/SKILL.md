@@ -1,20 +1,18 @@
 ---
 name: architect
-description: Interactive ideation session that turns ideas + existing roadmap into a PLAN.md the operator reviews before any manifest is queued.
+description: Interactive ideation session that turns ideas into a PLAN.md the operator reviews before any manifest is queued.
 phase: architect
-surface: interactive
-model: claude-opus-4-7
 ---
 
 # Architect
 
 ## Single responsibility
 
-Collaborate with the user during ideation. Update the project's roadmap. Emit
-**one `PLAN.md` operator artefact** that the operator reviews before any
-manifest hits `_queue/pending/`. The in-UI runner's **finalize** step (triggered
-when the operator approves on the `/architect` screen) promotes the manifests
-(`approve`), re-runs with feedback (`revise`), or archives the session
+Collaborate with the operator during ideation. Emit **one `PLAN.md` operator
+artefact** (plus its rich PLAN.html sibling) that the operator reviews before
+any manifest hits `_queue/pending/`. The in-UI runner's **finalize** step
+(triggered when the operator approves on the `/architect` screen) promotes the
+manifests (`approve`), re-runs with feedback (`revise`), or archives the session
 (`reject`).
 
 ## Surface — the in-UI runner (ADR 020 / ADR 023)
@@ -43,64 +41,59 @@ interview is **file-based handoff** (the same
   by an explicit operator action in the UI (idea / answer / verdict), preserving
   the "impossible to silently auto-satisfy" property of the human moment.
 
-## Required first action
+## Required first action — brain grounding
 
-Invoke `brain-query` with:
+**Your first tool calls MUST be `Read` against brain paths.** The brain
+navigation index is injected into your system prompt — use it to identify
+relevant theme files, then `Read` them. Required minimum:
 
-- "What does the brain know about <project> — current focus, recent initiatives, taste signals, hard constraints?"
-- "What patterns / antipatterns apply to <type-of-feature> the user is describing?"
+1. `brain/cycles/themes/*.md` covering initiative sizing, prior patterns, and
+   antipatterns relevant to the type of work being described.
+2. `projects/<project>/brain/profile.md` — taste signals and hard constraints
+   for this project.
+3. Any `projects/<project>/brain/themes/*.md` whose description matches the
+   initiative's domain.
 
-Record the response in your working notes. Log a brain-gap event for any question you couldn't answer from the brain.
-
-If `brain/graph.json` exists, the brain-query skill consults it first (graph-first
-for structural questions); the architect's flow is unchanged — call brain-query,
-get results, render them in PLAN.md's "Brain context" section. The architect
-does NOT depend on the graph being present.
+After reading, emit one `architect.brain-query` event listing the paths
+consulted. Render every consulted path + a one-line relevance summary in the
+PLAN's **Brain context** section. Log a brain-gap event for any question the
+brain couldn't answer so the next ingest pass can fill it.
 
 ## Inputs
 
-- The user's free-form idea / brief / pain point (live in the conversation).
-- `projects/<name>/roadmap.md` (current roadmap).
-- `projects/<name>/brain/profile.md` (project taste + constraints).
-- `projects/<name>/brain/themes/` (project-specific patterns + antipatterns).
-- `<projectRepoPath>/.forge/project.json` (per [C26](../../docs/planning/2026-05-20-refinement/CONTRACTS.md)):
-  if the project has a `metrics` block, surface its `command` / `baselines_dir`
-  / `tolerance_pct` in PLAN.md alongside the proposed manifest.
+- The operator's free-form idea / brief / pain point (live in the conversation).
+- Brain 2 (cycles) and Brain 3 (project) — read in the required first action above.
 - If the session is a continuation of a prior `revise` round:
   `<projectRepoPath>/_architect/<session-id>/feedback.md` — the operator's
   bundled annotations from the previous PLAN.md. Treat as binding scope.
 
 ## Outputs
 
-- Updated `projects/<name>/roadmap.md` — confirmed with the user. Schema in
-  [ADR 014](../../docs/decisions/014-roadmap-format.md): YAML frontmatter
-  (`project`, `updated_at`), a `## Current phase` section, an `## Initiatives`
-  table (`ID | Title | Status | Manifest | Depends on`), and a `## Backlog` list.
-  Status keys are exactly `pending | active | blocked | done`. Append/update
-  rows; do not rewrite the file unless the Current Phase is changing.
-- **`<projectRepoPath>/_architect/<session-id>/PLAN.md`** (NEW terminal step;
-  per [C12](../../docs/planning/2026-05-20-refinement/CONTRACTS.md)) — the
-  operator artefact. Use `orchestrator/architect-plan.ts:writePlanDoc`
-  (renders + writes PLAN.md + sibling `council-transcript.md`).
+- **`<projectRepoPath>/_architect/<session-id>/PLAN.md`** — the operator artefact
+  (per C12). The runner renders PLAN.md + sibling PLAN.html via
+  `cli/architect-plan.ts:writePlanDoc`.
 - **`<projectRepoPath>/_architect/<session-id>/manifests/INIT-*.md`** — draft
   manifests, NOT yet queued. The runner's finalize step (on operator approve)
   promotes them to `_queue/pending/`.
 - **No direct writes to `_queue/pending/`.** That happens only on the runner's
   finalize (operator approve in the UI).
+- **No roadmap.md write.** The roadmap is a derived view — the `_queue/pending/`
+  manifests and their `depends_on_initiatives` chain rendered by the forge UI.
+  The architect does NOT write or update any `roadmap.md`.
 
-## Initiative type discriminator (C27)
+## Feature decomposition — COARSE, not fine-grained
 
-Every architect-emitted manifest carries a `type:` field in its frontmatter:
+The architect emits **coarse capability-features** — vertical, independently-
+demonstrable capability groupings. Do NOT size individual work items; do NOT
+set `quality_gate_cmd` or per-feature `non_goals`. **The PM owns all work-item
+sizing and gate selection.**
 
-- **`type: implementation`** (default — today's behaviour): feature → WI → file
-  scope → AC. `iteration_budget` is a contract.
-- **`type: exploration`**: scope is hypothesis-driven; manifest body carries
-  `parameter_space`, `hypothesis`, `metric_command` (from the project's
-  `.forge/project.json` `metrics.command` if present), `locked_baselines`.
-  `iteration_budget` is a **hint, not a contract**.
-
-Classify based on the operator's brief. When in doubt, default to
-`implementation` and ask via an open escalation in PLAN.md.
+- A feature is a capability concern: "authentication", "export pipeline",
+  "payment integration". One coherent vertical slice the PM will decompose
+  into atomic work items.
+- A one-feature initiative is perfectly normal and expected.
+- Do NOT split features to reach a count. If the whole initiative is one
+  coherent concern, emit one feature.
 
 ## Event-log entries to emit
 
@@ -118,8 +111,8 @@ emitted by the runner's finalize step, not by this skill.)
 
 The runner appends a per-turn task block telling you whether it needs the
 **interview step** or the **draft step** (the exact JSON shapes are in Surface
-above; the size + dependency guidance is in that draft task block). Brain-query
-is your mandatory first action (above). Within a turn:
+above; the size + dependency guidance is in that draft task block). Brain
+grounding is your mandatory first action (above). Within a turn:
 
 - **Interview step** — ask only questions that *unblock* the draft, 1-4 at a
   time, prioritising: scope edge (in/out?), success signal (done when?),
@@ -127,13 +120,15 @@ is your mandatory first action (above). Within a turn:
   `done: true` as soon as you can draft without unresolved scope / success /
   constraint ambiguity — don't ask to merely refine.
 - **Draft step** — return coherent, releasable initiatives, each with concrete
-  Given-When-Then acceptance criteria in its body and explicit build order
-  (`depends_on`) where a later initiative needs an earlier one merged first.
+  Given-When-Then acceptance criteria in its body, coarse capability-features
+  (the PM decomposes these — you do NOT size work items or set per-feature
+  gates), and explicit build order (`depends_on`) where a later initiative
+  needs an earlier one merged first.
 
 The runner owns the mechanics around you — it renders the questions, builds the
-manifests, runs the council, writes PLAN.md/PLAN.html, updates the roadmap, emits
-the events, and (only on operator **approve**) promotes the manifests. You never
-call `AskUserQuestion`, `runCouncil`, or `writePlanDoc` yourself.
+manifests, runs the council, writes PLAN.md/PLAN.html, emits the events, and
+(only on operator **approve**) promotes the manifests. You never call
+`AskUserQuestion`, `runCouncil`, or `writePlanDoc` yourself.
 
 ## Constraints
 

@@ -1,28 +1,28 @@
 /**
- * Pure renderer for the before/after comparison demo (F-44).
+ * Pure renderer for the before/after comparison demo (ADR 021 / REV-4).
  *
- * Produces a single self-contained `comparison.html`: screenshots are
- * inlined as base64 data URIs so the visual story is intact when the file
- * is moved/opened anywhere; videos are referenced as sibling files (too
- * large to inline sanely).
+ * Produces a single self-contained `DEMO.html` the operator opens with no
+ * server: screenshots are inlined as base64 data URIs (resized to ≤800px
+ * wide concept — the data URI is passed in already-sized); videos are
+ * referenced as sibling files (too large to inline). Empty sections collapse.
  *
- * Framing discipline (per the demonstrability spec): the *before* panel is
- * the project's PRIOR behaviour — a valid working state, NOT an error or a
- * regression. The *after* panel is the behaviour with this initiative
- * applied. The demo captures the behavioural delta that is the essence of
- * the initiative; it is not a failure hunt. The only place build/run
- * failure is surfaced is the explicit build-status banner.
+ * Sections emitted (REV-4 / D3 richness mandate):
+ *   1. Header band — title, cycle id, branch, commit SHA, PR link
+ *   2. Summary — bullet list of what changed + why
+ *   3. Visual Changes — before/after image pairs side-by-side
+ *   4. API / Behaviour Diff — syntax-highlighted JSON/text before→after
+ *   5. Test Evidence — pass/fail table + coverage delta
+ *   6. Files Changed — annotated list + diffstat
+ *   7. Acceptance criteria (collapsible appendix)
  *
  * This module is intentionally pure (string in → string out). The fs reads
- * that turn screenshot files into data URIs live in `demo.ts`'s model
- * builder, so this renderer is trivially testable.
+ * that turn screenshot files into data URIs live in `demo.ts`'s capture path,
+ * so this renderer is trivially testable.
  */
 
 /**
  * One measured metric, paired before vs after, for a `kind: 'harness'`
- * checkpoint. Values are the raw scraped strings (null = not captured on
- * that side). `deltaPct` is computed only for numeric metrics. `parity` is
- * the per-row verdict the renderer colours.
+ * checkpoint.
  */
 export type HarnessMetricRow = {
   label: string;
@@ -31,97 +31,70 @@ export type HarnessMetricRow = {
   after: string | null;
   /** (after-before)/|before|*100, numeric metrics only; null otherwise. */
   deltaPct: number | null;
-  /**
-   * `match` — equal (numeric exact, or string identical).
-   * `within` — numeric, differs but |Δ%| ≤ tolerance.
-   * `diverged` — numeric over tolerance, or string mismatch.
-   * `incomplete` — missing on one side.
-   */
   parity: 'match' | 'within' | 'diverged' | 'incomplete';
 };
 
 export type DemoCheckpoint = {
-  /** Stable identifier; pairs the before capture with the after one. */
   label: string;
-  /**
-   * `screenshot` — a static UI state (inlined as a base64 data URI; truly
-   * self-contained). `video` — a dynamic/temporal behaviour clip
-   * (referenced as a sibling file under `before/` / `after/`, too large to
-   * inline). Choose video for anything time-dependent (a running
-   * simulation, an animation): a single still of a moving system cannot
-   * demonstrate parity. `harness` — behaviour only measurable at the
-   * Node/test layer (a headless simulation): the orchestrator reruns the
-   * project's own measurement test in each tree and this checkpoint renders
-   * the scraped metrics as a before/after table + parity verdict, NOT
-   * imagery. Default `screenshot`.
-   */
   kind: 'screenshot' | 'video' | 'harness';
-  /** For `kind: 'harness'` — paired metric rows; null/empty otherwise. */
   metrics?: HarnessMetricRow[] | null;
-  /**
-   * Agent-authored caption: what behaviour this checkpoint demonstrates
-   * (e.g. "Selecting a node opens the inspector panel"). Describes the
-   * behaviour, not "what's broken".
-   */
   caption: string;
-  /**
-   * For `kind: 'screenshot'` — PNG bytes as `data:image/png;base64,...`,
-   * or null if not captured. Unused for video checkpoints.
-   */
   beforeImage: string | null;
   afterImage: string | null;
-  /**
-   * For `kind: 'video'` — relative sibling path (e.g. `before/<label>.webm`),
-   * or null if not captured. Unused for screenshot checkpoints. Must be a
-   * relative path, never a scheme-bearing URL (esc() neutralises HTML
-   * delimiters but does not validate URL schemes).
-   */
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
-  /**
-   * Optional one-liner clarifying the baseline state at this checkpoint —
-   * e.g. "This control did not exist yet" — phrased as prior behaviour,
-   * never as an error.
-   */
   beforeNote?: string;
   afterNote?: string;
 };
 
 export type DemoBuildStatus = {
   ok: boolean;
-  /** Short human detail, e.g. "npm ci + vite build succeeded" or the failure tail. */
   detail?: string;
 };
 
+// ── Rich structured sections (REV-4 / D3) ────────────────────────────────
+
+export type DemoSummarySection = {
+  bullets: string[];
+  prUrl?: string;
+  commitSha?: string;
+  branch?: string;
+};
+
+export type DemoApiDiffEntry = {
+  name: string;
+  change: 'added' | 'changed' | 'removed';
+  before?: string;
+  after?: string;
+};
+
+export type TestResultRow = {
+  name: string;
+  result: 'pass' | 'fail' | 'skip';
+  delta?: string;
+};
+
 export type DemoComparisonModel = {
-  /** Headline — the essence of the initiative, one line. */
   title: string;
   initiativeId?: string;
   project: string;
   baseRef: string;
   changedRef: string;
-  /**
-   * Narrative paragraph: what behaviour this initiative changes and why it
-   * matters. Agent-authored from ACs + technical diff. This is the "essence".
-   */
   essence: string;
   generatedAt: string;
   baselineBuild: DemoBuildStatus;
   changedBuild: DemoBuildStatus;
   checkpoints: DemoCheckpoint[];
-  /**
-   * Sibling-file names (relative to the html), or null when no video.
-   * Callers MUST pass only relative paths or `file:`/`./` refs — never a
-   * scheme-bearing URL from untrusted input. `esc()` neutralises HTML
-   * delimiters but does not validate the URL scheme. (v1 orchestrator
-   * always leaves these null.)
-   */
   beforeVideo?: string | null;
   afterVideo?: string | null;
-  /** `git diff --stat baseRef..changedRef` text, shown as a collapsible appendix. */
   diffStat?: string;
-  /** Acceptance criteria the demo is grounded in, for traceability. */
   acceptanceCriteria?: string[];
+
+  // ── Rich structured sections ────────────────────────────────────────────
+  summary?: DemoSummarySection;
+  apiDiff?: DemoApiDiffEntry[];
+  testEvidence?: TestResultRow[];
+  filesChanged?: Array<{ path: string; note?: string }>;
 };
 
 function esc(s: string): string {
@@ -133,13 +106,12 @@ function esc(s: string): string {
     .replace(/'/g, '&#x27;');
 }
 
+// ── Section builders ──────────────────────────────────────────────────────
+
 function buildBanner(model: DemoComparisonModel): string {
   const b = model.baselineBuild;
   const c = model.changedBuild;
   if (b.ok && c.ok) return '';
-  // A build failure is the ONE place we surface failure framing — and even
-  // then it's informational ("baseline did not build, so the before column
-  // shows the build error"), not a value judgement on the change.
   const parts: string[] = [];
   if (!b.ok) {
     parts.push(
@@ -157,11 +129,26 @@ function buildBanner(model: DemoComparisonModel): string {
   return `<div class="banner">${parts.join('<hr>')}</div>`;
 }
 
+function buildSummarySection(model: DemoComparisonModel): string {
+  const s = model.summary;
+  // Always emit a summary section; if the rich summary is absent, emit the
+  // essence as a single bullet so the section is never empty.
+  const bullets: string[] = s?.bullets?.length ? s.bullets : [model.essence];
+  const meta: string[] = [];
+  if (s?.prUrl) meta.push(`<a href="${esc(s.prUrl)}" target="_blank" rel="noopener">Pull request</a>`);
+  if (s?.branch) meta.push(`Branch: <code>${esc(s.branch)}</code>`);
+  if (s?.commitSha) meta.push(`Commit: <code>${esc(s.commitSha)}</code>`);
+  return `
+<section class="section" id="summary">
+  <h2>Summary</h2>
+  <ul class="summary-bullets">
+    ${bullets.map((b) => `<li>${esc(b)}</li>`).join('\n    ')}
+  </ul>
+  ${meta.length > 0 ? `<p class="meta-row">${meta.join(' · ')}</p>` : ''}
+</section>`;
+}
+
 function mediaCell(cp: DemoCheckpoint, side: 'before' | 'after'): string {
-  // src is esc()'d defensively: in-tree callers always pass base64 data
-  // URIs / relative sibling paths (safe), but renderComparisonHtml is
-  // exported and a hand-built DemoCheckpoint could carry an
-  // attribute-breaking string.
   if (cp.kind === 'video') {
     const src = side === 'before' ? cp.beforeVideoSrc : cp.afterVideoSrc;
     return src
@@ -174,15 +161,10 @@ function mediaCell(cp: DemoCheckpoint, side: 'before' | 'after'): string {
     : `<div class="missing">no capture</div>`;
 }
 
-/** Overall harness verdict from the per-row parities. */
-function harnessVerdict(
-  rows: HarnessMetricRow[],
-): { word: string; cls: string } {
+function harnessVerdict(rows: HarnessMetricRow[]): { word: string; cls: string } {
   if (rows.length === 0) return { word: 'NO METRICS', cls: 'incomplete' };
-  if (rows.some((r) => r.parity === 'incomplete'))
-    return { word: 'INCOMPLETE', cls: 'incomplete' };
-  if (rows.some((r) => r.parity === 'diverged'))
-    return { word: 'DIVERGED', cls: 'diverged' };
+  if (rows.some((r) => r.parity === 'incomplete')) return { word: 'INCOMPLETE', cls: 'incomplete' };
+  if (rows.some((r) => r.parity === 'diverged')) return { word: 'DIVERGED', cls: 'diverged' };
   return { word: 'PARITY', cls: 'within' };
 }
 
@@ -194,9 +176,7 @@ function harnessTable(cp: DemoCheckpoint): string {
       const unit = r.unit ? ` <span class="muted">${esc(r.unit)}</span>` : '';
       const d =
         r.deltaPct === null
-          ? r.parity === 'match'
-            ? '='
-            : '—'
+          ? r.parity === 'match' ? '=' : '—'
           : `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%`;
       return `<tr class="p-${r.parity}"><td>${esc(r.label)}</td><td>${
         r.before === null ? '<span class="muted">—</span>' : esc(r.before)
@@ -223,14 +203,14 @@ function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
         : '';
   if (cp.kind === 'harness') {
     return `
-  <section class="checkpoint">
+  <div class="checkpoint">
     <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
     ${harnessTable(cp)}
     ${beforeNote}${afterNote}
-  </section>`;
+  </div>`;
   }
   return `
-  <section class="checkpoint">
+  <div class="checkpoint">
     <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
     <div class="pair">
       <figure>
@@ -244,39 +224,150 @@ function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
         ${afterNote}
       </figure>
     </div>
-  </section>`;
+  </div>`;
+}
+
+function buildVisualChangesSection(model: DemoComparisonModel): string {
+  if (model.checkpoints.length === 0) return '';
+  const items = model.checkpoints.map(buildCheckpoint).join('\n');
+
+  const videoRow =
+    model.beforeVideo || model.afterVideo
+      ? `<div class="checkpoint">
+        <h3>Full run</h3>
+        <div class="pair">
+          <figure><figcaption>Before — baseline behaviour</figcaption>${
+            model.beforeVideo
+              ? `<video controls preload="metadata" src="${esc(model.beforeVideo)}"></video>`
+              : '<div class="missing">no video</div>'
+          }</figure>
+          <figure><figcaption>After — this initiative</figcaption>${
+            model.afterVideo
+              ? `<video controls preload="metadata" src="${esc(model.afterVideo)}"></video>`
+              : '<div class="missing">no video</div>'
+          }</figure>
+        </div>
+      </div>`
+      : '';
+
+  return `
+<section class="section" id="visual-changes">
+  <h2>Visual Changes</h2>
+  ${items}
+  ${videoRow}
+</section>`;
+}
+
+/** Detect whether a string looks like JSON (starts with { or [) for syntax-highlight hint. */
+function looksLikeJson(s: string): boolean {
+  const t = s.trim();
+  return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
+}
+
+function buildApiDiffSection(model: DemoComparisonModel): string {
+  if (!model.apiDiff || model.apiDiff.length === 0) return '';
+  const changeBadge = (c: string): string => {
+    const cls = c === 'added' ? 'badge-added' : c === 'removed' ? 'badge-removed' : 'badge-changed';
+    return `<span class="badge ${cls}">${c}</span>`;
+  };
+  const codeBlock = (s: string): string => {
+    const lang = looksLikeJson(s) ? 'json' : '';
+    return `<pre class="code-block ${lang}">${esc(s)}</pre>`;
+  };
+  const entries = model.apiDiff
+    .map(
+      (e) => `
+    <div class="api-entry">
+      <div class="api-name">${esc(e.name)} ${changeBadge(e.change)}</div>
+      ${
+        e.before !== undefined || e.after !== undefined
+          ? `<div class="pair api-pair">
+          <div>
+            <div class="api-side-label">Before</div>
+            ${e.before !== undefined ? codeBlock(e.before) : '<div class="missing-code">—</div>'}
+          </div>
+          <div>
+            <div class="api-side-label">After</div>
+            ${e.after !== undefined ? codeBlock(e.after) : '<div class="missing-code">—</div>'}
+          </div>
+        </div>`
+          : ''
+      }
+    </div>`,
+    )
+    .join('');
+  return `
+<section class="section" id="api-diff">
+  <h2>API / Behaviour Diff</h2>
+  ${entries}
+</section>`;
+}
+
+function buildTestEvidenceSection(model: DemoComparisonModel): string {
+  if (!model.testEvidence || model.testEvidence.length === 0) return '';
+  const rows = model.testEvidence
+    .map((r) => {
+      const cls = r.result === 'pass' ? 'result-pass' : r.result === 'fail' ? 'result-fail' : 'result-skip';
+      return `<tr>
+        <td>${esc(r.name)}</td>
+        <td class="${cls}">${r.result}</td>
+        <td class="muted">${r.delta ? esc(r.delta) : '—'}</td>
+      </tr>`;
+    })
+    .join('');
+  return `
+<section class="section" id="test-evidence">
+  <h2>Test Evidence</h2>
+  <table class="test-table">
+    <thead><tr><th>test</th><th>result</th><th>delta</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</section>`;
+}
+
+function buildFilesChangedSection(model: DemoComparisonModel): string {
+  const hasAnnotated = model.filesChanged && model.filesChanged.length > 0;
+  const hasDiff = model.diffStat && model.diffStat.trim().length > 0;
+  if (!hasAnnotated && !hasDiff) return '';
+
+  const annotatedList = hasAnnotated
+    ? `<ul class="files-list">
+      ${model.filesChanged!.map((f) => `<li><code>${esc(f.path)}</code>${f.note ? ` <span class="muted">— ${esc(f.note)}</span>` : ''}</li>`).join('\n      ')}
+    </ul>`
+    : '';
+  const diffBlock = hasDiff
+    ? `<details class="diff-stat-toggle"><summary>git diff --stat <code>${esc(model.baseRef)}</code>..<code>${esc(model.changedRef)}</code></summary><pre class="diff-stat">${esc(model.diffStat!)}</pre></details>`
+    : '';
+
+  return `
+<section class="section" id="files-changed">
+  <h2>Files Changed</h2>
+  ${annotatedList}
+  ${diffBlock}
+</section>`;
+}
+
+function buildAcAppendix(model: DemoComparisonModel): string {
+  if (!model.acceptanceCriteria || model.acceptanceCriteria.length === 0) return '';
+  return `<details class="appendix"><summary>Acceptance criteria this demo is grounded in (${model.acceptanceCriteria.length})</summary><ol>${model.acceptanceCriteria
+    .map((a) => `<li>${esc(a)}</li>`)
+    .join('')}</ol></details>`;
 }
 
 /**
- * Render the self-contained comparison HTML. Pure: every input comes from
- * `model`; screenshots are expected to already be data URIs.
+ * Render the self-contained, richly-sectioned comparison HTML. Pure: every
+ * input comes from `model`; screenshots are expected to already be data URIs.
+ * Empty sections are suppressed so a notes-only demo stays clean.
  */
 export function renderComparisonHtml(model: DemoComparisonModel): string {
-  const acList =
-    model.acceptanceCriteria && model.acceptanceCriteria.length > 0
-      ? `<details class="appendix"><summary>Acceptance criteria this demo is grounded in (${model.acceptanceCriteria.length})</summary><ol>${model.acceptanceCriteria
-          .map((a) => `<li>${esc(a)}</li>`)
-          .join('')}</ol></details>`
-      : '';
-  const diffAppendix = model.diffStat
-    ? `<details class="appendix"><summary>Changed files (<code>git diff --stat ${esc(model.baseRef)}..${esc(model.changedRef)}</code>)</summary><pre>${esc(model.diffStat)}</pre></details>`
-    : '';
-  const videoRow =
-    model.beforeVideo || model.afterVideo
-      ? `<section class="checkpoint"><h3>Full run</h3><div class="pair">
-        <figure><figcaption>Before — baseline behaviour</figcaption>${
-          model.beforeVideo
-            ? `<video controls preload="metadata" src="${esc(model.beforeVideo)}"></video>`
-            : '<div class="missing">no video</div>'
-        }</figure>
-        <figure><figcaption>After — this initiative</figcaption>${
-          model.afterVideo
-            ? `<video controls preload="metadata" src="${esc(model.afterVideo)}"></video>`
-            : '<div class="missing">no video</div>'
-        }</figure></div></section>`
-      : '';
-
-  const checkpoints = model.checkpoints.map(buildCheckpoint).join('\n');
+  const headerMeta: string[] = [];
+  if (model.initiativeId) headerMeta.push(`<code>${esc(model.initiativeId)}</code>`);
+  headerMeta.push(`project <strong>${esc(model.project)}</strong>`);
+  headerMeta.push(`before <code>${esc(model.baseRef)}</code> → after <code>${esc(model.changedRef)}</code>`);
+  if (model.summary?.branch) headerMeta.push(`branch <code>${esc(model.summary.branch)}</code>`);
+  if (model.summary?.commitSha) headerMeta.push(`commit <code>${esc(model.summary.commitSha)}</code>`);
+  if (model.summary?.prUrl) headerMeta.push(`<a href="${esc(model.summary.prUrl)}" target="_blank" rel="noopener">Pull request</a>`);
+  headerMeta.push(`generated ${esc(model.generatedAt)}`);
 
   return `<!doctype html>
 <html lang="en">
@@ -288,23 +379,42 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
   body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0 1.5rem 4rem; max-width: 1400px; margin-inline: auto; }
-  header { padding: 2rem 0 1rem; border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
-  h1 { font-size: 1.6rem; margin: 0 0 .4rem; }
-  .meta { color: color-mix(in srgb, currentColor 60%, transparent); font-size: .85rem; }
-  .meta code { font-size: .85rem; }
-  .essence { font-size: 1.05rem; margin: 1.2rem 0; padding: 1rem 1.2rem; border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent); background: color-mix(in srgb, currentColor 5%, transparent); border-radius: 0 6px 6px 0; }
+
+  /* ── Header ── */
+  header { padding: 2rem 0 1rem; border-bottom: 2px solid color-mix(in srgb, currentColor 18%, transparent); }
+  h1 { font-size: 1.7rem; margin: 0 0 .5rem; }
+  .header-meta { color: color-mix(in srgb, currentColor 60%, transparent); font-size: .85rem; display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+  .header-meta code { font-size: .85rem; }
+  .header-meta a { color: inherit; }
+  .essence { font-size: 1.05rem; margin: 1.2rem 0 0; padding: 1rem 1.2rem; border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent); background: color-mix(in srgb, currentColor 5%, transparent); border-radius: 0 6px 6px 0; }
+
+  /* ── Section chrome ── */
+  .section { margin: 2.8rem 0; }
+  .section h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, currentColor 55%, transparent); margin: 0 0 1.2rem; padding-bottom: .4rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+
+  /* ── Banners ── */
   .banner { margin: 1rem 0; padding: .9rem 1.1rem; border-radius: 6px; background: color-mix(in srgb, #e0a800 22%, transparent); font-size: .9rem; }
   .banner hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); margin: .6rem 0; }
-  .checkpoint { margin: 2.4rem 0; }
-  .checkpoint h3 { font-size: 1.05rem; margin: 0 0 .8rem; display: flex; align-items: center; gap: .6rem; }
-  .step { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); font-size: .85rem; font-weight: 600; }
-  .kind { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #4a9eff 30%, transparent); vertical-align: middle; }
-  .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
+
+  /* ── Summary ── */
+  .summary-bullets { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .summary-bullets li { margin: .25rem 0; }
+  .meta-row { font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+  .meta-row a { color: inherit; }
+
+  /* ── Visual Changes ── */
+  .checkpoint { margin: 2rem 0; padding: 1.4rem; background: color-mix(in srgb, currentColor 3%, transparent); border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+  .checkpoint h3 { font-size: 1.0rem; margin: 0 0 .9rem; display: flex; align-items: center; gap: .6rem; }
+  .step { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); font-size: .85rem; font-weight: 600; flex-shrink: 0; }
+  .kind { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #4a9eff 30%, transparent); }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
   figure { margin: 0; }
   figcaption { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .4rem; }
-  img, video { width: 100%; height: auto; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; display: block; background: #0001; }
-  .missing { display: grid; place-items: center; min-height: 160px; border: 1px dashed color-mix(in srgb, currentColor 30%, transparent); border-radius: 6px; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .85rem; }
+  img, video { width: 100%; max-width: 800px; height: auto; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; display: block; background: #0001; }
+  .missing { display: grid; place-items: center; min-height: 120px; border: 1px dashed color-mix(in srgb, currentColor 30%, transparent); border-radius: 6px; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .85rem; }
+  .note { font-size: .82rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+
+  /* ── Harness table ── */
   table.harness { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .2rem 0 .6rem; }
   table.harness th, table.harness td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
   table.harness th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
@@ -317,35 +427,67 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   .verdict.v-within { background: color-mix(in srgb, #3fae6a 20%, transparent); }
   .verdict.v-diverged { background: color-mix(in srgb, #e0584a 22%, transparent); }
   .verdict.v-incomplete { background: color-mix(in srgb, #e0a800 22%, transparent); }
-  .note { font-size: .82rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+
+  /* ── API Diff ── */
+  .api-entry { margin: 1.2rem 0; }
+  .api-name { font-weight: 600; font-size: .95rem; margin-bottom: .5rem; }
+  .badge { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .5rem; border-radius: 999px; margin-left: .4rem; vertical-align: middle; }
+  .badge-added { background: color-mix(in srgb, #3fae6a 28%, transparent); }
+  .badge-removed { background: color-mix(in srgb, #e0584a 28%, transparent); }
+  .badge-changed { background: color-mix(in srgb, #e0a800 28%, transparent); }
+  .api-pair { align-items: start; }
+  .api-side-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .code-block { overflow-x: auto; font-size: .82rem; padding: .7rem .9rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+  .missing-code { font-size: .85rem; color: color-mix(in srgb, currentColor 40%, transparent); padding: .4rem 0; }
+
+  /* ── Test Evidence ── */
+  table.test-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.test-table th, table.test-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.test-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .result-pass { color: #3fae6a; font-weight: 600; }
+  .result-fail { color: #e0584a; font-weight: 600; }
+  .result-skip { color: color-mix(in srgb, currentColor 55%, transparent); }
+
+  /* ── Files Changed ── */
+  .files-list { margin: 0 0 1rem 1.2rem; padding: 0; font-size: .9rem; }
+  .files-list code { font-size: .85rem; }
+  .diff-stat-toggle { margin-top: .8rem; }
+  .diff-stat-toggle summary { cursor: pointer; font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+  .diff-stat { overflow-x: auto; font-size: .8rem; padding: .8rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin-top: .4rem; }
+
+  /* ── Appendix ── */
   .appendix { margin: 1.4rem 0; }
   .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
-  .appendix pre { overflow-x: auto; font-size: .8rem; padding: .8rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; }
   .appendix ol { font-size: .9rem; }
-  footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); }
-  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+
+  /* ── Shared utils ── */
+  .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
+  footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); padding-top: 1rem; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } .api-pair { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
   <h1>${esc(model.title)}</h1>
-  <div class="meta">
-    ${model.initiativeId ? `<code>${esc(model.initiativeId)}</code> · ` : ''}project <strong>${esc(model.project)}</strong>
-    · before <code>${esc(model.baseRef)}</code> → after <code>${esc(model.changedRef)}</code>
-    · generated ${esc(model.generatedAt)}
+  <div class="header-meta">
+    ${headerMeta.map((m) => `<span>${m}</span>`).join('\n    ')}
   </div>
+  <p class="essence">${esc(model.essence)}</p>
 </header>
-
-<p class="essence">${esc(model.essence)}</p>
 
 ${buildBanner(model)}
 
-${checkpoints}
+${buildSummarySection(model)}
 
-${videoRow}
+${buildVisualChangesSection(model)}
 
-${acList}
-${diffAppendix}
+${buildApiDiffSection(model)}
+
+${buildTestEvidenceSection(model)}
+
+${buildFilesChangedSection(model)}
+
+${buildAcAppendix(model)}
 
 <footer>Before = the project's prior behaviour (a valid working state). After = behaviour with this initiative applied. The demo focuses on the behavioural delta that is the essence of the change — it is not exhaustive and is not a failure hunt.</footer>
 </body>

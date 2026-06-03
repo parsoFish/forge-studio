@@ -2,20 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://forge/docs/schemas/project-config.schema.json",
   "title": "ProjectConfig",
-  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json (CONTRACTS.md C1). Declares the project's demo shape, quality gate, and optional metrics + sweep plug-ins (C26 + C28).",
+  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json. Declares the project's demo shape, quality gate, optional logging knobs, metrics, and sweep plug-ins. The authoritative validator is orchestrator/project-config.ts validateProjectConfig; this schema is the operator-facing reference.",
   "type": "object",
   "required": ["demo", "quality_gate_cmd"],
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "demo": {
       "type": "object",
       "required": ["shape"],
       "additionalProperties": false,
+      "description": "How the project surfaces a reviewer-visible demo. The project half of the demo contract (docs/forge-project-contract.md); the forge half is skills/demo/SKILL.md. Demo composition is via demo.shape — there is no per-project demo.skill field.",
       "properties": {
         "shape": {
           "type": "string",
           "enum": ["browser", "harness", "cli-diff", "artifact", "none"],
-          "description": "How the project surfaces a reviewer-visible demo (CONTRACTS.md C2). browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; none = infra-only initiatives, DEMO.md rationale block."
+          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; none = infra-only initiatives, DEMO.md rationale block."
         },
         "command": {
           "type": "array",
@@ -40,34 +41,60 @@
     "quality_gate_cmd": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Argv-style command the developer-loop + unifier run between iterations. Must exit 0 on a green tree."
+      "description": "Argv-style command the developer-loop + unifier run between iterations. Must exit 0 on a green tree. Must be fast and deterministic (see contract clause C1)."
+    },
+    "logging": {
+      "type": "object",
+      "description": "Optional logging / heartbeat knobs. Tunes forge-side behaviour without changing forge source.",
+      "additionalProperties": false,
+      "properties": {
+        "heartbeat_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Cadence in seconds for the agent_heartbeat liveness pulse (default 15s). Tune if the project's SDK calls are unusually long-running."
+        }
+      }
     },
     "metrics": {
       "type": "object",
-      "description": "Optional holistic metrics block (CONTRACTS.md C26). Required for any project that wants exploration-shape initiatives (C27); omit otherwise.",
+      "description": "Optional holistic metrics block. Required for any project that wants exploration-shape initiatives; omit otherwise.",
       "required": ["command", "baselines_dir", "tolerance_pct"],
       "additionalProperties": false,
       "properties": {
         "command": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Argv-style command emitting one or more scalar metrics on stdout."
         },
-        "baselines_dir": { "type": "string" },
-        "tolerance_pct": { "type": "number" }
+        "baselines_dir": {
+          "type": "string",
+          "description": "Directory holding locked baseline markdown files."
+        },
+        "tolerance_pct": {
+          "type": "number",
+          "description": "Allowable percentage drift before flagging regression."
+        }
       }
     },
     "sweep": {
       "type": "object",
-      "description": "Optional parameter-sweep plug-in points (CONTRACTS.md C28). Consumed by skills/project-sweep when the unifier runs in harness-runner mode for type: exploration manifests.",
+      "description": "Optional parameter-sweep plug-in points. Consumed by skills/project-sweep when the unifier runs in harness-runner mode for type: exploration manifests.",
       "required": ["start_command", "draw_function", "measurement_extractor"],
       "additionalProperties": false,
       "properties": {
         "start_command": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Argv-style command that brings the testbed up."
         },
-        "draw_function": { "type": "string" },
-        "measurement_extractor": { "type": "string" }
+        "draw_function": {
+          "type": "string",
+          "description": "Path (worktree-relative) to a module exporting a sample-draw function."
+        },
+        "measurement_extractor": {
+          "type": "string",
+          "description": "Path (worktree-relative) to a module that parses metrics.command output."
+        }
       }
     }
   }

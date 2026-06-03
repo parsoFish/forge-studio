@@ -19,7 +19,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  checkContamination,
   checkContradictions,
   checkFrontmatter,
   checkIndexSync,
@@ -363,34 +362,6 @@ test('checkLengthSoftCap: counts body lines, not frontmatter', () => {
   }
 });
 
-// ---------- checkContamination ----------
-
-test('checkContamination: clean project tree produces no findings', () => {
-  const root = buildBrainFixture({
-    themes: [],
-    extra: [{ path: 'projects/realproj/profile.md', content: '# realproj\n' }],
-  });
-  try {
-    const findings = checkContamination(root);
-    assert.equal(findings.length, 0);
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('checkContamination: __chained_test_proj_* and __bench_* dirs error', () => {
-  const root = buildBrainFixture({ themes: [] });
-  mkdirSync(join(root, 'brain', 'projects', '__chained_test_proj_99999'), { recursive: true });
-  mkdirSync(join(root, 'brain', 'projects', '__bench_xyz'), { recursive: true });
-  try {
-    const findings = checkContamination(root);
-    assert.ok(findings.some((f) => f.file.includes('__chained_test_proj_99999') && f.category === 'error'));
-    assert.ok(findings.some((f) => f.file.includes('__bench_xyz') && f.category === 'error'));
-  } finally {
-    cleanup(root);
-  }
-});
-
 // ---------- checkContradictions (stretch, warn-only) ----------
 
 test('checkContradictions: pattern + antipattern with overlapping keywords flags', () => {
@@ -447,12 +418,9 @@ test('runBrainLint: full scope catches a mix of violations + clean themes', () =
       { path: 'cycles/themes/ok.md', fm: { category: 'pattern' } }, // orphan flag (not in patterns.md)
     ],
   });
-  // Add a contamination dir.
-  mkdirSync(join(root, 'brain', 'projects', '__chained_test_proj_1'), { recursive: true });
   try {
     const result = runBrainLint({ cwd: root, scope: 'full' });
     assert.ok(result.findings.some((f) => f.category === 'error' && /category/i.test(f.message)));
-    assert.ok(result.findings.some((f) => f.category === 'error' && /contamination|__chained/i.test(f.message)));
     assert.ok(result.exitCode === 1, 'errors → exit 1');
   } finally {
     cleanup(root);
@@ -535,13 +503,15 @@ test('runBrainLint: project-only scope returns no findings (project themes are i
   }
 });
 
-test('runBrainLint: cleanup-dry-run scope reports contamination without errors', () => {
-  const root = buildBrainFixture({ themes: [] });
-  mkdirSync(join(root, 'brain', 'projects', '__chained_test_proj_42'), { recursive: true });
+test('runBrainLint: cleanup-dry-run scope is inventory-only — exits 0', () => {
+  // cleanup-dry-run surfaces flags but never errors, so exitCode is always 0.
+  const root = buildBrainFixture({
+    themes: [{ path: 'cycles/themes/x.md', fm: { category: 'snapshot' } }],
+  });
   try {
     const result = runBrainLint({ cwd: root, scope: 'cleanup-dry-run' });
-    assert.ok(result.findings.some((f) => f.file.includes('__chained_test_proj_42')));
-    // cleanup-dry-run is inventory-only — exit 0 unless deletion fails.
+    // All findings downgraded to flag — no errors.
+    assert.equal(result.findings.filter((f) => f.category === 'error').length, 0);
     assert.equal(result.exitCode, 0);
   } finally {
     cleanup(root);

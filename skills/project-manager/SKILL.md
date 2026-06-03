@@ -3,12 +3,13 @@ name: project-manager
 description: Decomposes an initiative into atomic, dependency-ordered work items with explicit acceptance criteria the developer loop can verify.
 phase: project-manager
 surface: unattended
-model: claude-sonnet-4-6
 ---
 
 # Project Manager
 
 ## Single responsibility
+
+The PM is the **sole decomposer and sizer**. The architect emits coarse capability-features (each is a named outcome, not a sized task). The PM receives those features and owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate. The PM may not invent or drop features (coverage checks enforce this).
 
 Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project's current state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 
@@ -113,7 +114,7 @@ graph TD
 2. Read the initiative manifest. Read the worktree's README and source layout.
 3. **Decompose EVERY declared feature — and only those.** Each feature in the manifest MUST receive **≥1 work item** (the orchestrator checks coverage and re-plans if a feature is left undecomposed — a feature with zero WIs is a hard, terminal failure). Conversely, do **not** invent work outside the manifest's features (no project-setup / brain / tracking-file busywork the architect didn't ask for — that was the betterado failure mode: a correct 3-feature manifest decomposed into unrelated scaffolding). If a feature genuinely needs no code, still emit one WI stating why and what it verifies. For each feature, decompose into work items:
    - Each has at least one **Given-When-Then** acceptance criterion (frontmatter `acceptance_criteria` array; each entry has non-empty `given`, `when`, `then` strings). **Always wrap `given` / `when` / `then` values in double quotes** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators, and unquoted strings starting with any of these (e.g. backtick-prefixed code names) fail to parse.
-   - Each declares its `depends_on` work items and its `files_in_scope` (worktree-relative paths, no leading `/`, no `..`). `files_in_scope` is advisory — it tells the operator + reviewer what files this WI touches; the dev-loop agent has freedom to edit any file to make the gate pass.
+   - Each declares its `depends_on` work items and its `files_in_scope` (worktree-relative paths, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files** — it tells the operator + reviewer what files this WI is expected to touch; the dev-loop agent has freedom to edit any file to make the gate pass. **Exception — hotspot files (a file listed in two or more WIs with no `depends_on` edge between them):** those are ENFORCED by `detectHiddenCoupling()` at PM close (see step 5 and the self-check). A shared file with no ordering edge is a guaranteed merge conflict and hard-fails the cycle.
    - **`creates:` is OPTIONAL — omit it unless you need it.** If you do set it, every entry MUST also appear in this WI's own `files_in_scope`, and it lists ONLY files THIS WI brings into existence from scratch — not files another WI owns. The validator hard-fails the cycle on `creates entry <path> must appear in files_in_scope`. Common trap: a WI whose `quality_gate_cmd` runs `tests/foo.test.ts` does NOT "create" that test file unless this same WI is the one writing it (often a later test/golden WI owns it) — in that case leave `creates` off entirely.
    - **Each declares a `quality_gate_cmd` that EXERCISES the ACs and FAILS ON A CLEAN TREE before the agent does any work.** This is MANDATORY (post-2026-05-24 claude-harness audit). The orchestrator's runner runs the gate at iter 0; if it passes, the WI is HARD-FAILED with `gate-too-loose: passed before agent invocation`. Sharp gates look like `['node', '--test', '--experimental-strip-types', 'tests/<NEW-FILE>.test.ts']` where `<NEW-FILE>.test.ts` doesn't exist yet on the worktree — the gate fails until the agent writes it AND the assertions inside it. Loose gates that default to the project-level `npm test` (which trivially passes on the existing test set) are rejected. If you can't write a sharp gate, the WI's AC is probably not testable — break it up.
    - Each estimates `estimated_iterations` (used as a soft hint for the Ralph loop; calibrate from `brain/cycles/themes/work-item-completion-by-domain.md`).

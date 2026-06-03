@@ -29,9 +29,9 @@ the UI is the sole operator surface.)
 > simulates this feedback — it is always supplied by a human in production. (A
 > bench simulator pre-populated it historically; benchmarks were removed 2026-05-25.)
 
-**Reads:** `_logs/<id>/user-questions.md` (the reflector's stage-2
-questions — ≤4 numbered; may be absent if none were non-brain-resolvable);
-`_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
+**Reads:** `_logs/<id>/user-questions.json` (derived by the orchestrator
+post-exit from `user-questions.md`; ≤4 entries; `[]` if no questions were
+written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 
 **Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question,
 then add any free-form feedback for the brain. Stage 3 distils this into
@@ -76,16 +76,12 @@ consulted before writes. Useful queries:
 - New raw source: `brain/cycles/_raw/<cycle-id>.md` (cycle log archived).
   Frontmatter required: `source_type: cycle`, `cycle_id`, `initiative_id`,
   `project`, `ingested_at`, `ingested_by: reflector`.
-- `_logs/<cycle-id>/user-questions.md` (stage 2; optional — skip if no
-  question is warranted).
-- `_logs/<cycle-id>/user-questions.json` (stage 2; cwc Amendment —
-  AskUserQuestion-shaped sibling of `user-questions.md`. Same skip rule:
-  omit both when no question is warranted. Consumed by the in-UI `/reflect` screen).
-- `_logs/<cycle-id>/brain-bench-candidates.jsonl` (S5 / plan 01b #6;
-  written by the orchestrator AFTER the agent exits, not by the agent
-  itself). One row per gap whose corresponding theme this cycle wrote.
-  Schema: `{question, expected_sources, why_now, gap_id?, scope?}`.
-  Consumed by `forge brain bench:promote --cycle <id>` (operator-gated).
+- `_logs/<cycle-id>/user-questions.md` (stage 2; write unless the cycle
+  had literally zero deliverables). Use `## N. <header>` headings. The
+  orchestrator derives `user-questions.json` from this file post-exit.
+- `_logs/<cycle-id>/user-questions.json` (stage 2; derived by the
+  orchestrator post-exit from `user-questions.md` — do NOT write this
+  yourself). Consumed by the in-UI `/reflect` screen.
 
 The reflector does NOT move the manifest to `_queue/done/` — the reviewer
 already did that on merge. The reflector is post-merge log-and-continue.
@@ -100,20 +96,7 @@ already did that on merge. The reflector is post-merge log-and-continue.
 - `reflector.user-feedback-captured`
 - `reflector.theme-emitted` (per theme file written)
 - `reflector.lint-pass-clean` (after structural validation passes)
-- `reflector.bench-candidates-emitted` (S5 — count of brain-bench
-  candidate rows written; emitted only when count > 0)
 - `reflector.end`
-
-## Benchmark suite
-
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
-
-Was `benchmarks/reflection/` — 5 fixtures
-covering: real merged cycle with one send-back, multi-send-back bash CLI,
-dev-loop wedge + recovery, brain-gap-heavy cycle, minimal clean cycle.
-Rubric: 5 gates (`manifest_provided`, `log_parseable`, `retro_emitted`,
-`brain_consulted`, `no_brain_corruption`) + 6 weighted criteria
-summing to 1.0 with pass threshold 0.7.
 
 ## Process
 
@@ -137,47 +120,34 @@ summing to 1.0 with pass threshold 0.7.
 4. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete
    observations, no hand-waving.
 
-### Stage 2 — Agent-prompted user questions (file-based handoff + AskUserQuestion shape)
+### Stage 2 — Agent-prompted user questions (file-based handoff)
 
 5. From Stage 1, identify items the agent cannot resolve from established
    principles + brain knowledge. These become user questions.
-6. Write up to 4 structured questions into **both** files:
-   - `_logs/<cycle-id>/user-questions.md` — numbered headings (human-readable
-     audit; pre-cwc-amendment format retained).
-   - `_logs/<cycle-id>/user-questions.json` — `AskUserQuestion`-shaped array
-     so the in-UI `/reflect` screen can render the operator handoff as
-     selectable options (cwc Amendment; the bridge writes `user-feedback.md`).
-     Schema:
-     ```json
-     [
-       {
-         "question": "Was the 5-WI decomposition the right size?",
-         "header": "WI sizing",
-         "options": [
-           { "label": "Too small", "description": "Should have been 3-4 WIs." },
-           { "label": "Right size", "description": "5 was correct for this scope." },
-           { "label": "Too large", "description": "Should have been ≥7 WIs." }
-         ]
-       }
-     ]
-     ```
-     - `header`: short chip label, ≤12 chars (`AskUserQuestion` constraint).
-     - `options`: 2-4 entries. Each carries a `label` + `description`. The
-       slash command always lets the operator pick "Other" + type prose, so
-       you do NOT need to cover every possibility — pick the 2-4 most
-       likely answers.
-     - When a question is genuinely open-ended ("anything else worth
-       capturing?"), use generic options ("Nothing notable", "Worth a
-       theme", "Significant issue") + the operator's Other-fallback.
-   - Skip BOTH files entirely if no questions are warranted.
+6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md`.
+   Format: one `## N. <header>` heading per question, body under it.
+   The orchestrator derives `user-questions.json` post-exit — you only
+   write the `.md`.
+
+   **Guaranteed seed questions** — always include these three unless the cycle
+   had literally zero deliverables:
+   1. "Was the work-item decomposition the right size?" — too-few WIs
+      (over-bundled), right-sized, or too-many (over-fragmented)?
+   2. "Did the implementation match the design intent?" — exact match,
+      minor divergence, or significant divergence worth a theme?
+   3. "Did the cycle stay aligned with the initiative's original goals?"
+      — yes, partial drift, or significant scope creep?
+
+   Add project-grounded follow-up questions beyond these (cap at 4 total).
+   Skip the file only when the cycle had literally zero deliverables.
+
 7. Capture the user's answers (read from `user-feedback.md` in stage 3) as
    Section 2 of `retro.md` (`## User questions`).
 
 ### Stage 3 — Pure user feedback (file-based handoff)
 
 8. Read `_logs/<cycle-id>/user-feedback.md`. In production a human writes
-   it before the next cycle. (A bench simulator pre-populated it
-   historically; benchmarks were removed 2026-05-25.)
+   it before the next cycle.
 9. If the file exists, distil the answers into Section 2 (alongside stage
    2 questions) and the free-form text into Section 3
    (`## User feedback`). If missing, write
@@ -198,10 +168,14 @@ summing to 1.0 with pass threshold 0.7.
     that resolves to the cycle log or the cycle archive.
 11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full
     provenance frontmatter.
-12. Append a short entry to `brain/forge-dev/log.md` summarising the cycle's deltas.
-13. Validate: every theme file you wrote has valid frontmatter + a valid
+12. Validate: every theme file you wrote has valid frontmatter + a valid
     `category` value + at least one resolvable evidence path. If any theme
     fails this check, fix it before exiting.
+
+> **Direct-write brain.** The reflector writes theme files directly. The
+> `brain-ingest` sub-skill is NOT invoked in this pass. The orchestrator calls
+> `regenerateBrainIndex` after you exit — you do not need to update
+> `brain/INDEX.md` yourself.
 
 > The `brain-ingest` sub-skill is NOT invoked in the current closure
 > pass — direct file writes give the same outcome with fewer moving

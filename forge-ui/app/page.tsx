@@ -92,7 +92,7 @@ export default function Page() {
 
   // Feature #9: operator-selected hex (phase / feature / wi), set by clicking
   // ANY hex in AgentGraphCanvas. Drives the hex-detail drawer (definition +
-  // scoped activity) and, for a WI, seeds the ActivityPanel work-item filter.
+  // scoped activity).
   const [selectedHex, setSelectedHex] = useState<SelectedHex | null>(null);
 
   // U1: cost summary per cycle. Re-fetched whenever the active cycle
@@ -279,10 +279,9 @@ export default function Page() {
           PR in GitHub, or a future standalone review screen mirroring
           /architect/[sessionId]. */}
 
-      {/* Phase B: agent-flow-style live React Flow pipeline graph. Phase
-          spine on top, features branching off dev-loop, WIs below, and
-          ephemeral tool nodes pulsing off the active WI as per-tool
-          events arrive. Replaces the hand-rolled hex <canvas>. */}
+      {/* Live React Flow pipeline graph: phase spine on top, features
+          branching off dev-loop, WIs below, ephemeral tool nodes pulsing
+          off the active WI as per-tool events arrive. */}
       <section style={{ marginTop: 24, display: 'flex', alignItems: 'stretch', gap: 12 }} data-section="pipeline-tree">
         {/* The canvas keeps its full width; the hex-detail drawer (Feature #9)
             sits BESIDE it (flex sibling), never covering the hexes. */}

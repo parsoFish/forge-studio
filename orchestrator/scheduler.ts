@@ -666,21 +666,12 @@ type ParsedManifest = {
 };
 
 function parseManifest(path: string): ParsedManifest {
-  const content = readFileSync(path, 'utf8');
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!fmMatch) throw new Error(`manifest ${path} missing frontmatter`);
-  const fm: Record<string, string> = {};
-  for (const line of fmMatch[1].split('\n')) {
-    const kv = line.match(/^(\w+):\s*(.+)$/);
-    if (kv) fm[kv[1]] = kv[2].trim();
-  }
-  if (!fm.initiative_id) throw new Error(`manifest ${path} missing initiative_id`);
-  if (!fm.project) throw new Error(`manifest ${path} missing project`);
+  const m = parseFullManifest(readFileSync(path, 'utf8'));
   return {
-    initiativeId: fm.initiative_id,
-    project: fm.project,
-    projectRepoPath: fm.project_repo_path ?? resolve('projects', fm.project),
-    resumeFrom: fm.resume_from === 'unifier' ? 'unifier' : undefined,
+    initiativeId: m.initiative_id,
+    project: m.project,
+    projectRepoPath: m.project_repo_path || resolve('projects', m.project),
+    resumeFrom: m.resume_from,
   };
 }
 
@@ -746,26 +737,22 @@ function cleanupRecoveredWorktrees(filenames: string[], paths: ReturnType<typeof
 }
 
 /**
- * Minimal manifest read for cleanup hot-path. Avoids importing the full
- * gray-matter parser when we only need three fields. Returns null if the
- * frontmatter is malformed.
+ * Manifest read for cleanup hot-path. Returns null if the frontmatter is
+ * malformed or required fields are missing.
  */
 function parseManifestFile(
   manifestPath: string,
 ): { initiative_id: string; project_repo_path: string; worktree_path?: string } | null {
-  const content = readFileSync(manifestPath, 'utf8');
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!fmMatch) return null;
-  const fm: Record<string, string> = {};
-  for (const line of fmMatch[1].split('\n')) {
-    const kv = line.match(/^(\w+):\s*(.+)$/);
-    if (kv) fm[kv[1]] = kv[2].trim();
+  try {
+    const m = parseFullManifest(readFileSync(manifestPath, 'utf8'));
+    if (!m.initiative_id || !m.project_repo_path) return null;
+    return {
+      initiative_id: m.initiative_id,
+      project_repo_path: m.project_repo_path,
+      worktree_path: m.worktree_path,
+    };
+  } catch {
+    return null;
   }
-  if (!fm.initiative_id || !fm.project_repo_path) return null;
-  return {
-    initiative_id: fm.initiative_id,
-    project_repo_path: fm.project_repo_path,
-    worktree_path: fm.worktree_path,
-  };
 }
 

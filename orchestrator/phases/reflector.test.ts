@@ -1,27 +1,21 @@
 /**
- * S6A — tests for orchestrator/phases/reflector.ts.
+ * Tests for orchestrator/phases/reflector.ts.
  *
- * Covers the brain-lint trigger + retention tagging wiring added in
- * stage S6A:
- *   - Clean lint run → lint_status: 'clean' + reflector.lint-invoked event.
- *   - Missing brain-lint executable → lint_status: 'skipped' +
- *     reflector.lint-skipped event with reason 'executable-missing'.
- *   - Lint exits with findings → lint_status: 'flagged' +
- *     reflector.lint-flagged event + _logs/<id>/brain-lint.md written.
- *   - reflection_status stays 'closed' for all three cases (lint is
- *     informational, not gating).
+ * Covers:
+ *   - S6A: brain-lint trigger + retention tagging.
+ *   - REF-1: user-questions.json derivation from user-questions.md (post-exit).
+ *   - REF-4: brain index regeneration after agent exits.
+ *   - S6B: recap.md written on successful close.
  *
- * The agent SDK is stubbed via the `deps.sdkQuery` injectable (which the
- * production code calls through). The brain-lint runner is stubbed via
- * `deps.brainLint`. The cycle log dir + manifest are pre-seeded in a
- * tempdir so the reflector reads a manifest that resolves cleanly.
+ * The agent SDK is stubbed via the `deps.sdkQuery` injectable. The brain-lint
+ * runner is stubbed via `deps.brainLint`. The cycle log dir + manifest are
+ * pre-seeded in a tempdir so the reflector reads a manifest that resolves
+ * cleanly.
  *
- * IMPORTANT: the reflector currently uses `import.meta.dirname` to resolve
- * the forge root for writes (brain/, _logs/). To keep tests isolated we
- * point the cycle id at a unique value and clean up the resulting log
- * dir after each test. The brain-write side-effect is a no-op for these
- * tests because the stub agent never writes themes — it just streams
- * back a `result` message.
+ * IMPORTANT: the reflector uses `import.meta.dirname` to resolve the forge root
+ * for writes (brain/, _logs/). Tests use unique cycle ids and clean up after
+ * each run. The stub agent never writes themes — it just streams a `result`
+ * message, so brain-write side-effects are minimal.
  */
 
 import { test } from 'node:test';
@@ -32,7 +26,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -342,129 +335,91 @@ test('runReflector: brain-gate failure → reflection_status:failed + lint_statu
   }
 });
 
-test('runReflector: emits brain-bench-candidates.jsonl (one row per matched gap)', async () => {
-  // Wire up a cycle where:
-  //   - brain-gaps.jsonl has 2 gap rows (one matching, one not).
-  //   - the agent stub "writes" a project theme file matching one gap's
-  //     keywords (we pre-create it under the forge tree's brain/projects/
-  //     slugifier/themes/ to mimic what the real agent would do).
-  // Expected: candidates.jsonl has 1 row pointing at the written theme;
-  // `reflector.bench-candidates-emitted` event fires with count=1.
-  const h = setupHarness({ suffix: 'bench-cand' });
-  // Pre-write brain-gaps.jsonl with two distinct gaps. The reflector's
-  // F-12 touch is a no-op since the file already exists.
-  const gapsPath = resolve(h.cycleLogDir, 'brain-gaps.jsonl');
-  // ensure the cycle log dir exists (logger creates it but writing the
-  // gaps file before the SDK kicks off is the cleaner path).
+test('runReflector: REF-1 — derives user-questions.json from agent-written user-questions.md', async () => {
+  // The agent writes user-questions.md with numbered ## headings; the
+  // orchestrator post-exit derives user-questions.json as an
+  // AskUserQuestion-shaped array so the /reflect screen can render it.
+  const h = setupHarness({ suffix: 'uq-derive' });
   try {
     mkdirSync(h.cycleLogDir, { recursive: true });
-  } catch {
-    /* dir may already exist */
-  }
-  writeFileSync(
-    gapsPath,
-    [
-      JSON.stringify({
-        gap_id: 'GAP-001',
-        query: 'How does slugifier handle batch processing with options?',
-      }),
-      JSON.stringify({
-        gap_id: 'GAP-002',
-        query: 'Completely unrelated question about other domain xyz',
-      }),
-      '',
-    ].join('\n'),
-  );
+    const mdPath = resolve(h.cycleLogDir, 'user-questions.md');
+    writeFileSync(
+      mdPath,
+      [
+        '## 1. Was the WI decomposition the right size?',
+        '',
+        'We had 5 WIs. Were they too granular?',
+        '',
+        '## 2. Should we add a retry policy?',
+        '',
+        'The dev-loop hit 3 transient failures.',
+        '',
+      ].join('\n'),
+    );
 
-  // Pre-create the matching theme file in the forge tree so the
-  // `listFreshThemes` heuristic picks it up. The themesDir the reflector
-  // computes is `<FORGE_ROOT>/projects/<project>/brain/themes`. Project
-  // is `slugifier` (set in setupHarness). We add a uniquely-named theme
-  // so the cleanup is targeted and we don't trample real brain content.
-  const projectThemesDir = resolve(FORGE_ROOT, 'projects', 'slugifier', 'brain', 'themes');
-  const themeFile = resolve(projectThemesDir, `__test-${h.cycleId.slice(-12)}-slugifier-batch-options.md`);
-  try {
-    mkdirSync(projectThemesDir, { recursive: true });
-  } catch {
-    /* may exist */
-  }
-  writeFileSync(
-    themeFile,
-    [
-      '---',
-      'title: Slugifier batch processing options',
-      'description: How slugifier processes batches with options',
-      'category: pattern',
-      'keywords: [slugifier, batch, processing, options, helpers]',
-      'created_at: 2026-05-23T12:00:00Z',
-      'updated_at: 2026-05-23T12:00:00Z',
-      '---',
-      '',
-      '# Slugifier batch processing options',
-      '',
-      'Body...',
-    ].join('\n'),
-  );
-  // Bump the theme's mtime to slightly in the future so `listFreshThemes`
-  // (mtime >= startedAtMs) picks it up — in production the agent writes
-  // the file *during* the reflector pass, which we mimic here.
-  const futureSec = (Date.now() + 5000) / 1000;
-  utimesSync(themeFile, futureSec, futureSec);
-
-  try {
     const result = await runReflector(makeInput(h), h.logger, {
       sdkQuery: fakeSdkQueryClean,
       brainLint: makeCleanLintStub(),
     });
     assert.equal(result.reflection_status, 'closed');
 
-    const candidatesPath = resolve(h.cycleLogDir, 'brain-bench-candidates.jsonl');
-    assert.ok(existsSync(candidatesPath), 'expected brain-bench-candidates.jsonl');
-    const body = readFileSync(candidatesPath, 'utf8').trim();
-    assert.ok(body.length > 0, 'expected non-empty candidates file');
-    const lines = body.split('\n').filter(Boolean);
-    assert.equal(lines.length, 1, 'expected exactly 1 candidate (only one gap matched)');
-    const candidate = JSON.parse(lines[0]);
-    assert.equal(candidate.gap_id, 'GAP-001');
-    assert.ok(
-      candidate.expected_sources.some((s: string) => s.includes('slugifier-batch-options')),
-      'candidate should point at the written theme',
-    );
-    assert.equal(candidate.scope, 'slugifier');
-
-    const events = h.events();
-    const emitEvent = events.find((e) => e.message === 'reflector.bench-candidates-emitted');
-    assert.ok(emitEvent, 'expected reflector.bench-candidates-emitted event');
-    assert.equal(emitEvent!.metadata?.['count'], 1);
-  } finally {
-    // Clean up the test theme so the live brain stays untouched.
-    try {
-      rmSync(themeFile, { force: true });
-    } catch {
-      /* best-effort */
+    const jsonPath = resolve(h.cycleLogDir, 'user-questions.json');
+    assert.ok(existsSync(jsonPath), 'expected user-questions.json to be derived');
+    const parsed = JSON.parse(readFileSync(jsonPath, 'utf8')) as Array<{
+      question: string;
+      header: string;
+      options: Array<{ label: string }>;
+    }>;
+    assert.equal(parsed.length, 2, 'expected 2 questions derived from 2 headings');
+    // headers must be ≤12 chars
+    for (const q of parsed) {
+      assert.ok(q.header.length <= 12, `header "${q.header}" exceeds 12 chars`);
+      assert.ok(Array.isArray(q.options) && q.options.length >= 2, 'expected ≥2 options per question');
     }
+    assert.ok(
+      parsed[0].question.includes('WI') || parsed[0].question.includes('decomposition'),
+      'first question body should reference WI/decomposition content',
+    );
+  } finally {
     h.cleanup();
   }
 });
 
-test('runReflector: zero gaps → empty candidates.jsonl, no emit event', async () => {
-  const h = setupHarness({ suffix: 'no-gaps' });
+test('runReflector: REF-1 — absent user-questions.md → user-questions.json is empty array', async () => {
+  // When the agent writes no questions (no warranted questions this cycle),
+  // user-questions.md is absent. The orchestrator must write [] so the UI
+  // shows "no questions" rather than a stale value or missing file.
+  const h = setupHarness({ suffix: 'uq-absent' });
   try {
     const result = await runReflector(makeInput(h), h.logger, {
       sdkQuery: fakeSdkQueryClean,
       brainLint: makeCleanLintStub(),
     });
     assert.equal(result.reflection_status, 'closed');
-    const candidatesPath = resolve(h.cycleLogDir, 'brain-bench-candidates.jsonl');
-    // File should exist (touched by the emit pass) but be empty.
-    assert.ok(existsSync(candidatesPath));
-    assert.equal(readFileSync(candidatesPath, 'utf8'), '');
-    // No emit event when count = 0.
+
+    const jsonPath = resolve(h.cycleLogDir, 'user-questions.json');
+    assert.ok(existsSync(jsonPath), 'expected user-questions.json even when .md absent');
+    const parsed = JSON.parse(readFileSync(jsonPath, 'utf8'));
+    assert.deepEqual(parsed, [], 'expected empty array when no user-questions.md');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: REF-4 — brain-index-regenerated event emitted on successful close', async () => {
+  // After the agent exits and themes are written, the orchestrator calls
+  // regenerateBrainIndex and emits reflector.brain-index-regenerated.
+  const h = setupHarness({ suffix: 'brain-idx' });
+  try {
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryClean,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'closed');
+
     const events = h.events();
-    assert.equal(
-      events.find((e) => e.message === 'reflector.bench-candidates-emitted'),
-      undefined,
-    );
+    const idxEvent = events.find((e) => e.message === 'reflector.brain-index-regenerated');
+    assert.ok(idxEvent, 'expected reflector.brain-index-regenerated event on successful close');
   } finally {
     h.cleanup();
   }

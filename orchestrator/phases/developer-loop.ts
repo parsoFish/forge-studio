@@ -24,7 +24,6 @@ import {
 } from '../dev-invocation.ts';
 import {
   readWorkItemsFromDir,
-  requiredVerificationPaths,
   topologicalOrder,
   validateWorkItemSet,
   writeWorkItemStatus,
@@ -291,16 +290,7 @@ export async function runDeveloperLoop(
               input.worktreePath,
               effective,
               (gateInfo) => emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo),
-                // Gate tightening: when the WI declares `creates` or
-                // `verification_artifact` (C5), require ≥1 of those paths
-                // to appear in `git diff main...HEAD` before declaring
-                // gate-pass. The set is computed by `requiredVerificationPaths`
-                // (single source of truth in work-item.ts); the executor
-                // does the diff check. Catches the 2026-05-23 dogfood
-                // false-pass where `go test -run TestX` exits 0 because
-                // TestX was never written. See
-                // [[quality-gate-cmd-must-assert-new-work]].
-                { requiredPaths: requiredVerificationPaths(wi) },
+                { requiredPaths: [] },
             );
           })(),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)

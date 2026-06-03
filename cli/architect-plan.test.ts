@@ -8,9 +8,8 @@
  *    preserve-intent rule).
  *  - C19 (informational-only aggregate footprint) is pinned by an explicit
  *    no-language-from-this-set assertion.
- *  - C27 type discriminator: an exploration session round-trips through
- *    render → parse → render preserving the parameter_space / hypothesis /
- *    metric_command / locked_baselines fields.
+ *  - ARCH-4: C27 type discriminator + exploration fields removed (dead paths);
+ *    tests assert the dead paths no longer appear in output.
  *  - C12 path layout: writePlanDoc emits exactly the path documented in
  *    contracts.
  */
@@ -29,6 +28,7 @@ import {
   type ProposedInitiative,
   type CouncilTranscript,
 } from './architect-plan.ts';
+// Note: ExplorationFields, ProjectMetrics, InitiativeType removed (ARCH-4).
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -81,7 +81,6 @@ function fxSession(overrides: Partial<ArchitectSession> = {}): ArchitectSession 
     ],
     council: fxCouncilTranscript(),
     initiatives: [fxInitiative()],
-    type: 'implementation',
     ...overrides,
   };
 }
@@ -94,14 +93,14 @@ test('renderPlanDoc: produces a markdown document with all required sections', (
   const session = fxSession();
   const doc = renderPlanDoc(session);
   assert.match(doc, /^# Architect plan — 2026-05-23T10-15-00/m);
-  // Cwc Amendment 1: brief + interview replaces the old "Vision recap" section
+  // Cwc Amendment 1: brief + interview section
   assert.match(doc, /## Operator brief \+ interview/);
   assert.match(doc, /## Brain context/);
   assert.match(doc, /## Council transcript/);
   assert.match(doc, /## Proposed initiatives/);
   assert.match(doc, /## Aggregate footprint/);
-  // Top-of-file verdict stub for the operator
-  assert.match(doc, /<!-- verdict: approve \| revise \| reject -->/);
+  // ARCH-4: verdict placeholder removed (verdict via UI bridge, not PLAN.md annotation)
+  assert.ok(!/<!-- verdict:/.test(doc), 'VERDICT_PLACEHOLDER must not appear in rendered PLAN.md');
 });
 
 // ---------------------------------------------------------------------------
@@ -155,52 +154,17 @@ test('renderPlanDoc: aggregate footprint is informational only (C19 — no gate 
 });
 
 // ---------------------------------------------------------------------------
-// 4. renderPlanDoc — C27 exploration discriminator
+// 4. ARCH-4: C27 exploration discriminator removed — renderPlanDoc no longer
+// accepts type/exploration fields. Validate the dead paths are truly gone.
 // ---------------------------------------------------------------------------
 
-test('renderPlanDoc: type: exploration surfaces parameter_space / hypothesis / metric_command / locked_baselines + iteration_budget marked as hint', () => {
-  const session = fxSession({
-    type: 'exploration',
-    initiatives: [fxInitiative({
-      initiative_id: 'INIT-2026-05-23-traf-sweep',
-      exploration: {
-        parameter_space: '- cp_spacing: [40, 50, 60, 70]\n- arrival_rate: [0.2, 0.4, 0.6]',
-        hypothesis: 'CP spacing acts as a natural speed limit; mid-range maximises throughput.',
-        metric_command: ['bash', '-lc', 'npm run grading'],
-        locked_baselines: ['docs/baselines/frontier.md'],
-      },
-    })],
-  });
-  const doc = renderPlanDoc(session);
-  assert.match(doc, /parameter_space/);
-  assert.match(doc, /cp_spacing/);
-  assert.match(doc, /hypothesis/i);
-  assert.match(doc, /CP spacing acts as a natural speed limit/);
-  assert.match(doc, /metric_command/);
-  assert.match(doc, /npm run grading/);
-  assert.match(doc, /locked_baselines/);
-  assert.match(doc, /docs\/baselines\/frontier\.md/);
-  // The hint-not-contract framing for exploration's iteration_budget
-  assert.match(doc, /iteration budget:.*hint/i);
-});
-
-// ---------------------------------------------------------------------------
-// 5. renderPlanDoc — C26 metrics block from .forge/project.json
-// ---------------------------------------------------------------------------
-
-test('renderPlanDoc: surfaces project metrics block (C26) when session provides it', () => {
-  const session = fxSession({
-    project_metrics: {
-      command: ['bash', '-lc', 'npm run grading'],
-      baselines_dir: 'docs/baselines/',
-      tolerance_pct: 1.0,
-    },
-  });
-  const doc = renderPlanDoc(session);
-  assert.match(doc, /## Project metrics/);
-  assert.match(doc, /npm run grading/);
-  assert.match(doc, /docs\/baselines\//);
-  assert.match(doc, /tolerance_pct.*1/);
+test('renderPlanDoc: no exploration/C27 fields in rendered output (ARCH-4 — dead paths removed)', () => {
+  const doc = renderPlanDoc(fxSession());
+  assert.ok(!/parameter_space/.test(doc), 'exploration parameter_space must not appear');
+  assert.ok(!/hypothesis/.test(doc), 'exploration hypothesis must not appear');
+  assert.ok(!/metric_command/.test(doc), 'exploration metric_command must not appear');
+  assert.ok(!/locked_baselines/.test(doc), 'exploration locked_baselines must not appear');
+  assert.ok(!/## Project metrics/.test(doc), 'C26 project_metrics must not appear (ARCH-4)');
 });
 
 // ---------------------------------------------------------------------------
@@ -392,8 +356,8 @@ test('renderPlanHtml: renders a feature dependency graph as inline SVG (replaces
   assert.ok(!/class="cycle"/.test(html), 'cycle diagram dropped per dogfood pushback');
   assert.ok(!/graphify brain/.test(html), 'cycle preamble dropped');
   assert.ok(!/Where this sits in the forge cycle/.test(html), 'irrelevant header dropped');
-  // The dep graph IS rendered
-  assert.match(html, /<h2>Feature dependency graph<\/h2>/);
+  // The dep graph IS rendered (label is a styled div, not an h2, per the ADR 020 card layout)
+  assert.match(html, /Feature dependency graph/);
   assert.match(html, /<svg class="dep-graph"/);
   // Each feature appears as a node
   assert.match(html, />FEAT-1</);
@@ -516,25 +480,14 @@ test('renderPlanHtml: C19 — aggregate footprint section uses none of the forbi
   assert.ok(!/aggregate_budget_declared/.test(block), `footprint block must not reference removed bench criterion:\n${block}`);
 });
 
-test('renderPlanHtml: exploration session surfaces parameter_space + hint badges (C27)', () => {
-  const html = renderPlanHtml(fxSession({
-    type: 'exploration',
-    initiatives: [fxInitiative({
-      initiative_id: 'INIT-2026-05-23-sweep',
-      iteration_budget: 8,
-      exploration: {
-        parameter_space: '- cp_spacing: [40, 50, 60]\n- rate: [0.2, 0.4]',
-        hypothesis: 'CP spacing acts as a natural speed limit.',
-        metric_command: ['npm', 'run', 'grading'],
-        locked_baselines: ['docs/baselines/frontier.md'],
-      },
-    })],
-  }));
-  assert.match(html, /class="badge warn">hint/i);
-  assert.match(html, /cp_spacing/);
-  assert.match(html, /CP spacing acts as a natural speed limit\./);
-  assert.match(html, /npm run grading/);
-  assert.match(html, /docs\/baselines\/frontier\.md/);
+test('renderPlanHtml: no exploration/C27 fields in output (ARCH-4 — dead paths removed)', () => {
+  // Verifies the dead render paths for type/exploration are truly gone.
+  const html = renderPlanHtml(fxSession());
+  assert.ok(!/exploration/.test(html), 'exploration render path must not appear');
+  assert.ok(!/parameter_space/.test(html), 'parameter_space must not appear');
+  assert.ok(!/locked_baselines/.test(html), 'locked_baselines must not appear');
+  assert.ok(!/Project metrics/.test(html), 'project_metrics C26 block must not appear');
+  assert.ok(!/Initiative type/.test(html), 'Initiative type meta line must not appear');
 });
 
 test('renderPlanHtml: escalation options render as cards (no naked bullet lists)', () => {

@@ -152,8 +152,8 @@ and the ADRs before acting.
    the documented seam — so weigh carefully.)*
 
 2. **Demo subsystem sprawl.** One capability (the before/after review demo) spans
-   `skills/demo`, `skills/demo-capture`, and `cli/demo.ts | demo-html.ts |
-   demo-model.ts | demo-runtime.ts | demo-script.ts` — ~7 modules across two layers.
+   `skills/demo` and `cli/demo.ts | demo-html.ts |
+   demo-model.ts | demo-runtime.ts | demo-capture.ts` — ~6 modules across two layers.
    Largest single surface for one feature. Candidate for consolidation behind one
    demo module.
    *(Partly actioned 2026-05-31 — Phase B of the hardening plan.* The **skill**
@@ -161,7 +161,7 @@ and the ADRs before acting.
    skill was deleted; `skills/demo-capture` was folded in), and it is the single
    source of the demo contract (ADR 016 superseded by it + ADR 021). The CLI
    modules remain as the *implementation* behind `forge demo render|capture` —
-   `demo-model.ts` is the schema/renderer; `demo.ts | demo-script.ts |
+   `demo-model.ts` is the schema/renderer; `demo.ts | demo-capture.ts |
    demo-runtime.ts | demo-html.ts` are the optional media-capture engine. Further
    collapsing the CLI modules is still open.)*
 

@@ -23,6 +23,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseManifest } from './manifest.ts';
 
 export type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
 
@@ -181,12 +182,15 @@ export function recover(opts: {
 }
 
 /**
- * Parse the `worktree_path` field out of a manifest's YAML frontmatter.
- * Minimal parsing — full YAML parsing comes via gray-matter when needed.
+ * Parse the `worktree_path` field from a manifest using the canonical parser.
+ * Returns null if the file is missing, malformed, or has no worktree_path.
  */
 function parseWorktreePath(manifestPath: string): string | null {
   if (!existsSync(manifestPath)) return null;
-  const content = readFileSync(manifestPath, 'utf8');
-  const match = content.match(/^worktree_path:\s*(.+)$/m);
-  return match ? match[1].trim() : null;
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return m.worktree_path ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -7,11 +7,15 @@ theme pages index — third-party docs, web research, v1-wiki snapshots, ADR
 ingests. Anything ingested by `brain-ingest` for forge itself lands here with
 provenance preserved.
 
-> **Note (three-brain model, ADR 018):** this top-level `brain/_raw/` is the
-> raw layer for **forge-dev / cycle knowledge**. It is distinct from
-> `brain/cycles/_raw/`, which holds the per-cycle event-log **archives** (Brain
-> 2). Don't confuse the two: `_raw/` here = ingested reference material;
-> `cycles/_raw/` = cycle archives.
+> **Two separate `_raw` layers — do not confuse them:**
+>
+> | Path | What lives here | Writer |
+> |---|---|---|
+> | `brain/_raw/` (this dir) | Ingested **reference material** — web fetches, docs, papers, retros, external research. Feeds theme pages via `brain-ingest`. | `brain-ingest` skill (operator-driven) |
+> | `brain/cycles/_raw/` | Per-cycle **event-log archives** — the raw JSONL + retro files written at cycle close. Feeds the reflector's synthesis. | orchestrator / reflector (automatic) |
+>
+> If you're adding external research or an operator retro: `brain/_raw/`.
+> If you're reading cycle history: `brain/cycles/_raw/`.
 
 ## Conventions
 

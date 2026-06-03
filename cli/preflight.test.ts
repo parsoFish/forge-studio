@@ -2,8 +2,12 @@
  * Tests for the forge↔project contract preflight (US-4.1 / ADR-017).
  *
  * Each test builds a throwaway project dir exercising one clause's
- * pass/fail path. C1/C2/C4 are HARD (drive `ok`); C3/C5/C6 are advisory
+ * pass/fail path. C1/C2/C4 are HARD (drive `ok`); C3/C5/C6/C8 are advisory
  * (warn, never flip `ok`).
+ *
+ * C2 uses git-truth checks (git ls-files + git check-ignore) rather than
+ * scanning .gitignore text — already-tracked files bypass .gitignore and
+ * must be caught (CON-1).
  */
 
 import { test } from 'node:test';
@@ -13,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { runPreflight, formatPreflightReport, type ClauseId } from './preflight.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent, type ClauseId } from './preflight.ts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
@@ -68,7 +72,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'DEMO', 'ARTIFACTS'] as ClauseId[]) {
+    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -136,31 +140,55 @@ test('C1: a .forge/quality_gate_cmd sidecar satisfies the gate without package.j
   }
 });
 
-test('C2 (HARD): .gitignore missing a scratch path ⇒ fail + ok=false, names the path', () => {
+test('C2 (HARD): scratch path not ignored by git ⇒ fail + ok=false, names the path', () => {
   const p = happyProject();
   try {
-    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', '.forge/', 'AGENT.md'].join('\n'));
+    // Remove PROMPT.md and fix_plan.md from .gitignore so they are NOT ignored.
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', '.forge/', 'AGENT.md'].join('\n'));
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'C2');
     assert.equal(c.pass, false);
     assert.equal(c.hard, true);
     assert.equal(r.ok, false);
-    assert.match(c.detail, /PROMPT\.md/);
-    assert.match(c.detail, /fix_plan\.md/);
+    assert.match(c.detail, /PROMPT\.md|fix_plan\.md/);
   } finally {
     p.cleanup();
   }
 });
 
-test('C2 (HARD): absent .gitignore fails', () => {
+test('C2 (HARD): scratch path tracked by git ⇒ fail even with .gitignore entry', () => {
   const p = happyProject();
   try {
-    rmSync(join(p.dir, '.gitignore'));
+    // Create and stage AGENT.md — once tracked, .gitignore entries are ignored.
+    writeFileSync(join(p.dir, 'AGENT.md'), '# agent\n');
+    execFileSync('git', ['-C', p.dir, 'add', '-f', 'AGENT.md']);
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, false);
+    assert.equal(c.hard, true);
+    assert.equal(r.ok, false);
+    assert.match(c.detail, /AGENT\.md.*tracked|tracked.*AGENT\.md/i);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C2 (HARD): no git repo + absent .gitignore fails', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-preflight-nogit-'));
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'forge-preflight-root-'));
+  try {
+    // Set up just enough to not trigger other hard clauses, but no git repo.
+    const name = dir.split('/').pop()!;
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, scripts: { test: 'vitest run' } }));
+    writeFileSync(join(dir, 'roadmap.md'), '# r\n');
+    mkdirSync(join(dir, 'brain'), { recursive: true });
+    writeFileSync(join(dir, 'brain', 'profile.md'), '# p\n');
+    const r = runPreflight(dir, { forgeRoot });
     assert.equal(clause(r, 'C2').pass, false);
     assert.equal(r.ok, false);
   } finally {
-    p.cleanup();
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
 
@@ -351,11 +379,78 @@ test('ARTIFACTS (ADVISORY): a Go project that ignores its binary outputs passes'
   }
 });
 
+test('C8 (ADVISORY): no AGENTS.md or CLAUDE.md warns but does NOT flip ok', () => {
+  const p = happyProject();
+  try {
+    rmSync(join(p.dir, 'CLAUDE.md'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C8');
+    assert.equal(c.pass, false);
+    assert.equal(c.hard, false);
+    assert.equal(r.ok, true, 'C8 is advisory — must not flip ok');
+    assert.match(c.detail, /AGENTS\.md|CLAUDE\.md/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C8 (ADVISORY): AGENTS.md at root passes', () => {
+  const p = happyProject();
+  try {
+    rmSync(join(p.dir, 'CLAUDE.md'));
+    writeFileSync(join(p.dir, 'AGENTS.md'), '# Build: npm test\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C8').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C8 (ADVISORY): CLAUDE.md at root passes', () => {
+  const p = happyProject();
+  try {
+    // happyProject already has CLAUDE.md.
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C8').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('buildVerdictEvent: produces correct structure for a passing report', () => {
+  const p = happyProject();
+  try {
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const evt = buildVerdictEvent(r);
+    assert.equal(evt.event_type, 'preflight.verdict');
+    assert.equal(evt.ok, r.ok);
+    assert.equal(evt.project_name, r.projectName);
+    assert.ok(Array.isArray(evt.failing_clause_ids));
+    assert.ok(Array.isArray(evt.warning_clause_ids));
+    assert.ok(evt.timestamp.startsWith('20'));
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('buildVerdictEvent: failing hard clauses appear in failing_clause_ids', () => {
+  const p = happyProject();
+  try {
+    rmSync(join(p.dir, 'roadmap.md')); // C4 hard fail
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const evt = buildVerdictEvent(r);
+    assert.equal(evt.ok, false);
+    assert.ok(evt.failing_clause_ids.includes('C4'));
+  } finally {
+    p.cleanup();
+  }
+});
+
 test('preflight: ok stays false if ANY hard clause fails even when advisory ones warn too', () => {
   const p = happyProject();
   try {
     rmSync(join(p.dir, 'roadmap.md')); // C4 hard fail
-    rmSync(join(p.dir, 'CLAUDE.md')); // C5 advisory warn
+    rmSync(join(p.dir, 'CLAUDE.md')); // C5 + C8 advisory warn
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, false);
     assert.match(formatPreflightReport(r), /CONTRACT NOT MET/);

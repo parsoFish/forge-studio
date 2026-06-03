@@ -17,7 +17,6 @@ import {
   writeWorkItem,
   readWorkItemsFromDir,
   detectHiddenCoupling,
-  requiredVerificationPaths,
   type WorkItem,
 } from './work-item.ts';
 
@@ -32,7 +31,6 @@ function fixture(overrides: Partial<WorkItem> = {}): WorkItem {
       { given: 'a request', when: 'the handler runs', then: 'it returns 200' },
     ],
     files_in_scope: ['src/handler.ts'],
-    // F1.I5 compliance: code-file WI must declare creates so gate-tightening fires.
     creates: ['src/handler.ts'],
     estimated_iterations: 2,
     // 2026-05-24 (claude-harness audit): quality_gate_cmd is REQUIRED on
@@ -323,22 +321,6 @@ test('creates: entry not in files_in_scope is rejected', () => {
   assert.ok(errors.some((e) => e.includes('creates')), `got ${JSON.stringify(errors)}`);
 });
 
-// ---- requiredVerificationPaths: DEPRECATED stub returning [] ----
-// The gate-tightening was removed 2026-05-24 (operator feedback: "overly
-// restrictive to be so specific about files allowed to be edited — it
-// seems to me this would not allow agentic flexibility to solve
-// problems"). quality_gate_cmd (npm test / project test runner) is now
-// the sole arbiter; no-work-indicator catches "agent did nothing".
-
-test('requiredVerificationPaths: returns [] (deprecated; gate skips path-tightening)', () => {
-  const wi = fixture({
-    files_in_scope: ['src/handler.ts', 'tests/handler.test.ts', 'docs/handler.md'],
-    creates: ['tests/handler.test.ts'],
-    verification_artifact: 'docs/handler.md',
-  });
-  assert.deepEqual(requiredVerificationPaths(wi), []);
-});
-
 // F1.I5 removed — modify-only WIs are legitimate (e.g. WI-6 extending
 // src/trail.ts created by WI-2). The validator no longer second-guesses
 // the PM's grammar.
@@ -360,15 +342,3 @@ test('validateWorkItem: accepts pure-docs WI', () => {
   assert.deepEqual(errors, []);
 });
 
-test('requiredVerificationPaths: false-pass scenario — creates declared but diff is empty would fail the gate', () => {
-  // Historical (2026-05-23 dogfood): when the gate ran path-tightening,
-  // this case caught a WI that declared creates but the agent never wrote
-  // any of those paths. The tightening was removed 2026-05-24 (operator
-  // feedback re: flexibility). The no-work-indicator scan in
-  // stop-conditions remains as the genuine "agent did nothing" net.
-  const wi = fixture({
-    files_in_scope: ['azuredevops/internal/service/release/resource_release_definition_test.go'],
-    creates: ['azuredevops/internal/service/release/resource_release_definition_test.go'],
-  });
-  assert.deepEqual(requiredVerificationPaths(wi), []);
-});

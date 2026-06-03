@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# brain-graphify-all.sh — rebuild graphify knowledge graphs for all three brains.
+# brain-graphify-all.sh — rebuild graphify knowledge graphs for Brain 1 and Brain 3.
 #
-# Three-brain model (Tier 4 restructure 2026-05-26):
+# Two-brain graphify model (BRN-3 — cycles graph dropped: empirically 0 relational edges):
 #   Brain 1 (forge-dev): forge code + ADRs + engineering notes
 #                        graph at: brain/forge-dev/graphify-out/
-#   Brain 2 (cycles):    cycle-derived patterns, antipatterns, operations, raw archives
-#                        graph at: brain/cycles/graphify-out/
 #   Brain 3 (per-project): lives inside each managed project
 #                           graph at: projects/<name>/brain/graphify-out/
 #
+# Brain 2 (cycles) is NOT graphified — it is keyword-scanned markdown only.
+#
 # Usage:
-#   bash scripts/brain-graphify-all.sh          # rebuild Brain 1 + Brain 2
-#   bash scripts/brain-graphify-all.sh --all    # rebuild Brain 1 + Brain 2 + all managed projects
+#   bash scripts/brain-graphify-all.sh          # rebuild Brain 1 only
+#   bash scripts/brain-graphify-all.sh --all    # rebuild Brain 1 + all managed project brains
 #
 # Requirements: graphify installed (uv tool install graphifyy)
 # After modifying forge code, this is run automatically by the post-commit hook.
@@ -46,13 +46,6 @@ run_graphify \
   "Brain 1 (forge-dev)" \
   "$FORGE_ROOT" \
   "brain/forge-dev/graphify-out"
-
-# Brain 2 — cycles (brain/cycles themes + _raw archives)
-# Scan root is brain/cycles/; output lands at brain/cycles/graphify-out/.
-run_graphify \
-  "Brain 2 (cycles)" \
-  "$FORGE_ROOT/brain/cycles" \
-  "graphify-out"
 
 if [[ "${1:-}" == "--all" ]]; then
   # Brain 3 — each managed project repo

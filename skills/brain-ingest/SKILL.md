@@ -10,12 +10,18 @@ model: claude-sonnet-4-6
 
 ## Single responsibility
 
-The only writer to the brain. Takes raw input (text, URL contents, cycle logs, retros, research) and:
+Manual / research ingest path. Takes raw input (text, URL contents, external research) and:
 
 1. Appends the raw to `brain/_raw/` with full provenance.
 2. Creates new theme pages or appends to existing ones in `brain/cycles/themes/` (forge-wide) or `projects/<name>/brain/themes/` (project-specific).
 3. Updates category indexes.
 4. Appends an entry to `brain/forge-dev/log.md`.
+
+> **Writer ownership:** the **reflector** is the de-facto writer during cycle execution — it
+> directly writes themes + category indexes as part of closing a cycle. This skill is the
+> *manual* ingest path for operator-initiated research, external docs, or ad-hoc raw sources
+> that don't arrive via the cycle pipeline. Both paths follow the same theme-page format and
+> append-only raw convention.
 
 ## Required first action
 

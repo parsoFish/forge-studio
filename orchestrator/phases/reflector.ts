@@ -13,7 +13,14 @@
  *      enum value);
  *   2. tags the cycle archive (`brain/cycles/_raw/<id>.md`) with a
  *      `retention` tier + `cited_by` list so plan 01's cleanup pass has
- *      a load-bearing signal for which archives to keep vs. summarise.
+ *      a load-bearing signal for which archives to keep vs. summarise;
+ *   3. derives `user-questions.json` from the agent-written
+ *      `user-questions.md` so the in-UI /reflect screen can render the
+ *      structured questions without the agent needing to write two files
+ *      (REF-1 fix: the agent only ever wrote the .md; the .json is
+ *      derived here post-exit);
+ *   4. calls `regenerateBrainIndex` after theme writes so the brain index
+ *      stays current without a separate operator step.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -48,6 +55,7 @@ import {
 } from '../../cli/cycle-retention.ts';
 import { writeCycleRecap } from '../../cli/cycle-recap.ts';
 import { cyclesThemesDir } from '../brain-paths.ts';
+import { regenerateBrainIndex } from '../../cli/brain-index.ts';
 
 /**
  * Defaults for the live reflector invocation. The reflector is a one-shot SDK
@@ -317,20 +325,42 @@ export async function runReflector(
     brainLint: deps.brainLint,
   });
 
-  // S5 / refinement #6 — brain-bench-growth candidate emit. Best-effort:
-  // a write failure is logged but does not block close. The candidate file
-  // is the input the operator-driven `forge brain bench:promote` reads.
-  const candidateCount = emitBenchCandidates({
-    forgeRoot,
-    cycleId,
-    cycleLogDir,
-    themesDir,
-    projectName,
-    sinceMs: startedAtMs,
-    logger,
-    initiativeId: input.initiativeId,
-    parentEventId: start.event_id,
-  });
+  // REF-1: derive user-questions.json from the agent-written user-questions.md.
+  // The agent only writes the .md; we synthesise the structured .json here
+  // post-exit so the in-UI /reflect screen has an AskUserQuestion-shaped array
+  // to render. Best-effort: a missing or unparse-able .md results in an empty
+  // array (no questions shown), which is acceptable (the .md is still readable).
+  const userQuestionsPath = resolve(cycleLogDir, 'user-questions.md');
+  const userQuestionsJsonPath = resolve(cycleLogDir, 'user-questions.json');
+  deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath);
+
+  // REF-4: regenerate the brain index now that the agent has written new themes.
+  // Best-effort: a failure here is logged but does not block close.
+  try {
+    regenerateBrainIndex({ cwd: forgeRoot });
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [resolve(forgeRoot, 'brain', 'INDEX.md')],
+      message: 'reflector.brain-index-regenerated',
+    });
+  } catch (indexErr) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'reflector.brain-index-failed',
+      metadata: { error: indexErr instanceof Error ? indexErr.message : String(indexErr) },
+    });
+  }
 
   // S6B — write `_logs/<cycle-id>/recap.md`. Orchestrator-side, NOT agent.
   // Always written on a successful reflector close (additive — does NOT
@@ -386,7 +416,6 @@ export async function runReflector(
       tool_use: toolUseSummary,
       lint_status: lintStatus,
       retention: retention.retention,
-      bench_candidates_emitted: candidateCount,
     },
   });
   return { reflection_status: 'closed', lint_status: lintStatus };
@@ -654,232 +683,76 @@ function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): st
 }
 
 /**
- * S5 / refinement #6 — emit brain-bench-growth candidates.
+ * REF-1: Derive `user-questions.json` from `user-questions.md`.
  *
- * One candidate row per qualifying gap. A gap qualifies iff this cycle
- * wrote at least one theme file (mtime >= sinceMs) under the project's
- * themes/ dir (i.e., `projects/<project>/brain/themes/`), AND the gap's question
- * intersects (via shared keywords) with the written theme's title /
- * frontmatter keywords. Cycles that wrote zero themes emit zero
- * candidates; cycles whose gaps were not filled emit zero candidates.
+ * The agent writes only the .md (numbered headings). This function
+ * synthesises the AskUserQuestion-shaped JSON array that the in-UI
+ * /reflect screen expects, so the interview works in production without
+ * requiring the agent to write two files.
  *
- * Heuristic intentionally conservative — false positives waste operator
- * time; false negatives just mean the question never enters the
- * promote pipeline (a future cycle hits the same gap and tries again).
- *
- * The output file `_logs/<cycle-id>/brain-bench-candidates.jsonl` is the
- * single input to `forge brain bench:promote`.
+ * Parsing strategy: split on `## ` headings, use the heading text as
+ * `header` (truncated to 12 chars per AskUserQuestion constraint) and the
+ * body text as `question`. Generic fallback options are supplied because
+ * the agent has no structured option data in the .md format. If the .md
+ * is absent or contains no questions, an empty array is written (the UI
+ * treats that as "no questions this cycle").
  */
-function emitBenchCandidates(opts: {
-  forgeRoot: string;
-  cycleId: string;
-  cycleLogDir: string;
-  themesDir: string;
-  projectName: string;
-  sinceMs: number;
-  logger: EventLogger;
-  initiativeId: string;
-  parentEventId?: string;
-}): number {
-  const { forgeRoot, cycleId, cycleLogDir, themesDir, projectName, sinceMs } = opts;
-  const candidatesPath = resolve(cycleLogDir, 'brain-bench-candidates.jsonl');
-
+function deriveUserQuestionsJson(mdPath: string, jsonPath: string): void {
   try {
-    const gaps = readBrainGaps(resolve(cycleLogDir, 'brain-gaps.jsonl'));
-    if (gaps.length === 0) {
-      // Nothing to consider. Touch an empty file so the operator + downstream
-      // tooling can tell "ran but no candidates" from "never ran".
-      mkdirSync(cycleLogDir, { recursive: true });
-      writeFileSync(candidatesPath, '');
-      return 0;
+    if (!existsSync(mdPath)) {
+      writeFileSync(jsonPath, '[]');
+      return;
     }
-    const projectThemes = listFreshThemes(themesDir, sinceMs);
-    const forgeThemes = listFreshThemes(cyclesThemesDir(forgeRoot), sinceMs);
-    const writtenThemes = [...projectThemes, ...forgeThemes];
-    if (writtenThemes.length === 0) {
-      // No themes this cycle ⇒ no gaps filled ⇒ no candidates.
-      mkdirSync(cycleLogDir, { recursive: true });
-      writeFileSync(candidatesPath, '');
-      return 0;
-    }
-    // Build a {theme-path -> keyword-set} lookup once per pass.
-    const themeKeywords = new Map<string, Set<string>>();
-    for (const t of writtenThemes) {
-      themeKeywords.set(t.path, extractThemeKeywords(t.path));
-    }
-
-    const lines: string[] = [];
-    for (const gap of gaps) {
-      const matched = matchGapToTheme(gap.query, themeKeywords);
-      if (matched.length === 0) continue;
-      const candidate = {
-        question: gap.query,
-        expected_sources: matched.map((p) => relativeToForge(p, forgeRoot)),
-        why_now: `this cycle wrote ${matched.length} theme(s) addressing the gap; promotion would make the question testable.`,
-        gap_id: gap.gap_id,
-        scope: projectName,
-      };
-      lines.push(JSON.stringify(candidate));
-    }
-    mkdirSync(cycleLogDir, { recursive: true });
-    writeFileSync(candidatesPath, lines.length === 0 ? '' : lines.join('\n') + '\n');
-    if (lines.length > 0) {
-      opts.logger.emit({
-        initiative_id: opts.initiativeId,
-        parent_event_id: opts.parentEventId,
-        phase: 'reflection',
-        skill: 'reflector',
-        event_type: 'log',
-        input_refs: [resolve(cycleLogDir, 'brain-gaps.jsonl')],
-        output_refs: [candidatesPath],
-        message: 'reflector.bench-candidates-emitted',
-        metadata: { count: lines.length, cycle_id: cycleId },
-      });
-    }
-    return lines.length;
-  } catch (err) {
-    // Best-effort. A failure here must not change reflection close.
-    opts.logger.emit({
-      initiative_id: opts.initiativeId,
-      parent_event_id: opts.parentEventId,
-      phase: 'reflection',
-      skill: 'reflector',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: 'reflector.bench-candidates-failed',
-      metadata: { error: err instanceof Error ? err.message : String(err) },
-    });
-    return 0;
-  }
-}
-
-type GapRow = { gap_id?: string; query: string };
-
-/**
- * Parse brain-gaps.jsonl (one JSON object per line). Tolerates a missing
- * file, empty lines, and malformed lines. Only rows with a string `query`
- * are kept.
- */
-function readBrainGaps(path: string): GapRow[] {
-  if (!existsSync(path)) return [];
-  let raw: string;
-  try {
-    raw = readFileSync(path, 'utf8');
+    const raw = readFileSync(mdPath, 'utf8');
+    const questions = parseUserQuestionsMd(raw);
+    writeFileSync(jsonPath, JSON.stringify(questions, null, 2));
   } catch {
-    return [];
-  }
-  const out: GapRow[] = [];
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+    // Best-effort: fall back to empty array so the UI shows "no questions".
     try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-      const query =
-        typeof parsed.query === 'string'
-          ? parsed.query
-          : typeof parsed.question === 'string'
-          ? parsed.question
-          : null;
-      if (!query) continue;
-      const gap_id = typeof parsed.gap_id === 'string' ? parsed.gap_id : undefined;
-      out.push({ gap_id, query });
+      writeFileSync(jsonPath, '[]');
     } catch {
-      /* skip */
+      /* silent */
     }
+  }
+}
+
+type UserQuestion = {
+  question: string;
+  header: string;
+  options: Array<{ label: string; description: string }>;
+};
+
+/**
+ * Parse the numbered heading format written by the agent:
+ *   ## 1. <heading text>
+ *   <body paragraphs>
+ *
+ * Returns one entry per heading found. If no headings match the pattern,
+ * falls back to treating the entire file body as a single question.
+ */
+function parseUserQuestionsMd(raw: string): UserQuestion[] {
+  const out: UserQuestion[] = [];
+  // Split on lines that start a numbered or unnumbered ## heading.
+  const sections = raw.split(/^(?=## )/m).filter((s) => s.trim());
+  for (const section of sections) {
+    const lines = section.split(/\r?\n/);
+    const heading = lines[0].replace(/^##\s+\d+\.\s*/, '').replace(/^##\s+/, '').trim();
+    if (!heading) continue;
+    const body = lines.slice(1).join('\n').trim();
+    const question = body || heading;
+    // header must be ≤12 chars (AskUserQuestion constraint).
+    const header = heading.slice(0, 12);
+    out.push({
+      question,
+      header,
+      options: [
+        { label: 'Nothing notable', description: 'No action needed from this question.' },
+        { label: 'Worth a theme', description: 'Capture as a brain theme.' },
+        { label: 'Significant issue', description: 'Needs immediate follow-up.' },
+      ],
+    });
   }
   return out;
-}
-
-/**
- * Tokenise a string for the gap-vs-theme intersection check. Mirrors the
- * bench's keyword tokenizer at low cost: lowercase, split on non-word,
- * drop stopwords + <3 char tokens, dedupe.
- */
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
-  'be', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'as', 'by',
-  'what', 'when', 'where', 'why', 'how', 'does', 'do', 'did', 'this',
-  'that', 'these', 'those', 'it', 'its', 'from', 'has', 'have', 'had',
-  'into', 'between', 'about', 'over', 'under', 'than', 'should', 'shall',
-  'will', 'must', 'can', 'could', 'would', 'may', 'might',
-]);
-
-function tokenise(text: string): Set<string> {
-  const out = new Set<string>();
-  for (const raw of text.toLowerCase().split(/[^a-z0-9_-]+/)) {
-    if (!raw) continue;
-    if (raw.length < 3) continue;
-    if (STOPWORDS.has(raw)) continue;
-    out.add(raw);
-  }
-  return out;
-}
-
-/**
- * Extract a theme's keyword set from its frontmatter `keywords:` field +
- * its title. Reads the file synchronously; on failure returns an empty
- * set. Cheap (one file per fresh theme; typically ≤5 per cycle).
- */
-function extractThemeKeywords(path: string): Set<string> {
-  try {
-    const raw = readFileSync(path, 'utf8');
-    const keywords = new Set<string>();
-    // Frontmatter block.
-    if (raw.startsWith('---\n') || raw.startsWith('---\r\n')) {
-      const end = raw.indexOf('\n---', 4);
-      if (end > 0) {
-        const block = raw.slice(4, end);
-        const kwLine = block.split(/\r?\n/).find((l) => /^keywords:/.test(l));
-        if (kwLine) {
-          // keywords: [a, b, c]  OR  keywords:\n  - a\n  - b
-          const inline = kwLine.match(/\[(.*)\]/);
-          if (inline) {
-            for (const t of inline[1].split(',')) {
-              const v = t.trim().replace(/^['"]|['"]$/g, '').toLowerCase();
-              if (v) keywords.add(v);
-            }
-          }
-        }
-        const titleLine = block.split(/\r?\n/).find((l) => /^title:/.test(l));
-        if (titleLine) {
-          for (const t of tokenise(titleLine.replace(/^title:\s*/, ''))) keywords.add(t);
-        }
-      }
-    }
-    // First H1 also folds in.
-    const firstH1 = raw.split(/\r?\n/).find((l) => l.startsWith('# '));
-    if (firstH1) for (const t of tokenise(firstH1.slice(2))) keywords.add(t);
-    return keywords;
-  } catch {
-    return new Set();
-  }
-}
-
-/**
- * Return the paths of themes whose keyword set shares ≥ 2 tokens with the
- * gap's query. Two is the minimum that meaningfully reduces false
- * positives: a single shared "token" (e.g. "brain") matches almost every
- * gap; two shared tokens implies a topic overlap.
- */
-function matchGapToTheme(query: string, themeKeywords: Map<string, Set<string>>): string[] {
-  const qTokens = tokenise(query);
-  const hits: string[] = [];
-  for (const [path, kw] of themeKeywords) {
-    let shared = 0;
-    for (const t of qTokens) {
-      if (kw.has(t)) {
-        shared += 1;
-        if (shared >= 2) break;
-      }
-    }
-    if (shared >= 2) hits.push(path);
-  }
-  return hits;
-}
-
-function relativeToForge(absPath: string, forgeRoot: string): string {
-  return absPath.startsWith(forgeRoot + '/') ? absPath.slice(forgeRoot.length + 1) : absPath;
 }
 
 // Re-export the legacy ReflectionStatus type for ergonomic imports.

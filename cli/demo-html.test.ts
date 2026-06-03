@@ -1,8 +1,9 @@
 /**
- * Tests for the pure before/after demo HTML renderer (F-44).
- * Asserts structure, framing discipline (no error/regression language in the
- * happy path), self-containment (data-URI screenshots), and graceful
- * degradation (missing captures, build failure banner).
+ * Tests for the pure before/after demo HTML renderer (REV-4 / D3).
+ * Asserts structure, richness (sections present), framing discipline
+ * (no error/regression language in the happy path), self-containment
+ * (data-URI screenshots), and graceful degradation (missing captures,
+ * build failure banner, empty optional sections).
  */
 
 import { test } from 'node:test';
@@ -25,6 +26,15 @@ function model(overrides: Partial<DemoComparisonModel> = {}): DemoComparisonMode
     generatedAt: '2026-05-13T06:00:00Z',
     baselineBuild: { ok: true, detail: 'npm ci + vite build ok' },
     changedBuild: { ok: true, detail: 'npm ci + vite build ok' },
+    summary: {
+      bullets: [
+        'Clicking a node now opens an inspector panel with the computed grade.',
+        'Previously selection only highlighted the node without showing data.',
+      ],
+      prUrl: 'https://github.com/org/repo/pull/7',
+      branch: 'forge/INIT-world-graph-ux',
+      commitSha: 'abc1234',
+    },
     checkpoints: [
       {
         label: 'select-node',
@@ -53,6 +63,22 @@ function model(overrides: Partial<DemoComparisonModel> = {}): DemoComparisonMode
         afterNote: 'Flow continues identically under the new timing model.',
       },
     ],
+    apiDiff: [
+      {
+        name: 'GET /api/nodes/:id',
+        change: 'changed',
+        before: '{ "id": "n1", "label": "A" }',
+        after: '{ "id": "n1", "label": "A", "grade": 0.87 }',
+      },
+    ],
+    testEvidence: [
+      { name: 'computeGrade — returns float', result: 'pass', delta: '+1 new test' },
+      { name: 'All existing tests', result: 'pass', delta: '42/42 green' },
+    ],
+    filesChanged: [
+      { path: 'src/grade.ts', note: 'new — grade computation' },
+      { path: 'src/Inspector.tsx', note: 'renders grade badge' },
+    ],
     acceptanceCriteria: [
       'GIVEN a world graph WHEN a node is clicked THEN an inspector panel opens',
       'GIVEN the inspector open WHEN it renders THEN it shows the node grade',
@@ -62,31 +88,58 @@ function model(overrides: Partial<DemoComparisonModel> = {}): DemoComparisonMode
   };
 }
 
-test('renderComparisonHtml: emits a self-contained doc with title + essence', () => {
+// ── Header band ───────────────────────────────────────────────────────────
+
+test('renderComparisonHtml: header band carries title, branch, commitSha, PR link', () => {
   const html = renderComparisonHtml(model());
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /<title>Node inspector panel — before \/ after<\/title>/);
-  assert.match(html, /class="essence"/);
+  assert.match(html, /forge\/INIT-world-graph-ux/);
+  assert.match(html, /abc1234/);
+  assert.match(html, /Pull request/);
+  assert.match(html, /https:\/\/github\.com\/org\/repo\/pull\/7/);
+});
+
+test('renderComparisonHtml: essence appears in the header', () => {
+  const html = renderComparisonHtml(model());
   assert.match(html, /inspector panel showing its computed grade/);
 });
 
-test('renderComparisonHtml: every checkpoint renders a before AND after figure', () => {
+// ── Summary section ───────────────────────────────────────────────────────
+
+test('renderComparisonHtml: Summary section with bullets is emitted', () => {
   const html = renderComparisonHtml(model());
-  assert.match(html, /Before — baseline behaviour/);
-  assert.match(html, /After — this initiative/);
-  // 2 screenshot checkpoints × (before+after) = 4 data-URI <img>.
-  const imgs = html.match(/<img src="data:image\/png;base64,/g) ?? [];
-  assert.equal(imgs.length, 4);
+  assert.match(html, /id="summary"/);
+  assert.match(html, /Clicking a node now opens an inspector panel/);
+  assert.match(html, /Previously selection only highlighted the node/);
 });
 
-test('renderComparisonHtml: harness checkpoint renders a metric table + parity verdict, no media', () => {
+test('renderComparisonHtml: Summary falls back to essence when summary absent', () => {
+  const html = renderComparisonHtml(model({ summary: undefined }));
+  assert.match(html, /id="summary"/);
+  // essence is used as the fallback bullet
+  assert.match(html, /inspector panel showing its computed grade/);
+});
+
+// ── Visual Changes section ────────────────────────────────────────────────
+
+test('renderComparisonHtml: Visual Changes section renders before/after pairs', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /id="visual-changes"/);
+  assert.match(html, /Before — baseline behaviour/);
+  assert.match(html, /After — this initiative/);
+  const imgs = html.match(/<img src="data:image\/png;base64,/g) ?? [];
+  assert.equal(imgs.length, 4, '2 screenshot checkpoints × (before+after) = 4 data-URI imgs');
+});
+
+test('renderComparisonHtml: harness checkpoint renders metric table + verdict, no media', () => {
   const html = renderComparisonHtml(
     model({
       checkpoints: [
         {
           label: 'flow-parity',
           kind: 'harness',
-          caption: '150-vehicle scoring sim on straight-highway',
+          caption: '150-vehicle scoring sim',
           beforeImage: null,
           afterImage: null,
           metrics: [
@@ -104,12 +157,11 @@ test('renderComparisonHtml: harness checkpoint renders a metric table + parity v
   assert.match(html, /<td>148<\/td>/);
   assert.match(html, /\+0\.7%/);
   assert.match(html, /class="verdict v-within">Verdict: <strong>PARITY<\/strong>/);
-  // A harness checkpoint emits no <img> and no <video>.
   assert.ok(!html.includes('<img '), 'harness checkpoint has no <img>');
   assert.ok(!html.includes('<video'), 'harness checkpoint has no <video>');
 });
 
-test('renderComparisonHtml: a diverged metric drives a DIVERGED verdict; missing → INCOMPLETE', () => {
+test('renderComparisonHtml: diverged metric → DIVERGED verdict; missing → INCOMPLETE', () => {
   const diverged = renderComparisonHtml(
     model({
       checkpoints: [
@@ -124,7 +176,6 @@ test('renderComparisonHtml: a diverged metric drives a DIVERGED verdict; missing
     }),
   );
   assert.match(diverged, /class="verdict v-diverged">Verdict: <strong>DIVERGED<\/strong>/);
-  assert.match(diverged, /tr class="p-diverged"/);
 
   const incomplete = renderComparisonHtml(
     model({
@@ -137,6 +188,157 @@ test('renderComparisonHtml: a diverged metric drives a DIVERGED verdict; missing
     }),
   );
   assert.match(incomplete, /class="verdict v-incomplete">Verdict: <strong>INCOMPLETE<\/strong>/);
+});
+
+test('renderComparisonHtml: video checkpoint renders <video> pair with kind badge', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /<video controls preload="metadata" playsinline src="before\/sim-flow\.webm">/);
+  assert.match(html, /<video controls preload="metadata" playsinline src="after\/sim-flow\.webm">/);
+  assert.match(html, /<span class="kind">video<\/span>/);
+  const imgs = html.match(/<img /g) ?? [];
+  assert.equal(imgs.length, 4, 'only the 2 screenshot checkpoints emit <img>');
+});
+
+test('renderComparisonHtml: missing capture degrades to placeholder', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        { label: 'x', kind: 'screenshot', caption: 'only after captured', beforeImage: null, afterImage: PNG_DATA_URI },
+      ],
+    }),
+  );
+  assert.match(html, /class="missing"/);
+  assert.match(html, /no capture/);
+});
+
+test('renderComparisonHtml: screenshots are inlined as data URIs (self-contained)', () => {
+  const html = renderComparisonHtml(model());
+  assert.ok(html.includes(PNG_DATA_URI), 'screenshot data URI inlined verbatim');
+  assert.ok(!/<img src="before\//.test(html), 'no external screenshot file refs');
+  assert.ok(!/<img src="after\//.test(html), 'no external screenshot file refs');
+});
+
+// ── API Diff section ──────────────────────────────────────────────────────
+
+test('renderComparisonHtml: API Diff section renders before/after code blocks + badge', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /id="api-diff"/);
+  assert.match(html, /GET \/api\/nodes\/:id/);
+  assert.match(html, /badge-changed/);
+  assert.match(html, /&quot;grade&quot;: 0\.87/);
+  assert.match(html, /code-block/);
+});
+
+test('renderComparisonHtml: API Diff section absent when apiDiff not provided', () => {
+  const html = renderComparisonHtml(model({ apiDiff: undefined }));
+  assert.ok(!html.includes('id="api-diff"'), 'no api-diff section when absent');
+});
+
+test('renderComparisonHtml: API Diff added/removed badges emit correct classes', () => {
+  const html = renderComparisonHtml(
+    model({
+      apiDiff: [
+        { name: 'newEndpoint()', change: 'added', after: '(): void' },
+        { name: 'oldFn()', change: 'removed', before: '(): void' },
+      ],
+    }),
+  );
+  assert.match(html, /badge-added/);
+  assert.match(html, /badge-removed/);
+});
+
+// ── Test Evidence section ─────────────────────────────────────────────────
+
+test('renderComparisonHtml: Test Evidence section renders pass/fail table', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /id="test-evidence"/);
+  assert.match(html, /computeGrade/);
+  assert.match(html, /result-pass/);
+  assert.match(html, /\+1 new test/);
+});
+
+test('renderComparisonHtml: Test Evidence absent when not provided', () => {
+  const html = renderComparisonHtml(model({ testEvidence: undefined }));
+  assert.ok(!html.includes('id="test-evidence"'), 'no test-evidence section when absent');
+});
+
+test('renderComparisonHtml: failed test row gets result-fail class', () => {
+  const html = renderComparisonHtml(
+    model({
+      testEvidence: [
+        { name: 'integration test', result: 'fail', delta: 'regression' },
+      ],
+    }),
+  );
+  assert.match(html, /result-fail/);
+  assert.match(html, /integration test/);
+});
+
+// ── Files Changed section ─────────────────────────────────────────────────
+
+test('renderComparisonHtml: Files Changed section renders annotated list + diffstat toggle', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /id="files-changed"/);
+  assert.match(html, /src\/grade\.ts/);
+  assert.match(html, /new — grade computation/);
+  assert.match(html, /git diff --stat/);
+  assert.match(html, /src\/ui\/Inspector\.ts/);
+});
+
+test('renderComparisonHtml: Files Changed falls back to diffStat when filesChanged absent', () => {
+  const html = renderComparisonHtml(model({ filesChanged: undefined }));
+  assert.match(html, /id="files-changed"/);
+  assert.match(html, /src\/ui\/Inspector\.ts/);
+});
+
+test('renderComparisonHtml: Files Changed absent when both filesChanged and diffStat absent', () => {
+  const html = renderComparisonHtml(model({ filesChanged: undefined, diffStat: undefined }));
+  assert.ok(!html.includes('id="files-changed"'), 'no files-changed section when nothing to show');
+});
+
+// ── Acceptance criteria appendix ──────────────────────────────────────────
+
+test('renderComparisonHtml: acceptance criteria appear as collapsible appendix', () => {
+  const html = renderComparisonHtml(model());
+  assert.match(html, /Acceptance criteria this demo is grounded in \(2\)/);
+  assert.match(html, /inspector panel opens/);
+});
+
+// ── Build banner ──────────────────────────────────────────────────────────
+
+test('renderComparisonHtml: build failure surfaces a banner', () => {
+  const html = renderComparisonHtml(
+    model({ baselineBuild: { ok: false, detail: 'vite: ENOENT vite.config.ts' } }),
+  );
+  assert.match(html, /class="banner"/);
+  assert.match(html, /did not build/);
+  assert.match(html, /ENOENT vite\.config\.ts/);
+});
+
+test('renderComparisonHtml: no banner when both builds succeed', () => {
+  const html = renderComparisonHtml(model());
+  assert.ok(!html.includes('class="banner"'));
+});
+
+// ── Framing discipline ────────────────────────────────────────────────────
+
+test('renderComparisonHtml: happy path carries no error/regression framing', () => {
+  const html = renderComparisonHtml(model());
+  assert.ok(!/\bbroken\b/i.test(html), 'no "broken"');
+  assert.ok(!/\bregression\b/i.test(html), 'no "regression"');
+  assert.ok(!/\bbug\b/i.test(html), 'no "bug"');
+  assert.match(html, /prior behaviour \(a valid working state\)/);
+});
+
+// ── HTML escaping ─────────────────────────────────────────────────────────
+
+test('renderComparisonHtml: escapes HTML in user-supplied strings', () => {
+  const html = renderComparisonHtml(
+    model({ title: '<script>alert(1)</script>', essence: 'a & b < c > d "q"' }),
+  );
+  assert.ok(!html.includes('<script>alert(1)</script>'), 'title script escaped');
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /a &amp; b &lt; c &gt; d &quot;q&quot;/);
 });
 
 test('renderComparisonHtml: harness metric strings are HTML-escaped', () => {
@@ -155,98 +357,14 @@ test('renderComparisonHtml: harness metric strings are HTML-escaped', () => {
   assert.match(html, /a&amp;b/);
 });
 
-test('renderComparisonHtml: video checkpoint renders <video> sibling pair, not inlined, with a kind badge', () => {
-  const html = renderComparisonHtml(model());
-  assert.match(html, /<video controls preload="metadata" playsinline src="before\/sim-flow\.webm">/);
-  assert.match(html, /<video controls preload="metadata" playsinline src="after\/sim-flow\.webm">/);
-  assert.match(html, /<span class="kind">video<\/span>/);
-  // The video checkpoint contributes no inlined <img>.
-  const imgs = html.match(/<img /g) ?? [];
-  assert.equal(imgs.length, 4, 'only the 2 screenshot checkpoints emit <img>');
-});
-
-test('renderComparisonHtml: a video checkpoint with no clip degrades to a placeholder', () => {
+test('renderComparisonHtml: apiDiff entries are HTML-escaped', () => {
   const html = renderComparisonHtml(
     model({
-      checkpoints: [
-        {
-          label: 'sim',
-          kind: 'video',
-          caption: 'sim',
-          beforeImage: null,
-          afterImage: null,
-          beforeVideoSrc: null,
-          afterVideoSrc: null,
-        },
+      apiDiff: [
+        { name: '<script>evil()</script>', change: 'added', after: '{ "k": "<v>" }' },
       ],
     }),
   );
-  assert.match(html, /class="missing"/);
-  assert.ok(!html.includes('<video'), 'no <video> tag when src is null');
-});
-
-test('renderComparisonHtml: screenshots are inlined as data URIs (self-contained)', () => {
-  const html = renderComparisonHtml(model());
-  assert.ok(html.includes(PNG_DATA_URI), 'screenshot data URI inlined verbatim');
-  // Screenshots must be inlined (no <img src="before/...">); videos
-  // legitimately reference siblings, so only assert on <img>.
-  assert.ok(!/<img src="before\//.test(html), 'no external screenshot file refs');
-  assert.ok(!/<img src="after\//.test(html), 'no external screenshot file refs');
-});
-
-test('renderComparisonHtml: happy path carries no error/regression framing', () => {
-  const html = renderComparisonHtml(model());
-  assert.ok(!/\bbroken\b/i.test(html), 'no "broken"');
-  assert.ok(!/\bregression\b/i.test(html), 'no "regression"');
-  assert.ok(!/\bbug\b/i.test(html), 'no "bug"');
-  // The footer explicitly states before is a valid working state.
-  assert.match(html, /prior behaviour \(a valid working state\)/);
-});
-
-test('renderComparisonHtml: build failure surfaces a banner (the one allowed failure framing)', () => {
-  const html = renderComparisonHtml(
-    model({ baselineBuild: { ok: false, detail: 'vite: ENOENT vite.config.ts' } }),
-  );
-  assert.match(html, /class="banner"/);
-  assert.match(html, /did not build/);
-  assert.match(html, /ENOENT vite\.config\.ts/);
-});
-
-test('renderComparisonHtml: no banner when both builds succeed', () => {
-  const html = renderComparisonHtml(model());
-  assert.ok(!html.includes('class="banner"'));
-});
-
-test('renderComparisonHtml: missing capture degrades to a placeholder, not a crash', () => {
-  const html = renderComparisonHtml(
-    model({
-      checkpoints: [
-        { label: 'x', kind: 'screenshot', caption: 'only after captured', beforeImage: null, afterImage: PNG_DATA_URI },
-      ],
-    }),
-  );
-  assert.match(html, /class="missing"/);
-  assert.match(html, /no capture/);
-});
-
-test('renderComparisonHtml: videos referenced as sibling files, not inlined', () => {
-  const html = renderComparisonHtml(model({ beforeVideo: 'before/run.webm', afterVideo: 'after/run.webm' }));
-  assert.match(html, /<video controls preload="metadata" src="before\/run\.webm">/);
-  assert.match(html, /<video controls preload="metadata" src="after\/run\.webm">/);
-});
-
-test('renderComparisonHtml: acceptance criteria + diffstat appear as appendices', () => {
-  const html = renderComparisonHtml(model());
-  assert.match(html, /Acceptance criteria this demo is grounded in \(2\)/);
-  assert.match(html, /git diff --stat origin\/main\.\.forge\/INIT-world-graph-ux/);
-  assert.match(html, /src\/ui\/Inspector\.ts/);
-});
-
-test('renderComparisonHtml: escapes HTML in user-supplied strings', () => {
-  const html = renderComparisonHtml(
-    model({ title: '<script>alert(1)</script>', essence: 'a & b < c > d "q"' }),
-  );
-  assert.ok(!html.includes('<script>alert(1)</script>'), 'title script escaped');
+  assert.ok(!html.includes('<script>evil()'), 'api entry name escaped');
   assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /a &amp; b &lt; c &gt; d &quot;q&quot;/);
 });
