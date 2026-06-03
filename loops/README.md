@@ -1,6 +1,6 @@
 # Loops
 
-> Agentic loop runtimes. Default: `ralph/` (Ralph loop pattern over Claude Agent SDK). Adapters for alternative runtimes (Hermes, Aider, OpenHands, OpenClaw) live under `_adapters/`.
+> Agentic loop runtimes. Default: `ralph/` (Ralph loop pattern over Claude Agent SDK). Future adapters for alternative runtimes (Hermes, Aider, OpenHands) would live under `_adapters/` — that directory does not exist yet.
 
 ## Why a loop abstraction at all
 
@@ -49,4 +49,4 @@ Placeholder. Each future adapter follows the same `LoopInput` / `LoopResult` sha
 - **`_adapters/hermes/`** — Hermes Agent; if its persistent-memory model proves complementary to (rather than competing with) the brain.
 - **`_adapters/openhands/`** — OpenHands; if a heavier orchestration framework becomes warranted.
 
-When adding an adapter, add an ADR documenting the why, expose the `LoopInput`/`LoopResult` interface, add a benchmark harness comparing it head-to-head with Ralph on `benchmarks/developer-loop/work-items/`.
+When adding an adapter, add an ADR documenting the why, expose the `LoopInput`/`LoopResult` interface, and compare it head-to-head with Ralph via the real-capability harness (`scripts/verify-cycle.mjs`).

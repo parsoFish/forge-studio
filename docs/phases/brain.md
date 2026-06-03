@@ -15,8 +15,9 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 ## Outputs
 
 - `brain/_raw/<source>.md` — appended raw source.
-- `brain/forge/themes/<theme>.md` — new or updated theme page.
-- `brain/projects/<name>/themes/<theme>.md` — project-specific theme page.
+- `brain/forge-dev/themes/<theme>.md` — forge-engineering theme page (Brain 1).
+- `brain/cycles/themes/<theme>.md` — cross-cycle pattern theme page (Brain 2).
+- `<project-repo>/brain/themes/<theme>.md` — project-specific theme page (Brain 3, lives in each project's own repo).
 - Updated category indexes (`patterns.md`, `antipatterns.md`, `decisions.md`, `operations.md`, per-project `profile.md`).
 - Append to `brain/log.md` for significant operations.
 
@@ -70,7 +71,7 @@ The brain phase is judged on **two axes** — a cheap deterministic metric (per-
 
 ## TODO (post-scaffold)
 
-- [ ] Run brain seeding Pass A (general best practices) — see [`docs/seeding-plan.md`](../seeding-plan.md).
-- [ ] Run brain seeding Pass B (v1 wiki + existing projects).
-- [ ] Populate `benchmarks/brain/questions.json` with Pass A success-signal questions.
+- [x] Run brain seeding Pass A (general best practices) — complete.
+- [x] Run brain seeding Pass B (v1 wiki + existing projects) — complete.
+- ~~Populate `benchmarks/brain/questions.json`~~ — benchmarks removed 2026-05-25; superseded by real-cycle quality signal.
 - [ ] Wire Obsidian vault config (per-user, gitignored).

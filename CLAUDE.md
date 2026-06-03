@@ -82,7 +82,6 @@ forge/
 ├── cli/                # operator utilities + forge subcommand handlers (post-2026-05-24 Move 1)
 ├── forge-ui/           # Next.js operator UI; launched by `forge watch` (M2-A/B/C; see CWC DOM convention below)
 ├── _queue/             # initiative queue (gitignored)
-├── monitor/            # tmux + Obsidian + log-tail visualisation
 ├── _logs/              # JSONL event logs (gitignored)
 └── projects/           # managed projects (gitignored)
 ```
@@ -191,9 +190,8 @@ sections were merged into a single hex pipeline):
   features) hosted by `[data-component="agent-hex-canvas"]`.
 - *(retired, ADR 020 cleanup)* the inline review verdict box
   (`[data-section="verdict-form"]` / `[data-component="verdict-form"]`) was
-  removed. The review human moment runs via `/forge-review` (own session),
-  merging the PR in GitHub, or a future standalone review screen mirroring
-  `/architect/[sessionId]`.
+  removed. The review human moment runs on the `/review/<cycleId>` UI screen
+  (approve / send-back), or by merging the PR in GitHub.
 - `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
   the primary dashboard, mounted above the cycles tab. Compact by design — the
   heavy interview + PLAN-gate UI lives on the dedicated screen. Carries

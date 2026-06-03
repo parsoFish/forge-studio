@@ -85,7 +85,7 @@ estimated_iterations: 3                         # int > 0; soft hint to the Ralp
 - `estimated_iterations` > 0.
 - Body is free-form markdown. **No code blocks containing implementations** — acceptance criteria are the contract, the developer loop writes the code. (Enforced by convention, not validator.)
 
-### 3a. Optional extension fields (added 2026-05-20 per [CONTRACTS.md C5](../planning/2026-05-20-refinement/CONTRACTS.md))
+### 3a. Optional extension fields (added 2026-05-20 per [CONTRACTS.md C5](../_archive/planning/2026-05-20-refinement/CONTRACTS.md))
 
 Four optional fields extend the schema. **All four are omit-on-undefined: a WI without any of them produces frontmatter byte-identical to the pre-amendment shape.** A round-trip preservation test in `orchestrator/work-item.test.ts` asserts byte-equality for the pre-amendment WI; a refactor that changes the serialisation order of the existing fields would break it.
 
@@ -152,8 +152,8 @@ creates: [tests/x.test.ts]                                   # files this WI cre
 **Why now.** The 2026-05-18 intersection-backpressure cycle surfaced a class of decomposition failures the 6-criterion bench couldn't catch: feature hallucination (WI-8 declared `FEAT-5` against a 4-feature manifest), file-creation ambiguity (multiple WIs implicitly "created" the same file), and trivially-green dev-loops (no per-WI gate ⇒ Ralph exits on iteration 0 because the whole-project test pass). These four fields make each of those failure modes deterministically scoreable.
 
 **Cross-references.**
-- [CONTRACTS.md](../planning/2026-05-20-refinement/CONTRACTS.md) C5 (the locked contract), C5a (the `knownFeatureIds` load-bearing wiring), C5b (the hallucinated-FEAT recovery flow), C11 (`initiatives.json` migration).
-- [Plan 03](../planning/2026-05-20-refinement/03-project-manager.md) §"Required WI fields", §"Bench redesign".
+- [CONTRACTS.md](../_archive/planning/2026-05-20-refinement/CONTRACTS.md) C5 (the locked contract), C5a (the `knownFeatureIds` load-bearing wiring), C5b (the hallucinated-FEAT recovery flow), C11 (`initiatives.json` migration).
+- [Plan 03](../_archive/planning/2026-05-20-refinement/03-project-manager.md) §"Required WI fields", §"Bench redesign".
 - Reference implementation: `orchestrator/work-item.ts` (parser, validator, omit-on-undefined serialiser); `orchestrator/work-item.test.ts` (round-trip test). (The former `benchmarks/project-manager/scoring.ts` deterministic `files_real_or_explicitly_new` / `one_creator_per_file` criteria were removed with the benchmarks 2026-05-25.)
 
 The schema fields locked in §1-3 (`work_item_id`, `feature_id`, `initiative_id`, `status`, `depends_on`, `acceptance_criteria`, `files_in_scope`, `estimated_iterations`) remain required. The four new fields in §3a remain optional indefinitely — they tighten signal without breaking any WI that doesn't need them.

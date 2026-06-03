@@ -58,7 +58,7 @@ The reflector does NOT move the manifest to `_queue/done/`. The reviewer already
 ## TODO (post-scaffold)
 
 - [x] Define the retro.md template (three structural sections; rendered via `renderReflectorUserPrompt`).
-- [x] Populate `benchmarks/reflection/fixtures/` with 5 fixture cycles + expected deltas.
+- [x] ~~Populate `benchmarks/reflection/fixtures/`~~ — benchmarks removed 2026-05-25; real-cycle quality signal takes over.
 - [x] Wire `orchestrator/cycle.ts:runReflector()` end-to-end (real SDK invocation; log-and-continue failure mode).
 - [ ] Future: orchestrator gate that blocks scheduler from queueing new initiatives for a project whose last N reflections failed.
 - [ ] Future: stdin / CLI transport for stages 2 + 3 in production (currently file-based only).

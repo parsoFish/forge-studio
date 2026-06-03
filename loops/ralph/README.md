@@ -39,7 +39,6 @@ The loop exits when **any one** condition fires:
 - **Quality gates pass.** The orchestrator runs the project's quality gates (e.g. `npm test`, `npm run lint`, `gh pr checks`). The agent's claim of "it works" is not trusted — orchestrator-side verification only.
 - **Iteration budget exhausted.** From the initiative manifest's `iteration_budget`. Hard limit.
 - **Cost budget exhausted.** From the initiative manifest's `cost_budget_usd`. Hard limit.
-- **Wedged.** No progress detected over N consecutive iterations (default 3). "Progress" = files changed + `fix_plan.md` has fewer outstanding items.
 
 ## Why Ralph specifically
 
@@ -53,8 +52,8 @@ The loop exits when **any one** condition fires:
 
 - ✅ Driver + stop conditions + templates wired end-to-end.
 - ✅ Claude Agent SDK wiring via [`claude-agent.ts`](./claude-agent.ts) (`createClaudeAgent` factory; SDK `query` is dependency-injectable for unit tests).
-- ⏳ Per-iteration commit discipline (`git add -A && git commit -m`) — currently the agent is instructed to commit in the prompt; orchestrator-side enforcement lands when `cycle.ts` integrates with the runner end-to-end.
-- ⏳ Per-iteration JSONL event-log emission — once `cycle.ts` is wired, every iteration writes a `developer-ralph.iteration` event referencing the work-item path and the iteration's filesChanged.
+- ✅ Per-iteration commit discipline — orchestrator-side enforcement in `cycle.ts`.
+- ✅ Per-iteration JSONL event-log emission — `cycle.ts` emits `developer-ralph.iteration` events referencing the work-item path and filesChanged.
 
 ## Wiring example
 

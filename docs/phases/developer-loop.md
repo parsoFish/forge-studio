@@ -45,7 +45,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 `benchmarks/developer-loop/` (removed) — five fixtures, one per managed project.
 - `fixtures/<id>/` — seed worktree (source files + tests) plus `.forge/work-items/WI-1.md` (the WI spec) plus a failing acceptance test.
 - `cases.json` — catalogue with per-fixture `quality_gate_cmd` + `pre_existing_tests_cmd` + budgets.
-- `scoring.ts` — pure rubric (gate `terminated_cleanly`; weighted criteria for `loop_completed`, `iteration_budget_respected`, `files_in_scope_respected`, `no_regression`; pass threshold 0.7). `cost_budget_respected` was dropped per [CONTRACTS.md C19](../planning/2026-05-20-refinement/CONTRACTS.md) (all $-budgets removed).
+- `scoring.ts` — pure rubric (gate `terminated_cleanly`; weighted criteria for `loop_completed`, `iteration_budget_respected`, `files_in_scope_respected`, `no_regression`; pass threshold 0.7). `cost_budget_respected` was dropped (all $-budgets removed).
 - `sdk.ts` — per-fixture tempdir + runDevLoop entrypoint (shared with the live cycle via `orchestrator/dev-invocation.ts`).
 - `score.ts` — runs the Ralph loop against each fixture, scores, writes `results/<iso>.json`.
 
@@ -66,7 +66,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## Onboarding a project
 
-> Source of truth: [CONTRACTS.md C1 / C2 / C26 / C28](../planning/2026-05-20-refinement/CONTRACTS.md).
+> Source of truth: [`docs/forge-project-contract.md`](../forge-project-contract.md) + [ADR 017](../decisions/017-forge-project-contract.md).
 > Schema: [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json).
 
 Each managed project declares how forge should drive its dev-loop unifier
@@ -140,7 +140,7 @@ diff, per-shape rules, media capture, and the review-UI mapping — is owned by
 [`skills/demo/SKILL.md`](../../skills/demo/SKILL.md) (the canonical demo
 capability the unifier agent composes, ADR 024).
 
-Iteration cap: **3** (no $ cap per CONTRACTS.md C19). Composed gates that
+Iteration cap: **diff-scaled** — trivial (≤2 files changed) → 4; small (≤10 files) → 8; larger → 15. No $ cap. Composed gates that
 must all pass for the unifier to exit clean: `initiative_gate`,
 `demo_runs_clean`, `pr_self_contained`, `branches_in_sync`.
 

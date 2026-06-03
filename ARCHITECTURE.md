@@ -1,10 +1,12 @@
 # Architecture
 
-> This document is the **narrative / intended** architecture. For the
-> **honest as-built** (what the code actually does, with Mermaid graphs)
-> see [`docs/architecture/as-built-snapshot-2026-05-17.md`](./docs/architecture/as-built-snapshot-2026-05-17.md);
-> where the two differ, the snapshot is the truth. ADRs in
-> [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
+> This document is the **narrative / intended** architecture. The
+> **canonical current architecture** is
+> [`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/)
+> — the north-star this code is aligned to. The 2026-05-17 as-built
+> snapshot is archived prior art at
+> [`docs/_archive/architecture/as-built-snapshot-2026-05-17.md`](./docs/_archive/architecture/as-built-snapshot-2026-05-17.md).
+> ADRs in [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
 >
 > **Reconciled 2026-05-16**, refreshed **2026-05-17** post-closure. Key
 > divergences from the idealised description below: (a) **5 phases are
@@ -42,10 +44,9 @@ the planner's work items.
 > **High-level view (revamped 2026-05-31).** The diagram below is the canonical
 > one-glance picture, aligned to the **agent-composes-skills** model
 > ([ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)). It
-> supersedes the legacy swimlane `docs/architecture/forge2.0.drawio` (kept as
-> prior art). The structural drill-down (Context → Containers → Components) lives
-> in the C4 model [`docs/architecture/c4/`](./docs/architecture/c4/); the two
-> layers are kept in sync per [`docs/architecture/overview.md`](./docs/architecture/overview.md).
+> supersedes the legacy swimlane `docs/architecture/forge2.0.drawio` (archived at
+> `docs/_archive/architecture/`). The structural reference is
+> [`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/).
 
 ```mermaid
 flowchart TB
@@ -173,12 +174,14 @@ Once the user confirms the initiative, the architect knows it will be worked on 
 
 **Intentionally out-of-cycle (by design, not a gap).** The architect is
 **not** wired into `runCycle` and is **not** auto-invoked: it is a
-deliberate human moment the operator runs in their own Claude session
-via the **`/forge-architect`** slash command
-([`.claude/commands/forge-architect.md`](./.claude/commands/forge-architect.md)).
+deliberate human moment the operator runs via the **forge UI**
+(`/architect/<sid>` screen — [ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)).
 Its only handoff to forge is the files it writes
-(`_queue/pending/INIT-*.md` + roadmap rows); the scheduler picks those
-up unattended. Design of record:
+(`_queue/pending/INIT-*.md`); the scheduler picks those up unattended.
+The roadmap is **not** written by the architect — it is a derived view
+of the `_queue/` manifests + their `depends_on_initiatives` chain (see
+[`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/)
++ [`docs/phases/architect.md`](./docs/phases/architect.md)). Design of record:
 [`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)
 (resolves retro Q4; US-3.1 / US-1.0).
 
@@ -224,16 +227,18 @@ Responsibility: closeout of an initiative back to main.
 The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orchestrator/unifier-invocation.ts`](./orchestrator/unifier-invocation.ts) + verdict providers in [`orchestrator/file-verdict.ts`](./orchestrator/file-verdict.ts) / [`orchestrator/pr-verdict.ts`](./orchestrator/pr-verdict.ts)) runs between iterations and:
 
 1. **Re-runs the project quality gate** (orchestrator-verified — never trusts the agent's claim).
-2. **Asks the verdict provider** — production: file-based handoff written by the operator via the **`/forge-review <id>`** slash command (the operator's own Claude session). Bench: simulator agent.
-3. **On approve** → the review *gate* is released (this is **not** a merge — Phase 6 / G9): `runReviewer` opens a demo-embedded PR on the project repo and **STOPS**. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
+2. **Asks the verdict provider** — production: the operator reviews via the **`/review/<cycleId>`** UI screen ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)). The file-based `verdict-response.md` handoff is written by the UI bridge.
+3. **On approve** → closure merges the PR and fires reflection. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
+
+> **Note (refocus pass):** `runReviewer` has been folded into `cycle.ts` — the reviewer phase was removed as a separate phase; the unifier sub-phase owns review-prep and the PR opens inline after the delivery gate passes.
 
 **Self-contained PR (2026-05-18).** `pr.ts:embedDemoInPr` commits the demo bundle to a tracked `demo/<id>/` on the branch (before the push) and writes a visibility-aware PR body — a relative-link `DEMO.md` for **private** repos (GitHub's image proxy can't fetch private raw URLs), inline raw images for public. The operator reviews entirely from the PR; iterating via PR comments is a supported lightweight loop (pattern: `brain/cycles/themes/pr-as-sole-review-window.md`).
 
-**No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (or via `/forge-review`); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), then `alignLocalToRemote` brings the **project's working tree** forward to the merged `main` (a guarded `merge --ff-only`, **stashing/restoring any uncommitted operator state** such as `roadmap.md` — never a bare ref move that strands the working tree) and prunes the branch, moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
+**No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (via the `/review/<cycleId>` UI screen or directly on GitHub); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), then `alignLocalToRemote` brings the **project's working tree** forward to the merged `main` (a guarded `merge --ff-only`, **stashing/restoring any uncommitted operator state** — never a bare ref move that strands the working tree) and prunes the branch, moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
 
-Cap: 3 iterations (1 prep + ≤2 send-back rounds), scaled up for very large diffs (`computeAdaptiveReviewIterationCap`). There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict); the loop is bounded only by this iteration cap. Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
+Cap: diff-scaled iterations (trivial ≤2 files → 4; small ≤10 → 8; larger → 15), computed by `computeAdaptiveReviewIterationCap`. There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict); the loop is bounded only by this iteration cap. Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
-Like the architect, the review loop is best implemented as **Claude Code skills the user invokes**, so it benefits directly from agentic-wrapper improvements.
+The review human moment is the **`/review/<cycleId>` UI screen** ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)) — not a slash command.
 
 ### 6. Reflection *(human-in-the-loop, then unattended ingest)*
 
@@ -266,7 +271,7 @@ The UI bridge writes the handoff files the phases already consume:
 Everything else runs unattended for arbitrary durations via:
 
 - **`_queue/` state-machine directories** (`pending → in-flight → ready-for-review → done | failed`).
-- **`orchestrator/scheduler.ts`** (~150-line persistent loop) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
+- **`orchestrator/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
 - **Crash recovery** by atomic claim + heartbeat: orphaned in-flight items return to `pending/` on restart.
 
 This is **not v1's job queue + worker + resource controller**. See ADR 011-013 for the line we're holding.
@@ -280,7 +285,7 @@ Every skill mandates `brain-query` as its first action. Broader research (web, d
 Every skill invocation emits a structured event to `_logs/<cycle-id>/events.jsonl` (schema in [`docs/decisions/008-jsonl-event-log.md`](./docs/decisions/008-jsonl-event-log.md)). The event log is the source of truth for:
 
 - **Reflection** (replay what happened).
-- **Visualisation** (`forge status`, `monitor/tmux.sh`, live phase view).
+- **Visualisation** (`forge status`, forge UI live phase view).
 - **Metrics** (cost, iterations, duration per phase / skill / initiative).
 
 ### Phase isolation & quality
