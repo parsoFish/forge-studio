@@ -159,3 +159,40 @@ test('runRequeue: throws when initiative ID does not resolve', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// D1: send-back wiring. A UI send-back writes `<id>.pr-feedback.md` then requeues
+// with resume_from: unifier; that feedback must survive the requeue (it is the
+// resumed unifier's input). A non-resume requeue must instead clear stale feedback.
+test('runRequeue: resume-from-unifier PRESERVES <id>.pr-feedback.md (the send-back input)', () => {
+  const root = setupForgeRoot();
+  try {
+    const id = 'INIT-2026-05-24-rq-test';
+    writeFileSync(join(root, '_queue', 'in-flight', `${id}.md`), MANIFEST());
+    const feedback = join(root, '_queue', 'in-flight', `${id}.pr-feedback.md`);
+    writeFileSync(feedback, '# Send-back feedback\n\nfix the thing\n');
+
+    const r = runRequeue(id, { forgeRoot: root, resumeFromUnifier: true });
+    assert.equal(r.toQueueDir, 'pending');
+    assert.match(readFileSync(join(root, '_queue', 'pending', `${id}.md`), 'utf8'), /resume_from: unifier/);
+    assert.equal(existsSync(feedback), true, 'pr-feedback.md must survive a resume requeue');
+    assert.ok(!r.verdictsRemoved.includes(feedback));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
+  const root = setupForgeRoot();
+  try {
+    const id = 'INIT-2026-05-24-rq-test';
+    writeFileSync(join(root, '_queue', 'failed', `${id}.md`), MANIFEST());
+    const feedback = join(root, '_queue', 'failed', `${id}.pr-feedback.md`);
+    writeFileSync(feedback, 'stale feedback\n');
+
+    const r = runRequeue(id, { forgeRoot: root });
+    assert.equal(existsSync(feedback), false, 'stale pr-feedback.md must be cleared on a non-resume requeue');
+    assert.ok(r.verdictsRemoved.includes(feedback));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

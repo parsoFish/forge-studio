@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger } from './logging.ts';
@@ -55,9 +55,10 @@ import { runClosure } from './phases/closure.ts';
 import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
-// now a thin, non-LLM PR-opener. The operator's verdict arrives out-of-band as
-// a UI action (the bridge writes verdict-response.md; send-back re-enters via
-// requeue with resume_from: unifier).
+// now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict
+// arrives out-of-band as a UI action: APPROVE is a no-op ack (they merge in
+// GitHub; closure confirms), SEND-BACK (D1) writes `<id>.pr-feedback.md` and
+// requeues with resume_from: unifier — the resumed unifier reads that feedback.
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();
@@ -121,7 +122,21 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   //      that didn't declare a quality_gate_cmd; the dispatch will surface
   //      the absence via a metadata field.
   const effectiveQualityGateCmd = resolveQualityGateCmd(input);
-  const inputWithGate: CycleInput = { ...input, qualityGateCmd: effectiveQualityGateCmd };
+  // D1: a UI send-back writes `<id>.pr-feedback.md` beside the manifest and
+  // requeues with resume_from: unifier. When that feedback file is present on a
+  // resume, run the unifier in send-back mode (developer-loop already threads
+  // unifierFeedbackRef → the unifier prompt). A manual `forge requeue
+  // --resume-from=unifier` (no feedback file) stays a plain re-prep.
+  const prFeedbackPath = input.manifestPath.replace(/\.md$/, '.pr-feedback.md');
+  const unifierFeedbackRef =
+    input.resumeFrom === 'unifier' && existsSync(prFeedbackPath)
+      ? prFeedbackPath
+      : input.unifierFeedbackRef;
+  const inputWithGate: CycleInput = {
+    ...input,
+    qualityGateCmd: effectiveQualityGateCmd,
+    unifierFeedbackRef,
+  };
 
   // Final cycle outcome. `merged` is reachable ONLY via the closure step
   // (a GitHub-confirmed merge) — never from the reviewer (G9).
@@ -164,6 +179,12 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         await runProjectManager(inputWithGate, logger);
       }
       const devLoopOutcome = await runDeveloperLoop(inputWithGate, logger);
+      // D1: consume-once — the send-back feedback has now been read by the
+      // unifier; remove it so a later resume doesn't re-enter send-back mode
+      // with stale feedback (a fresh UI send-back writes a new one).
+      if (unifierFeedbackRef) {
+        try { rmSync(unifierFeedbackRef, { force: true }); } catch { /* best-effort */ }
+      }
       // Safety net: commit any uncommitted dev-loop work before the reviewer
       // starts. The dev-loop's prompt tells the agent to commit per
       // iteration, but if it skips, source files would not reach the PR.

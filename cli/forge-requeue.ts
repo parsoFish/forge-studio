@@ -114,10 +114,15 @@ export function runRequeue(
   renameSync(tmpPath, toPath);
   rmSync(fromPath, { force: true });
 
-  // 4. Remove stranded verdict files.
+  // 4. Remove stranded verdict files. On a resume-from-unifier requeue we KEEP
+  //    `<id>.pr-feedback.md` — it is the send-back input the resumed unifier
+  //    reads (D1). On a non-resume requeue, clear it too so stale feedback can't
+  //    re-trigger send-back mode on a later resume.
   const verdictsRemoved: string[] = [];
+  const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md'];
+  if (!opts.resumeFromUnifier) staleSuffixes.push('.pr-feedback.md');
   for (const c of candidates) {
-    for (const suffix of ['.verdict-prompt.md', '.verdict-response.md']) {
+    for (const suffix of staleSuffixes) {
       const path = join(c.dir, `${initiativeId}${suffix}`);
       if (existsSync(path)) {
         try { rmSync(path, { force: true }); verdictsRemoved.push(path); } catch { /* */ }

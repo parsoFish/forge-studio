@@ -42,7 +42,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
-import { fileVerdictPaths } from '../orchestrator/file-verdict.ts';
+import { runRequeue } from './forge-requeue.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -728,17 +728,9 @@ async function handleHttp(
         sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' });
         return;
       }
-      const paths = fileVerdictPaths(initiativeId, ctx.queueRoot);
-      // Accept the verdict for a manifest in EITHER in-flight/ (the
-      // reviewer is still iterating, waiting for the verdict file to
-      // be picked up) OR ready-for-review/ (closure moved it there
-      // because the PR is open / the cap was hit / convergence
-      // failed; the verdict file still gets written to in-flight/
-      // because that's what the file-verdict reader watches). Without
-      // the ready-for-review fallback the UI's verdict form would
-      // 409 whenever closure had already run — which is the common
-      // case for the journey demo and for any cycle that completed a
-      // review iteration before the operator opened the form.
+      // Accept the verdict for a manifest in EITHER in-flight/ OR
+      // ready-for-review/ (closure moves it to ready-for-review/ once the PR is
+      // open, which is the common case by the time the operator opens the form).
       const inFlightPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
       const readyForReviewPath = join(ctx.queueRoot, 'ready-for-review', `${initiativeId}.md`);
       if (!existsSync(inFlightPath) && !existsSync(readyForReviewPath)) {
@@ -749,8 +741,25 @@ async function handleHttp(
         return;
       }
       const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
-      // Lock whichever manifest we found so we don't race the scheduler's
-      // status transition. proper-lockfile uses a sibling `.lock` dir.
+
+      if (kind === 'approve') {
+        // G9: forge never auto-merges. Approve is the operator's signal that the
+        // PR is good — they merge it in GitHub and `closure` confirms the merge
+        // (then reflection fires). Nothing to persist here.
+        sendJson(res, 200, {
+          ok: true,
+          kind,
+          note: 'approved — merge the PR in GitHub; closure confirms the merge and triggers reflection',
+        });
+        return;
+      }
+
+      // send-back (D1): write the operator's feedback beside the manifest as
+      // `<id>.pr-feedback.md` (the file the resumed unifier reads in send-back
+      // mode), then requeue with resume_from: unifier so the cycle re-runs the
+      // unifier against the preserved worktree + this feedback. We lock the
+      // manifest only for the feedback write, then release before runRequeue
+      // (which moves the manifest) to avoid renaming a locked file.
       let release: (() => Promise<void>) | null = null;
       try {
         release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
@@ -758,17 +767,22 @@ async function handleHttp(
         sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) });
         return;
       }
+      const feedbackPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.pr-feedback.md`);
       try {
-        const content = renderVerdictResponse(kind, rationale, acs);
-        // Write tmp+rename for atomicity (per C16).
-        const tmpPath = paths.responsePath + '.tmp';
         mkdirSync(join(ctx.queueRoot, 'in-flight'), { recursive: true });
-        writeFileSync(tmpPath, content);
-        renameSync(tmpPath, paths.responsePath);
+        const tmpPath = feedbackPath + '.tmp';
+        writeFileSync(tmpPath, renderPrFeedback(rationale, acs));
+        renameSync(tmpPath, feedbackPath);
       } finally {
         if (release) { try { await release(); } catch { /* ignore */ } }
       }
-      sendJson(res, 200, { ok: true, wrote: paths.responsePath });
+      try {
+        const forgeRoot = resolve(ctx.queueRoot, '..');
+        const requeue = runRequeue(initiativeId, { forgeRoot, resumeFromUnifier: true });
+        sendJson(res, 200, { ok: true, kind, wrote: feedbackPath, requeuedTo: requeue.toQueueDir });
+      } catch (requeueErr) {
+        sendJson(res, 500, { error: `send-back requeue failed: ${String(requeueErr)}`, wrote: feedbackPath });
+      }
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
     }
@@ -1070,19 +1084,17 @@ async function handleReflect(
   return false;
 }
 
-function renderVerdictResponse(
-  kind: 'approve' | 'send-back',
+function renderPrFeedback(
   rationale: string,
   acs: Array<{ given: string; when: string; then: string }>,
 ): string {
-  // Mirrors the shape that orchestrator/file-verdict.ts:parseVerdictResponse
-  // expects. YAML frontmatter (`verdict: …` + `rationale: |` block), then
-  // optional `- GIVEN ... WHEN ... THEN ...` lines for send-back.
-  const fmRationale = rationale.split('\n').map((l) => '  ' + l).join('\n');
-  const head = `---\nverdict: ${kind}\nrationale: |\n${fmRationale}\n---\n`;
-  if (kind === 'approve') return head;
-  const body = acs.map((a) => `- GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`).join('\n');
-  return `${head}\n## Acceptance criteria\n\n${body}\n`;
+  // The send-back feedback file the resumed unifier reads (cycle-context
+  // unifierFeedbackRef). Freeform markdown: the operator's rationale + the
+  // acceptance criteria to address this round as GIVEN/WHEN/THEN lines.
+  const body = acs
+    .map((a) => `- GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`)
+    .join('\n');
+  return `# Send-back feedback\n\n${rationale.trim()}\n\n## Acceptance criteria to address this round\n\n${body}\n`;
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {
