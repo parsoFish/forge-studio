@@ -24,6 +24,42 @@ artifact]; enforce the single-decomposition decision across architect+PM [P1].
 
 ---
 
+## Execution status (2026-06-03)
+
+The bulk of this backlog is **landed on `refocus/refinement-pass`** (build clean, 508 tests
+green), in four commits:
+
+- **Wave 1** (8 parallel clusters): BRN-3/5/6 (graphify dropped for the cycle brain; dead
+  lint checks culled), CON-1/2/4/5/6 (C2 git-truth fix, validators merged, C8 clause),
+  REV-2 + REV-4/D3 (second demo system deleted; rich DEMO.html), ARCH-1/2/3/4/6 + D3
+  (real brain grounding, coarse features, roadmap-claim dropped, rich PLAN.html), PM-1/2/3/4/5
+  (sole-sizer, prompt collapse, dead culls), ORC-2/3/5 + D4 (local-merge ripped out, parsers
+  collapsed, classifier slimmed), REF-1/2/3/4/6 (interview `.json` fix, dead bench pipeline
+  deleted), UI-1/3/4 (dead chip-bar culled). ~13.8k lines removed.
+- **Wave 2**: DEV-1 (empty-branch delivery guard), REV-3 (300-char floor dropped), REV-6
+  (reviewer phase folded into cycle.ts — the unifier/review "combine"), **D1** (operator
+  send-back loop wired end-to-end + dead verdict-write culled).
+
+**Decisions D1–D5 resolved** (see commits): D1 wired · D2 see below · D3 rich plans+demos
+landed (visual verification still recommended) · D4 local-merge removed · D5 async reflection
+kept + REF-1 fixed.
+
+**Deferred (clearly-scoped follow-ups, not rushed onto the critical path):**
+- **D2 / CON-3 — relocate Ralph scratch (`AGENT.md`/`PROMPT.md`/`fix_plan.md`) under `.forge/`.**
+  C2 *correctness* is already enforced (CON-1 git-truth check now fails a project that tracks
+  `AGENT.md`); this is the ergonomic consolidation so a project gitignores `.forge/` once.
+  Touches `loops/ralph/runner.ts` (prepareWorkspace) + `dev-invocation`/`unifier-invocation`
+  prompt paths + templates + the contract scratch list + betterado's committed `AGENT.md`
+  (project-side untrack). Do as one focused pass with the Ralph runner tests as the gate.
+- **REV-1 deeper cull** — `parseVerdictResponse` + `file-verdict.ts` + the `forge review` CLI
+  verdict path are write-only/never-read, but still referenced by the CLI; remove once the
+  CLI verdict surface is confirmed retired (ADR 023 makes the UI the sole surface).
+- **DEV-4** (wedge circuit-breaker), **DEV-5** (split the unifier out of `developer-loop.ts`),
+  **ORC-1** (scheduler size extraction), and **SKL-5** (full ADR-024 phase migration) remain
+  as the directional/structural follow-ups noted in their specs.
+
+---
+
 ## P0 — Correctness & broken human-moments (do first)
 
 | ID | 🏷 | Item | Files | Effort |
