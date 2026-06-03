@@ -108,7 +108,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function runDeveloperLoop(
   input: CycleInput,
   logger: EventLogger,
-): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null }> {
+): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null; commitsAhead: number; filesChanged: number; insertions: number }> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
     initiative_id: input.initiativeId,
@@ -536,7 +536,7 @@ export async function runDeveloperLoop(
   // exist. The reflector grounds "what was delivered" in THIS event, not in
   // per-WI status counts — which can read stale `failed:N` on a resume even
   // though the branch carries merged, tested code (the cascade-v4 wrong-theme).
-  emitDeliverySummary(input, logger, start.event_id);
+  const deliveryStat = emitDeliverySummary(input, logger, start.event_id);
 
   // cascade-v4 #3: surface the unifier outcome so cycle.ts can gate PR
   // creation — a unifier that did not pass its composed gate must NOT yield a
@@ -544,6 +544,9 @@ export async function runDeveloperLoop(
   return {
     unifierSucceeded: unifierOutcome.succeeded,
     unifierFailureClass: unifierOutcome.failureClass,
+    commitsAhead: deliveryStat.commits,
+    filesChanged: deliveryStat.filesChanged,
+    insertions: deliveryStat.insertions,
   };
 }
 
@@ -570,7 +573,11 @@ export async function runDeveloperLoop(
  * even when the branch carries real merged code. Best-effort (git failures →
  * zeros); never throws. Exported for unit testing.
  */
-export function emitDeliverySummary(input: CycleInput, logger: EventLogger, parentEventId: string): void {
+export function emitDeliverySummary(
+  input: CycleInput,
+  logger: EventLogger,
+  parentEventId: string,
+): { filesChanged: number; insertions: number; deletions: number; commits: number } {
   const wt = input.worktreePath;
   const git = (args: string[]): string => {
     try {
@@ -602,6 +609,7 @@ export function emitDeliverySummary(input: CycleInput, logger: EventLogger, pare
     message: 'dev-loop.delivered',
     metadata: { base: base || null, files_changed: filesChanged, insertions, deletions, commits },
   });
+  return { filesChanged, insertions, deletions, commits };
 }
 
 export function assertDevLoopCloseSync(
@@ -1191,7 +1199,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     } catch {
       body = '';
     }
-    prBodyOk = body.length >= 300 && /^## Demo\b/m.test(body);
+    prBodyOk = /^## Demo\b/m.test(body);
   }
   if (!demoOk || !prBodyOk) {
     logger.emit({

@@ -50,10 +50,9 @@ import { resolveQualityGateCmd } from './cycle-context.ts';
 // Phase runners (extracted from this module — cycle.ts is the thin spine).
 import { runProjectManager } from './phases/project-manager.ts';
 import { runDeveloperLoop } from './phases/developer-loop.ts';
-import { runReviewer } from './phases/reviewer.ts';
 import { runReflector } from './phases/reflector.ts';
 import { runClosure } from './phases/closure.ts';
-import { assertLocalRemoteSynced, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
+import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener. The operator's verdict arrives out-of-band as
@@ -196,10 +195,17 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         );
       }
 
-      // Review phase: assess the branch holistically vs intent, refine
-      // (may spawn a dev-loop), produce the demo-embedded PR, then STOP.
-      // No auto-merge (G9) — the GitHub PR is the operator's merge surface.
-      const reviewerOutcome = await runReviewer(inputWithGate, logger);
+      // DEV-1: empty-branch guard. A branch with zero commits ahead of base AND
+      // zero insertions has nothing to review — opening a PR against it is
+      // misleading and was the root cause of the empty PR #1 incident (a
+      // resume-from-unifier cycle with complete:0 and no commits ahead of base).
+      assertNonEmptyDelivery(devLoopOutcome, inputWithGate.initiativeId, inputWithGate.worktreePath, logger);
+
+      // Open the PR inline (REV-6: the reviewer phase is now just PR-opening;
+      // inlined here so the spine is: dev-loop → delivery gate → open PR → closure).
+      // All reviewer.* events are preserved verbatim so the forge-ui phase hexes
+      // and e2e harness keep working without change.
+      const reviewerOutcome = await openPrInline(inputWithGate, logger);
 
       // Closure: reflection fires ONLY on a GitHub-confirmed merge (G10),
       // and `_queue/done/` ⇒ the PR is MERGED (G1). The closure step asks
@@ -374,17 +380,141 @@ function writeCycleReportSafely(cycleId: string): void {
 // the dev-only emitGateEvent helper moved to ./phases/developer-loop.ts
 // (Phase 3.4c step 4). Imported at the top.
 
-// runReviewer + its REVIEWER_LIVE_* defaults + inferProjectType +
-// defaultGetVerdict + computeAdaptiveReviewIterationCap +
-// ensureMinimalPrDescription + extractPrTitle moved to
-// ./phases/reviewer.ts (Phase 3.4c step 5). Imported + re-exported below.
+// REV-6: runReviewer was a near-empty wrapper around openPullRequest. Its
+// logic is now inlined into openPrInline (below) so the spine is simply
+// dev-loop → delivery gate → open PR → closure. The reviewer.ts file is
+// deleted; its events are preserved verbatim so the UI + e2e harness are
+// unaffected.
 
 // runReflector + its REFLECTOR_LIVE_* defaults + resolveCurrentManifestPath
 // moved to ./phases/reflector.ts (Phase 3.4c step 2). Imported at the top.
 
+/**
+ * REV-6: inline PR-opening (previously `runReviewer`). Opens the PR from the
+ * unifier-authored `.forge/pr-description.md`, emitting every event the old
+ * `runReviewer` emitted (verbatim phase/skill/message values) so the forge-ui
+ * phase hexes and e2e harness remain unaffected.
+ *
+ * Returns `ReviewerOutcome` — always `'pr-open'` on success, or throws with a
+ * structured `unifier.prerequisite-missing` event on failure (matching the
+ * former reviewer.ts behaviour exactly).
+ */
+async function openPrInline(
+  input: CycleInput,
+  logger: EventLogger,
+): Promise<import('./cycle-context.ts').ReviewerOutcome> {
+  const start = logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'review-loop',
+    skill: 'review-router',
+    event_type: 'start',
+    input_refs: [input.worktreePath, input.manifestPath],
+    output_refs: [],
+  });
+
+  const prDescriptionPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
+  const prTitle = `forge: ${input.initiativeId}`;
+  const prUrl = openPullRequest(input.worktreePath, prDescriptionPath, prTitle);
+
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'review-loop',
+    skill: 'review-router',
+    event_type: prUrl ? 'log' : 'error',
+    input_refs: [prDescriptionPath],
+    output_refs: prUrl ? [prUrl] : [],
+    message: prUrl ? 'reviewer.pr-opened' : 'reviewer.pr-open-failed',
+    metadata: { url: prUrl, pr_created: prUrl !== null },
+  });
+
+  if (!prUrl) {
+    const demoMdPath = resolve(input.worktreePath, 'demo', input.initiativeId, 'DEMO.md');
+    const prDescPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
+    const missing: string[] = [];
+    if (!existsSync(demoMdPath)) missing.push(`demo/${input.initiativeId}/DEMO.md`);
+    if (!existsSync(prDescPath)) missing.push('.forge/pr-description.md');
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'review-router',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'unifier.prerequisite-missing',
+      metadata: { missing, demo_md_path: demoMdPath, pr_description_path: prDescPath },
+    });
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'review-loop',
+      skill: 'review-router',
+      event_type: 'end',
+      input_refs: [input.worktreePath],
+      output_refs: [input.worktreePath],
+      metadata: { outcome: 'failed', pr_url: null, missing_prerequisites: missing },
+    });
+    throw new Error(
+      `reviewer.pr-open-failed: unifier did not author a PR — missing prerequisites: ${missing.join(', ')}. ` +
+        `Dev-loop work items must produce their declared \`creates:\` paths before the unifier can build a demo bundle.`,
+    );
+  }
+
+  const outcome: import('./cycle-context.ts').ReviewerOutcome = 'pr-open';
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'review-loop',
+    skill: 'review-router',
+    event_type: 'end',
+    input_refs: [input.worktreePath],
+    output_refs: [prUrl],
+    metadata: { outcome, pr_url: prUrl },
+  });
+
+  return outcome;
+}
+
 function newCycleId(initiativeId: string): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `${ts}_${initiativeId}`;
+}
+
+/**
+ * DEV-1: empty-branch delivery guard. Throws with a `zero-delivery`
+ * classification and emits a `delivery-gate.empty-branch` error event when
+ * the branch has 0 commits ahead of base AND 0 insertions — nothing to
+ * review. Exported for direct unit testing (no SDK, no git).
+ */
+export function assertNonEmptyDelivery(
+  outcome: { commitsAhead: number; filesChanged: number; insertions: number },
+  initiativeId: string,
+  worktreePath: string,
+  logger: EventLogger,
+): void {
+  if (outcome.commitsAhead === 0 && outcome.insertions === 0) {
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: 'delivery-gate.empty-branch',
+      metadata: {
+        failure_class: 'zero-delivery',
+        commits_ahead: outcome.commitsAhead,
+        files_changed: outcome.filesChanged,
+        insertions: outcome.insertions,
+        note: 'branch has no commits ahead of base and no insertions — no PR opened',
+      },
+    });
+    throw new Error(
+      `delivery gate: branch has 0 commits ahead of base and 0 insertions — ` +
+        `nothing to review (zero-delivery). Triage why the dev-loop produced no commits.`,
+    );
+  }
 }
 
 /**

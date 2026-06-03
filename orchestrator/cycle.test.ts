@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { recordBrainGateResult, snapshotCycleArtefacts } from './cycle.ts';
+import { assertNonEmptyDelivery, recordBrainGateResult, snapshotCycleArtefacts } from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
@@ -25,6 +25,9 @@ function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; 
 }
 
 function readEvents(logger: ReturnType<typeof createLogger>): EventLogEntry[] {
+  // The log file is created lazily on first emit; a code path that emits
+  // nothing (e.g. assertNonEmptyDelivery on a non-empty branch) leaves no file.
+  if (!existsSync(logger.logFilePath)) return [];
   const text = readFileSync(logger.logFilePath, 'utf8');
   return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as EventLogEntry);
 }
@@ -93,6 +96,74 @@ test('recordBrainGateResult: parentEventId is propagated for child-event correla
     });
     const events = readEvents(logger);
     assert.equal(events[0].parent_event_id, 'EV_parent_123');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ----- assertNonEmptyDelivery (DEV-1) -----
+
+test('assertNonEmptyDelivery: throws and emits delivery-gate.empty-branch when 0 commits + 0 insertions', () => {
+  const { dir, logger } = setupLogger();
+  try {
+    assert.throws(
+      () =>
+        assertNonEmptyDelivery(
+          { commitsAhead: 0, filesChanged: 0, insertions: 0 },
+          'INIT-empty',
+          '/fake/worktree',
+          logger,
+        ),
+      /zero-delivery/,
+    );
+    const events = readEvents(logger);
+    const ev = events.find((e) => e.message === 'delivery-gate.empty-branch');
+    assert.ok(ev, 'expected a delivery-gate.empty-branch error event');
+    assert.equal(ev!.event_type, 'error');
+    assert.equal(ev!.phase, 'orchestrator');
+    assert.equal(ev!.initiative_id, 'INIT-empty');
+    const md = ev!.metadata as Record<string, unknown>;
+    assert.equal(md.failure_class, 'zero-delivery');
+    assert.equal(md.commits_ahead, 0);
+    assert.equal(md.insertions, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('assertNonEmptyDelivery: does NOT throw when commitsAhead > 0 (non-empty branch)', () => {
+  const { dir, logger } = setupLogger();
+  try {
+    assert.doesNotThrow(() =>
+      assertNonEmptyDelivery(
+        { commitsAhead: 3, filesChanged: 5, insertions: 42 },
+        'INIT-nonempty',
+        '/fake/worktree',
+        logger,
+      ),
+    );
+    // No error event emitted for a non-empty branch.
+    const events = readEvents(logger);
+    assert.equal(events.filter((e) => e.message === 'delivery-gate.empty-branch').length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('assertNonEmptyDelivery: does NOT throw when insertions > 0 even with 0 commitsAhead', () => {
+  // Edge: a boundary commit may produce insertions without a separate WI commit.
+  const { dir, logger } = setupLogger();
+  try {
+    assert.doesNotThrow(() =>
+      assertNonEmptyDelivery(
+        { commitsAhead: 0, filesChanged: 1, insertions: 10 },
+        'INIT-insertions',
+        '/fake/worktree',
+        logger,
+      ),
+    );
+    const events = readEvents(logger);
+    assert.equal(events.filter((e) => e.message === 'delivery-gate.empty-branch').length, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
