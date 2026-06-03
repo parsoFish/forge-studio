@@ -58,6 +58,29 @@ kept + REF-1 fixed.
   **ORC-1** (scheduler size extraction), and **SKL-5** (full ADR-024 phase migration) remain
   as the directional/structural follow-ups noted in their specs.
 
+### Cleanup pass (2026-06-03)
+
+A repo-wide hygiene sweep landed (build clean, 501 tests green):
+- **Deleted** `monitor/` (superseded by the UI), `_meta/`, `_review/`, root `demo/` + `.forge/`
+  + stray `graphify-out/`, `forge-ui/.demo-shots/journey` (the **e2e demo is the sole forge-level
+  demo**), `gh-shim.ts` (dead post-local-merge-removal), and 5 one-shot migration scripts.
+- **Culled** `config.resolveNotifyConfig` (no importer), the dead `parseVerdictResponse` in
+  `file-verdict.ts` (kept `fileVerdictPaths` for the `forge review` CLI), and the `forge brain
+  graph` error-shim. **Orchestrator-review finding:** the rest of the "extensive" feel is the
+  legitimate invocation-contract + resilience layer, NOT dead code (the re-export barrel produces
+  ts-prune false positives) — only the two items above were genuinely dead.
+- **Docs** culled to current state: historical docs → `docs/_archive/`; ARCHITECTURE/README/CLAUDE/
+  PRINCIPLES + overview + phase docs + ADR-014 reconciled to as-built; broken archived-path links
+  repointed. `loops/` stays (the Ralph core is live) — only README drift fixed.
+
+**Reasoned deferral (post-cycle):** D2's physical scratch-relocation under `.forge/`, DEV-4,
+DEV-5, ORC-1. D2 is a ~25-touchpoint change across the Ralph critical path + agent prompts where
+a missed reference silently breaks institutional-memory continuity; C2 *correctness* is already
+enforced (the git-truth check) so the relocation is purely ergonomic. DEV-4 (net-new behaviour),
+DEV-5/ORC-1 (structural refactors) are not "cleanup" and carry critical-path risk. Per forge's own
+"don't destabilize before validation" learning, these are sequenced **after** a first successful
+release-component cycle, not rushed before it.
+
 ---
 
 ## P0 — Correctness & broken human-moments (do first)
