@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { fetchArtifactText } from '@/lib/bridge-client';
 import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, InteractiveSurface } from '@/lib/bridge-client';
 
 /**
@@ -221,20 +222,16 @@ function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurf
       return;
     }
     setState('running');
-    try {
-      const res = await fetch(`/api/artifact/${encodeURIComponent(cycleId)}/${encodeURIComponent(surface.artifact)}`);
-      if (!res.ok) {
-        setState('error');
-        setResult(`No live capture found (${res.status}). Re-run the project's demo skill with credentials to capture the real resource.`);
-        return;
-      }
-      const text = await res.text();
-      try { setResult(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResult(text); }
-      setState('done');
-    } catch (e) {
+    // MUST go through the bridge base — /api/artifact lives on the bridge, not
+    // the Next origin (a relative fetch 404s).
+    const { ok, status, text } = await fetchArtifactText(cycleId, surface.artifact);
+    if (!ok) {
       setState('error');
-      setResult(`Failed to load the captured artifact: ${e instanceof Error ? e.message : String(e)}`);
+      setResult(`No live capture found (${status || 'no bridge'}). Re-run the project's demo skill with credentials to capture the real resource.`);
+      return;
     }
+    try { setResult(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResult(text); }
+    setState('done');
   }
 
   return (

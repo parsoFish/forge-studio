@@ -354,6 +354,28 @@ export async function fetchDemoModel(cycleId: string): Promise<DemoModel | null>
   return bridgeGet<DemoModel | null>(`/api/artifact/${encodeURIComponent(cycleId)}/demo.json`, null);
 }
 
+/**
+ * Fetch a cycle artifact (served by the bridge's /api/artifact route) as TEXT.
+ * Used by the interactive-review `live-query` surface to render an
+ * already-captured response on demand. MUST go through the bridge base (the
+ * /api/* routes live on the bridge, NOT the Next origin) — a relative fetch
+ * 404s. Returns { ok, status, text }; ok=false on no-bridge / non-2xx / throw.
+ */
+export async function fetchArtifactText(
+  cycleId: string,
+  filename: string,
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, status: 0, text: '' };
+  try {
+    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(cycleId)}/${encodeURIComponent(filename)}`);
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, text };
+  } catch {
+    return { ok: false, status: 0, text: '' };
+  }
+}
+
 // ---- Architect (ADR 020) -------------------------------------------------
 
 export type ArchitectPhase =
