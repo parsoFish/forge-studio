@@ -264,9 +264,29 @@ test('quality_gate_cmd: a `bash -c "… | grep" pipeline gate is rejected', () =
     quality_gate_cmd: ['bash', '-c', "go test -tags all -run TestReleaseFolder ./pkg/ 2>&1 | grep -q '--- PASS:.*TestReleaseFolder'"],
   }));
   assert.ok(
-    errors.some((e) => e.includes('exit code') && e.includes('pipeline')),
+    errors.some((e) => e.includes('ONE runnable command')),
     `expected a pipeline-gate rejection, got ${JSON.stringify(errors)}`,
   );
+});
+
+// re-review #4: structural, not a 5-tool denylist — pipes to rg/jq/etc and
+// command chains (&& / ;) all mask the runner's exit code and must be rejected.
+test('quality_gate_cmd: shell pipes to non-denylist tools (jq/rg) are still rejected', () => {
+  for (const script of [
+    'go test ./pkg/ | jq .',
+    'pytest -q | rg PASSED',
+    'go test ./pkg/ | wc -l',
+  ]) {
+    const errors = validateWorkItem(fixture({ quality_gate_cmd: ['bash', '-c', script] }));
+    assert.ok(errors.some((e) => e.includes('ONE runnable command')), `expected rejection for: ${script} — got ${JSON.stringify(errors)}`);
+  }
+});
+
+test('quality_gate_cmd: shell command chains (&& / ;) are rejected', () => {
+  for (const script of ['go vet ./... && go test ./pkg/', 'cd pkg ; go test']) {
+    const errors = validateWorkItem(fixture({ quality_gate_cmd: ['bash', '-c', script] }));
+    assert.ok(errors.some((e) => e.includes('ONE runnable command')), `expected rejection for: ${script} — got ${JSON.stringify(errors)}`);
+  }
 });
 
 test('quality_gate_cmd: a direct `go test -run` gate (the recipe) passes', () => {
@@ -274,6 +294,14 @@ test('quality_gate_cmd: a direct `go test -run` gate (the recipe) passes', () =>
     quality_gate_cmd: ['go', 'test', '-tags', 'all', '-count=1', '-run', 'TestReleaseFolder', './azuredevops/internal/service/release/'],
   }));
   assert.deepEqual(errors, [], `the canonical recipe gate must validate cleanly, got ${JSON.stringify(errors)}`);
+});
+
+test('quality_gate_cmd: a plain argv with a `-run A|B` regex (no shell) is NOT a pipeline', () => {
+  // The `|` is a -run regex alternation in a literal argv — not a shell pipe.
+  const errors = validateWorkItem(fixture({
+    quality_gate_cmd: ['go', 'test', '-run', 'TestFoo|TestBar', './pkg/'],
+  }));
+  assert.deepEqual(errors, [], `a -run regex argv must validate cleanly, got ${JSON.stringify(errors)}`);
 });
 
 test('non_goals: round-trips an array of strings', () => {
