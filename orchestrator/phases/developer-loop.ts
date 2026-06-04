@@ -289,7 +289,13 @@ export async function runDeveloperLoop(
               input.worktreePath,
               effective,
               (gateInfo) => emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo),
-                { requiredPaths: [] },
+              // Wave B (2026-06-04): enforce that declared output paths land.
+              // If the WI declares `creates` paths those MUST appear in the
+              // branch diff before the gate can pass — independently of whether
+              // a sibling WI already produced tests. The `already-complete`
+              // 3-way runner check handles the "sibling beat us" case upstream;
+              // this layer catches "agent exited without writing declared files".
+              { requiredPaths: wi.creates ?? [] },
             );
           })(),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
@@ -964,11 +970,12 @@ export async function runUnifier(
     onHeartbeat: unifierToolSink.onHeartbeat,
   });
 
-  // Composed quality gate per plan 04: ALL of:
+  // Composed quality gate per plan 04 (5 gates after Wave B):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
   //   2. demo_runs_clean (demo.command exits 0 — excused for shape "none")
-  //   3. pr_self_contained (DEMO.md exists + pr-description.md present)
+  //   3. pr_self_contained (demo.json valid + pr-description.md present)
   //   4. branches_in_sync (assertLocalRemoteSynced doesn't throw)
+  //   5. incomplete_delivery (every WI's creates[] paths in diff)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
       worktreePath: input.worktreePath,
@@ -979,6 +986,7 @@ export async function runUnifier(
       logger,
       initiativeIdForEvent: input.initiativeId,
       parentEventId: start.event_id,
+      workItemsDir: resolve(input.worktreePath, '.forge/work-items'),
     });
 
   let loopResult: LoopResult | null = null;
@@ -1127,16 +1135,23 @@ type ComposedUnifierGateInput = {
   logger: EventLogger;
   initiativeIdForEvent: string;
   parentEventId: string;
+  /** Wave B (2026-06-04): path to the work-items dir for incomplete-delivery gate. */
+  workItemsDir: string;
 };
 
 /**
- * The four-gate composed check the unifier must clear to exit clean:
+ * Five-gate composed check the unifier must clear to exit clean:
  *   1. initiative_gate — project quality_gate_cmd against branch tip.
  *   2. demo_runs_clean — demo.command exits 0 (excused for shape "none").
- *   3. pr_self_contained — DEMO.md + pr-description.md present.
+ *   3. pr_self_contained — demo.json valid + pr-description.md present.
  *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw.
+ *   5. incomplete_delivery — every WI's declared `creates[]` paths are
+ *      present in `git diff --name-only main...HEAD`. Fails the cycle
+ *      before a PR opens when a WI's declared outputs were silently
+ *      never written (the INIT-2 release_folder WI-3 scenario).
+ *      WIs with empty `creates` are exempt.
  *
- * Returns true ONLY when all four pass. Emits a classified event on each
+ * Returns true ONLY when all five pass. Emits a classified event on each
  * sub-gate failure so the operator sees exactly which gate blocked.
  */
 async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
@@ -1242,7 +1257,87 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     return false;
   }
 
+  // 5. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
+  //    `creates[]` paths must appear in `git diff --name-only main...HEAD`.
+  //    WIs with empty `creates` are exempt. This catches the INIT-2
+  //    release_folder scenario: WI-3 was skipped (gate-too-loose misfire)
+  //    but the unifier's full-gate still passed on WI-1's work, opening
+  //    a PR that silently lacked WI-3's declared acc test + docs.
+  {
+    const missingDeliveries = collectMissingDeliveries(worktreePath, input.workItemsDir);
+    if (missingDeliveries.length > 0) {
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'developer-loop',
+        skill: 'developer-unifier',
+        event_type: 'error',
+        input_refs: [worktreePath],
+        output_refs: [],
+        message: 'unifier.gate.incomplete-delivery',
+        metadata: {
+          failure_class: 'incomplete-delivery',
+          missing: missingDeliveries,
+        },
+      });
+      return false;
+    }
+  }
+
   return true;
+}
+
+/**
+ * Wave B (2026-06-04): collect WI-declared `creates[]` paths that are absent
+ * from the branch diff. Returns an array of `{ work_item_id, path }` pairs.
+ * Empty array means all declared deliverables are present (gate passes).
+ *
+ * WIs with empty `creates` are exempt — a verify-only or refactoring WI that
+ * produces no new files is a valid PM choice and must not block the unifier.
+ *
+ * Exported for unit testing.
+ */
+export function collectMissingDeliveries(
+  worktreePath: string,
+  workItemsDir: string,
+): Array<{ work_item_id: string; path: string }> {
+  // Compute the branch diff once.
+  let diffPaths: Set<string>;
+  try {
+    let base = '';
+    const git = (args: string[]) =>
+      execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).trim();
+    if (git(['rev-parse', '--verify', 'main']).length > 0) base = 'main';
+    else if (git(['rev-parse', '--verify', 'master']).length > 0) base = 'master';
+    if (!base) return []; // can't determine base → don't block (fail-open on git error)
+    const lines = git(['diff', '--name-only', `${base}...HEAD`])
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    diffPaths = new Set(lines);
+  } catch {
+    return []; // git unavailable → don't block
+  }
+
+  // Read the WI set and check each WI's creates[].
+  let items: import('../work-item.ts').WorkItem[];
+  try {
+    const result = readWorkItemsFromDir(workItemsDir);
+    items = result.items;
+  } catch {
+    return []; // WI parse failure → don't block (separate validation path)
+  }
+
+  const missing: Array<{ work_item_id: string; path: string }> = [];
+  for (const wi of items) {
+    if (!wi.creates || wi.creates.length === 0) continue; // exempt
+    for (const p of wi.creates) {
+      if (!diffPaths.has(p)) {
+        missing.push({ work_item_id: wi.work_item_id, path: p });
+      }
+    }
+  }
+  return missing;
 }
 
 function runShellGate(worktreePath: string, cmd: string[]): boolean {

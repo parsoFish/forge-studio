@@ -16,7 +16,11 @@ export type StopCondition =
   // runner emits on iter-0 if the gate passes BEFORE any agent work.
   // Means the WI's quality_gate_cmd doesn't exercise its acceptance
   // criteria — PM must rewrite the gate. Fires before any iter has run.
-  | { kind: 'gate-too-loose'; reason: string };
+  | { kind: 'gate-too-loose'; reason: string }
+  // 2026-06-04 (Wave B): synthetic condition the runner emits on iter-0
+  // when the gate passes AND the branch already has commits vs base —
+  // a sibling WI delivered this WI's work ahead of us. Status: complete.
+  | { kind: 'already-complete'; reason: string };
 
 export type LoopState = {
   worktreePath: string;
@@ -79,6 +83,12 @@ async function checkOne(
       // runner detects it inline at iter 0 (gate passes before any work)
       // and synthesises a finalize() call. The case exists only for
       // discriminated-union exhaustiveness.
+      return { stop: false };
+
+    case 'already-complete':
+      // Like gate-too-loose, this is synthesised by the runner at iter 0
+      // (gate passes + branch already has commits → sibling delivered).
+      // Never fired from the per-iteration condition loop.
       return { stop: false };
   }
 }
@@ -417,6 +427,38 @@ function resolveBaseBranch(worktreePath: string): string {
     } catch { /* try next */ }
   }
   throw new Error('no main or master branch in worktree');
+}
+
+/**
+ * Wave B (2026-06-04): 3-way iter-0 gate decision.
+ *
+ * Returns true when the worktree branch already has commits AND/OR file-level
+ * diffs against its base — i.e. a sibling WI has already delivered work here.
+ * Returns false when the branch is completely empty vs base (hollow gate).
+ *
+ * Used by the runner to distinguish:
+ *   - gate passes + no commits → hollow gate  → `gate-too-loose`  (failed)
+ *   - gate passes + has commits → sibling delivered → `already-complete` (complete)
+ */
+export function checkBranchHasCommitsVsBase(worktreePath: string): boolean {
+  try {
+    const base = resolveBaseBranch(worktreePath);
+    // Commit count: > 0 means the branch has real commits beyond base.
+    const countOut = execFileSync(
+      'git', ['rev-list', '--count', `${base}..HEAD`],
+      { cwd: worktreePath, stdio: 'pipe' },
+    ).toString('utf8').trim();
+    if (Number(countOut) > 0) return true;
+    // Also check uncommitted diffs (staged/unstaged) in case autocommit hasn't run yet.
+    const diffOut = execFileSync(
+      'git', ['diff', '--name-only', `${base}...HEAD`],
+      { cwd: worktreePath, stdio: 'pipe' },
+    ).toString('utf8').trim();
+    return diffOut.length > 0;
+  } catch {
+    // Can't determine — treat as no commits (hollow gate is the safer fail-closed path).
+    return false;
+  }
 }
 
 function tail(s: string, max: number): string {

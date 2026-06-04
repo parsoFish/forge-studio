@@ -11,9 +11,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
-import { emitDeliverySummary, unifierIterationCap } from './developer-loop.ts';
+import { collectMissingDeliveries, emitDeliverySummary, unifierIterationCap } from './developer-loop.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { CycleInput } from '../cycle-context.ts';
 import { parseManifest, serializeManifest } from '../manifest.ts';
@@ -156,4 +156,141 @@ test('manifest: absent disposable ⇒ undefined (normal reflection)', () => {
     '',
   ].join('\n');
   assert.equal(parseManifest(md).disposable, undefined);
+});
+
+// -------------------------------------------------------------------------
+// Wave B (2026-06-04): collectMissingDeliveries — incomplete-delivery gate
+// -------------------------------------------------------------------------
+
+/**
+ * Build a minimal git repo + WI directory for the incomplete-delivery tests.
+ *
+ * Returns { worktreePath, workItemsDir, git, cleanup }.
+ */
+function missingDeliveryHarness(committedFiles: string[] = []): {
+  worktreePath: string;
+  workItemsDir: string;
+  git: (...args: string[]) => void;
+  cleanup: () => void;
+} {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-missing-del-'));
+  const wiDir = join(dir, '.forge', 'work-items');
+  mkdirSync(wiDir, { recursive: true });
+
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+  git('init', '-b', 'main');
+  git('config', 'user.email', 'test@forge.test');
+  git('config', 'user.name', 'forge-test');
+
+  // Baseline commit on main.
+  writeFileSync(join(dir, 'README.md'), '# baseline\n');
+  git('add', 'README.md');
+  git('commit', '-m', 'baseline');
+  git('checkout', '-b', 'forge/wi-test');
+
+  // Commit the requested files onto the branch.
+  for (const f of committedFiles) {
+    const fp = join(dir, f);
+    mkdirSync(dirname(fp), { recursive: true });
+    writeFileSync(fp, `// ${f}\n`);
+    git('add', f);
+  }
+  if (committedFiles.length > 0) {
+    git('commit', '-m', 'branch work');
+  }
+
+  return {
+    worktreePath: dir,
+    workItemsDir: wiDir,
+    git,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+  };
+}
+
+/** Write a minimal WI YAML file with optional creates[] entries. */
+function writeWI(
+  wiDir: string,
+  id: string,
+  creates: string[],
+): void {
+  const createsYaml =
+    creates.length > 0
+      ? `creates:\n${creates.map((p) => `  - ${p}`).join('\n')}\n`
+      : '';
+  const yaml = [
+    '---',
+    `work_item_id: ${id}`,
+    'initiative_id: INIT-2026-06-04-test',
+    'status: pending',
+    'acceptance_criteria:',
+    '  - given: "a clean tree"',
+    '    when: "gate runs"',
+    '    then: "it passes"',
+    `files_in_scope:\n${creates.map((p) => `  - ${p}`).join('\n') || '  - README.md'}`,
+    createsScrubbed(createsYaml),
+    'quality_gate_cmd: ["true"]',
+    'estimated_iterations: 1',
+    'depends_on: []',
+    '---',
+    `# ${id}`,
+    '',
+  ].join('\n');
+  writeFileSync(join(wiDir, `${id}.md`), yaml);
+}
+
+function createsScrubbed(s: string): string {
+  // Return empty string if no creates — avoids a blank "creates:" line
+  return s.trimEnd();
+}
+
+test('collectMissingDeliveries: all declared creates[] present in diff → returns []', () => {
+  const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness(['pkg/resource.go', 'pkg/resource_test.go']);
+  try {
+    writeWI(workItemsDir, 'WI-1', ['pkg/resource.go', 'pkg/resource_test.go']);
+    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
+    assert.deepEqual(missing, [], `expected no missing deliveries, got ${JSON.stringify(missing)}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test('collectMissingDeliveries: a creates[] path absent from diff → returns it', () => {
+  // Branch has resource.go but NOT resource_test.go
+  const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness(['pkg/resource.go']);
+  try {
+    writeWI(workItemsDir, 'WI-1', ['pkg/resource.go', 'pkg/resource_test.go']);
+    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
+    assert.equal(missing.length, 1, `expected 1 missing, got ${JSON.stringify(missing)}`);
+    assert.equal(missing[0]?.work_item_id, 'WI-1');
+    assert.equal(missing[0]?.path, 'pkg/resource_test.go');
+  } finally {
+    cleanup();
+  }
+});
+
+test('collectMissingDeliveries: WI with empty creates is exempt', () => {
+  // Branch has nothing new, but WI-1 has no creates[] — exempt
+  const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness([]);
+  try {
+    writeWI(workItemsDir, 'WI-1', []); // no creates
+    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
+    assert.deepEqual(missing, [], 'WI with no creates should not be flagged');
+  } finally {
+    cleanup();
+  }
+});
+
+test('collectMissingDeliveries: multiple WIs — only the one with missing paths reported', () => {
+  const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness(['pkg/impl.go']);
+  try {
+    writeWI(workItemsDir, 'WI-1', ['pkg/impl.go']);          // present → ok
+    writeWI(workItemsDir, 'WI-2', ['pkg/impl_test.go']);     // absent → missing
+    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
+    assert.equal(missing.length, 1);
+    assert.equal(missing[0]?.work_item_id, 'WI-2');
+    assert.equal(missing[0]?.path, 'pkg/impl_test.go');
+  } finally {
+    cleanup();
+  }
 });

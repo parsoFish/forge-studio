@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   autoCommitWorktreeIfDirty,
+  checkBranchHasCommitsVsBase,
   checkStopConditions,
   defaultQualityGates,
   type StopCondition,
@@ -184,15 +185,24 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
   const failOnHollowGate = input.failOnHollowIter0Gate ?? true;
 
   for (;;) {
-    // Iter-0: run the full set including quality-gates-pass. If it
-    // passes here, the gate is hollow — bail with a synthetic stop
-    // condition the caller surfaces as `gate-too-loose`.
+    // Iter-0: 3-way gate decision (Wave B, 2026-06-04).
+    //
+    // If the gate passes before the agent has done any work:
+    //   A) branch already has commits vs base → a sibling WI delivered this
+    //      WI's work ahead of us → `already-complete` (status: complete).
+    //   B) branch is empty vs base → the gate doesn't exercise its ACs →
+    //      `gate-too-loose` (status: failed — PM must rewrite the gate).
+    //
+    // If the gate fails → proceed to iterate normally.
     if (state.iteration === 0 && failOnHollowGate) {
       const passed = await Promise.resolve(qualityGate({ iteration: 0 }));
       if (passed) {
-        // stop_reason is the discriminator string — callers
-        // (developer-loop, cycle.ts, failure-classifier) read this to
-        // surface the human-friendly explanation.
+        const branchHasWork = checkBranchHasCommitsVsBase(input.worktreePath);
+        if (branchHasWork) {
+          // A sibling WI already delivered this WI's work — mark complete.
+          return finalize(state, startedAt, 'already-complete', agentMdPath, fixPlanPath);
+        }
+        // Hollow gate — gate passes on a clean branch with no agent work.
         return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath);
       }
     }
@@ -280,10 +290,14 @@ function finalize(
   fixPlanPath: string,
 ): LoopResult {
   const status: LoopResult['status'] =
-    stopReason === 'quality-gates-pass' ? 'complete' : 'failed';
+    stopReason === 'quality-gates-pass' || stopReason === 'already-complete'
+      ? 'complete'
+      : 'failed';
   // gate-too-loose surfaces as a failed WI; the caller (developer-loop)
   // reads stop_reason and classifies the failure mode for the cycle
   // report + the failure-classifier.
+  // already-complete surfaces as a complete WI — a sibling delivered
+  // this WI's work; no agent invocation is needed or desirable.
   const filesChanged = uniqueFiles(state.filesChangedHistory);
   return {
     status,
