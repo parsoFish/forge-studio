@@ -128,7 +128,8 @@ Composed gates checked by the orchestrator after each iteration:
 - `demo_runs_clean` — `demo.command` (per `.forge/project.json`) exits 0;
   excused when `demo.shape: "none"`.
 - `pr_self_contained` — `demo/<initiative-id>/demo.json` exists + validates
-  (ADR 021), `.forge/pr-description.md` has substantive Why/What/How/Demo sections.
+  (ADR 021), `.forge/pr-description.md` has substantive `## Why` / `## What` /
+  `## How` sections (NO `## Demo` — the orchestrator appends it at PR-open).
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` ==
   merge-base.
 

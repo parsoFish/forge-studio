@@ -1154,6 +1154,25 @@ type ComposedUnifierGateInput = {
  * Returns true ONLY when all five pass. Emits a classified event on each
  * sub-gate failure so the operator sees exactly which gate blocked.
  */
+
+/**
+ * The `.forge/pr-description.md` self-contained check.
+ *
+ * The unifier is instructed to author the git-truth `## Why` / `## What` /
+ * `## How` sections and to NOT include a `## Demo` heading — the orchestrator
+ * appends the canonical `## Demo` link automatically at PR-open
+ * (orchestrator/pr.ts) and even strips any the agent added. So this gate MUST
+ * validate the git-truth shape, NEVER `## Demo`: a `## Demo` assertion here is
+ * unwinnable (it can only appear downstream) and silently burns the entire
+ * unifier iteration budget. That exact contradiction false-failed the
+ * release_folder re-run (2026-06-04) — the body was perfect, the gate was wrong.
+ */
+export function prBodyHasGitTruthSections(body: string): boolean {
+  const hasWhat = /^##\s+What\b/im.test(body);
+  const hasWhyOrHow = /^##\s+(Why|How)\b/im.test(body);
+  return hasWhat && hasWhyOrHow && body.trim().length > 150;
+}
+
 async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
   const { worktreePath, initiativeId, qualityGateCmd, demoShape, demoCommand, logger } = input;
 
@@ -1213,7 +1232,8 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     } catch {
       body = '';
     }
-    prBodyOk = /^## Demo\b/m.test(body);
+    // git-truth Why/What/How shape — NOT `## Demo` (pr.ts appends that at PR-open).
+    prBodyOk = prBodyHasGitTruthSections(body);
   }
   if (!demoOk || !prBodyOk) {
     logger.emit({

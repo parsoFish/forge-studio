@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
-import { collectMissingDeliveries, emitDeliverySummary, unifierIterationCap } from './developer-loop.ts';
+import { collectMissingDeliveries, emitDeliverySummary, prBodyHasGitTruthSections, unifierIterationCap } from './developer-loop.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { CycleInput } from '../cycle-context.ts';
 import { parseManifest, serializeManifest } from '../manifest.ts';
@@ -279,6 +279,54 @@ test('collectMissingDeliveries: WI with empty creates is exempt', () => {
   } finally {
     cleanup();
   }
+});
+
+// -------------------------------------------------------------------------
+// prBodyHasGitTruthSections — the pr_self_contained body check (2026-06-04).
+// The unifier authors `## Why`/`## What`/`## How` and is told NOT to add a
+// `## Demo` heading (pr.ts appends that at PR-open). The gate must validate
+// the git-truth shape, never `## Demo` — asserting `## Demo` was unwinnable
+// and false-failed the release_folder re-run (burned the unifier budget).
+// -------------------------------------------------------------------------
+
+test('prBodyHasGitTruthSections: the real unifier-authored Why/What/How body passes', () => {
+  const body = [
+    '## Why',
+    '',
+    'Azure DevOps release pipelines are organised into folder hierarchies. Before this change betterado could not manage them via Terraform.',
+    '',
+    '## What',
+    '',
+    '- `betterado_release_folder` resource with full CRUD.',
+    '- Provider registration + 5 gomock unit tests.',
+    '',
+    '## How',
+    '',
+    'Follows the established resource_release_definition.go pattern (schema → expand/flatten → CRUD).',
+    '',
+  ].join('\n');
+  assert.equal(prBodyHasGitTruthSections(body), true);
+});
+
+test('prBodyHasGitTruthSections: a body WITHOUT `## Demo` is still valid (the regression)', () => {
+  // This is the exact shape the agent is instructed to produce; the old gate
+  // (`/^## Demo\\b/m`) rejected it and burned the whole unifier budget.
+  const body = [
+    '## Why',
+    'Operators previously had no Terraform-managed way to create release folders, so IaC rollouts were incomplete and manual.',
+    '## What',
+    'A new `betterado_release_folder` resource with full CRUD, provider registration, and five gomock unit tests covering create/read/update/delete.',
+    '## How',
+    'Follows the established resource pattern: schema, expand/flatten, CRUD against the existing mocked ReleaseClient. No new client plumbing.',
+  ].join('\n\n');
+  assert.equal(prBodyHasGitTruthSections(body), true);
+  assert.ok(!/^## Demo\b/m.test(body), 'fixture deliberately has no ## Demo heading');
+});
+
+test('prBodyHasGitTruthSections: a stub / empty body is rejected', () => {
+  assert.equal(prBodyHasGitTruthSections(''), false);
+  assert.equal(prBodyHasGitTruthSections('## What\n\nx\n'), false, 'too short + no Why/How');
+  assert.equal(prBodyHasGitTruthSections('## Demo\n\njust a demo link, no real body'), false, '## Demo alone is not a self-contained body');
 });
 
 test('collectMissingDeliveries: multiple WIs — only the one with missing paths reported', () => {
