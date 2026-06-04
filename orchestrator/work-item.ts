@@ -288,7 +288,10 @@ export function readWorkItemsFromDir(dir: string): {
   const items: WorkItem[] = [];
   const parseErrors: Record<string, string> = {};
   const files = readdirSync(dir)
-    .filter((f) => f.endsWith('.md') && f !== '_graph.md' && f !== '_coverage.md')
+    // Skip ALL `_`-prefixed artifacts (_graph.md, _decomposition.md, etc.) — only
+    // WI-<n>.md files are work items. (Name-list skipping regressed when _coverage.md
+    // was renamed _decomposition.md; the prefix rule is future-proof.)
+    .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
     .sort();
 
   for (const file of files) {
