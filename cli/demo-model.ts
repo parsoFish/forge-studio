@@ -82,6 +82,16 @@ export type DemoModel = {
    * are shown with a richer annotation (e.g. "core logic", "new file").
    */
   filesChanged?: Array<{ path: string; note?: string }>;
+  /**
+   * A fenced code block showing what the operator can now run/create to USE
+   * the new capability (HCL, CLI command, API call, etc.). Optional.
+   */
+  usage_example?: string;
+  /**
+   * 2-4 bullets describing what this change unlocks / the next capability.
+   * Optional.
+   */
+  impact?: string[];
 };
 
 const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
@@ -130,8 +140,17 @@ export function validateDemoModel(raw: unknown): string[] {
           errors.push(`${at}.${f} must be a relative sibling path when set`);
         }
       }
-      if (cp.metrics !== undefined && !Array.isArray(cp.metrics)) {
-        errors.push(`${at}.metrics must be an array when set`);
+      if (cp.metrics !== undefined) {
+        if (!Array.isArray(cp.metrics)) {
+          errors.push(`${at}.metrics must be an array when set`);
+        } else {
+          (cp.metrics as Array<Record<string, unknown>>).forEach((row, j) => {
+            const validParities = new Set(['match', 'within', 'diverged', 'incomplete']);
+            if (row.parity !== undefined && !validParities.has(row.parity as string)) {
+              errors.push(`${at}.metrics[${j}].parity must be one of match|within|diverged|incomplete (got "${row.parity}")`);
+            }
+          });
+        }
       }
     });
   }
@@ -153,6 +172,12 @@ export function validateDemoModel(raw: unknown): string[] {
   }
   if (m.filesChanged !== undefined && !Array.isArray(m.filesChanged)) {
     errors.push('filesChanged must be an array when set');
+  }
+  if (m.usage_example !== undefined && typeof m.usage_example !== 'string') {
+    errors.push('usage_example must be a string when set');
+  }
+  if (m.impact !== undefined && !Array.isArray(m.impact)) {
+    errors.push('impact must be an array of strings when set');
   }
 
   return errors;
@@ -184,12 +209,14 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
       beforeNote: c.beforeNote,
       afterNote: c.afterNote,
     })),
-    diffStat: model.diffStat,
+    diffStat: stripScratchFromDiffStat(model.diffStat),
     acceptanceCriteria: model.acceptanceCriteria,
     summary: model.summary,
     apiDiff: model.apiDiff,
     testEvidence: model.testEvidence,
     filesChanged: model.filesChanged,
+    usage_example: model.usage_example,
+    impact: model.impact,
   };
 }
 
@@ -314,6 +341,28 @@ export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDe
   return { ok: true, errors: [], wrote: [mdPath, htmlPath] };
 }
 
+/** Scratch files written by forge orchestrators that should not appear in the demo. */
+const SCRATCH_FILE_PATTERNS = [/\bAGENT\.md\b/, /\bPROMPT\.md\b/, /\bfix_plan\.md\b/];
+
+/** Strip forge scratch files from a git diff --stat string. */
+function stripScratchFromDiffStat(diffStat: string): string {
+  return diffStat
+    .split('\n')
+    .filter((line) => !SCRATCH_FILE_PATTERNS.some((re) => re.test(line)))
+    .join('\n')
+    .trim();
+}
+
+/** Derive the checkpoints section heading from the dominant checkpoint kind. */
+function checkpointsSectionHeadingMd(checkpoints: DemoModelCheckpoint[]): string {
+  if (checkpoints.length === 0) return 'Visual Changes';
+  const hasMedia = checkpoints.some((c) => c.kind === 'screenshot' || c.kind === 'video');
+  if (hasMedia) return 'Visual Changes';
+  const allHarness = checkpoints.every((c) => c.kind === 'harness');
+  if (allHarness) return 'Test Evidence';
+  return 'Visual Changes';
+}
+
 /** Render a derived DEMO.md (the PR-self-contained convenience). Markdown only;
  *  media is referenced as relative links rather than embedded. */
 export function renderDemoMarkdown(model: DemoModel): string {
@@ -333,7 +382,8 @@ export function renderDemoMarkdown(model: DemoModel): string {
     lines.push('');
   }
 
-  lines.push('## Visual Changes');
+  const checkpointsHeading = checkpointsSectionHeadingMd(model.checkpoints);
+  lines.push(`## ${checkpointsHeading}`);
   lines.push('');
   for (const c of model.checkpoints) {
     lines.push(`### ${c.caption}`);
@@ -394,6 +444,7 @@ export function renderDemoMarkdown(model: DemoModel): string {
     lines.push('');
   }
 
+  const cleanedDiffStat = stripScratchFromDiffStat(model.diffStat);
   lines.push('## Files Changed');
   lines.push('');
   if (model.filesChanged && model.filesChanged.length > 0) {
@@ -402,13 +453,30 @@ export function renderDemoMarkdown(model: DemoModel): string {
     }
     lines.push('');
     lines.push('```');
-    lines.push(model.diffStat);
+    lines.push(cleanedDiffStat);
     lines.push('```');
   } else {
     lines.push('```');
-    lines.push(model.diffStat);
+    lines.push(cleanedDiffStat);
     lines.push('```');
   }
   lines.push('');
+
+  if (model.usage_example && model.usage_example.trim().length > 0) {
+    lines.push('## Usage');
+    lines.push('');
+    lines.push('```');
+    lines.push(model.usage_example);
+    lines.push('```');
+    lines.push('');
+  }
+
+  if (model.impact && model.impact.length > 0) {
+    lines.push('## Impact');
+    lines.push('');
+    for (const b of model.impact) lines.push(`- ${b}`);
+    lines.push('');
+  }
+
   return lines.join('\n');
 }

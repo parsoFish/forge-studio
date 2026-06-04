@@ -95,6 +95,10 @@ export type DemoComparisonModel = {
   apiDiff?: DemoApiDiffEntry[];
   testEvidence?: TestResultRow[];
   filesChanged?: Array<{ path: string; note?: string }>;
+  /** A fenced code block showing what the operator can now run/use. */
+  usage_example?: string;
+  /** 2-4 bullets: what this change unlocks / the next capability. */
+  impact?: string[];
 };
 
 function esc(s: string): string {
@@ -227,9 +231,27 @@ function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
   </div>`;
 }
 
+/** Determine the section heading based on the dominant checkpoint kind. */
+function checkpointsSectionHeading(checkpoints: DemoCheckpoint[]): string {
+  if (checkpoints.length === 0) return 'Visual Changes';
+  const hasMedia = checkpoints.some((c) => c.kind === 'screenshot' || c.kind === 'video');
+  if (hasMedia) return 'Visual Changes';
+  const allHarness = checkpoints.every((c) => c.kind === 'harness');
+  if (allHarness) {
+    // If there are also cli-diff checkpoints this would fall through; for now
+    // the vocabulary is screenshot | video | harness — all harness → Test Evidence.
+    return 'Test Evidence';
+  }
+  // Mixed: harness + non-media (shouldn't occur with current vocabulary but fall back).
+  return 'Visual Changes';
+}
+
 function buildVisualChangesSection(model: DemoComparisonModel): string {
   if (model.checkpoints.length === 0) return '';
   const items = model.checkpoints.map(buildCheckpoint).join('\n');
+
+  const heading = checkpointsSectionHeading(model.checkpoints);
+  const sectionId = heading === 'Test Evidence' ? 'test-evidence-checkpoints' : 'visual-changes';
 
   const videoRow =
     model.beforeVideo || model.afterVideo
@@ -251,8 +273,8 @@ function buildVisualChangesSection(model: DemoComparisonModel): string {
       : '';
 
   return `
-<section class="section" id="visual-changes">
-  <h2>Visual Changes</h2>
+<section class="section" id="${sectionId}">
+  <h2>${heading}</h2>
   ${items}
   ${videoRow}
 </section>`;
@@ -325,9 +347,21 @@ function buildTestEvidenceSection(model: DemoComparisonModel): string {
 </section>`;
 }
 
+/** Scratch files written by forge orchestrators — filtered before rendering. */
+const SCRATCH_FILE_PATTERNS_HTML = [/\bAGENT\.md\b/, /\bPROMPT\.md\b/, /\bfix_plan\.md\b/];
+
+function stripScratchDiffStat(diffStat: string): string {
+  return diffStat
+    .split('\n')
+    .filter((line) => !SCRATCH_FILE_PATTERNS_HTML.some((re) => re.test(line)))
+    .join('\n')
+    .trim();
+}
+
 function buildFilesChangedSection(model: DemoComparisonModel): string {
   const hasAnnotated = model.filesChanged && model.filesChanged.length > 0;
-  const hasDiff = model.diffStat && model.diffStat.trim().length > 0;
+  const rawDiff = model.diffStat ? stripScratchDiffStat(model.diffStat) : '';
+  const hasDiff = rawDiff.length > 0;
   if (!hasAnnotated && !hasDiff) return '';
 
   const annotatedList = hasAnnotated
@@ -336,7 +370,7 @@ function buildFilesChangedSection(model: DemoComparisonModel): string {
     </ul>`
     : '';
   const diffBlock = hasDiff
-    ? `<details class="diff-stat-toggle"><summary>git diff --stat <code>${esc(model.baseRef)}</code>..<code>${esc(model.changedRef)}</code></summary><pre class="diff-stat">${esc(model.diffStat!)}</pre></details>`
+    ? `<details class="diff-stat-toggle"><summary>git diff --stat <code>${esc(model.baseRef)}</code>..<code>${esc(model.changedRef)}</code></summary><pre class="diff-stat">${esc(rawDiff)}</pre></details>`
     : '';
 
   return `
@@ -344,6 +378,26 @@ function buildFilesChangedSection(model: DemoComparisonModel): string {
   <h2>Files Changed</h2>
   ${annotatedList}
   ${diffBlock}
+</section>`;
+}
+
+function buildUsageSection(model: DemoComparisonModel): string {
+  if (!model.usage_example || model.usage_example.trim().length === 0) return '';
+  return `
+<section class="section" id="usage">
+  <h2>Usage</h2>
+  <pre class="usage-block">${esc(model.usage_example)}</pre>
+</section>`;
+}
+
+function buildImpactSection(model: DemoComparisonModel): string {
+  if (!model.impact || model.impact.length === 0) return '';
+  return `
+<section class="section" id="impact">
+  <h2>Impact</h2>
+  <ul class="impact-list">
+    ${model.impact.map((b) => `<li>${esc(b)}</li>`).join('\n    ')}
+  </ul>
 </section>`;
 }
 
@@ -455,6 +509,16 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   .diff-stat-toggle summary { cursor: pointer; font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); }
   .diff-stat { overflow-x: auto; font-size: .8rem; padding: .8rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin-top: .4rem; }
 
+  /* ── Usage ── */
+  .usage-block { overflow-x: auto; font-size: .88rem; padding: .9rem 1.1rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+
+  /* ── Impact ── */
+  .impact-list { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .impact-list li { margin: .3rem 0; }
+
+  /* ── Parity rows (additional) ── */
+  tr.p-match { background: color-mix(in srgb, #3fae6a 7%, transparent); }
+
   /* ── Appendix ── */
   .appendix { margin: 1.4rem 0; }
   .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
@@ -486,6 +550,10 @@ ${buildApiDiffSection(model)}
 ${buildTestEvidenceSection(model)}
 
 ${buildFilesChangedSection(model)}
+
+${buildUsageSection(model)}
+
+${buildImpactSection(model)}
 
 ${buildAcAppendix(model)}
 

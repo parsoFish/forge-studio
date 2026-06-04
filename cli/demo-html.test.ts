@@ -357,6 +357,116 @@ test('renderComparisonHtml: harness metric strings are HTML-escaped', () => {
   assert.match(html, /a&amp;b/);
 });
 
+// ── Wave C1: shape-aware heading, parity CSS, usage + impact ─────────────
+
+test('renderComparisonHtml: harness-only checkpoints render under "Test Evidence" heading', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow', kind: 'harness', caption: 'Scoring sim', beforeImage: null, afterImage: null,
+          metrics: [
+            { label: 'completed', before: '148', after: '149', deltaPct: 0.7, parity: 'within' },
+          ],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /<h2>Test Evidence<\/h2>/);
+  assert.ok(!html.includes('<h2>Visual Changes</h2>'), 'no Visual Changes heading for harness-only');
+});
+
+test('renderComparisonHtml: mixed harness+screenshot keeps "Visual Changes" heading', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow', kind: 'harness', caption: 'Sim', beforeImage: null, afterImage: null,
+          metrics: [{ label: 'x', before: '1', after: '1', deltaPct: 0, parity: 'match' }],
+        },
+        { label: 'ui', kind: 'screenshot', caption: 'UI shot', beforeImage: PNG_DATA_URI, afterImage: PNG_DATA_URI },
+      ],
+    }),
+  );
+  assert.match(html, /<h2>Visual Changes<\/h2>/);
+});
+
+test('renderComparisonHtml: parity CSS classes all render correctly (match/within/diverged/incomplete)', () => {
+  const html = renderComparisonHtml(
+    model({
+      checkpoints: [
+        {
+          label: 'flow', kind: 'harness', caption: 'Parity test', beforeImage: null, afterImage: null,
+          metrics: [
+            { label: 'a', before: '1', after: '1', deltaPct: 0, parity: 'match' },
+            { label: 'b', before: '10', after: '10.1', deltaPct: 1, parity: 'within' },
+            { label: 'c', before: '10', after: '5', deltaPct: -50, parity: 'diverged' },
+            { label: 'd', before: null, after: '5', deltaPct: null, parity: 'incomplete' },
+          ],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /class="p-match"/);
+  assert.match(html, /class="p-within"/);
+  assert.match(html, /class="p-diverged"/);
+  assert.match(html, /class="p-incomplete"/);
+});
+
+test('renderComparisonHtml: renders Usage section when usage_example set', () => {
+  const html = renderComparisonHtml(
+    model({ usage_example: 'resource "betterado_task_group" "demo" {\n  name = "test"\n}' }),
+  );
+  assert.match(html, /id="usage"/);
+  assert.match(html, /<h2>Usage<\/h2>/);
+  assert.match(html, /betterado_task_group/);
+  assert.match(html, /usage-block/);
+});
+
+test('renderComparisonHtml: Usage section absent when usage_example not set', () => {
+  const html = renderComparisonHtml(model({ usage_example: undefined }));
+  assert.ok(!html.includes('id="usage"'), 'no usage section when absent');
+});
+
+test('renderComparisonHtml: renders Impact section when impact set', () => {
+  const html = renderComparisonHtml(
+    model({ impact: ['Enables task-group provisioning.', 'Unblocks W2 resource imports.'] }),
+  );
+  assert.match(html, /id="impact"/);
+  assert.match(html, /<h2>Impact<\/h2>/);
+  assert.match(html, /Enables task-group provisioning\./);
+  assert.match(html, /Unblocks W2 resource imports\./);
+  assert.match(html, /impact-list/);
+});
+
+test('renderComparisonHtml: Impact section absent when impact not set', () => {
+  const html = renderComparisonHtml(model({ impact: undefined }));
+  assert.ok(!html.includes('id="impact"'), 'no impact section when absent');
+});
+
+test('renderComparisonHtml: Usage and Impact sections are HTML-escaped', () => {
+  const html = renderComparisonHtml(
+    model({
+      usage_example: '<script>alert(1)</script>',
+      impact: ['a & b < c'],
+    }),
+  );
+  assert.ok(!html.includes('<script>alert(1)</script>'), 'usage script tag escaped');
+  assert.match(html, /a &amp; b &lt; c/);
+});
+
+test('renderComparisonHtml: scratch files stripped from diffStat in Files Changed', () => {
+  const html = renderComparisonHtml(
+    model({
+      diffStat: ' src/main.ts | 10 +\n AGENT.md | 3 +\n fix_plan.md | 2 +\n PROMPT.md | 1 +',
+    }),
+  );
+  assert.ok(!html.includes('AGENT.md'), 'AGENT.md stripped from diffStat');
+  assert.ok(!html.includes('fix_plan.md'), 'fix_plan.md stripped from diffStat');
+  assert.ok(!html.includes('PROMPT.md'), 'PROMPT.md stripped from diffStat');
+  assert.match(html, /src\/main\.ts/);
+});
+
 test('renderComparisonHtml: apiDiff entries are HTML-escaped', () => {
   const html = renderComparisonHtml(
     model({

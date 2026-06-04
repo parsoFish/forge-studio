@@ -35,19 +35,34 @@ and prove it cohesive:
    - Run `forge demo render <initiative-id>` to derive `DEMO.md` + `DEMO.html`
      from `demo.json`, then commit all three. **Never hand-write DEMO.md** — it
      is derived, so the PR artifact and the in-UI review render never drift.
+   - **Check for a `demo.skill` in `.forge/project.json`** before authoring
+     demo.json. If the field is present, `Read` that skill file — it specifies
+     the project-specific evidence hierarchy (e.g. betterado's `ado-demo` skill:
+     `terraform apply` → API GET → portal screenshot → `terraform destroy`). For
+     a new or changed resource, **attempt the live-capability evidence first** —
+     a real created resource is the best demonstration. Fall back to harness-only
+     if credentials are absent, and document the fallback in the demo `essence`.
    - The project's `demo.shape` in `.forge/project.json` decides HOW you fill
      the checkpoints (not a different file format):
      - **browser** — fill checkpoints + invoke the media-capture skill
        (`forge demo capture <initiative-id>`) to back-fill before/after images.
      - **harness** — a `kind: 'harness'` checkpoint carrying `metrics[]`
        (before/after + parity), scraped from the project's measurement command.
+       Parity vocabulary: `match | within | diverged | incomplete`. Author a
+       `testEvidence[]` table. Do **NOT** author "Visual Changes"/screenshots —
+       there is no UI. For new-capability initiatives also author `usage_example`
+       (fenced HCL/CLI/API block) and `impact` (string[] bullets).
      - **cli-diff** / **artifact** — before/after notes (no media required).
      - **none** — a single rationale checkpoint (caption + afterNote).
 4. **Write the PR body** at `.forge/pr-description.md`:
-   - Sections: `## Why` (non-empty), `## What`, `## How`, `## Demo` (must
-     reference `demo/<initiative-id>/DEMO.md` via a relative link).
-   - Anchor on `git log` + `git diff --stat main...HEAD` — describe what
-     actually landed, not what was hoped for. Substance, not boilerplate.
+   - Sections: `## Why` (non-empty), `## What`, `## How`.
+   - **Do NOT add a `## Demo` section.** The orchestrator appends the canonical
+     demo block automatically when it opens the PR. A hand-authored `## Demo`
+     heading will be stripped.
+   - Anchor on `git diff --name-only main...HEAD` — list ONLY files that
+     ACTUALLY appear in the diff. Do NOT claim a file, test, or doc as added
+     unless it appears in `git diff --stat main...HEAD`. Substance, not
+     boilerplate; describe what actually landed, not what was planned.
 5. **Commit** everything as `feat(<initiative-id>): unify and demo`. If no
    changes are needed (no fixes, demo already exists, PR body present),
    skip the commit — the gates run against the per-WI tip in that case.

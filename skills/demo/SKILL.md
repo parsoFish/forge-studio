@@ -123,6 +123,27 @@ collapses them gracefully when absent, but their absence means a less useful dem
   ]
   ```
 
+- **`usage_example`** (string, required for new-or-changed-capability initiatives) —
+  a fenced code block showing HOW to use the new capability: the HCL resource block,
+  the CLI invocation, or the API request that exercises it. This is the first thing
+  the operator looks for when reviewing a new feature.
+
+  ```json
+  "usage_example": "```hcl\nresource \"betterado_release_definition\" \"example\" {\n  name    = \"my-release\"\n  project = var.project_id\n}\n```"
+  ```
+
+- **`impact`** (string[], required for new-or-changed-capability initiatives) —
+  bullets describing what the new capability unlocks for the operator. Distinct from
+  `essence` (which is the technical delta) — `impact` is the "so what":
+
+  ```json
+  "impact": [
+    "Operators can now define classic release pipelines as Terraform resources.",
+    "Full CRUD lifecycle: create, read, update, delete.",
+    "Idempotent — re-plan produces no diff after initial apply."
+  ]
+  ```
+
 - **`acceptanceCriteria[]`** (optional but recommended) — the ACs the demo proves.
 
 ### Three load-bearing disciplines
@@ -181,6 +202,11 @@ The project declares its shape in `.forge/project.json` `demo.shape`:
   encode them as a `kind: "harness"` checkpoint with
   `metrics: [{ label, before, after, deltaPct, parity }]`. **Reuse the project's
   test — never re-derive the measurement.** Pair with `testEvidence` rows.
+  **Parity vocabulary:** `match` (exact same result), `within` (within tolerance),
+  `diverged` (regression), `incomplete` (no baseline available).
+  **Do NOT author "Visual Changes"/screenshots for a harness demo** — no UI exists.
+  Use `testEvidence` for the pass/fail table and `usage_example`/`impact` for
+  new-capability initiatives.
 - **`cli-diff`** — run the project's demo command twice (baseline + HEAD), capture
   stdout, encode the before/after in `beforeNote`/`afterNote`. Use `apiDiff` to
   show the CLI flag / output format change.

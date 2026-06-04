@@ -61,6 +61,20 @@ function parseOwnerRepo(originUrl: string): string | null {
 const DEMO_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
 
 /**
+ * Strip any `## Demo` section (plus trailing content until the next `##`
+ * heading or end-of-string) from a PR body. The unifier is told not to
+ * include a `## Demo` section, but if it does anyway this prevents a
+ * duplicate heading from appearing after `embedDemoInPr` appends the
+ * canonical block. Pure string operation; never throws.
+ */
+export function stripDemoSection(body: string): string {
+  // Match "## Demo" (case-insensitive) optionally preceded by a horizontal
+  // rule, then consume everything up to (but not including) the next "## "
+  // heading or end of string.
+  return body.replace(/(?:^|\n)---\s*\n## [Dd]emo\b[\s\S]*?(?=\n## |\n---\s*\n## |$)/g, '').trimEnd();
+}
+
+/**
  * S4 amendment (CONTRACTS.md C2 + plan 04 §"PR-as-self-contained-review-window"):
  * `embedDemoInPr` is a **pure PR-body composer**. It does NOT mutate the
  * filesystem (no `cpSync`, no `git add`, no `git commit`). The dev-loop
@@ -231,9 +245,14 @@ export function openPullRequest(
     try {
       const demoMd = embedDemoInPr(worktreePath, initiativeId, branch, trackedDemoDir, isPrivate);
       if (demoMd) {
-        const base = existsSync(prDescriptionPath)
+        let base = existsSync(prDescriptionPath)
           ? readFileSync(prDescriptionPath, 'utf8')
           : '';
+        // Dedup: if the agent-authored PR body already contains a ## Demo heading,
+        // strip it (and any trailing content until the next ##) so the canonical
+        // demo block appended below is the only one. Handles the case where the
+        // unifier ignored the "don't add ## Demo" instruction.
+        base = stripDemoSection(base);
         const combined = join(worktreePath, '.forge', 'pr-body-with-demo.md');
         mkdirSync(join(worktreePath, '.forge'), { recursive: true });
         writeFileSync(combined, base + '\n' + demoMd + '\n');

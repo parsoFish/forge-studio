@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-
 import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib/bridge-client';
 
 /**
@@ -9,6 +7,10 @@ import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib
  * in-UI equivalent of `renderComparisonHtml`). The schema this renders IS the
  * contract the unifier fills, which is what makes demos consistent. Forge dark
  * theme; mirrors the plan screen's "rich artifact on its own page" treatment.
+ *
+ * Renders ALL sections: summary (with PR link), apiDiff before/after,
+ * testEvidence pass/fail table, filesChanged annotated list, checkpoints,
+ * usage_example fenced block, impact bullets, acceptanceCriteria, diffStat.
  */
 const PARITY_COLOR: Record<DemoHarnessMetricRow['parity'], string> = {
   match: '#2ea043',
@@ -17,9 +19,16 @@ const PARITY_COLOR: Record<DemoHarnessMetricRow['parity'], string> = {
   incomplete: '#d29922',
 };
 
+const TEST_RESULT_COLOR: Record<string, string> = {
+  pass: '#2ea043',
+  fail: '#f85149',
+  skip: '#d29922',
+};
+
 export function DemoComparison({ model }: { model: DemoModel }): JSX.Element {
   return (
     <div data-section="demo-comparison" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header: title + essence */}
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, color: '#e6edf3' }}>{model.title}</div>
         <div
@@ -37,13 +46,116 @@ export function DemoComparison({ model }: { model: DemoModel }): JSX.Element {
         </div>
       </div>
 
+      {/* Summary section */}
+      {model.summary && (
+        <div data-section="demo-summary">
+          <SectionLabel>Summary</SectionLabel>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#c9d1d9' }}>
+            {model.summary.bullets.map((b, i) => <li key={i}>{b}</li>)}
+          </ul>
+          {(model.summary.prUrl || model.summary.branch || model.summary.commitSha) && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#8b949e', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {model.summary.prUrl && (
+                <a href={model.summary.prUrl} target="_blank" rel="noreferrer" style={{ color: '#58a6ff' }}>
+                  PR: {model.summary.prUrl}
+                </a>
+              )}
+              {model.summary.branch && <span>Branch: <code style={{ background: '#161b22', padding: '1px 4px', borderRadius: 3 }}>{model.summary.branch}</code></span>}
+              {model.summary.commitSha && <span>Commit: <code style={{ background: '#161b22', padding: '1px 4px', borderRadius: 3 }}>{model.summary.commitSha.slice(0, 8)}</code></span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* API / Behaviour diff */}
+      {model.apiDiff && model.apiDiff.length > 0 && (
+        <div data-section="demo-api-diff">
+          <SectionLabel>API / Behaviour Diff</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {model.apiDiff.map((entry, i) => (
+              <div key={i} style={{ border: '1px solid #21262d', borderRadius: 6, padding: '10px 14px', background: '#0b0f14' }}>
+                <div style={{ fontSize: 12, color: '#e6edf3', fontWeight: 600, marginBottom: 6 }}>
+                  {entry.name}
+                  <span style={{ marginLeft: 8, fontWeight: 400, color: entry.change === 'added' ? '#2ea043' : entry.change === 'removed' ? '#f85149' : '#d29922', fontSize: 11, textTransform: 'uppercase' }}>
+                    {entry.change}
+                  </span>
+                </div>
+                {(entry.before !== undefined || entry.after !== undefined) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {entry.before !== undefined && (
+                      <div>
+                        <div style={{ fontSize: 10, color: '#6e7681', marginBottom: 3, textTransform: 'uppercase' }}>before</div>
+                        <pre style={{ margin: 0, overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 4, padding: 8, fontSize: 11, color: '#c9d1d9' }}>{entry.before}</pre>
+                      </div>
+                    )}
+                    {entry.after !== undefined && (
+                      <div>
+                        <div style={{ fontSize: 10, color: '#6e7681', marginBottom: 3, textTransform: 'uppercase' }}>after</div>
+                        <pre style={{ margin: 0, overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 4, padding: 8, fontSize: 11, color: '#c9d1d9' }}>{entry.after}</pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Test evidence */}
+      {model.testEvidence && model.testEvidence.length > 0 && (
+        <div data-section="demo-test-evidence">
+          <SectionLabel>Test Evidence</SectionLabel>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ color: '#6e7681', textAlign: 'left' }}>
+                <th style={th}>test</th>
+                <th style={th}>result</th>
+                <th style={th}>delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.testEvidence.map((r, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #21262d' }}>
+                  <td style={{ ...td, color: '#c9d1d9' }}>{r.name}</td>
+                  <td style={{ ...td, color: TEST_RESULT_COLOR[r.result] ?? '#c9d1d9', fontWeight: 600 }}>{r.result}</td>
+                  <td style={{ ...td, color: '#8b949e' }}>{r.delta ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Checkpoints */}
       {model.checkpoints.map((c, i) => (
         <CheckpointCard key={`${c.label}-${i}`} cp={c} />
       ))}
 
+      {/* Usage example */}
+      {model.usage_example && (
+        <div data-section="demo-usage-example">
+          <SectionLabel>Usage Example</SectionLabel>
+          <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, fontSize: 12, color: '#c9d1d9', margin: 0 }}>
+            {model.usage_example}
+          </pre>
+        </div>
+      )}
+
+      {/* Impact bullets */}
+      {model.impact && model.impact.length > 0 && (
+        <div data-section="demo-impact">
+          <SectionLabel>Impact</SectionLabel>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#c9d1d9' }}>
+            {model.impact.map((b, i) => <li key={i}>{b}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Acceptance criteria */}
       {model.acceptanceCriteria && model.acceptanceCriteria.length > 0 && (
         <div data-section="demo-acs">
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 6 }}>Acceptance criteria</div>
+          <SectionLabel>Acceptance criteria</SectionLabel>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#c9d1d9' }}>
             {model.acceptanceCriteria.map((ac, i) => (
               <li key={i}>{ac}</li>
@@ -52,14 +164,30 @@ export function DemoComparison({ model }: { model: DemoModel }): JSX.Element {
         </div>
       )}
 
+      {/* Files changed */}
       <details style={{ fontSize: 12, color: '#8b949e' }}>
         <summary style={{ cursor: 'pointer' }}>
           Changed files (<code>git diff --stat {model.baseRef ?? 'main'}..{model.changedRef ?? 'HEAD'}</code>)
         </summary>
-        <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, marginTop: 8 }}>
+        {model.filesChanged && model.filesChanged.length > 0 && (
+          <ul style={{ margin: '8px 0 4px', paddingLeft: 18, fontSize: 12, color: '#c9d1d9' }}>
+            {model.filesChanged.map((f, i) => (
+              <li key={i}><code style={{ color: '#79c0ff' }}>{f.path}</code>{f.note ? <span style={{ color: '#8b949e' }}> — {f.note}</span> : null}</li>
+            ))}
+          </ul>
+        )}
+        <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, marginTop: 4 }}>
           {model.diffStat}
         </pre>
       </details>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      {children}
     </div>
   );
 }

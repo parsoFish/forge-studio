@@ -274,6 +274,97 @@ test('mergeCapturedMedia: fills images on matching checkpoints + appends unmatch
   assert.equal(m.checkpoints[0].beforeImage, undefined);
 });
 
+// ── Wave C1: usage_example + impact ──────────────────────────────────────
+
+test('validateDemoModel: usage_example + impact are accepted when valid', () => {
+  const m = validModel();
+  m.usage_example = 'resource "betterado_task_group" "demo" {}';
+  m.impact = ['Enables task-group provisioning via Terraform.', 'Unblocks W2 resource imports.'];
+  assert.deepEqual(validateDemoModel(m), []);
+});
+
+test('validateDemoModel: rejects non-string usage_example', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.usage_example = 42;
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('usage_example')));
+});
+
+test('validateDemoModel: rejects non-array impact', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.impact = 'unlocks stuff';
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('impact')));
+});
+
+test('validateDemoModel: rejects invalid parity value in harness metric', () => {
+  const m = validModel();
+  m.checkpoints[0].kind = 'harness';
+  m.checkpoints[0].metrics = [
+    // @ts-expect-error — intentionally invalid parity
+    { label: 'fps', before: '30', after: '60', deltaPct: 100, parity: 'pass' },
+  ];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('parity') && e.includes('"pass"')));
+});
+
+test('validateDemoModel: accepts all valid parity values', () => {
+  for (const parity of ['match', 'within', 'diverged', 'incomplete'] as const) {
+    const m = validModel();
+    m.checkpoints[0].kind = 'harness';
+    m.checkpoints[0].metrics = [
+      { label: 'x', before: '1', after: '1', deltaPct: 0, parity },
+    ];
+    assert.deepEqual(validateDemoModel(m), [], `parity "${parity}" should be valid`);
+  }
+});
+
+test('renderDemoMarkdown: harness-only checkpoints use "## Test Evidence" heading', () => {
+  const m = validModel();
+  m.checkpoints[0].kind = 'harness';
+  m.checkpoints[0].metrics = [
+    { label: 'completed', before: '148', after: '149', deltaPct: 0.7, parity: 'within' },
+  ];
+  const md = renderDemoMarkdown(m);
+  assert.match(md, /## Test Evidence/);
+  assert.ok(!md.includes('## Visual Changes'), 'no Visual Changes heading for harness-only');
+});
+
+test('renderDemoMarkdown: screenshot checkpoint uses "## Visual Changes" heading', () => {
+  const md = renderDemoMarkdown(validModel());
+  assert.match(md, /## Visual Changes/);
+  assert.ok(!md.includes('## Test Evidence\n'), 'no Test Evidence heading for screenshot');
+});
+
+test('renderDemoMarkdown: renders ## Usage section when usage_example set', () => {
+  const m = validModel();
+  m.usage_example = 'resource "betterado_task_group" "demo" {\n  name = "test"\n}';
+  const md = renderDemoMarkdown(m);
+  assert.match(md, /## Usage/);
+  assert.match(md, /betterado_task_group/);
+});
+
+test('renderDemoMarkdown: renders ## Impact section when impact set', () => {
+  const m = validModel();
+  m.impact = ['Enables task-group provisioning.', 'Unblocks W2 resource imports.'];
+  const md = renderDemoMarkdown(m);
+  assert.match(md, /## Impact/);
+  assert.match(md, /- Enables task-group provisioning\./);
+  assert.match(md, /- Unblocks W2 resource imports\./);
+});
+
+test('renderDemoMarkdown: strips AGENT.md / PROMPT.md / fix_plan.md from diffStat', () => {
+  const m = validModel();
+  m.diffStat = ' src/theme.ts | 40 ++++\n AGENT.md | 10 +\n fix_plan.md | 5 +\n PROMPT.md | 3 +\n 4 files changed';
+  const md = renderDemoMarkdown(m);
+  assert.ok(!md.includes('AGENT.md'), 'AGENT.md stripped');
+  assert.ok(!md.includes('fix_plan.md'), 'fix_plan.md stripped');
+  assert.ok(!md.includes('PROMPT.md'), 'PROMPT.md stripped');
+  assert.match(md, /src\/theme\.ts/);
+});
+
 // ── toComparisonModel ─────────────────────────────────────────────────────
 
 test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {
@@ -292,4 +383,22 @@ test('toComparisonModel: passes through rich sections to comparison model', () =
   assert.equal(cm.apiDiff?.length, 1);
   assert.equal(cm.testEvidence?.length, 1);
   assert.equal(cm.filesChanged?.length, 2);
+});
+
+test('toComparisonModel: passes through usage_example + impact', () => {
+  const m = validModel();
+  m.usage_example = 'resource "betterado_task_group" "x" {}';
+  m.impact = ['Enables provisioning.'];
+  const cm = toComparisonModel(m, 'T');
+  assert.equal(cm.usage_example, 'resource "betterado_task_group" "x" {}');
+  assert.deepEqual(cm.impact, ['Enables provisioning.']);
+});
+
+test('toComparisonModel: strips scratch files from diffStat', () => {
+  const m = validModel();
+  m.diffStat = ' src/main.ts | 10 +\n AGENT.md | 3 +\n fix_plan.md | 2 +';
+  const cm = toComparisonModel(m, 'T');
+  assert.ok(!cm.diffStat?.includes('AGENT.md'));
+  assert.ok(!cm.diffStat?.includes('fix_plan.md'));
+  assert.ok(cm.diffStat?.includes('src/main.ts'));
 });

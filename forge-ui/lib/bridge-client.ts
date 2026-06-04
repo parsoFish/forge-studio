@@ -289,6 +289,26 @@ export type DemoModelCheckpoint = {
   afterImage?: string | null;
 };
 
+export type DemoSummarySection = {
+  bullets: string[];
+  prUrl?: string;
+  branch?: string;
+  commitSha?: string;
+};
+
+export type DemoApiDiffEntry = {
+  name: string;
+  change: 'added' | 'changed' | 'removed';
+  before?: string;
+  after?: string;
+};
+
+export type DemoTestResultRow = {
+  name: string;
+  result: 'pass' | 'fail' | 'skip';
+  delta?: string;
+};
+
 export type DemoModel = {
   title: string;
   essence: string;
@@ -299,6 +319,14 @@ export type DemoModel = {
   checkpoints: DemoModelCheckpoint[];
   diffStat: string;
   acceptanceCriteria?: string[];
+  // Rich structured sections (mirrors cli/demo-model.ts DemoModel)
+  summary?: DemoSummarySection;
+  apiDiff?: DemoApiDiffEntry[];
+  testEvidence?: DemoTestResultRow[];
+  filesChanged?: Array<{ path: string; note?: string }>;
+  // New-capability fields (sibling agent adds to cli/demo-model.ts)
+  usage_example?: string;
+  impact?: string[];
 };
 
 /** Fetch the cycle's structured demo (mirrored into _logs/<cycle>/artifacts/
