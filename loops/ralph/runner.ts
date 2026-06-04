@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   autoCommitWorktreeIfDirty,
+  branchHasAllCreates,
   checkBranchHasCommitsVsBase,
   checkStopConditions,
   defaultQualityGates,
@@ -67,6 +68,14 @@ export type LoopInput = {
    * DEMO.md.
    */
   failOnHollowIter0Gate?: boolean;
+  /**
+   * 2026-06-05 (re-review #3): THIS work item's declared `creates[]` paths. The
+   * runner only takes the `already-complete` shortcut when ALL of these are
+   * already on the branch (a sibling genuinely delivered this WI's outputs) —
+   * not on a bare "the branch has some commit". A WI with no creates[] never
+   * shortcuts; it runs its own iteration.
+   */
+  requiredPaths?: string[];
   /**
    * 2026-06-05 (re-review #1): predicate returning whether the LAST gate run
    * could not RUN (missing binary / EACCES / killed by signal), as opposed to
@@ -207,12 +216,19 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
       const passed = await Promise.resolve(qualityGate({ iteration: 0 }));
       if (passed) {
         const branchHasWork = checkBranchHasCommitsVsBase(input.worktreePath);
-        if (branchHasWork) {
-          // A sibling WI already delivered this WI's work — mark complete.
+        if (!branchHasWork) {
+          // Hollow gate — gate passes on a clean branch with no agent work.
+          return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath);
+        }
+        // re-review #3: the branch has SOME work, but `already-complete` is only
+        // honest when a sibling delivered THIS WI's OWN declared outputs — not on
+        // a bare "branch has a commit". If this WI declares creates[] and they're
+        // all present, it's genuinely done; otherwise (partial, or no creates[])
+        // fall through and let the agent attempt this WI's own AC. The unifier's
+        // (fail-closed) incomplete-delivery gate is the backstop if it doesn't.
+        if (branchHasAllCreates(input.worktreePath, input.requiredPaths ?? [])) {
           return finalize(state, startedAt, 'already-complete', agentMdPath, fixPlanPath);
         }
-        // Hollow gate — gate passes on a clean branch with no agent work.
-        return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath);
       }
       // re-review #1: the gate FAILED at iter-0 — but did it fail because the
       // tests failed (expected: the agent will write them), or because the gate

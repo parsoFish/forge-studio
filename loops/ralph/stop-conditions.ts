@@ -487,6 +487,23 @@ function resolveBaseBranch(worktreePath: string): string {
  *   - gate passes + no commits → hollow gate  → `gate-too-loose`  (failed)
  *   - gate passes + has commits → sibling delivered → `already-complete` (complete)
  */
+/**
+ * re-review #3: are ALL of this WI's declared `creates[]` paths present in the
+ * branch diff vs base? Tightens `already-complete`: a sibling having committed
+ * *something* (`checkBranchHasCommitsVsBase`) is NOT enough to call THIS WI
+ * done — it is genuinely already-delivered only when its OWN declared outputs
+ * are on the branch. A WI with empty `creates[]` returns false: it must run its
+ * own iteration to attempt its AC, never free-ride on a sibling's commit (which
+ * was the hollow-pass: a no-work WI marked complete because the branch had any
+ * commit). The complement to the gate's `.some()` required-paths check, which
+ * only catches the "NONE present" case — this catches "not ALL present".
+ */
+export function branchHasAllCreates(worktreePath: string, creates: readonly string[]): boolean {
+  if (!creates || creates.length === 0) return false;
+  const diff = gitDiffPathsAgainstMain(worktreePath);
+  return creates.every((p) => diff.has(p));
+}
+
 export function checkBranchHasCommitsVsBase(worktreePath: string): boolean {
   try {
     const base = resolveBaseBranch(worktreePath);

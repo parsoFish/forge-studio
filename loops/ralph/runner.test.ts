@@ -120,6 +120,9 @@ test('Wave B: gate passes + branch has prior commits → already-complete, statu
       // Gate always passes — simulates WI-2's test already passing because
       // WI-1 wrote the required file.
       qualityGate: () => true,
+      // re-review #3: the sibling committed THIS WI's declared output, so it is
+      // genuinely already-delivered (not a bare "branch has a commit").
+      requiredPaths: ['sibling_work.go'],
       failOnHollowIter0Gate: true,
     };
 
@@ -128,6 +131,61 @@ test('Wave B: gate passes + branch has prior commits → already-complete, statu
     assert.equal(result.stop_reason, 'already-complete', `expected already-complete, got ${result.stop_reason}`);
     assert.equal(result.status, 'complete', `expected complete, got ${result.status}`);
     assert.equal(result.iterations, 0, 'no agent iterations should have run');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// re-review #3: `already-complete` must require THIS WI's OWN declared outputs,
+// not a bare "the branch has a commit" — otherwise a sibling's commit silently
+// completes a WI that did no work (hollow pass).
+test('re-review #3: gate passes + branch has commits but this WI\'s creates are NOT all present ⇒ NOT already-complete', async () => {
+  const dir = setupRepoWithBranchCommit(); // sibling committed sibling_work.go
+  let agentRuns = 0;
+  try {
+    const workItemPath = join(dir, 'WI-3.md');
+    writeFileSync(workItemPath, '# WI-3: declares an output the sibling did NOT make\n');
+    mkdirSync(join(dir, 'loops', 'ralph'), { recursive: true });
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 5, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-rr3',
+      initiativeId: 'INIT-rr3',
+      qualityGate: () => true,
+      requiredPaths: ['this_wi_output.go'], // NOT present on the branch
+      failOnHollowIter0Gate: true,
+    };
+    const result = await run(input, async () => { agentRuns++; return { filesChanged: [], costUsd: 0 }; });
+    assert.notEqual(result.stop_reason, 'already-complete', 'must NOT free-ride on the sibling commit');
+    assert.ok(agentRuns >= 1, 'the agent must run its own iteration to attempt this WI\'s AC');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('re-review #3: a WI with empty creates[] does NOT take the already-complete shortcut', async () => {
+  const dir = setupRepoWithBranchCommit();
+  let agentRuns = 0;
+  try {
+    const workItemPath = join(dir, 'WI-noc.md');
+    writeFileSync(workItemPath, '# WI: no creates declared\n');
+    mkdirSync(join(dir, 'loops', 'ralph'), { recursive: true });
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 5, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-noc',
+      initiativeId: 'INIT-noc',
+      qualityGate: () => true,
+      requiredPaths: [], // empty creates ⇒ must run its own iteration
+      failOnHollowIter0Gate: true,
+    };
+    const result = await run(input, async () => { agentRuns++; return { filesChanged: [], costUsd: 0 }; });
+    assert.notEqual(result.stop_reason, 'already-complete', 'empty-creates WI must run its own iteration');
+    assert.ok(agentRuns >= 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

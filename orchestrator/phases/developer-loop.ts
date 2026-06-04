@@ -301,6 +301,10 @@ export async function runDeveloperLoop(
               { requiredPaths: wi.creates ?? [] },
             );
           })(),
+          // re-review #3: the runner only takes the `already-complete` shortcut
+          // when ALL of THIS WI's declared outputs are on the branch (a sibling
+          // genuinely delivered them) — not on a bare "branch has a commit".
+          requiredPaths: wi.creates ?? [],
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,
@@ -1311,8 +1315,24 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
   //    but the unifier's full-gate still passed on WI-1's work, opening
   //    a PR that silently lacked WI-3's declared acc test + docs.
   {
-    const missingDeliveries = collectMissingDeliveries(worktreePath, input.workItemsDir);
-    if (missingDeliveries.length > 0) {
+    const delivery = collectMissingDeliveries(worktreePath, input.workItemsDir);
+    if (delivery.indeterminate) {
+      // re-review #2: fail CLOSED — we could not verify the WIs delivered their
+      // declared outputs, so do NOT open a PR that might silently omit work.
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'developer-loop',
+        skill: 'developer-unifier',
+        event_type: 'error',
+        input_refs: [worktreePath],
+        output_refs: [],
+        message: 'unifier.gate.delivery-indeterminate',
+        metadata: { failure_class: 'delivery-indeterminate', reason: delivery.reason },
+      });
+      return false;
+    }
+    if (delivery.missing.length > 0) {
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
@@ -1324,7 +1344,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
         message: 'unifier.gate.incomplete-delivery',
         metadata: {
           failure_class: 'incomplete-delivery',
-          missing: missingDeliveries,
+          missing: delivery.missing,
         },
       });
       return false;
@@ -1344,10 +1364,26 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
  *
  * Exported for unit testing.
  */
+export type MissingDelivery = { work_item_id: string; path: string };
+
+/**
+ * Delivery-completeness check result. `indeterminate` means the check could
+ * NOT be computed (git base undetectable / git unavailable / WI parse failure).
+ *
+ * re-review #2: this is the LAST backstop stopping a PR that omits declared
+ * outputs (and the only backstop behind the `already-complete` shortcut), so it
+ * fails CLOSED — an indeterminate result BLOCKS the PR with a distinct reason,
+ * rather than the old fail-OPEN behaviour that returned `[]` and silently let a
+ * possibly-incomplete delivery through looking review-ready.
+ */
+export type DeliveryCheck =
+  | { indeterminate: false; missing: MissingDelivery[] }
+  | { indeterminate: true; reason: string };
+
 export function collectMissingDeliveries(
   worktreePath: string,
   workItemsDir: string,
-): Array<{ work_item_id: string; path: string }> {
+): DeliveryCheck {
   // Compute the branch diff once.
   let diffPaths: Set<string>;
   try {
@@ -1356,26 +1392,27 @@ export function collectMissingDeliveries(
       execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).trim();
     if (git(['rev-parse', '--verify', 'main']).length > 0) base = 'main';
     else if (git(['rev-parse', '--verify', 'master']).length > 0) base = 'master';
-    if (!base) return []; // can't determine base → don't block (fail-open on git error)
+    if (!base) {
+      return { indeterminate: true, reason: 'cannot verify delivery: no base branch (neither main nor master) in the worktree' };
+    }
     const lines = git(['diff', '--name-only', `${base}...HEAD`])
       .split('\n')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     diffPaths = new Set(lines);
-  } catch {
-    return []; // git unavailable → don't block
+  } catch (err) {
+    return { indeterminate: true, reason: `cannot verify delivery: git diff failed (${err instanceof Error ? err.message : String(err)})` };
   }
 
   // Read the WI set and check each WI's creates[].
   let items: import('../work-item.ts').WorkItem[];
   try {
-    const result = readWorkItemsFromDir(workItemsDir);
-    items = result.items;
-  } catch {
-    return []; // WI parse failure → don't block (separate validation path)
+    items = readWorkItemsFromDir(workItemsDir).items;
+  } catch (err) {
+    return { indeterminate: true, reason: `cannot verify delivery: work items unreadable (${err instanceof Error ? err.message : String(err)})` };
   }
 
-  const missing: Array<{ work_item_id: string; path: string }> = [];
+  const missing: MissingDelivery[] = [];
   for (const wi of items) {
     if (!wi.creates || wi.creates.length === 0) continue; // exempt
     for (const p of wi.creates) {
@@ -1384,7 +1421,7 @@ export function collectMissingDeliveries(
       }
     }
   }
-  return missing;
+  return { indeterminate: false, missing };
 }
 
 type ShellGateResult = { passed: boolean; errored: boolean; stderr: string };

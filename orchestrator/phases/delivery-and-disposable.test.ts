@@ -244,12 +244,13 @@ function createsScrubbed(s: string): string {
   return s.trimEnd();
 }
 
-test('collectMissingDeliveries: all declared creates[] present in diff → returns []', () => {
+test('collectMissingDeliveries: all declared creates[] present in diff → no missing', () => {
   const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness(['pkg/resource.go', 'pkg/resource_test.go']);
   try {
     writeWI(workItemsDir, 'WI-1', ['pkg/resource.go', 'pkg/resource_test.go']);
-    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
-    assert.deepEqual(missing, [], `expected no missing deliveries, got ${JSON.stringify(missing)}`);
+    const result = collectMissingDeliveries(worktreePath, workItemsDir);
+    if (result.indeterminate) throw new Error(`unexpected indeterminate: ${result.reason}`);
+    assert.deepEqual(result.missing, [], `expected no missing deliveries, got ${JSON.stringify(result.missing)}`);
   } finally {
     cleanup();
   }
@@ -260,10 +261,11 @@ test('collectMissingDeliveries: a creates[] path absent from diff → returns it
   const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness(['pkg/resource.go']);
   try {
     writeWI(workItemsDir, 'WI-1', ['pkg/resource.go', 'pkg/resource_test.go']);
-    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
-    assert.equal(missing.length, 1, `expected 1 missing, got ${JSON.stringify(missing)}`);
-    assert.equal(missing[0]?.work_item_id, 'WI-1');
-    assert.equal(missing[0]?.path, 'pkg/resource_test.go');
+    const result = collectMissingDeliveries(worktreePath, workItemsDir);
+    if (result.indeterminate) throw new Error(`unexpected indeterminate: ${result.reason}`);
+    assert.equal(result.missing.length, 1, `expected 1 missing, got ${JSON.stringify(result.missing)}`);
+    assert.equal(result.missing[0]?.work_item_id, 'WI-1');
+    assert.equal(result.missing[0]?.path, 'pkg/resource_test.go');
   } finally {
     cleanup();
   }
@@ -274,10 +276,28 @@ test('collectMissingDeliveries: WI with empty creates is exempt', () => {
   const { worktreePath, workItemsDir, cleanup } = missingDeliveryHarness([]);
   try {
     writeWI(workItemsDir, 'WI-1', []); // no creates
-    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
-    assert.deepEqual(missing, [], 'WI with no creates should not be flagged');
+    const result = collectMissingDeliveries(worktreePath, workItemsDir);
+    if (result.indeterminate) throw new Error(`unexpected indeterminate: ${result.reason}`);
+    assert.deepEqual(result.missing, [], 'WI with no creates should not be flagged');
   } finally {
     cleanup();
+  }
+});
+
+// re-review #2: the delivery check is the LAST backstop for a hollow PR, so it
+// must fail CLOSED — an uncomputable check (non-git worktree / no base branch)
+// returns `indeterminate`, which the unifier gate treats as a block, NOT the old
+// fail-open `[]` that silently let a possibly-incomplete delivery through.
+test('collectMissingDeliveries: fails CLOSED (indeterminate) when the base branch cannot be determined', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-no-git-'));
+  const wiDir = join(dir, '.forge', 'work-items');
+  mkdirSync(wiDir, { recursive: true });
+  try {
+    const result = collectMissingDeliveries(dir, wiDir); // not a git repo → cannot verify
+    assert.equal(result.indeterminate, true, 'a non-git worktree must be indeterminate, not silently empty');
+    if (result.indeterminate) assert.match(result.reason, /cannot verify delivery/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -334,10 +354,11 @@ test('collectMissingDeliveries: multiple WIs — only the one with missing paths
   try {
     writeWI(workItemsDir, 'WI-1', ['pkg/impl.go']);          // present → ok
     writeWI(workItemsDir, 'WI-2', ['pkg/impl_test.go']);     // absent → missing
-    const missing = collectMissingDeliveries(worktreePath, workItemsDir);
-    assert.equal(missing.length, 1);
-    assert.equal(missing[0]?.work_item_id, 'WI-2');
-    assert.equal(missing[0]?.path, 'pkg/impl_test.go');
+    const result = collectMissingDeliveries(worktreePath, workItemsDir);
+    if (result.indeterminate) throw new Error(`unexpected indeterminate: ${result.reason}`);
+    assert.equal(result.missing.length, 1);
+    assert.equal(result.missing[0]?.work_item_id, 'WI-2');
+    assert.equal(result.missing[0]?.path, 'pkg/impl_test.go');
   } finally {
     cleanup();
   }
