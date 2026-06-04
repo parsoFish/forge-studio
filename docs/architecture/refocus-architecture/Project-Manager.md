@@ -1,8 +1,8 @@
 # Project Manager
 
 > **Intent.** The autonomous phase that performs forge's **single decomposition**: it
-> breaks each coarse capability-feature into **right-sized, outcome-defined work items**
-> arranged in a dependency DAG so independent work can run in parallel.
+> decomposes the initiative body's GWT ACs directly into **right-sized, outcome-defined
+> work items** arranged in a dependency DAG so independent work can run in parallel.
 >
 > **Type:** autonomous (never asks the operator; infers and proceeds).
 > **Realized via:** one SDK agent invocation
@@ -31,7 +31,7 @@
 **Consumes:** `_queue/in-flight/<id>.md` (the manifest body: vision + GWT ACs + budgets);
 the project worktree at HEAD; brain themes; a language-detected gate recipe.
 **Produces:** `<worktree>/.forge/work-items/WI-*.md` (ADR 015 schema), `_graph.md`
-(dependency view), `_coverage.md` (feature→WI telemetry); PM phase events.
+(dependency view), `_decomposition.md` (AC→WI telemetry); PM phase events.
 
 ## Relationships
 

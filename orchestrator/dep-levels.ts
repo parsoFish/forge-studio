@@ -8,7 +8,7 @@
  * back-edge resolves to level 0) so the function is total — never recurses
  * forever, never throws.
  *
- * Extracted out of `cli/architect-plan.ts`'s PLAN.html feature-graph render so
+ * Extracted out of `cli/architect-plan.ts`'s PLAN.html dependency-graph render so
  * the CLI and any other server-side caller share ONE implementation. The
  * forge-ui client mirrors this in `forge-ui/lib/dep-layout.ts` (forge-ui is a
  * hard runtime boundary that cannot import orchestrator code — same mirror

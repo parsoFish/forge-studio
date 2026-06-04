@@ -125,10 +125,10 @@ function hasErrorBetween(events: readonly EventLogEntry[], afterIdx: number, bef
 }
 
 /**
- * Roll a set of per-WI statuses up to a per-feature status. Operator
- * note 2026-05-25: failures should not propagate across siblings —
- * features and the dev-loop phase reflect the worst-case state of
- * their own work items only.
+ * Roll a set of per-WI statuses up to an initiative/dev-loop status.
+ * Operator note 2026-05-25: failures should not propagate across
+ * siblings — the initiative and the dev-loop phase reflect the
+ * worst-case state of their own work items only.
  *
  *   - all WIs complete             → 'complete' (green)
  *   - any failed (terminal red)    → 'failed'   (red — cycle dead)

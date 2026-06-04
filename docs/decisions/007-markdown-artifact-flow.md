@@ -14,7 +14,15 @@ V1 represented work as a mix of TypeScript objects, JSON state files, and markdo
 **All inter-phase data is markdown** with optional YAML frontmatter for structured metadata. The flow:
 
 ```
-Roadmap (markdown) ──► Initiative manifest (markdown + frontmatter) ──► Feature spec (markdown) ──► Work item spec (markdown) ──► PR description (markdown) ──► Retro (markdown)
+Roadmap (markdown) ──► Initiative manifest (markdown + frontmatter) ──► Work item spec (markdown) ──► PR description (markdown) ──► Retro (markdown)
+```
+
+## Amendment 2026-06-04 — feature layer removed
+
+The intermediate **Feature spec** node is gone. The architect now emits initiatives whose markdown body carries vision + Given/When/Then acceptance criteria directly (no `features[]` list), and the PM decomposes those ACs straight into work items. The flow is now:
+
+```
+Roadmap ──► Initiative manifest ──► Work item spec ──► PR description ──► Retro
 ```
 
 Every artifact:

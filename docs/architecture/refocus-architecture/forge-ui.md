@@ -16,7 +16,7 @@
 - Be the only place the operator works: submit ideas, answer the architect interview,
   approve/revise the PLAN gate, approve/send-back review, answer reflection — all in-UI.
 - Visualise the per-project roadmap (topological dependency spine) and the **live hex
-  pipeline** (phase → feature → WI hexes with status/cost/tokens, tool bursts, reasoning
+  pipeline** (phase hexes → WI hexes with status/cost/tokens, tool bursts, reasoning
   bubbles) from the event stream; drill into any hex for definition + scoped activity log.
 - Drive scheduler lifecycle (start/pause/resume/stop) from the dashboard.
 - Mirror every load-bearing state to `data-*` attributes (**DOM-as-metrics**) so headless

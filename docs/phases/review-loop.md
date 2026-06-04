@@ -42,14 +42,15 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
     and **reflection fires**.
   - **Not merged / send-back-cap-exhausted** → manifest moves
     `in-flight/ → ready-for-review/`, flagged; reflection is skipped.
-- **Send-back:** the operator writes `verdict: send-back` ACs (via
-  `forge review <id>`) *or* comments on the PR; review-Ralph reads the
-  ACs from `fix_plan.md` next iteration and re-prepares. Cap: 2 rounds.
+- **Send-back:** the operator works the **`/review/<cycleId>`** UI screen
+  (the sole review human-moment, [ADR 023](../decisions/023-ui-sole-operator-surface.md))
+  and either approves or sends back ACs; send-back writes a
+  `verdict-response.md` that review-Ralph reads into `fix_plan.md` the next
+  iteration and re-prepares. Cap: 2 rounds.
 
 ## Skills
 
 - [`skills/developer-unifier/SKILL.md`](../../skills/developer-unifier/SKILL.md) — the unifier sub-phase that owns the review-prep iteration (post-S4 collapse; the dedicated `skills/reviewer/` was archived 2026-05-23).
-- [`orchestrator/review-router.ts`](../../orchestrator/review-router.ts) — non-LLM PR-comment poller that routes operator verdicts back into `fix_plan.md`.
 
 ## Success signals
 
@@ -94,7 +95,10 @@ merged cycles.
   creation point is removed.
 - **Verdict via PR comments** (`pr-verdict.ts:makePrCommentVerdict`),
   with the file-verdict provider as a fallback when no PR can be created
-  (no remote / gh down) — never strands.
+  (no remote / gh down) — never strands. *(Historical — [ADR 023](../decisions/023-ui-sole-operator-surface.md)
+  retired the PR-comment + CLI verdict ingress; `pr-verdict.ts` is deleted and
+  the verdict now arrives solely from the `/review/<cycleId>` UI screen as a
+  `verdict-response.md`.)*
 - **P2 mechanical integrity gate:** a WI marked `complete` whose declared
   `files_in_scope` are entirely absent from the branch diff auto-sends-
   back into the loop WITHOUT consuming a human verdict round

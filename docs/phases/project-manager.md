@@ -26,7 +26,7 @@ Four optional fields tighten the dev-loop signal on larger initiatives. All four
 | Field | Type | Purpose |
 |---|---|---|
 | `quality_gate_cmd` | `string[]` | Per-WI gate command override (e.g. `["npm","test","--","tests/x.test.ts"]`). Eliminates the trivially-green pathology on initiatives where the whole-project gate would pass without the WI's work. |
-| `non_goals` | `string[]` | Explicit out-of-scope items pulled forward from the manifest's per-feature `non_goals`. Rescues over-eager dev-loop. |
+| `non_goals` | `string[]` | Explicit out-of-scope items pulled forward from the initiative body's non-goals. Rescues over-eager dev-loop. |
 | `verification_artifact` | `string` | Path the dev-loop must produce that the gate exercises. Must appear in `files_in_scope`. |
 | `creates` | `string[]` | Structured marker for files this WI creates from scratch. Subset of `files_in_scope`. Bench's `one_creator_per_file` + `files_real_or_explicitly_new` consume this. |
 

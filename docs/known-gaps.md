@@ -27,7 +27,14 @@ resume-from-unifier path, [ADR 019](./decisions/019-cycle-resume-from-unifier.md
 
 ---
 
-## 2026-05-31 — architect/PM decomposition boundary is under-specified (the breakdown can happen twice)
+## 2026-05-31 — architect/PM decomposition boundary is under-specified (the breakdown can happen twice) — ✅ RESOLVED 2026-06-04 (R1)
+
+**Resolved (R1):** the feature layer was removed entirely. The architect emits
+initiatives whose body carries Given/When/Then ACs directly (no `features[]`),
+and the PM decomposes those ACs straight into right-sized work items — the
+breakdown now happens exactly once, at the PM. The "breakdown can happen twice"
+smell is structurally impossible without an intermediate feature tier. Original
+finding below for the record.
 
 Surfaced by the operator watching the release_definition dogfood cycle. The
 intended hierarchy is **feature → WI → file** (`skills/architect/SKILL.md` §type:
@@ -60,8 +67,11 @@ decision can be specified at both levels too.
   chunking — i.e. the PM stops being a second decomposition pass.
   Either way: name the authoritative level for WI-sizing + the gate decision so it
   is decided exactly once.
-- **Evidence:** `skills/architect/SKILL.md` (feature → WI → file; per-feature C4
-  fields), `skills/project-manager/SKILL.md` (decompose each feature → WIs),
+- **Evidence:** R1 removal recorded in
+  [ADR 015 amendment](./decisions/015-work-item-format.md#amendment-2026-06-04--feature_id-field-removed)
+  + [ADR 007 amendment](./decisions/007-markdown-artifact-flow.md#amendment-2026-06-04--feature-layer-removed);
+  `skills/architect/SKILL.md` + `skills/project-manager/SKILL.md` (now direct-AC
+  decomposition, no feature tier). Original incident:
   `_logs/2026-05-31T10-15-32_INIT-2026-05-31-release-definition-unit-tests/`
   (architect FEAT-1/2 titled WI-1/WI-2 → PM WI-1/WI-2, 1:1).
 

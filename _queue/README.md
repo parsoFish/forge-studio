@@ -38,13 +38,8 @@ cost_budget_usd: 25.00       # initiative-level cap
 phase: pending               # updated by orchestrator: pending | project-manager-complete | developer-complete | review-prep-complete
 iteration: 0                 # updated by Ralph each iteration
 worktree_path:               # set by scheduler on claim
-features:
-  - feature_id: FEAT-1
-    title: short title
-    depends_on: []
-  - feature_id: FEAT-2
-    title: short title
-    depends_on: [FEAT-1]
+# No features[] block — the initiative body's Given/When/Then ACs plus
+# any initiative-level depends_on carry the intent the PM decomposes.
 ---
 
 # <Initiative title>

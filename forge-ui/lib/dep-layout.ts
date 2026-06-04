@@ -1,12 +1,12 @@
 /**
  * Topological-level layout — forge-ui mirror of `orchestrator/dep-levels.ts`
- * (the server-side SSOT that `cli/architect-plan.ts`'s PLAN.html feature graph
- * uses). forge-ui is a hard runtime boundary that cannot import orchestrator
+ * (the server-side SSOT that `cli/architect-plan.ts`'s PLAN.html dependency
+ * graph uses). forge-ui is a hard runtime boundary that cannot import orchestrator
  * code, so this is a byte-for-byte algorithm mirror — same convention as
  * `forge-ui/lib/phases.ts` ↔ `orchestrator/logging.ts`. Keep the two in sync.
  *
- * Drives the per-project roadmap spine (Feature #10): the same level-by-topo
- * algorithm applied to initiatives (INIT-ids), features, or work items.
+ * Drives the per-project roadmap spine: the same level-by-topo
+ * algorithm applied to initiatives (INIT-ids) or work items (WI-ids).
  *
  * `topoLevels(items, depsOf)` assigns each item a level:
  *   - level 0   = no (resolvable) dependencies — a spine root
@@ -18,7 +18,7 @@
  * so the function is total — it never recurses forever and never throws.
  *
  * Pure + synchronous so it is unit-testable without any UI tree, and reusable
- * for features (FEAT-ids), work items (WI-ids), or initiatives (INIT-ids).
+ * for work items (WI-ids) or initiatives (INIT-ids).
  */
 
 export type TopoLevelResult<T> = {

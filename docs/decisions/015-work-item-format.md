@@ -56,8 +56,8 @@ graph TD
 ```yaml
 ---
 work_item_id: WI-3                              # /^WI-\d+$/, unique within initiative
-feature_id: FEAT-2                              # /^FEAT-\d+$/, must exist in initiative manifest
-initiative_id: INIT-2026-05-08-add-oauth        # matches manifest's initiative_id
+feature_id: FEAT-2                              # (removed 2026-06-04 — R1; see amendment) was /^FEAT-\d+$/, must exist in initiative manifest
+initiative_id: INIT-2026-05-08-add-oauth        # REQUIRED parent ref; matches manifest's initiative_id
 status: pending                                 # pending | in-progress | complete | failed
 depends_on:                                     # array of WI-ids; must form a DAG
   - WI-1
@@ -77,7 +77,7 @@ estimated_iterations: 3                         # int > 0; soft hint to the Ralp
 
 **Validation rules** (enforced by `orchestrator/work-item.ts:validateWorkItem`):
 
-- `work_item_id`, `feature_id`, `initiative_id` match their respective regexes.
+- `work_item_id`, ~~`feature_id`~~ (removed 2026-06-04 — R1; see amendment), `initiative_id` match their respective regexes. `initiative_id` is now the required parent ref.
 - `status` ∈ the four-value enum above. Default `pending` on emission.
 - `depends_on` references resolve within the same initiative's WI set. Cycles rejected (DFS three-color check, same pattern as `manifest.ts:detectCycle`).
 - `acceptance_criteria` has ≥ 1 entry; each entry has non-empty `given`, `when`, `then` strings.

@@ -187,11 +187,14 @@ sections were merged into a single hex pipeline):
   cards: `[data-cycle-id][data-cycle-initiative-id][data-cycle-status][data-cycle-project][data-cycle-active]`.
 - `[data-section="pipeline-tree"]` — the cascading hex view (phases
   on top, WIs branching directly off the dev-loop hex) hosted by
-  `[data-component="agent-hex-canvas"]`.
-- *(retired, ADR 020 cleanup)* the inline review verdict box
-  (`[data-section="verdict-form"]` / `[data-component="verdict-form"]`) was
-  removed. The review human moment runs on the `/review/<cycleId>` UI screen
-  (approve / send-back), or by merging the PR in GitHub.
+  `[data-component="agent-graph"]`.
+- *(ADR 020 cleanup)* the **inline dashboard** verdict box was retired —
+  the review human moment runs on the `/review/<cycleId>` UI screen (approve /
+  send-back), or by merging the PR in GitHub. The verdict form itself is **alive
+  there**: `[data-component="verdict-form"]` (ReviewVerdictForm.tsx) carries
+  `data-form-state` (`editing | submitting | submitted`) + `data-form-kind`
+  (`approve | send-back`) + `data-initiative-id` + `data-ac-count`, and the
+  harness depends on it.
 - `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
   the primary dashboard, mounted above the cycles tab. Compact by design — the
   heavy interview + PLAN-gate UI lives on the dedicated screen. Carries
@@ -215,7 +218,7 @@ sections were merged into a single hex pipeline):
 - Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
 - Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd][data-phase-index]`.
 - WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps]`.
-- Artifact badges overlaid on the canvas: `[data-overlay="plan-badge"]` (under architect), `[data-overlay="demo-badge"]` (under review-loop).
+- Canvas panel overlays: `[data-component="cost-panel"]` (CostPanel) + the FileHeatmap.
 - Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
 - Components: `[data-component="scheduler-banner"][data-banner-state]`,
   `[data-component="toasts"][data-toast-count]`.

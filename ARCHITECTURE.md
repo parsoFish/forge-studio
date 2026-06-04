@@ -124,19 +124,19 @@ operator ─(UI only)─► ① architect ─INIT-*.md─► [orchestrator: spaw
 ### Artifact flow
 
 ```
-Roadmap ──► Initiative ──► Feature ──► Work item ──┐
-                                                     │
-                                                     ▼
-                                          (developer loop iterates)
-                                                     │
-                                                     ▼
-                                              Review-ready PR
+Roadmap ──► Initiative ──► Work item ──┐
+                                         │
+                                         ▼
+                              (developer loop iterates)
+                                         │
+                                         ▼
+                                  Review-ready PR
 ```
 
 ### Branch flow
 
 ```
-main ◄── (review loop merges) ──── initiative branch ◄── feature branches
+main ◄── (review loop merges) ──── initiative branch ◄── per-work-item branches
 ```
 
 ## The phases
@@ -166,7 +166,7 @@ The brain is itself a small set of agents (Claude Code skills):
 
 The architect is **a Claude Code skill the user invokes during ideation sessions**. It is not a hand-rolled subprocess.
 
-Responsibility: turn ideas + existing roadmap + brain knowledge into **initiatives** — coherent collections of features that move a project to a desired state.
+Responsibility: turn ideas + existing roadmap + brain knowledge into **initiatives** — coherent units of work, each carrying Given/When/Then acceptance criteria in its body, that move a project to a desired state.
 
 Critically, the architect uses the **LLM Council pattern** ([`skills/architect-llm-council/`](./skills/architect-llm-council/)) — a chain of perspectives (CEO, eng, design, DX) that auto-resolves mechanical questions and only escalates the taste decisions. Inspired by gstack's `/autoplan`.
 
@@ -187,7 +187,7 @@ of the `_queue/` manifests + their `depends_on_initiatives` chain (see
 
 ### 3. Project Manager *(unattended)*
 
-Responsibility: break initiative features into **work items** with explicit dependencies and acceptance criteria.
+Responsibility: decompose the initiative body's Given-When-Then acceptance criteria directly into **work items** with explicit dependencies and acceptance criteria.
 
 Work items follow a **spec-driven format** designed for the agentic developer loop:
 - Atomic scope (1-3 files where possible).
@@ -215,7 +215,7 @@ loop:
 Key properties:
 - **Loop runtime is swappable** — `loops/_adapters/` is the placeholder for future hermes/aider/openhands adapters that can be A/B'd against Ralph.
 - **Parallel work** = N git worktrees × N Ralph instances, coordinated by the orchestrator's scheduler.
-- **The developer loop is *complete* for an initiative** when all work items + features have landed in the initiative branch with all checks passing.
+- **The developer loop is *complete* for an initiative** when all work items have landed in the initiative branch with all checks passing.
 - **Merge conflict handling** is part of the loop, not the orchestrator.
 
 ### 5. Review Loop *(human-in-the-loop)*
@@ -232,7 +232,7 @@ The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orche
 
 > **Note (refocus pass):** `runReviewer` has been folded into `cycle.ts` — the reviewer phase was removed as a separate phase; the unifier sub-phase owns review-prep and the PR opens inline after the delivery gate passes.
 
-**Self-contained PR (2026-05-18).** `pr.ts:embedDemoInPr` commits the demo bundle to a tracked `demo/<id>/` on the branch (before the push) and writes a visibility-aware PR body — a relative-link `DEMO.md` for **private** repos (GitHub's image proxy can't fetch private raw URLs), inline raw images for public. The operator reviews entirely from the PR; iterating via PR comments is a supported lightweight loop (pattern: `brain/cycles/themes/pr-as-sole-review-window.md`).
+**Self-contained PR.** The **unifier** writes + commits the git-tracked `demo/<initiative-id>/` bundle during its loop (so the demo lands on the branch before review). `pr.ts:embedDemoInPr` is then a **pure PR-body composer** — it appends a `## Demo` block to the PR description with branch-absolute `blob/<branch>/demo/<id>/DEMO.md` links (inlining raw images for **public** repos; GitHub's image proxy can't fetch private raw URLs), and de-duplicates any `## Demo` the unifier already wrote into the body. The operator reviews entirely from the PR; iterating via PR comments is a supported lightweight loop (pattern: `brain/cycles/themes/pr-as-sole-review-window.md`).
 
 **No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (via the `/review/<cycleId>` UI screen or directly on GitHub); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), then `alignLocalToRemote` brings the **project's working tree** forward to the merged `main` (a guarded `merge --ff-only`, **stashing/restoring any uncommitted operator state** — never a bare ref move that strands the working tree) and prunes the branch, moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
 
@@ -244,7 +244,7 @@ The review human moment is the **`/review/<cycleId>` UI screen** ([ADR 023](./do
 
 Triggered after initiative closeout. Three scopes:
 
-1. **Agentic self-reflection** — the agent reviews its own performance: digests the JSONL event log, counts iterations needed at each level (work item → feature → review → initiative), spots antipatterns.
+1. **Agentic self-reflection** — the agent reviews its own performance: digests the JSONL event log, counts iterations needed at each level (work item → review → initiative), spots antipatterns.
 2. **Agent-prompted user questions** — the agent asks the user only what it cannot resolve from established principles + brain knowledge.
 3. **Pure user feedback** — the user's free-form observations.
 

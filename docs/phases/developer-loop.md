@@ -54,7 +54,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 - **Wedged loops** — Ralph never converges. The iteration budget is the backstop (loop aborts when iterations are exhausted). A dedicated wedged-detector existed historically but was removed in Tier 2 (2026-05-25); the iteration budget is now the only no-progress backstop.
 - **Token burn on no-op iterations** — iteration budget caps this; cost budget per initiative caps it harder.
 - **Hallucinated test passes** — quality gate verification runs in the orchestrator, not the agent (carried-over v1 lesson).
-- **Merge conflicts across parallel loops** — handled by per-work-item branches off the initiative branch + orchestrator-level rebase before declaring a feature complete.
+- **Merge conflicts across parallel loops** — handled by per-work-item branches off the initiative branch + orchestrator-level rebase before declaring the initiative complete.
 
 ## TODO (post-scaffold)
 

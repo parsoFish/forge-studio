@@ -107,7 +107,9 @@ the forge UI — the structured demo and PR are surfaced there. Pick **one**:
 
 The **authoritative contract** for each moment is its skill:
 architect → [`skills/architect/SKILL.md`](./skills/architect/SKILL.md);
-review → [`skills/reviewer/SKILL.md`](./skills/reviewer/SKILL.md);
+review → [`skills/developer-unifier/SKILL.md`](./skills/developer-unifier/SKILL.md)
+(the reviewer folded into the unifier + `cycle.ts`), with the demo contract in
+[`skills/demo/SKILL.md`](./skills/demo/SKILL.md);
 reflect → [`skills/reflector/SKILL.md`](./skills/reflector/SKILL.md).
 Design of record: [`brain/cycles/themes/human-interaction-via-own-session.md`](./brain/cycles/themes/human-interaction-via-own-session.md);
 review/closure mechanics in [`docs/phases/review-loop.md`](./docs/phases/review-loop.md).

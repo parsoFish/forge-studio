@@ -71,7 +71,6 @@ function setupHarness(opts: { suffix: string }): Harness {
       'cost_budget_usd: 1.0',
       'phase: done',
       'origin: architect',
-      'features: []',
       '---',
       '',
       'body',

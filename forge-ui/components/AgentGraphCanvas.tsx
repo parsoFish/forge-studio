@@ -20,7 +20,7 @@
  * DOM-as-metrics: data-section/-component="agent-graph", data-state,
  * data-wi-count, data-active-wi-id, data-tool-node-count; phase hexes carry
  * data-phase-hex/-phase/-phase-status/-phase-cost-usd; WI hexes data-wi-id/
- * -wi-status/-wi-feature-id/-wi-deps; tool bursts data-tool-node.
+ * -wi-status/-wi-deps; tool bursts data-tool-node.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -374,7 +374,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
           onNodeClick={(_, node) => {
             // Single click path for every hex kind. Defining this handler is also
             // what makes ReactFlow set `pointer-events:all` on non-selectable,
-            // non-draggable wrappers (phase + feature hexes) — without it their
+            // non-draggable wrappers (phase hexes) — without it their
             // clicks were swallowed and only WI hexes opened the detail drawer.
             const d = node.data as Partial<HexData>;
             if (d.onSelect && d.kind && d.id) d.onSelect({ kind: d.kind, id: d.id });
@@ -396,7 +396,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         {tab === 'cost' && <CostPanel cost={cost} workItems={workItems} wiActivity={wiActivity} totals={totals} onClose={() => setTab('none')} />}
         <div style={panelOverlay(tab === 'files')}><FileHeatmap events={events} /></div>
         {/* The standalone Activity tab was removed (operator 2026-06-02): every
-            hex (phase / feature / work-item) is now clickable and opens the
+            hex (phase / work-item) is now clickable and opens the
             HexDetailDrawer with a per-hex activity stream, which supersedes a
             global activity view. */}
       </div>
@@ -449,7 +449,7 @@ type HexData = {
 
 function HexNode({ data }: NodeProps<HexData>): JSX.Element {
   // Click routing lives on the ReactFlow instance (`onNodeClick`), NOT here:
-  // phase/feature hexes are `selectable:false` + `draggable:false`, so ReactFlow
+  // phase hexes are `selectable:false` + `draggable:false`, so ReactFlow
   // gives their wrapper `pointer-events:none` and an inner-div onClick would
   // never fire (only the default-selectable WI hexes worked). A node-level
   // handler forces `pointer-events:all` on every wrapper — one uniform path.
