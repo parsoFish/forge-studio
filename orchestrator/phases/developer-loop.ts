@@ -258,6 +258,9 @@ export async function runDeveloperLoop(
     for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
       runnerError = undefined;
       try {
+        // re-review #1: captured by the gate's onRun each run; read by the
+        // runner's gateErrored predicate to stop early on a broken gate.
+        let lastGateErrored = false;
         result = await runRalph(
         {
           workItemSpecPath: specPath,
@@ -288,7 +291,7 @@ export async function runDeveloperLoop(
             return makeQualityGateFromCmd(
               input.worktreePath,
               effective,
-              (gateInfo) => emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo),
+              (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); },
               // Wave B (2026-06-04): enforce that declared output paths land.
               // If the WI declares `creates` paths those MUST appear in the
               // branch diff before the gate can pass — independently of whether
@@ -298,6 +301,9 @@ export async function runDeveloperLoop(
               { requiredPaths: wi.creates ?? [] },
             );
           })(),
+          // re-review #1: stop early if the gate command can't RUN (broken
+          // gate) rather than iterating against it and burning the budget.
+          gateErrored: () => lastGateErrored,
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
           // can aggregate iteration counts. F-23 enriches the metadata so
           // post-mortems can see what the agent actually did per iteration
@@ -700,7 +706,11 @@ function emitGateEvent(
   // work). Emit as `log` with `expected_fail: true` so the UI doesn't
   // flip the dev-loop phase to red on a normal-path event. Real
   // failures (iter >= 1 with the gate still failing) stay as `error`.
-  const isExpectedIter0Fail = !info.passed && info.iteration === 0;
+  // A gate that ERRORED (could not run — missing binary / signal) is NEVER
+  // "expected", even at iter-0: it's a broken gate, not a test outcome. Always
+  // surface it as an error with a distinct `gate.errored` message so the
+  // classifier says "fix the gate" instead of mis-reading it as a code failure.
+  const isExpectedIter0Fail = !info.passed && !info.errored && info.iteration === 0;
   logger.emit({
     initiative_id: initiativeId,
     parent_event_id: parentEventId,
@@ -710,11 +720,13 @@ function emitGateEvent(
     input_refs: [],
     output_refs: [],
     duration_ms: info.durationMs,
-    message: info.passed
-      ? 'gate.pass'
-      : isExpectedIter0Fail
-        ? 'gate.expected-fail'
-        : 'gate.fail',
+    message: info.errored
+      ? 'gate.errored'
+      : info.passed
+        ? 'gate.pass'
+        : isExpectedIter0Fail
+          ? 'gate.expected-fail'
+          : 'gate.fail',
     metadata: {
       work_item_id: workItemId,
       gate_passed: info.passed,
@@ -722,6 +734,8 @@ function emitGateEvent(
       gate_command: info.command,
       gate_stdout_tail: info.stdoutTail,
       gate_stderr_tail: info.stderrTail,
+      ...(info.errored ? { gate_errored: true } : {}),
+      ...(info.rejectReason ? { reject_reason: info.rejectReason } : {}),
       ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
       ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
     },
@@ -1177,7 +1191,8 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
   const { worktreePath, initiativeId, qualityGateCmd, demoShape, demoCommand, logger } = input;
 
   // 1. initiative_gate
-  if (!runShellGate(worktreePath, qualityGateCmd)) {
+  const initiativeGate = runShellGate(worktreePath, qualityGateCmd);
+  if (!initiativeGate.passed) {
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
@@ -1186,15 +1201,22 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       event_type: 'error',
       input_refs: [worktreePath],
       output_refs: [],
-      message: 'unifier.gate.initiative-failed',
-      metadata: { failure_class: 'dev-loop-unifier-gate-failed', command: qualityGateCmd },
+      // A gate that could not RUN is a broken gate, not a delivery failure.
+      message: initiativeGate.errored ? 'unifier.gate.errored' : 'unifier.gate.initiative-failed',
+      metadata: {
+        failure_class: initiativeGate.errored ? 'dev-loop-unifier-gate-errored' : 'dev-loop-unifier-gate-failed',
+        command: qualityGateCmd,
+        ...(initiativeGate.errored ? { gate_errored: true } : {}),
+        gate_stderr_tail: initiativeGate.stderr.slice(-2000),
+      },
     });
     return false;
   }
 
   // 2. demo_runs_clean — excused for shape "none"
   if (demoShape !== 'none' && demoCommand && demoCommand.length > 0) {
-    if (!runShellGate(worktreePath, demoCommand)) {
+    const demoGate = runShellGate(worktreePath, demoCommand);
+    if (!demoGate.passed) {
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
@@ -1203,8 +1225,13 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
         event_type: 'error',
         input_refs: [worktreePath],
         output_refs: [],
-        message: 'unifier.gate.demo-failed',
-        metadata: { failure_class: 'dev-loop-unifier-demo-failed', command: demoCommand },
+        message: demoGate.errored ? 'unifier.gate.errored' : 'unifier.gate.demo-failed',
+        metadata: {
+          failure_class: demoGate.errored ? 'dev-loop-unifier-gate-errored' : 'dev-loop-unifier-demo-failed',
+          command: demoCommand,
+          ...(demoGate.errored ? { gate_errored: true } : {}),
+          gate_stderr_tail: demoGate.stderr.slice(-2000),
+        },
       });
       return false;
     }
@@ -1360,17 +1387,25 @@ export function collectMissingDeliveries(
   return missing;
 }
 
-function runShellGate(worktreePath: string, cmd: string[]): boolean {
-  if (cmd.length === 0) return false;
+type ShellGateResult = { passed: boolean; errored: boolean; stderr: string };
+
+/**
+ * Run a unifier gate command. Distinguishes a gate that RAN and returned
+ * non-zero (test/build fail) from a gate that could NOT RUN at all (missing
+ * binary / EACCES / killed by signal) — the latter is a broken gate, not a
+ * delivery failure (re-review #1). Callers emit a distinct `gate-errored`
+ * class for the errored case and stop discarding stderr.
+ */
+function runShellGate(worktreePath: string, cmd: string[]): ShellGateResult {
+  if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, stderr: 'empty gate command' };
   const [head, ...rest] = cmd;
-  if (!head) return false;
   try {
-    execFileSync(head, rest, {
-      cwd: worktreePath,
-      stdio: 'pipe',
-    });
-    return true;
-  } catch {
-    return false;
+    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
+    return { passed: true, errored: false, stderr: '' };
+  } catch (err) {
+    const e = err as { status?: number | null; code?: string; signal?: string; message?: string; stderr?: Buffer | string };
+    const stderr = e.stderr ? (typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8')) : (e.message ?? '');
+    const errored = e.code === 'ENOENT' || e.code === 'EACCES' || (!!e.signal && (e.status === null || e.status === undefined));
+    return { passed: false, errored, stderr };
   }
 }

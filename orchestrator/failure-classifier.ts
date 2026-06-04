@@ -39,6 +39,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let agentThrew = false, devLoopTotalFailure = false;
   let unifierNoDemo = false, unifierNotPassed = false, reviewFailed = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
+  let gateErrored = false;
 
   for (const e of events) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -63,6 +64,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
       if (blob.includes('cannot find module') || blob.includes('module not found')) { worktreeNoDeps = true; ev(e); }
     }
+    // re-review #1/#5: a gate that could not RUN (missing binary / EACCES /
+    // killed) is a BROKEN GATE, not a test or code failure. Distinct terminal
+    // so the operator fixes the quality_gate_cmd and the reflector isn't
+    // mis-trained into "the code was wrong". Covers per-WI (gate.errored) and
+    // unifier (unifier.gate.errored) paths via the gate_errored metadata flag.
+    if (md.gate_errored === true || msg === 'gate.errored' || msg === 'unifier.gate.errored') { gateErrored = true; ev(e); }
     if (e.event_type === 'error') {
       const blob = (msg + ' ' + JSON.stringify(md)).toLowerCase();
       // Transient API-pressure signatures: rate limits, usage limits, overload,
@@ -92,6 +99,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   }
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
+  if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);

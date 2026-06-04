@@ -162,3 +162,36 @@ test('Wave B: gate passes + empty branch (no prior commits) → gate-too-loose, 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// re-review #1: a gate that could not RUN (broken command) stops the loop EARLY
+// with `gate-errored` instead of iterating the budget against an unrunnable gate.
+test('re-review #1: gate fails + gateErrored() ⇒ gate-errored, status failed, 0 iterations', async () => {
+  const dir = setupEmptyBranchRepo();
+  let agentRuns = 0;
+  try {
+    const workItemPath = join(dir, 'WI-broken-gate.md');
+    writeFileSync(workItemPath, '# WI: broken gate\n\nThe gate command cannot run.\n');
+    mkdirSync(join(dir, 'loops', 'ralph'), { recursive: true });
+
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 5, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-broken-gate',
+      initiativeId: 'INIT-bg',
+      qualityGate: () => false,          // gate "fails" ...
+      gateErrored: () => true,           // ... because it could not RUN
+      failOnHollowIter0Gate: true,
+    };
+
+    const result = await run(input, async () => { agentRuns++; return { filesChanged: [], costUsd: 0 }; });
+
+    assert.equal(result.stop_reason, 'gate-errored', `expected gate-errored, got ${result.stop_reason}`);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.iterations, 0, 'must short-circuit before any agent iteration');
+    assert.equal(agentRuns, 0, 'the agent must not be invoked against a broken gate');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -67,6 +67,15 @@ export type LoopInput = {
    * DEMO.md.
    */
   failOnHollowIter0Gate?: boolean;
+  /**
+   * 2026-06-05 (re-review #1): predicate returning whether the LAST gate run
+   * could not RUN (missing binary / EACCES / killed by signal), as opposed to
+   * running and returning non-zero. When true the runner stops EARLY with
+   * `gate-errored` rather than iterating against an unrunnable gate (the agent
+   * cannot make a broken command pass, so iterating only burns the budget).
+   * The developer-loop wires this to the captured GateRunInfo.errored.
+   */
+  gateErrored?: () => boolean;
 };
 
 /**
@@ -205,6 +214,13 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
         // Hollow gate — gate passes on a clean branch with no agent work.
         return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath);
       }
+      // re-review #1: the gate FAILED at iter-0 — but did it fail because the
+      // tests failed (expected: the agent will write them), or because the gate
+      // command could not RUN? A broken gate errors every iteration; iterating
+      // only burns the budget and then mis-reports as a code failure. Stop now.
+      if (input.gateErrored?.()) {
+        return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath);
+      }
     }
 
     const conditionsForThisCheck =
@@ -214,6 +230,11 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     const stop = await checkStopConditions(state, conditionsForThisCheck, qualityGate);
     if (stop.stop) {
       return finalize(state, startedAt, stop.condition, agentMdPath, fixPlanPath);
+    }
+    // A gate that broke mid-run (binary vanished / OOM-killed) is also
+    // unrunnable — don't keep iterating against it.
+    if (input.gateErrored?.()) {
+      return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath);
     }
 
     state.iteration += 1;

@@ -20,7 +20,12 @@ export type StopCondition =
   // 2026-06-04 (Wave B): synthetic condition the runner emits on iter-0
   // when the gate passes AND the branch already has commits vs base —
   // a sibling WI delivered this WI's work ahead of us. Status: complete.
-  | { kind: 'already-complete'; reason: string };
+  | { kind: 'already-complete'; reason: string }
+  // 2026-06-05 (re-review #1): synthesised by the runner inline when the gate
+  // COMMAND could not run (missing binary / EACCES / killed). Status: failed —
+  // a broken gate, distinct from "tests failed". The runner stops early rather
+  // than iterating against an unrunnable command.
+  | { kind: 'gate-errored'; reason: string };
 
 export type LoopState = {
   worktreePath: string;
@@ -90,6 +95,11 @@ async function checkOne(
       // (gate passes + branch already has commits → sibling delivered).
       // Never fired from the per-iteration condition loop.
       return { stop: false };
+
+    case 'gate-errored':
+      // Synthesised by the runner inline when the gate command can't run.
+      // Never fired from the per-iteration condition loop.
+      return { stop: false };
   }
 }
 
@@ -113,7 +123,16 @@ export type GateRunInfo = {
    * rejected the run. Empty when the gate's outcome was determined by exit
    * code alone (the pre-tightening behaviour).
    */
-  rejectReason?: 'no-work-indicator' | 'required-paths-missing';
+  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored';
+  /**
+   * Set when the gate command itself could NOT RUN (missing binary, EACCES,
+   * killed by signal) — a BROKEN GATE, categorically different from a test
+   * failure. The emitter logs a distinct `gate.errored` event and the
+   * failure-classifier surfaces it as a "fix the gate, not the code" terminal,
+   * so the reflector is not mis-trained and the WI doesn't burn its budget
+   * iterating against an unrunnable command.
+   */
+  errored?: boolean;
   /**
    * The Ralph iteration this gate ran in. iter-0 is the sharp-gate
    * must-fail check that runs BEFORE the agent has done any work; a
@@ -260,21 +279,48 @@ function runGateCapturing(
   let exitCode = 0;
   let stdout = '';
   let stderr = '';
+  let errored = false;
+  // Tightening / error reason — only relevant when exit-code already said "pass"
+  // (no-work / required-paths) OR when the command itself could not run (errored).
+  let rejectReason: GateRunInfo['rejectReason'];
   try {
     const out = execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
     stdout = out.toString('utf8');
     passed = true;
   } catch (err) {
-    const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
-    exitCode = typeof e.status === 'number' ? e.status : 1;
+    const e = err as { status?: number | null; code?: string; signal?: string; message?: string; stdout?: Buffer | string; stderr?: Buffer | string };
     if (e.stdout) stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout.toString('utf8');
     if (e.stderr) stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8');
     passed = false;
+    // Gate ERROR vs test FAIL (re-review #1). The command could not be EXECUTED
+    // as intended — a missing binary (ENOENT), permission error (EACCES), or a
+    // kill signal (no exit status) — as opposed to a test runner that ran and
+    // returned non-zero. A broken gate is UNFIXABLE by the agent (the gate cmd
+    // is fixed by the PM), so iterating burns the budget and then fails the
+    // cycle as if the CODE were wrong, mis-training the reflector. Surface it as
+    // a distinct state so the classifier says "fix the gate", not "tests failed".
+    const spawnFailed = e.code === 'ENOENT' || e.code === 'EACCES';
+    const killedBySignal = !!e.signal && (e.status === null || e.status === undefined);
+    if (spawnFailed || killedBySignal) {
+      errored = true;
+      exitCode = -4; // synthetic — gate could not run (distinct from a real non-zero exit)
+      rejectReason = 'gate-errored';
+      const why = spawnFailed
+        ? `the gate command could not be executed (${e.code}: \`${head}\` not found or not executable)`
+        : `the gate command was killed by signal ${e.signal} before returning an exit code`;
+      stderr =
+        (stderr ? stderr + (stderr.endsWith('\n') ? '' : '\n') : '') +
+        `[forge gate-errored] ${why}.\n` +
+        `  This is a BROKEN GATE, not a test failure — the agent cannot make a non-runnable command pass. ` +
+        `Fix the work item's quality_gate_cmd (is the runner installed? is the path/binary correct?), then re-run.` +
+        (e.message ? `\n  spawn error: ${e.message}` : '');
+    } else {
+      exitCode = typeof e.status === 'number' ? e.status : 1;
+    }
   }
 
   // Tightening: only relevant when exit-code already said "pass". A non-zero
   // exit is a clear fail regardless of indicators / paths.
-  let rejectReason: GateRunInfo['rejectReason'];
   if (passed) {
     // 1. No-work indicator scan.
     const indicators =
@@ -340,6 +386,7 @@ function runGateCapturing(
     stderrTail: tail(stderr, GATE_OUTPUT_MAX),
     command,
     ...(rejectReason ? { rejectReason } : {}),
+    ...(errored ? { errored } : {}),
     iteration,
   });
   return passed;

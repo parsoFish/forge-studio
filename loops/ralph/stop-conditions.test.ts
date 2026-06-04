@@ -44,6 +44,41 @@ test('makeQualityGateFromCmd: returns false when binary is missing', () => {
   }
 });
 
+// re-review #1: a gate that could not RUN (missing binary) is flagged as
+// `errored` with the synthetic -4 exit + `gate-errored` reason — distinct from
+// a test that RAN and returned non-zero (which must NOT be errored).
+test('makeQualityGateFromCmd: a missing binary is reported as a gate ERROR, not a test fail', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(dir, ['this-binary-definitely-does-not-exist-99999'], (i) => { info = i; });
+    assert.equal(gate({ iteration: 2 }), false);
+    assert.ok(info, 'onRun must fire');
+    assert.equal(info!.errored, true, 'missing binary ⇒ errored');
+    assert.equal(info!.exitCode, -4, 'synthetic gate-errored exit code');
+    assert.equal(info!.rejectReason, 'gate-errored');
+    assert.match(info!.stderrTail, /BROKEN GATE/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: a test that RAN and exited non-zero is NOT errored', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let info: GateRunInfo | undefined;
+    // `false` exists and exits 1 — a real test-fail, not a broken gate.
+    const gate = makeQualityGateFromCmd(dir, ['false'], (i) => { info = i; });
+    assert.equal(gate({ iteration: 2 }), false);
+    assert.ok(info);
+    assert.notEqual(info!.errored, true, 'a ran-and-failed command must NOT be flagged errored');
+    assert.equal(info!.exitCode, 1);
+    assert.equal(info!.rejectReason, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('makeQualityGateFromCmd: returns false on empty command', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
   try {

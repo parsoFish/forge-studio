@@ -71,6 +71,30 @@ test('assertGreenBaseline: a red gate throws + emits dev-loop.baseline-red with 
   }
 });
 
+// re-review #1/#5: a gate that could not RUN is a BROKEN GATE terminal —
+// distinct from a test/code failure, so the operator fixes the gate and the
+// reflector is not mis-trained.
+test('classifyCycleFailure: a per-WI gate.errored event ⇒ terminal "broken gate"', () => {
+  const events = [
+    { message: 'gate.errored', event_type: 'error', phase: 'developer-loop',
+      metadata: { gate_errored: true, reject_reason: 'gate-errored', gate_exit_code: -4, gate_command: 'pytest -q' } },
+  ] as unknown as EventLogEntry[];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.match(c.reason, /BROKEN GATE|could NOT RUN/);
+});
+
+test('classifyCycleFailure: a unifier.gate.errored event ⇒ same broken-gate terminal (not a delivery fail)', () => {
+  const events = [
+    { message: 'unifier.gate.errored', event_type: 'error', phase: 'developer-loop',
+      metadata: { failure_class: 'dev-loop-unifier-gate-errored', gate_errored: true } },
+  ] as unknown as EventLogEntry[];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /BROKEN GATE|could NOT RUN/);
+});
+
 test('assertGreenBaseline: no project-level gate ⇒ skipped (not a failure)', () => {
   const h = setup(undefined);
   try {
