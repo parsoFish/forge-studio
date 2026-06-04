@@ -139,8 +139,8 @@ function writePlan(sid, round) {
     .r{color:#7ee787}</style></head>
     <body><h1>PLAN — claude-trail --compact ${round > 1 ? '<span class="r">(revised)</span>' : ''}</h1>
     <p>Operator brief: a 3-line glance view (title / verdict / cost) for claude-trail, default output unchanged.</p>
-    <div class="card"><h2>FEAT-1 renderCompact() + --compact flag</h2><p>GIVEN a cycle WHEN --compact THEN print title + verdict + total cost only.</p></div>
-    <div class="card"><h2>FEAT-2 Flag-conflict error paths</h2><p>Depends on FEAT-1. --compact errors when combined with --format json / --out / --since.</p></div></body></html>`);
+    <div class="card"><h2>AC-1 — renderCompact() + --compact flag</h2><p>GIVEN a cycle WHEN --compact THEN print title + verdict + total cost only (3 lines).</p></div>
+    <div class="card"><h2>AC-2 — flag-conflict error paths</h2><p>--compact errors when combined with --format json / --out / --since. The PM sizes the work items directly off these acceptance criteria.</p></div></body></html>`);
   writeFileSync(join(dir, 'escalations.json'), JSON.stringify([
     { id: 'esc-0', critic: 'design', question: 'What does --compact show when the cycle has no verdict yet?',
       options: [{ label: 'Placeholders', rationale: 'Keep the strict 3-line shape: "Verdict: (unknown)", "Total: $0.00".' }, { label: 'Error', rationale: 'Refuse — --compact is for completed cycles only.' }] },
@@ -163,7 +163,19 @@ function cycleEvent(phase, eventType, message, opts = {}) {
 }
 function moveManifest(from, to) {
   mkdirSync(QDIR(to), { recursive: true });
-  renameSync(join(QDIR(from), `${INIT}.md`), join(QDIR(to), `${INIT}.md`));
+  // Robust to the REAL bridge having moved the manifest out from under us — the
+  // /review send-back now does a real requeue (ui-bridge /api/verdict → runRequeue
+  // moves ready-for-review → pending, ADR 019/D1), so a hard-coded `from` ENOENTs.
+  // Find the manifest wherever it currently lives.
+  const search = [from, 'pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
+  for (const q of search) {
+    const src = join(QDIR(q), `${INIT}.md`);
+    if (existsSync(src)) {
+      if (q !== to) renameSync(src, join(QDIR(to), `${INIT}.md`));
+      return;
+    }
+  }
+  throw new Error(`moveManifest: ${INIT}.md not found in any queue dir (wanted ${from} → ${to})`);
 }
 function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
@@ -192,11 +204,11 @@ function writeReflectionQuestions() {
   mkdirSync(CYCLE_LOG, { recursive: true });
   writeFileSync(join(CYCLE_LOG, 'user-questions.json'), JSON.stringify([
     {
-      question: 'Was the 2-feature / 2-WI decomposition the right size for this initiative?',
+      question: 'Was the 2-work-item decomposition the right size for this initiative?',
       header: 'WI sizing',
       options: [
-        { label: 'Right size', description: 'Two features mapped cleanly to the work.' },
-        { label: 'Too small', description: 'Could have been a single feature.' },
+        { label: 'Right size', description: 'Two work items mapped cleanly to the acceptance criteria.' },
+        { label: 'Too small', description: 'Could have been a single work item.' },
         { label: 'Too large', description: 'Should have been split further.' },
       ],
     },
