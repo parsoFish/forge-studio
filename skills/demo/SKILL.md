@@ -146,6 +146,38 @@ collapses them gracefully when absent, but their absence means a less useful dem
 
 - **`acceptanceCriteria[]`** (optional but recommended) — the ACs the demo proves.
 
+- **`interactiveSurfaces[]`** (optional — re-review #8, Stage 0/1) — an *enhancement
+  layer* that lets the operator EXPLORE the new capability on `/review/<cycleId>`,
+  not just read about it. The static demo renders unchanged when absent. Each entry
+  is `{ kind, label, seed?, artifact?, portalUrl? }`. **Stage 0/1 kinds are
+  non-executing** (no cost, no live mutation, never a merge gate):
+  - **`portal-link`** — a deep link (`portalUrl`) to the real resource (e.g. the
+    ADO portal page for the object the change created).
+  - **`live-query`** — a button that fetches an **already-captured** artifact
+    (`artifact`: a plain filename your demo skill wrote into the bundle, served via
+    `/api/artifact/<cycleId>/<artifact>`) and renders it beside the demo — e.g. the
+    real REST response confirming the object exists. Degrades to a clear "no live
+    capture" message when the artifact is absent (a no-credentials run).
+
+  Per-shape guidance — author the surface that lets the operator confirm "what can I
+  now create": **IaC** (terraform/betterado) → `live-query` (the captured API GET of
+  the created object) + `portal-link`; **browser** → a `portal-link` to the running
+  preview; **API** → a `live-query` of the captured request/response; **CLI/library**
+  → a `portal-link` to docs + the `seed` (the new command/snippet). The executing
+  kinds (`hcl-replan`/`api-replay`/`ui-preview`/`cli-run`/`snippet-run`) are accepted
+  by the schema for forward-compatibility but render disabled until a later stage
+  wires an executor — do NOT rely on them yet.
+
+  ```json
+  "interactiveSurfaces": [
+    { "kind": "live-query", "label": "Show the live release folder (real ADO API)",
+      "artifact": "live-resource.json",
+      "portalUrl": "https://dev.azure.com/{org}/{project}/_release?_a=releases" },
+    { "kind": "portal-link", "label": "Open the folder in the Azure DevOps portal",
+      "portalUrl": "https://dev.azure.com/{org}/{project}/_release?_a=releases" }
+  ]
+  ```
+
 ### Three load-bearing disciplines
 
 - **One behavioural delta, not a tour.** Pick the single delta that is the essence

@@ -299,6 +299,38 @@ test('validateDemoModel: rejects non-array impact', () => {
   assert.ok(errs.some((e) => e.includes('impact')));
 });
 
+// Interactive review surfaces (re-review #8, Stage 0/1).
+test('validateDemoModel: a valid interactiveSurfaces array passes', () => {
+  const m = validModel();
+  m.interactiveSurfaces = [
+    { kind: 'live-query', label: 'Show the live ADO folder', artifact: 'live-resource.json', portalUrl: 'https://dev.azure.com/org/proj/_release' },
+    { kind: 'portal-link', label: 'Open the folder in the portal', portalUrl: 'https://dev.azure.com/org/proj/_release' },
+    { kind: 'hcl-replan', label: 'Re-plan this HCL', seed: 'resource "betterado_release_folder" "x" {}' },
+  ];
+  assert.deepEqual(validateDemoModel(m), []);
+});
+
+test('validateDemoModel: rejects an unknown interactive surface kind', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.interactiveSurfaces = [{ kind: 'mutate-prod', label: 'nope' }];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('interactiveSurfaces[0].kind')));
+});
+
+test('validateDemoModel: rejects a missing surface label + a path-traversing artifact', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.interactiveSurfaces = [{ kind: 'live-query', artifact: '../../etc/passwd' }];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('interactiveSurfaces[0].label')), `label error, got ${JSON.stringify(errs)}`);
+  assert.ok(errs.some((e) => e.includes('interactiveSurfaces[0].artifact')), `artifact error, got ${JSON.stringify(errs)}`);
+});
+
+test('validateDemoModel: interactiveSurfaces is optional (absent ⇒ valid)', () => {
+  assert.deepEqual(validateDemoModel(validModel()), []);
+});
+
 test('validateDemoModel: rejects invalid parity value in harness metric', () => {
   const m = validModel();
   m.checkpoints[0].kind = 'harness';

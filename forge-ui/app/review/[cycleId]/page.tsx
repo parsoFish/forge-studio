@@ -72,7 +72,7 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
             <div style={{ fontSize: 12, color: '#8b949e' }}>{cycle.project ?? '(no project)'}</div>
 
             {demo ? (
-              <DemoComparison model={demo} />
+              <DemoComparison model={demo} cycleId={cycleId} />
             ) : (
               <div style={{ border: '1px solid #21262d', borderRadius: 8, padding: '14px 18px', background: '#0b0f14', fontSize: 13, color: '#8b949e' }}>
                 No structured demo (<code>demo.json</code>) filed for this cycle yet.

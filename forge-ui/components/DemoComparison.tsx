@@ -1,6 +1,7 @@
 'use client';
 
-import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib/bridge-client';
+import { useState } from 'react';
+import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, InteractiveSurface } from '@/lib/bridge-client';
 
 /**
  * ADR 021 — renders the unifier-authored structured `demo.json` natively (the
@@ -25,7 +26,7 @@ const TEST_RESULT_COLOR: Record<string, string> = {
   skip: '#d29922',
 };
 
-export function DemoComparison({ model }: { model: DemoModel }): JSX.Element {
+export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?: string }): JSX.Element {
   return (
     <div data-section="demo-comparison" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header: title + essence */}
@@ -180,6 +181,114 @@ export function DemoComparison({ model }: { model: DemoModel }): JSX.Element {
           {model.diffStat}
         </pre>
       </details>
+
+      {/* Interactive review surfaces (re-review #8, Stage 0/1) — explore the
+          new capability, not just read about it. Renders only when the demo
+          declares them; the static demo above is unchanged when absent. */}
+      {model.interactiveSurfaces && model.interactiveSurfaces.length > 0 && (
+        <div data-section="demo-interactive" data-interactive-count={model.interactiveSurfaces.length}>
+          <SectionLabel>Try it — explore the new capability</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {model.interactiveSurfaces.map((s, i) => (
+              <InteractiveSurfaceCard key={i} surface={s} cycleId={cycleId} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EXECUTING_SURFACE_KINDS = new Set(['hcl-replan', 'api-replay', 'ui-preview', 'cli-run', 'snippet-run']);
+
+/**
+ * One interactive surface. Stage 0/1 is NON-EXECUTING: `portal-link` is a deep
+ * link; `live-query` fetches an already-captured artifact (served via the
+ * existing /api/artifact route) and renders it on demand, degrading clearly
+ * when no capture exists (e.g. a no-credentials run). Executing kinds render a
+ * disabled "coming soon" affordance. Mirrors load-bearing state to
+ * data-surface-state per the DOM-as-metrics convention.
+ */
+function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurface; cycleId?: string }): JSX.Element {
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [result, setResult] = useState<string | null>(null);
+  const isExecuting = EXECUTING_SURFACE_KINDS.has(surface.kind);
+
+  async function runLiveQuery(): Promise<void> {
+    if (!surface.artifact || !cycleId) {
+      setState('error');
+      setResult('No captured artifact is declared for this surface. Run the project demo skill with live credentials to populate it.');
+      return;
+    }
+    setState('running');
+    try {
+      const res = await fetch(`/api/artifact/${encodeURIComponent(cycleId)}/${encodeURIComponent(surface.artifact)}`);
+      if (!res.ok) {
+        setState('error');
+        setResult(`No live capture found (${res.status}). Re-run the project's demo skill with credentials to capture the real resource.`);
+        return;
+      }
+      const text = await res.text();
+      try { setResult(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResult(text); }
+      setState('done');
+    } catch (e) {
+      setState('error');
+      setResult(`Failed to load the captured artifact: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return (
+    <div
+      data-interactive-surface={surface.kind}
+      data-surface-state={state}
+      style={{ border: '1px solid #21262d', borderRadius: 8, padding: 12, background: '#0b0f14' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: '#e6edf3', fontWeight: 500 }}>{surface.label}</span>
+        {surface.portalUrl && (
+          <a
+            data-action="open-portal"
+            href={surface.portalUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12, color: '#79c0ff', textDecoration: 'none', border: '1px solid #21262d', borderRadius: 6, padding: '2px 8px' }}
+          >
+            ↗ Open in portal
+          </a>
+        )}
+        {surface.kind === 'live-query' && (
+          <button
+            data-action="run-live-query"
+            onClick={runLiveQuery}
+            disabled={state === 'running'}
+            style={{ fontSize: 12, color: '#e6edf3', background: '#1f6feb', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: state === 'running' ? 'default' : 'pointer' }}
+          >
+            {state === 'running' ? 'Querying…' : 'Show the live resource'}
+          </button>
+        )}
+        {isExecuting && (
+          <span
+            data-surface-disabled="true"
+            title="Executing surfaces (re-plan / replay / preview) arrive in a later stage"
+            style={{ fontSize: 11, color: '#8b949e', border: '1px dashed #30363d', borderRadius: 6, padding: '2px 8px' }}
+          >
+            interactive run — coming soon
+          </span>
+        )}
+      </div>
+      {surface.seed && (
+        <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, marginTop: 8, fontSize: 12, color: '#c9d1d9' }}>
+          {surface.seed}
+        </pre>
+      )}
+      {result !== null && (
+        <pre
+          data-surface-result
+          style={{ overflow: 'auto', background: '#010409', border: `1px solid ${state === 'error' ? '#f85149' : '#21262d'}`, borderRadius: 6, padding: 10, marginTop: 8, fontSize: 12, color: state === 'error' ? '#f0a4a0' : '#7ee787' }}
+        >
+          {result}
+        </pre>
+      )}
     </div>
   );
 }

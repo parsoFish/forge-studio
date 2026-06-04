@@ -309,6 +309,23 @@ export type DemoTestResultRow = {
   delta?: string;
 };
 
+/**
+ * Interactive-review surface (re-review #8). Mirrors cli/demo-model.ts
+ * InteractiveSurface. Stage 0/1 renders `portal-link` (deep link) + `live-query`
+ * (serves an already-captured artifact via /api/artifact); executing kinds are
+ * declared but rendered disabled until Stage 2+ wires an executor.
+ */
+export type InteractiveSurfaceKind =
+  | 'portal-link' | 'live-query' | 'hcl-replan' | 'api-replay' | 'ui-preview' | 'cli-run' | 'snippet-run';
+
+export type InteractiveSurface = {
+  kind: InteractiveSurfaceKind;
+  label: string;
+  seed?: string;
+  artifact?: string;
+  portalUrl?: string;
+};
+
 export type DemoModel = {
   title: string;
   essence: string;
@@ -327,6 +344,8 @@ export type DemoModel = {
   // New-capability fields (sibling agent adds to cli/demo-model.ts)
   usage_example?: string;
   impact?: string[];
+  // Interactive-review surfaces (re-review #8, Stage 0/1)
+  interactiveSurfaces?: InteractiveSurface[];
 };
 
 /** Fetch the cycle's structured demo (mirrored into _logs/<cycle>/artifacts/

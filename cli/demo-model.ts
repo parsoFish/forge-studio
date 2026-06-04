@@ -50,6 +50,45 @@ export type DemoModelCheckpoint = {
   afterVideoSrc?: string | null;
 };
 
+/**
+ * Interactive-review surface (re-review #8, Stage 0/1). A declarative affordance
+ * the operator can poke on `/review/<cycleId>` to EXPLORE the new capability —
+ * an enhancement layer on the otherwise-static demo. Authored into `demo.json`
+ * by the demo phase agent per the project's declared interactive kinds; the
+ * static demo renders unchanged when absent.
+ *
+ * Stage 0/1 kinds are NON-EXECUTING (no cost, no live mutation, never a merge
+ * gate): `portal-link` is a deep link to the real resource; `live-query` serves
+ * an ALREADY-CAPTURED artifact the project's demo skill wrote into the bundle.
+ * The executing kinds (`hcl-replan`/`api-replay`/`ui-preview`/`cli-run`/
+ * `snippet-run`) are declared for forward-compatibility (Stage 2+) but the UI
+ * renders them disabled until an executor is wired behind the bridge.
+ */
+export type InteractiveSurfaceKind =
+  | 'portal-link'
+  | 'live-query'
+  | 'hcl-replan'
+  | 'api-replay'
+  | 'ui-preview'
+  | 'cli-run'
+  | 'snippet-run';
+
+export type InteractiveSurface = {
+  kind: InteractiveSurfaceKind;
+  /** Button / section label shown to the operator. */
+  label: string;
+  /** Inspectable seed (HCL, CLI command, request body). Display-only in Stage 0/1. */
+  seed?: string;
+  /**
+   * `live-query`: the demo-bundle artifact filename (a plain filename — NO path
+   * separators) holding the already-captured live response to render on demand,
+   * served via `/api/artifact/<cycleId>/<artifact>`.
+   */
+  artifact?: string;
+  /** `portal-link`/`live-query`: deep link to the real resource (e.g. the ADO portal). */
+  portalUrl?: string;
+};
+
 export type DemoModel = {
   title: string;
   essence: string;
@@ -92,9 +131,17 @@ export type DemoModel = {
    * Optional.
    */
   impact?: string[];
+  /**
+   * Interactive-review surfaces (re-review #8, Stage 0/1). Optional enhancement
+   * layer; the static demo renders unchanged when absent.
+   */
+  interactiveSurfaces?: InteractiveSurface[];
 };
 
 const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
+const VALID_SURFACE_KINDS = new Set<InteractiveSurfaceKind>([
+  'portal-link', 'live-query', 'hcl-replan', 'api-replay', 'ui-preview', 'cli-run', 'snippet-run',
+]);
 
 /**
  * Validate an authored `demo.json`. Returns an array of human-readable errors;
@@ -178,6 +225,36 @@ export function validateDemoModel(raw: unknown): string[] {
   }
   if (m.impact !== undefined && !Array.isArray(m.impact)) {
     errors.push('impact must be an array of strings when set');
+  }
+  if (m.interactiveSurfaces !== undefined) {
+    if (!Array.isArray(m.interactiveSurfaces)) {
+      errors.push('interactiveSurfaces must be an array when set');
+    } else {
+      m.interactiveSurfaces.forEach((raw, i) => {
+        if (!raw || typeof raw !== 'object') {
+          errors.push(`interactiveSurfaces[${i}] must be an object`);
+          return;
+        }
+        const s = raw as Record<string, unknown>;
+        if (typeof s.kind !== 'string' || !VALID_SURFACE_KINDS.has(s.kind as InteractiveSurfaceKind)) {
+          errors.push(`interactiveSurfaces[${i}].kind must be one of ${[...VALID_SURFACE_KINDS].join(', ')}`);
+        }
+        if (typeof s.label !== 'string' || s.label.length === 0) {
+          errors.push(`interactiveSurfaces[${i}].label must be a non-empty string`);
+        }
+        // artifact is served via /api/artifact/<cycle>/<file> — a plain filename
+        // only (the bridge route rejects traversal, but fail at authoring too).
+        if (s.artifact !== undefined && (typeof s.artifact !== 'string' || /[\\/]|\.\./.test(s.artifact))) {
+          errors.push(`interactiveSurfaces[${i}].artifact must be a plain filename (no path separators)`);
+        }
+        if (s.portalUrl !== undefined && typeof s.portalUrl !== 'string') {
+          errors.push(`interactiveSurfaces[${i}].portalUrl must be a string`);
+        }
+        if (s.seed !== undefined && typeof s.seed !== 'string') {
+          errors.push(`interactiveSurfaces[${i}].seed must be a string`);
+        }
+      });
+    }
   }
 
   return errors;
