@@ -14,11 +14,11 @@
  *   5.  draft → review council → plan options from the council's feedback
  *   6.  on feedback, the architect reruns the last step
  *   7.  on approval → PM
- *   8.  PM plans features + work items
+ *   8.  PM decomposes the initiative's acceptance criteria directly into work items
  *   9.  developer loop progresses work items, respecting dependencies
  *   10. unifier reviews + loops to clean the output
- *   11. unifier runs the demo skill → forge-ui-themed demo page
- *   12. operator reviews; Ralph dev-loops rerun with operator input until approve
+ *   11. unifier runs the demo skill → a rich, INTERACTIVE demo page
+ *   12. operator reviews + pokes the new capability live, then sends back / approves
  *   13. on approval → reflect
  *
  * No live LLM: the architect runner's turns + the autonomous cycle are emulated
@@ -28,7 +28,8 @@
  * This is also the UI REGRESSION HARNESS (the old scripts/forge-ui-harness.mjs
  * S1–S4 checks were merged in here, 2026-05-30): alongside recording the video
  * it asserts the DOM-as-metrics invariants at each beat (status transitions,
- * ≥5 phase hexes, materialised feature/WI hexes, the per-phase cost rollup).
+ * ≥5 phase hexes, materialised WI hexes, the per-phase cost rollup, and the
+ * interactive demo surfaces).
  * Assertions are SOFT — they record into `failures[]` and log ✓/✗ so the video
  * always finishes; a non-zero exit at the end flags any regression for CI.
  *
@@ -180,20 +181,61 @@ function moveManifest(from, to) {
 function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
+  // The real captured output the `live-query` interactive surface serves — the
+  // operator runs it right on the review page to SEE what `--compact` prints
+  // (interactive review, re-review #8), not just read a metric table.
+  writeFileSync(join(artifacts, 'compact-output.txt'),
+    '# Trail — INIT-2026-06-04-demo-cycle\nVerdict: approve\nTotal: $0.24\n');
   writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
     title: `claude-trail --compact: a 3-line glance view${revision > 1 ? ' (round ' + revision + ')' : ''}`,
     essence: 'Running `claude-trail <id> --compact` now prints a terse 3-line summary (title / Verdict / Cost) instead of the full multi-section trail. Mutually exclusive with --format json / --out / --since; default output unchanged.',
     project: PROJECT, initiativeId: INIT, baseRef: 'main', changedRef: `forge/${INIT}`,
     diffStat: ' src/trail.ts                 | 18 ++++\n src/cli.ts                   | 30 ++++--\n tests/compact-flag.test.ts   | 292 +++++++++\n 3 files changed, 334 insertions(+)',
-    acceptanceCriteria: ['GIVEN a cycle WHEN `claude-trail <id> --compact` THEN stdout is exactly the title, Verdict, and Total cost (3 lines)'],
+    acceptanceCriteria: [
+      'GIVEN a cycle WHEN `claude-trail <id> --compact` THEN stdout is exactly the title, Verdict, and Total cost (3 lines)',
+      `GIVEN --compact combined with --format json WHEN the command runs THEN it exits non-zero${revision > 1 ? ' and stderr names BOTH flags (added this round on review feedback)' : ''}`,
+    ],
+    // ── Rich git-truth sections (the current demo contract — REV-4 / Wave C) ──
+    summary: {
+      bullets: [
+        'Added a `--compact` flag to `claude-trail` — a 3-line glance (title / Verdict / Cost).',
+        'Default (full) output is byte-for-byte unchanged — no regression.',
+        '`--compact` is mutually exclusive with `--format json` / `--out` / `--since` (exits non-zero).',
+      ],
+      branch: `forge/${INIT}`,
+      commitSha: 'a1b2c3d',
+    },
+    apiDiff: [
+      { name: 'claude-trail <id> --compact', change: 'added',
+        before: '(no --compact flag — only the full multi-section trail)',
+        after: '# Trail — <id>\nVerdict: approve\nTotal: $0.24' },
+      { name: 'claude-trail <id> --compact --format json', change: 'added',
+        before: '(flags combined silently — json won)',
+        after: `exit 2 — "error: --compact cannot be combined with --format json"${revision > 1 ? ' (error now names BOTH flags)' : ''}` },
+    ],
+    testEvidence: [
+      { name: 'TestCompact_PrintsThreeLines', result: 'pass' },
+      { name: 'TestCompact_DefaultOutputUnchanged', result: 'pass' },
+      { name: 'TestCompact_ConflictsWithFormatJson', result: 'pass' },
+      { name: 'TestCompact_ConflictsWithOutAndSince', result: 'pass' },
+    ],
     checkpoints: [
       { label: 'compact', kind: 'harness', caption: 'The 3-line glance matches the golden byte-for-byte',
         metrics: [
-          { label: 'compact output is 3 lines', before: 'n/a', after: 'yes', deltaPct: null, parity: 'diverged' },
+          { label: 'compact output is exactly 3 lines', before: 'n/a', after: 'yes', deltaPct: null, parity: 'match' },
           { label: 'full trail output unchanged (no regression)', before: 'yes', after: 'yes', deltaPct: null, parity: 'match' },
         ] },
-      { label: 'conflicts', kind: 'screenshot', caption: '--compact errors cleanly when combined with --format json / --out / --since',
-        beforeNote: 'No compact mode existed.', afterNote: `--compact prints title+verdict+cost; conflicting flags exit non-zero.${revision > 1 ? ' Error message now names both flags per review.' : ''}` },
+    ],
+    usage_example: '```bash\n# Glance at a finished cycle — title, verdict, cost, nothing else\nclaude-trail INIT-2026-06-04-demo-cycle --compact\n# → # Trail — INIT-2026-06-04-demo-cycle\n# → Verdict: approve\n# → Total: $0.24\n```',
+    impact: [
+      'Operators get a one-glance cycle status without scrolling the full trail.',
+      'Scriptable in CI / Slack notifications (terse, stable 3-line shape).',
+      'Composes cleanly — conflicting flags fail fast instead of silently surprising.',
+    ],
+    // ── Interactive review surfaces (re-review #8, Stage 0/1) ──
+    interactiveSurfaces: [
+      { kind: 'live-query', label: 'Show the real `--compact` output (captured)', artifact: 'compact-output.txt' },
+      { kind: 'cli-run', label: 'Re-run `claude-trail … --compact` yourself', seed: 'claude-trail INIT-2026-06-04-demo-cycle --compact' },
     ],
   }, null, 2));
 }
@@ -267,6 +309,12 @@ function check(cond, msg) {
   else { failures.push(msg); console.error(`  ✗ ${msg}`); }
 }
 async function countAtLeast(page, selector, n, msg) {
+  // Poll — these counts depend on events streaming from the bridge tail and/or a
+  // cost re-fetch (≤10s), so a one-shot read RACES the propagation (the old
+  // flakiness: WI hexes / cost intermittently read 0). Wait, then report the real count.
+  try {
+    await page.waitForFunction(({ s, k }) => document.querySelectorAll(s).length >= k, { s: selector, k: n }, { timeout: 15000 });
+  } catch { /* fall through and report the actual count */ }
   const got = await page.evaluate((s) => document.querySelectorAll(s).length, selector);
   check(got >= n, `${msg} (found ${got}, want ≥${n})`);
 }
@@ -288,9 +336,20 @@ async function maxPhaseCost(page) {
   return page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('[data-phase-hex]')]
     .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)));
 }
+/** Poll for the per-phase cost rollup to populate (fetchCost re-fetches ≤10s),
+ *  then assert — avoids the one-shot race where cost reads 0 before the fetch. */
+async function expectPhaseCost(page, msg) {
+  try {
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-phase-hex]')].some((e) => (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
+      null, { timeout: 15000 },
+    );
+  } catch { /* report the real value below */ }
+  check(await maxPhaseCost(page) > 0, msg);
+}
 /** Click the first hex matching `hexSelector` and assert the HexDetailDrawer
  *  opens with the expected kind. Guards the regression where only WI hexes were
- *  clickable (phase/feature wrappers had pointer-events:none). Closes after. */
+ *  clickable (phase-hex wrappers had pointer-events:none). Closes after. */
 async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   const el = page.locator(hexSelector).first();
   if ((await el.count()) === 0) { check(false, `${label}: no ${hexSelector} present to click`); return; }
@@ -430,6 +489,12 @@ async function main() {
     await sleep(ACT);
     await page.locator('[data-action="watch-it-build"]').click(); // natural transition → dashboard
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
+    // Explicitly SELECT our cycle so its events/cost stream into the canvas. The
+    // dashboard auto-selects snapshot.live[0], which is NOT necessarily this
+    // cycle when another cycle is already live (e.g. a real betterado cycle in
+    // the queue) — selecting our own makes the demo robust to that and forces a
+    // fetchEvents/fetchCost for THIS cycle (the WI-hex + cost-rollup source).
+    await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
     await sleep(ACT);
     await frame(page, 'step07b-to-pm', 'Step 7 — approved; "Watch it build →" lands on the dashboard, cycle live');
     // S1 + S4: the cycle is live and the pipeline spine renders for it.
@@ -502,7 +567,7 @@ async function main() {
     // S1 + S3: the cycle is reviewable and the per-phase cost rollup is live
     // (architect / PM / dev-loop have all reported cost by now).
     await expectCycleStatus(page, 'ready-for-review');
-    check(await maxPhaseCost(page) > 0, 'cost rollup: a phase hex shows cost > 0');
+    await expectPhaseCost(page, 'cost rollup: a phase hex shows cost > 0');
 
     // STEP 12 — operator reviews; Ralph dev-loops rerun with operator input until approve.
     await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click(); // natural transition → review
@@ -510,6 +575,24 @@ async function main() {
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await sleep(READ);
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
+
+    // STEP 12a — interactive review (re-review #8): the operator doesn't just READ
+    // the demo, they POKE the new capability on the review page — running the
+    // captured `--compact` output live to see exactly what it prints.
+    const hasInteractive = await page.locator('[data-section="demo-interactive"]').count() > 0;
+    check(hasInteractive, 'review page renders the interactive "Try it" surfaces');
+    if (hasInteractive) {
+      const liveQuery = page.locator('[data-interactive-surface="live-query"] [data-action="run-live-query"]');
+      if (await liveQuery.count() > 0) {
+        await liveQuery.first().click();
+        await page.waitForSelector('[data-interactive-surface="live-query"][data-surface-state="done"]', { timeout: 8000 }).catch(() => {});
+        await sleep(READ);
+        const ran = await page.locator('[data-interactive-surface="live-query"][data-surface-state="done"]').count() > 0;
+        check(ran, 'interactive: the live-query surface ran and rendered the captured output');
+        await frame(page, 'step12a-interactive', 'Step 12 — the operator runs the captured --compact output right on the review page (interactive review)');
+      }
+    }
+
     // Send back with a new acceptance criterion.
     await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();
     await page.locator('[data-component="verdict-form"] textarea').fill('Close — but the --compact + --format json error must name BOTH flags before this merges.');
@@ -587,7 +670,7 @@ async function main() {
     // S1 + S3 + S4 final: cycle done, the spine intact, total cost accrued.
     await expectCycleStatus(page, 'done');
     await countAtLeast(page, '[data-phase-hex]', 5, 'completed cycle still shows ≥5 phase hexes');
-    check(await maxPhaseCost(page) > 0, 'completed cycle shows accrued per-phase cost');
+    await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
 
     console.log('\n[e2e] journey complete.');
   } finally {
