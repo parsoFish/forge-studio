@@ -145,6 +145,14 @@ creates: [tests/x.test.ts]                                   # files this WI cre
 - [`orchestrator/manifest.ts`](../../orchestrator/manifest.ts) — manifest schema; sibling pattern for `work-item.ts`.
 - Brain themes: `spec-driven-work-items`, `design-is-the-bottleneck`, `work-item-completion-by-domain`, `markdown-artifact-flow`, `brain/projects/env-optimiser/themes/specify-driven-features`.
 
+## Amendment 2026-06-04 — feature_id field removed
+
+`feature_id` is no longer a required frontmatter field. The architect now emits **initiatives** whose markdown body carries vision + Given/When/Then acceptance criteria directly (no `features[]` list). The PM decomposes the initiative's ACs directly into outcome-sized work items. WIs key on `initiative_id` only; `feature_id` is now absent from every new WI.
+
+**Impact on existing WIs:** WIs written before this amendment that carry a `feature_id` field remain valid — the parser treats it as an unknown optional field (ignored). The validator no longer requires it.
+
+**Cross-references:** CLAUDE.md DOM-as-metrics section (feature hex mirrors removed); `forge-ui/lib/use-graph-model.ts` (feature tier removed); `forge-ui/components/AgentGraphCanvas.tsx` (no feature hex loop); ADR 015 §3 schema updated.
+
 ## Refinement 2026-05-20 (S3, batch `2026-05-20-refinement`)
 
 **Amendment** — does not replace any of §1-4. Adds §3a (optional extension fields). All four new fields (`quality_gate_cmd`, `non_goals`, `verification_artifact`, `creates`) are optional and omit-on-undefined; pre-amendment WIs round-trip byte-identically.

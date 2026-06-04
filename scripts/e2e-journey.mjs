@@ -128,9 +128,10 @@ function writePlan(sid, round) {
   writeFileSync(join(dir, 'manifests', `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
-    'origin: architect', 'features:', '  - feature_id: FEAT-1', '    title: renderCompact() + --compact flag', '    depends_on: []',
-    '  - feature_id: FEAT-2', '    title: Flag-conflict error paths', '    depends_on: [FEAT-1]', '---', '',
-    '# claude-trail --compact', '', 'GIVEN a cycle WHEN `claude-trail <id> --compact` THEN it prints the title, verdict, and total cost only.',
+    'origin: architect', '---', '',
+    '# claude-trail --compact', '',
+    'Given a cycle, when `claude-trail <id> --compact` is run, then it prints the title, verdict, and total cost only.',
+    'Given `--compact` is combined with `--format json`, when the command runs, then it exits non-zero.',
   ].join('\n'));
   writeFileSync(join(dir, 'PLAN.html'), `<!doctype html><html><head><meta charset="utf-8"><style>
     body{font:14px ui-sans-serif,system-ui;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
@@ -423,34 +424,30 @@ async function main() {
     await expectCycleStatus(page, 'in-flight');
     await countAtLeast(page, '[data-phase-hex]', 5, 'pipeline spine shows ≥5 phase hexes');
 
-    // STEP 8 — PM plans features + work items (events stream live to the pipeline).
+    // STEP 8 — PM decomposes initiative ACs directly into work items (events stream live).
     await paced([
       () => cycleEvent('project-manager', 'start', 'pm phase start'),
       () => cycleEvent('project-manager', 'tool_use', 'pm.brain-query', { metadata: { tool: 'brain-query' } }),
-      () => cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-1' } }),
-      () => cycleEvent('project-manager', 'log', 'pm.feature-decomposed', { metadata: { feature_id: 'FEAT-2' } }),
-      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1', feature_id: 'FEAT-1' } }),
-      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2', feature_id: 'FEAT-2' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1' } }),
+      () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2' } }),
       () => cycleEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.31, duration_ms: 28000, metadata: { work_item_count: 2 } }),
     ]);
     await sleep(WORK);
-    await frame(page, 'step08-pm', 'Step 8 — the PM plans 2 features + work items (the pipeline advances live)');
-    // S4: PM decomposition materialised the feature + WI tiers on the canvas.
-    await countAtLeast(page, '[data-feature-hex]', 2, 'PM materialised ≥2 feature hexes');
+    await frame(page, 'step08-pm', 'Step 8 — the PM decomposes the initiative into work items (the pipeline advances live)');
+    // PM decomposition materialised the WI tier on the canvas (no feature tier).
     await countAtLeast(page, '[data-wi-hex]', 2, 'PM materialised ≥2 WI hexes');
 
     // S5 (operator 2026-06-02): EVERY hex kind must open the HexDetailDrawer —
     // not just work items. Regression guard for the pointer-events:none bug on
-    // non-selectable phase/feature wrappers.
+    // non-selectable phase wrappers. Feature tier is gone; only phase + wi hexes exist.
     await expectHexOpensDrawer(page, '[data-phase-hex]', 'phase', 'hex-detail');
-    await expectHexOpensDrawer(page, '[data-feature-hex]', 'feature', 'hex-detail');
     await expectHexOpensDrawer(page, '[data-wi-hex]', 'wi', 'hex-detail');
-    await frame(page, 'step08b-hex-detail', 'Step 8b — every hex (phase / feature / work-item) opens the detail drawer');
+    await frame(page, 'step08b-hex-detail', 'Step 8b — every hex (phase / work-item) opens the detail drawer');
 
     // STEP 9 — developer loop progresses WIs, respecting dependencies. WI-1
-    // runs and goes GREEN (per-WI `end`); only THEN does WI-2 (depends_on
-    // FEAT-1) start. The dev-loop PHASE hex stays blue throughout (per-WI ends
-    // are non-terminal for the phase).
+    // runs and goes GREEN (per-WI `end`); only THEN does WI-2 (depends_on WI-1)
+    // start. The dev-loop PHASE hex stays blue throughout (per-WI ends are
+    // non-terminal for the phase).
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop start'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-1', tool: 'Edit' } }),
@@ -458,7 +455,7 @@ async function main() {
       () => cycleEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } }), // → WI-1 green
     ]);
     await sleep(WORK);
-    await frame(page, 'step09-dev-loop', 'Step 9 — WI-1 done (green); WI-2 (depends on FEAT-1) only now starts');
+    await frame(page, 'step09-dev-loop', 'Step 9 — WI-1 done (green); WI-2 (depends on WI-1) only now starts');
     await paced([
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
       () => cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', { iteration: 1, metadata: { work_item_id: 'WI-2' } }),

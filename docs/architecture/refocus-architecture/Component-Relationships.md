@@ -8,15 +8,18 @@
 ## 1. The spine, in one line
 
 ```
-operator ─(UI only)─▶ ① ARCHITECT ──INIT-*.md──▶ [orchestrator: claim + worktree + spawn @ tier]
-                                                        │
-        ┌───────────────────────────────────────────────┘
+operator ─(UI only)─▶ ① ARCHITECT ──INIT-*.md (GWT ACs)──▶ [orchestrator: claim + worktree + spawn @ tier]
+                                                                  │
+        ┌─────────────────────────────────────────────────────────┘
         ▼
    ② project-manager ─WI-*.md─▶ ③ developer-loop ─branch─▶ ④ unifier ─demo+PR─▶ ⑤ REVIEW ─merge─▶ closure ─▶ ⑥ REFLECT
-        └──────────────── each phase = an agent that composes skills ───────────────┘                          │
-                                                                                                                ▼
+        └──────────────── each phase = an agent that composes skills ───────────────┘                                │
+                                                                                                                      ▼
    planners (①②) + reflector (⑥) ◀── read ── BRAIN (3 scopes) ── write ──▶ reflector (⑥)
 ```
+
+Architect → PM hand-off: the initiative manifest carries vision + GWT ACs in the body;
+**no `features[]` list** — the PM decomposes ACs directly into WIs (3 levels: initiative → WI → file).
 
 Uppercase = the three **human moments** on the UI; the rest run unattended in the
 orchestrator. Every inter-phase hand-off is a **file** (markdown artifact) or a **JSONL
@@ -30,7 +33,7 @@ flowchart TB
 
     subgraph UI["forge UI — sole operator surface · ADR 023"]
       direction LR
-      AR["① Architect<br/><i>idea → coarse initiatives</i>"]
+      AR["① Architect<br/><i>idea → initiatives (GWT ACs)</i>"]
       RV["⑤ Review<br/><i>read demo · approve · merge</i>"]
       RF["⑥ Reflect<br/><i>feedback</i>"]
     end
@@ -39,7 +42,7 @@ flowchart TB
 
     subgraph PHASES["Each phase = a model-tiered AGENT that COMPOSES skills · ADR 024"]
       direction LR
-      PM["② project-manager<br/><i>features → work items + gates</i>"]
+      PM["② project-manager<br/><i>ACs → work items + gates</i>"]
       DV["③ developer-loop<br/><i>Ralph × N work items</i>"]
       UN["④ unifier<br/><i>unify · demo · PR</i>"]
       RFL["⑥ reflector"]
@@ -160,9 +163,9 @@ North star: the SKILL.md *is* the runnable source of intent, and new capabilitie
 
 | Component | Consumes (from) | Produces (to) | Reads brain | Writes brain |
 |---|---|---|---|---|
-| **Architect** | operator idea/verdict (UI); project + Brain 2/3 | `INIT-*.md` → queue | 2, 3 | — |
+| **Architect** | operator idea/verdict (UI); project + Brain 2/3 | `INIT-*.md` (vision + GWT ACs) → queue | 2, 3 | — |
 | **Orchestrator** | `INIT-*.md`; `.forge/project.json`; git/gh | `_queue/` moves; worktrees; events; PRs (via closure) | — | — |
-| **Project Manager** | `INIT-*.md` (coarse features) | `WI-*.md` + DAG | 2, 3 | — |
+| **Project Manager** | `INIT-*.md` body (GWT ACs) | `WI-*.md` + DAG | 2, 3 | — |
 | **Developer Loop** | `WI-*.md` + gates | commits on branch; `dev-loop.delivered` | 3 (advisory) | — |
 | **Unifier** | branch + WIs | `demo.json` + PR description | 3 (advisory) | — |
 | **Review/Closure** | branch + demo + operator verdict | GitHub PR; merge confirm; `done/` | — | — |
@@ -176,7 +179,7 @@ North star: the SKILL.md *is* the runnable source of intent, and new capabilitie
 Both learnings syntheses + the comparable-systems research agree: phases are reliable; the
 **seams** and the **merge boundary** are where forge breaks. The seams to keep honest:
 
-1. **Architect → PM** — one decomposition (coarse features → WIs), not two. *(locked)*
+1. **Architect → PM** — one decomposition (initiative ACs → WIs), not two. *(locked; no features[] intermediate layer)*
 2. **PM → dev-loop** — the WI is the executor's single source of intent; no re-decomposition.
 3. **dev-loop → unifier** — `dev-loop.delivered` (git diff) is completion truth; an empty
    branch must never open a PR.

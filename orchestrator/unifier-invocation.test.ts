@@ -107,7 +107,7 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
     writeFileSync(join(root, '.forge', 'manifest.md'), '# manifest');
     writeFileSync(
       join(root, '.forge', 'work-items', 'WI-1.md'),
-      '---\nwork_item_id: WI-1\nfeature_id: FEAT-1\ninitiative_id: I\nstatus: complete\ndepends_on: []\nfiles_in_scope: ["src/x.ts"]\nestimated_iterations: 1\nacceptance_criteria:\n  - given: g\n    when: w\n    then: t\n---\n# WI-1\n',
+      '---\nwork_item_id: WI-1\ninitiative_id: I\nstatus: complete\ndepends_on: []\nfiles_in_scope: ["src/x.ts"]\nestimated_iterations: 1\nquality_gate_cmd: [\'node\', \'--test\']\nacceptance_criteria:\n  - given: g\n    when: w\n    then: t\n---\n# WI-1\n',
     );
     const out = prepareUnifierWorkspace({
       initiativeId: 'INIT-x',

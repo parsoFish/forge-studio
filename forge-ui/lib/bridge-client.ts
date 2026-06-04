@@ -157,20 +157,13 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
   return body.events;
 }
 
-export type InitiativeFeature = {
-  featureId: string;
-  title: string;
-  dependsOn: string[];
-};
-
 export type InitiativeManifestSummary = {
   initiativeId: string;
   project: string;
-  features: InitiativeFeature[];
 };
 
 /**
- * Fetch the initiative manifest summary (id, project, features). Used by
+ * Fetch the initiative manifest summary (id, project). Used by
  * the InitiativeInfo panel so the operator sees what the cycle is
  * actually working on without parsing event metadata. Returns null when
  * the manifest isn't accessible (initiative ID unknown to the bridge,
@@ -189,7 +182,6 @@ export type WorkItemAcceptanceCriterion = { given: string; when: string; then: s
 
 export type WorkItemDetail = {
   work_item_id: string;
-  feature_id: string;
   acceptance_criteria: WorkItemAcceptanceCriterion[];
   files_in_scope: string[];
   quality_gate_cmd: string[];

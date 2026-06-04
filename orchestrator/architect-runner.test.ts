@@ -155,11 +155,7 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
           title: 'Dark mode toggle',
           iteration_budget: 4,
           cost_budget_usd: 6,
-          features: [
-            { title: 'Theme context + OS sync' },
-            { title: 'Settings toggle UI', depends_on: [0] },
-          ],
-          body: '## Dark mode\n\nGIVEN settings WHEN toggled THEN theme persists.',
+          body: '## Dark mode\n\nGiven settings exist, when toggled, then theme persists.\n\nGiven OS dark mode is active, when app loads, then dark theme is applied.',
         },
       ],
     },
@@ -230,8 +226,7 @@ test('F-W5-1: structured interview/draft steps must NOT run the SDK in plan mode
             title: 'Compact flag',
             iteration_budget: 3,
             cost_budget_usd: 2,
-            features: [{ title: 'compact renderer' }],
-            body: '## Compact\n\nGIVEN a cycle WHEN --compact THEN title+summary+verdict only.',
+            body: '## Compact\n\nGiven a cycle trail exists, when --compact flag is used, then only title+summary+verdict are shown.',
           },
         ],
       };
@@ -302,8 +297,7 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
                 title: 'Dark mode toggle',
                 iteration_budget: 4,
                 cost_budget_usd: 6,
-                features: [{ title: 'Theme context' }],
-                body: '## Dark mode\n\nGIVEN settings WHEN toggled THEN theme persists.',
+                body: '## Dark mode\n\nGiven settings exist, when toggled, then theme persists.',
               },
             ],
           }
@@ -366,8 +360,7 @@ test('drafting: architect emits cross-initiative build order → manifest depend
                 title: 'Green the CI',
                 iteration_budget: 3,
                 cost_budget_usd: 4,
-                features: [{ title: 'Fix fmt + lint' }],
-                body: '## CI\n\nGIVEN red CI WHEN fixed THEN checks pass.',
+                body: '## CI\n\nGiven red CI exists, when lint and fmt are fixed, then all checks pass.',
               },
               {
                 slug: 'release-folder',
@@ -376,8 +369,7 @@ test('drafting: architect emits cross-initiative build order → manifest depend
                 cost_budget_usd: 8,
                 // valid dep + a self-ref + an unknown ref — last two must drop.
                 depends_on: ['ci-green', 'release-folder', 'does-not-exist'],
-                features: [{ title: 'CRUD + tests' }],
-                body: '## release_folder\n\nGIVEN green CI WHEN added THEN resource works.',
+                body: '## release_folder\n\nGiven green CI exists, when release_folder resource is added, then CRUD operations work.',
               },
             ],
           }
@@ -434,15 +426,11 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
     'cost_budget_usd: 6',
     'phase: pending',
     'origin: architect',
-    'features:',
-    '  - feature_id: FEAT-1',
-    '    title: Seeded feature',
-    '    depends_on: []',
     '---',
     '',
     '## Seeded body',
     '',
-    'GIVEN x WHEN y THEN z.',
+    'Given x exists, when y is done, then z is observable.',
   ].join('\n');
   writeFileSync(join(manifestsDir, 'INIT-2026-05-29-seeded.md'), seeded);
   // Resolved decisions on disk.
@@ -533,8 +521,7 @@ test('runner streams tool_use events from the agent stream (drives the architect
               title: 'Dark mode',
               iteration_budget: 3,
               cost_budget_usd: 5,
-              features: [{ title: 'toggle' }],
-              body: '## x\n\nGIVEN a WHEN b THEN c.',
+              body: '## x\n\nGiven a precondition, when b action occurs, then c is observable.',
             },
           ],
         };
@@ -619,8 +606,7 @@ test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async
             title: 'Feature X',
             iteration_budget: 3,
             cost_budget_usd: 4,
-            features: [{ title: 'core' }],
-            body: '## Feature X\n\nGIVEN env WHEN used THEN works.',
+            body: '## Feature X\n\nGiven env is set up, when used, then it works.',
           }],
         };
     async function* gen(): AsyncGenerator<unknown> {

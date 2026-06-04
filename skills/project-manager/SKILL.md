@@ -9,7 +9,7 @@ surface: unattended
 
 ## Single responsibility
 
-The PM is the **sole decomposer and sizer**. The architect emits coarse capability-features (each is a named outcome, not a sized task). The PM receives those features and owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate. The PM may not invent or drop features (coverage checks enforce this).
+The PM is the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + Given-When-Then acceptance criteria. The PM decomposes those ACs **directly** into atomic outcome-sized work items — the initiative body is the single source of intent. The PM owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
 
 Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project's current state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 
@@ -39,7 +39,7 @@ Then read `projects/<project>/brain/profile.md` and any `brain/themes/*.md` for 
 
 ## Inputs
 
-- `_queue/in-flight/<initiative-id>.md` — initiative manifest (with feature list).
+- `_queue/in-flight/<initiative-id>.md` — initiative manifest. The body carries the initiative vision + Given-When-Then ACs; there is no separate `features[]` list. The body is your single source of intent.
 - `<worktree>/` — the project at HEAD; read README, source structure, existing tests.
 - Brain knowledge.
 
@@ -55,7 +55,6 @@ Then read `projects/<project>/brain/profile.md` and any `brain/themes/*.md` for 
 ```yaml
 ---
 work_item_id: WI-3
-feature_id: FEAT-2
 initiative_id: INIT-2026-05-08-add-oauth
 status: pending
 depends_on:
@@ -103,7 +102,6 @@ graph TD
 
 - `pm.start` — decomposition begun for an initiative.
 - `pm.brain-query` — every brain query.
-- `pm.feature-decomposed` — one event per feature, with the resulting work-item count.
 - `pm.work-item-emitted` — one event per work-item file written.
 - `pm.graph-emitted` — dependency graph written.
 - `pm.end` — decomposition complete.
@@ -112,16 +110,16 @@ graph TD
 
 1. **Brain query first.** Always-relevant themes plus project-specific.
 2. Read the initiative manifest. Read the worktree's README and source layout.
-3. **Decompose EVERY declared feature — and only those.** Each feature in the manifest MUST receive **≥1 work item** (the orchestrator checks coverage and re-plans if a feature is left undecomposed — a feature with zero WIs is a hard, terminal failure). Conversely, do **not** invent work outside the manifest's features (no project-setup / brain / tracking-file busywork the architect didn't ask for — that was the betterado failure mode: a correct 3-feature manifest decomposed into unrelated scaffolding). If a feature genuinely needs no code, still emit one WI stating why and what it verifies. For each feature, decompose into work items:
+3. **Decompose the initiative body's Given-When-Then acceptance criteria DIRECTLY into atomic outcome-sized work items.** The initiative body is your single source of intent — there is no `features[]` list. Each GWT block in the body MUST be exercised by ≥1 WI's `quality_gate_cmd` (this is the PM-close self-check equivalent of "feature coverage" — every AC block covered ⇒ cycle close allowed). Do **not** invent work outside the initiative body's ACs (no project-setup / brain / tracking-file busywork the architect didn't ask for — that was the betterado failure mode). If an AC genuinely needs no code, still emit one WI stating why and what it verifies. For each WI:
    - Each has at least one **Given-When-Then** acceptance criterion (frontmatter `acceptance_criteria` array; each entry has non-empty `given`, `when`, `then` strings). **Always wrap `given` / `when` / `then` values in double quotes** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators, and unquoted strings starting with any of these (e.g. backtick-prefixed code names) fail to parse.
    - Each declares its `depends_on` work items and its `files_in_scope` (worktree-relative paths, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files** — it tells the operator + reviewer what files this WI is expected to touch; the dev-loop agent has freedom to edit any file to make the gate pass. **Exception — hotspot files (a file listed in two or more WIs with no `depends_on` edge between them):** those are ENFORCED by `detectHiddenCoupling()` at PM close (see step 5 and the self-check). A shared file with no ordering edge is a guaranteed merge conflict and hard-fails the cycle.
    - **`creates:` is OPTIONAL — omit it unless you need it.** If you do set it, every entry MUST also appear in this WI's own `files_in_scope`, and it lists ONLY files THIS WI brings into existence from scratch — not files another WI owns. The validator hard-fails the cycle on `creates entry <path> must appear in files_in_scope`. Common trap: a WI whose `quality_gate_cmd` runs `tests/foo.test.ts` does NOT "create" that test file unless this same WI is the one writing it (often a later test/golden WI owns it) — in that case leave `creates` off entirely.
    - **Each declares a `quality_gate_cmd` that EXERCISES the ACs and FAILS ON A CLEAN TREE before the agent does any work.** This is MANDATORY (post-2026-05-24 claude-harness audit). The orchestrator's runner runs the gate at iter 0; if it passes, the WI is HARD-FAILED with `gate-too-loose: passed before agent invocation`. Sharp gates look like `['node', '--test', '--experimental-strip-types', 'tests/<NEW-FILE>.test.ts']` where `<NEW-FILE>.test.ts` doesn't exist yet on the worktree — the gate fails until the agent writes it AND the assertions inside it. Loose gates that default to the project-level `npm test` (which trivially passes on the existing test set) are rejected. If you can't write a sharp gate, the WI's AC is probably not testable — break it up.
    - Each estimates `estimated_iterations` (used as a soft hint for the Ralph loop; calibrate from `brain/cycles/themes/work-item-completion-by-domain.md`).
-4. **Inherit feature parallelism.** Read each feature's `depends_on` in the manifest. If two features have no edge connecting them, their work items must also be independent — never serialise parallel features into a WI chain. The architect's feature graph is the skeleton; the WI graph refines it without over-constraining it.
+4. **Prefer independence.** Emit WIs with empty `depends_on` (parallel-from-start) wherever the work permits. The dev-loop parallelises every DAG level. Serialise only when there is a true prerequisite dependency.
 5. **Practise file-scope discipline.** If two WIs would both edit the same file, prefer (a) splitting the file along the dimension that distinguishes them (one file per impl / concern), then (b) merging the WIs into one, then (c) adding a `depends_on` edge serialising them. Two WIs sharing a file with no edge is a guaranteed merge conflict and the orchestrator's `detectHiddenCoupling()` validator will REJECT the cycle at PM close (the 2026-05-23 betterado dogfood failed exactly this way: WI-1 + WI-5 both listed a shared schema file with no edge → cycle failed at PM phase, $1.54 wasted).
 6. Write the dependency graph as `_graph.md` (mermaid `graph TD`; one node per WI; edges run prerequisite → dependent and must agree exactly with the union of all `depends_on` lists).
-7. **Self-check — MANDATORY before writing files.** Walk every pair of work items that share any file in `files_in_scope`. If neither item appears in the other's `depends_on` (transitively, in either direction), they will conflict at merge time. **STOP and fix it before emitting any WI file** — either add the missing edge OR merge them into one work item. The bench scores this as `no_hidden_coupling`; the orchestrator's `detectHiddenCoupling()` validator HARD-FAILS the cycle if you emit overlapping WIs without a connecting edge (you don't get a retry — the cycle dies at PM phase).
+7. **Self-check — MANDATORY before writing files.** Walk every pair of work items that share any file in `files_in_scope`. If neither item appears in the other's `depends_on` (transitively, in either direction), they will conflict at merge time. **STOP and fix it before emitting any WI file** — either add the missing edge OR merge them into one work item. Also verify: every GWT block in the initiative body is exercised by ≥1 WI `quality_gate_cmd`. The orchestrator's `detectHiddenCoupling()` validator HARD-FAILS the cycle if you emit overlapping WIs without a connecting edge (you don't get a retry — the cycle dies at PM phase).
 
 ## Constraints
 

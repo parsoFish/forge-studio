@@ -32,10 +32,6 @@ worktree_path: ${overrides.worktreePath ?? '/tmp/nonexistent-worktree'}
 retry_count: 2
 previous_failure_modes:
   - pm-hidden-coupling
-features:
-  - feature_id: FEAT-1
-    title: t
-    depends_on: []
 ---
 
 body

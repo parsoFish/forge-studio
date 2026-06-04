@@ -6,7 +6,6 @@ import {
   fetchCost,
   fetchCycles,
   fetchEvents,
-  fetchManifest,
   subscribe,
   fetchArchitectSessions,
   fetchLiveness,
@@ -15,7 +14,6 @@ import {
   type Cycle,
   type CycleListSnapshot,
   type ConnectionState,
-  type InitiativeFeature,
   type ArchitectSessionSummary,
 } from '@/lib/bridge-client';
 import { CycleToasts } from '@/components/Toasts';
@@ -162,29 +160,6 @@ export default function Page() {
     [allCycles, activeCycleId],
   );
 
-  // Manifest features for the active cycle. Fed into the graph model so
-  // AgentGraphCanvas can render the feature tier branching off dev-loop.
-  // Polls every 5s while missing — the manifest is filed at scheduler-claim
-  // time so it's usually present immediately, but new cycles can race the fetch.
-  const [features, setFeatures] = useState<InitiativeFeature[]>([]);
-  useEffect(() => {
-    setFeatures([]);
-    const initId = activeCycle?.initiativeId;
-    if (!initId) return;
-    let cancelled = false;
-    let loaded = false;
-    const attempt = (): void => {
-      if (loaded) return;
-      void fetchManifest(initId).then((m) => {
-        if (cancelled) return;
-        if (m) { setFeatures(m.features); loaded = true; }
-      });
-    };
-    attempt();
-    const id = setInterval(attempt, 5000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [activeCycle?.initiativeId]);
-
   // WI graph for the active cycle (PM emits `_logs/<id>/work-items-
   // snapshot/_graph.md` at pm.end). Feeds the pipeline-tree WI tier.
   // Polls until the bridge serves the graph, then stops.
@@ -206,12 +181,11 @@ export default function Page() {
     return () => { cancelled = true; clearInterval(id); };
   }, [activeCycleId]);
 
-  // Phase B: all pipeline-graph derivation (phase states, materialised
-  // features, work items + per-WI status, feature rollups) lives in one
-  // shared hook so the graph + heatmap consume a single source.
-  const { phaseStates, materialisedFeatures, workItems, featureStatuses } = useGraphModel({
+  // Phase B: all pipeline-graph derivation (phase states, work items + per-WI
+  // status) lives in one shared hook so the graph + heatmap consume a single
+  // source. Feature tier removed — WIs derive directly from events.
+  const { phaseStates, workItems } = useGraphModel({
     events,
-    features,
     wiGraph,
   });
 
@@ -289,9 +263,7 @@ export default function Page() {
           <AgentGraphCanvas
             phaseStates={phaseStates}
             cost={cost}
-            features={materialisedFeatures}
             workItems={workItems}
-            featureStatuses={featureStatuses}
             events={events}
             cycleId={activeCycleId}
             selectedHex={selectedHex}
@@ -306,7 +278,6 @@ export default function Page() {
               events={events}
               phaseStates={phaseStates}
               cost={cost}
-              features={materialisedFeatures}
               workItems={workItems}
               onClose={() => setSelectedHex(null)}
             />

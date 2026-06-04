@@ -13,7 +13,8 @@
 ## Responsibilities
 
 1. **Own all work-item sizing and gate selection** (locked decision). The architect hands
-   down coarse features with no gates; the PM is the *one* place chunking is decided.
+   down an initiative with GWT acceptance criteria; the PM is the *one* place that
+   decomposes those ACs into outcome-sized WIs (no intermediate feature list).
 2. Size each WI by its **verifiable outcome**, not by a file list — every WI ships with a
    single runnable `quality_gate_cmd` that fails on a clean tree and passes only when the
    acceptance criteria are met. *(Research: PR-count, not file-count, predicts difficulty;
@@ -21,14 +22,14 @@
 3. Build the **dependency DAG**: any WI that produces an interface (type, API, schema) or
    owns a **hotspot file** (routes, config, registries) is a predecessor of its consumers,
    so parallel siblings never collide at merge.
-4. Stay bound to the architect's feature set (invent no feature, drop none) and reconcile
-   `files_in_scope` against the real worktree so paths are not hallucinated.
+4. Stay bound to the architect's initiative body (invent no new scope, drop none) and
+   reconcile `files_in_scope` against the real worktree so paths are not hallucinated.
 5. Read the cycle brain + the project's Brain 3 first (planner brain-first mandate).
 
 ## Inputs → Outputs
 
-**Consumes:** `_queue/in-flight/<id>.md` (the manifest's coarse features + budgets); the
-project worktree at HEAD; brain themes; a language-detected gate recipe.
+**Consumes:** `_queue/in-flight/<id>.md` (the manifest body: vision + GWT ACs + budgets);
+the project worktree at HEAD; brain themes; a language-detected gate recipe.
 **Produces:** `<worktree>/.forge/work-items/WI-*.md` (ADR 015 schema), `_graph.md`
 (dependency view), `_coverage.md` (feature→WI telemetry); PM phase events.
 
@@ -40,16 +41,16 @@ project worktree at HEAD; brain themes; a language-detected gate recipe.
 
 ## Boundaries (what this is NOT)
 
-- Not a second feature-decomposer — features are the architect's; the PM decomposes
-  features **into** WIs and is the **sole** WI-sizer.
+- Not a scope inventor — the initiative body is the *only* source of scope; the PM maps
+  ACs to WIs and is the **sole** WI-sizer.
 - Not interactive — fully unattended.
 - Not the executor — it specifies outcomes + gates; the dev-loop implements.
 
 ## Divergences to resolve → [backlog](docs/architecture/refocus-architecture/REFINEMENT-BACKLOG.md)
 
-- **[PM-1 · high]** Now the *only* decomposer (locked decision): make the PM-as-sole-sizer
-  rule explicit in `skills/project-manager/SKILL.md` and stop the architect emitting
-  WI-sized features (pairs with [ARCH-3](docs/architecture/refocus-architecture/Architect.md)). Removes the duplicated SDK decomposition pass.
+- ~~**[PM-1 · high]**~~ ✓ Resolved 2026-06-04: the architect no longer emits a `features[]`
+  list; the PM decomposes the initiative's ACs directly into WIs (pairs with ARCH-3).
+  `skills/project-manager/SKILL.md` should be updated to reflect direct-AC decomposition.
 - **[PM-2 · high]** The user prompt is ~157 lines vs a 4-line intent: the gate rule is
   stated three times, hidden-coupling twice, and named past incidents are re-litigated
   inline. Collapse to point-at-the-validator; move war-stories to brain themes.

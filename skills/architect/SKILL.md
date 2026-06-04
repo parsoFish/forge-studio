@@ -81,19 +81,23 @@ brain couldn't answer so the next ingest pass can fill it.
   manifests and their `depends_on_initiatives` chain rendered by the forge UI.
   The architect does NOT write or update any `roadmap.md`.
 
-## Feature decomposition — COARSE, not fine-grained
+## Initiative body — the single source of intent
 
-The architect emits **coarse capability-features** — vertical, independently-
-demonstrable capability groupings. Do NOT size individual work items; do NOT
-set `quality_gate_cmd` or per-feature `non_goals`. **The PM owns all work-item
-sizing and gate selection.**
+Each initiative body **MUST contain ≥1 Given-When-Then acceptance criterion**,
+one per independently-deliverable outcome. These ACs are the PM's sole source of
+intent — the PM decomposes them directly into atomic work items without any
+intermediate feature layer.
 
-- A feature is a capability concern: "authentication", "export pipeline",
-  "payment integration". One coherent vertical slice the PM will decompose
-  into atomic work items.
-- A one-feature initiative is perfectly normal and expected.
-- Do NOT split features to reach a count. If the whole initiative is one
-  coherent concern, emit one feature.
+- **No `features[]` list.** The 4-level hierarchy (initiative → feature → WI →
+  file) is collapsed to 3 (initiative → WI → file). Do NOT emit a features
+  array. The body's GWT blocks carry what used to be feature titles.
+- Write ACs at the grain of independently-runnable outcomes. A one-AC initiative
+  is perfectly normal; a multi-AC initiative covers multiple distinct outcomes
+  that the PM will decompose into parallel WIs.
+- Do NOT size individual work items; do NOT set `quality_gate_cmd`. **The PM
+  owns all work-item sizing and gate selection.**
+- Cross-initiative ordering is expressed via `depends_on` on the initiative
+  itself (the scheduler gate) — this is unchanged.
 
 ## Event-log entries to emit
 
@@ -120,10 +124,10 @@ grounding is your mandatory first action (above). Within a turn:
   `done: true` as soon as you can draft without unresolved scope / success /
   constraint ambiguity — don't ask to merely refine.
 - **Draft step** — return coherent, releasable initiatives, each with concrete
-  Given-When-Then acceptance criteria in its body, coarse capability-features
-  (the PM decomposes these — you do NOT size work items or set per-feature
-  gates), and explicit build order (`depends_on`) where a later initiative
-  needs an earlier one merged first.
+  Given-When-Then acceptance criteria in its body (one per independently-
+  deliverable outcome — the PM decomposes these directly into WIs; you do NOT
+  size work items or set gates), and explicit build order (`depends_on`) where
+  a later initiative needs an earlier one merged first.
 
 The runner owns the mechanics around you — it renders the questions, builds the
 manifests, runs the council, writes PLAN.md/PLAN.html, emits the events, and
@@ -133,16 +137,17 @@ manifests, runs the council, writes PLAN.md/PLAN.html, emits the events, and
 ## Constraints
 
 - **Initiatives are coherent and releasable**, sized for the work they actually
-  need (the draft task block gives the initiative / feature / work-item size
-  north-stars — a one-feature initiative is normal). The reference for what
-  shape lands is past successful initiatives: query `projects/<project>/brain/themes/`
-  and `brain/cycles/themes/` via `brain-query`.
+  need (the draft task block gives the initiative / work-item size north-stars).
+  The reference for what shape lands is past successful initiatives: query
+  `projects/<project>/brain/themes/` and `brain/cycles/themes/` via
+  `brain-query`.
 - **Acceptance criteria are concrete.** Vague criteria propagate downstream and
   break the developer loop. Reject your own draft if you can't write a
-  Given-When-Then for it.
-- **Dependencies are explicit at both levels.** Within an initiative, order work
-  with `features[].depends_on`; across initiatives, set each initiative's
-  `depends_on` so the scheduler holds dependents until their prerequisites merge.
+  Given-When-Then for it. Each initiative body MUST contain ≥1 GWT block.
+- **Dependencies are explicit.** Across initiatives, set each initiative's
+  `depends_on` so the scheduler holds dependents until their prerequisites
+  merge. There is no intra-initiative feature dependency layer — the PM orders
+  WIs with `depends_on` directly.
 - **Aggregate footprint is informational** (per
   [C19](../../docs/planning/2026-05-20-refinement/CONTRACTS.md)). PLAN.md
   surfaces the total iteration budget and per-initiative estimated cost as

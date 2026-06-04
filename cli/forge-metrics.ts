@@ -210,23 +210,17 @@ function renderHeader(args: {
 
 function renderInitiative(manifest: InitiativeManifest | null): string {
   if (!manifest) return '## What was asked\n\n_(manifest unavailable)_';
-  const featureRows = manifest.features
-    .map((f) => `| \`${f.feature_id}\` | ${f.title} | ${f.depends_on.length === 0 ? '_(none)_' : f.depends_on.map((d) => `\`${d}\``).join(', ')} |`)
-    .join('\n');
+  // Count GWT blocks in the initiative body as a proxy for acceptance-criteria richness.
+  const gwtCount = (manifest.body.match(/\bGIVEN\b/gi) ?? []).length;
   return [
     '## What was asked',
     '',
     `**Iteration budget:** ${manifest.iteration_budget} · **Cost budget:** $${manifest.cost_budget_usd.toFixed(2)} · **Quality gate:** \`${manifest.quality_gate_cmd?.join(' ') ?? '(default — npm test)'}\``,
+    `**Acceptance criteria in body:** ${gwtCount} GWT block${gwtCount !== 1 ? 's' : ''}`,
     '',
     '### Initiative spec',
     '',
     manifest.body.trim(),
-    '',
-    '### Features (architect output)',
-    '',
-    featureRows.length > 0
-      ? ['| Feature | Title | Depends on |', '|---|---|---|', featureRows].join('\n')
-      : '_(no features in manifest)_',
   ].join('\n');
 }
 

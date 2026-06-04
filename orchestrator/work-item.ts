@@ -25,7 +25,6 @@ export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';
 
 export type WorkItem = {
   work_item_id: string;            // WI-<n>
-  feature_id: string;              // FEAT-<n>
   initiative_id: string;           // INIT-<YYYY-MM-DD>-<slug>
   status: WorkItemStatus;
   depends_on: string[];            // WI-ids
@@ -51,7 +50,6 @@ export type WorkItem = {
 };
 
 const WORK_ITEM_ID_PATTERN = /^WI-\d+$/;
-const FEATURE_ID_PATTERN = /^FEAT-\d+$/;
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
 
@@ -60,7 +58,6 @@ export function parseWorkItem(content: string): WorkItem {
   const data = parsed.data as Record<string, unknown>;
 
   const work_item_id = stringField(data, 'work_item_id', true);
-  const feature_id = stringField(data, 'feature_id', true);
   const initiative_id = stringField(data, 'initiative_id', true);
   const statusRaw = stringField(data, 'status', false) ?? 'pending';
   const status = (WORK_ITEM_STATUSES.includes(statusRaw as WorkItemStatus)
@@ -74,7 +71,6 @@ export function parseWorkItem(content: string): WorkItem {
 
   const w: WorkItem = {
     work_item_id,
-    feature_id,
     initiative_id,
     status,
     depends_on,
@@ -108,7 +104,6 @@ export function parseWorkItem(content: string): WorkItem {
 export function serializeWorkItem(w: WorkItem): string {
   const data: Record<string, unknown> = {
     work_item_id: w.work_item_id,
-    feature_id: w.feature_id,
     initiative_id: w.initiative_id,
     status: w.status,
     depends_on: w.depends_on,
@@ -143,8 +138,6 @@ export type ValidateOptions = {
   knownWorkItemIds?: ReadonlySet<string>;
   /** Initiative ID this WI is expected to belong to; if set, mismatch is an error. */
   expectedInitiativeId?: string;
-  /** Feature IDs known to exist in the parent manifest; if set, feature_id mismatch is an error. */
-  knownFeatureIds?: ReadonlySet<string>;
 };
 
 export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): string[] {
@@ -154,14 +147,6 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
     errors.push('work_item_id is required');
   } else if (!WORK_ITEM_ID_PATTERN.test(w.work_item_id)) {
     errors.push(`work_item_id must match WI-<n>: got ${w.work_item_id}`);
-  }
-
-  if (!w.feature_id) {
-    errors.push('feature_id is required');
-  } else if (!FEATURE_ID_PATTERN.test(w.feature_id)) {
-    errors.push(`feature_id must match FEAT-<n>: got ${w.feature_id}`);
-  } else if (opts.knownFeatureIds && !opts.knownFeatureIds.has(w.feature_id)) {
-    errors.push(`feature_id ${w.feature_id} is not declared in the initiative manifest`);
   }
 
   if (!w.initiative_id) {

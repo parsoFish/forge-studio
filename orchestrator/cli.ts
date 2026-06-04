@@ -375,15 +375,11 @@ created_at: ${new Date().toISOString()}
 iteration_budget: 5
 cost_budget_usd: 1.00
 phase: pending
-features:
-  - feature_id: FEAT-1
-    title: smoke-test feature
-    depends_on: []
 ---
 
 # Fixture initiative
 
-Smoke test for the scheduler. No real work performed.
+Given the scheduler runs, when this fixture initiative is processed, then no real work is performed.
 `;
     const out = join(paths.pending, `${id}.md`);
     writeFileSync(out, manifest);

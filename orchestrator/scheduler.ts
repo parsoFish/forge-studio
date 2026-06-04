@@ -309,9 +309,6 @@ function makeProgressTee(): (entry: EventLogEntry) => void {
         console.log(
           `[${ts}] ${id} · PM FAILED${cost}${dur} · subtype=${md.result_subtype ?? '?'} · WIs=${md.work_item_count ?? '?'}`,
         );
-      else if (e.message === 'pm.feature-decomposed') {
-        // Skip per-feature noise — covered by the end summary.
-      }
       return;
     }
 

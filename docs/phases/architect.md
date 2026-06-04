@@ -12,7 +12,7 @@
 
 ## Purpose
 
-Collaborate with the operator during ideation to emit one or more **initiatives** — coherent, dependency-ordered collections of coarse capability-features that move a project to a desired state. The architect emits features at the capability level; the PM owns all work-item sizing and gate selection. Once an initiative is approved, it's queued for unattended execution.
+Collaborate with the operator during ideation to emit one or more **initiatives** — coherent, dependency-ordered specifications that move a project to a desired state. Each initiative's markdown body carries the vision + Given/When/Then acceptance criteria; the PM decomposes those ACs directly into work items (no intermediate feature list). Once an initiative is approved, it's queued for unattended execution.
 
 ## Inputs
 
@@ -37,16 +37,11 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
   created_at: <ISO-8601>
   iteration_budget: 50           # max Ralph iterations across the whole initiative
   cost_budget_usd: 5             # operator-set cost cap
-  features:
-    - feature_id: FEAT-1
-      title: ...           # coarse capability-feature title; PM decomposes into WIs
-      depends_on: []
-    - feature_id: FEAT-2
-      title: ...
-      depends_on: [FEAT-1]
   ---
   ```
-- Frontmatter is followed by the markdown initiative spec (the council-confirmed brief).
+- Frontmatter is followed by the markdown initiative spec (the council-confirmed brief)
+  with vision + Given/When/Then acceptance criteria. **No `features[]` list** — the PM
+  decomposes the initiative's ACs directly into work items.
 - **No roadmap.md write.** The roadmap is a derived view: the `_queue/` manifests
   and their `depends_on_initiatives` chain, rendered by the forge UI. The architect
   does not write or maintain any `roadmap.md`.
@@ -73,9 +68,9 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 ## Known failure modes (to defend against)
 
-- **Agent over-reaches** — turns one idea into 50 features. The architect's prompt caps initiative size and prefers small, releasable initiatives.
-- **Vague acceptance criteria** — propagates downstream and breaks the developer loop. The council includes a critic specifically watching for this.
-- **Missing dependencies** — leads to parallel work-item collisions. The council includes a dependency-graph critic.
+- **Agent over-reaches** — turns one idea into a sprawling spec. The architect's prompt caps initiative scope and prefers small, releasable initiatives.
+- **Vague acceptance criteria** — propagates downstream and breaks the developer loop. The council includes a critic specifically watching for this; crisp GWT ACs are the primary quality signal since the feature list is gone.
+- **Missing cross-initiative dependencies** — leads to ordering failures. The council includes a dependency critic for `depends_on_initiatives`.
 
 ## Status
 
@@ -86,3 +81,4 @@ All phase infrastructure is live as of 2026-06-02:
 - [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
 - [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.
 - [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.
+- [x] Feature list removed from manifests — ARCH-3 resolved: architect emits initiatives with GWT ACs in the body; PM decomposes ACs directly into WIs (2026-06-04).

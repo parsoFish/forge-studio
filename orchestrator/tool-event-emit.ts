@@ -36,7 +36,6 @@ export type ToolEventContext = {
   phase: Phase;
   skill: string;
   workItemId?: string;
-  featureId?: string;
 };
 
 export type ToolEventSamplerOptions = {
@@ -132,7 +131,6 @@ export function makeToolEventSink(
 } {
   const sampler = createToolEventSampler(opts);
   const wiMeta = ctx.workItemId !== undefined ? { work_item_id: ctx.workItemId } : {};
-  const featMeta = ctx.featureId !== undefined ? { feature_id: ctx.featureId } : {};
 
   return {
     onToolUse(detail) {
@@ -149,7 +147,7 @@ export function makeToolEventSink(
           input_refs: [],
           output_refs: [detail.filePath],
           message: `file.${detail.op}`,
-          metadata: { ...wiMeta, ...featMeta, path: detail.filePath, op: detail.op },
+          metadata: { ...wiMeta, path: detail.filePath, op: detail.op },
         });
       }
       if (!emit) return;
@@ -164,7 +162,6 @@ export function makeToolEventSink(
         message: `tool.${detail.name}`,
         metadata: {
           ...wiMeta,
-          ...featMeta,
           tool: detail.name,
           input_summary: detail.inputSummary,
           seq: detail.seq,
@@ -181,7 +178,7 @@ export function makeToolEventSink(
         input_refs: [],
         output_refs: [],
         message: 'agent.heartbeat',
-        metadata: { ...wiMeta, ...featMeta, ...info },
+        metadata: { ...wiMeta, ...info },
       });
     },
     flushIteration(iteration) {
@@ -200,7 +197,6 @@ export function makeToolEventSink(
         message: 'tool.coalesced',
         metadata: {
           ...wiMeta,
-          ...featMeta,
           coalesced: true,
           coalesced_count: coalescedCount,
           sampled_out_count: sampledOutCount,

@@ -504,9 +504,9 @@ async function handleHttp(
     }
     return;
   }
-  // Initiative manifest (initiative_id, project, features). Used by the
+  // Initiative manifest (initiative_id, project). Used by the
   // UI's InitiativeInfo panel so the operator sees what the cycle is
-  // actually working on (features, not just IDs). 2026-05-25.
+  // actually working on. 2026-05-25.
   if (method === 'GET' && url.startsWith('/api/manifest/')) {
     const initiativeId = decodeURIComponent(url.slice('/api/manifest/'.length));
     if (!initiativeId) {
@@ -531,11 +531,6 @@ async function handleHttp(
       sendJson(res, 200, {
         initiativeId: m.initiative_id,
         project: m.project,
-        features: m.features.map((f) => ({
-          featureId: f.feature_id,
-          title: f.title,
-          dependsOn: f.depends_on,
-        })),
       });
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
@@ -588,7 +583,6 @@ async function handleHttp(
       const w = parseWorkItem(readFileSync(found, 'utf8'));
       sendJson(res, 200, {
         work_item_id: w.work_item_id,
-        feature_id: w.feature_id,
         acceptance_criteria: w.acceptance_criteria,
         files_in_scope: w.files_in_scope,
         quality_gate_cmd: w.quality_gate_cmd ?? [],

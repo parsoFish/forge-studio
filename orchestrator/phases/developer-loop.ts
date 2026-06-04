@@ -169,7 +169,7 @@ export async function runDeveloperLoop(
       input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
       output_refs: [],
       message: 'ralph.start',
-      metadata: { work_item_id: wi.work_item_id, feature_id: wi.feature_id },
+      metadata: { work_item_id: wi.work_item_id },
     });
 
     if (prerequisiteFailed(wi, wiOutcomes)) {
@@ -237,7 +237,6 @@ export async function runDeveloperLoop(
       phase: 'developer-loop',
       skill: 'developer-ralph',
       workItemId: wi.work_item_id,
-      featureId: wi.feature_id,
     });
 
     const agent = createClaudeAgent({

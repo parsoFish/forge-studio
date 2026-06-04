@@ -1,14 +1,14 @@
 # Phase: Project Manager
 
-> *Unattended.* Breaks initiative features into spec-driven work items the developer loop can execute.
+> *Unattended.* Decomposes initiative acceptance criteria directly into spec-driven work items the developer loop can execute.
 
 ## Purpose
 
-Take the architect's confirmed initiative and decompose its features into **work items** — atomic, dependency-ordered units with acceptance criteria the developer loop can verify. Designed for *iteration* (not one-shotting); designed for *parallelism* (declared dependencies allow safe parallel execution).
+Take the architect's confirmed initiative and decompose its Given/When/Then acceptance criteria into **work items** — atomic, dependency-ordered units with acceptance criteria the developer loop can verify. There is no intermediate feature list: the PM reads the initiative body directly and maps ACs to outcome-sized WIs. Designed for *iteration* (not one-shotting); designed for *parallelism* (declared dependencies allow safe parallel execution).
 
 ## Inputs
 
-- `_queue/in-flight/<initiative-id>.md` (the initiative manifest, claimed by the scheduler).
+- `_queue/in-flight/<initiative-id>.md` (the initiative manifest, claimed by the scheduler). The markdown body carries the vision + GWT ACs the PM decomposes.
 - `projects/<name>/` (current project state at the worktree's HEAD).
 - Brain knowledge (queried via `brain-query`).
 
@@ -48,21 +48,15 @@ Four optional fields tighten the dev-loop signal on larger initiatives. All four
 
 Locked in `orchestrator/pm-invocation.ts` user prompt + `orchestrator/phases/project-manager.ts` derived range:
 
-- **Per feature:** 1-3 WIs. <1 = under-decomposed; >3 = the feature is two features (escalate to architect via a brain-gap note).
-- **Per initiative:** `feature_count..2*feature_count+2`, with a ceiling of **8** unless `feature_count > 4` (then `2*fc+2`). Floor is `max(feature_count, 2)`.
+- **Per initiative:** 2–8 WIs is the target range. Under-decomposed = one giant WI; over-decomposed = >8 WIs (split the initiative instead).
 - **Per-file rule:** at most one WI **creates** a given file (listed in its `creates` array). Subsequent WIs extend it and `depends_on` the creator.
-- **No new features.** PM may not invent a `FEAT-N` not in the manifest — `knownFeatureIds` is wired into both `runProjectManager` and `benchmarks/project-manager/score.ts` ([CONTRACTS.md C5a](../_archive/planning/2026-05-20-refinement/CONTRACTS.md)).
+- **No invented scope.** PM may not add acceptance criteria or work items not grounded in the initiative's body — scope is locked in the initiative spec.
 
-## Hallucinated-FEAT recovery flow ([CONTRACTS.md C5b](../_archive/planning/2026-05-20-refinement/CONTRACTS.md))
+## Out-of-scope WI recovery
 
-If the PM emits a WI whose `feature_id` is not in the manifest's known set:
+If the PM emits a WI whose acceptance criteria or files_in_scope have no grounding in the initiative body, the validator can detect the mismatch. The recovery flow mirrors the former feature-hallucination flow: the orchestrator wipes the stale `.forge/work-items/` dir and re-invokes the PM once with an augmented prompt pointing to the initiative body. If the retry still drifts, the orchestrator emits a terminal `pm.out-of-scope` event and throws.
 
-1. The validator (`validateWorkItem` with `knownFeatureIds`) hard-errors.
-2. `runProjectManager` catches and detects the failure shape — only the hallucination, nothing else broken.
-3. Orchestrator wipes the stale `.forge/work-items/` dir and re-invokes the PM **once** with the prompt augmented by `renderPmHallucinationRetryAugment` — names the manifest's feature IDs verbatim and tells the agent to re-map rather than invent.
-4. If the retry also hallucinates, the orchestrator emits a terminal `pm.feature-hallucination` event and throws. The cycle's failure-classifier picks up `pm-feature-hallucination` (non-recoverable — needs an architect-side amend, not an auto-retry).
-
-Tested in [`orchestrator/cycle-pm-hallucination.test.ts`](../../orchestrator/cycle-pm-hallucination.test.ts).
+> Note (2026-06-04): `feature_id` validation (`knownFeatureIds`) was removed with the feature tier. The `cycle-pm-hallucination.test.ts` test covers the retry mechanics and may be refactored by sibling clusters to match the new model.
 
 ## Benchmark suite
 
@@ -84,10 +78,10 @@ The bench's invocation contract lives in [`orchestrator/pm-invocation.ts`](../..
 
 > Note (2026-05-25): the `benchmarks/` harnesses were removed; the "bench's `<criterion>`" scoring references below are historical. The prompt guidance and validator-layer guards (`detectHiddenCoupling`, `knownFeatureIds`) remain live; phase quality is now judged on real merged cycles.
 
-- **Over-decomposition** — 50 work items for a 3-day feature. Capped via the bench's `work_item_count_in_range` criterion + sizing-band prompt guidance.
-- **Under-decomposition** — one giant work item. Same.
-- **Vague acceptance criteria** — passes the buck to the developer loop. `every_item_has_gwt` (0.18) explicitly scores Given-When-Then completeness.
-- **Hidden dependencies** — work items collide at merge time. PM's last-step self-check (`detectHiddenCoupling`) drives `no_hidden_coupling` (0.15).
-- **Feature hallucination** — PM invents `FEAT-N` not in the manifest. Caught at the validator layer (C5a `knownFeatureIds` wired into both bench and live cycle); retried once with an augmented prompt (C5b); terminal `pm-feature-hallucination` failure mode if persistent.
-- **Multiple creators for one file** — two WIs implicitly create the same file ⇒ merge conflict + bench mis-scoring. The `creates` field + bench's `one_creator_per_file` (0.12) make this deterministically scoreable.
-- **Trivially-green dev-loops** — initiative-wide gate passes before any WI's work lands ⇒ Ralph exits on iteration 0. `quality_gate_cmd_present` (0.10) requires per-WI gates on larger initiatives (iteration_budget > 5).
+- **Over-decomposition** — 50 work items for a simple initiative. Capped via sizing-band prompt guidance (2–8 WIs per initiative).
+- **Under-decomposition** — one giant work item that covers the whole initiative. Same remedy.
+- **Vague acceptance criteria** — passes the buck to the developer loop. Every WI must have ≥1 Given-When-Then criterion; the validator enforces this.
+- **Hidden dependencies** — work items collide at merge time. PM's last-step self-check (`detectHiddenCoupling`) detects file-ownership overlaps.
+- **Out-of-scope WIs** — PM invents work items not grounded in the initiative body. Retried once with augmented prompt; terminal `pm.out-of-scope` if persistent.
+- **Multiple creators for one file** — two WIs implicitly create the same file ⇒ merge conflict. The `creates` field + `one_creator_per_file` enforcement make this deterministically catchable.
+- **Trivially-green dev-loops** — initiative-wide gate passes before any WI's work lands ⇒ Ralph exits on iteration 0. Per-WI `quality_gate_cmd` is required on larger initiatives (iteration_budget > 5).

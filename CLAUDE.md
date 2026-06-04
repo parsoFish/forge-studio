@@ -186,8 +186,8 @@ sections were merged into a single hex pipeline):
   status tally header and a `[data-project-track]` of status-coloured cycle
   cards: `[data-cycle-id][data-cycle-initiative-id][data-cycle-status][data-cycle-project][data-cycle-active]`.
 - `[data-section="pipeline-tree"]` — the cascading hex view (phases
-  on top, features branching off dev-loop post-PM, WIs branching off
-  features) hosted by `[data-component="agent-hex-canvas"]`.
+  on top, WIs branching directly off the dev-loop hex) hosted by
+  `[data-component="agent-hex-canvas"]`.
 - *(retired, ADR 020 cleanup)* the inline review verdict box
   (`[data-section="verdict-form"]` / `[data-component="verdict-form"]`) was
   removed. The review human moment runs on the `/review/<cycleId>` UI screen
@@ -214,14 +214,13 @@ sections were merged into a single hex pipeline):
     `[data-escalation-id][data-decision-resolved]`.
 - Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
 - Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd][data-phase-index]`.
-- Feature hex mirrors: `[data-feature-hex][data-feature-id][data-feature-deps][data-feature-index]`.
-- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-feature-id][data-wi-deps]`.
+- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps]`.
 - Artifact badges overlaid on the canvas: `[data-overlay="plan-badge"]` (under architect), `[data-overlay="demo-badge"]` (under review-loop).
 - Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
 - Components: `[data-component="scheduler-banner"][data-banner-state]`,
   `[data-component="toasts"][data-toast-count]`.
 
-Phase, feature, and WI statuses share a single 5-state vocabulary
+Phase and WI statuses share a single 5-state vocabulary
 (`pending | active | complete | retrying | failed`). Yellow = retrying
 (had a transient error, still recovering); red = full cycle failure
 only — sibling units stay in their own state independently. See
@@ -244,8 +243,8 @@ ad-hoc demo/capture scripts, the harness surface is **two scripts only**
    It is BOTH the watchable demo (records a **video** + frame gallery +
    `index.html` under `forge-ui/.demo-shots/e2e/`) AND the **UI regression
    harness**: the old `forge-ui-harness.mjs` S1–S4 `data-*` assertions (status
-   transitions, ≥5 phase hexes, materialised feature/WI hexes, the per-phase
-   cost rollup) were merged in as a soft-collecting layer — the video always
+   transitions, ≥5 phase hexes, materialised WI hexes, the per-phase cost
+   rollup) were merged in as a soft-collecting layer — the video always
    finishes, and a non-zero exit flags any DOM-as-metrics regression. Cleans up
    its synthetic project/cycle/queue state afterwards.
 

@@ -86,7 +86,6 @@ test('sink: emits tool_use + file_change for a file op, with metadata', () => {
     phase: 'developer-loop',
     skill: 'developer-ralph',
     workItemId: 'WI-2',
-    featureId: 'FEAT-1',
   });
   sink.onToolUse(det('Edit', 1, 'src/foo.ts', 'modify'));
 
@@ -96,7 +95,6 @@ test('sink: emits tool_use + file_change for a file op, with metadata', () => {
   assert.ok(fileChange, 'file_change emitted');
   assert.equal(toolUse!.metadata?.tool, 'Edit');
   assert.equal(toolUse!.metadata?.work_item_id, 'WI-2');
-  assert.equal(toolUse!.metadata?.feature_id, 'FEAT-1');
   assert.equal(fileChange!.metadata?.path, 'src/foo.ts');
   assert.equal(fileChange!.metadata?.op, 'modify');
   assert.deepEqual(fileChange!.output_refs, ['src/foo.ts']);

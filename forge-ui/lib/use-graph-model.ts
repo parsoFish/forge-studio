@@ -8,61 +8,45 @@
  */
 
 import { useMemo } from 'react';
-import type { EventLogEntry, InitiativeFeature } from './bridge-client';
+import type { EventLogEntry } from './bridge-client';
 import type { WiGraph } from './wi-graph';
 import { derivePhaseStates, type PhaseState } from './phases';
-import { derivePerWiStatus, rollupStatus, type WiStatus } from './wi-status';
+import { derivePerWiStatus, type WiStatus } from './wi-status';
 
 export type GraphWorkItem = {
   id: string;
   title: string;
-  featureId?: string;
   dependsOn: string[];
   status?: WiStatus;
 };
 
 export type GraphModel = {
   phaseStates: PhaseState[];
-  materialisedFeatures: InitiativeFeature[];
   workItems: GraphWorkItem[];
-  featureStatuses: Record<string, WiStatus>;
 };
 
 export type GraphModelInputs = {
   events: EventLogEntry[];
-  features: InitiativeFeature[];
   wiGraph: WiGraph | null;
 };
 
 /**
- * Features materialise only once their `pm.feature-decomposed` event has
- * fired; WIs only once `pm.work-item-emitted` has fired. Pre-PM, both are
+ * WIs materialise once `pm.work-item-emitted` has fired. Pre-PM, the list is
  * empty. Mirrors the operator note 2026-05-25 event-driven materialisation.
+ * Feature layer removed (refocus: initiative→WI directly, no features tier).
  */
-export function deriveGraphModel({ events, features, wiGraph }: GraphModelInputs): GraphModel {
+export function deriveGraphModel({ events, wiGraph }: GraphModelInputs): GraphModel {
   const phaseStates = derivePhaseStates(events);
 
-  const ackedFeatures = new Set<string>();
-  for (const e of events) {
-    if (e.message !== 'pm.feature-decomposed') continue;
-    const fid = (e.metadata as { feature_id?: string } | undefined)?.feature_id;
-    if (fid) ackedFeatures.add(fid);
-  }
-  const materialisedFeatures =
-    features.length === 0 || ackedFeatures.size === 0
-      ? []
-      : features.filter((f) => ackedFeatures.has(f.featureId));
-
-  const wiFeature = new Map<string, string | undefined>();
+  const wiIds = new Set<string>();
   for (const e of events) {
     if (e.message !== 'pm.work-item-emitted') continue;
     const wid = (e.metadata as { work_item_id?: string } | undefined)?.work_item_id;
-    const fid = (e.metadata as { feature_id?: string } | undefined)?.feature_id;
-    if (wid) wiFeature.set(wid, fid);
+    if (wid) wiIds.add(wid);
   }
 
   let workItems: GraphWorkItem[] = [];
-  if (wiFeature.size > 0) {
+  if (wiIds.size > 0) {
     const titleByWi = new Map<string, string>();
     const depsByWi = new Map<string, string[]>();
     if (wiGraph) {
@@ -73,36 +57,22 @@ export function deriveGraphModel({ events, features, wiGraph }: GraphModelInputs
         depsByWi.set(edge.to, arr);
       }
     }
-    const wiIds = Array.from(wiFeature.keys());
-    const statusById = derivePerWiStatus(events, wiIds);
-    workItems = Array.from(wiFeature.entries()).map(([id, featureId]) => ({
+    const statusById = derivePerWiStatus(events, Array.from(wiIds));
+    workItems = Array.from(wiIds).map((id) => ({
       id,
       title: titleByWi.get(id) ?? id,
-      featureId,
       dependsOn: depsByWi.get(id) ?? [],
       status: statusById[id],
     }));
   }
 
-  const wisByFeature = new Map<string, WiStatus[]>();
-  for (const w of workItems) {
-    if (!w.featureId) continue;
-    const arr = wisByFeature.get(w.featureId) ?? [];
-    if (w.status) arr.push(w.status);
-    wisByFeature.set(w.featureId, arr);
-  }
-  const featureStatuses: Record<string, WiStatus> = {};
-  for (const [fid, statuses] of wisByFeature.entries()) {
-    featureStatuses[fid] = rollupStatus(statuses);
-  }
-
-  return { phaseStates, materialisedFeatures, workItems, featureStatuses };
+  return { phaseStates, workItems };
 }
 
 export function useGraphModel(inputs: GraphModelInputs): GraphModel {
-  const { events, features, wiGraph } = inputs;
+  const { events, wiGraph } = inputs;
   return useMemo(
-    () => deriveGraphModel({ events, features, wiGraph }),
-    [events, features, wiGraph],
+    () => deriveGraphModel({ events, wiGraph }),
+    [events, wiGraph],
   );
 }

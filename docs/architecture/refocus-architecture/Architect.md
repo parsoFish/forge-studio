@@ -16,16 +16,15 @@
    plan cannot proceed without — then freezes scope. *(Front-loading ambiguity is the
    single highest-leverage autonomy lever; mid-run scope change is the dominant failure
    mode of unattended agents.)*
-2. Draft one or more **coherent, releasable initiatives** as **coarse capability-features**
-   with Given-When-Then acceptance criteria and an explicit cross-initiative build order
-   (`depends_on_initiatives`). It does **not** size work items or set per-feature gates —
-   that is the PM's job (one decomposition, downstream).
+2. Draft one or more **coherent, releasable initiatives** whose markdown body carries the
+   vision + Given/When/Then acceptance criteria and an explicit cross-initiative build
+   order (`depends_on_initiatives`). **No `features[]` list** — the PM decomposes the
+   initiative's ACs directly into outcome-sized work items.
 3. Run each planning round through the **LLM council once** (parallel critics: CEO / eng /
    design / DX), fold mechanical fixes in automatically, and surface only taste decisions
    as operator escalations.
 4. Render the operator review artifacts: **PLAN.md** (parse target) + **PLAN.html** (rich,
-   read-only: feature dependency graph, comparative pros/cons decision cards, mocked
-   options for visual changes).
+   read-only: comparative pros/cons decision cards, mocked options for visual changes).
 5. On approve, **deterministically** bake the operator's resolved decisions into the
    approved manifests and promote them to `_queue/pending/` — no second LLM draft.
 
@@ -46,7 +45,8 @@ phase events.
 
 ## Boundaries (what this is NOT)
 
-- Not a work-item sizer or gate-setter — emits **coarse features only**.
+- Not a work-item sizer or gate-setter — emits initiatives with GWT ACs; the PM decomposes ACs into WIs.
+- Not a feature-list author — **no `features[]` list** in the manifest (resolved, 2026-06-04).
 - Not a roadmap-file author — **the roadmap is a derived view** of the queued initiatives
   + their dependency chain (rendered by the UI), not a `roadmap.md` it writes.
 - Not auto-invoked and not wired into `runCycle` — it is a deliberate human moment whose
@@ -58,8 +58,8 @@ phase events.
   architect never calls `brain-query` despite the planner brain-first mandate.
 - **[ARCH-2 · high]** Drop the unwritten `roadmap.md` output claim from SKILL.md + phase
   doc (roadmap = derived view, per locked decision).
-- **[ARCH-3 · med]** Architect emits features at WI granularity and may set per-feature
-  gates — must emit **coarse capability-features, no gates** (locked decision).
+- ~~**[ARCH-3 · med]**~~ ✓ Resolved 2026-06-04: architect now emits initiatives with GWT ACs,
+  no `features[]` list; PM decomposes ACs directly into WIs.
 - **[ARCH-4 · med]** Dead render paths: C27 exploration + C26 project-metrics blocks are
   unreachable (runner never sets them); terminal-era PLAN.md annotation machinery
   (`VERDICT_PLACEHOLDER`, "edit the inner text") is obsolete under the bridge verdict flow.

@@ -33,7 +33,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
   let baselineRed = false, resumeNeedsRebase = false;
-  let pmFeatureHallucination = false, pmFeatureCoverage = false;
+  let pmEmptyDecomposition = false;
   let pmCapped = false, pmBudgetExhausted = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
   let agentThrew = false, devLoopTotalFailure = false;
@@ -54,8 +54,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     }
     if (pmErr && Array.isArray(md.hidden_coupling_violations) && md.hidden_coupling_violations.length > 0) { pmHiddenCoupling = true; ev(e); }
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
-    if (e.phase === 'project-manager' && msg === 'pm.feature-hallucination') { pmFeatureHallucination = true; ev(e); }
-    if (e.phase === 'project-manager' && msg === 'pm.feature-coverage') { pmFeatureCoverage = true; ev(e); }
+    if (e.phase === 'project-manager' && msg === 'pm.empty-decomposition') { pmEmptyDecomposition = true; ev(e); }
     if (e.phase === 'developer-loop' && msg === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
     if (e.phase === 'developer-loop' && msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
@@ -97,8 +96,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (resumeNeedsRebase) return T('terminal', 'resume blocked — the preserved branch conflicts with current main (another cycle merged during the stall); rebase the initiative branch onto main by hand, then re-resume', evidence);
-  if (pmFeatureHallucination) return T('terminal', 'PM emitted a feature_id not in the manifest', evidence);
-  if (pmFeatureCoverage) return T('terminal', 'PM left a declared feature with no work items — incomplete decomposition (dropped a feature)', evidence);
+  if (pmEmptyDecomposition) return T('terminal', 'PM emitted zero work items — the initiative body may have no decomposable ACs or the PM ignored them entirely; amend the initiative body and re-queue', evidence);
   if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
   if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
   if (agentThrew) return T('terminal', 'agent threw a non-rate-limit error', evidence);

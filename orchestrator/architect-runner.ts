@@ -59,7 +59,6 @@ import {
   sessionPaths,
   type ArchitectSession,
   type ProposedInitiative,
-  type ProposedFeature,
   type CouncilTranscript,
   type InterviewRound,
 } from '../cli/architect-plan.ts';
@@ -68,7 +67,6 @@ import {
   serializeManifest,
   parseManifest,
   type InitiativeManifest,
-  type Feature,
 } from './manifest.ts';
 import { promoteManifests } from './promote-manifests.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
@@ -419,7 +417,6 @@ type DraftInitiative = {
    * `depends_on_initiatives` (F-25 scheduler gate). Empty = runs in parallel.
    */
   depends_on?: string[];
-  features: { title: string; depends_on?: number[] }[];
   body: string;
 };
 
@@ -437,20 +434,9 @@ const DRAFT_SCHEMA = {
           iteration_budget: { type: 'number' },
           cost_budget_usd: { type: 'number' },
           depends_on: { type: 'array', items: { type: 'string' } },
-          features: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                depends_on: { type: 'array', items: { type: 'number' } },
-              },
-              required: ['title'],
-            },
-          },
           body: { type: 'string' },
         },
-        required: ['slug', 'title', 'iteration_budget', 'cost_budget_usd', 'features', 'body'],
+        required: ['slug', 'title', 'iteration_budget', 'cost_budget_usd', 'body'],
       },
     },
   },
@@ -505,9 +491,9 @@ async function runDraftStep(args: {
     '',
     'Produce one or more coherent, releasable initiatives. For each: a kebab ' +
       '`slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), ' +
-      'a `features` list (each with a title and optional `depends_on` referencing ' +
-      'earlier feature indices), and a markdown `body` spec with concrete, ' +
-      'Given-When-Then acceptance criteria.',
+      'and a markdown `body` spec with concrete, Given-When-Then acceptance criteria ' +
+      '(one GWT block per independently-deliverable outcome). The PM decomposes ' +
+      'those ACs directly into work items — there is no intermediate feature layer.',
     '',
     '### Build order (cross-initiative dependencies)',
     "If a later initiative would fail without an earlier one merged first — a " +
@@ -518,22 +504,19 @@ async function runDraftStep(args: {
       'holds dependents until their prerequisites merge, so under-declaring ' +
       'order causes parallel failures and over-declaring serialises needlessly.',
     '',
-    '### Size — what an initiative / feature / work item IS',
+    '### Size — what an initiative / work item IS',
     '- **Initiative**: one coherent, releasable capability you could describe in ' +
       'a sentence and review as a single PR-worthy outcome (functionality + its ' +
       'tests + its docs). It is the unit of build order above. A roadmap is many ' +
-      'initiatives; a single-feature initiative is perfectly normal.',
-    '- **Feature**: an OPTIONAL coarse grouping = one vertical, independently-' +
-      'demonstrable slice. Use it only when an initiative has multiple distinct ' +
-      'concerns. A one-feature initiative, or a feature that is a single work ' +
-      'item, is normal and expected — do NOT split to hit a count.',
-    '- **Work item** (the PM derives these later from your features): the atomic ' +
+      'initiatives.',
+    '- **Work item** (the PM derives these from your body ACs): the atomic ' +
       'verifiable change — the smallest diff that lands as one mergeable ' +
       'commit-set and is proven by one sharp test/gate, roughly a focused ' +
-      'half-day. Title features at THIS grain when an initiative is small; the ' +
+      'half-day. Write ACs at THIS grain when an initiative is small; the ' +
       'PM enriches them rather than re-decomposing.',
-    'Split a feature into multiple work items only when two parts change ' +
-      'genuinely independent files/surfaces — never to reach a number.',
+    '- **Each GWT block in the body = one independently-deliverable outcome.** ' +
+      'Split into multiple GWT blocks only when two parts change genuinely ' +
+      'independent files/surfaces — never to reach a count.',
   ].join('\n');
 
   const { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
@@ -585,18 +568,13 @@ async function runDraftStep(args: {
     writeFileSync(join(paths.manifestsDir, `${m.initiative_id}.md`), serializeManifest(m));
   }
 
-  const proposed: ProposedInitiative[] = manifests.map((m) => ({
+  const proposed: ProposedInitiative[] = manifests.map((m, idx) => ({
     initiative_id: m.initiative_id,
     project: m.project,
     project_repo_path: m.project_repo_path,
-    title: m.features[0]?.title ?? m.initiative_id,
+    title: draftInitiatives[idx]?.title ?? m.initiative_id,
     iteration_budget: m.iteration_budget,
     cost_budget_usd: m.cost_budget_usd,
-    features: m.features.map<ProposedFeature>((f) => ({
-      feature_id: f.feature_id,
-      title: f.title,
-      depends_on: f.depends_on,
-    })),
     // Carry cross-initiative build order through to the PLAN render. The
     // renderer's "Depends on" column reads this; without it the plan showed
     // every initiative as "—" even when the manifests DID carry deps
@@ -738,15 +716,6 @@ function buildManifest(
   knownSlugs?: Set<string>,
 ): InitiativeManifest {
   const slug = slugify(d.slug || d.title);
-  const features: Feature[] = (d.features.length ? d.features : [{ title: d.title }]).map(
-    (f, i) => ({
-      feature_id: `FEAT-${i + 1}`,
-      title: f.title,
-      depends_on: (f.depends_on ?? [])
-        .filter((n) => Number.isInteger(n) && n >= 0 && n < d.features.length && n !== i)
-        .map((n) => `FEAT-${n + 1}`),
-    }),
-  );
   // Resolve cross-initiative `depends_on` slug refs → full initiative_ids.
   // Drop self-refs and refs to slugs not in this draft (would block forever).
   const dependsOnInitiatives = Array.from(
@@ -766,7 +735,6 @@ function buildManifest(
     cost_budget_usd: d.cost_budget_usd > 0 ? d.cost_budget_usd : 5,
     phase: 'pending',
     origin: 'architect',
-    features,
     body: d.body,
     ...(dependsOnInitiatives.length > 0 ? { depends_on_initiatives: dependsOnInitiatives } : {}),
   };

@@ -29,11 +29,7 @@ function fixture(): InitiativeManifest {
     cost_budget_usd: 25,
     phase: 'pending',
     origin: 'architect',
-    features: [
-      { feature_id: 'FEAT-1', title: 'Login', depends_on: [] },
-      { feature_id: 'FEAT-2', title: 'Profile', depends_on: ['FEAT-1'] },
-    ],
-    body: '# Demo initiative\n\nAdd auth + profile.',
+    body: '# Demo initiative\n\nAdd auth + profile.\n\n## Acceptance Criteria\n\nGiven a user, when they log in, then they see the dashboard.',
   };
 }
 
@@ -50,9 +46,8 @@ test('serializeManifest → parseManifest round-trips fields and body', () => {
   assert.equal(parsed.iteration_budget, 50);
   assert.equal(parsed.cost_budget_usd, 25);
   assert.equal(parsed.origin, 'architect');
-  assert.equal(parsed.features.length, 2);
-  assert.deepEqual(parsed.features[1]!.depends_on, ['FEAT-1']);
   assert.match(parsed.body, /# Demo initiative/);
+  assert.match(parsed.body, /Acceptance Criteria/);
 });
 
 test('validateManifest: passes a clean manifest', () => {
@@ -73,33 +68,6 @@ test('validateManifest: rejects malformed initiative_id', () => {
     errors.some((e) => e.includes('initiative_id') && e.includes('INIT-')),
     `got ${JSON.stringify(errors)}`,
   );
-});
-
-test('validateManifest: rejects undeclared feature dependency', () => {
-  const m = fixture();
-  m.features.push({ feature_id: 'FEAT-3', title: 'Settings', depends_on: ['FEAT-99'] });
-  const errors = validateManifest(m);
-  assert.ok(
-    errors.some((e) => e.includes('depends_on') && e.includes('FEAT-99')),
-    `got ${JSON.stringify(errors)}`,
-  );
-});
-
-test('validateManifest: rejects feature dependency cycles', () => {
-  const m = fixture();
-  m.features = [
-    { feature_id: 'FEAT-1', title: 'A', depends_on: ['FEAT-2'] },
-    { feature_id: 'FEAT-2', title: 'B', depends_on: ['FEAT-1'] },
-  ];
-  const errors = validateManifest(m);
-  assert.ok(errors.some((e) => e.toLowerCase().includes('cycle')), `got ${JSON.stringify(errors)}`);
-});
-
-test('validateManifest: rejects duplicate feature ids', () => {
-  const m = fixture();
-  m.features.push({ feature_id: 'FEAT-1', title: 'duplicate', depends_on: [] });
-  const errors = validateManifest(m);
-  assert.ok(errors.some((e) => e.includes('duplicate')), `got ${JSON.stringify(errors)}`);
 });
 
 test('validateManifest: rejects budgets ≤ 0', () => {
@@ -141,11 +109,12 @@ test('writeManifest: refuses to write an invalid manifest', () => {
   }
 });
 
-test('parseManifest: tolerates manifests with no features section', () => {
+test('parseManifest: tolerates manifests with body only (no optional fields)', () => {
   const md = `---\ninitiative_id: INIT-2026-05-04-y\nproject: demo\ncreated_at: 2026-05-04T18:00:00Z\niteration_budget: 10\ncost_budget_usd: 5\nphase: pending\n---\n\n# Body only\n`;
   const parsed = parseManifest(md);
-  assert.deepEqual(parsed.features, []);
   assert.match(parsed.body, /Body only/);
+  assert.equal(parsed.quality_gate_cmd, undefined);
+  assert.equal(parsed.depends_on_initiatives, undefined);
 });
 
 test('parseManifest: throws on missing required fields', () => {

@@ -39,10 +39,6 @@ phase: done
 quality_gate_cmd:
   - npm
   - test
-features:
-  - feature_id: FEAT-1
-    title: Add helper utility
-    depends_on: []
 ---
 
 # Add helper utility
@@ -106,7 +102,6 @@ We need a helper to support feature X.
     join(wiDir, 'WI-1.md'),
     `---
 work_item_id: WI-1
-feature_id: FEAT-1
 initiative_id: ${initiativeId}
 status: complete
 depends_on: []
@@ -192,7 +187,6 @@ test('buildCycleReport: emits all load-bearing sections for a successful cycle',
     // What was asked
     assert.match(md, /What was asked/);
     assert.match(md, /Add helper utility/);
-    assert.match(md, /\| `FEAT-1` \| Add helper utility/);
 
     // Decomposition
     assert.match(md, /How the system decomposed it/);

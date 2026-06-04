@@ -32,18 +32,11 @@
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { topoLevels } from '../orchestrator/dep-levels.ts';
 import type { Flag, Escalation, CriticVerdict, OptionVisual } from '../skills/architect-llm-council/council.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
-
-export type ProposedFeature = {
-  feature_id: string;
-  title: string;
-  depends_on: string[];
-};
 
 export type ProposedInitiative = {
   initiative_id: string;
@@ -54,10 +47,9 @@ export type ProposedInitiative = {
   cost_budget_usd: number;
   /** Optional informational cost estimate surfaced in the aggregate footprint (C19). */
   estimated_cost_usd?: number;
-  features: ProposedFeature[];
   /** Initiative-level dependencies on other initiatives (mirrors manifest.ts). */
   depends_on_initiatives?: string[];
-  /** Raw manifest body — preserved verbatim in the PLAN.md drawer. */
+  /** Raw manifest body — preserved verbatim in the PLAN.md drawer; carries GWT ACs. */
   body: string;
 };
 
@@ -227,12 +219,12 @@ export function renderPlanDoc(session: ArchitectSession): string {
   // --- Proposed initiatives ---
   parts.push('## Proposed initiatives');
   parts.push('');
-  parts.push('| ID | Title | Features | Iteration budget | Depends on |');
-  parts.push('|---|---|---|---|---|');
+  parts.push('| ID | Title | Iteration budget | Depends on |');
+  parts.push('|---|---|---|---|');
   for (const init of session.initiatives) {
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
     parts.push(
-      `| \`${init.initiative_id}\` | ${init.title} | ${init.features.length} | ${init.iteration_budget} | ${dep} |`,
+      `| \`${init.initiative_id}\` | ${init.title} | ${init.iteration_budget} | ${dep} |`,
     );
   }
   parts.push('');
@@ -376,102 +368,31 @@ ${opts}
 }
 
 /**
- * Render a feature dependency graph as inline SVG. Replaces the
- * informational cycle-diagram (operator pushback 2026-05-23: irrelevant —
- * the operator knows where they are in the cycle). The graph IS the value
- * markdown can't render: visual topology of feature edges, hover-revealed
- * titles, root highlighting.
- *
- * Layout algorithm: simple level-by-topo layout. Each feature's level =
- * 1 + max(level of its depends_on). Features at the same level stack
- * vertically. Edges drawn as orthogonal polylines with arrowheads.
- *
- * Sizing keeps within the page's max-width (1100px) for typical session
- * shapes (≤6 features). Wider shapes get horizontal scroll via the
- * wrapper's `overflow-x: auto`.
+ * Extract GWT blocks from a markdown body. Returns an array of objects with
+ * given/when/then strings, parsed from fenced YAML blocks or from inline
+ * bullet-list style. Falls back to a flat display of lines matching GWT
+ * keywords if no structured blocks are found.
  */
-function renderFeatureDepGraphSvg(init: ProposedInitiative): string {
-  const features = init.features;
-  if (features.length === 0) {
-    return '<p class="empty">No features.</p>';
-  }
-
-  // Topological levels via the shared SSOT (orchestrator/dep-levels.ts): a
-  // feature's level = 1 + max(level of its deps within this init); deps to
-  // unknown FEAT-ids are skipped; cycles are defended against. Same algorithm
-  // the forge-ui roadmap spine mirrors.
-  const { byLevel, maxLevel } = topoLevels(
-    features,
-    (f) => f.feature_id,
-    (f) => f.depends_on,
-  );
-  const maxRowsInAnyLevel = Math.max(...Array.from(byLevel.values()).map((b) => b.length));
-
-  // Layout constants.
-  const NODE_W = 200;
-  const NODE_H = 56;
-  const COL_GAP = 70;
-  const ROW_GAP = 22;
-  const PADDING = 16;
-  const COLS = maxLevel + 1;
-  const ROWS = maxRowsInAnyLevel;
-
-  const width = PADDING * 2 + COLS * NODE_W + (COLS - 1) * COL_GAP;
-  const height = PADDING * 2 + ROWS * NODE_H + (ROWS - 1) * ROW_GAP;
-
-  // Compute each feature's (x, y) center.
-  const positions = new Map<string, { x: number; y: number }>();
-  for (let lvl = 0; lvl <= maxLevel; lvl++) {
-    const bucket = byLevel.get(lvl) ?? [];
-    const x = PADDING + lvl * (NODE_W + COL_GAP) + NODE_W / 2;
-    const totalH = bucket.length * NODE_H + (bucket.length - 1) * ROW_GAP;
-    const yStart = PADDING + (height - PADDING * 2 - totalH) / 2 + NODE_H / 2;
-    bucket.forEach((f, idx) => {
-      positions.set(f.feature_id, { x, y: yStart + idx * (NODE_H + ROW_GAP) });
-    });
-  }
-
-  // Render node rects + labels.
-  const nodes = features.map((f) => {
-    const p = positions.get(f.feature_id)!;
-    const isRoot = f.depends_on.length === 0;
-    const titleTrim = f.title.length > 28 ? f.title.slice(0, 27) + '…' : f.title;
-    return `    <g>
-      <title>${esc(f.feature_id)}: ${esc(f.title)}</title>
-      <rect class="node-box${isRoot ? ' root' : ''}" x="${p.x - NODE_W / 2}" y="${p.y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="4" ry="4"/>
-      <text class="node-id" x="${p.x - NODE_W / 2 + 10}" y="${p.y - 8}">${esc(f.feature_id)}</text>
-      <text class="node-title" x="${p.x - NODE_W / 2 + 10}" y="${p.y + 12}">${esc(titleTrim)}</text>
-    </g>`;
-  }).join('\n');
-
-  // Render edges with arrowheads.
-  const edges: string[] = [];
-  for (const f of features) {
-    const to = positions.get(f.feature_id);
-    if (!to) continue;
-    for (const depId of f.depends_on) {
-      const from = positions.get(depId);
-      if (!from) continue;
-      const x1 = from.x + NODE_W / 2;
-      const y1 = from.y;
-      const x2 = to.x - NODE_W / 2 - 6; // leave room for arrowhead
-      const y2 = to.y;
-      const midX = (x1 + x2) / 2;
-      edges.push(
-        `    <path class="edge" d="M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}" marker-end="url(#arrow)"/>`,
-      );
+function extractGwtBlocks(body: string): Array<{ given: string; when: string; then: string }> {
+  const blocks: Array<{ given: string; when: string; then: string }> = [];
+  // Match YAML-style GWT entries: lines starting with given:/when:/then:
+  const lines = body.split('\n');
+  let cur: Partial<{ given: string; when: string; then: string }> = {};
+  for (const line of lines) {
+    const gm = /^\s*-?\s*given:\s*["']?(.*?)["']?\s*$/.exec(line);
+    const wm = /^\s*when:\s*["']?(.*?)["']?\s*$/.exec(line);
+    const tm = /^\s*then:\s*["']?(.*?)["']?\s*$/.exec(line);
+    if (gm) {
+      if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
+      cur = { given: gm[1]?.trim() ?? '' };
+    } else if (wm && cur.given) {
+      cur.when = wm[1]?.trim() ?? '';
+    } else if (tm && cur.given) {
+      cur.then = tm[1]?.trim() ?? '';
     }
   }
-
-  return `<svg class="dep-graph" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
-      </marker>
-    </defs>
-${edges.join('\n')}
-${nodes}
-  </svg>`;
+  if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
+  return blocks;
 }
 
 /**
@@ -483,8 +404,8 @@ ${nodes}
  *
  * Structure (top-to-bottom):
  *  1. Header — vision + initiative count + session metadata
- *  2. Per-initiative CARDS — title, budget, depends-on, feature dep graph,
- *     features list with acceptance-criteria drawer
+ *  2. Per-initiative CARDS — title, budget, depends-on, AC list from body,
+ *     manifest body drawer
  *  3. Design decisions — COMPARATIVE CARDS side by side (pros/cons + visuals)
  *  4. Brain context — what the architect consulted
  *  5. Council transcript — per-critic accordion (collapsed)
@@ -498,13 +419,16 @@ export function renderPlanHtml(session: ArchitectSession): string {
   const totalEstimated = knownCost.reduce((s, i) => s + (i.estimated_cost_usd ?? 0), 0);
   const open = session.open_escalations ?? [];
 
-  // Per-initiative card: dep graph + features table + body drawer
+  // Per-initiative card: AC list from body + body drawer
   function renderInitiativeCard(init: ProposedInitiative, idx: number): string {
     const hue = (idx * 67) % 360;
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
-    const featRows = init.features.map((f) =>
-      `<tr><td><code>${esc(f.feature_id)}</code></td><td>${esc(f.title)}</td><td>${f.depends_on.length ? f.depends_on.map((d) => `<code>${esc(d)}</code>`).join(', ') : '—'}</td></tr>`
-    ).join('\n');
+    const gwtBlocks = extractGwtBlocks(init.body);
+    const acRows = gwtBlocks.length > 0
+      ? gwtBlocks.map((b, i) =>
+          `<tr><td>${i + 1}</td><td>${esc(b.given)}</td><td>${esc(b.when)}</td><td>${esc(b.then)}</td></tr>`
+        ).join('\n')
+      : `<tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr>`;
     return `<div class="init-card" data-initiative-id="${esc(init.initiative_id)}" style="--card-accent: hsl(${hue}, 55%, 50%)">
   <div class="init-header">
     <div class="init-title-block">
@@ -517,14 +441,13 @@ export function renderPlanHtml(session: ArchitectSession): string {
       ${dep !== '—' ? `<span class="chip dep-chip">after ${esc(dep)}</span>` : ''}
     </div>
   </div>
-  <div class="dep-graph-wrap">
-    <div class="dep-graph-title">Feature dependency graph</div>
-    ${renderFeatureDepGraphSvg(init)}
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody>${acRows}</tbody>
+    </table>
   </div>
-  <table class="features-table">
-    <thead><tr><th>Feature</th><th>Title</th><th>Depends on</th></tr></thead>
-    <tbody>${featRows}</tbody>
-  </table>
   <details class="body-drawer">
     <summary>Manifest body</summary>
     <pre>${esc(init.body.trimEnd())}</pre>
@@ -658,8 +581,8 @@ export function renderPlanHtml(session: ArchitectSession): string {
   .init-title-block { display: flex; flex-direction: column; gap: 0.25rem; }
   .init-title { font-size: 1.05rem; font-weight: 600; }
   .init-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.1rem; }
-  /* ── Dep graph ── */
-  .dep-graph-wrap {
+  /* ── AC list ── */
+  .ac-list-wrap {
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -667,18 +590,11 @@ export function renderPlanHtml(session: ArchitectSession): string {
     margin: 0.5rem 0 0.85rem;
     overflow-x: auto;
   }
-  .dep-graph-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-  svg.dep-graph { display: block; min-width: 100%; }
-  svg.dep-graph .node-box { fill: var(--card-bg); stroke: var(--border); stroke-width: 1; }
-  svg.dep-graph .node-box.root { stroke: var(--accent); stroke-width: 2; }
-  svg.dep-graph .node-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 11px; font-weight: 600; fill: var(--accent); }
-  svg.dep-graph .node-title { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 11px; fill: var(--fg); }
-  svg.dep-graph .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
-  svg.dep-graph .arrowhead { fill: var(--muted); }
-  /* ── Features table ── */
-  .features-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
-  .features-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
-  .features-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ac-list-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  /* ── AC table ── */
+  .ac-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
+  .ac-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .ac-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   /* ── Tables (general) ── */
   table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
   th, td { padding: 0.45rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 0.88rem; }

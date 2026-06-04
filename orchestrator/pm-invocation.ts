@@ -96,13 +96,6 @@ export type PmUserPromptInput = {
   worktreeRelPath: string;
   projectName: string;
   /**
-   * The manifest's declared feature_ids. Surfaced verbatim in the prompt so
-   * the PM never invents FEAT-N outside this set (C5a load-bearing fix).
-   * Optional only for backward-compat with older bench callers; live cycle
-   * always passes it.
-   */
-  knownFeatureIds?: readonly string[];
-  /**
    * Project-shape context the live caller reads from the worktree before
    * invoking the PM (2026-05-25 — claude-harness cycle 8 audit):
    * `package.json`, `CLAUDE.md`, `.forge/project.json`, and a directory
@@ -135,17 +128,16 @@ export type PmUserPromptInput = {
  * Tells the agent the cwd-relative paths and reiterates the contract
  * (brain-first, Given-When-Then, files_in_scope, _graph.md).
  *
- * Hard rules (quality_gate_cmd required, hidden-coupling check, feature
- * coverage) are enforced by the validator in orchestrator/work-item.ts —
- * this prompt states each rule once and defers to that enforcement.
+ * Hard rules (quality_gate_cmd required, hidden-coupling check) are
+ * enforced by the validator in orchestrator/work-item.ts — this prompt
+ * states each rule once and defers to that enforcement.
  */
 export function renderPmUserPrompt(input: PmUserPromptInput): string {
-  const knownFeatureIds = input.knownFeatureIds ?? [];
   const projectContextBlock = renderProjectContextBlock(input.projectContext);
   return [
     '# Project-manager invocation',
     '',
-    'You are running non-interactively. Decompose the initiative into atomic work items and write them to disk. **You MUST write at least one work-item file before stopping; finishing without writing files is a failed run.** Do not ask clarifying questions; if something is genuinely under-specified in the manifest, infer the most reasonable choice, note it in the work-item body, and proceed.',
+    'You are running non-interactively. Decompose the initiative body\'s Given-When-Then acceptance criteria directly into atomic outcome-sized work items and write them to disk. **You MUST write at least one work-item file before stopping; finishing without writing files is a failed run.** Do not ask clarifying questions; if something is genuinely under-specified in the manifest, infer the most reasonable choice, note it in the work-item body, and proceed.',
     ...(projectContextBlock ? ['', projectContextBlock] : []),
     '',
     '## Step 0 — Brain queries (REQUIRED, before any other action)',
@@ -153,7 +145,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     "**Your first tool calls MUST be `Read` against `brain/...` paths.** The orchestrator records which files you read; if zero of them are under `brain/`, the cycle aborts with a `pm.brain-skipped` error before validation even runs. The brain navigation index is in your system prompt above — use it to pick relevant theme files, then `Read` them in full. Do not infer or fabricate brain-theme content; you must have actually read the file.",
     '',
     'Required reads (minimum):',
-    '- One or more `brain/cycles/themes/*.md` covering work-item sizing, file-scope discipline, and feature-parallelism inheritance.',
+    '- One or more `brain/cycles/themes/*.md` covering work-item sizing and file-scope discipline.',
     `- \`projects/${input.projectName}/brain/profile.md\` — taste signals for this project. Cite this in the WI body.`,
     `- Any \`projects/${input.projectName}/brain/themes/*.md\` whose description matches the initiative's domain.`,
     '',
@@ -175,20 +167,14 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '',
     `## Initiative: ${input.initiativeId}`,
     `## Project: ${input.projectName}`,
-    ...(knownFeatureIds.length > 0
-      ? [
-          '',
-          '## Known feature IDs (manifest)',
-          '',
-          `The architect's manifest declares exactly these feature IDs — your work items' \`feature_id\` field MUST be drawn from this set. Inventing or renaming a \`FEAT-N\` is a hard error; the orchestrator validates and retries once, then aborts.`,
-          '',
-          `**Cover every feature.** Each feature below MUST receive **≥1 work item** — leaving a declared feature undecomposed is a hard error. Decompose ONLY the manifest's features; do not plan project-setup / brain / tracking-file busywork the manifest didn't ask for. If a feature genuinely needs no code, emit one WI stating why and what it verifies.`,
-          '',
-          `**ENRICH, don't re-decide the chunking.** When a feature is already the size of one mergeable commit, emit one WI that enriches it (ACs + gate + file scope). Split only when two parts change genuinely independent files/surfaces.`,
-          '',
-          knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
-        ]
-      : []),
+    '',
+    '## Decomposition mandate',
+    '',
+    'Read the initiative manifest body carefully. The body carries the vision and ≥1 Given-When-Then acceptance criterion. **Decompose the initiative ACs directly into atomic outcome-sized work items** (one WI = one independently-runnable AC where possible). The initiative body is your single source of intent — there is no features list.',
+    '',
+    '**Every GWT block in the initiative body must be exercised by ≥1 WI `quality_gate_cmd`.** Emitting zero work items is a terminal failure. Decompose ONLY the manifest body\'s ACs; do not plan project-setup / brain / tracking-file busywork the architect didn\'t ask for.',
+    '',
+    '**ENRICH, don\'t re-decide the chunking.** When an AC is already the size of one mergeable commit, emit one WI that enriches it (additional ACs + gate + file scope). Split only when two parts change genuinely independent files/surfaces.',
     ...(input.gateRecipe ? ['', input.gateRecipe] : []),
     '',
     '## Per-WI REQUIRED gate + optional fields',
@@ -217,7 +203,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '',
     '## Inputs',
     '',
-    `- Initiative manifest: \`${input.manifestRelPath}\` (read AFTER brain queries AND structural Globs).`,
+    `- Initiative manifest: \`${input.manifestRelPath}\` (read AFTER brain queries AND structural Globs). The body is your single source of intent.`,
     `- Worktree: your current directory. \`files_in_scope\` paths can be existing files (edited/moved) OR new files (created) — both are fine.`,
     '',
     '## Output requirements',
@@ -225,13 +211,11 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     `- Write **one work-item file per atomic unit of work** to \`.forge/work-items/WI-<n>.md\`. Use \`WI-1\`, \`WI-2\`, … contiguous and 1-indexed.`,
     `- Size WIs by consulting brain themes under \`projects/${input.projectName}/brain/themes/\` and \`brain/cycles/themes/\`. No synthetic floor or ceiling — choose the shape that matches the work.`,
     `- Prefer WIs with empty \`depends_on\` (parallel-from-start). The dev-loop parallelises every DAG level.`,
-    "- **Inherit feature parallelism from the manifest.** If two features have no edge between them, their WIs MUST also be independent. Serialising parallel features is the most common PM antipattern.",
     '- **File-scope discipline (enforced).** If two WIs would both edit the same file, prefer in order: (1) split the file, (2) merge the WIs, (3) add a `depends_on` edge. Two WIs sharing a file with no edge fails `detectHiddenCoupling()` at PM close.',
     '- Frontmatter (locked by ADR 015) — exactly these fields, all required:',
     '  ```yaml',
     '  ---',
     '  work_item_id: WI-<n>',
-    '  feature_id: FEAT-<n>          # must exist in the manifest',
     `  initiative_id: ${input.initiativeId}`,
     '  status: pending',
     '  depends_on: [WI-...]          # empty array if independent',
@@ -254,14 +238,15 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '',
     '**Per work item — frontmatter completeness:**',
     '- `work_item_id` (matches `WI-<n>` and the filename)',
-    '- `feature_id` (matches a feature in the manifest)',
     `- \`initiative_id\` set exactly to \`${input.initiativeId}\``,
     '- `status: pending`',
     '- `depends_on` (array, possibly empty)',
-    '- `acceptance_criteria` — at least 2 entries, each with `given` / `when` / `then`, all double-quoted',
+    '- `acceptance_criteria` — at least 1 entry, each with `given` / `when` / `then`, all double-quoted',
     '- `files_in_scope` — at least 1 worktree-relative path, no leading `/`',
     '- `estimated_iterations` — a positive integer (>= 1)',
     '- `quality_gate_cmd` — REQUIRED; must fail on a clean tree; first arg must be real project tooling',
+    '',
+    "**AC coverage check:** every GWT block in the initiative body is exercised by ≥1 WI `quality_gate_cmd`. If any body AC has no corresponding WI gate, add the missing WI or expand an existing one.",
     '',
     "**Hidden-coupling check:** walk every pair of work items sharing a file in `files_in_scope`. If neither appears in the other's `depends_on` transitively, add the missing edge or merge them. The orchestrator's `detectHiddenCoupling()` hard-fails the cycle on violations.",
     '',
@@ -312,57 +297,6 @@ function renderProjectContextBlock(
   }
   if (parts.length <= 4) return ''; // header only — nothing actually inlined
   return parts.join('\n');
-}
-
-/**
- * S3 / C5b — augment the PM user prompt on a hallucination retry. The
- * orchestrator catches a first-pass feature_id-hallucination, wipes the
- * stale work-items dir, and re-invokes the PM with this text appended.
- *
- * The retry's whole job is "do it again, but use these feature_ids verbatim
- * and only these" — we DON'T re-state the brain-query mandate (the first
- * pass already covered it; the retry's brain gate is intentionally
- * relaxed in runProjectManager).
- */
-export function renderPmHallucinationRetryAugment(args: {
-  knownFeatureIds: readonly string[];
-  hallucinated: readonly string[];
-}): string {
-  return [
-    '## RETRY pass — your previous work items invented feature IDs',
-    '',
-    `Your previous decomposition declared the following feature IDs that do **not** appear in the manifest: ${args.hallucinated.map((f) => `\`${f}\``).join(', ')}. The orchestrator has wiped your previous \`.forge/work-items/\` output. Re-decompose the initiative from scratch.`,
-    '',
-    'Use **only** these feature IDs (manifest declared):',
-    '',
-    args.knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
-    '',
-    "If a WI you wrote previously would have fitted a manifest feature you missed, re-map it to the correct existing FEAT-id. **Do not invent new feature IDs**, even if you believe one is needed — the architect contract is binding; if the manifest is genuinely incomplete, surface the gap in the first WI's body and proceed against the existing features only.",
-  ].join('\n');
-}
-
-/**
- * Faithful-decomposition retry (coverage variant). The orchestrator catches a
- * first pass that left ≥1 manifest feature with **zero** work items — the PM
- * dropped/ignored a declared feature (the betterado failure mode: it planned
- * unrelated work and never decomposed task_group/release/live-harness). Re-invoke
- * the PM with this augment naming the uncovered features verbatim.
- */
-export function renderPmCoverageRetryAugment(args: {
-  knownFeatureIds: readonly string[];
-  uncovered: readonly string[];
-}): string {
-  return [
-    '## RETRY pass — you left declared features with NO work items',
-    '',
-    `Every feature the manifest declares **must** be decomposed into ≥1 work item. Your previous decomposition produced **zero** work items for: ${args.uncovered.map((f) => `\`${f}\``).join(', ')}. The orchestrator has wiped your previous \`.forge/work-items/\` output. Re-decompose the initiative from scratch, covering **every** feature.`,
-    '',
-    'The manifest declares exactly these features — each needs at least one WI:',
-    '',
-    args.knownFeatureIds.map((id) => `- \`${id}\``).join('\n'),
-    '',
-    "Do **not** invent new feature IDs and do **not** plan work outside the manifest's features (no project-setup / brain / tracking-file busywork the manifest didn't ask for). If a feature genuinely needs no code, still emit one WI that states why and what it verifies — never silently drop it.",
-  ].join('\n');
 }
 
 /** Tool-use telemetry surfaced by the live cycle. */

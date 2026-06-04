@@ -29,6 +29,7 @@ import {
   type CouncilTranscript,
 } from './architect-plan.ts';
 // Note: ExplorationFields, ProjectMetrics, InitiativeType removed (ARCH-4).
+// Note: ProposedFeature + features[] removed (no-feature model, 2026-06-04).
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -47,10 +48,7 @@ function fxInitiative(overrides: Partial<ProposedInitiative> = {}): ProposedInit
     iteration_budget: 5,
     cost_budget_usd: 1.0,
     estimated_cost_usd: 0.25,
-    features: [
-      { feature_id: 'FEAT-1', title: 'Do the thing', depends_on: [] },
-    ],
-    body: '# Sample initiative\n\nThis is the manifest body.\n\n## Acceptance criteria\n\n- Given X, when Y, then Z.\n',
+    body: '# Sample initiative\n\nThis is the manifest body.\n\n## Acceptance criteria\n\n- given: "X exists"\n  when:  "Y happens"\n  then:  "Z is observable"\n',
     ...overrides,
   };
 }
@@ -338,82 +336,71 @@ test('renderPlanHtml: produces a self-contained HTML document with no external l
   assert.match(html, /<title>PLAN — 2026-05-23T10-15-00 — sample<\/title>/);
 });
 
-test('renderPlanHtml: renders a feature dependency graph as inline SVG (replaces cycle diagram per 2026-05-23 dogfood pushback)', () => {
+test('renderPlanHtml: renders initiative AC list instead of feature dep graph (no-feature model, 2026-06-04)', () => {
   const html = renderPlanHtml(fxSession({
     initiatives: [
       fxInitiative({
-        initiative_id: 'INIT-2026-05-24-multi-feat',
-        features: [
-          { feature_id: 'FEAT-1', title: 'gomock substrate', depends_on: [] },
-          { feature_id: 'FEAT-2', title: 'pre_deployment_gates', depends_on: ['FEAT-1'] },
-          { feature_id: 'FEAT-3', title: 'post_deployment_gates', depends_on: ['FEAT-2'] },
-          { feature_id: 'FEAT-4', title: 'docs + example', depends_on: ['FEAT-2', 'FEAT-3'] },
-        ],
+        initiative_id: 'INIT-2026-05-24-multi-ac',
+        body: '## Substrate\n\n- given: "CI is red"\n  when:  "fmt is fixed"\n  then:  "checks pass"\n- given: "CI is green"\n  when:  "deployment gate is added"\n  then:  "pre-deploy checks run"\n',
       }),
     ],
   }));
-  // The replaced cycle diagram MUST NOT be present
-  assert.ok(!/class="cycle"/.test(html), 'cycle diagram dropped per dogfood pushback');
-  assert.ok(!/graphify brain/.test(html), 'cycle preamble dropped');
-  assert.ok(!/Where this sits in the forge cycle/.test(html), 'irrelevant header dropped');
-  // The dep graph IS rendered (label is a styled div, not an h2, per the ADR 020 card layout)
-  assert.match(html, /Feature dependency graph/);
-  assert.match(html, /<svg class="dep-graph"/);
-  // Each feature appears as a node
-  assert.match(html, />FEAT-1</);
-  assert.match(html, />FEAT-2</);
-  assert.match(html, />FEAT-3</);
-  assert.match(html, />FEAT-4</);
-  // Titles surface (may be truncated)
-  assert.match(html, /gomock substrate/);
-  // Edges rendered as <path class="edge">
-  const edgeCount = (html.match(/class="edge"/g) ?? []).length;
-  assert.ok(edgeCount >= 4, `expected ≥4 edge paths for 4 dependency edges (FEAT-2→FEAT-1, FEAT-3→FEAT-2, FEAT-4→FEAT-2, FEAT-4→FEAT-3); got ${edgeCount}`);
-  // Root feature (FEAT-1) gets the accented border via .root class
-  assert.match(html, /class="node-box root"/);
-  // Hover tooltip via SVG <title>
-  assert.match(html, /<title>FEAT-1: gomock substrate<\/title>/);
+  // Cycle diagram and old dep-graph MUST NOT be present
+  assert.ok(!/class="cycle"/.test(html), 'cycle diagram must not be present');
+  assert.ok(!/class="dep-graph"/.test(html), 'SVG dep-graph must not be present');
+  assert.ok(!/Feature dependency graph/.test(html), 'feature dep graph title must not be present');
+  // AC list IS rendered
+  assert.match(html, /Acceptance criteria/);
+  assert.match(html, /class="ac-list-wrap"/);
+  assert.match(html, /class="ac-table"/);
+  // GWT blocks surface in the table
+  assert.match(html, /CI is red/);
+  assert.match(html, /fmt is fixed/);
+  assert.match(html, /checks pass/);
 });
 
-test('renderPlanHtml: single-feature initiative renders a degenerate dep graph (no edges, one node)', () => {
+test('renderPlanHtml: single-AC initiative renders AC list with one row', () => {
   const html = renderPlanHtml(fxSession({
     initiatives: [
       fxInitiative({
-        initiative_id: 'INIT-2026-05-24-single-feat',
-        features: [
-          { feature_id: 'FEAT-1', title: 'Single feature', depends_on: [] },
-        ],
+        initiative_id: 'INIT-2026-05-24-single-ac',
+        body: '## Single\n\n- given: "system is ready"\n  when:  "request arrives"\n  then:  "response is 200"\n',
       }),
     ],
   }));
-  assert.match(html, /<svg class="dep-graph"/);
-  assert.match(html, />FEAT-1</);
-  // No edges expected
-  assert.ok(!/class="edge"/.test(html));
+  assert.ok(!/class="dep-graph"/.test(html), 'SVG dep-graph must not be present');
+  assert.match(html, /class="ac-table"/);
+  assert.match(html, /system is ready/);
+  assert.match(html, /request arrives/);
+  assert.match(html, /response is 200/);
 });
 
-test('renderPlanHtml: multi-initiative session renders one dep graph per initiative with title chrome', () => {
+test('renderPlanHtml: multi-initiative session renders one AC list per initiative with initiative-id chrome', () => {
   const html = renderPlanHtml(fxSession({
     initiatives: [
       fxInitiative({
         initiative_id: 'INIT-A',
         title: 'First initiative',
-        features: [{ feature_id: 'FEAT-1', title: 'a', depends_on: [] }],
+        body: '## A\n\n- given: "A condition"\n  when:  "A action"\n  then:  "A outcome"\n',
       }),
       fxInitiative({
         initiative_id: 'INIT-B',
         title: 'Second initiative',
-        features: [{ feature_id: 'FEAT-1', title: 'b', depends_on: [] }],
+        body: '## B\n\n- given: "B condition"\n  when:  "B action"\n  then:  "B outcome"\n',
       }),
     ],
   }));
-  // One SVG per initiative
-  const svgCount = (html.match(/<svg class="dep-graph"/g) ?? []).length;
-  assert.equal(svgCount, 2);
-  // Each carries its initiative-id title chrome (only shown when N>1)
-  assert.match(html, /<div class="dep-graph-title">/);
+  // No SVG dep-graphs
+  assert.ok(!/class="dep-graph"/.test(html), 'no SVG dep-graphs in multi-initiative output');
+  // Two AC list wrappers (one per initiative)
+  const acListCount = (html.match(/class="ac-list-wrap"/g) ?? []).length;
+  assert.equal(acListCount, 2, 'expected one ac-list-wrap per initiative');
+  // Each initiative-id appears (title chrome)
   assert.match(html, /INIT-A/);
   assert.match(html, /INIT-B/);
+  // AC content surfaces
+  assert.match(html, /A condition/);
+  assert.match(html, /B condition/);
 });
 
 test('renderPlanHtml: surfaces vision + interview rounds as a table', () => {

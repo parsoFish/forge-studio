@@ -12,12 +12,6 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-export type Feature = {
-  feature_id: string;          // FEAT-<n>
-  title: string;
-  depends_on: string[];        // feature_ids of prerequisite features
-};
-
 export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
 
 /**
@@ -56,12 +50,11 @@ export type InitiativeManifest = {
    * when the frontmatter omits it (legacy manifests).
    */
   origin: InitiativeOrigin;
-  features: Feature[];
   /**
    * F-25: initiative-level dependencies. Each entry is another initiative_id
    * that must be in `_queue/done/` before the scheduler may claim this one.
-   * Empty / absent = no prerequisites. Distinct from `features[].depends_on`,
-   * which orders work-items WITHIN this initiative.
+   * Empty / absent = no prerequisites. Distinct from `depends_on` on individual
+   * work-items, which orders WIs WITHIN this initiative.
    */
   depends_on_initiatives?: string[];
   /**
@@ -117,7 +110,6 @@ export type InitiativeManifest = {
 };
 
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
-const FEATURE_ID_PATTERN = /^FEAT-\d+$/;
 
 export function parseManifest(content: string): InitiativeManifest {
   const parsed = matter(content);
@@ -137,9 +129,6 @@ export function parseManifest(content: string): InitiativeManifest {
   const rawOrigin = stringField(data, 'origin', false);
   const origin = (rawOrigin ? rawOrigin : DEFAULT_ORIGIN) as InitiativeOrigin;
 
-  const rawFeatures = Array.isArray(data.features) ? (data.features as unknown[]) : [];
-  const features: Feature[] = rawFeatures.map((f, i) => parseFeature(f, i));
-
   const manifest: InitiativeManifest = {
     initiative_id,
     project,
@@ -149,7 +138,6 @@ export function parseManifest(content: string): InitiativeManifest {
     cost_budget_usd,
     phase,
     origin,
-    features,
     body: parsed.content.replace(/^\n+/, ''),
   };
   if (typeof data.claimed_at === 'string') manifest.claimed_at = data.claimed_at;
@@ -208,13 +196,6 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.previous_failure_modes && m.previous_failure_modes.length > 0) {
     data.previous_failure_modes = m.previous_failure_modes;
   }
-  if (m.features.length > 0) {
-    data.features = m.features.map((f) => ({
-      feature_id: f.feature_id,
-      title: f.title,
-      depends_on: f.depends_on,
-    }));
-  }
   return matter.stringify('\n' + m.body.replace(/^\n+/, ''), data);
 }
 
@@ -254,24 +235,6 @@ export function validateManifest(m: InitiativeManifest): string[] {
       }
     }
   }
-
-  // Feature shape + dependency graph
-  const ids = new Set<string>();
-  for (const f of m.features) {
-    if (!f.feature_id || !FEATURE_ID_PATTERN.test(f.feature_id)) {
-      errors.push(`feature ${f.feature_id || '<missing>'} must match FEAT-<n>`);
-      continue;
-    }
-    if (ids.has(f.feature_id)) errors.push(`duplicate feature_id: ${f.feature_id}`);
-    ids.add(f.feature_id);
-  }
-  for (const f of m.features) {
-    for (const dep of f.depends_on) {
-      if (!ids.has(dep)) errors.push(`feature ${f.feature_id}: depends_on references undeclared ${dep}`);
-    }
-  }
-  const cycle = detectCycle(m.features);
-  if (cycle) errors.push(`feature dependency cycle: ${cycle.join(' → ')}`);
 
   return errors;
 }
@@ -330,51 +293,3 @@ function numberField(data: Record<string, unknown>, key: string, required: boole
   return 0;
 }
 
-function parseFeature(f: unknown, idx: number): Feature {
-  if (typeof f !== 'object' || f === null) {
-    throw new Error(`features[${idx}] must be an object`);
-  }
-  const obj = f as Record<string, unknown>;
-  const feature_id = typeof obj.feature_id === 'string' ? obj.feature_id : '';
-  const title = typeof obj.title === 'string' ? obj.title : '';
-  const depends_on = Array.isArray(obj.depends_on)
-    ? (obj.depends_on as unknown[]).filter((x): x is string => typeof x === 'string')
-    : [];
-  return { feature_id, title, depends_on };
-}
-
-/** DFS cycle detection across features. Returns the cycle path if one is found. */
-function detectCycle(features: Feature[]): string[] | null {
-  const adj = new Map<string, string[]>();
-  for (const f of features) adj.set(f.feature_id, f.depends_on);
-
-  const WHITE = 0, GRAY = 1, BLACK = 2;
-  const color = new Map<string, number>();
-  for (const id of adj.keys()) color.set(id, WHITE);
-
-  const stack: string[] = [];
-  function visit(id: string): string[] | null {
-    color.set(id, GRAY);
-    stack.push(id);
-    for (const dep of adj.get(id) ?? []) {
-      const c = color.get(dep);
-      if (c === undefined) continue;            // undeclared — flagged elsewhere
-      if (c === GRAY) return [...stack.slice(stack.indexOf(dep)), dep];
-      if (c === WHITE) {
-        const found = visit(dep);
-        if (found) return found;
-      }
-    }
-    stack.pop();
-    color.set(id, BLACK);
-    return null;
-  }
-
-  for (const id of adj.keys()) {
-    if (color.get(id) === WHITE) {
-      const found = visit(id);
-      if (found) return found;
-    }
-  }
-  return null;
-}

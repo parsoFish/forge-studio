@@ -23,7 +23,6 @@ import {
 function fixture(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     work_item_id: 'WI-1',
-    feature_id: 'FEAT-1',
     initiative_id: 'INIT-2026-05-08-demo',
     status: 'pending',
     depends_on: [],
@@ -48,12 +47,11 @@ test('serializeWorkItem → parseWorkItem round-trips frontmatter and body', () 
   const md = serializeWorkItem(w);
   assert.match(md, /^---\n/);
   assert.match(md, /work_item_id: WI-1/);
-  assert.match(md, /feature_id: FEAT-1/);
+  assert.ok(!/feature_id:/.test(md), 'feature_id must not appear in serialized output');
   assert.match(md, /Implement the handler/);
 
   const parsed = parseWorkItem(md);
   assert.equal(parsed.work_item_id, 'WI-1');
-  assert.equal(parsed.feature_id, 'FEAT-1');
   assert.equal(parsed.initiative_id, 'INIT-2026-05-08-demo');
   assert.equal(parsed.status, 'pending');
   assert.equal(parsed.acceptance_criteria.length, 1);
@@ -69,11 +67,6 @@ test('validateWorkItem: passes a clean work item', () => {
 test('validateWorkItem: rejects malformed work_item_id', () => {
   const errors = validateWorkItem(fixture({ work_item_id: 'WIE-1' }));
   assert.ok(errors.some((e) => e.includes('work_item_id') && e.includes('WI-')), `got ${JSON.stringify(errors)}`);
-});
-
-test('validateWorkItem: rejects malformed feature_id', () => {
-  const errors = validateWorkItem(fixture({ feature_id: 'F-1' }));
-  assert.ok(errors.some((e) => e.includes('feature_id') && e.includes('FEAT-')));
 });
 
 test('validateWorkItem: rejects malformed initiative_id', () => {
@@ -123,13 +116,6 @@ test('validateWorkItem: rejects depends_on referring to unknown WI when set prov
     knownWorkItemIds: new Set(['WI-1', 'WI-2']),
   });
   assert.ok(errors.some((e) => e.includes('WI-99')));
-});
-
-test('validateWorkItem: rejects feature_id missing from manifest set', () => {
-  const errors = validateWorkItem(fixture({ feature_id: 'FEAT-9' }), {
-    knownFeatureIds: new Set(['FEAT-1', 'FEAT-2']),
-  });
-  assert.ok(errors.some((e) => e.includes('FEAT-9')));
 });
 
 test('validateWorkItemSet: rejects duplicate work_item_ids', () => {
@@ -224,7 +210,7 @@ test('readWorkItemsFromDir: parses all .md files except _graph.md', () => {
 });
 
 test('parseWorkItem: throws on missing required field', () => {
-  const md = `---\nfeature_id: FEAT-1\n---\n\nbody`;
+  const md = `---\ninitiative_id: INIT-2026-05-08-demo\n---\n\nbody`;
   assert.throws(() => parseWorkItem(md), /work_item_id/);
 });
 
@@ -247,6 +233,8 @@ test('round-trip: a minimal WI (only required fields) serialises byte-identicall
   const reparsed = parseWorkItem(md1);
   const md2 = serializeWorkItem(reparsed);
   assert.equal(md1, md2, 'round-trip must be byte-identical');
+  // The removed feature layer must not appear in serialized output.
+  assert.ok(!md1.includes('feature_id:'), 'feature_id must not appear (feature layer removed)');
   // The optional fields that remain unset must not leak into the frontmatter.
   assert.ok(!md1.includes('non_goals'), 'non_goals must not appear when undefined');
   assert.ok(!md1.includes('verification_artifact'), 'verification_artifact must not appear when undefined');

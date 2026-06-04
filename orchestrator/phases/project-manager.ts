@@ -17,8 +17,6 @@ import {
   PM_MODEL,
   buildPmSystemPrompt,
   renderPmUserPrompt,
-  renderPmHallucinationRetryAugment,
-  renderPmCoverageRetryAugment,
   tallyToolUse,
   type PmToolUseSummary,
 } from '../pm-invocation.ts';
@@ -35,9 +33,8 @@ import { withIdleDeadline } from '../stream-deadline.ts';
 
 /**
  * Injection seam for tests. The live cycle uses `sdkQuery` from the
- * Claude Agent SDK; cycle-pm-hallucination.test.ts supplies a stub that
- * returns a canned PM session per call so we can exercise the retry path
- * without hitting the network.
+ * Claude Agent SDK; tests supply a stub that returns a canned PM session
+ * per call so we can exercise the pass without hitting the network.
  */
 export type PmQueryFn = (params: {
   prompt: string;
@@ -96,87 +93,16 @@ export async function runProjectManager(
   const manifest = parseManifest(readFileSync(input.manifestPath, 'utf8'));
   const queryFn = options.queryFn ?? (sdkQuery as unknown as PmQueryFn);
 
-  const manifestFeatureIds = manifest.features.map((f) => f.feature_id);
-
-  // First PM pass — the standard production behaviour. If it fails ONLY on a
-  // **faithful-decomposition** gap — the PM invented a feature_id not in the
-  // manifest (hallucination, C5b) and/or left a declared feature with zero
-  // work items (coverage; the betterado failure mode) — retry once with an
-  // augment that names the manifest features and the specific defect. Any
-  // other failure mode falls through to the standard throw path.
-  const first = await runOnePmPass({
+  const result = await runOnePmPass({
     input,
     logger,
     manifest,
     parentEventId: start.event_id,
     queryFn,
-    pass: 1,
-    promptAugment: null,
   });
 
-  if (first.kind === 'success') return;
-  if (first.kind !== 'fidelity') {
-    throw new Error(`project-manager phase failed: ${first.summary}`);
-  }
-
-  // Hallucination is the more specific contract violation, so when both gaps
-  // are present it drives the messaging (preserving the C5b event contract).
-  const firstIsHalluc = first.hallucinated.length > 0;
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'project-manager',
-    skill: 'project-manager',
-    event_type: 'log',
-    input_refs: [input.manifestPath],
-    output_refs: [],
-    message: firstIsHalluc ? 'pm.feature-hallucination-retry' : 'pm.feature-coverage-retry',
-    metadata: firstIsHalluc
-      ? { pass: 1, hallucinated_feature_ids: first.hallucinated, manifest_feature_ids: manifestFeatureIds }
-      : { pass: 1, uncovered_feature_ids: first.uncovered, manifest_feature_ids: manifestFeatureIds },
-  });
-
-  const second = await runOnePmPass({
-    input,
-    logger,
-    manifest,
-    parentEventId: start.event_id,
-    queryFn,
-    pass: 2,
-    promptAugment: firstIsHalluc
-      ? renderPmHallucinationRetryAugment({ knownFeatureIds: manifestFeatureIds, hallucinated: first.hallucinated })
-      : renderPmCoverageRetryAugment({ knownFeatureIds: manifestFeatureIds, uncovered: first.uncovered }),
-  });
-
-  if (second.kind === 'success') return;
-
-  // Second pass also failed. If it's STILL a fidelity gap, classify + throw
-  // distinctly so the cycle's failure-classifier picks up the terminal mode
-  // (pm-feature-hallucination or pm-feature-coverage — both need an architect
-  // amend, not an auto-retry). Other failure modes (hidden coupling, schema,
-  // etc.) fall back to the generic message for their own classifiers.
-  if (second.kind === 'fidelity') {
-    const secondIsHalluc = second.hallucinated.length > 0;
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'project-manager',
-      skill: 'project-manager',
-      event_type: 'error',
-      input_refs: [input.manifestPath],
-      output_refs: [],
-      message: secondIsHalluc ? 'pm.feature-hallucination' : 'pm.feature-coverage',
-      metadata: secondIsHalluc
-        ? { passes_attempted: 2, hallucinated_feature_ids: second.hallucinated, manifest_feature_ids: manifestFeatureIds }
-        : { passes_attempted: 2, uncovered_feature_ids: second.uncovered, manifest_feature_ids: manifestFeatureIds },
-    });
-    throw new Error(
-      secondIsHalluc
-        ? `project-manager phase failed: feature_id hallucination persisted across 2 passes (last invented ${second.hallucinated.join(', ')}); manifest only declares ${manifestFeatureIds.join(', ')}`
-        : `project-manager phase failed: feature-coverage gap persisted across 2 passes (features with no work items: ${second.uncovered.join(', ')}); every declared feature must be decomposed`,
-    );
-  }
-  throw new Error(`project-manager phase failed: ${second.summary}`);
+  if (result.kind === 'success') return;
+  throw new Error(`project-manager phase failed: ${result.summary}`);
 }
 
 type PmPassInput = {
@@ -185,30 +111,19 @@ type PmPassInput = {
   manifest: InitiativeManifest;
   parentEventId: string;
   queryFn: PmQueryFn;
-  pass: 1 | 2;
-  /** Extra text appended to the standard PM prompt for retry-augmented passes. */
-  promptAugment: string | null;
 };
 
 type PmPassOutcome =
   | { kind: 'success' }
-  /**
-   * A faithful-decomposition gap — the ONLY problems are invented feature_ids
-   * (`hallucinated`, C5b) and/or declared features left with zero work items
-   * (`uncovered`). Both are auto-retryable: re-invoke once with an augment that
-   * names the manifest features and the specific defect.
-   */
-  | { kind: 'fidelity'; hallucinated: string[]; uncovered: string[]; summary: string }
   | { kind: 'failure'; summary: string };
 
 /**
- * Run one PM pass against the SDK, validate the emitted work-items, and
+ * Run the PM pass against the SDK, validate the emitted work-items, and
  * emit telemetry. Returns a discriminated outcome rather than throwing so
- * the outer orchestrator can decide whether to retry (hallucination) or
- * give up (anything else).
+ * the outer orchestrator can decide how to handle failure.
  */
 async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
-  const { input, logger, manifest, parentEventId, queryFn, pass, promptAugment } = p;
+  const { input, logger, manifest, parentEventId, queryFn } = p;
 
   // F-21: wipe any stale `.forge/work-items/` inherited from the project's
   // base branch. The dev-loop's pre-review boundary snapshot historically
@@ -216,15 +131,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // agent sees pre-existing WI files and emits stale content (wrong
   // initiative_id, wrong work) instead of starting from a clean canvas.
   // Idempotent — missing dir is fine; gitignore is the structural fix,
-  // this is the runtime backstop. On the retry pass this also clears the
-  // hallucinated WI files from pass 1.
+  // this is the runtime backstop.
   const stalePmScratch = resolve(input.worktreePath, '.forge', 'work-items');
   if (existsSync(stalePmScratch)) {
     rmSync(stalePmScratch, { recursive: true, force: true });
   }
-
-  const featureCountByFeatureId = new Map<string, number>();
-  for (const f of manifest.features) featureCountByFeatureId.set(f.feature_id, 0);
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const systemPrompt = buildPmSystemPrompt(forgeRoot);
@@ -234,26 +145,20 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // script) because "go read package.json" wasn't load-bearing —
   // inlining the contents makes it so.
   const projectContext = readProjectContext(input.worktreePath);
-  // 2026-05-25 (operator steer): numeric sizing hints (min/max WI count,
-  // parallel-fraction floor) removed — PM is trusted to size, and the
-  // reference for "what shape lands" is brain-query for past successful
-  // WIs, not thin-air bounds derived from feature count.
   // betterado #2: derive the language-specific scoped-gate recipe from the
   // worktree so the PM writes a discriminating per-WI gate (e.g. Go's
   // `-tags all -run <NewPrefix> ./pkg/`) instead of the operator hand-encoding it.
   const gateRecipe = renderGateRecipeBlock(deriveGateRecipe(input.worktreePath));
-  let prompt = renderPmUserPrompt({
+  const prompt = renderPmUserPrompt({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
     worktreeRelPath: input.worktreePath,
     projectName: manifest.project,
-    knownFeatureIds: manifest.features.map((f) => f.feature_id),
     projectContext,
     gateRecipe,
   });
-  if (promptAugment) prompt = prompt + '\n\n' + promptAugment;
 
-  const options: Record<string, unknown> = {
+  const opts: Record<string, unknown> = {
     // F-37: PM runs with cwd = the worktree, NOT forgeRoot. Previously
     // the PM agent's `Glob({pattern: 'src/**'})` resolved against forge's
     // own root (which has no src/ directory) — getting zero results, then
@@ -275,14 +180,14 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // throws into cycle.ts → classifier (transient) instead of hanging the queue.
   // betterado roadmap run stalled exactly here mid-PM (known-gaps 2026-06-01).
   const abortController = new AbortController();
-  options.abortController = abortController;
+  opts.abortController = abortController;
 
   const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0 };
   let costUsd = 0;
   let durationMs = 0;
   let resultSubtype: string | undefined;
 
-  // Phase A — per-tool live telemetry for the PM (no work-item/feature yet).
+  // Phase A — per-tool live telemetry for the PM (no work-item yet).
   // The PM drives its own stream loop, so it feeds the sink manually via
   // `extractLiveToolDetails` rather than `createClaudeAgent`'s `onToolUse`.
   const pmToolSink = makeToolEventSink(logger, {
@@ -293,7 +198,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   });
   let pmToolSeq = 0;
 
-  for await (const msg of withIdleDeadline(queryFn({ prompt, options }) as AsyncIterable<unknown>, {
+  for await (const msg of withIdleDeadline(queryFn({ prompt, options: opts }) as AsyncIterable<unknown>, {
     label: 'project-manager',
     abortController,
   })) {
@@ -333,11 +238,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // PM agent skipped brain-query entirely, fail fast with a distinct error
   // (rather than continuing into validateWorkItemSet, where the
   // brain-skip's downstream effect — incomplete frontmatter — surfaces
-  // instead, masking the real cause). Only enforced on the first pass:
-  // the retry's augmented prompt is the orchestrator's "consult-the-brain
-  // result" surface, and the second pass shouldn't re-burn that budget.
+  // instead, masking the real cause).
   if (
-    pass === 1 &&
     !recordBrainGateResult('project-manager', 'project-manager', toolUseSummary.brainReads, {
       initiativeId: input.initiativeId,
       logger,
@@ -355,8 +257,6 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   const { items, parseErrors } = readWorkItemsFromDir(workItemsDir);
 
   for (const item of items) {
-    const prev = featureCountByFeatureId.get(item.feature_id) ?? 0;
-    featureCountByFeatureId.set(item.feature_id, prev + 1);
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
@@ -366,28 +266,12 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       input_refs: [input.manifestPath],
       output_refs: [resolve(workItemsDir, `${item.work_item_id}.md`)],
       message: 'pm.work-item-emitted',
-      metadata: { work_item_id: item.work_item_id, feature_id: item.feature_id, pass },
+      metadata: { work_item_id: item.work_item_id },
     });
   }
 
-  for (const [featureId, count] of featureCountByFeatureId.entries()) {
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: parentEventId,
-      phase: 'project-manager',
-      skill: 'project-manager',
-      event_type: 'log',
-      input_refs: [input.manifestPath],
-      output_refs: [],
-      message: 'pm.feature-decomposed',
-      metadata: { feature_id: featureId, work_item_count: count, pass },
-    });
-  }
-
-  const knownFeatureIds = new Set(manifest.features.map((f) => f.feature_id));
   const { perItem, setErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,
-    knownFeatureIds,
   });
   const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
@@ -395,33 +279,23 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // without a `depends_on` edge between them will conflict at merge time.
   const couplingViolations = items.length > 0 ? detectHiddenCoupling(items) : [];
 
-  const hallucinated = collectHallucinatedFeatureIds(items, knownFeatureIds);
+  // Operator sanity-check surface: a greppable WI list so a human can eyeball
+  // at a glance whether each WI got plausible scope (and spot off-target scope —
+  // e.g. a WI touching brain/ for a code initiative).
+  writeDecompositionDoc(workItemsDir, manifest, items);
 
-  // Faithful-decomposition: every DECLARED feature must get ≥1 work item.
-  // A feature with zero WIs means the PM dropped/ignored it — the betterado
-  // failure mode (a correct 3-feature manifest, decomposed into unrelated
-  // brain/tracking busywork). Cheap + deterministic; the complement of the
-  // hallucination check (no invented features ∧ no dropped features ⇒ the WIs
-  // map onto exactly the manifest's features).
-  const coveredFeatureIds = new Set(items.map((i) => i.feature_id));
-  const uncovered = [...knownFeatureIds].filter((id) => !coveredFeatureIds.has(id)).sort();
-
-  // Operator sanity-check surface: a greppable feature→WI mapping so a human
-  // can eyeball at a glance whether each feature got plausible work items
-  // (and spot off-target scope — e.g. a WI touching brain/ for a code feature).
-  writeFeatureCoverageDoc(workItemsDir, manifest, items, uncovered);
-
-  if (uncovered.length > 0) {
+  // Terminal: zero work items emitted → pm-empty-decomposition.
+  if (items.length === 0) {
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
       skill: 'project-manager',
-      event_type: 'log',
+      event_type: 'error',
       input_refs: [input.manifestPath],
-      output_refs: [resolve(workItemsDir, '_coverage.md')],
-      message: 'pm.feature-uncovered',
-      metadata: { uncovered_feature_ids: uncovered, manifest_feature_ids: manifest.features.map((f) => f.feature_id), pass },
+      output_refs: [],
+      message: 'pm.empty-decomposition',
+      metadata: { result_subtype: resultSubtype },
     });
   }
 
@@ -430,8 +304,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     Object.keys(parseErrors).length > 0 ||
     setErrors.length > 0 ||
     itemErrorCount > 0 ||
-    couplingViolations.length > 0 ||
-    uncovered.length > 0;
+    couplingViolations.length > 0;
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -442,7 +315,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     input_refs: [input.manifestPath],
     output_refs: [resolve(workItemsDir, '_graph.md')],
     message: 'pm.graph-emitted',
-    metadata: { pass },
+    metadata: {},
   });
 
   logger.emit({
@@ -463,25 +336,10 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       set_errors: setErrors,
       per_item_error_count: itemErrorCount,
       hidden_coupling_violations: couplingViolations,
-      hallucinated_feature_ids: hallucinated,
-      uncovered_feature_ids: uncovered,
-      pass,
     },
   });
 
   if (!failed) return { kind: 'success' };
-
-  // A faithful-decomposition gap is the ONLY problem when nothing else fails
-  // and the per-item errors are exactly the hallucinated WIs' feature_id
-  // errors (so the items are otherwise valid). Either invented feature_ids OR
-  // dropped features (or both) → the retryable `fidelity` kind.
-  const onlyFidelityGap =
-    items.length > 0 &&
-    Object.keys(parseErrors).length === 0 &&
-    setErrors.length === 0 &&
-    couplingViolations.length === 0 &&
-    itemErrorCount === hallucinated.length &&
-    (hallucinated.length > 0 || uncovered.length > 0);
 
   const summary = [
     items.length === 0 ? 'no work items emitted' : null,
@@ -489,87 +347,42 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     setErrors.length > 0 ? `set errors: ${setErrors.join('; ')}` : null,
     itemErrorCount > 0 ? `${itemErrorCount} per-item validation errors` : null,
     couplingViolations.length > 0
-      ? `${couplingViolations.length} hidden-coupling pair(s): ${couplingViolations.map((p) => `${p.a}↔${p.b} share ${p.sharedFiles.join(',')}`).join('; ')}`
+      ? `${couplingViolations.length} hidden-coupling pair(s): ${couplingViolations.map((pair) => `${pair.a}↔${pair.b} share ${pair.sharedFiles.join(',')}`).join('; ')}`
       : null,
-    uncovered.length > 0 ? `${uncovered.length} feature(s) with no work items: ${uncovered.join(', ')}` : null,
   ]
     .filter((s): s is string => s !== null)
     .join('; ');
 
-  if (onlyFidelityGap) {
-    return { kind: 'fidelity', hallucinated, uncovered, summary };
-  }
   return { kind: 'failure', summary };
 }
 
 /**
- * Write `.forge/work-items/_coverage.md` — a greppable feature→WI mapping for a
- * fast operator sanity check (known-gaps 2026-05-31, betterado #1). Lists each
- * declared feature (id + title) and the WIs decomposed under it (id + the files
- * each touches, so off-target scope is obvious), flagging any feature with no
- * work items. Excluded from `readWorkItemsFromDir` so it is never parsed as a WI.
+ * Write `.forge/work-items/_decomposition.md` — a greppable WI list for a
+ * fast operator sanity check. Lists each WI (id + the files it touches, so
+ * off-target scope is obvious). Excluded from `readWorkItemsFromDir` so it
+ * is never parsed as a WI.
  */
-function writeFeatureCoverageDoc(
+function writeDecompositionDoc(
   workItemsDir: string,
   manifest: InitiativeManifest,
   items: ReadonlyArray<WorkItem>,
-  uncovered: ReadonlyArray<string>,
 ): void {
-  const byFeature = new Map<string, WorkItem[]>();
-  for (const f of manifest.features) byFeature.set(f.feature_id, []);
-  for (const item of items) {
-    if (!byFeature.has(item.feature_id)) byFeature.set(item.feature_id, []); // hallucinated → still listed
-    byFeature.get(item.feature_id)!.push(item);
-  }
   const lines: string[] = [
-    `# Feature → work-item coverage — ${manifest.initiative_id}`,
+    `# Work-item decomposition — ${manifest.initiative_id}`,
     '',
-    `${manifest.features.length} declared feature(s); ${items.length} work item(s).` +
-      (uncovered.length > 0 ? ` ⚠ ${uncovered.length} feature(s) with NO work items.` : ' All features covered.'),
+    `${items.length} work item(s) emitted.`,
     '',
   ];
-  const titleById = new Map(manifest.features.map((f) => [f.feature_id, f.title] as const));
-  for (const f of manifest.features) {
-    const wis = byFeature.get(f.feature_id) ?? [];
-    const flag = wis.length === 0 ? ' — ⚠ UNCOVERED' : '';
-    lines.push(`## ${f.feature_id} — ${f.title}${flag}`);
-    if (wis.length === 0) {
-      lines.push('- (no work items — the PM left this feature undecomposed)');
-    } else {
-      for (const wi of wis) lines.push(`- ${wi.work_item_id}: ${wi.files_in_scope.join(', ')}`);
-    }
-    lines.push('');
-  }
-  // Surface any WIs whose feature_id is NOT a declared feature (hallucinated),
-  // so the mapping is complete even on a failing pass.
-  for (const [featureId, wis] of byFeature.entries()) {
-    if (titleById.has(featureId)) continue;
-    lines.push(`## ${featureId} — ⚠ NOT A DECLARED FEATURE (hallucinated)`);
-    for (const wi of wis) lines.push(`- ${wi.work_item_id}: ${wi.files_in_scope.join(', ')}`);
+  for (const item of items) {
+    lines.push(`## ${item.work_item_id}`);
+    for (const f of item.files_in_scope) lines.push(`- ${f}`);
     lines.push('');
   }
   try {
-    writeFileSync(join(workItemsDir, '_coverage.md'), lines.join('\n'));
+    writeFileSync(join(workItemsDir, '_decomposition.md'), lines.join('\n'));
   } catch {
     /* best-effort telemetry artifact — never fail the PM pass on a write error */
   }
-}
-
-/**
- * Walk the emitted work items and return the set of feature_ids that don't
- * appear in the manifest. Drives the retry path per C5b.
- */
-function collectHallucinatedFeatureIds(
-  items: ReadonlyArray<WorkItem>,
-  knownFeatureIds: ReadonlySet<string>,
-): string[] {
-  const out = new Set<string>();
-  for (const item of items) {
-    if (item.feature_id && !knownFeatureIds.has(item.feature_id)) {
-      out.add(item.feature_id);
-    }
-  }
-  return [...out].sort();
 }
 
 /**
@@ -608,4 +421,3 @@ function readProjectContext(worktreePath: string): {
     claudeMd: safeRead('CLAUDE.md'),
   };
 }
-

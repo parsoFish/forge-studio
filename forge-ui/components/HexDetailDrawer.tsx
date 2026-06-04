@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { fetchWorkItem, type WorkItemDetail, type CostSummary, type InitiativeFeature, type EventLogEntry } from '@/lib/bridge-client';
+import { fetchWorkItem, type WorkItemDetail, type CostSummary, type EventLogEntry } from '@/lib/bridge-client';
 import type { SelectedHex } from '@/lib/hex-detail';
 import type { PhaseState } from '@/lib/phases';
 import type { GraphWorkItem } from '@/lib/use-graph-model';
@@ -34,13 +34,12 @@ export type HexDetailDrawerProps = {
   events: EventLogEntry[];
   phaseStates: PhaseState[];
   cost: CostSummary | null;
-  features: InitiativeFeature[];
   workItems: GraphWorkItem[];
   onClose: () => void;
 };
 
 export function HexDetailDrawer(props: HexDetailDrawerProps): JSX.Element {
-  const { hex, cycleId, events, phaseStates, cost, features, workItems, onClose } = props;
+  const { hex, cycleId, events, phaseStates, cost, workItems, onClose } = props;
 
   return (
     <div
@@ -59,7 +58,7 @@ export function HexDetailDrawer(props: HexDetailDrawerProps): JSX.Element {
 
       <div style={bodyStyle}>
         <div style={sectionLabel}>definition</div>
-        <Definition hex={hex} cycleId={cycleId} phaseStates={phaseStates} cost={cost} features={features} workItems={workItems} />
+        <Definition hex={hex} cycleId={cycleId} phaseStates={phaseStates} cost={cost} workItems={workItems} />
 
         <div style={{ ...sectionLabel, marginTop: 14 }}>activity</div>
         <div style={activityWrapStyle}>
@@ -77,14 +76,12 @@ function Definition({
   cycleId,
   phaseStates,
   cost,
-  features,
-  workItems,
+  workItems: _workItems,
 }: {
   hex: SelectedHex;
   cycleId: string | null;
   phaseStates: PhaseState[];
   cost: CostSummary | null;
-  features: InitiativeFeature[];
   workItems: GraphWorkItem[];
 }): JSX.Element {
   if (hex.kind === 'phase') {
@@ -95,18 +92,6 @@ function Definition({
         <Field label="phase" value={hex.id} />
         <Field label="status" value={st} accent={statusGlow(st)} />
         <Field label="cost" value={`$${costUsd.toFixed(3)}`} accent="#7ee787" />
-      </div>
-    );
-  }
-  if (hex.kind === 'feature') {
-    const f = features.find((x) => x.featureId === hex.id);
-    const childWis = workItems.filter((w) => w.featureId === hex.id).map((w) => w.id);
-    return (
-      <div data-detail-kind="feature">
-        <Field label="feature" value={hex.id} />
-        <Field label="title" value={f?.title || '(untitled)'} />
-        <Field label="depends_on" value={(f?.dependsOn ?? []).join(', ') || '—'} />
-        <Field label="work items" value={childWis.join(', ') || '(none yet)'} />
       </div>
     );
   }
@@ -144,7 +129,6 @@ function WiDefinition({ cycleId, wiId }: { cycleId: string | null; wiId: string 
   return (
     <div data-detail-kind="wi" data-wi-detail-state="ready">
       <Field label="work item" value={wi.work_item_id} />
-      <Field label="feature" value={wi.feature_id} />
       <div style={subLabel}>acceptance criteria</div>
       <ol style={acListStyle} data-section="acceptance-criteria">
         {wi.acceptance_criteria.length === 0 ? (
@@ -185,7 +169,7 @@ function Field({ label, value, accent }: { label: string; value: string; accent?
 // ---- styles ----------------------------------------------------------------
 
 function kindBadge(kind: SelectedHex['kind']): React.CSSProperties {
-  const color = kind === 'phase' ? '#58a6ff' : kind === 'feature' ? '#d2a8ff' : '#7ee787';
+  const color = kind === 'phase' ? '#58a6ff' : '#7ee787';
   return { fontSize: 10, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: 0.6, color, border: `1px solid ${color}55`, borderRadius: 10, padding: '1px 8px' };
 }
 
