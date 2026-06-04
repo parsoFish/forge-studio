@@ -214,6 +214,15 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
     );
   } else if (!w.quality_gate_cmd.every((s) => typeof s === 'string' && s.length > 0)) {
     errors.push('quality_gate_cmd entries must be non-empty strings');
+  } else if (/\|\s*(grep|awk|sed|head|tail)\b/.test(w.quality_gate_cmd.join(' '))) {
+    // 2026-06-04 (release_folder re-run): the gate must be the test runner's
+    // own EXIT CODE, never a pipeline that re-derives pass/fail by filtering
+    // stdout. Such pipelines mask the runner's exit code AND are fragile — a
+    // `grep '--- PASS:…'` pattern starts with `-`, is parsed as grep options,
+    // so the gate ALWAYS errors regardless of the tests (cost a whole cycle).
+    errors.push(
+      'quality_gate_cmd must be the test runner\'s exit code, NOT a pipeline that filters its output (`| grep`/`awk`/`sed`). The runner exits non-zero on failure — invoke it directly (e.g. `go test -tags all -run <Prefix> <pkg>`), never `bash -c "… | grep \'--- PASS\'"`.',
+    );
   }
   if (w.non_goals !== undefined) {
     if (!Array.isArray(w.non_goals)) {

@@ -255,6 +255,27 @@ test('quality_gate_cmd: empty array is rejected by validateWorkItem', () => {
   assert.ok(errors.some((e) => e.includes('quality_gate_cmd')), `got ${JSON.stringify(errors)}`);
 });
 
+// 2026-06-04 (release_folder re-run): the gate must be the test runner's own
+// exit code, never a `| grep`/`awk`/`sed` pipeline that re-derives pass/fail
+// from stdout — the pipe masks the exit code and a `grep '--- PASS'` pattern
+// starts with `-` so it errors regardless of the tests. Fail-fast at PM.
+test('quality_gate_cmd: a `bash -c "… | grep" pipeline gate is rejected', () => {
+  const errors = validateWorkItem(fixture({
+    quality_gate_cmd: ['bash', '-c', "go test -tags all -run TestReleaseFolder ./pkg/ 2>&1 | grep -q '--- PASS:.*TestReleaseFolder'"],
+  }));
+  assert.ok(
+    errors.some((e) => e.includes('exit code') && e.includes('pipeline')),
+    `expected a pipeline-gate rejection, got ${JSON.stringify(errors)}`,
+  );
+});
+
+test('quality_gate_cmd: a direct `go test -run` gate (the recipe) passes', () => {
+  const errors = validateWorkItem(fixture({
+    quality_gate_cmd: ['go', 'test', '-tags', 'all', '-count=1', '-run', 'TestReleaseFolder', './azuredevops/internal/service/release/'],
+  }));
+  assert.deepEqual(errors, [], `the canonical recipe gate must validate cleanly, got ${JSON.stringify(errors)}`);
+});
+
 test('non_goals: round-trips an array of strings', () => {
   const w = fixture({ non_goals: ['docs', 'the bar component'] });
   const md = serializeWorkItem(w);
