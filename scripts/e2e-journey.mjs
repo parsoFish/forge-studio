@@ -153,14 +153,27 @@ function writePlan(sid, round) {
 
 let cycleSeq = 0;
 function cycleEvent(phase, eventType, message, opts = {}) {
-  const { metadata = {}, ...extras } = opts;
+  // `skill` defaults to the phase (the canonical case) but can be OVERRIDDEN via
+  // opts.skill. This matters for the unifier: it runs as a sub-phase of the
+  // developer-loop (backend phase stays 'developer-loop'), but the UI splits it
+  // onto its OWN hex by routing `skill === 'developer-unifier'` events to the
+  // `unifier` phase (forge-ui/lib/phases.ts → phaseForEvent). So the unifier
+  // beats MUST be seeded with skill:'developer-unifier' (phase still
+  // 'developer-loop') or the unifier hex stays grey while the dev hex updates.
+  const { metadata = {}, skill = phase, ...extras } = opts;
   mkdirSync(CYCLE_LOG, { recursive: true });
   cycleSeq += 1;
   appendFileSync(join(CYCLE_LOG, 'events.jsonl'), JSON.stringify({
     event_id: `EV_cyc_${cycleSeq}`, cycle_id: CYCLE_ID, initiative_id: INIT,
-    started_at: new Date().toISOString(), phase, skill: phase, event_type: eventType,
+    started_at: new Date().toISOString(), phase, skill, event_type: eventType,
     input_refs: [], output_refs: [], message, metadata, ...extras,
   }) + '\n');
+}
+// Sugar for the unifier sub-phase: backend phase stays 'developer-loop' (so the
+// failure-classifier's phase-rules are unchanged) but skill='developer-unifier'
+// so the UI lights the dedicated unifier hex.
+function unifierEvent(eventType, message, opts = {}) {
+  return cycleEvent('developer-loop', eventType, message, { ...opts, skill: 'developer-unifier' });
 }
 function moveManifest(from, to) {
   mkdirSync(QDIR(to), { recursive: true });
@@ -353,17 +366,33 @@ async function expectPhaseCost(page, msg) {
 async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   const el = page.locator(hexSelector).first();
   if ((await el.count()) === 0) { check(false, `${label}: no ${hexSelector} present to click`); return; }
+  // Settle on the hex before clicking so the click isn't a flash.
+  await el.hover().catch(() => {});
+  await sleep(ACT);
   await el.click();
+  let opened = false;
   try {
     await page.waitForSelector(`[data-section="hex-detail"][data-hex-kind="${kind}"]`, { timeout: 5000 });
+    opened = true;
     check(true, `${label}: clicking a ${kind} hex opens the detail drawer`);
   } catch {
     const got = await page.evaluate(() =>
       document.querySelector('[data-section="hex-detail"]')?.getAttribute('data-hex-kind') ?? '(no drawer)');
     check(false, `${label}: clicking a ${kind} hex opens the detail drawer (got kind="${got}")`);
   }
+  // Watchable: let the viewer READ the OPEN drawer (and capture a frame of it
+  // open) before closing — otherwise the menu just flashes open-and-shut.
+  if (opened) {
+    await sleep(READ);
+    await frame(page, `hex-detail-${kind}`, `Hex detail — clicking a ${kind} hex opens the detail drawer (held open)`);
+  }
   const close = page.locator('[data-action="close-hex-detail"]');
-  if ((await close.count()) > 0) { await close.click(); await sleep(200); }
+  if ((await close.count()) > 0) {
+    await sleep(ACT);          // pause before closing so open→close reads as deliberate
+    await close.click();
+    await page.waitForSelector('[data-section="hex-detail"]', { state: 'detached', timeout: 3000 }).catch(() => {});
+    await sleep(ACT);          // settle after the drawer closes
+  }
 }
 
 // ---- the journey ----------------------------------------------------------
@@ -391,6 +420,7 @@ async function main() {
     await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="new-idea"]', { timeout: 10000 });
+    await sleep(ACT); // let the dashboard settle before the operator starts typing
     await page.locator('[data-section="new-idea"] [data-field="project"]').fill(PROJECT);
     // Type the idea like a person would, not a paste, so the video shows it being written.
     await page.locator('[data-section="new-idea"] [data-field="idea"]').click();
@@ -411,6 +441,7 @@ async function main() {
     writeStatus(sid, { phase: 'interviewing', round: 1, idea: IDEA });
     archEvent(sid, 'start', 'architect turn (phase=interviewing, round=1)');
     await page.waitForSelector('[data-component="architect-hex"]', { timeout: 15000 });
+    await sleep(ACT); // settle on the architect screen before the live bursts begin
     await burst(sid, ['Read', 'Grep', 'Glob', 'Read', 'Grep']); // reviewing project + brain, exploring edge cases
     await frame(page, 'step02-architect-explores', 'Step 2 — the architect reviews the project + explores edge cases (live bursts on the hex)');
 
@@ -488,7 +519,11 @@ async function main() {
     await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 15000 });
     await sleep(ACT);
     await page.locator('[data-action="watch-it-build"]').click(); // natural transition → dashboard
+    // Settle on the destination (dashboard, our cycle present) so the screen
+    // change reads as a navigation, not a pop-in/out flash.
+    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
+    await sleep(ACT);
     // Explicitly SELECT our cycle so its events/cost stream into the canvas. The
     // dashboard auto-selects snapshot.live[0], which is NOT necessarily this
     // cycle when another cycle is already live (e.g. a real betterado cycle in
@@ -541,39 +576,55 @@ async function main() {
     await sleep(WORK);
     await frame(page, 'step09b-wis-green', 'Step 9 — both work items green; the dev-loop hex stays blue (unifier next)');
 
-    // STEP 10 — unifier reviews + loops to clean the output.
+    // STEP 10 — unifier reviews + loops to clean the output. These events are
+    // seeded with skill='developer-unifier' (NOT developer-loop) so they route to
+    // the unifier's OWN hex (forge-ui/lib/phases.ts → phaseForEvent); seeding them
+    // as 'developer-loop' would light the dev hex and leave the unifier grey.
+    // The unifier hex goes BLUE here (start, no end yet) and we dwell so it is
+    // visibly blue/pulsing before it greens on its phase-level end in Step 11.
     await paced([
-      () => cycleEvent('developer-loop', 'log', 'unifier.start — reviewing the merged work-item output'),
-      () => cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test' } }),
-      () => cycleEvent('developer-loop', 'log', 'unifier.gate — initiative gate green; cleaning output'),
-    ]);
+      () => unifierEvent('start', 'unifier.start — reviewing the merged work-item output'),
+      () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test' } }),
+      () => unifierEvent('log', 'unifier.gate — initiative gate green; cleaning output'),
+    ], WORK); // pace each beat by WORK so the unifier hex is visibly blue between them
     await sleep(WORK);
-    await frame(page, 'step10-unifier-clean', 'Step 10 — the unifier reviews the whole branch and loops to clean the output');
+    await frame(page, 'step10-unifier-clean', 'Step 10 — the unifier (its own hex, blue) reviews the whole branch and loops to clean the output');
 
     // STEP 11 — unifier runs the demo skill → forge-ui-themed demo page; cycle ready.
+    // The demo-skill beats are the unifier's (skill='developer-unifier'), then the
+    // unifier's OWN phase-level `end` (no work_item_id, skill='developer-unifier')
+    // greens the unifier hex — paced AFTER a visibly-blue dwell. The dev-loop's
+    // ralph.end (phase 'developer-loop', no work_item_id) greens the dev hex.
     await paced([
-      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
-      () => cycleEvent('developer-loop', 'tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
-      () => { writeDemoJson(1); cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }); },
+      () => unifierEvent('log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
+      () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
+      // The unifier finishes: phase-level `end` (no work_item_id) on the
+      // developer-unifier skill → the unifier hex goes GREEN with its cost pill.
+      () => { writeDemoJson(1); unifierEvent('end', 'unifier.end — demo authored, branch clean', { cost_usd: 0.18, duration_ms: 46000 }); },
+      // The dev-loop phase itself ends (ralph.end — no work_item_id) → dev hex green.
+      () => cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }),
       // Review phase OPENS (hex goes blue) — but it does NOT close out until the
       // operator finishes reviewing (the closeout fires on approve, step 13).
       () => cycleEvent('review-loop', 'start', 'review-loop start'),
       () => cycleEvent('review-loop', 'log', 'reviewer.pr-opened'),
-    ]);
+    ], WORK); // dwell WORK between beats so the unifier hex is visibly blue, then visibly greens
     moveManifest('in-flight', 'ready-for-review');
     await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
-    await sleep(WORK);
-    await frame(page, 'step11-demo-ready', 'Step 11 — the unifier ran the demo skill; a "Review →" entry appears');
+    // Key beat: the unifier hex has just greened and the cycle is reviewable —
+    // dwell at READ length so the viewer sees the unifier complete (not a flash).
+    await sleep(READ);
+    await frame(page, 'step11-demo-ready', 'Step 11 — the unifier (its own hex, now green) ran the demo skill; a "Review →" entry appears');
     // S1 + S3: the cycle is reviewable and the per-phase cost rollup is live
     // (architect / PM / dev-loop have all reported cost by now).
     await expectCycleStatus(page, 'ready-for-review');
     await expectPhaseCost(page, 'cost rollup: a phase hex shows cost > 0');
 
     // STEP 12 — operator reviews; Ralph dev-loops rerun with operator input until approve.
+    await sleep(ACT); // settle before the navigation click
     await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click(); // natural transition → review
     await page.waitForSelector('main[data-page="review-cycle"][data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await sleep(READ);
+    await sleep(READ); // let the review page settle + be read, not a pop-in
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
 
     // STEP 12a — interactive review (re-review #8): the operator doesn't just READ
@@ -606,20 +657,27 @@ async function main() {
     // Return to the dashboard (natural) while the dev-loop reruns on the feedback.
     await page.locator('[data-action="back-to-dashboard"]').click();
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
+    await sleep(ACT); // settle on the dashboard before work streams in
     moveManifest('ready-for-review', 'in-flight');
+    // The rerun re-exercises the unifier's demo-skill too, so its demo-skill beat
+    // is a unifierEvent (own hex) and the round closes with the unifier's own
+    // phase-level `end` (re-greens the unifier hex) alongside ralph.end (dev hex).
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop rerun — addressing review feedback'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
-      () => cycleEvent('developer-loop', 'log', 'unifier.demo-skill — re-rendering demo.json (error names both flags)'),
-      () => { writeDemoJson(2); cycleEvent('developer-loop', 'end', 'ralph.end (round 2)'); },
+      () => unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (error names both flags)'),
+      () => { writeDemoJson(2); unifierEvent('end', 'unifier.end (round 2) — demo re-rendered', { cost_usd: 0.06 }); },
+      () => cycleEvent('developer-loop', 'end', 'ralph.end (round 2)'),
     ]);
     moveManifest('in-flight', 'ready-for-review');
     await sleep(WORK);
     await frame(page, 'step12c-rerun', 'Step 12 — the dev-loop reran on the operator feedback; back to "Review →"');
     // Re-review: the updated demo + a fresh verdict.
+    await sleep(ACT); // settle before the navigation click
     await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click();
+    await page.waitForSelector('main[data-page="review-cycle"][data-page-ready="true"]', { timeout: 30000 }).catch(() => {});
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await sleep(READ);
+    await sleep(READ); // let the re-review page settle + be read
     await frame(page, 'step12d-re-review', 'Step 12 — the operator re-reviews the updated demo (error now names both flags)');
 
     // STEP 13 — approve → merge → reflect (its own page) → done.
@@ -643,10 +701,11 @@ async function main() {
     await frame(page, 'step13b-reflect-link', 'Step 13 — merged; "Reflect on this cycle →" surfaces the final human moment');
 
     // The reflection screen — the third moment, in-UI.
+    await sleep(ACT); // settle before the navigation click
     await page.locator('[data-action="open-reflect"]').click();
     await page.waitForSelector('main[data-page="reflect-cycle"][data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="reflect-questions"]', { timeout: 15000 });
-    await sleep(READ);
+    await sleep(READ); // let the reflect page settle + be read, not a pop-in
     await frame(page, 'step13c-reflect-page', 'Step 13 — the reflection screen asks how the cycle went');
     await page.locator('[data-question-index="0"] input[type="radio"]').first().check();
     await page.locator('[data-field="freeform"]').fill('Dependency ordering held; the error-message send-back was the right call.');
@@ -661,16 +720,33 @@ async function main() {
     await frame(page, 'step13d-reflected', 'Step 13 — feedback captured; the reflector folds it into the brain');
 
     // The logical endpoint: the whole completed cycle with per-phase costs.
+    await sleep(ACT); // settle before the navigation click
     await page.locator('[data-action="back-to-dashboard"]').click();
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
+    await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 }).catch(() => {});
+    await sleep(ACT); // settle on the dashboard before selecting our cycle
     await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {}); // select OUR completed cycle
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"][data-cycle-status="done"]`, { timeout: 15000 }).catch(() => {});
-    await sleep(WORK);
+    // The final endpoint — dwell at READ length so the viewer takes in the whole
+    // completed spine (every phase green, the unifier among them, with its cost).
+    await sleep(READ);
     await frame(page, 'step13e-cycle-complete', 'Done — the full cycle, every phase green with its cost, in the hex pane');
     // S1 + S3 + S4 final: cycle done, the spine intact, total cost accrued.
     await expectCycleStatus(page, 'done');
     await countAtLeast(page, '[data-phase-hex]', 5, 'completed cycle still shows ≥5 phase hexes');
     await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
+    // Operator fix: the unifier is its OWN hex — its events (skill 'developer-unifier')
+    // must light it up (blue→green), not fold into the dev-loop hex. Regression guard.
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') === 'complete',
+        null, { timeout: 8000 },
+      );
+      check(true, 'unifier hex lit its own status (blue→green), not folded into dev-loop');
+    } catch {
+      const got = await page.evaluate(() => document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') ?? '(absent)');
+      check(false, `unifier hex should reach complete (got "${got}")`);
+    }
 
     console.log('\n[e2e] journey complete.');
   } finally {
