@@ -90,26 +90,34 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
               </div>
             ) : (
               <div data-section="reflect-questions" style={{ border: '1px solid #30363d', borderRadius: 10, padding: 16, background: '#0d1117' }}>
-                {questions.map((q, i) => (
-                  <fieldset key={i} data-question-index={i} data-question-resolved={choices[i] ? 'true' : 'false'} style={{ border: 'none', padding: 0, margin: '0 0 14px' }}>
-                    <legend style={{ fontSize: 13, color: '#e6edf3', marginBottom: 6, padding: 0 }}>{q.question}</legend>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {q.options.map((opt) => {
-                        const selected = choices[i] === opt.label;
-                        return (
-                          <label key={opt.label} data-option-label={opt.label} data-option-selected={selected ? 'true' : 'false'}
-                            style={{ display: 'flex', gap: 8, alignItems: 'flex-start', border: `1px solid ${selected ? '#1f6feb' : '#30363d'}`, borderRadius: 6, padding: '8px 10px', cursor: 'pointer', background: selected ? '#0d2440' : 'transparent' }}>
-                            <input type="radio" name={`rq-${i}`} checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))} style={{ marginTop: 2 }} />
-                            <span>
-                              <span style={{ fontSize: 13, color: '#e6edf3', fontWeight: 500 }}>{opt.label}</span>
-                              <span style={{ display: 'block', fontSize: 12, color: '#8b949e' }}>{opt.description}</span>
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                ))}
+                {questions.map((q, i) => {
+                  const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+                  return (
+                    <fieldset key={i} data-question-index={i} data-question-resolved={choices[i] ? 'true' : 'false'} data-question-mode={hasOptions ? 'options' : 'freeform'} style={{ border: 'none', padding: 0, margin: '0 0 14px' }}>
+                      <legend style={{ fontSize: 13, color: '#e6edf3', marginBottom: 6, padding: 0 }}>{q.question}</legend>
+                      {hasOptions ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {q.options.map((opt) => {
+                            const selected = choices[i] === opt.label;
+                            return (
+                              <label key={opt.label} data-option-label={opt.label} data-option-selected={selected ? 'true' : 'false'}
+                                style={{ display: 'flex', gap: 8, alignItems: 'flex-start', border: `1px solid ${selected ? '#1f6feb' : '#30363d'}`, borderRadius: 6, padding: '8px 10px', cursor: 'pointer', background: selected ? '#0d2440' : 'transparent' }}>
+                                <input type="radio" name={`rq-${i}`} checked={selected} onChange={() => setChoices((c) => ({ ...c, [i]: opt.label }))} style={{ marginTop: 2 }} />
+                                <span>
+                                  <span style={{ fontSize: 13, color: '#e6edf3', fontWeight: 500 }}>{opt.label}</span>
+                                  {opt.description ? <span style={{ display: 'block', fontSize: 12, color: '#8b949e' }}>{opt.description}</span> : null}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <textarea value={choices[i] ?? ''} onChange={(e) => setChoices((c) => ({ ...c, [i]: e.target.value }))} placeholder="Your answer…" rows={2} data-question-freeform
+                          style={{ width: '100%', boxSizing: 'border-box', background: '#010409', color: '#e6edf3', border: '1px solid #30363d', borderRadius: 6, padding: '8px 10px', fontSize: 13, resize: 'vertical' }} />
+                      )}
+                    </fieldset>
+                  );
+                })}
                 <textarea value={freeform} onChange={(e) => setFreeform(e.target.value)} placeholder="Anything else worth capturing this cycle…" rows={2} data-field="freeform"
                   style={{ width: '100%', boxSizing: 'border-box', background: '#010409', color: '#e6edf3', border: '1px solid #30363d', borderRadius: 6, padding: '8px 10px', fontSize: 13, marginBottom: 10, resize: 'vertical' }} />
                 {error && <div style={{ color: '#f85149', fontSize: 12, marginBottom: 8 }}>{error}</div>}

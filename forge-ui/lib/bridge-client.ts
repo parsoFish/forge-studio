@@ -401,6 +401,10 @@ export type ArchitectEscalation = {
   id: string;
   critic: string;
   question: string;
+  // The gate deliberately omits the council's per-option `visual` field: the
+  // visual renders inside the PLAN.html iframe the gate already shows, not on
+  // the option cards. So this type is intentionally narrower than the runner's
+  // escalation shape — not stale.
   options: {
     label: string;
     rationale: string;

@@ -96,8 +96,10 @@ export default function Page() {
   const [selectedHex, setSelectedHex] = useState<SelectedHex | null>(null);
 
   // U1: cost summary per cycle. Re-fetched whenever the active cycle
-  // changes; also re-fetched every 10s so live cycles show their cost
-  // ticking up. Cheap (just reads the events.jsonl server-side).
+  // changes; also polled so live cycles show their cost ticking up. Cheap
+  // (just reads the events.jsonl server-side). The event stream is
+  // sub-second, so while the active cycle is in-flight we poll at 3s to keep
+  // the cost pills close to live activity; otherwise 10s is plenty.
   const [cost, setCost] = useState<CostSummary | null>(null);
   useEffect(() => {
     if (!activeCycleId) { setCost(null); return; }
@@ -106,9 +108,11 @@ export default function Page() {
       fetchCost(activeCycleId).then((c) => { if (!cancelled) setCost(c); });
     };
     refresh();
-    const id = setInterval(refresh, 10000);
+    const inFlight = [...snapshot.live, ...snapshot.recent]
+      .find((c) => c.cycleId === activeCycleId)?.status === 'in-flight';
+    const id = setInterval(refresh, inFlight ? 3000 : 10000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [activeCycleId]);
+  }, [activeCycleId, snapshot]);
 
   // Feature #8 — poll the bridge's daemon-stall liveness every 30s. Edge-fire a
   // single toast on the not-stalled → stalled transition; clear it on recovery

@@ -692,10 +692,13 @@ function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): st
  *
  * Parsing strategy: split on `## ` headings, use the heading text as
  * `header` (truncated to 12 chars per AskUserQuestion constraint) and the
- * body text as `question`. Generic fallback options are supplied because
- * the agent has no structured option data in the .md format. If the .md
- * is absent or contains no questions, an empty array is written (the UI
- * treats that as "no questions this cycle").
+ * body text as `question`. If the section supplies structured options (a
+ * markdown bullet/dash list, optionally under an "Options:" marker) those
+ * are parsed into `{label, description}`; otherwise `options` is left empty
+ * so the /reflect screen renders a freeform textarea rather than a
+ * one-size-fits-all generic triad. If the .md is absent or contains no
+ * questions, an empty array is written (the UI treats that as "no questions
+ * this cycle").
  */
 function deriveUserQuestionsJson(mdPath: string, jsonPath: string): void {
   try {
@@ -739,20 +742,54 @@ function parseUserQuestionsMd(raw: string): UserQuestion[] {
     const heading = lines[0].replace(/^##\s+\d+\.\s*/, '').replace(/^##\s+/, '').trim();
     if (!heading) continue;
     const body = lines.slice(1).join('\n').trim();
-    const question = body || heading;
+    const options = parseSectionOptions(lines.slice(1));
+    // The question text is the body with any parsed option lines stripped, so
+    // the freeform/options content isn't duplicated into the prompt.
+    const question = stripOptionLines(body) || heading;
     // header must be ≤12 chars (AskUserQuestion constraint).
     const header = heading.slice(0, 12);
-    out.push({
-      question,
-      header,
-      options: [
-        { label: 'Nothing notable', description: 'No action needed from this question.' },
-        { label: 'Worth a theme', description: 'Capture as a brain theme.' },
-        { label: 'Significant issue', description: 'Needs immediate follow-up.' },
-      ],
-    });
+    out.push({ question, header, options });
   }
   return out;
+}
+
+/**
+ * Parse a markdown bullet/dash list of options from a question section body.
+ *
+ * A "meaningful" option line looks like `- Label` or `* Label — description`
+ * (em-dash, en-dash, or " - " as the label/description separator). Lines are
+ * only treated as options when there are at least two of them — a single
+ * stray bullet inside prose is prose, not a choice set. When no structured
+ * options are present we return [] so the UI falls back to a freeform answer
+ * rather than synthesizing a generic triad that fits no question.
+ */
+function parseSectionOptions(bodyLines: string[]): Array<{ label: string; description: string }> {
+  const opts: Array<{ label: string; description: string }> = [];
+  for (const line of bodyLines) {
+    const m = line.match(/^\s*[-*]\s+(.+)$/);
+    if (!m) continue;
+    const text = m[1].trim();
+    if (!text) continue;
+    // Split label from description on em/en dash or " - ".
+    const sep = text.match(/\s+(?:—|–|-)\s+/);
+    if (sep && sep.index !== undefined) {
+      const label = text.slice(0, sep.index).trim();
+      const description = text.slice(sep.index + sep[0].length).trim();
+      opts.push({ label, description });
+    } else {
+      opts.push({ label: text, description: '' });
+    }
+  }
+  return opts.length >= 2 ? opts : [];
+}
+
+/** Drop markdown bullet/dash lines from a body so option text isn't duplicated into the question prompt. */
+function stripOptionLines(body: string): string {
+  return body
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*[-*]\s+/.test(l))
+    .join('\n')
+    .trim();
 }
 
 // Re-export the legacy ReflectionStatus type for ergonomic imports.

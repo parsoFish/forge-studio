@@ -225,6 +225,14 @@ function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurf
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<string | null>(null);
   const isExecuting = EXECUTING_SURFACE_KINDS.has(surface.kind);
+  // A portal-link with no portalUrl is a mis-declared surface: there is nothing
+  // to open. Make it first-class so automation sees an `error` surface-state
+  // instead of a dead label. portalUrl is optional in the schema, so this is a
+  // valid-but-broken model, not a parse failure.
+  const isDeadPortalLink = surface.kind === 'portal-link' && !surface.portalUrl;
+  // surface-state reflects the *interactive* state (idle/running/done/error),
+  // but a dead portal-link is structurally errored regardless of interaction.
+  const surfaceState = isDeadPortalLink ? 'error' : state;
 
   async function runLiveQuery(): Promise<void> {
     if (!surface.artifact || !cycleId) {
@@ -248,7 +256,7 @@ function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurf
   return (
     <div
       data-interactive-surface={surface.kind}
-      data-surface-state={state}
+      data-surface-state={surfaceState}
       style={{ border: '1px solid #21262d', borderRadius: 8, padding: 12, background: '#0b0f14' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -263,6 +271,15 @@ function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurf
           >
             ↗ Open in portal
           </a>
+        )}
+        {isDeadPortalLink && (
+          <span
+            data-surface-disabled="true"
+            title="This portal-link surface declares no portalUrl, so there is nothing to open."
+            style={{ fontSize: 11, color: '#f0a4a0', border: '1px dashed #f85149', borderRadius: 6, padding: '2px 8px' }}
+          >
+            no link declared
+          </span>
         )}
         {surface.kind === 'live-query' && (
           <button

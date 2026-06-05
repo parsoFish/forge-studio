@@ -373,12 +373,61 @@ test('runReflector: REF-1 — derives user-questions.json from agent-written use
     // headers must be ≤12 chars
     for (const q of parsed) {
       assert.ok(q.header.length <= 12, `header "${q.header}" exceeds 12 chars`);
-      assert.ok(Array.isArray(q.options) && q.options.length >= 2, 'expected ≥2 options per question');
+      // Plain numbered-heading questions carry NO structured options — the
+      // /reflect screen renders a per-question freeform answer rather than a
+      // synthesized one-size-fits-all generic triad.
+      assert.ok(Array.isArray(q.options) && q.options.length === 0, 'expected empty options (freeform) when the .md supplies no option list');
     }
     assert.ok(
       parsed[0].question.includes('WI') || parsed[0].question.includes('decomposition'),
       'first question body should reference WI/decomposition content',
     );
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: REF-1 — section with a markdown option list → structured options parsed', async () => {
+  // When the agent DOES supply a meaningful option list (≥2 bullet/dash
+  // lines, optionally with an em-dash description), those become the
+  // AskUserQuestion options instead of a freeform answer.
+  const h = setupHarness({ suffix: 'uq-options' });
+  try {
+    mkdirSync(h.cycleLogDir, { recursive: true });
+    const mdPath = resolve(h.cycleLogDir, 'user-questions.md');
+    writeFileSync(
+      mdPath,
+      [
+        '## 1. Was the WI decomposition the right size?',
+        '',
+        'We had 5 WIs.',
+        '',
+        '- Too granular — split fewer next time',
+        '- Just right — keep the cadence',
+        '- Too coarse — decompose further',
+        '',
+      ].join('\n'),
+    );
+
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryClean,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'closed');
+
+    const jsonPath = resolve(h.cycleLogDir, 'user-questions.json');
+    const parsed = JSON.parse(readFileSync(jsonPath, 'utf8')) as Array<{
+      question: string;
+      header: string;
+      options: Array<{ label: string; description: string }>;
+    }>;
+    assert.equal(parsed.length, 1, 'expected 1 question');
+    assert.equal(parsed[0].options.length, 3, 'expected 3 parsed options');
+    assert.equal(parsed[0].options[0].label, 'Too granular');
+    assert.equal(parsed[0].options[0].description, 'split fewer next time');
+    // The option bullet lines must be stripped out of the question prompt.
+    assert.ok(!parsed[0].question.includes('Too granular'), 'option lines should not leak into the question body');
+    assert.ok(parsed[0].question.includes('5 WIs'), 'prose body should remain in the question');
   } finally {
     h.cleanup();
   }
