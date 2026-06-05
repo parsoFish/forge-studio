@@ -287,6 +287,10 @@ export type DemoModelCheckpoint = {
   metrics?: DemoHarnessMetricRow[];
   beforeImage?: string | null;
   afterImage?: string | null;
+  // Mirror of cli/demo-model.ts — a kind:'video' checkpoint carries a relative
+  // sibling path (served via the bridge artifact route, NOT a data: URI).
+  beforeVideoSrc?: string | null;
+  afterVideoSrc?: string | null;
 };
 
 export type DemoSummarySection = {

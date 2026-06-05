@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { fetchArtifactText } from '@/lib/bridge-client';
+import { useEffect, useState } from 'react';
+import { fetchArtifactText, resolveBridgeUrl } from '@/lib/bridge-client';
 import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, InteractiveSurface } from '@/lib/bridge-client';
 
 /**
@@ -28,6 +28,11 @@ const TEST_RESULT_COLOR: Record<string, string> = {
 };
 
 export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?: string }): JSX.Element {
+  // Resolve the bridge base once so video checkpoints can build their artifact
+  // URL (a kind:'video' checkpoint stores a relative sibling path served via
+  // /api/artifact on the bridge, not the Next origin).
+  const [bridgeBase, setBridgeBase] = useState('');
+  useEffect(() => { resolveBridgeUrl().then(setBridgeBase).catch(() => {}); }, []);
   return (
     <div data-section="demo-comparison" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header: title + essence */}
@@ -131,7 +136,7 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
 
       {/* Checkpoints */}
       {model.checkpoints.map((c, i) => (
-        <CheckpointCard key={`${c.label}-${i}`} cp={c} />
+        <CheckpointCard key={`${c.label}-${i}`} cp={c} cycleId={cycleId} bridgeBase={bridgeBase} />
       ))}
 
       {/* Usage example */}
@@ -298,7 +303,13 @@ function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element 
   );
 }
 
-function CheckpointCard({ cp }: { cp: DemoModelCheckpoint }): JSX.Element {
+/** Build a bridge artifact URL for a relative media path (video sibling), or null. */
+function mediaUrl(bridgeBase: string, cycleId: string | undefined, src?: string | null): string | null {
+  if (!bridgeBase || !cycleId || !src) return null;
+  return `${bridgeBase}/api/artifact/${encodeURIComponent(cycleId)}/${encodeURIComponent(src)}`;
+}
+
+function CheckpointCard({ cp, cycleId, bridgeBase }: { cp: DemoModelCheckpoint; cycleId?: string; bridgeBase: string }): JSX.Element {
   return (
     <figure
       data-checkpoint={cp.label}
@@ -310,26 +321,28 @@ function CheckpointCard({ cp }: { cp: DemoModelCheckpoint }): JSX.Element {
         <MetricTable rows={cp.metrics} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Side label="before" note={cp.beforeNote} image={cp.beforeImage} />
-          <Side label="after" note={cp.afterNote} image={cp.afterImage} />
+          <Side label="before" note={cp.beforeNote} image={cp.beforeImage} video={mediaUrl(bridgeBase, cycleId, cp.beforeVideoSrc)} />
+          <Side label="after" note={cp.afterNote} image={cp.afterImage} video={mediaUrl(bridgeBase, cycleId, cp.afterVideoSrc)} />
         </div>
       )}
     </figure>
   );
 }
 
-function Side({ label, note, image }: { label: string; note?: string; image?: string | null }): JSX.Element {
+function Side({ label, note, image, video }: { label: string; note?: string; image?: string | null; video?: string | null }): JSX.Element {
   return (
-    <div data-side={label}>
+    <div data-side={label} data-media-kind={video ? 'video' : image ? 'image' : 'note'}>
       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#6e7681', marginBottom: 6 }}>{label}</div>
-      {image ? (
+      {video ? (
+        <video controls preload="metadata" playsInline src={video} style={{ width: '100%', border: '1px solid #21262d', borderRadius: 6, display: 'block', background: '#000' }} />
+      ) : image ? (
         // Only data: URIs reach here (validateDemoModel rejects remote/scheme refs).
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt={`${label} state`} style={{ width: '100%', border: '1px solid #21262d', borderRadius: 6, display: 'block' }} />
       ) : (
         <div style={{ fontSize: 13, color: '#c9d1d9' }}>{note ?? <span style={{ color: '#6e7681' }}>—</span>}</div>
       )}
-      {image && note && <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>{note}</div>}
+      {(video || image) && note && <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>{note}</div>}
     </div>
   );
 }
