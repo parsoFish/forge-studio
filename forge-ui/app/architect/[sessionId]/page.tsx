@@ -77,17 +77,19 @@ export default function ArchitectSessionPage({
               {session.project}
             </div>
 
-            {(session.phase === 'interviewing' || session.phase === 'awaiting-answers') &&
-              (session.questions && session.questions.length > 0 ? (
-                <ArchitectQuestionForm
-                  project={session.project}
-                  sessionId={session.sessionId}
-                  round={session.round}
-                  questions={session.questions}
-                />
-              ) : (
-                <Status label={`The architect is thinking… (round ${session.round})`} />
-              ))}
+            {/* The question FORM only appears once the architect has emitted
+                questions (phase 'awaiting-answers'); interviewing/drafting are
+                working states that show a 'thinking…' status, not the form. */}
+            {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
+              <ArchitectQuestionForm
+                project={session.project}
+                sessionId={session.sessionId}
+                round={session.round}
+                questions={session.questions}
+              />
+            ) : (session.phase === 'interviewing' || session.phase === 'awaiting-answers' || session.phase === 'drafting') ? (
+              <Status label={`The architect is thinking… (round ${session.round})`} />
+            ) : null}
 
             {session.phase === 'drafting' && <Status label="The architect is drafting the plan…" />}
 

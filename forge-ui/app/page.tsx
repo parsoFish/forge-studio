@@ -6,6 +6,7 @@ import {
   fetchCost,
   fetchCycles,
   fetchEvents,
+  fetchReflection,
   subscribe,
   fetchArchitectSessions,
   fetchLiveness,
@@ -512,6 +513,19 @@ function CycleCard({
 }) {
   const meta = CYCLE_STATUS_META[c.status];
   const reviewable = c.status === 'ready-for-review';
+  // The reflect human-moment was orphaned: the only entry point was a transient
+  // link on the review screen, so a `done` cycle with pending reflection questions
+  // had no durable way back. Surface a "Reflect →" on done cards while reflection
+  // is outstanding (gated on the bridge's answered flag so it disappears once done).
+  const [reflectPending, setReflectPending] = useState(false);
+  useEffect(() => {
+    if (c.status !== 'done') { setReflectPending(false); return; }
+    let cancelled = false;
+    fetchReflection(c.cycleId)
+      .then((r) => { if (!cancelled) setReflectPending(!!r && r.questions.length > 0 && !r.answered); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [c.status, c.cycleId]);
   return (
     <span data-roadmap-bubble data-dep-level={level} style={{ display: 'inline-flex', alignItems: 'stretch' }}>
       <button
@@ -535,7 +549,7 @@ function CycleCard({
           borderLeftColor: meta.color,
           background: active ? '#0d1f3a' : '#161b22',
           color: '#e6edf3',
-          borderRadius: reviewable ? '6px 0 0 6px' : 6,
+          borderRadius: (reviewable || reflectPending) ? '6px 0 0 6px' : 6,
           cursor: 'pointer',
         }}
       >
@@ -562,6 +576,28 @@ function CycleCard({
           }}
         >
           Review →
+        </Link>
+      )}
+      {reflectPending && (
+        <Link
+          href={`/reflect/${encodeURIComponent(c.cycleId)}`}
+          data-action="open-reflect"
+          title="Reflect on this cycle"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '0 10px',
+            fontSize: 11,
+            fontWeight: 600,
+            color: '#fff',
+            background: '#6e40c9',
+            border: '1px solid #30363d',
+            borderLeft: 'none',
+            borderRadius: '0 6px 6px 0',
+            textDecoration: 'none',
+          }}
+        >
+          Reflect →
         </Link>
       )}
     </span>
