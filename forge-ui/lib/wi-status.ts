@@ -20,8 +20,8 @@
 import type { EventLogEntry } from './bridge-client';
 
 /**
- * Status state per work item, also reused for features (rolled-up from
- * their WIs) and the dev-loop phase. Distinct from `PhaseStatus` so the
+ * Status state per work item, also rolled up to the dev-loop phase. Distinct
+ * from `PhaseStatus` so the
  * 'retrying' state can travel separately from the orchestrator's
  * top-level phase state.
  *

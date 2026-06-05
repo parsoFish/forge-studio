@@ -9,7 +9,6 @@
  *        - wi      → acceptance criteria (Given/When/Then), files_in_scope,
  *                    quality_gate_cmd (fetched from the bridge's
  *                    /api/work-item/<cycleId>/<wiId> snapshot endpoint).
- *        - feature → title + depends_on.
  *        - phase   → phase name, status, cost.
  *   2. ACTIVITY — the existing ActivityPanel, scoped to this hex via `scopeHex`
  *        (events pre-filtered by eventMatchesHex; chip bar hidden).

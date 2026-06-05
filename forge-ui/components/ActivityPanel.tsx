@@ -21,7 +21,7 @@ export type ActivityPanelProps = {
 /**
  * Scoped activity tracker rendered inside the HexDetailDrawer.
  *
- * Events are pre-filtered to the selected hex (phase / feature / WI) via
+ * Events are pre-filtered to the selected hex (phase / WI) via
  * `eventMatchesHex`. The operator can click any row to inspect its full
  * metadata in the detail pane below.
  */

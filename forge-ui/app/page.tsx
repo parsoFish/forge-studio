@@ -89,7 +89,7 @@ export default function Page() {
     return () => { cancelled = true; };
   }, [activeCycleId, resetEvents]);
 
-  // Feature #9: operator-selected hex (phase / feature / wi), set by clicking
+  // operator-selected hex (phase / wi), set by clicking
   // ANY hex in AgentGraphCanvas. Drives the hex-detail drawer (definition +
   // scoped activity).
   const [selectedHex, setSelectedHex] = useState<SelectedHex | null>(null);
@@ -254,9 +254,9 @@ export default function Page() {
           PR in GitHub, or a future standalone review screen mirroring
           /architect/[sessionId]. */}
 
-      {/* Live React Flow pipeline graph: phase spine on top, features
-          branching off dev-loop, WIs below, ephemeral tool nodes pulsing
-          off the active WI as per-tool events arrive. */}
+      {/* Live React Flow pipeline graph: phase spine on top, WIs branching
+          directly off the dev-loop hex (no feature tier), ephemeral tool nodes
+          pulsing off the active WI as per-tool events arrive. */}
       <section style={{ marginTop: 24, display: 'flex', alignItems: 'stretch', gap: 12 }} data-section="pipeline-tree">
         {/* The canvas keeps its full width; the hex-detail drawer (Feature #9)
             sits BESIDE it (flex sibling), never covering the hexes. */}
