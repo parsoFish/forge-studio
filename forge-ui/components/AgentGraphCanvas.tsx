@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 
 import type { CostSummary, EventLogEntry } from '@/lib/bridge-client';
 import type { PhaseState, Phase } from '@/lib/phases';
-import { PHASE_ORDER } from '@/lib/phases';
+import { PHASE_ORDER, costForPhaseHex } from '@/lib/phases';
 import type { HexKind, SelectedHex } from '@/lib/hex-detail';
 import type { WiStatus } from '@/lib/wi-status';
 import { statusGlow } from '@/lib/status-colors';
@@ -258,7 +258,7 @@ export function AgentGraphCanvas(props: AgentGraphCanvasProps): JSX.Element {
         id: `phase:${phase}`,
         type: 'hex',
         position: { x: c.x - size / 2, y: c.y - size / 2 },
-        data: { kind: 'phase', id: phase, label: shortPhase(phase), status: st, costUsd: cost?.perPhase?.[phase]?.cost_usd ?? 0, active: st === 'active', size, selected: selectedHex?.kind === 'phase' && selectedHex.id === phase, onSelect: onSelectHex },
+        data: { kind: 'phase', id: phase, label: shortPhase(phase), status: st, costUsd: costForPhaseHex(phase, cost ?? null), active: st === 'active', size, selected: selectedHex?.kind === 'phase' && selectedHex.id === phase, onSelect: onSelectHex },
         width: size,
         height: size,
         draggable: false,
@@ -589,7 +589,12 @@ function FitOnStructuralChange({ signal }: { signal: string }): JSX.Element | nu
 
 function CostPanel({ cost, workItems, wiActivity, totals, onClose }: { cost: CostSummary | null; workItems: GraphWorkItem[]; wiActivity: Record<string, WiActivity>; totals: { tokens: number; costUsd: number }; onClose: () => void }): JSX.Element {
   const perAgent = workItems.map((w) => ({ id: w.id, cost: wiActivity[w.id]?.costUsd ?? 0 })).filter((a) => a.cost > 0).sort((a, b) => b.cost - a.cost);
-  const perPhase = cost ? Object.entries(cost.perPhase).filter(([, m]) => m.cost_usd > 0).sort((a, b) => b[1].cost_usd - a[1].cost_usd) : [];
+  // BY PHASE must match the HEX SET, not the raw backend buckets — same split as
+  // the pills (unifier carved out of dev-loop, closure folded into review). The
+  // non-hex backend phases (orchestrator/brain) collapse into one "overhead" row.
+  const perPhase = PHASE_ORDER.map((p) => ({ p, cost: costForPhaseHex(p, cost) })).filter((x) => x.cost > 0).sort((a, b) => b.cost - a.cost);
+  const HEX_RAW_PHASES = new Set(['architect', 'project-manager', 'developer-loop', 'review-loop', 'closure', 'reflection']);
+  const overhead = cost ? Object.entries(cost.perPhase).filter(([k]) => !HEX_RAW_PHASES.has(k)).reduce((s, [, m]) => s + (m.cost_usd ?? 0), 0) : 0;
   return (
     <div style={costCard} data-component="cost-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -599,7 +604,8 @@ function CostPanel({ cost, workItems, wiActivity, totals, onClose }: { cost: Cos
       {perAgent.length > 0 && <div style={costSection}>BY WORK ITEM</div>}
       {perAgent.map((a) => <div key={a.id} style={costRow}><span>{a.id}</span><span style={{ color: '#adbac7' }}>${a.cost.toFixed(3)}</span></div>)}
       {perPhase.length > 0 && <div style={costSection}>BY PHASE</div>}
-      {perPhase.map(([p, m]) => <div key={p} style={costRow}><span>{shortPhase(p as Phase)}</span><span style={{ color: '#adbac7' }}>${m.cost_usd.toFixed(3)}</span></div>)}
+      {perPhase.map(({ p, cost: c }) => <div key={p} style={costRow}><span>{shortPhase(p)}</span><span style={{ color: '#adbac7' }}>${c.toFixed(3)}</span></div>)}
+      {overhead > 0 && <div style={costRow}><span style={{ color: '#6e7681' }}>overhead</span><span style={{ color: '#6e7681' }}>${overhead.toFixed(3)}</span></div>}
     </div>
   );
 }

@@ -8,8 +8,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { derivePhaseStates } from './phases.ts';
-import type { EventLogEntry } from './bridge-client.ts';
+import { derivePhaseStates, costForPhaseHex } from './phases.ts';
+import type { EventLogEntry, CostSummary } from './bridge-client.ts';
 
 let seq = 0;
 function ev(phase: string, event_type: string, metadata: Record<string, unknown> = {}): EventLogEntry {
@@ -140,4 +140,24 @@ test('resume-from-unifier: dev-loop end complete:0/failed:N/resumed is NOT a fai
     ev('developer-loop', 'end', { work_item_count: 2, complete: 0, failed: 2, resumed: true }),
   ];
   assert.equal(statusOf(events, 'developer-loop'), 'complete');
+});
+
+// costForPhaseHex: the per-hex cost must apply the SAME split as the status —
+// unifier carved out of dev-loop (by skill), closure folded into review-loop —
+// or the unifier hex shows $0 while its cost hides in the dev-loop pill.
+test('costForPhaseHex: unifier cost is split out of developer-loop', () => {
+  const cost: CostSummary = {
+    totalUsd: 15, total_cost_usd: 15,
+    perPhase: { 'developer-loop': { cost_usd: 12, iterations: 0, duration_ms: 0 }, 'review-loop': { cost_usd: 1, iterations: 0, duration_ms: 0 }, closure: { cost_usd: 0.5, iterations: 0, duration_ms: 0 } },
+    perSkill: { 'developer-unifier': { invocations: 1, cost_usd: 9, duration_ms: 0 } },
+  } as unknown as CostSummary;
+  assert.equal(costForPhaseHex('unifier', cost), 9, 'unifier hex shows its real (skill) cost, not $0');
+  assert.equal(costForPhaseHex('developer-loop', cost), 3, 'dev-loop = 12 - 9 unifier');
+  assert.equal(costForPhaseHex('review-loop', cost), 1.5, 'review-loop folds in closure (1 + 0.5)');
+});
+
+test('costForPhaseHex: null cost → 0 for every phase', () => {
+  for (const p of ['architect', 'unifier', 'review-loop'] as const) {
+    assert.equal(costForPhaseHex(p, null), 0);
+  }
 });

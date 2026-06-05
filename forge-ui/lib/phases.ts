@@ -4,7 +4,7 @@
  * order in `orchestrator/logging.ts`.
  */
 
-import type { EventLogEntry } from './bridge-client';
+import type { EventLogEntry, CostSummary } from './bridge-client';
 
 export const PHASE_ORDER = [
   'architect',
@@ -41,6 +41,31 @@ function phaseForEvent(e: EventLogEntry): string {
  */
 export function canonicalPhase(raw: string): string {
   return raw === 'closure' ? 'review-loop' : raw;
+}
+
+/**
+ * The cost a phase HEX should display. The hex set splits `unifier` out of
+ * `developer-loop` (phaseForEvent) and folds `closure` into `review-loop`
+ * (canonicalPhase) for STATUS — but `cost.perPhase` is keyed by the RAW backend
+ * phase, so cost MUST be split the SAME way or the hexes and the money disagree
+ * (the unifier hex showed $0 while its real cost hid inside the dev-loop pill).
+ * ONE rule for status and cost. Use this everywhere a per-hex cost is shown
+ * (the hex pill, the detail drawer, the cost panel, the header tooltip).
+ */
+export function costForPhaseHex(phase: Phase, cost: CostSummary | null): number {
+  if (!cost) return 0;
+  const per = (p: string): number => cost.perPhase?.[p]?.cost_usd ?? 0;
+  const unifierCost = cost.perSkill?.['developer-unifier']?.cost_usd ?? 0;
+  switch (phase) {
+    case 'unifier':
+      return unifierCost; // its events carry phase 'developer-loop'; keyed by skill
+    case 'developer-loop':
+      return Math.max(0, per('developer-loop') - unifierCost); // dev-loop minus the unifier slice
+    case 'review-loop':
+      return per('review-loop') + per('closure'); // closure folds into the review hex
+    default:
+      return per(phase);
+  }
 }
 
 /**

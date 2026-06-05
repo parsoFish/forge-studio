@@ -25,6 +25,7 @@ import type { SelectedHex } from '@/lib/hex-detail';
 import { fetchWiGraph, type WiGraph } from '@/lib/wi-graph';
 import { useGraphModel } from '@/lib/use-graph-model';
 import { useBatchedEvents } from '@/lib/use-batched-events';
+import { PHASE_ORDER, costForPhaseHex } from '@/lib/phases';
 import { STATUS_COLOR } from '@/lib/status-colors';
 import { topoLevels } from '@/lib/dep-layout';
 
@@ -226,7 +227,7 @@ export default function Page() {
             data-cost-badge
             data-cost-usd={cost.totalUsd}
             style={{ fontSize: 12, color: '#d2a8ff', fontFamily: 'ui-monospace, Menlo, monospace' }}
-            title={`Per-phase: ${Object.entries(cost.perPhase).map(([p, m]) => `${p}=$${m.cost_usd.toFixed(2)}`).join(' · ')}`}
+            title={`Per-phase: ${PHASE_ORDER.map((p) => ({ p, c: costForPhaseHex(p, cost) })).filter((x) => x.c > 0).map((x) => `${x.p}=$${x.c.toFixed(2)}`).join(' · ')}`}
           >
             ${cost.totalUsd.toFixed(2)}
           </span>

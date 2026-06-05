@@ -21,7 +21,8 @@ import { useEffect, useState } from 'react';
 
 import { fetchWorkItem, type WorkItemDetail, type CostSummary, type EventLogEntry } from '@/lib/bridge-client';
 import type { SelectedHex } from '@/lib/hex-detail';
-import type { PhaseState } from '@/lib/phases';
+import type { PhaseState, Phase } from '@/lib/phases';
+import { costForPhaseHex } from '@/lib/phases';
 import type { GraphWorkItem } from '@/lib/use-graph-model';
 import { statusGlow } from '@/lib/status-colors';
 import { ActivityPanel } from '@/components/ActivityPanel';
@@ -86,7 +87,7 @@ function Definition({
 }): JSX.Element {
   if (hex.kind === 'phase') {
     const st = phaseStates.find((p) => p.phase === hex.id)?.status ?? 'pending';
-    const costUsd = cost?.perPhase?.[hex.id]?.cost_usd ?? 0;
+    const costUsd = costForPhaseHex(hex.id as Phase, cost);
     return (
       <div data-detail-kind="phase">
         <Field label="phase" value={hex.id} />
