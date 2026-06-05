@@ -171,10 +171,13 @@ than scraping rendered text. Pattern from
 
 The root `<main>` carries page-level state:
 
-- `data-conn-state` — `connecting | open | reconnecting | no-bridge`
+- `data-conn-state` — `connecting | open | reconnecting | no-bridge | daemon-stalled`
+- `data-daemon-stalled` — `true | false` (the scheduler heartbeat went stale while the bridge is open)
+- `data-bridge-url` — the resolved bridge base (debug handle)
 - `data-live-count`, `data-recent-count` — cycle counts
-- `data-active-cycle-id`, `data-active-cycle-status`, `data-active-cycle-events`
-- `data-page-ready` — `true` once the bridge connection is open
+- `data-active-cycle-id`, `data-active-cycle-status`, `data-active-cycle-events`, `data-active-cycle-cost-usd`
+- `data-page-ready` — `true` once the bridge connection is open (or `no-bridge` / `daemon-stalled`)
+- the header cost badge: `[data-cost-badge][data-cost-usd]`
 
 Section + component anchors (post-2026-05-25 cascade-tree layout —
 the old state-machine + activity-sidebar + standalone wi-graph
@@ -224,7 +227,7 @@ sections were merged into a single hex pipeline):
     `[data-section="design-decisions"]` → per-decision
     `[data-escalation-id][data-decision-resolved]`.
 - Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
-- Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd][data-phase-index]`.
+- Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd]`.
 - WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps]`.
 - Canvas panel overlays: `[data-component="cost-panel"]` (CostPanel) + the FileHeatmap.
 - Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
