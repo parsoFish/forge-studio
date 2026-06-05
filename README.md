@@ -8,13 +8,11 @@ This is **forge v2** — a fresh implementation that learns from v1 (at `~/sideP
 
 ## See it run
 
-A real cycle — architect-supplied initiative → PM decomposes → dev-loop writes the code → unifier opens a PR — recorded against the operator UI shipped under [`forge-ui/`](./forge-ui).
+The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + plan gate → PM decomposes the initiative's acceptance criteria into work items → developer loop (respecting dependencies) → unifier → an *interactive* review demo → reflection — driven entirely through the operator UI under [`forge-ui/`](./forge-ui). It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`forge-ui/.demo-shots/e2e/index.html`](./forge-ui/.demo-shots/e2e)).
 
 https://github.com/parsoFish/forge-v2/releases/download/v0.1.0/cycle.mp4
 
-(GitHub auto-embeds this as an inline `<video>` element on the rendered README page. Direct link: [cycle.mp4](https://github.com/parsoFish/forge-v2/releases/download/v0.1.0/cycle.mp4) · Phase-by-phase captions: [docs/demo/README.md](./docs/demo/README.md).)
-
-The cycle shown is `INIT-2026-05-25-claude-trail-verdict-summary` — cycle 10 of the `claude-harness` dogfood sequence (claude's own forge project, also published at [parsoFish/claude-harness](https://github.com/parsoFish/claude-harness)).
+(An early **v0.1.0** recording of one full cycle, auto-embedded inline by GitHub. The operator journey above is the current, continuously-regenerated demonstration and reflects the refined pipeline — initiatives decomposed straight into work items, with the interactive review surface.)
 
 ## The six phases
 
