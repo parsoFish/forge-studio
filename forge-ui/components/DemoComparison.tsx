@@ -134,10 +134,16 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
         </div>
       )}
 
-      {/* Checkpoints */}
-      {model.checkpoints.map((c, i) => (
-        <CheckpointCard key={`${c.label}-${i}`} cp={c} cycleId={cycleId} bridgeBase={bridgeBase} />
-      ))}
+      {/* Checkpoints — shape-aware heading mirrors the derived DEMO.html so the
+          in-UI demo and the PR artifact present the same section structure. */}
+      {model.checkpoints.length > 0 && (
+        <div data-section="demo-checkpoints">
+          <SectionLabel>{checkpointsHeading(model.checkpoints)}</SectionLabel>
+          {model.checkpoints.map((c, i) => (
+            <CheckpointCard key={`${c.label}-${i}`} cp={c} cycleId={cycleId} bridgeBase={bridgeBase} />
+          ))}
+        </div>
+      )}
 
       {/* Usage example */}
       {model.usage_example && (
@@ -301,6 +307,14 @@ function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element 
       {children}
     </div>
   );
+}
+
+/** Shape-aware checkpoints heading — mirrors cli/demo-model.ts so the in-UI demo
+ *  and the derived DEMO.html present the same section structure (no phantom label). */
+function checkpointsHeading(checkpoints: DemoModelCheckpoint[]): string {
+  if (checkpoints.some((c) => c.kind === 'screenshot' || c.kind === 'video')) return 'Visual Changes';
+  if (checkpoints.length > 0 && checkpoints.every((c) => c.kind === 'harness')) return 'Test Evidence';
+  return 'Visual Changes';
 }
 
 /** Build a bridge artifact URL for a relative media path (video sibling), or null. */
