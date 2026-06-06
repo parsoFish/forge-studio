@@ -354,6 +354,69 @@ re-run. Results split:
   all 4 GitHub CI checks green** — merged to betterado `main`. The demo ran the full CI
   verbatim. The original gate-gaming can't recur (forge's authoritative gate IS the CI).
 
+## 2026-06-06 — a live-acc WI's per-WI gate doesn't run the project linter, so the dev-loop ships CI-red code (gate ≠ CI, live-acc variant)
+
+Surfaced driving the `shared-acceptance-fixture` initiative (a shared live ADO
+test fixture) through forge end-to-end. The architect → PLAN → PM → dev-loop all
+worked cleanly: PM emitted 2 well-grounded WIs (all under `azuredevops/`, both
+live-acc TF_ACC gates, standing ACs injected, DAG WI-1→WI-2), the dev-loop
+delivered the fixture (`shared_fixtures.go`, 464 lines) + refactored
+`TestAccReleaseDefinition_basic`, both per-WI **live-acc gates passed live** (real
+ADO apply → API round-trip → destroy), and the unifier passed. Then the **final CI
+delivery gate** (`make test && golangci-lint run ./... && make terrafmt-check`,
+TF_ACC correctly stripped — the A3 fix working) caught **`golangci-lint` errcheck
+violations** in the new fixture (`_ =` on the four cleanup `Delete` calls under
+errcheck `check-blank`, and two `id, _ := uuid.Parse(...)` discards) and
+**correctly refused to open a PR**. The cycle failed at $14.75 / 22m with the
+worktree preserved.
+
+- **Why it matters:** the delivery gate did its job (no CI-red PR shipped), but the
+  *dev-loop* should have caught this itself. A live-acc WI's `quality_gate_cmd` is
+  the acceptance test (`go test -run TestX ./acceptancetests/`), which does **not**
+  run `golangci-lint`. The standing AC (A2b) *tells* the agent "CI-equivalent
+  (push-green) must pass — `golangci-lint run ./...`", but nothing **enforces** it
+  at the per-WI gate. So the agent marks the WI `complete` on a green acc test while
+  its code is lint-red, and the failure only surfaces at the cycle-level CI gate —
+  which fails the **whole cycle** (expensive, net-new fixture re-run) instead of the
+  dev-loop self-correcting in-iteration. Same "gate ≠ project CI" class as the
+  2026-05-31 / 2026-06-02 findings, now in the **live-acc WI** guise (there the gate
+  was lint-only and missed `make test`; here the gate is the acc test and misses lint).
+- **Direction (pick one):**
+  (a) For a project with a `ci_gate`, the per-WI gate for a **live-acc WI** should
+  ALSO run the project's linter (append `golangci-lint run <pkg>` / the language
+  formatter to the composed per-WI gate), so a lint-red WI can't reach `complete`. OR
+  (b) Run a **lint/format sub-check at dev-loop close** (before the WI is marked
+  complete) scoped to the changed files — cheaper than the whole-module CI gate, and
+  it fails the iteration (self-correct) rather than the cycle.
+  Either way the linter must run *inside* the dev-loop, not only at the post-unifier
+  delivery gate.
+- **Workaround used this cycle (operator):** hand-fixed the 6 errcheck lines
+  (`mustParseUUID(t,…)` helper + `if err := …; err != nil { t.Logf(…) }` on the
+  cleanup deletes), committed to the branch, and `forge requeue --resume-from=unifier`
+  → the CI gate re-ran green → PR. The fixture itself (the delivered work) was sound;
+  only the lint hygiene slipped the per-WI gate.
+- **Evidence:** `_logs/2026-06-06T09-03-51_INIT-2026-06-06-shared-acceptance-fixture/`
+  (`cycle.ci-gate` `ok:false` with the errcheck output; per-WI `ralph.end`
+  `stop_reason:quality-gates-pass` for both WIs), branch
+  `forge/INIT-2026-06-06-shared-acceptance-fixture` commit `52efbdee` (the fix).
+
+## 2026-06-06 — two lower-severity machinery observations from the same fixture cycle
+
+1. **`report.md` diff section shows inverted delivery on a resume cycle.** The
+   resumed `shared-acceptance-fixture` report rendered `shared_fixtures.go` as a
+   **deleted** file (−484) and the test reverting to inline HCL — the *opposite* of
+   what landed — because the report's unified diff captured a stale git state, while
+   the authoritative `dev-loop.delivered` event correctly showed
+   `files_changed=6, insertions=1141, deletions=1`. Low severity (the reflector
+   cross-checks `dev-loop.delivered`, so it didn't draw a wrong conclusion), but an
+   operator reading the report diff would be misled. Same display-layer class as the
+   "wrong quality-gate command in the report" item above. Direction: on a resume,
+   render the report diff from the same base the delivery event uses (or annotate the
+   diff as "may be stale on resume — see dev-loop.delivered"). The reflector also
+   logged this as a betterADO Brain-3 theme (`2026-06-06-report-diff-stale-on-resume`)
+   — a minor reflector **mis-scope** (it's forge machinery, not a betterADO pattern);
+   re-route in a future brain pass.
+
 ## Concerns (ranked by exposure for a real, unattended initiative)
 
 ### 1. Reflector can write confidently-wrong themes from stale metadata — ✅ RESOLVED 2026-05-31
