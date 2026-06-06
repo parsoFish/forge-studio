@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
+import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'reflector', 'SKILL.md');
@@ -42,12 +43,24 @@ export const REFLECTOR_DISALLOWED_TOOLS: ReflectorDisallowedTool[] = [
 ];
 
 /**
- * Reflector workload is summarisation + write — not opus-justifying. Match
- * every other live phase. The SKILL.md frontmatter `model: claude-opus-4-7`
- * is aspirational; this constant is the live default. Promote later by
- * changing one line.
+ * ADR 024 seam: the reflector as a declarative phase agent — it COMPOSES the
+ * reflector skill (the single source of its intent) at the `sonnet` tier.
+ * Summarisation + direct brain writes are not opus-justifying. The orchestrator
+ * resolves the model from the tier; a tier re-point is a single edit here.
  */
-export const REFLECTOR_MODEL = 'claude-sonnet-4-6';
+export const reflectorAgentSpec: PhaseAgentSpec = {
+  phase: 'reflector',
+  skill: 'skills/reflector/SKILL.md',
+  tier: 'sonnet',
+  allowedTools: REFLECTOR_ALLOWED_TOOLS,
+  disallowedTools: REFLECTOR_DISALLOWED_TOOLS,
+};
+
+/**
+ * Concrete model, derived from the spec's tier (single source: the spec).
+ * Behavior-preserving: resolves to `claude-sonnet-4-6` — same as before.
+ */
+export const REFLECTOR_MODEL = modelForSpec(reflectorAgentSpec);
 
 let cachedSkillText: string | null = null;
 function loadSkillText(): string {
@@ -88,8 +101,9 @@ function loadBrainNavigation(cwd: string): string {
  * still benefit from the within-window cache hit.
  *
  * Build the reflector system prompt: brain navigation index + the SKILL.md
- * contract + reflector-specific discipline notes (file-based handoff,
- * direct-write themes, evidence-grounding requirement).
+ * contract (ADR 024: the single source of phase intent). All static operational
+ * intent lives in SKILL.md; per-cycle data (cycle id, manifest paths, worktree
+ * paths) goes in the user prompt only.
  *
  * @param brainCwd - directory containing `brain/`. For the bench this is the
  *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
@@ -107,64 +121,6 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '# reflector skill contract',
     '',
     loadSkillText(),
-    '',
-    '---',
-    '',
-    '# Reflector discipline (this closure pass)',
-    '',
-    'You are a **one-shot reflector** — not a Ralph loop. Run the four-stage process described in the skill contract, then exit. The orchestrator does not call you a second time.',
-    '',
-    '**File-based interactivity (stages 2 + 3).** You do NOT call `AskUserQuestion`. Instead:',
-    '- **Stage 2**: write your structured questions (max 4) into `_logs/<cycle-id>/user-questions.md`. One numbered question per `## N. <header>` heading, body under it. The orchestrator derives `user-questions.json` from this file post-exit.',
-    '- **Guaranteed seed questions (always include unless the cycle had trivially zero work):**',
-    '  1. "Was the work-item decomposition the right size?" — too-few WIs (over-bundled), right-sized, or too-many (over-fragmented)?',
-    '  2. "Did the implementation match the design intent?" — exact match, minor divergence, or significant divergence worth a theme?',
-    '  3. "Did the cycle stay aligned with the initiative\'s original goals?" — yes, partial drift, or significant scope creep?',
-    '  Add project-grounded follow-up questions beyond these (cap at 4 total). Skip ALL questions only when the cycle had literally zero deliverables.',
-    '- **Stage 3**: after writing questions, read `_logs/<cycle-id>/user-feedback.md`. Treat its contents as the user\'s answers + free-form feedback, and incorporate them into `retro.md` Section 2 + Section 3.',
-    '- If `user-feedback.md` does not exist when you go to read it, write retro.md sections 2 + 3 as `_(no feedback supplied this cycle)_` and continue.',
-    '',
-    '**Direct-write brain.** Write theme markdown files directly to `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`. Required frontmatter: `title`, `description`, `category` (one of `pattern`, `antipattern`, `decision`, `operation`, `reference`), `created_at`, `updated_at`. The brain-ingest sub-skill is NOT invoked in this pass.',
-    '',
-    '**Evidence grounding (load-bearing).** Every theme MUST include a `## Sources` section listing ≥ 1 path that resolves to either:',
-    '- `_logs/<cycle-id>/...` (event log entries you cited), or',
-    '- `brain/cycles/_raw/<cycle-id>.md` (the cycle archive you wrote).',
-    '',
-    'Themes without resolvable sources fail the bench\'s evidence-grounding criterion. Vague observations ("we could improve X") are rejected.',
-    '',
-    '**Cycle archive (mandatory).** Write `brain/cycles/_raw/<cycle-id>.md` with frontmatter:',
-    '```yaml',
-    '---',
-    'source_type: cycle',
-    'source_url: _logs/<cycle-id>/events.jsonl',
-    'source_title: Cycle <cycle-id> — Initiative <initiative-id>',
-    'cycle_id: <cycle-id>',
-    'initiative_id: <initiative-id>',
-    'project: <project>',
-    'ingested_at: <ISO-8601 timestamp>',
-    'ingested_by: reflector',
-    'retention: auto',
-    'cited_by: []',
-    '---',
-    '```',
-    'Body: a short summary plus the full event-log excerpt (or a link to it).',
-    '',
-    '**Note on `retention` + `cited_by` (S6A).** Always write the placeholder values shown above (`retention: auto` and `cited_by: []`). The orchestrator post-processes the archive after you exit to compute the correct retention tier (`load-bearing` / `interesting` / `routine`) from the cycle\'s event log + the themes you wrote, and to populate `cited_by` with the theme files that reference this archive. Do not attempt to compute these yourself — the heuristic is the orchestrator\'s responsibility.',
-    '',
-    '**Retro structure.** `_logs/<cycle-id>/retro.md` MUST contain three structural headings:',
-    '- `## Self-reflection` — what you noticed (stage 1).',
-    '- `## User questions` — questions you wrote, plus answers from `user-feedback.md` (stage 2).',
-    '- `## User feedback` — free-form user input from `user-feedback.md` (stage 3).',
-    '',
-    '**Brain-query first (REQUIRED, mandatory).** Your first tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` whose description matches a pattern you observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. This is unconditional, not "when unsure". Production gates on this signal.',
-    '',
-    'Hard rules:',
-    '- **No `gh` operations.** The reviewer already merged. Reflection is post-merge log-and-continue.',
-    '- **No queue mutation.** `_queue/done/` already contains the manifest (the reviewer moved it). Read-only for you.',
-    '- **No WI-spec edits.**',
-    '- **No web tools.** `WebFetch` / `WebSearch` are disabled.',
-    '- **Concrete actions, not vague intentions.** Themes must capture specific patterns / antipatterns / decisions, not platitudes.',
-    '- **Delivery truth comes from `dev-loop.delivered`, not per-WI status.** The event log carries a `dev-loop.delivered` event with the branch\'s git diff-stat (`files_changed` / `insertions` / `deletions` / `commits`). That event + the merged tree are the authoritative record of what landed. Per-WI `status: failed` counts can be **stale** after a resume — the work is committed on the branch from the prior cycle, but the status files were never rewritten. **NEVER write a "nothing delivered" / "empty branch" / "no implementation" theme if `dev-loop.delivered` shows `files_changed > 0` (or the merged tree contains the change).** If the status metadata and the diff disagree, the diff wins — and that contradiction is itself the antipattern worth capturing (stale-status-vs-real-delivery), NOT "the PR was empty".',
   ].join('\n');
 }
 

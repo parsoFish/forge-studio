@@ -46,9 +46,14 @@ this cycle. Do not run a cycle from this moment.
 
 ## Required first action
 
-Invoke `brain-query` BEFORE writing anything. Production gates on this
-signal (`brain_consulted`) — the reflection fails if the brain is not
-consulted before writes. Useful queries:
+Invoke `brain-query` BEFORE writing anything. Your first tool calls MUST be
+`Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...`
+paths — at minimum `projects/<project>/brain/profile.md` and any prior
+`projects/<project>/brain/themes/*.md` whose description matches a pattern
+you observed in the event log. The orchestrator records `tool_use.brainReads`
+and **fails the reflection if zero brain reads are recorded**. This is
+unconditional, not "when unsure". Production gates on this signal
+(`brain_consulted`). Useful queries:
 
 - "What does the brain know about prior retros for similar initiatives?"
 - "What antipatterns are currently surfaced and might be reinforced or
@@ -74,8 +79,24 @@ consulted before writes. Useful queries:
   a `## Sources` section listing ≥ 1 path that resolves to either
   `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`.
 - New raw source: `brain/cycles/_raw/<cycle-id>.md` (cycle log archived).
-  Frontmatter required: `source_type: cycle`, `cycle_id`, `initiative_id`,
-  `project`, `ingested_at`, `ingested_by: reflector`.
+  Required frontmatter (write these placeholder values exactly — the orchestrator
+  post-processes the archive after you exit to compute the correct `retention` tier
+  and populate `cited_by`; do NOT attempt to compute these yourself):
+  ```yaml
+  ---
+  source_type: cycle
+  source_url: _logs/<cycle-id>/events.jsonl
+  source_title: Cycle <cycle-id> — Initiative <initiative-id>
+  cycle_id: <cycle-id>
+  initiative_id: <initiative-id>
+  project: <project>
+  ingested_at: <ISO-8601 timestamp>
+  ingested_by: reflector
+  retention: auto
+  cited_by: []
+  ---
+  ```
+  Body: a short summary plus the full event-log excerpt (or a link to it).
 - `_logs/<cycle-id>/user-questions.md` (stage 2; write unless the cycle
   had literally zero deliverables). Use `## N. <header>` headings. The
   orchestrator derives `user-questions.json` from this file post-exit.
@@ -121,6 +142,10 @@ already did that on merge. The reflector is post-merge log-and-continue.
    observations, no hand-waving.
 
 ### Stage 2 — Agent-prompted user questions (file-based handoff)
+
+**Do NOT call `AskUserQuestion`.** File-based handoff only: write questions
+to `user-questions.md`; the orchestrator derives `user-questions.json` post-exit.
+You only ever write the `.md`.
 
 5. From Stage 1, identify items the agent cannot resolve from established
    principles + brain knowledge. These become user questions.

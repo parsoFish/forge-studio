@@ -1,0 +1,255 @@
+/**
+ * Unit tests for orchestrator/reflector-invocation.ts — ADR 024 seam.
+ *
+ * Verifies:
+ *   1. `reflectorAgentSpec` is well-formed (phase / skill / tier / tools).
+ *   2. `REFLECTOR_MODEL` derives from the spec's tier (behaviour-preserved: Sonnet).
+ *   3. The system prompt contains the reflector's key invariants sourced from SKILL.md.
+ *   4. The user prompt contains the dynamic per-cycle bindings and NOT the static prose.
+ *
+ * No SDK invocation; no shell commands.
+ */
+
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  reflectorAgentSpec,
+  REFLECTOR_MODEL,
+  REFLECTOR_ALLOWED_TOOLS,
+  REFLECTOR_DISALLOWED_TOOLS,
+  buildReflectorSystemPrompt,
+  renderReflectorUserPrompt,
+} from './reflector-invocation.ts';
+import { modelForSpec } from './phase-agent.ts';
+
+// ---------------------------------------------------------------------------
+// reflectorAgentSpec shape
+// ---------------------------------------------------------------------------
+
+test('reflectorAgentSpec: phase is "reflector"', () => {
+  assert.equal(reflectorAgentSpec.phase, 'reflector');
+});
+
+test('reflectorAgentSpec: skill points to skills/reflector/SKILL.md', () => {
+  assert.equal(reflectorAgentSpec.skill, 'skills/reflector/SKILL.md');
+});
+
+test('reflectorAgentSpec: tier is "sonnet"', () => {
+  assert.equal(reflectorAgentSpec.tier, 'sonnet');
+});
+
+test('reflectorAgentSpec: allowedTools includes Read, Write, Bash, Grep, Glob, Edit', () => {
+  const tools = reflectorAgentSpec.allowedTools;
+  for (const t of ['Read', 'Write', 'Bash', 'Grep', 'Glob', 'Edit'] as const) {
+    assert.ok(tools.includes(t), `missing tool: ${t}`);
+  }
+});
+
+test('reflectorAgentSpec: disallowedTools bans web tools and NotebookEdit', () => {
+  const denied = reflectorAgentSpec.disallowedTools;
+  assert.ok(denied.includes('WebFetch'));
+  assert.ok(denied.includes('WebSearch'));
+  assert.ok(denied.includes('NotebookEdit'));
+});
+
+// ---------------------------------------------------------------------------
+// REFLECTOR_MODEL derives from the spec (behaviour-preserved: Sonnet)
+// ---------------------------------------------------------------------------
+
+test('REFLECTOR_MODEL equals modelForSpec(reflectorAgentSpec)', () => {
+  assert.equal(REFLECTOR_MODEL, modelForSpec(reflectorAgentSpec));
+});
+
+test('REFLECTOR_MODEL is claude-sonnet-4-6 (behaviour-preserved)', () => {
+  assert.equal(REFLECTOR_MODEL, 'claude-sonnet-4-6');
+});
+
+// ---------------------------------------------------------------------------
+// Re-exported tool lists match the spec
+// ---------------------------------------------------------------------------
+
+test('REFLECTOR_ALLOWED_TOOLS matches spec allowedTools', () => {
+  assert.deepEqual([...reflectorAgentSpec.allowedTools], REFLECTOR_ALLOWED_TOOLS);
+});
+
+test('REFLECTOR_DISALLOWED_TOOLS matches spec disallowedTools', () => {
+  assert.deepEqual([...reflectorAgentSpec.disallowedTools], REFLECTOR_DISALLOWED_TOOLS);
+});
+
+// ---------------------------------------------------------------------------
+// System prompt: brain index + SKILL.md key invariants; no per-cycle data
+// ---------------------------------------------------------------------------
+
+function makeFakeBrainCwd(): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-reflector-test-'));
+  // brain/INDEX.md is what loadBrainIndex reads — create a minimal one.
+  mkdirSync(join(dir, 'brain'), { recursive: true });
+  writeFileSync(
+    join(dir, 'brain', 'INDEX.md'),
+    '# Brain index\n\n_(test stub)_\n',
+  );
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('buildReflectorSystemPrompt: contains brain navigation header', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(sys.includes('Brain navigation index'), 'should include brain nav header');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: contains reflector skill contract header', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(sys.includes('reflector skill contract'), 'should embed skill contract header');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: brain-first mandate present (from SKILL.md)', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    // Key invariant: brain query is mandatory and production gates on it.
+    assert.ok(
+      sys.includes('brain_consulted') || sys.includes('brain reads are recorded'),
+      'should carry the brain-first production gate signal',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: direct-write brain rule present (from SKILL.md)', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(
+      sys.includes('direct') && sys.includes('Write'),
+      'should carry the direct-write brain rule',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: cycle archive frontmatter present (from SKILL.md)', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(sys.includes('retention: auto'), 'should include cycle archive retention placeholder');
+    assert.ok(sys.includes('cited_by: []'), 'should include cycle archive cited_by placeholder');
+    assert.ok(sys.includes('ingested_by: reflector'), 'should include cycle archive ingested_by');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: AskUserQuestion prohibition present (from SKILL.md)', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(sys.includes('AskUserQuestion'), 'should carry AskUserQuestion prohibition');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: does NOT contain per-cycle dynamic data', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    // Dynamic cycle-id strings must not appear in the stable system prompt.
+    assert.ok(!sys.includes('INIT-2026-'), 'system prompt must not embed a real initiative id');
+    assert.ok(!sys.includes('cycleId'), 'system prompt must not reference cycleId variable');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildReflectorSystemPrompt: is substantive (> 2000 chars from SKILL.md content)', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    assert.ok(sys.length > 2000, 'system prompt should be substantive');
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User prompt: dynamic per-cycle bindings only
+// ---------------------------------------------------------------------------
+
+const SAMPLE_INPUT = {
+  initiativeId: 'INIT-2026-06-07-reflector-test',
+  cycleId: 'CYCLE-2026-06-07-001',
+  manifestRelPath: '_queue/done/INIT-2026-06-07-reflector-test.md',
+  eventLogRelPath: '_logs/CYCLE-2026-06-07-001/events.jsonl',
+  brainGapsRelPath: '_logs/CYCLE-2026-06-07-001/brain-gaps.jsonl',
+  mergedTreeRelPath: 'projects/testproj',
+  projectName: 'testproj',
+  userQuestionsRelPath: '_logs/CYCLE-2026-06-07-001/user-questions.md',
+  userFeedbackRelPath: '_logs/CYCLE-2026-06-07-001/user-feedback.md',
+  retroRelPath: '_logs/CYCLE-2026-06-07-001/retro.md',
+  cycleArchiveRelPath: 'brain/cycles/_raw/CYCLE-2026-06-07-001.md',
+  themesDirRelPath: 'projects/testproj/brain/themes',
+  forgeThemesDirRelPath: 'brain/cycles/themes',
+};
+
+test('renderReflectorUserPrompt: contains initiative id', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('INIT-2026-06-07-reflector-test'));
+});
+
+test('renderReflectorUserPrompt: contains cycle id', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('CYCLE-2026-06-07-001'));
+});
+
+test('renderReflectorUserPrompt: contains event log path', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('_logs/CYCLE-2026-06-07-001/events.jsonl'));
+});
+
+test('renderReflectorUserPrompt: contains retro output path', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('_logs/CYCLE-2026-06-07-001/retro.md'));
+});
+
+test('renderReflectorUserPrompt: contains themes dir path', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('projects/testproj/brain/themes'));
+});
+
+test('renderReflectorUserPrompt: contains forge themes dir path', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('brain/cycles/themes'));
+});
+
+test('renderReflectorUserPrompt: contains project name', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('testproj'));
+});
+
+test('renderReflectorUserPrompt: does NOT contain the static skill prose (that lives in system prompt)', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  // The "Reflector" heading and verbose skill body must not be duplicated here.
+  assert.ok(!prompt.includes('retention: auto'), 'bulk static prose must not be in user prompt');
+  assert.ok(!prompt.includes('ingested_by: reflector'), 'YAML frontmatter must not be in user prompt');
+});
+
+test('renderReflectorUserPrompt: is compact (no huge static blocks)', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  // A pure dynamic brief should be well under 5 KB.
+  assert.ok(prompt.length < 5000, `user prompt is too large (${prompt.length} chars) — static prose may have leaked in`);
+});
