@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   rmSync,
@@ -36,6 +37,7 @@ import {
   confirmPrMerged,
   embedDemoInPr,
   pushInitiativeBranch,
+  stripForgeScratchFromBranch,
 } from './pr.ts';
 
 function sh(cwd: string, cmd: string, args: string[]): string {
@@ -155,6 +157,82 @@ test('checkLocalRemoteSynced: detects main diverged from the merge-base', () => 
     const inv = checkLocalRemoteSynced(proj);
     assert.equal(inv.ok, false);
     assert.match(inv.detail, /main diverged from the pre-initiative state/);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---- C2: stripForgeScratchFromBranch drops leaked Ralph scratch ----
+
+test('stripForgeScratchFromBranch: drops cycle-introduced root Ralph scratch (PROMPT/AGENT/fix_plan)', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    // Mirror autoCommitWorktreeIfDirty sweeping the worktree-root Ralph scratch
+    // onto the branch via `git add -A`.
+    for (const f of ['PROMPT.md', 'AGENT.md', 'fix_plan.md']) {
+      writeFileSync(join(proj, f), `ralph scratch ${f}\n`);
+    }
+    sh(proj, 'git', ['add', '-A']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'forge-autocommit: iter 1 WIP']);
+    assert.equal(sh(proj, 'git', ['ls-files', '--', 'AGENT.md']).trim(), 'AGENT.md');
+
+    stripForgeScratchFromBranch(proj);
+
+    // No longer tracked on the branch (so it cannot leak into the PR / main) …
+    for (const f of ['PROMPT.md', 'AGENT.md', 'fix_plan.md']) {
+      assert.equal(sh(proj, 'git', ['ls-files', '--', f]).trim(), '', `${f} should be untracked after strip`);
+    }
+    // … but the working-tree copies survive (rm --cached only) so an in-flight loop keeps its state.
+    assert.ok(existsSync(join(proj, 'AGENT.md')), 'working-tree AGENT.md preserved');
+  } finally {
+    cleanup();
+  }
+});
+
+test('stripForgeScratchFromBranch: preserves a project-owned AGENT.md present on the base', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    // The project legitimately ships an AGENT.md, tracked on main before the initiative.
+    sh(proj, 'git', ['checkout', '-q', 'main']);
+    writeFileSync(join(proj, 'AGENT.md'), '# project agent guide\n');
+    sh(proj, 'git', ['add', 'AGENT.md']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'docs: ship project AGENT.md']);
+    sh(proj, 'git', ['push', '-q', 'origin', 'main']);
+    sh(proj, 'git', ['checkout', '-q', 'initiative-x']);
+    sh(proj, 'git', ['merge', '-q', '--no-edit', 'main']); // brings AGENT.md onto the branch via the base
+    // The cycle also leaks fix_plan.md, which SHOULD be stripped.
+    writeFileSync(join(proj, 'fix_plan.md'), 'ralph scratch\n');
+    sh(proj, 'git', ['add', '-A']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'forge-autocommit: WIP']);
+
+    stripForgeScratchFromBranch(proj);
+
+    // AGENT.md is on the base → a project file, preserved.
+    assert.equal(sh(proj, 'git', ['ls-files', '--', 'AGENT.md']).trim(), 'AGENT.md');
+    // fix_plan.md was cycle scratch (absent from the base) → stripped.
+    assert.equal(sh(proj, 'git', ['ls-files', '--', 'fix_plan.md']).trim(), '');
+  } finally {
+    cleanup();
+  }
+});
+
+test('stripForgeScratchFromBranch: drops .forge/ scratch but keeps protected project.json', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    writeFileSync(join(proj, '.forge', 'project.json'), '{"name":"proj"}\n');
+    writeFileSync(join(proj, '.forge', 'pr-description.md'), 'scratch draft\n');
+    sh(proj, 'git', ['add', '.forge/project.json', '.forge/pr-description.md']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'add forge config + scratch']);
+
+    stripForgeScratchFromBranch(proj);
+
+    assert.equal(
+      sh(proj, 'git', ['ls-files', '--', '.forge/project.json']).trim(),
+      '.forge/project.json',
+      'protected config kept',
+    );
+    assert.equal(sh(proj, 'git', ['ls-files', '--', '.forge/pr-description.md']).trim(), '', '.forge scratch dropped');
   } finally {
     cleanup();
   }

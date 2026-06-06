@@ -463,19 +463,85 @@ export type PushResult =
  */
 const PROTECTED_FORGE_CONFIG: readonly string[] = ['.forge/project.json', '.forge/quality_gate_cmd'];
 
-export function stripForgeScratchFromBranch(worktreePath: string): void {
+/**
+ * C2 leak: the Ralph runner stamps its loop scratch — PROMPT.md / AGENT.md /
+ * fix_plan.md — at the WORKTREE ROOT (the agent references them by relative
+ * path), NOT under the gitignored `.forge/` dir. So `autoCommitWorktreeIfDirty`'s
+ * `git add -A` (and the agent's own commits) sweep them onto the initiative
+ * branch, where they leak into the PR and, after merge, re-introduce the C2
+ * contract violation on `main` — forcing a manual `git rm --cached` before every
+ * merge across the whole release chain (2026-06-06). Strip them at the same
+ * pre-PR boundary `.forge/` is stripped.
+ */
+const ROOT_RALPH_SCRATCH: readonly string[] = ['PROMPT.md', 'AGENT.md', 'fix_plan.md'];
+
+/** First existing base ref, preferring the pushed remote. null in a degraded git state. */
+function resolveStripBaseRef(worktreePath: string): string | null {
+  for (const ref of ['origin/main', 'main', 'origin/master', 'master']) {
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], {
+        cwd: worktreePath,
+        stdio: 'pipe',
+      });
+      return ref;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
+}
+
+/** True if `file` is tracked in `ref`'s tree (i.e. a pre-existing project file, not cycle scratch). */
+function isTrackedAtRef(worktreePath: string, ref: string, file: string): boolean {
   try {
-    const tracked = execFileSync('git', ['ls-files', '.forge'], {
+    const out = execFileSync('git', ['ls-tree', '--name-only', ref, '--', file], {
       cwd: worktreePath,
       stdio: 'pipe',
       encoding: 'utf8',
     }).trim();
-    if (!tracked) return;
-    const toStrip = tracked
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((f) => f && !PROTECTED_FORGE_CONFIG.includes(f));
-    if (toStrip.length === 0) return; // only protected config tracked — nothing to strip
+    return out.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function stripForgeScratchFromBranch(worktreePath: string): void {
+  try {
+    const toStrip: string[] = [];
+
+    // (1) gitignored `.forge/` scratch the agent may have force-added (the fixed
+    //     `.forge/pr-description.md` path is the v1 add/add-conflict source).
+    const trackedForge = execFileSync('git', ['ls-files', '.forge'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    if (trackedForge) {
+      toStrip.push(
+        ...trackedForge
+          .split('\n')
+          .map((s) => s.trim())
+          .filter((f) => f && !PROTECTED_FORGE_CONFIG.includes(f)),
+      );
+    }
+
+    // (2) root-level Ralph scratch (PROMPT.md / AGENT.md / fix_plan.md). Strip
+    //     ONLY the copies THIS cycle introduced — tracked on the branch but
+    //     absent from the base — so a project that legitimately tracks one of
+    //     these names (e.g. an `AGENT.md` it ships) is never deleted from its PR.
+    const baseRef = resolveStripBaseRef(worktreePath);
+    for (const f of ROOT_RALPH_SCRATCH) {
+      const trackedNow = execFileSync('git', ['ls-files', '--', f], {
+        cwd: worktreePath,
+        stdio: 'pipe',
+        encoding: 'utf8',
+      }).trim();
+      if (!trackedNow) continue; // not on the branch → nothing to strip
+      if (baseRef && isTrackedAtRef(worktreePath, baseRef, f)) continue; // project-owned → keep
+      toStrip.push(f);
+    }
+
+    if (toStrip.length === 0) return; // only protected config / clean tree — nothing to strip
     execFileSync('git', ['rm', '--cached', '--quiet', '--ignore-unmatch', ...toStrip], {
       cwd: worktreePath,
       stdio: 'pipe',
@@ -489,7 +555,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
         'user.name=forge',
         'commit',
         '-m',
-        'chore: drop gitignored .forge/ scratch from branch (keeps tracked .forge/project.json + quality_gate_cmd)',
+        'chore: drop forge scratch from branch (.forge/ + root Ralph PROMPT/AGENT/fix_plan; keeps tracked .forge/project.json + quality_gate_cmd)',
       ],
       { cwd: worktreePath, stdio: 'pipe' },
     );
