@@ -29,7 +29,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '../work-item.ts';
-import { createClaudeAgent, type QueryFn } from '../../loops/ralph/claude-agent.ts';
+import { createClaudeAgent, type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
@@ -104,6 +104,82 @@ const DEV_LIVE_MAX_TURNS_PER_ITERATION = 120;
 const DEV_AGENT_CRASH_MAX_RETRIES = 2;
 const DEV_AGENT_CRASH_BACKOFF_MS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Change C — shared factory for tool-event-sink + Claude agent pairs.
+ *
+ * Both the per-WI dev-loop and the unifier follow the identical pattern:
+ *   1. build a `makeToolEventSink` for live telemetry
+ *   2. call `createClaudeAgent` with `onToolUse` + `onHeartbeat` wired in
+ *
+ * This helper collapses that duplication. The caller supplies the logger +
+ * context (phase/skill/workItemId) for the sink and the agent-specific
+ * options (model, tools, systemPrompt, …). The returned `{ agent, toolSink }`
+ * carry exactly the same objects the inline code produced before.
+ *
+ * Behavior-preserving: the sink and agent options are forwarded unchanged;
+ * net effect is fewer lines at each call site.
+ *
+ * Change B — `onUsageDelta` is wired inside so every agent emits per-turn
+ * token-usage log events. The callback emits a `log` event with
+ * `usage_delta` message carrying raw token counts (no pricing table —
+ * the authoritative `cost_usd` continues to come from the iteration `result`
+ * event; this is additive mid-turn granularity only).
+ */
+function makeAgentWithTelemetry(
+  logger: EventLogger,
+  sinkCtx: {
+    initiativeId: string;
+    parentEventId: string;
+    phase: 'developer-loop';
+    skill: string;
+    workItemId?: string;
+  },
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta'>,
+): { agent: ReturnType<typeof createClaudeAgent>; toolSink: ReturnType<typeof makeToolEventSink> } {
+  const toolSink = makeToolEventSink(logger, {
+    initiativeId: sinkCtx.initiativeId,
+    parentEventId: sinkCtx.parentEventId,
+    phase: sinkCtx.phase,
+    skill: sinkCtx.skill,
+    workItemId: sinkCtx.workItemId,
+  });
+
+  const agent = createClaudeAgent({
+    ...agentOpts,
+    onToolUse: toolSink.onToolUse,
+    onHeartbeat: toolSink.onHeartbeat,
+    onUsageDelta: (u) => {
+      // Change B: emit per-turn token deltas as a lightweight log event so
+      // the operator UI and future tooling can track mid-iteration usage.
+      // No USD cost is derived here (no pricing table exists in the codebase).
+      // The authoritative cost_usd comes from the iteration end event.
+      try {
+        logger.emit({
+          initiative_id: sinkCtx.initiativeId,
+          parent_event_id: sinkCtx.parentEventId,
+          phase: sinkCtx.phase,
+          skill: sinkCtx.skill,
+          event_type: 'log',
+          input_refs: [],
+          output_refs: [],
+          message: 'usage_delta',
+          metadata: {
+            ...(sinkCtx.workItemId ? { work_item_id: sinkCtx.workItemId } : {}),
+            input_tokens: u.inputTokens,
+            output_tokens: u.outputTokens,
+            cache_read_tokens: u.cacheReadTokens,
+            cache_creation_tokens: u.cacheCreationTokens,
+          },
+        });
+      } catch {
+        /* never let a failing emit break the outer agent loop */
+      }
+    },
+  });
+
+  return { agent, toolSink };
+}
 
 export async function runDeveloperLoop(
   input: CycleInput,
@@ -240,29 +316,27 @@ export async function runDeveloperLoop(
       })();
     };
 
-    // Phase A — per-tool live telemetry sink for this WI. Emits sampled
-    // `tool_use` / `file_change` / `agent_heartbeat` events mid-iteration so
-    // the operator UI pulses live; coalesced summary flushed per iteration.
-    const wiToolSink = makeToolEventSink(logger, {
-      initiativeId: input.initiativeId,
-      parentEventId: wiStart.event_id,
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      workItemId: wi.work_item_id,
-    });
-
-    const agent = createClaudeAgent({
-      model: DEV_MODEL,
-      allowedTools: [...DEV_ALLOWED_TOOLS],
-      disallowedTools: [...DEV_DISALLOWED_TOOLS],
-      permissionMode: 'acceptEdits',
-      systemPrompt,
-      maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
-      // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
-      queryFn: tallyingQueryFn,
-      onToolUse: wiToolSink.onToolUse,
-      onHeartbeat: wiToolSink.onHeartbeat,
-    });
+    // Change C — Phase A per-tool live telemetry sink + agent built together.
+    const { agent, toolSink: wiToolSink } = makeAgentWithTelemetry(
+      logger,
+      {
+        initiativeId: input.initiativeId,
+        parentEventId: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        workItemId: wi.work_item_id,
+      },
+      {
+        model: DEV_MODEL,
+        allowedTools: [...DEV_ALLOWED_TOOLS],
+        disallowedTools: [...DEV_DISALLOWED_TOOLS],
+        permissionMode: 'acceptEdits',
+        systemPrompt,
+        maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
+        // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
+        queryFn: tallyingQueryFn,
+      },
+    );
 
     let result: LoopResult | null = null;
     let runnerError: { kind: string; message: string } | undefined;
@@ -985,29 +1059,28 @@ export async function runUnifier(
   const systemPrompt = buildUnifierSystemPrompt();
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
-  // Phase A — per-tool live telemetry sink for the unifier (no work_item_id).
-  const unifierToolSink = makeToolEventSink(logger, {
-    initiativeId: input.initiativeId,
-    parentEventId: start.event_id,
-    phase: 'developer-loop',
-    skill: 'developer-unifier',
-  });
-
-  // ADR 024 seam: spawn the unifier from its declarative PhaseAgentSpec — the
-  // orchestrator picks the model tier + tool policy and points the clean agent
-  // at the skill it composes; it authors no intent here.
-  const agent = createClaudeAgent({
-    model: modelForSpec(unifierAgentSpec),
-    allowedTools: [...unifierAgentSpec.allowedTools],
-    disallowedTools: [...unifierAgentSpec.disallowedTools],
-    permissionMode: 'acceptEdits',
-    systemPrompt,
-    maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
-    // Per CONTRACTS.md C19: no $ cap on the unifier. Iteration cap is the only bound.
-    queryFn: sdkQueryFn,
-    onToolUse: unifierToolSink.onToolUse,
-    onHeartbeat: unifierToolSink.onHeartbeat,
-  });
+  // Change C — Phase A per-tool live telemetry sink + unifier agent built together.
+  // ADR 024 seam: the orchestrator picks the model tier + tool policy from the
+  // declarative PhaseAgentSpec; it authors no intent here.
+  const { agent, toolSink: unifierToolSink } = makeAgentWithTelemetry(
+    logger,
+    {
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      phase: 'developer-loop',
+      skill: 'developer-unifier',
+    },
+    {
+      model: modelForSpec(unifierAgentSpec),
+      allowedTools: [...unifierAgentSpec.allowedTools],
+      disallowedTools: [...unifierAgentSpec.disallowedTools],
+      permissionMode: 'acceptEdits',
+      systemPrompt,
+      maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
+      // Per CONTRACTS.md C19: no $ cap on the unifier. Iteration cap is the only bound.
+      queryFn: sdkQueryFn,
+    },
+  );
 
   // Composed quality gate per plan 04 (5 gates after Wave B):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)

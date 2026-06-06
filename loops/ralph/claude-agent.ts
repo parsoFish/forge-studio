@@ -93,6 +93,28 @@ export type ClaudeAgentOptions = {
    */
   onToolUse?: (detail: ToolUseLiveDetail) => void;
   /**
+   * Change B — mid-iteration token-usage signal. Fired once per unique
+   * `message.id` observed in the `assistant` stream so the orchestrator can
+   * emit a lightweight event carrying token deltas for the operator UI.
+   *
+   * The SDK may replay the same `message` object across parallel tool-use
+   * blocks (they share a `message.id`); deduplication by id happens inside
+   * this adapter so each logical assistant turn fires the callback exactly once.
+   *
+   * This is a token-only signal — no USD cost is computed here (there is no
+   * pricing table in the codebase). The authoritative `cost_usd` continues to
+   * come from the `result` message at iteration end. Never lets a throwing
+   * consumer break the agent loop (wrapped in try/catch).
+   *
+   * If unset, no per-turn usage events fire — backward compatible.
+   */
+  onUsageDelta?: (u: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  }) => void;
+  /**
    * S7 / C13 — heartbeat cadence in ms. Default 15_000 (15s). Read from
    * the project config's `logging.heartbeat_seconds` by callers; here we
    * accept the resolved value so this module stays config-agnostic.
@@ -188,6 +210,10 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     let lastAssistantText = '';
     let tokensIn: number | undefined;
     let tokensOut: number | undefined;
+    // Change B — dedup set for onUsageDelta: the SDK may reuse the same
+    // message.id across parallel tool-use blocks; fire the callback only once
+    // per unique id so the caller sees one delta per logical assistant turn.
+    const seenMessageIds = new Set<string>();
     // S8 / C23 — cache-hit telemetry. Underlying API uses snake_case
     // (cache_read_input_tokens / cache_creation_input_tokens) on the `usage`
     // block of the result message; we surface camelCase to match the rest of
@@ -234,7 +260,8 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     })) {
       const m = msg as { type?: string };
       if (m.type === 'assistant') {
-        const content = (m as { message?: { content?: unknown } }).message?.content;
+        const assistantMsg = (m as { message?: { id?: string; content?: unknown; usage?: unknown } }).message;
+        const content = assistantMsg?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
             const b = block as { type?: string; name?: string; input?: unknown; text?: string };
@@ -274,6 +301,33 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
                 });
               } catch {
                 /* never let a misbehaving tool-use sink kill the SDK call */
+              }
+            }
+          }
+        }
+        // Change B — per-turn usage delta. Fire once per unique message.id so
+        // parallel tool-use blocks sharing an id don't double-count.
+        if (opts.onUsageDelta && assistantMsg) {
+          const msgId = typeof assistantMsg.id === 'string' ? assistantMsg.id : null;
+          const isDupe = msgId !== null && seenMessageIds.has(msgId);
+          if (!isDupe) {
+            if (msgId !== null) seenMessageIds.add(msgId);
+            const u = assistantMsg.usage as {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+              cache_creation_input_tokens?: number;
+            } | undefined;
+            if (u) {
+              try {
+                opts.onUsageDelta({
+                  inputTokens: typeof u.input_tokens === 'number' ? u.input_tokens : 0,
+                  outputTokens: typeof u.output_tokens === 'number' ? u.output_tokens : 0,
+                  cacheReadTokens: typeof u.cache_read_input_tokens === 'number' ? u.cache_read_input_tokens : 0,
+                  cacheCreationTokens: typeof u.cache_creation_input_tokens === 'number' ? u.cache_creation_input_tokens : 0,
+                });
+              } catch {
+                /* never let a throwing usage-delta consumer break the agent loop */
               }
             }
           }

@@ -437,6 +437,211 @@ test('createClaudeAgent: no heartbeats when onHeartbeat is unset (default)', asy
   }
 });
 
+// ---------------------------------------------------------------------------
+// Change B — onUsageDelta: per-turn token-usage signal.
+// ---------------------------------------------------------------------------
+
+test('createClaudeAgent: onUsageDelta fires once per unique message.id in the assistant stream', async () => {
+  // Verifies that:
+  //   (a) the callback fires when message.usage is present, and
+  //   (b) duplicate message.id blocks (parallel tool-use pattern) are deduped
+  //       so the callback fires exactly once per logical assistant turn.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-usage-delta-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const deltas: Array<{
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+    }> = [];
+
+    // Two distinct assistant messages (id: 'msg-1', 'msg-2'). msg-1 is
+    // yielded twice — simulating the SDK replaying the same message for a
+    // second parallel tool-use block. The adapter must deduplicate so the
+    // callback fires for msg-1 only once.
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [
+          {
+            type: 'assistant',
+            message: {
+              id: 'msg-1',
+              content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }],
+              usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 500, cache_creation_input_tokens: 50 },
+            },
+          },
+          // Same id as above — duplicate; must be suppressed.
+          {
+            type: 'assistant',
+            message: {
+              id: 'msg-1',
+              content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/tmp/x' } }],
+              usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 500, cache_creation_input_tokens: 50 },
+            },
+          },
+          // Second distinct message — must fire.
+          {
+            type: 'assistant',
+            message: {
+              id: 'msg-2',
+              content: [{ type: 'tool_use', name: 'Write', input: { file_path: '/tmp/y', content: 'x' } }],
+              usage: { input_tokens: 200, output_tokens: 40, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+            },
+          },
+          { type: 'result', subtype: 'success', total_cost_usd: 0.05, num_turns: 3 },
+        ],
+        captured,
+      ),
+      onUsageDelta: (u) => deltas.push(u),
+    });
+
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.equal(deltas.length, 2, 'two unique message ids → two delta callbacks');
+    assert.deepEqual(deltas[0], { inputTokens: 100, outputTokens: 20, cacheReadTokens: 500, cacheCreationTokens: 50 });
+    assert.deepEqual(deltas[1], { inputTokens: 200, outputTokens: 40, cacheReadTokens: 0, cacheCreationTokens: 0 });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: onUsageDelta fires once when message has no id (id-less dedup path)', async () => {
+  // When message.id is absent (future SDK shape or test stub), the adapter
+  // must still call the callback if usage is present — but it cannot deduplicate
+  // across id-less messages, so each such message fires independently.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-usage-noid-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const deltas: Array<{ inputTokens: number }> = [];
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [
+          {
+            type: 'assistant',
+            message: {
+              // no `id` field
+              content: [{ type: 'tool_use', name: 'Bash', input: { command: 'pwd' } }],
+              usage: { input_tokens: 77 },
+            },
+          },
+          { type: 'result', subtype: 'success', total_cost_usd: 0.01, num_turns: 1 },
+        ],
+        captured,
+      ),
+      onUsageDelta: (u) => deltas.push({ inputTokens: u.inputTokens }),
+    });
+
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.equal(deltas.length, 1, 'id-less message with usage fires once');
+    assert.equal(deltas[0]!.inputTokens, 77);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: onUsageDelta not called when usage is absent from assistant message', async () => {
+  // No usage block → callback must not fire even if a message.id is present.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-usage-absent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    let fired = 0;
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [
+          {
+            type: 'assistant',
+            message: {
+              id: 'msg-no-usage',
+              content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }],
+              // no `usage` field
+            },
+          },
+          { type: 'result', subtype: 'success', total_cost_usd: 0.01, num_turns: 1 },
+        ],
+        captured,
+      ),
+      onUsageDelta: () => { fired += 1; },
+    });
+
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.equal(fired, 0, 'onUsageDelta must not fire when usage is absent');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: a throwing onUsageDelta consumer does not break the agent loop', async () => {
+  // The adapter must swallow exceptions from the callback so misbehaving
+  // consumers cannot kill the SDK stream.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-usage-throw-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [
+          {
+            type: 'assistant',
+            message: {
+              id: 'msg-x',
+              content: [{ type: 'tool_use', name: 'Bash', input: { command: 'echo hi' } }],
+              usage: { input_tokens: 10, output_tokens: 5 },
+            },
+          },
+          { type: 'result', subtype: 'success', total_cost_usd: 0.02, num_turns: 1 },
+        ],
+        captured,
+      ),
+      onUsageDelta: () => { throw new Error('consumer exploded'); },
+    });
+
+    // Must not throw despite the callback throwing.
+    const result = await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.equal(result.costUsd, 0.02, 'cost still captured after throwing consumer');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('createClaudeAgent: idle-tail emits 1 final heartbeat when interval did not fire (S7 / C13)', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
   try {
