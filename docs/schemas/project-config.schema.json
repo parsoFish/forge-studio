@@ -76,6 +76,11 @@
         "required": {
           "type": "boolean",
           "description": "When true, the PM phase HARD-FAILS the cycle unless ≥1 emitted WI has a quality_gate_cmd token containing `match` — guaranteeing every initiative is proven by a live acceptance test."
+        },
+        "requires_env": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Env vars that MUST be set for a matching (live-acc) gate to actually run live, e.g. [\"TF_ACC\"]. If a WI's gate matches `match` but one is unset, the dev-loop ERRORS the gate instead of letting a skipped runner (`ok pkg 0.00s`) false-pass. Optional."
         }
       }
     },

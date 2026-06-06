@@ -123,7 +123,7 @@ export type GateRunInfo = {
    * rejected the run. Empty when the gate's outcome was determined by exit
    * code alone (the pre-tightening behaviour).
    */
-  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored';
+  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored' | 'live-env-missing';
   /**
    * Set when the gate command itself could NOT RUN (missing binary, EACCES,
    * killed by signal) — a BROKEN GATE, categorically different from a test
@@ -206,6 +206,19 @@ export type GateTighteningOptions = {
    * print legitimately matching substrings on PASS).
    */
   noWorkIndicators?: readonly string[] | null;
+  /**
+   * Env vars that MUST be set for this gate to actually exercise the live
+   * system (e.g. `["TF_ACC"]` for a Terraform live-acceptance gate). When any
+   * is unset, the gate is treated as ERRORED (could not validate) rather than
+   * passed — because a live-acc runner without these SKIPS, and a skipped Go
+   * acc test prints `ok pkg 0.00Xs` (matches WORK_HAPPENED_PATTERNS), so the
+   * no-work scan can't catch it. Wired from `.forge/project.json`
+   * `acceptance_gate.requires_env` for WIs whose gate targets the acc suite.
+   * Empty/absent ⇒ no env requirement (default behaviour). Surfaced after the
+   * forge daemon ran betterado cycles without TF_ACC → live-acc gates skipped +
+   * false-passed and the resources shipped unverified (2026-06-06).
+   */
+  requiredEnv?: readonly string[];
 };
 
 /** Default quality-gates implementation: shells to `npm test` in the worktree. */
@@ -274,6 +287,34 @@ function runGateCapturing(
     return false;
   }
   const command = cmd.join(' ');
+
+  // Live-acceptance env guard (2026-06-06). A live-acc gate that runs WITHOUT
+  // its declared live-test env makes the runner SKIP — and a skipped Go acc
+  // test prints `ok pkg 0.00Xs`, indistinguishable from a real pass (it even
+  // matches WORK_HAPPENED_PATTERNS), so the no-work scan below cannot catch it.
+  // The only reliable guard is up front: if any required var is unset, the gate
+  // could ONLY skip, so ERROR it (could-not-validate, a broken gate) rather than
+  // let it false-pass. Errored ⇒ the runner stops early + the classifier says
+  // "fix the gate", instead of shipping an unverified resource.
+  const missingEnv = (options?.requiredEnv ?? []).filter((v) => !process.env[v]);
+  if (missingEnv.length > 0) {
+    onRun?.({
+      passed: false,
+      errored: true,
+      exitCode: -5, // synthetic — gate could not validate (live-test env absent)
+      durationMs: 0,
+      stdoutTail: '',
+      stderrTail:
+        `[forge gate-errored] live-acceptance gate requires ${missingEnv.join(', ')} to be set so the test ` +
+        `actually runs against the live system; unset ⇒ the runner SKIPS and the gate would FALSE-PASS ` +
+        `("ok … 0.00s"). Set ${missingEnv.join(', ')} (+ creds) in the cycle env before running this gate ` +
+        `(e.g. \`export TF_ACC=1\` + source secrets.env, or run via \`forge serve --once\` with them exported).`,
+      command,
+      rejectReason: 'live-env-missing',
+      iteration,
+    });
+    return false;
+  }
   const startedAt = Date.now();
   let passed = false;
   let exitCode = 0;

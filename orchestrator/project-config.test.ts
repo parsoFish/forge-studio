@@ -240,11 +240,11 @@ test('validateProjectConfig: ci_gate_unset_env + standing_work_item_acs + accept
     quality_gate_cmd: ['true'],
     ci_gate_unset_env: ['TF_ACC'],
     standing_work_item_acs: ['live acc test', 'CI must be green'],
-    acceptance_gate: { match: 'acceptancetests', required: true },
+    acceptance_gate: { match: 'acceptancetests', required: true, requires_env: ['TF_ACC'] },
   });
   assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC']);
   assert.deepEqual(cfg.standing_work_item_acs, ['live acc test', 'CI must be green']);
-  assert.deepEqual(cfg.acceptance_gate, { match: 'acceptancetests', required: true });
+  assert.deepEqual(cfg.acceptance_gate, { match: 'acceptancetests', required: true, requires_env: ['TF_ACC'] });
 });
 
 test('validateProjectConfig: the three A2/A3 seams are optional (absent ⇒ undefined)', () => {

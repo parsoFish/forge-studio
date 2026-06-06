@@ -41,7 +41,7 @@ import {
   unifierAgentSpec,
 } from '../unifier-invocation.ts';
 import { modelForSpec } from '../phase-agent.ts';
-import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
+import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel } from '../../cli/demo-model.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
@@ -156,6 +156,18 @@ export async function runDeveloperLoop(
   const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const systemPrompt = buildDevSystemPrompt(forgeRoot);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
+
+  // Live-acc env guard (2026-06-06): when the project declares an
+  // `acceptance_gate` with `requires_env`, a WI whose gate targets the acc
+  // suite must run with those vars set — else the runner SKIPS and the gate
+  // false-passes (the daemon ran betterado cycles without TF_ACC and shipped
+  // unverified resources). Load the config once; absent ⇒ no env requirement.
+  let accGate: AcceptanceGateConfig | undefined;
+  try {
+    accGate = loadProjectConfig(input.worktreePath)?.acceptance_gate;
+  } catch {
+    /* best-effort — a malformed config is fail-closed by the baseline gate */
+  }
 
   const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null }> = [];
 
@@ -288,6 +300,15 @@ export async function runDeveloperLoop(
             const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
             const effective = wiCmd ?? fallback;
             if (!effective) return undefined;
+            // Live-acc env guard: if this WI's gate targets the acc suite
+            // (matches the project's acceptance_gate.match) and the project
+            // declares requires_env, demand those vars be set — else the gate
+            // errors (can't validate live) instead of skip-and-false-passing.
+            const requiredEnv =
+              accGate?.requires_env && accGate.requires_env.length > 0 &&
+              effective.some((tok) => tok.includes(accGate!.match))
+                ? accGate.requires_env
+                : undefined;
             return makeQualityGateFromCmd(
               input.worktreePath,
               effective,
@@ -298,7 +319,7 @@ export async function runDeveloperLoop(
               // a sibling WI already produced tests. The `already-complete`
               // 3-way runner check handles the "sibling beat us" case upstream;
               // this layer catches "agent exited without writing declared files".
-              { requiredPaths: wi.creates ?? [] },
+              { requiredPaths: wi.creates ?? [], ...(requiredEnv ? { requiredEnv } : {}) },
             );
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut

@@ -170,11 +170,18 @@ CI-clean push, and neither can be left to per-WI PM judgment (a betterado resour
 once shipped with *no* live-acceptance test at all). Three project-config seams in
 `.forge/project.json` make the two-gate model structural and forge-wide:
 
-- **`acceptance_gate: { match, required }`** — when `required`, the PM phase
-  **hard-fails the cycle** unless ≥1 emitted WI has a `quality_gate_cmd` token
-  containing `match` (e.g. `"acceptancetests"`). This guarantees every initiative
-  is proven by a real live-acceptance WI; the live test runs as that WI's own
-  per-WI gate (creds + the live-test trigger from the serve env).
+- **`acceptance_gate: { match, required, requires_env }`** — when `required`, the
+  PM phase **hard-fails the cycle** unless ≥1 emitted WI has a `quality_gate_cmd`
+  token containing `match` (e.g. `"acceptancetests"`). This guarantees every
+  initiative is proven by a real live-acceptance WI; the live test runs as that
+  WI's own per-WI gate (creds + the live-test trigger from the serve env).
+  **`requires_env`** (e.g. `["TF_ACC"]`) closes the matching hole on the *run*
+  side: a live-acc runner with the trigger **unset** silently SKIPS, and a skipped
+  Go acc test prints `ok pkg 0.00s` (indistinguishable from a pass — it even
+  matches forge's "tests ran" heuristic), so the no-work scan can't catch it. The
+  dev-loop therefore **errors** a matching gate whose `requires_env` vars are
+  unset, instead of false-passing. (Origin: the daemon ran betterado cycles
+  without `TF_ACC` and shipped two unverified resources — 2026-06-06.)
 - **`standing_work_item_acs: string[]`** — verbatim test invariants forge appends
   to **every** WI body as a `## Standing acceptance criteria (project contract)`
   section. The two betterado standing ACs are *(1)* "proven by a live acceptance

@@ -90,6 +90,13 @@ export type AcceptanceGateConfig = {
   match: string;
   /** When true, every initiative must include ≥1 WI whose gate contains `match`. */
   required: boolean;
+  /**
+   * Env vars that MUST be set for a matching (live-acceptance) gate to actually
+   * run against the live system — e.g. `["TF_ACC"]`. When a WI's gate matches
+   * `match` but one of these is unset, the dev-loop ERRORS the gate instead of
+   * letting a skipped runner (`ok pkg 0.00s`) false-pass. Optional.
+   */
+  requires_env?: string[];
 };
 
 export type ProjectConfig = {
@@ -262,7 +269,12 @@ function parseAcceptanceGate(raw: unknown): AcceptanceGateConfig | undefined {
   if (typeof a.required !== 'boolean') {
     throw new Error('project-config: acceptance_gate.required must be a boolean when the block is present');
   }
-  return { match, required: a.required };
+  const requires_env = optionalArgv(a.requires_env, 'acceptance_gate.requires_env');
+  return {
+    match,
+    required: a.required,
+    ...(requires_env ? { requires_env } : {}),
+  };
 }
 
 function parseLogging(raw: unknown): LoggingConfig | undefined {

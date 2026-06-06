@@ -79,6 +79,40 @@ test('makeQualityGateFromCmd: a test that RAN and exited non-zero is NOT errored
   }
 });
 
+test('makeQualityGateFromCmd: requiredEnv with an UNSET var ERRORS the gate (live-acc skip guard)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-env-'));
+  const unset = 'FORGE_TEST_DEFINITELY_UNSET_ENV_XYZ';
+  delete process.env[unset];
+  try {
+    let info: GateRunInfo | undefined;
+    // `true` exits 0 — but the missing required env var must make the gate
+    // ERROR *before running* (a live-acc runner would silently skip + false-pass).
+    const gate = makeQualityGateFromCmd(dir, ['true'], (i) => { info = i; }, { requiredEnv: [unset] });
+    assert.equal(gate(), false, 'gate must NOT pass when a required env var is unset');
+    assert.ok(info);
+    assert.equal(info!.passed, false);
+    assert.equal(info!.errored, true, 'a live-acc gate without its env is a broken/unvalidatable gate');
+    assert.equal(info!.rejectReason, 'live-env-missing');
+    assert.equal(info!.exitCode, -5);
+    assert.match(info!.stderrTail, new RegExp(unset));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: requiredEnv satisfied → gate runs + passes normally', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-env-'));
+  const present = 'FORGE_TEST_PRESENT_ENV_XYZ';
+  process.env[present] = '1';
+  try {
+    const gate = makeQualityGateFromCmd(dir, ['true'], undefined, { requiredEnv: [present] });
+    assert.equal(gate(), true, 'gate runs (and passes) when the required env var is set');
+  } finally {
+    delete process.env[present];
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('makeQualityGateFromCmd: returns false on empty command', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
   try {
