@@ -86,3 +86,28 @@ vocabulary, and removes duplication — it does not re-architect.
 
 Discovery synthesis (full architecture map + preservation inventory + candidate
 simplifications) is archived in the session workflow outputs (`forge-internal-discovery`).
+
+## Knowledge-layer reconciliation (added 2026-06-07 per operator)
+
+Forge must be defined **as-is, not as the history of all work done**. Simplification
+therefore extends to the knowledge layer, and every code change carries a knowledge DoD.
+
+- **Success criterion F — Knowledge reconciled to current state.** No ADR, doc, or brain
+  theme contradicts the current implementation or the simplified intent; conflicting ADRs are
+  amended (clause-level) or superseded; docs reflect as-built; brain themes describe how forge
+  *is* (historical iteration-narrative consolidated into current patterns or left to `_raw`,
+  not carried as live themes). **Stop** when a fresh reader of ADRs + docs + brain would form
+  an accurate picture of the *current* system with no historical contradictions.
+- **D7 — Knowledge is part of the simplification.** Decided to treat ADRs/docs/brain as
+  in-scope artifacts (not frozen history): reconcile conflicts, update to as-built, clean the
+  brain to current-state — accepting that brain *deletion* is operator-gated (irreversible).
+- **Definition-of-done (every concern):** each code change also updates the ADR(s) it touches,
+  the affected docs, and any brain theme it makes stale — in the same PR. A change that leaves
+  a contradicting ADR/doc/brain is not done.
+
+**Reconciliation workstream** (audit-driven — `forge-knowledge-reconciliation-audit`):
+- **R-A — ADR reconciliation:** amend/supersede conflicting ADRs (confirm 003↔024, the UI
+  ADRs, the feature-layer-era 014/015) and author ADR 025 (hooks).
+- **R-B — docs-to-as-built sweep:** ARCHITECTURE / PRINCIPLES / CLAUDE / phases / operator-journey / contract.
+- **R-C — brain cleaning:** consolidate duplicates, archive baked-in history, fix stale themes.
+  **Operator-gated** — conservative default is archive-not-delete; the cull list comes to the operator first.
