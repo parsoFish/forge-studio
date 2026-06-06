@@ -93,10 +93,10 @@ unambiguous.
   output shape surfaces downstream as a golden mismatch.
 - See [ADR 022](../../../docs/decisions/022-real-capability-harness.md) for the
   decision + runner contract (inputs: corpus manifest + base SHA + tier + cost
-  ceiling; outputs: pass/fail per outcome assertion + realised cost) and
-  [the rebuild ROADMAP](../../../docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md)
-  for the decomposition. The standing runner is codified separately by evolving
-  `scripts/verify-cycle.mjs`.
+  ceiling; outputs: pass/fail per outcome assertion + realised cost). The original
+  decomposition lived in `docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md`
+  (since pruned — de-linked 2026-06-06 to keep brain lint clean). The standing runner
+  is codified separately by evolving `scripts/verify-cycle.mjs`.
 
 ## See also
 
