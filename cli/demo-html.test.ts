@@ -161,7 +161,7 @@ test('renderComparisonHtml: harness checkpoint renders metric table + verdict, n
   assert.ok(!html.includes('<video'), 'harness checkpoint has no <video>');
 });
 
-test('renderComparisonHtml: diverged metric → DIVERGED verdict; missing → INCOMPLETE', () => {
+test('renderComparisonHtml: diverged metric → DIVERGED verdict; net-new (no baseline) → NEW', () => {
   const diverged = renderComparisonHtml(
     model({
       checkpoints: [
@@ -187,7 +187,11 @@ test('renderComparisonHtml: diverged metric → DIVERGED verdict; missing → IN
       ],
     }),
   );
-  assert.match(incomplete, /class="verdict v-incomplete">Verdict: <strong>INCOMPLETE<\/strong>/);
+  // A net-new metric (no prior baseline) is informational, NOT a warning: the
+  // verdict reads "NEW", the cell relabels `incomplete` → `new`.
+  assert.match(incomplete, /class="verdict v-new">Verdict: <strong>NEW \(no prior baseline\)<\/strong>/);
+  assert.match(incomplete, /<td class="verdict-cell">new<\/td>/);
+  assert.doesNotMatch(incomplete, /INCOMPLETE/);
 });
 
 test('renderComparisonHtml: video checkpoint renders <video> pair with kind badge', () => {

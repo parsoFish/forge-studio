@@ -165,10 +165,27 @@ function mediaCell(cp: DemoCheckpoint, side: 'before' | 'after'): string {
     : `<div class="missing">no capture</div>`;
 }
 
+/**
+ * Map a parity value to the word shown in the cell. `incomplete` is renamed to
+ * "new" because that is what it actually means here — the metric is net-new, so
+ * there is no prior baseline to compare against (the `after` column is the
+ * result). The literal word "incomplete" was consistently misread as "the work
+ * is unfinished / something is wrong" when in fact the new test PASSES.
+ */
+function parityLabel(parity: HarnessMetricRow['parity']): string {
+  return parity === 'incomplete' ? 'new' : parity;
+}
+
+/**
+ * Checkpoint-level verdict. A genuine problem is a `diverged` row (a regression
+ * vs the baseline) — that takes precedence and warns. `incomplete` rows are
+ * net-new metrics with no baseline; on their own they are NOT a warning, so the
+ * checkpoint reads "NEW" (informational), not "INCOMPLETE". Empty ⇒ no evidence.
+ */
 function harnessVerdict(rows: HarnessMetricRow[]): { word: string; cls: string } {
   if (rows.length === 0) return { word: 'NO METRICS', cls: 'incomplete' };
-  if (rows.some((r) => r.parity === 'incomplete')) return { word: 'INCOMPLETE', cls: 'incomplete' };
   if (rows.some((r) => r.parity === 'diverged')) return { word: 'DIVERGED', cls: 'diverged' };
+  if (rows.some((r) => r.parity === 'incomplete')) return { word: 'NEW (no prior baseline)', cls: 'new' };
   return { word: 'PARITY', cls: 'within' };
 }
 
@@ -186,14 +203,15 @@ function harnessTable(cp: DemoCheckpoint): string {
         r.before === null ? '<span class="muted">—</span>' : esc(r.before)
       }${unit}</td><td>${
         r.after === null ? '<span class="muted">—</span>' : esc(r.after)
-      }${unit}</td><td>${esc(d)}</td><td class="verdict-cell">${r.parity}</td></tr>`;
+      }${unit}</td><td>${esc(d)}</td><td class="verdict-cell">${esc(parityLabel(r.parity))}</td></tr>`;
     })
     .join('');
   return `<table class="harness">
       <thead><tr><th>metric</th><th>before</th><th>after</th><th>Δ</th><th>parity</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
-    <p class="verdict v-${v.cls}">Verdict: <strong>${v.word}</strong></p>`;
+    <p class="verdict v-${v.cls}">Verdict: <strong>${v.word}</strong></p>
+    <p class="legend"><strong>match</strong>/<strong>within</strong> = unchanged from baseline · <strong>new</strong> = newly added, no prior baseline (see the <em>after</em> column for the result — a PASS means the new test is green) · <strong>diverged</strong> = regressed vs baseline (the only state that signals a problem)</p>`;
 }
 
 function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
@@ -344,6 +362,7 @@ function buildTestEvidenceSection(model: DemoComparisonModel): string {
     <thead><tr><th>test</th><th>result</th><th>delta</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
+  <p class="legend"><strong>pass</strong> = green · <strong>fail</strong> = failed (a problem) · <strong>skip</strong> = not run in this gate (e.g. a live test with no credentials present) — not a failure · delta <strong>new</strong> = test added by this change</p>
 </section>`;
 }
 
@@ -475,12 +494,17 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   table.harness td:nth-child(n+2) { font-variant-numeric: tabular-nums; }
   table.harness .verdict-cell { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
   tr.p-diverged { background: color-mix(in srgb, #e0584a 16%, transparent); }
-  tr.p-within { background: color-mix(in srgb, #3fae6a 12%, transparent); }
-  tr.p-incomplete { background: color-mix(in srgb, #e0a800 16%, transparent); }
+  tr.p-within, tr.p-match { background: color-mix(in srgb, #3fae6a 12%, transparent); }
+  /* "incomplete" = net-new metric, no prior baseline. Informational blue, NOT
+     the amber warning it used to be (a new test that PASSES is not a problem). */
+  tr.p-incomplete { background: color-mix(in srgb, #539bf5 14%, transparent); }
   .verdict { font-size: .95rem; margin: .2rem 0 0; padding: .5rem .8rem; border-radius: 6px; display: inline-block; }
   .verdict.v-within { background: color-mix(in srgb, #3fae6a 20%, transparent); }
   .verdict.v-diverged { background: color-mix(in srgb, #e0584a 22%, transparent); }
+  .verdict.v-new { background: color-mix(in srgb, #539bf5 20%, transparent); }
   .verdict.v-incomplete { background: color-mix(in srgb, #e0a800 22%, transparent); }
+  .legend { font-size: .72rem; line-height: 1.5; margin: .35rem 0 0; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .legend strong { color: color-mix(in srgb, currentColor 80%, transparent); font-weight: 600; }
 
   /* ── API Diff ── */
   .api-entry { margin: 1.2rem 0; }

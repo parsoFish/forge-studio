@@ -18,14 +18,26 @@ const PARITY_COLOR: Record<DemoHarnessMetricRow['parity'], string> = {
   match: '#2ea043',
   within: '#2ea043',
   diverged: '#f85149',
-  incomplete: '#d29922',
+  // "incomplete" = net-new metric, no prior baseline. Informational blue, NOT
+  // the amber warning it used to be — a new test that PASSES is not a problem.
+  incomplete: '#58a6ff',
 };
 
 const TEST_RESULT_COLOR: Record<string, string> = {
   pass: '#2ea043',
   fail: '#f85149',
-  skip: '#d29922',
+  // skip = not run in this gate (e.g. a live test with no creds) — benign, neutral.
+  skip: '#8b949e',
 };
+
+/**
+ * Display label for a parity value. `incomplete` reads as "no prior baseline =
+ * newly added"; surface it as "new" so a passing net-new test isn't misread as
+ * an unfinished / broken one (the `after` column carries the real result).
+ */
+function parityLabel(parity: DemoHarnessMetricRow['parity']): string {
+  return parity === 'incomplete' ? 'new' : parity;
+}
 
 export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?: string }): JSX.Element {
   // Resolve the bridge base once so video checkpoints can build their artifact
@@ -125,11 +137,18 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
               {model.testEvidence.map((r, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #21262d' }}>
                   <td style={{ ...td, color: '#c9d1d9' }}>{r.name}</td>
-                  <td style={{ ...td, color: TEST_RESULT_COLOR[r.result] ?? '#c9d1d9', fontWeight: 600 }}>{r.result}</td>
+                  <td style={{ ...td, color: TEST_RESULT_COLOR[r.result] ?? '#c9d1d9', fontWeight: 600 }} title={r.result === 'skip' ? 'Not run in this gate (e.g. a live test with no credentials present) — not a failure.' : undefined}>{r.result}</td>
                   <td style={{ ...td, color: '#8b949e' }}>{r.delta ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3} style={{ ...td, color: '#6e7681', fontFamily: 'inherit', fontSize: 11, paddingTop: 8 }}>
+                  <strong style={{ color: '#8b949e' }}>pass</strong> / <strong style={{ color: '#8b949e' }}>fail</strong> = result · <strong style={{ color: '#8b949e' }}>skip</strong> = not run in this gate (e.g. a live test with no creds) — not a failure · delta <strong style={{ color: '#8b949e' }}>new</strong> = test added by this change
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -399,11 +418,18 @@ function MetricTable({ rows }: { rows: DemoHarnessMetricRow[] }): JSX.Element {
               <td style={td}>{r.before ?? '—'}{r.unit ? ` ${r.unit}` : ''}</td>
               <td style={td}>{r.after ?? '—'}{r.unit ? ` ${r.unit}` : ''}</td>
               <td style={td}>{d}</td>
-              <td style={{ ...td, color: PARITY_COLOR[r.parity], fontWeight: 600 }}>{r.parity}</td>
+              <td style={{ ...td, color: PARITY_COLOR[r.parity], fontWeight: 600 }} title={r.parity === 'incomplete' ? 'Newly added — no prior baseline to compare. The "after" column is the result.' : undefined}>{parityLabel(r.parity)}</td>
             </tr>
           );
         })}
       </tbody>
+      <tfoot>
+        <tr>
+          <td colSpan={5} style={{ ...td, color: '#6e7681', fontFamily: 'inherit', fontSize: 11, paddingTop: 8 }}>
+            <strong style={{ color: '#8b949e' }}>match</strong>/<strong style={{ color: '#8b949e' }}>within</strong> = unchanged · <strong style={{ color: '#8b949e' }}>new</strong> = newly added, no prior baseline (see <em>after</em> — PASS means the new test is green) · <strong style={{ color: '#8b949e' }}>diverged</strong> = regressed (the only state that signals a problem)
+          </td>
+        </tr>
+      </tfoot>
     </table>
   );
 }

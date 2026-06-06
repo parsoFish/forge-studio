@@ -475,8 +475,13 @@ export function renderDemoMarkdown(model: DemoModel): string {
       lines.push('|---|---|---|---|---|');
       for (const r of c.metrics) {
         const d = r.deltaPct === null ? '—' : `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%`;
-        lines.push(`| ${r.label} | ${r.before ?? '—'} | ${r.after ?? '—'} | ${d} | ${r.parity} |`);
+        // `incomplete` → `new`: the metric is net-new (no prior baseline); the
+        // `after` column is the result. The literal word read as "unfinished".
+        const parity = r.parity === 'incomplete' ? 'new' : r.parity;
+        lines.push(`| ${r.label} | ${r.before ?? '—'} | ${r.after ?? '—'} | ${d} | ${parity} |`);
       }
+      lines.push('');
+      lines.push('> parity: **match**/**within** = unchanged · **new** = newly added, no prior baseline (the *after* column is the result — PASS means the new test is green) · **diverged** = regressed vs baseline (the only state that signals a problem).');
     }
     lines.push('');
   }
@@ -511,6 +516,8 @@ export function renderDemoMarkdown(model: DemoModel): string {
     for (const r of model.testEvidence) {
       lines.push(`| ${r.name} | ${r.result} | ${r.delta ?? '—'} |`);
     }
+    lines.push('');
+    lines.push('> result: **pass**/**fail** · **skip** = not run in this gate (e.g. a live test with no credentials present) — not a failure · delta **new** = test added by this change.');
     lines.push('');
   }
 
