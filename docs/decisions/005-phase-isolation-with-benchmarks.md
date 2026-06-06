@@ -24,14 +24,21 @@ The phase docs in `docs/phases/<phase>.md` each name their benchmark contract. T
 
 ## Consequences
 
+> **Amended 2026-05-25:** the `benchmarks/<phase>/` harnesses and `npm run bench:<phase>` commands
+> were deleted. They had begun teaching phases toward the bench shape rather than measuring real
+> outcomes. The phase-isolation decision itself stands — the **current quality gate** is
+> [`scripts/verify-cycle.mjs`](../../scripts/verify-cycle.mjs) (`npm run verify:cycle`), a
+> real-cycle harness that asserts actual outcomes (merged PR, passing project tests, cost under
+> ceiling) against a managed project. See [ADR 022](./022-real-capability-harness.md).
+
 **Positive:**
-- Fast feedback per-phase. A change to the Architect skill can be benchmarked in seconds, not minutes.
-- Cycle-over-cycle improvement is measurable.
-- Reduces the "did this help?" debate to "did the score go up?".
+- Phase isolation is still enforced architecturally — phases communicate only through markdown artifacts and the JSONL event log.
+- Real-cycle quality signal accumulates in brain themes rather than synthetic rubrics.
+- `scripts/verify-cycle.mjs` provides a tiered regression gate (frozen-SHA routine / full-greenfield release) before pointing forge at a real project.
 
 **Negative / accepted trade-offs:**
-- Maintaining benchmark cases is real ongoing work. Mitigated by treating reflection-discovered failures as new benchmark cases.
-- A phase's benchmark can drift from real-world performance. Mitigated by occasional full-cycle runs.
+- Per-phase improvement is harder to isolate without synthetic benches; brain theme accumulation is the substitute signal.
+- Full-cycle runs are slower than per-phase micro-benches. Accepted — the synthetic benches were causing more harm than good.
 
 ## Alternatives considered
 

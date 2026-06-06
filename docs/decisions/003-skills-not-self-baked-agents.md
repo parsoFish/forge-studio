@@ -24,7 +24,9 @@ Forge ships nine skills at scaffold time:
 - `skills/brain-query/` — wiki lookup; mandated as the first action of every other skill.
 - `skills/developer-ralph/` — launches the developer loop (calls into `loops/ralph/`).
 
-Every `SKILL.md` follows the same shape: single responsibility, declared inputs (file/folder paths), declared outputs (artifacts written), `brain-query`-first, named benchmark suite, declared event-log entries.
+Every `SKILL.md` follows the same shape: single responsibility, declared inputs (file/folder paths), declared outputs (artifacts written), `brain-query`-first, declared event-log entries.
+
+The orchestrator spawns each phase as a clean, model-tiered **agent** that composes skills/CLIs/MCP — the agent→skill composition layer is formalised in [ADR 024](./024-phases-as-subagents-invoking-skills.md).
 
 ## Consequences
 
@@ -32,7 +34,6 @@ Every `SKILL.md` follows the same shape: single responsibility, declared inputs 
 - Prompt changes are content changes, not code changes.
 - Users can plug in their own skills without touching orchestrator code.
 - Forge benefits directly from Claude Code platform improvements.
-- Each skill has a benchmark suite — improvement is measurable per skill.
 
 **Negative / accepted trade-offs:**
 - Skill discovery is conventional (filesystem-based), not registered. We rely on the convention rather than a registry.

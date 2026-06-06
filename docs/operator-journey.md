@@ -26,7 +26,7 @@ The whole journey is centralised on the forge UI. The operator never leaves it.
 6. **On operator feedback, the architect reruns the last step** (re-council /
    re-plan) and re-presents.
 7. **On operator approval, the journey moves to the PM.**
-8. **The PM plans the features and work items** for the initiative.
+8. **The PM plans the work items** for the initiative.
 9. **The developer loop picks up work items and progresses them, respecting
    dependencies.**
 10. **Once all work items are complete, the unifier reviews and loops to clean
@@ -41,7 +41,7 @@ The whole journey is centralised on the forge UI. The operator never leaves it.
 
 | Step | As-built today | Gap to the vision |
 |---|---|---|
-| 1, 3, 4, 7, 8, 9, 13 | Wired — dashboard new-idea, file-handoff interview, plan approve→PM, PM features/WIs, dependency-ordered dev-loop, reflect-on-merge. | — |
+| 1, 3, 4, 7, 8, 9, 13 | Wired — dashboard new-idea, file-handoff interview, plan approve→PM, PM WIs, dependency-ordered dev-loop, reflect-on-merge. | — |
 | 2 — architect reviews project + explores edge cases | The runner brain-queries + reads the project before drafting. | Surface "exploring / edge cases" as an explicit architect stage (label + bursts), and prompt the architect to enumerate edge cases. |
 | 5 — council → plan options from feedback | `runCouncil` runs in the draft turn; its escalations become the PLAN gate's design decisions. | Surface the **council** as its own visible stage between drafting and the plan gate. |
 | 6 — plan send-back reruns the last step | Plan gate "Send back" → a revise turn regenerates. | Make the rerun visibly re-run council + re-present, not just regenerate. |

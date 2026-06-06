@@ -4,6 +4,8 @@
 **Date:** 2026-05-08
 
 > Note (2026-05-25): the `benchmarks/` harnesses were removed; the "PM bench"/"bench scores" references below are historical. The WI schema itself stands — it is now validated by `orchestrator/work-item.ts` and judged on real merged cycles rather than a synthetic bench.
+>
+> Note: the `CONTRACTS.md` referenced in §3a is an archived planning artifact (`docs/_archive/planning/2026-05-20-refinement/CONTRACTS.md`). The live wiring for all optional fields lives in [`orchestrator/work-item.ts`](../../orchestrator/work-item.ts).
 
 ## Context
 

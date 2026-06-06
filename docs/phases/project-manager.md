@@ -64,7 +64,7 @@ If the PM emits a WI whose acceptance criteria or files_in_scope have no groundi
 
 `benchmarks/project-manager/` (removed)
 - `initiatives.json` — five fixtures, one per managed project, calibrated against project-specific brain themes. (See the former `benchmarks/project-manager/README.md`, removed 2026-05-25.) Per [CONTRACTS.md C11](../_archive/planning/2026-05-20-refinement/CONTRACTS.md), `score.ts` parses both the old `expected.{min,max}_work_items` shape and the new manifest-topology-derived shape for one release.
-- `score.ts` — invokes the PM skill against fixtures and scores the 9-criteria rubric + 1 gate; pass threshold 0.7. The gate (`feature_id_in_manifest`) trips → 0 score.
+- `score.ts` — invokes the PM skill against fixtures and scores the 9-criteria rubric + 1 gate; pass threshold 0.7. The gate (`feature_id_in_manifest`) trips → 0 score. (`feature_id_in_manifest` was a bench-only guard; it is not present in the live `orchestrator/work-item.ts` validator.)
 - `scoring.ts` / `sdk.ts` / unit tests — pure scoring functions and the SDK invocation shim, both unit-tested. Three new deterministic criteria: `one_creator_per_file`, `quality_gate_cmd_present`, `files_real_or_explicitly_new` (each consumes a structured field — no NLP).
 
 The bench's invocation contract lives in [`orchestrator/pm-invocation.ts`](../../orchestrator/pm-invocation.ts) and is shared with the live cycle in [`orchestrator/cycle.ts`](../../orchestrator/cycle.ts) — one source of truth for the PM's system prompt + user prompt.
@@ -76,7 +76,7 @@ The bench's invocation contract lives in [`orchestrator/pm-invocation.ts`](../..
 
 ## Known failure modes (to defend against)
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; the "bench's `<criterion>`" scoring references below are historical. The prompt guidance and validator-layer guards (`detectHiddenCoupling`, `knownFeatureIds`) remain live; phase quality is now judged on real merged cycles.
+> Note (2026-05-25): the `benchmarks/` harnesses were removed; the "bench's `<criterion>`" scoring references below are historical. The prompt guidance and validator-layer guard (`detectHiddenCoupling`) remain live; `knownFeatureIds` was removed with the feature tier (2026-06-04); phase quality is now judged on real merged cycles.
 
 - **Over-decomposition** — 50 work items for a simple initiative. Capped via sizing-band prompt guidance (2–8 WIs per initiative).
 - **Under-decomposition** — one giant work item that covers the whole initiative. Same remedy.
