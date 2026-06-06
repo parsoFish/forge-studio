@@ -226,6 +226,11 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   const resuming = serializeManifest({ ...fixture(), resume_from: 'unifier' });
   assert.match(resuming, /resume_from: unifier/);
   assert.equal(parseManifest(resuming).resume_from, 'unifier');
+
+  // ADR 019: 'developer' resume mode round-trips the same way.
+  const resumingDev = serializeManifest({ ...fixture(), resume_from: 'developer' });
+  assert.match(resumingDev, /resume_from: developer/);
+  assert.equal(parseManifest(resumingDev).resume_from, 'developer');
 });
 
 test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {

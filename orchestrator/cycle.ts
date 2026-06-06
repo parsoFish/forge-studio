@@ -20,6 +20,7 @@ import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin } from './manifest.ts';
+import { loadProjectConfig } from './project-config.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
 // phase runners import them from there, never from this module — keeps the
@@ -129,7 +130,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   // --resume-from=unifier` (no feedback file) stays a plain re-prep.
   const prFeedbackPath = input.manifestPath.replace(/\.md$/, '.pr-feedback.md');
   const unifierFeedbackRef =
-    input.resumeFrom === 'unifier' && existsSync(prFeedbackPath)
+    (input.resumeFrom === 'unifier' || input.resumeFrom === 'developer') && existsSync(prFeedbackPath)
       ? prFeedbackPath
       : input.unifierFeedbackRef;
   const inputWithGate: CycleInput = {
@@ -145,19 +146,41 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
-      // ADR 019: on resume-from-unifier the architect + PM already ran in the
-      // prior (stalled) cycle and their output (the WI specs) survives in the
-      // preserved worktree's `.forge/work-items/`. Skip PM; the dev-loop
-      // detects `resumeFrom` and runs only the unifier against the existing
-      // per-WI commits.
-      if (input.resumeFrom === 'unifier') {
+      // ADR 019: on EITHER resume mode (unifier or developer) the architect + PM
+      // already ran in the prior (stalled) cycle and their output (the WI specs)
+      // survives in the preserved worktree's `.forge/work-items/`. Skip PM and
+      // rebase the preserved branch onto current main. The dev-loop then keys on
+      // `resumeFrom`: 'unifier' runs only the unifier against the existing per-WI
+      // commits; 'developer' re-runs the dev-loop over ALL work items (newly-added
+      // pending WIs get built) before re-unifying.
+      if (input.resumeFrom === 'unifier' || input.resumeFrom === 'developer') {
         // cascade-v4 #4: another cycle may have merged to main during the stall,
         // so the preserved branch no longer has main as its merge-base — the
         // dev-loop-close invariant would fail at the END of this resumed cycle,
         // wasting the unifier run. Rebase the preserved branch onto current main
         // NOW (clean → force-with-lease push the initiative branch; conflict →
         // fail fast with a clear, actionable resume-needs-rebase signal).
+        //
+        // resume_from:developer reads the per-WI specs from `.forge/work-items/`,
+        // but that dir is gitignored — the rebase replay clobbers untracked files,
+        // wiping the work items the dev-loop is about to run. Snapshot the dir
+        // OUTSIDE the git worktree (so the rebase can't touch the backup) and
+        // restore it afterward. (Unifier resume runs zero WIs → harmless no-op.)
+        const wiResumeDir = resolve(inputWithGate.worktreePath, '.forge', 'work-items');
+        const wiResumeBak = `${inputWithGate.worktreePath}.work-items-resume-bak`;
+        const preserveWorkItems = existsSync(wiResumeDir);
+        if (preserveWorkItems) {
+          rmSync(wiResumeBak, { recursive: true, force: true });
+          cpSync(wiResumeDir, wiResumeBak, { recursive: true });
+        }
         const rebase = rebasePreservedBranchOntoMain(inputWithGate.worktreePath);
+        if (preserveWorkItems) {
+          if (!existsSync(wiResumeDir) || readdirSync(wiResumeDir).length === 0) {
+            mkdirSync(wiResumeDir, { recursive: true });
+            cpSync(wiResumeBak, wiResumeDir, { recursive: true });
+          }
+          rmSync(wiResumeBak, { recursive: true, force: true });
+        }
         logger.emit({
           initiative_id: input.initiativeId,
           phase: 'orchestrator',
@@ -221,6 +244,17 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       // misleading and was the root cause of the empty PR #1 incident (a
       // resume-from-unifier cycle with complete:0 and no commits ahead of base).
       assertNonEmptyDelivery(devLoopOutcome, inputWithGate.initiativeId, inputWithGate.worktreePath, logger);
+
+      // FINAL CI DELIVERY GATE. The dev-loop's gates are SCOPED per-WI, so a
+      // cycle can reach here with the project's FULL CI (whole-module test +
+      // gofmt/terrafmt + lint) red — which shipped a real PR with formatting +
+      // lint red at review. Before opening the PR, auto-apply the project's
+      // formatters then run its operator-configured `ci_gate` DIRECTLY; a red
+      // gate throws `ci-gate-failed` so the manifest routes to triage instead
+      // of producing a CI-red "ready" PR. The ci_gate is a trusted
+      // `["bash","-c","…&&…"]` chain — run via execFileSync here, NOT through
+      // the pipe-banned per-WI gate runner (runShellGate / gateIsShellPipeline).
+      enforceFinalCiGate(inputWithGate, logger);
 
       // Open the PR inline (REV-6: the reviewer phase is now just PR-opening;
       // inlined here so the spine is: dev-loop → delivery gate → open PR → closure).
@@ -684,4 +718,212 @@ function enforceDevLoopCloseInvariant(
       merge_base: inv.mergeBase,
     },
   });
+}
+
+/** Result of running one operator-configured command vector. */
+export type CiCommandResult = { ok: boolean; output: string };
+
+/**
+ * Injectable command runner so `decideFinalCiGate` is unit-testable without
+ * spawning real processes. The production runner (`execCommandVector`) wraps
+ * `execFileSync`; tests pass a stub. `kind` distinguishes the fixer (best-effort)
+ * from the gate (verdict) so the runner can pick an appropriate timeout.
+ */
+export type CiCommandRunner = (
+  cmd: string[],
+  worktreePath: string,
+  kind: 'fix' | 'gate',
+) => CiCommandResult;
+
+const CI_FIX_TIMEOUT_MS = 5 * 60_000;
+const CI_GATE_TIMEOUT_MS = 20 * 60_000;
+
+/**
+ * Production command runner. Runs the vector DIRECTLY via `execFileSync`
+ * (`["bash","-c","…&&…"]` is run as `bash -c …`) — deliberately NOT routed
+ * through the per-WI gate runner (runShellGate / gateIsShellPipeline), whose
+ * pipe-ban would reject the operator's `&&` CI chain. The operator authored
+ * `ci_gate`, so it is trusted.
+ */
+function execCommandVector(cmd: string[], worktreePath: string, kind: 'fix' | 'gate'): CiCommandResult {
+  const [head, ...rest] = cmd;
+  const timeout = kind === 'fix' ? CI_FIX_TIMEOUT_MS : CI_GATE_TIMEOUT_MS;
+  try {
+    const out = execFileSync(head, rest, {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+      timeout,
+    });
+    return { ok: true, output: out.toString() };
+  } catch (err) {
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+    const stdout = e.stdout ? e.stdout.toString() : '';
+    const stderr = e.stderr ? e.stderr.toString() : '';
+    return { ok: false, output: (stdout + stderr) || (e.message ?? '') };
+  }
+}
+
+/**
+ * Pure decision core for the final CI gate. Exported for direct unit testing
+ * with a stubbed `run` (no real `make test`). Given the project's `ciGate` +
+ * optional `ciFixCmd`:
+ *   1. Best-effort apply the formatters (`ciFixCmd`) — never throws on a fixer
+ *      error (a broken formatter must not block delivery).
+ *   2. Run the full `ciGate`; return its ok + (tail of) output.
+ * No-op (returns `null`) when `ciGate` is absent/empty — the caller then skips
+ * committing/pushing fmt changes and the gate entirely. This function performs
+ * NO git/IO of its own; the orchestrator commits+pushes any fmt changes around
+ * it (it cannot know whether the fixer changed files).
+ */
+export function decideFinalCiGate(
+  args: { ciGate: string[] | null; ciFixCmd: string[] | null; worktreePath: string; run: CiCommandRunner },
+): { ranFixer: boolean; gateOk: boolean; gateOutput: string } | null {
+  const { ciGate, ciFixCmd, worktreePath, run } = args;
+  if (!ciGate || ciGate.length === 0) return null;
+
+  let ranFixer = false;
+  if (ciFixCmd && ciFixCmd.length > 0) {
+    // Best-effort: a fixer that errors must never throw — the gate below is the
+    // real verdict, and an un-formatted tree just fails that gate cleanly.
+    try {
+      run(ciFixCmd, worktreePath, 'fix');
+      ranFixer = true;
+    } catch {
+      /* swallow — formatter failure is non-fatal */
+    }
+  }
+
+  const gate = run(ciGate, worktreePath, 'gate');
+  return { ranFixer, gateOk: gate.ok, gateOutput: gate.output };
+}
+
+/**
+ * Final CI delivery gate (orchestrator wiring around `decideFinalCiGate`).
+ * Reads the project's `ci_gate` + `ci_fix_cmd` from `.forge/project.json`;
+ * when a `ci_gate` is configured (and not a dry run), applies the formatters,
+ * commits+pushes any resulting fmt changes so the PR is fmt-clean, then runs
+ * the full CI gate. A red gate emits a classified `cycle.ci-gate` event and
+ * throws `ci-gate-failed` so the cycle routes to triage rather than opening a
+ * CI-red PR. Best-effort config read — a missing/unreadable project.json
+ * simply skips the gate (the dev-loop's scoped gates still ran).
+ */
+function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
+  if (input.dryRun) return;
+
+  let ciGate: string[] | null = null;
+  let ciFixCmd: string[] | null = null;
+  try {
+    const cfg = loadProjectConfig(input.projectRepoPath);
+    ciGate = cfg?.ci_gate && cfg.ci_gate.length > 0 ? cfg.ci_gate : null;
+    ciFixCmd = cfg?.ci_fix_cmd && cfg.ci_fix_cmd.length > 0 ? cfg.ci_fix_cmd : null;
+  } catch (err) {
+    // A malformed project.json is fail-closed elsewhere (dev-loop loads it);
+    // here we log-and-skip rather than mask a real config error at PR-open.
+    logger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'log',
+      input_refs: [input.projectRepoPath],
+      output_refs: [],
+      message: 'cycle.ci-gate-skipped',
+      metadata: { reason: err instanceof Error ? err.message : String(err) },
+    });
+    return;
+  }
+
+  if (!ciGate) return;
+
+  const decision = decideFinalCiGate({
+    ciGate,
+    ciFixCmd,
+    worktreePath: input.worktreePath,
+    run: execCommandVector,
+  });
+  // decision is non-null because ciGate is non-empty.
+  if (!decision) return;
+
+  // Commit + push any formatting changes the fixer produced so the PR is
+  // fmt-clean. Guard on a dirty tree so a no-op fixer adds no empty commit.
+  if (decision.ranFixer) {
+    commitAndPushCiFix(input.worktreePath, logger, input.initiativeId);
+  }
+
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: decision.gateOk ? 'log' : 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: 'cycle.ci-gate',
+    metadata: {
+      ok: decision.gateOk,
+      ran_fixer: decision.ranFixer,
+      ci_gate: ciGate,
+      output_tail: decision.gateOutput.slice(-1200),
+    },
+  });
+
+  if (!decision.gateOk) {
+    throw new Error(
+      `ci-gate-failed: the project ci_gate is red — not opening a PR (triage before re-running).\n` +
+        decision.gateOutput.slice(-1200),
+    );
+  }
+}
+
+/**
+ * Commit + push any working-tree changes the CI auto-formatter produced.
+ * Guarded by `git status --porcelain` so a no-op fixer adds no empty commit.
+ * Best-effort push — a push failure is logged but does not throw (the gate
+ * already passed against the local tree; the PR open will surface a real sync
+ * problem via the existing invariants).
+ */
+function commitAndPushCiFix(
+  worktreePath: string,
+  logger: EventLogger,
+  initiativeId: string,
+): void {
+  try {
+    const dirty = execFileSync('git', ['status', '--porcelain'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).toString().trim();
+    if (dirty.length === 0) return;
+
+    execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe' });
+    try {
+      execFileSync('git', ['reset', '-q', '--', 'node_modules'], { cwd: worktreePath, stdio: 'pipe' });
+    } catch {
+      /* best-effort — not staged */
+    }
+    execFileSync('git', ['commit', '-m', 'style: apply ci_fix_cmd (auto-format)'], {
+      cwd: worktreePath,
+      stdio: 'pipe',
+    });
+    let pushed = true;
+    let pushReason: string | null = null;
+    try {
+      execFileSync('git', ['push'], { cwd: worktreePath, stdio: 'pipe' });
+    } catch (err) {
+      pushed = false;
+      pushReason = err instanceof Error ? err.message : String(err);
+    }
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: pushed ? 'log' : 'error',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: pushed ? 'cycle.ci-fix-committed' : 'cycle.ci-fix-push-failed',
+      metadata: pushed ? undefined : { reason: pushReason },
+    });
+  } catch {
+    // Not a git repo / nothing to commit / git failed — non-fatal: the gate
+    // ran against the local tree regardless.
+  }
 }

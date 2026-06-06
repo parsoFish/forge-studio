@@ -185,3 +185,49 @@ test('validateProjectConfig: shape: "browser" requires a preview_command', () =>
 test('PROJECT_CONFIG_REL_PATH is `.forge/project.json` per C1', () => {
   assert.equal(PROJECT_CONFIG_REL_PATH, '.forge/project.json');
 });
+
+test('loadProjectConfig: ci_gate + ci_fix_cmd round-trip from project.json', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(
+      root,
+      JSON.stringify({
+        demo: { shape: 'harness', command: ['go', 'test', './...'] },
+        quality_gate_cmd: ['go', 'test', './...'],
+        ci_gate: ['bash', '-c', 'make test && golangci-lint run ./... && make terrafmt-check'],
+        ci_fix_cmd: ['bash', '-c', 'make fmt && make terrafmt'],
+      }),
+    );
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg);
+    assert.deepEqual(cfg.ci_gate, [
+      'bash',
+      '-c',
+      'make test && golangci-lint run ./... && make terrafmt-check',
+    ]);
+    assert.deepEqual(cfg.ci_fix_cmd, ['bash', '-c', 'make fmt && make terrafmt']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: ci_gate + ci_fix_cmd are optional (absent ⇒ undefined)', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+  });
+  assert.equal(cfg.ci_gate, undefined);
+  assert.equal(cfg.ci_fix_cmd, undefined);
+});
+
+test('validateProjectConfig: ci_gate must be an argv string[] when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        ci_gate: 'make test && lint',
+      }),
+    /ci_gate/,
+  );
+});

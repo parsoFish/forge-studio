@@ -178,6 +178,13 @@ async function cmdServe(rest: string[]): Promise<void> {
     // operator's monitor (or `forge metrics`) is the right place for
     // ongoing visibility, so we only print this for `--once`.
     printLatestReportHint();
+    // Everything serve() does for `--once` is already awaited + flushed by
+    // the time we reach here, but the Claude Agent SDK / child phases leave
+    // open handles (sockets, stdio pipes) that keep the Node event loop
+    // alive — so the process hangs after `cycle pr-open` instead of exiting.
+    // Force a clean exit. ONLY for once-mode: forever-mode runs until SIGINT
+    // and must NOT force-exit (it has work still to drain).
+    process.exit(0);
   }
 }
 
@@ -1075,37 +1082,42 @@ async function cmdWatch(rest: string[]): Promise<void> {
 function cmdRequeue(rest: string[]): void {
   const initInput = rest.find((a) => !a.startsWith('--'));
   const resetRetries = rest.includes('--reset-retries');
-  // ADR 019: --resume-from=unifier (or --resume-from unifier) resumes the next
-  // cycle from the unifier sub-phase against the preserved worktree.
+  // ADR 019: --resume-from={unifier,developer} (or --resume-from <mode>) resumes
+  // the next cycle against the PRESERVED worktree instead of a full re-run.
   const resumeIdx = rest.findIndex((a) => a === '--resume-from' || a.startsWith('--resume-from='));
   let resumeFromUnifier = false;
+  let resumeFromDeveloper = false;
   if (resumeIdx !== -1) {
     const arg = rest[resumeIdx];
     const value = arg.includes('=') ? arg.split('=')[1] : rest[resumeIdx + 1];
-    if (value !== 'unifier') {
-      console.error(`forge requeue: --resume-from only supports 'unifier' (got '${value ?? ''}')`);
+    if (value === 'unifier') resumeFromUnifier = true;
+    else if (value === 'developer') resumeFromDeveloper = true;
+    else {
+      console.error(`forge requeue: --resume-from only supports 'unifier' or 'developer' (got '${value ?? ''}')`);
       process.exit(2);
     }
-    resumeFromUnifier = true;
   }
   if (rest.includes('--help') || rest.includes('-h') || !initInput) {
-    console.log(`forge requeue <init-id-or-handle> [--reset-retries] [--resume-from=unifier]
+    console.log(`forge requeue <init-id-or-handle> [--reset-retries] [--resume-from=unifier|developer]
   Recover a stuck initiative back to the pending queue. Idempotent.
   Moves manifest from any queue dir → _queue/pending/, deletes stranded
   verdict files, removes the worktree, and (optionally) resets
   retry_count to 0. Appends a 'requeued-from-<dir>-<date>' marker to
   previous_failure_modes for the forensic trail.
-    --reset-retries        Set retry_count to 0 (default: preserve prior count).
-    --resume-from=unifier  Resume from the unifier sub-phase (ADR 019): skip
-                           PM + per-WI dev-loop and PRESERVE the worktree so
-                           the salvaged WI commits drive the resumed unifier.`);
+    --reset-retries          Set retry_count to 0 (default: preserve prior count).
+    --resume-from=unifier    Resume from the unifier sub-phase (ADR 019): skip
+                             PM + per-WI dev-loop and PRESERVE the worktree so
+                             the salvaged WI commits drive the resumed unifier.
+    --resume-from=developer  Resume the dev-loop on the preserved worktree (build
+                             newly-added work items), then re-unify.`);
     if (!initInput) process.exit(2);
     return;
   }
   void import('../cli/forge-requeue.ts').then(({ runRequeue }) => {
     try {
-      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries, resumeFromUnifier });
-      console.log(`requeued ${r.initiativeId}${resumeFromUnifier ? ' (resume-from=unifier)' : ''}`);
+      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries, resumeFromUnifier, resumeFromDeveloper });
+      const resumeNote = resumeFromDeveloper ? ' (resume-from=developer)' : resumeFromUnifier ? ' (resume-from=unifier)' : '';
+      console.log(`requeued ${r.initiativeId}${resumeNote}`);
       console.log(`  from: ${r.fromQueueDir}/ → pending/`);
       console.log(`  worktree removed: ${r.worktreeRemoved}`);
       console.log(`  branch deleted (fresh-from-main on re-run): ${r.branchDeleted}`);

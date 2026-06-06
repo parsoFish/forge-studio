@@ -12,7 +12,13 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { assertNonEmptyDelivery, recordBrainGateResult, snapshotCycleArtefacts } from './cycle.ts';
+import {
+  assertNonEmptyDelivery,
+  decideFinalCiGate,
+  recordBrainGateResult,
+  snapshotCycleArtefacts,
+  type CiCommandRunner,
+} from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
@@ -167,6 +173,100 @@ test('assertNonEmptyDelivery: does NOT throw when insertions > 0 even with 0 com
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ----- decideFinalCiGate (final CI delivery gate) -----
+
+/**
+ * Build a stub CiCommandRunner that records every invocation and returns a
+ * canned ok/output per `kind`. No real process is spawned — the test never
+ * runs `make test`.
+ */
+function stubRunner(
+  results: { fix?: { ok: boolean; output?: string }; gate: { ok: boolean; output?: string } },
+): { run: CiCommandRunner; calls: Array<{ cmd: string[]; kind: 'fix' | 'gate' }> } {
+  const calls: Array<{ cmd: string[]; kind: 'fix' | 'gate' }> = [];
+  const run: CiCommandRunner = (cmd, _wt, kind) => {
+    calls.push({ cmd, kind });
+    const r = kind === 'fix' ? results.fix ?? { ok: true } : results.gate;
+    return { ok: r.ok, output: r.output ?? '' };
+  };
+  return { run, calls };
+}
+
+test('decideFinalCiGate: ci_gate green → gateOk true, fixer ran first', () => {
+  const { run, calls } = stubRunner({ fix: { ok: true }, gate: { ok: true, output: 'PASS' } });
+  const decision = decideFinalCiGate({
+    ciGate: ['bash', '-c', 'make test && lint'],
+    ciFixCmd: ['bash', '-c', 'make fmt'],
+    worktreePath: '/fake/wt',
+    run,
+  });
+  assert.ok(decision);
+  assert.equal(decision.gateOk, true);
+  assert.equal(decision.ranFixer, true);
+  // fixer runs before the gate.
+  assert.deepEqual(calls.map((c) => c.kind), ['fix', 'gate']);
+});
+
+test('decideFinalCiGate: ci_gate red → gateOk false with output (caller throws ci-gate-failed)', () => {
+  const { run } = stubRunner({ gate: { ok: false, output: 'gofmt: file.go needs formatting' } });
+  const decision = decideFinalCiGate({
+    ciGate: ['bash', '-c', 'make test && lint'],
+    ciFixCmd: null,
+    worktreePath: '/fake/wt',
+    run,
+  });
+  assert.ok(decision);
+  assert.equal(decision.gateOk, false);
+  assert.match(decision.gateOutput, /gofmt/);
+});
+
+test('decideFinalCiGate: no ci_gate configured → null (gate skipped, no PR block)', () => {
+  const { run, calls } = stubRunner({ gate: { ok: true } });
+  assert.equal(
+    decideFinalCiGate({ ciGate: null, ciFixCmd: ['x'], worktreePath: '/fake/wt', run }),
+    null,
+  );
+  assert.equal(
+    decideFinalCiGate({ ciGate: [], ciFixCmd: null, worktreePath: '/fake/wt', run }),
+    null,
+  );
+  // No commands run when there is no gate.
+  assert.equal(calls.length, 0);
+});
+
+test('decideFinalCiGate: a throwing fixer does not block — gate still decides', () => {
+  const calls: Array<'fix' | 'gate'> = [];
+  const run: CiCommandRunner = (_cmd, _wt, kind) => {
+    calls.push(kind);
+    if (kind === 'fix') throw new Error('formatter crashed');
+    return { ok: true, output: 'PASS' };
+  };
+  const decision = decideFinalCiGate({
+    ciGate: ['bash', '-c', 'make test'],
+    ciFixCmd: ['bash', '-c', 'make fmt'],
+    worktreePath: '/fake/wt',
+    run,
+  });
+  assert.ok(decision);
+  assert.equal(decision.gateOk, true);
+  // ranFixer stays false because the fixer threw, but the gate still ran.
+  assert.equal(decision.ranFixer, false);
+  assert.deepEqual(calls, ['fix', 'gate']);
+});
+
+test('decideFinalCiGate: no ci_fix_cmd → gate runs without a fixer pass', () => {
+  const { run, calls } = stubRunner({ gate: { ok: true } });
+  const decision = decideFinalCiGate({
+    ciGate: ['bash', '-c', 'make test'],
+    ciFixCmd: null,
+    worktreePath: '/fake/wt',
+    run,
+  });
+  assert.ok(decision);
+  assert.equal(decision.ranFixer, false);
+  assert.deepEqual(calls.map((c) => c.kind), ['gate']);
 });
 
 // S4 deletion: the F-30 adaptive reviewer iteration cap tests are gone —

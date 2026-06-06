@@ -89,12 +89,18 @@ export type InitiativeManifest = {
   quality_gate_cmd?: string[];
   /**
    * ADR 019: resume a stalled cycle from a later phase rather than re-running
-   * it from scratch. `'unifier'` ⇒ skip architect/PM/per-WI dev-loop and run
-   * only the unifier sub-phase + downstream phases against the preserved
-   * branch. Set by `forge requeue --resume-from=unifier`; cleared on a clean
+   * it from scratch, reusing the preserved worktree + branch.
+   *   - `'unifier'`   ⇒ skip architect/PM/per-WI dev-loop and run only the
+   *                     unifier sub-phase + downstream phases against the
+   *                     preserved branch (unifier-only re-prep).
+   *   - `'developer'` ⇒ skip architect/PM but re-run the dev-loop over ALL work
+   *                     items on the preserved branch (already-complete WIs hit
+   *                     the cheap shortcut; newly-added pending WIs get built),
+   *                     then re-unify — "send it back for another dev pass".
+   * Set by `forge requeue --resume-from={unifier,developer}`; cleared on a clean
    * full run. Absent ⇒ normal full cycle.
    */
-  resume_from?: 'unifier';
+  resume_from?: 'unifier' | 'developer';
   /**
    * cascade-v4 #7: a throwaway / verification cycle (e.g. `verify-cycle.mjs`
    * frozen-SHA routine runs) should NOT pollute the durable brain. When
@@ -151,7 +157,9 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'unifier') manifest.resume_from = 'unifier';
+  if (data.resume_from === 'unifier' || data.resume_from === 'developer') {
+    manifest.resume_from = data.resume_from;
+  }
   if (data.disposable === true) manifest.disposable = true;
   if (typeof data.retry_count === 'number') manifest.retry_count = data.retry_count;
   if (Array.isArray(data.previous_failure_modes)) {
@@ -184,7 +192,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'unifier') {
+  if (m.resume_from === 'unifier' || m.resume_from === 'developer') {
     data.resume_from = m.resume_from;
   }
   if (m.disposable === true) {

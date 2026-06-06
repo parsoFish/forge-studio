@@ -132,6 +132,37 @@ test('runRequeue --resume-from=unifier: stamps resume_from AND preserves the wor
   }
 });
 
+test('runRequeue --resume-from=developer: preserves worktree + branch + feedback AND stamps resume_from: developer', () => {
+  const root = setupForgeRoot();
+  try {
+    const file = 'INIT-2026-05-24-rq-test.md';
+    const wt = join(root, '_worktrees', 'INIT-2026-05-24-rq-test');
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: wt }));
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
+    // (c) the send-back feedback must survive a developer resume (it re-unifies).
+    const feedback = join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.pr-feedback.md');
+    writeFileSync(feedback, '# Send-back feedback\n\nbuild the new WI\n');
+
+    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromDeveloper: true });
+
+    // (a) worktree is the salvaged work — it must NOT be removed.
+    assert.equal(r.worktreeRemoved, false);
+    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-developer');
+    // (b) the forge/<id> branch must NOT be deleted (no project repo here, so
+    //     branchDeleted is false regardless — assert the preservation contract).
+    assert.equal(r.branchDeleted, false, 'branch must be preserved on resume-from-developer');
+    // (c) pr-feedback.md survives the requeue.
+    assert.equal(existsSync(feedback), true, 'pr-feedback.md must survive a developer resume');
+    assert.ok(!r.verdictsRemoved.includes(feedback));
+    // (d) resume_from: developer stamped into the moved manifest.
+    const moved = readFileSync(join(root, '_queue', 'pending', file), 'utf8');
+    assert.match(moved, /^resume_from:\s*developer\s*$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runRequeue: throws when manifest is not in any queue dir', () => {
   const root = setupForgeRoot();
   try {

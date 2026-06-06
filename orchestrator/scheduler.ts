@@ -525,13 +525,18 @@ async function runOne(
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
     const branch = `forge/${manifest.initiativeId}`;
     const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
-    // ADR 019: on resume-from-unifier reuse the preserved worktree (it already
-    // holds the per-WI commits) rather than `worktree.add` — adding onto an
-    // already-checked-out path fails ("already exists"). If the worktree was
-    // GC'd, fall through to `worktree.add`, which re-checks-out the surviving
-    // branch (the per-WI commits are durable on the ref).
+    // ADR 019: on a resume reuse the preserved worktree (it already holds the
+    // per-WI commits) rather than `worktree.add` — adding onto an already-
+    // checked-out path fails ("already exists"). If the worktree was GC'd, fall
+    // through to `worktree.add`, which re-checks-out the surviving branch (the
+    // per-WI commits are durable on the ref).
+    // BOTH resume modes must reuse: 'unifier' runs only the unifier; 'developer'
+    // re-runs the dev-loop over the work-item specs in the gitignored
+    // `.forge/work-items/` — falling through to `worktree.add` re-checks-out the
+    // branch and WIPES those untracked specs at claim time (the dev-loop then
+    // finds "no work items"). So a developer resume reuses, never re-adds.
     const liveWorktree =
-      manifest.resumeFrom === 'unifier' &&
+      (manifest.resumeFrom === 'unifier' || manifest.resumeFrom === 'developer') &&
       worktree.list(manifest.projectRepoPath).some((w) => resolve(w.path) === expectedWtPath);
     if (liveWorktree) {
       if (tee) console.log(`[serve] resume-from-${manifest.resumeFrom}: reusing preserved worktree ${expectedWtPath}`);
@@ -658,8 +663,12 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
-  /** ADR 019: when 'unifier', resume the cycle from the unifier sub-phase against the preserved worktree. */
-  resumeFrom?: 'unifier';
+  /**
+   * ADR 019: resume the cycle against the preserved worktree — 'unifier' runs
+   * only the unifier sub-phase; 'developer' re-runs the dev-loop over all work
+   * items (building newly-added ones) then re-unifies.
+   */
+  resumeFrom?: 'unifier' | 'developer';
 };
 
 function parseManifest(path: string): ParsedManifest {

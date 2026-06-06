@@ -13,6 +13,13 @@
  *   5. Remove the worktree if present (`git worktree remove --force` plus
  *      `rm -rf` fallback) so the next claim gets a fresh canvas.
  *
+ * Resume modes (ADR 019) PRESERVE the worktree + branch instead of wiping
+ * them, so the resumed cycle runs against the salvaged per-WI work:
+ *   - `--resume-from=unifier`   re-runs only the unifier sub-phase.
+ *   - `--resume-from=developer` re-runs the dev-loop over ALL work items on the
+ *                               preserved branch (builds newly-added WIs), then
+ *                               re-unifies — "send it back for another dev pass".
+ *
  * Each step is idempotent; running on an already-cleaned manifest is safe.
  */
 
@@ -36,6 +43,15 @@ export type RequeueOptions = {
    * skipped. Use after a unifier-only gate failure to salvage the WI work.
    */
   resumeFromUnifier?: boolean;
+  /**
+   * ADR 019: resume the next cycle from the dev-loop on the preserved worktree
+   * instead of a full re-run. Sets `resume_from: developer` on the manifest AND
+   * preserves the worktree + branch (same as resumeFromUnifier) — so step 5's
+   * worktree removal is skipped. The resumed dev-loop runs over ALL work items
+   * (already-complete ones hit the cheap shortcut; newly-added pending WIs get
+   * built), then re-unifies. Mutually exclusive with resumeFromUnifier.
+   */
+  resumeFromDeveloper?: boolean;
 };
 
 export type RequeueResult = {
@@ -70,6 +86,11 @@ export function runRequeue(
   const initiativeId = resolved.canonical;
   const filename = `${initiativeId}.md`;
 
+  // ADR 019: both resume modes preserve the worktree + branch (the salvaged
+  // per-WI work the resumed cycle runs against). Only a full (non-resume)
+  // requeue wipes them for a fresh-from-main re-run.
+  const preserveWorktree = opts.resumeFromUnifier || opts.resumeFromDeveloper;
+
   // 1. Locate manifest in any queue dir.
   const candidates: Array<{ dir: string; label: string }> = [
     { dir: queuePaths.pending, label: 'pending' },
@@ -102,9 +123,15 @@ export function runRequeue(
     ...manifest,
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
-    // ADR 019: stamp the resume marker so the scheduler runs the cycle from
-    // the unifier sub-phase against the preserved worktree.
-    ...(opts.resumeFromUnifier ? { resume_from: 'unifier' as const } : {}),
+    // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
+    // preserved worktree — `developer` re-runs the dev-loop (build newly-added
+    // WIs) then re-unifies; `unifier` re-runs only the unifier. (CLI keeps the
+    // two mutually exclusive; developer takes precedence if both were set.)
+    ...(opts.resumeFromDeveloper
+      ? { resume_from: 'developer' as const }
+      : opts.resumeFromUnifier
+        ? { resume_from: 'unifier' as const }
+        : {}),
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
@@ -114,13 +141,14 @@ export function runRequeue(
   renameSync(tmpPath, toPath);
   rmSync(fromPath, { force: true });
 
-  // 4. Remove stranded verdict files. On a resume-from-unifier requeue we KEEP
-  //    `<id>.pr-feedback.md` — it is the send-back input the resumed unifier
-  //    reads (D1). On a non-resume requeue, clear it too so stale feedback can't
-  //    re-trigger send-back mode on a later resume.
+  // 4. Remove stranded verdict files. On a resume requeue (unifier OR developer)
+  //    we KEEP `<id>.pr-feedback.md` — it is the send-back input the resumed
+  //    unifier reads (D1), and a developer resume also re-unifies. On a
+  //    non-resume requeue, clear it too so stale feedback can't re-trigger
+  //    send-back mode on a later resume.
   const verdictsRemoved: string[] = [];
   const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md'];
-  if (!opts.resumeFromUnifier) staleSuffixes.push('.pr-feedback.md');
+  if (!preserveWorktree) staleSuffixes.push('.pr-feedback.md');
   for (const c of candidates) {
     for (const suffix of staleSuffixes) {
       const path = join(c.dir, `${initiativeId}${suffix}`);
@@ -131,8 +159,8 @@ export function runRequeue(
   }
 
   // 5. Remove the worktree AND delete the initiative branch — UNLESS resuming
-  //    from the unifier, where the preserved worktree + branch ARE the salvaged
-  //    WI work the resume runs against (ADR 019). Deleting the branch on a
+  //    (unifier OR developer), where the preserved worktree + branch ARE the
+  //    salvaged WI work the resume runs against (ADR 019). Deleting the branch on a
   //    normal re-run is load-bearing: otherwise the next `git worktree add`
   //    reuses the STALE branch (based on whatever main was at the original run)
   //    instead of branching fresh from CURRENT main — and if main has since
@@ -144,7 +172,7 @@ export function runRequeue(
   let branchDeleted = false;
   const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
   const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
-  if (!opts.resumeFromUnifier) {
+  if (!preserveWorktree) {
     if (existsSync(worktreePath) && projectRepoPath && existsSync(projectRepoPath)) {
       try {
         execFileSync('git', ['-C', projectRepoPath, 'worktree', 'remove', '--force', worktreePath], { stdio: 'pipe' });

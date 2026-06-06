@@ -275,6 +275,26 @@ export function openPullRequest(
       stdio: 'pipe',
     });
 
+    // A PR may already exist for this branch — a resume/send-back (resume_from
+    // developer|unifier) preserves the branch AND its open PR. `gh pr create`
+    // errors in that case ("a pull request already exists"); the push above has
+    // already updated the PR with the new commits, so detect the existing PR,
+    // refresh its body with the re-composed demo, and reuse it. This makes
+    // PR-open idempotent — without it a resumed cycle that produced a perfectly
+    // good branch fails at PR-open (mis-reported as a missing prerequisite).
+    const existing = prRef(worktreePath);
+    if (existing) {
+      try {
+        execFileSync('gh', ['pr', 'edit', String(existing.number), '--body-file', bodyFile], {
+          cwd: worktreePath,
+          stdio: 'pipe',
+        });
+      } catch {
+        /* body refresh is best-effort — the new commits are already on the PR */
+      }
+      return existing.url;
+    }
+
     const out = execFileSync(
       'gh',
       ['pr', 'create', '--body-file', bodyFile, '--title', title],

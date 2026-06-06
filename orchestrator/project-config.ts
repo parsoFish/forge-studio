@@ -76,6 +76,23 @@ export type LoggingConfig = {
 export type ProjectConfig = {
   demo: DemoConfig;
   quality_gate_cmd: string[];
+  /**
+   * The project's FULL CI verification — the operator-configured gate that
+   * mirrors the project's CI workflow (e.g. `make test && golangci-lint run
+   * ./... && make terrafmt-check`). Run DIRECTLY (operator-trusted) as the
+   * final delivery gate before a PR is opened, so a cycle can't ship a PR
+   * while the project's whole-module CI is red. Distinct from the per-WI
+   * `quality_gate_cmd` (which is scoped + pipe-banned): `ci_gate` is allowed
+   * to be a `["bash","-c","…&&…"]` shell chain because the operator authored
+   * it. Optional — absent ⇒ no final CI gate.
+   */
+  ci_gate?: string[];
+  /**
+   * The project's auto-formatters (e.g. `make fmt && make terrafmt`), applied
+   * best-effort BEFORE `ci_gate` runs so a PR is fmt-clean. Optional — absent
+   * ⇒ the CI gate runs without an auto-format pass.
+   */
+  ci_fix_cmd?: string[];
   metrics?: MetricsConfig;
   sweep?: SweepConfig;
   logging?: LoggingConfig;
@@ -155,6 +172,13 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     throw new Error('project-config: missing required `quality_gate_cmd` (argv)');
   }
 
+  // Optional final-delivery CI gate + its auto-formatters. Both are
+  // operator-authored argv vectors; a `["bash","-c","…&&…"]` shell chain is
+  // permitted here (unlike the pipe-banned per-WI gate) because the orchestrator
+  // runs them DIRECTLY rather than through the per-WI gate runner.
+  const ci_gate = optionalArgv(obj.ci_gate, 'ci_gate');
+  const ci_fix_cmd = optionalArgv(obj.ci_fix_cmd, 'ci_fix_cmd');
+
   const metrics = parseMetrics(obj.metrics);
   const sweep = parseSweep(obj.sweep);
   const logging = parseLogging(obj.logging);
@@ -162,6 +186,8 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   return {
     demo,
     quality_gate_cmd,
+    ...(ci_gate ? { ci_gate } : {}),
+    ...(ci_fix_cmd ? { ci_fix_cmd } : {}),
     ...(metrics ? { metrics } : {}),
     ...(sweep ? { sweep } : {}),
     ...(logging ? { logging } : {}),
