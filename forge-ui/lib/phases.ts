@@ -24,10 +24,11 @@ export type Phase = (typeof PHASE_ORDER)[number];
  * looping for many minutes — a misleading display. Surface the unifier as its
  * OWN hex by routing `developer-unifier`-skill events to the `unifier` phase.
  * Keeps the backend event phase ('developer-loop') unchanged — only the UI's
- * phase-status derivation splits them — so nothing server-side (e.g. the
- * failure-classifier's `phase === 'developer-loop'` rules) is affected.
+ * phase-status derivation AND live-burst attribution split them — so nothing
+ * server-side (e.g. the failure-classifier's `phase === 'developer-loop'`
+ * rules) is affected.
  */
-function phaseForEvent(e: EventLogEntry): string {
+export function phaseForEvent(e: EventLogEntry): string {
   if (e.skill === 'developer-unifier') return 'unifier';
   return canonicalPhase(e.phase);
 }

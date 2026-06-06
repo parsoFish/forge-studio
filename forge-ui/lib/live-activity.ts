@@ -8,6 +8,7 @@
  */
 
 import type { EventLogEntry } from './bridge-client';
+import { phaseForEvent } from './phases';
 
 export type LiveToolNode = {
   /** Stable id for React Flow keying. */
@@ -50,7 +51,11 @@ export function deriveLiveToolBursts(
     if (!md || md.coalesced === true) continue;
     const ageMs = nowMs - Date.parse(e.started_at);
     if (Number.isNaN(ageMs) || ageMs < 0 || ageMs > windowMs) continue;
-    const ownerId = typeof md.work_item_id === 'string' ? md.work_item_id : e.phase;
+    // Owner is the WI when present; otherwise the event's UI phase via
+    // phaseForEvent — so unifier bursts (skill 'developer-unifier', no
+    // work_item_id, backend phase 'developer-loop') pulse the UNIFIER hex, not
+    // the dev-loop hex, matching the phase-status + cost split.
+    const ownerId = typeof md.work_item_id === 'string' ? md.work_item_id : phaseForEvent(e);
     const ownerKind: 'wi' | 'phase' = typeof md.work_item_id === 'string' ? 'wi' : 'phase';
     const n = perOwnerCount.get(ownerId) ?? 0;
     if (n >= perOwner) continue;
