@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path';
 import {
   assertNonEmptyDelivery,
   decideFinalCiGate,
+  execCommandVector,
   recordBrainGateResult,
   snapshotCycleArtefacts,
   type CiCommandRunner,
@@ -267,6 +268,52 @@ test('decideFinalCiGate: no ci_fix_cmd → gate runs without a fixer pass', () =
   assert.ok(decision);
   assert.equal(decision.ranFixer, false);
   assert.deepEqual(calls.map((c) => c.kind), ['gate']);
+});
+
+test('decideFinalCiGate: unsetEnv is passed to BOTH the fixer and the gate (A3 TF_ACC isolation)', () => {
+  // The CI delivery gate must mirror GitHub CI: stripping TF_ACC so `make test`
+  // does NOT run the live acceptance suite even though the serve env set it for
+  // the per-WI live gates.
+  const seen: Array<{ kind: 'fix' | 'gate'; unsetEnv?: string[] }> = [];
+  const run: CiCommandRunner = (_cmd, _wt, kind, unsetEnv) => {
+    seen.push({ kind, unsetEnv });
+    return { ok: true, output: 'PASS' };
+  };
+  const decision = decideFinalCiGate({
+    ciGate: ['bash', '-c', 'make test'],
+    ciFixCmd: ['bash', '-c', 'make fmt'],
+    worktreePath: '/fake/wt',
+    run,
+    unsetEnv: ['TF_ACC'],
+  });
+  assert.ok(decision);
+  assert.equal(decision.gateOk, true);
+  assert.deepEqual(seen, [
+    { kind: 'fix', unsetEnv: ['TF_ACC'] },
+    { kind: 'gate', unsetEnv: ['TF_ACC'] },
+  ]);
+});
+
+test('execCommandVector: strips the named env var from the child process (A3, real spawn)', () => {
+  const prev = process.env.TF_ACC;
+  process.env.TF_ACC = '1';
+  try {
+    // Without stripping, the child sees TF_ACC=1 (inherited).
+    const inherited = execCommandVector(['bash', '-c', 'echo "TFACC=[$TF_ACC]"'], '/tmp', 'gate');
+    assert.match(inherited.output, /TFACC=\[1\]/);
+    // With unsetEnv, TF_ACC is absent in the child → empty expansion.
+    const stripped = execCommandVector(
+      ['bash', '-c', 'echo "TFACC=[$TF_ACC]"'],
+      '/tmp',
+      'gate',
+      ['TF_ACC'],
+    );
+    assert.match(stripped.output, /TFACC=\[\]/);
+    assert.equal(stripped.ok, true);
+  } finally {
+    if (prev === undefined) delete process.env.TF_ACC;
+    else process.env.TF_ACC = prev;
+  }
 });
 
 // S4 deletion: the F-30 adaptive reviewer iteration cap tests are gone —

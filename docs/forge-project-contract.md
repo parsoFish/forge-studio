@@ -164,6 +164,35 @@ project must define both:
   interactive web console, so machine evidence is API responses; screenshots of
   authenticated UIs are best-effort.
 
+**The mandatory per-WI testing contract** *(deepened 2026-06-06).* For an
+external-resource project, "a change is done" requires **both** a live proof and a
+CI-clean push, and neither can be left to per-WI PM judgment (a betterado resource
+once shipped with *no* live-acceptance test at all). Three project-config seams in
+`.forge/project.json` make the two-gate model structural and forge-wide:
+
+- **`acceptance_gate: { match, required }`** — when `required`, the PM phase
+  **hard-fails the cycle** unless ≥1 emitted WI has a `quality_gate_cmd` token
+  containing `match` (e.g. `"acceptancetests"`). This guarantees every initiative
+  is proven by a real live-acceptance WI; the live test runs as that WI's own
+  per-WI gate (creds + the live-test trigger from the serve env).
+- **`standing_work_item_acs: string[]`** — verbatim test invariants forge appends
+  to **every** WI body as a `## Standing acceptance criteria (project contract)`
+  section. The two betterado standing ACs are *(1)* "proven by a live acceptance
+  test — apply → API-read assert → idempotency re-plan → clean destroy" and *(2)*
+  "the GitHub-equivalent CI is green (whole-module test **without** the live-test
+  trigger + lint + fmt)".
+- **`ci_gate_unset_env: string[]`** — names stripped from the env when the CI
+  delivery gate runs, so it mirrors GitHub CI's clean env even though the serve
+  env set the live-test trigger (e.g. `TF_ACC`) for the per-WI live gates. Without
+  this, the same trigger that makes live gates run also makes `make test` run the
+  whole live suite — env-dependent failures GitHub never sees.
+
+This is the **two-tier gate model**, named explicitly: the *inner* tier is the
+fast, offline, creds-free `quality_gate_cmd` the dev-loop runs every iteration
+(C1); the *merge* tier is the full `ci_gate` (live-test triggers stripped) **plus**
+the mandatory live-acceptance WI. The inner tier keeps iteration fast; the merge
+tier proves the change is both correct against the real system and safe to push.
+
 ### Demo — the project can show its change (the demo family)
 *(landed 2026-05-31)* The review phase must be able to show the operator the one
 behavioural delta the initiative produced, so the project must expose **how a
@@ -202,11 +231,19 @@ already-tracked files. The DEMO clause validation is delegated to
 After each run, the CLI writes a `preflight.verdict` JSONL event.
 
 The deepened facets of C1 (gate discrimination) and C2 (build-artifact
-hermeticity), the deeper demo facet (does the before/after actually capture the
-delta), and C7 entirely, are **not yet machine-checked** — they're in the
-hardening backlog ([docs/known-gaps.md](./known-gaps.md), 2026-05-31). Until
-then, onboarding must verify them by hand (run the gate on a clean tree and
-confirm it *fails*; build and confirm `git status` is clean).
+hermeticity) and the deeper demo facet (does the before/after actually capture
+the delta) are **not yet machine-checked** — they're in the hardening backlog
+([docs/known-gaps.md](./known-gaps.md), 2026-05-31). Until then, onboarding must
+verify them by hand (run the gate on a clean tree and confirm it *fails*; build
+and confirm `git status` is clean).
+
+C7's mandatory per-WI testing contract IS partially machine-checked, but **not at
+preflight** — the checks live where the relevant data exists: `acceptance_gate`
+is enforced in the **PM phase** (`orchestrator/phases/project-manager.ts` — the
+cycle hard-fails if no live-acc WI is emitted), `standing_work_item_acs` is
+injected there too, and `ci_gate_unset_env` is applied by the **final CI gate**
+(`orchestrator/cycle.ts enforceFinalCiGate`). The remaining C7 facets (creds
+out-of-band, isolation/self-cleanup) stay hand-verified during onboarding.
 
 ## The point: roadmap-scale, not single-WI
 

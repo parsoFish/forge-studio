@@ -73,6 +73,25 @@ export type LoggingConfig = {
   heartbeat_seconds?: number;
 };
 
+/**
+ * Live-acceptance enforcement (contract C7, 2026-06-06). For an
+ * external-resource project (whose behaviour can only be proven against a
+ * live system), the merge decision must be backed by a real acceptance test.
+ * Rather than run a slow live suite at cycle end, forge requires the PM
+ * decomposition to INCLUDE a live-acceptance WI: ≥1 work item whose
+ * `quality_gate_cmd` targets the live acceptance suite. `match` is the
+ * substring (any argv token contains it) that identifies such a gate; when
+ * `required` is true the PM phase hard-fails the cycle if no emitted WI
+ * carries a matching gate. The live test then runs as that WI's own per-WI
+ * gate during the dev-loop (with TF_ACC + creds from the serve env).
+ */
+export type AcceptanceGateConfig = {
+  /** Substring identifying a live-acceptance gate in a WI quality_gate_cmd. */
+  match: string;
+  /** When true, every initiative must include ≥1 WI whose gate contains `match`. */
+  required: boolean;
+};
+
 export type ProjectConfig = {
   demo: DemoConfig;
   quality_gate_cmd: string[];
@@ -93,6 +112,28 @@ export type ProjectConfig = {
    * ⇒ the CI gate runs without an auto-format pass.
    */
   ci_fix_cmd?: string[];
+  /**
+   * Env-var names to STRIP from the environment when running `ci_gate` /
+   * `ci_fix_cmd` (2026-06-06, contract A3). The final CI delivery gate must
+   * mirror the project's GitHub CI, which runs in a clean env. A live-test
+   * trigger left in the cycle env (e.g. Terraform's `TF_ACC=1`, set so per-WI
+   * live-acceptance gates run) would otherwise leak into `make test` and run
+   * the whole live suite — env-dependent failures GitHub never sees. Listing
+   * the trigger here makes the CI gate hermetic regardless of cycle env.
+   * Optional — absent ⇒ the gate inherits `process.env` unchanged.
+   */
+  ci_gate_unset_env?: string[];
+  /**
+   * Verbatim acceptance-criterion statements forge appends to EVERY work item
+   * the PM emits, as a "## Standing acceptance criteria (project contract)"
+   * body section (2026-06-06, contract A2). Encodes project-wide test
+   * invariants (e.g. "proven by a live TF_ACC test", "must not redden CI") as
+   * static standing ACs, removing the per-WI PM judgment that kept varying.
+   * Optional — absent ⇒ no section appended.
+   */
+  standing_work_item_acs?: string[];
+  /** Live-acceptance-WI requirement (contract C7). Optional. */
+  acceptance_gate?: AcceptanceGateConfig;
   metrics?: MetricsConfig;
   sweep?: SweepConfig;
   logging?: LoggingConfig;
@@ -178,6 +219,12 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   // runs them DIRECTLY rather than through the per-WI gate runner.
   const ci_gate = optionalArgv(obj.ci_gate, 'ci_gate');
   const ci_fix_cmd = optionalArgv(obj.ci_fix_cmd, 'ci_fix_cmd');
+  const ci_gate_unset_env = optionalArgv(obj.ci_gate_unset_env, 'ci_gate_unset_env');
+  const standing_work_item_acs = optionalArgv(
+    obj.standing_work_item_acs,
+    'standing_work_item_acs',
+  );
+  const acceptance_gate = parseAcceptanceGate(obj.acceptance_gate);
 
   const metrics = parseMetrics(obj.metrics);
   const sweep = parseSweep(obj.sweep);
@@ -188,10 +235,34 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     quality_gate_cmd,
     ...(ci_gate ? { ci_gate } : {}),
     ...(ci_fix_cmd ? { ci_fix_cmd } : {}),
+    ...(ci_gate_unset_env ? { ci_gate_unset_env } : {}),
+    ...(standing_work_item_acs ? { standing_work_item_acs } : {}),
+    ...(acceptance_gate ? { acceptance_gate } : {}),
     ...(metrics ? { metrics } : {}),
     ...(sweep ? { sweep } : {}),
     ...(logging ? { logging } : {}),
   };
+}
+
+/**
+ * Parse + validate the optional `acceptance_gate` block. Throws on a present
+ * but malformed block (fail-closed, matching the other parsers). Returns
+ * `undefined` when absent.
+ */
+function parseAcceptanceGate(raw: unknown): AcceptanceGateConfig | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object') {
+    throw new Error('project-config: acceptance_gate must be an object when present');
+  }
+  const a = raw as Record<string, unknown>;
+  const match = optionalString(a.match, 'acceptance_gate.match');
+  if (!match) {
+    throw new Error('project-config: acceptance_gate.match is required (non-empty string) when the block is present');
+  }
+  if (typeof a.required !== 'boolean') {
+    throw new Error('project-config: acceptance_gate.required must be a boolean when the block is present');
+  }
+  return { match, required: a.required };
 }
 
 function parseLogging(raw: unknown): LoggingConfig | undefined {

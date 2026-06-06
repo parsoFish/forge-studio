@@ -231,3 +231,61 @@ test('validateProjectConfig: ci_gate must be an argv string[] when present', () 
     /ci_gate/,
   );
 });
+
+// ----- A2/A3 testing-contract seams (2026-06-06) -----
+
+test('validateProjectConfig: ci_gate_unset_env + standing_work_item_acs + acceptance_gate round-trip', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    ci_gate_unset_env: ['TF_ACC'],
+    standing_work_item_acs: ['live acc test', 'CI must be green'],
+    acceptance_gate: { match: 'acceptancetests', required: true },
+  });
+  assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC']);
+  assert.deepEqual(cfg.standing_work_item_acs, ['live acc test', 'CI must be green']);
+  assert.deepEqual(cfg.acceptance_gate, { match: 'acceptancetests', required: true });
+});
+
+test('validateProjectConfig: the three A2/A3 seams are optional (absent ⇒ undefined)', () => {
+  const cfg = validateProjectConfig({ demo: { shape: 'none' }, quality_gate_cmd: ['true'] });
+  assert.equal(cfg.ci_gate_unset_env, undefined);
+  assert.equal(cfg.standing_work_item_acs, undefined);
+  assert.equal(cfg.acceptance_gate, undefined);
+});
+
+test('validateProjectConfig: ci_gate_unset_env must be an argv string[] when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        ci_gate_unset_env: 'TF_ACC',
+      }),
+    /ci_gate_unset_env/,
+  );
+});
+
+test('validateProjectConfig: acceptance_gate requires a non-empty match', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        acceptance_gate: { required: true },
+      }),
+    /acceptance_gate\.match/,
+  );
+});
+
+test('validateProjectConfig: acceptance_gate.required must be a boolean', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        acceptance_gate: { match: 'acceptancetests', required: 'yes' },
+      }),
+    /acceptance_gate\.required/,
+  );
+});

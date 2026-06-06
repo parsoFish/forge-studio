@@ -41,7 +41,43 @@
     "quality_gate_cmd": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Argv-style command the developer-loop + unifier run between iterations. Must exit 0 on a green tree. Must be fast and deterministic (see contract clause C1)."
+      "description": "Argv-style command the developer-loop + unifier run between iterations. Must exit 0 on a green tree. Must be fast and deterministic (see contract clause C1). This is the INNER tier of the two-tier gate model — fast offline unit while iterating."
+    },
+    "ci_gate": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The MERGE tier of the two-tier gate model — the project's FULL CI verification, run directly (operator-trusted, so a `[\"bash\",\"-c\",\"…&&…\"]` chain is allowed) as the final delivery gate before a PR opens. A red ci_gate routes to triage instead of shipping a CI-red PR. Optional."
+    },
+    "ci_fix_cmd": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The project's auto-formatters (e.g. make fmt + make terrafmt), applied best-effort before ci_gate so the PR is fmt-clean. Optional."
+    },
+    "ci_gate_unset_env": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Env-var names STRIPPED from the environment when running ci_gate / ci_fix_cmd, so the CI delivery gate mirrors GitHub CI (a clean env) regardless of the cycle env. Example: [\"TF_ACC\"] — the serve env sets TF_ACC=1 so per-WI live-acceptance gates run, but the CI gate must run `make test` WITHOUT it (else the whole live suite runs, failing on env GitHub never has). Optional — absent ⇒ env inherited unchanged. See contract A3."
+    },
+    "standing_work_item_acs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Verbatim acceptance-criterion statements forge appends to EVERY work item the PM emits, as a '## Standing acceptance criteria (project contract)' body section. Encodes project-wide testing invariants (e.g. 'proven by a live acceptance test', 'must not redden CI') as static standing ACs, removing per-WI PM judgment. Optional. See contract A2."
+    },
+    "acceptance_gate": {
+      "type": "object",
+      "description": "Live-acceptance-WI requirement (contract C7). For external-resource projects whose behaviour can only be proven against a live system. Optional — absent ⇒ no check.",
+      "required": ["match", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "match": {
+          "type": "string",
+          "description": "Substring that identifies a live-acceptance gate in a WI quality_gate_cmd (any argv token contains it), e.g. 'acceptancetests'."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "When true, the PM phase HARD-FAILS the cycle unless ≥1 emitted WI has a quality_gate_cmd token containing `match` — guaranteeing every initiative is proven by a live acceptance test."
+        }
+      }
     },
     "logging": {
       "type": "object",

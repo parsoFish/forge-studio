@@ -23,9 +23,11 @@ import {
 import {
   detectHiddenCoupling,
   readWorkItemsFromDir,
+  serializeWorkItem,
   validateWorkItemSet,
   type WorkItem,
 } from '../work-item.ts';
+import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
 import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
@@ -254,7 +256,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   }
 
   const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
-  const { items, parseErrors } = readWorkItemsFromDir(workItemsDir);
+  const read = readWorkItemsFromDir(workItemsDir);
+  let items = read.items;
+  const parseErrors = read.parseErrors;
 
   for (const item of items) {
     logger.emit({
@@ -270,6 +274,25 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
+  // Load the project's forge config (best-effort) for the A2 testing-contract
+  // checks. A malformed config is surfaced + fail-closed elsewhere (the
+  // dev-loop loads it); here we skip the EXTRA checks rather than break the PM
+  // pass on a config problem unrelated to decomposition quality.
+  let projectConfig: ProjectConfig | null = null;
+  try {
+    projectConfig = loadProjectConfig(input.worktreePath);
+  } catch {
+    projectConfig = null;
+  }
+
+  // A2b (2026-06-06): inject the project's standing acceptance criteria into
+  // every WI body as a fixed contract section. Static + automatic — removes
+  // the per-WI PM judgment that kept varying. Body-only (frontmatter stays
+  // byte-stable), idempotent (skips a WI already carrying the section).
+  if (projectConfig?.standing_work_item_acs && projectConfig.standing_work_item_acs.length > 0) {
+    items = appendStandingAcs(workItemsDir, items, projectConfig.standing_work_item_acs);
+  }
+
   const { perItem, setErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,
   });
@@ -278,6 +301,25 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // F-05: hidden-coupling check. Two WIs whose `files_in_scope` overlap
   // without a `depends_on` edge between them will conflict at merge time.
   const couplingViolations = items.length > 0 ? detectHiddenCoupling(items) : [];
+
+  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7). When the
+  // project declares `acceptance_gate.required`, the decomposition MUST include
+  // ≥1 WI whose `quality_gate_cmd` targets the live acceptance suite — so every
+  // initiative is proven by a real TF_ACC test, not an offline proxy. INIT-2
+  // shipped with NO live-acc WI; this makes that a hard PM failure.
+  let accGateViolation: string | null = null;
+  const accGate = projectConfig?.acceptance_gate;
+  if (accGate?.required && items.length > 0) {
+    const hasLiveAccWi = items.some((it) =>
+      (it.quality_gate_cmd ?? []).some((tok) => tok.includes(accGate.match)),
+    );
+    if (!hasLiveAccWi) {
+      accGateViolation =
+        `no live-acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
+        `"${accGate.match}" (a live TF_ACC acceptance test proving the change against the real ` +
+        `external system). Add an acceptance WI whose gate runs that suite.`;
+    }
+  }
 
   // Operator sanity-check surface: a greppable WI list so a human can eyeball
   // at a glance whether each WI got plausible scope (and spot off-target scope —
@@ -304,7 +346,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     Object.keys(parseErrors).length > 0 ||
     setErrors.length > 0 ||
     itemErrorCount > 0 ||
-    couplingViolations.length > 0;
+    couplingViolations.length > 0 ||
+    accGateViolation !== null;
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -336,6 +379,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       set_errors: setErrors,
       per_item_error_count: itemErrorCount,
       hidden_coupling_violations: couplingViolations,
+      ...(accGateViolation ? { acceptance_gate_violation: accGateViolation } : {}),
     },
   });
 
@@ -349,11 +393,47 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     couplingViolations.length > 0
       ? `${couplingViolations.length} hidden-coupling pair(s): ${couplingViolations.map((pair) => `${pair.a}↔${pair.b} share ${pair.sharedFiles.join(',')}`).join('; ')}`
       : null,
+    accGateViolation,
   ]
     .filter((s): s is string => s !== null)
     .join('; ');
 
   return { kind: 'failure', summary };
+}
+
+/** Heading for the project-contract standing-AC section injected per WI. */
+const STANDING_ACS_HEADER = '## Standing acceptance criteria (project contract)';
+
+/**
+ * A2b (2026-06-06) — append the project's `standing_work_item_acs` to every WI
+ * body as a fixed contract section, then re-serialise the file. Body-only
+ * (frontmatter byte-stable via `serializeWorkItem`), idempotent (a WI already
+ * carrying the header is left untouched — safe on resume). Best-effort per
+ * file: a write error leaves that WI unchanged rather than failing the PM pass.
+ * Returns the items with their in-memory bodies updated to match disk.
+ */
+function appendStandingAcs(
+  workItemsDir: string,
+  items: ReadonlyArray<WorkItem>,
+  standingAcs: ReadonlyArray<string>,
+): WorkItem[] {
+  const section = [
+    STANDING_ACS_HEADER,
+    '',
+    'These project-wide testing invariants apply to **every** work item in this initiative, in addition to the work-specific acceptance criteria above. The dev-loop must satisfy them and the reviewer must confirm them:',
+    '',
+    ...standingAcs.map((ac) => `- ${ac}`),
+  ].join('\n');
+  return items.map((item) => {
+    if (item.body.includes(STANDING_ACS_HEADER)) return item; // idempotent
+    const updated: WorkItem = { ...item, body: `${item.body.replace(/\s+$/, '')}\n\n${section}\n` };
+    try {
+      writeFileSync(join(workItemsDir, `${item.work_item_id}.md`), serializeWorkItem(updated));
+      return updated;
+    } catch {
+      return item; // best-effort — never fail the PM pass on a write error
+    }
+  });
 }
 
 /**
@@ -373,6 +453,29 @@ function writeDecompositionDoc(
     `${items.length} work item(s) emitted.`,
     '',
   ];
+
+  // A1 advisory (2026-06-06): a top-level-scope summary so the operator can
+  // eyeball off-target decomposition AT A GLANCE. If the PM mis-grounds (e.g.
+  // hallucinates off the title and touches `releases/`, `docs/`, or `brain/`
+  // instead of the project's source tree), the stray top-level dir shows up
+  // here immediately. Advisory only — not a hard gate (a legit WI may touch
+  // docs/examples); the teeth are the restate-the-target step + the live-acc-WI
+  // requirement.
+  const topLevel = new Map<string, number>();
+  for (const item of items) {
+    for (const f of item.files_in_scope) {
+      const seg = f.split('/')[0] || f;
+      topLevel.set(seg, (topLevel.get(seg) ?? 0) + 1);
+    }
+  }
+  if (topLevel.size > 0) {
+    lines.push('## Top-level scope (eyeball for off-target dirs)');
+    for (const [seg, count] of [...topLevel.entries()].sort((a, b) => b[1] - a[1])) {
+      lines.push(`- \`${seg}/\` — ${count} file ref(s)`);
+    }
+    lines.push('');
+  }
+
   for (const item of items) {
     lines.push(`## ${item.work_item_id}`);
     for (const f of item.files_in_scope) lines.push(`- ${f}`);

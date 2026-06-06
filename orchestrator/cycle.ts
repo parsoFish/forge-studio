@@ -733,6 +733,12 @@ export type CiCommandRunner = (
   cmd: string[],
   worktreePath: string,
   kind: 'fix' | 'gate',
+  /**
+   * Env-var names to strip from the child env so the CI gate mirrors GitHub
+   * CI regardless of the cycle env (e.g. `TF_ACC`). Empty/undefined ⇒ inherit
+   * `process.env` unchanged.
+   */
+  unsetEnv?: string[],
 ) => CiCommandResult;
 
 const CI_FIX_TIMEOUT_MS = 5 * 60_000;
@@ -743,17 +749,33 @@ const CI_GATE_TIMEOUT_MS = 20 * 60_000;
  * (`["bash","-c","…&&…"]` is run as `bash -c …`) — deliberately NOT routed
  * through the per-WI gate runner (runShellGate / gateIsShellPipeline), whose
  * pipe-ban would reject the operator's `&&` CI chain. The operator authored
- * `ci_gate`, so it is trusted.
+ * `ci_gate`, so it is trusted. Exported for a focused real-spawn test of the
+ * A3 env-stripping (the rest of the gate logic is tested via `decideFinalCiGate`
+ * with a stubbed runner).
  */
-function execCommandVector(cmd: string[], worktreePath: string, kind: 'fix' | 'gate'): CiCommandResult {
+export function execCommandVector(
+  cmd: string[],
+  worktreePath: string,
+  kind: 'fix' | 'gate',
+  unsetEnv?: string[],
+): CiCommandResult {
   const [head, ...rest] = cmd;
   const timeout = kind === 'fix' ? CI_FIX_TIMEOUT_MS : CI_GATE_TIMEOUT_MS;
+  // A3 (2026-06-06): strip the project's declared live-test triggers (e.g.
+  // `TF_ACC`) so the CI delivery gate mirrors GitHub CI even when the serve
+  // env set them for the per-WI live-acceptance gates. No list ⇒ inherit env.
+  let env: NodeJS.ProcessEnv | undefined;
+  if (unsetEnv && unsetEnv.length > 0) {
+    env = { ...process.env };
+    for (const name of unsetEnv) delete env[name];
+  }
   try {
     const out = execFileSync(head, rest, {
       cwd: worktreePath,
       stdio: 'pipe',
       encoding: 'utf8',
       timeout,
+      ...(env ? { env } : {}),
     });
     return { ok: true, output: out.toString() };
   } catch (err) {
@@ -777,9 +799,16 @@ function execCommandVector(cmd: string[], worktreePath: string, kind: 'fix' | 'g
  * it (it cannot know whether the fixer changed files).
  */
 export function decideFinalCiGate(
-  args: { ciGate: string[] | null; ciFixCmd: string[] | null; worktreePath: string; run: CiCommandRunner },
+  args: {
+    ciGate: string[] | null;
+    ciFixCmd: string[] | null;
+    worktreePath: string;
+    run: CiCommandRunner;
+    /** Env-var names to strip from both fixer + gate runs (A3, e.g. `TF_ACC`). */
+    unsetEnv?: string[];
+  },
 ): { ranFixer: boolean; gateOk: boolean; gateOutput: string } | null {
-  const { ciGate, ciFixCmd, worktreePath, run } = args;
+  const { ciGate, ciFixCmd, worktreePath, run, unsetEnv } = args;
   if (!ciGate || ciGate.length === 0) return null;
 
   let ranFixer = false;
@@ -787,14 +816,14 @@ export function decideFinalCiGate(
     // Best-effort: a fixer that errors must never throw — the gate below is the
     // real verdict, and an un-formatted tree just fails that gate cleanly.
     try {
-      run(ciFixCmd, worktreePath, 'fix');
+      run(ciFixCmd, worktreePath, 'fix', unsetEnv);
       ranFixer = true;
     } catch {
       /* swallow — formatter failure is non-fatal */
     }
   }
 
-  const gate = run(ciGate, worktreePath, 'gate');
+  const gate = run(ciGate, worktreePath, 'gate', unsetEnv);
   return { ranFixer, gateOk: gate.ok, gateOutput: gate.output };
 }
 
@@ -813,10 +842,12 @@ function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
 
   let ciGate: string[] | null = null;
   let ciFixCmd: string[] | null = null;
+  let ciGateUnsetEnv: string[] = [];
   try {
     const cfg = loadProjectConfig(input.projectRepoPath);
     ciGate = cfg?.ci_gate && cfg.ci_gate.length > 0 ? cfg.ci_gate : null;
     ciFixCmd = cfg?.ci_fix_cmd && cfg.ci_fix_cmd.length > 0 ? cfg.ci_fix_cmd : null;
+    ciGateUnsetEnv = cfg?.ci_gate_unset_env && cfg.ci_gate_unset_env.length > 0 ? cfg.ci_gate_unset_env : [];
   } catch (err) {
     // A malformed project.json is fail-closed elsewhere (dev-loop loads it);
     // here we log-and-skip rather than mask a real config error at PR-open.
@@ -840,6 +871,7 @@ function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
     ciFixCmd,
     worktreePath: input.worktreePath,
     run: execCommandVector,
+    unsetEnv: ciGateUnsetEnv,
   });
   // decision is non-null because ciGate is non-empty.
   if (!decision) return;
@@ -862,6 +894,7 @@ function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
       ok: decision.gateOk,
       ran_fixer: decision.ranFixer,
       ci_gate: ciGate,
+      ...(ciGateUnsetEnv.length > 0 ? { ci_gate_unset_env: ciGateUnsetEnv } : {}),
       output_tail: decision.gateOutput.slice(-1200),
     },
   });
