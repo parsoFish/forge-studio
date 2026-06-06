@@ -49,6 +49,79 @@ test('buildUnifierSystemPrompt: includes SKILL.md text + Ralph discipline notes'
   assert.ok(sys.length > 1000, 'system prompt should be substantive');
 });
 
+test('buildUnifierSystemPrompt: carries the 4 composed-gate awareness rule', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(sys.includes('initiative_gate'), 'must reference initiative_gate');
+  assert.ok(sys.includes('demo_runs_clean'), 'must reference demo_runs_clean');
+  assert.ok(sys.includes('pr_self_contained'), 'must reference pr_self_contained');
+  assert.ok(sys.includes('branches_in_sync'), 'must reference branches_in_sync');
+});
+
+test('buildUnifierSystemPrompt: carries the iter-1-skeleton rule (observed 5+ cycle failure mode)', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(
+    sys.includes('skeleton') || sys.includes('SKELETON'),
+    'must reference the iter-1 skeleton rule',
+  );
+  assert.ok(
+    sys.includes('DO NOT spend iteration 1 reading') ||
+      sys.includes('DO NOT spend iteration') ||
+      sys.includes('skeleton goes in FIRST'),
+    'must carry the iter-1 write-first mandate',
+  );
+});
+
+test('buildUnifierSystemPrompt: carries the demo contract (no ## Demo section rule)', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(
+    sys.includes('## Demo') || sys.includes('Demo section'),
+    'must reference the no-## Demo-section rule',
+  );
+});
+
+test('buildUnifierSystemPrompt: carries the no-gh-pr-create rule', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(
+    sys.includes('gh pr create') || sys.includes('gh pr merge'),
+    'must carry the no-gh-pr-create/merge rule',
+  );
+});
+
+test('buildUnifierSystemPrompt: carries the no-hallucinated-test-passes rule', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(
+    sys.includes('hallucinated') || sys.toLowerCase().includes('prove it'),
+    'must carry the no-hallucinated-test-passes rule',
+  );
+});
+
+test('buildUnifierSystemPrompt: carries the integrate-not-develop role (unifier role)', () => {
+  const sys = buildUnifierSystemPrompt();
+  assert.ok(
+    sys.includes('integrate') || sys.includes('NOT to implement WIs'),
+    'must carry the unifier integrate-not-develop role',
+  );
+});
+
+test('renderUnifierUserPrompt: is dynamic-only (no static Ralph discipline repetition)', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: ['.forge/work-items/WI-1.md'],
+    iteration: 1,
+    iterationBudget: 5,
+    demoShape: 'harness',
+    qualityGateCmd: ['npm', 'test'],
+    feedbackRef: undefined,
+  });
+  // The static Ralph discipline header must NOT be duplicated in the user prompt
+  // (it now lives only in SKILL.md)
+  assert.ok(
+    !prompt.includes('Ralph loop discipline'),
+    'user prompt must not re-state Ralph loop discipline (it lives in SKILL.md)',
+  );
+});
+
 test('renderUnifierUserPrompt: initial-prep mode references manifest + WIs', () => {
   const prompt = renderUnifierUserPrompt({
     initiativeId: 'INIT-2026-05-23-test',

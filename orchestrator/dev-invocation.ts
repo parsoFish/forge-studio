@@ -27,6 +27,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 import { parseWorkItem, type WorkItem } from './work-item.ts';
+import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
@@ -44,7 +45,24 @@ export const DEV_ALLOWED_TOOLS: DevAllowedTool[] = [
   'Glob',
 ];
 export const DEV_DISALLOWED_TOOLS: DevDisallowedTool[] = ['NotebookEdit', 'WebFetch', 'WebSearch'];
-export const DEV_MODEL = 'claude-sonnet-4-6';
+
+/**
+ * ADR 024 seam: the developer-loop (Ralph) as a declarative phase agent. It
+ * composes the developer-ralph skill (the single source of its intent). The
+ * orchestrator spawns it at the `sonnet` tier (implementation work — not
+ * opus-level reasoning). Other phases adopt the same `PhaseAgentSpec` shape.
+ * The orchestrator resolves the model from the tier.
+ */
+export const devAgentSpec: PhaseAgentSpec = {
+  phase: 'developer-loop',
+  skill: 'skills/developer-ralph/SKILL.md',
+  tier: 'sonnet',
+  allowedTools: DEV_ALLOWED_TOOLS,
+  disallowedTools: DEV_DISALLOWED_TOOLS,
+};
+
+/** Concrete model, derived from the spec's tier (single source: the spec). */
+export const DEV_MODEL = modelForSpec(devAgentSpec);
 
 let cachedSkillText: string | null = null;
 function loadSkillText(): string {
@@ -54,8 +72,9 @@ function loadSkillText(): string {
 }
 
 /**
- * Build the developer-loop system prompt: the SKILL.md contract + Ralph-loop
- * discipline notes that don't change across iterations.
+ * Build the developer-loop system prompt: the SKILL.md contract (which now
+ * includes the Ralph-loop discipline block — moved there as part of the ADR 024
+ * prose migration so the skill is the single source of intent).
  *
  * F-34 strip-back: previously this loaded the entire brain navigation index
  * (~17 KB) and mandated brain-first reads on every iteration. In practice the
@@ -69,35 +88,7 @@ function loadSkillText(): string {
  *   no longer used since the brain navigation index is no longer loaded.
  */
 export function buildDevSystemPrompt(_brainCwd: string): string {
-  return [
-    '# developer-ralph skill contract',
-    '',
-    loadSkillText(),
-    '',
-    '---',
-    '',
-    '# Ralph loop discipline',
-    '',
-    'You are inside a Ralph loop. Each call to you is **one iteration** of that loop. The loop carries state across iterations via three worktree files you must read at the start of every iteration:',
-    '',
-    '- **`PROMPT.md`** — the per-iteration brief (work item spec, acceptance criteria, files in scope, iteration counter).',
-    '- **`AGENT.md`** — institutional memory across iterations. Read first, update last. Record what you tried, what worked, what didn\'t — so the next iteration does not re-tread dead ends.',
-    '- **`fix_plan.md`** — checklist of acceptance criteria + sub-tasks. Tick items as you complete them; add items as you discover sub-problems.',
-    '',
-    'After your work this iteration, **commit** with a conventional-commits message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Atomic commits — one concern per commit. You may use `Bash` for `git`, `npm test`, `pytest`, `bats`, or any test runner.',
-    '',
-    '**The orchestrator decides when to stop, not you.** It runs the project\'s quality gates between your iterations. Your job is to make incremental progress every iteration; the orchestrator exits the loop when gates pass or when the iteration budget is exhausted.',
-    '',
-    'Hard rules:',
-    '- **You are CONTINUING, not restarting.** Every prior iteration\'s work is committed on this branch. Your FIRST move each iteration: `git log --oneline main..HEAD` + `git diff --stat main..HEAD` to see what is already built, and read `AGENT.md` for what has already been tried. Build on it — never re-research a question `AGENT.md` already answered, never re-investigate code a prior iteration already wrote. If you catch yourself reading SDK/docs/source to "understand" rather than to make a concrete edit, you are burning the iteration: stop reading and write.',
-    '- **Write code EARLY.** Make a concrete, committed change every iteration. If an acceptance criterion needs a new file, write a compiling skeleton of it in your first one or two tool calls, then flesh it out across iterations — do NOT spend a whole iteration researching. Progress is measured in committed diffs, not in understanding.',
-    '- **Anchor on the WI\'s acceptance criteria.** Your job is to make each AC\'s `then` clause observable. (The project\'s own `brain/` — profile + themes, Brain 3 — is available as supplemental context per ADR 010 if the WI is genuinely thin on a project convention; the forge brain is off-limits.)',
-    '- **`files_in_scope` is advisory orientation, NOT a fence.** It is the planner\'s best guess at which files this WI touches — a starting point. You are FREE to edit any file needed to make the gate pass, including **sweeping or mechanical changes across many files** (e.g. running a formatter over the whole tree, fixing a lint rule everywhere it fires) when that is what the acceptance criterion requires. Don\'t gratuitously rewrite unrelated features — but never let the scope list stop you from applying the actual fix.',
-    '- **Read what the gate is telling you, then use the project\'s own fixers.** When the gate runs the project\'s CI / format / lint checks and reports a failure, it names exactly what is wrong — fix THAT, the cheap way. If a formatter or linter has an auto-fix target (`make fmt`, `make terrafmt`, `gofmt -w`, `prettier --write`, `ruff --fix`, `cargo fmt`), RUN IT over the whole tree in one command instead of hand-editing files one by one. A whole-tree formatter run is one Bash call; hand-fixing 100 files is a wasted budget. Re-run the gate to confirm.',
-    '- **No shortcuts.** Don\'t skip tests, don\'t `--no-verify`, don\'t disable lint rules to pass.',
-    '- **No hallucinated test passes.** If you claim tests pass, prove it by running them via `Bash`. The orchestrator re-runs them anyway and will exit `failed` if your claim was wrong.',
-    '- **`creates:` / `verification_artifact:` paths are MANDATORY outputs.** If the work item lists either, the orchestrator runs `git diff --name-only main...HEAD` and rejects the iteration if NONE of those paths are in the diff. Action: before you exit each iteration, ensure at least one of those paths exists in the worktree (a compiling stub is enough to satisfy the path check; substantive content comes second). If the gate emits "[forge gate-tightening] REJECTED: …", the rejection message lists the exact paths — create one of them in the next iteration.',
-  ].join('\n');
+  return loadSkillText();
 }
 
 export type DevUserPromptInput = {

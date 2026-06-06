@@ -119,6 +119,24 @@ phase is migrated.
 > session. The other phases (PM, dev-loop, reflector) adopt `PhaseAgentSpec`
 > next, one at a time behind the harness gate.
 
+> **Landed 2026-06-07 (developer-loop migration + unifier prose move complete).**
+> `devAgentSpec: PhaseAgentSpec` added to `orchestrator/dev-invocation.ts`
+> (composes `skills/developer-ralph/SKILL.md` at the `sonnet` tier); `DEV_MODEL`
+> now derives from the spec's tier via `modelForSpec`. The Ralph-loop discipline
+> block that was inline in `buildDevSystemPrompt()` is relocated into
+> `skills/developer-ralph/SKILL.md` — the skill is now the single source of
+> dev-loop intent. Separately, the unifier prose move is complete: the inline
+> "Ralph loop discipline" block in `buildUnifierSystemPrompt()` and the
+> instructional prologue in `renderUnifierUserPrompt()` (iter-1-skeleton rule,
+> role description, hard rules) are relocated into
+> `skills/developer-unifier/SKILL.md`; both builders now emit only SKILL.md
+> text or dynamic run-context respectively. All four agent phases that do LLM
+> work (PM, dev-loop, unifier, reflector — PM + reflector migrations are on
+> sibling branches) now source their intent from SKILL.md via `PhaseAgentSpec`.
+> Behaviour-preserving (same models, same tools, same rules — relocation only).
+> Unit-tested in `orchestrator/dev-invocation.test.ts` (new) and extended
+> `orchestrator/unifier-invocation.test.ts`.
+
 ## Consequences
 
 - **Intent has one home; capabilities are shared.** A phase's intent is its agent
