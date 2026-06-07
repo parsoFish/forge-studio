@@ -62,6 +62,43 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
   }
 });
 
+test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 026 lineage)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    const id = 'INIT-2026-05-30-lineage';
+    // Manifest carries an explicit cycle_id (the one runCycle persisted at first claim).
+    const body = [
+      '---',
+      `initiative_id: ${id}`,
+      'project: demo',
+      `project_repo_path: ${wt}`,
+      "created_at: '2026-05-30T00:00:00.000Z'",
+      'iteration_budget: 2',
+      'cost_budget_usd: 1',
+      'phase: pending',
+      'origin: architect',
+      `worktree_path: ${wt}`,
+      'cycle_id: 2026-05-30T01-02-03_' + id,
+      '---',
+      `# ${id}`,
+      '',
+    ].join('\n');
+    writeFileSync(join(queueRoot, 'ready-for-review', `${id}.md`), body);
+    let threaded: string | undefined;
+    await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      finalizeOne: async (input) => { threaded = input.cycleId; return true; },
+    });
+    assert.equal(threaded, '2026-05-30T01-02-03_' + id);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', async () => {
   const { root, queueRoot } = setup();
   try {

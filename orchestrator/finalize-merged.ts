@@ -116,7 +116,11 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       const inFlightPath = join(paths.inFlight, file);
       renameSync(manifestPath, inFlightPath);
 
-      const cycleId = latestCycleId(logsRoot, initiativeId) ?? initiativeId;
+      // ADR 026: prefer the cycle_id persisted on the manifest (the authoritative
+      // anchor written at first claim) so finalize appends to the SAME `_logs`
+      // dir the cycle used; fall back to the latest matching dir for legacy
+      // manifests that never persisted one.
+      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
       const logger = createLogger(cycleId, logsRoot);
       const input: CycleInput = { initiativeId, manifestPath: inFlightPath, projectRepoPath, worktreePath, cycleId };
 

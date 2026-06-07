@@ -21,7 +21,7 @@ import type { EventLogEntry } from './logging.ts';
 import { createCostTickConsumer } from '../cli/cost-tick.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { readManifestOrigin } from './manifest.ts';
+import { readManifestOrigin, readManifestCycleId, persistManifestCycleId } from './manifest.ts';
 import { loadProjectConfig } from './project-config.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
@@ -65,7 +65,17 @@ import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebaseP
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();
-  const cycleId = input.cycleId ?? newCycleId(input.initiativeId);
+  // ADR 026: keep one initiative on ONE cycleId for its whole life. Prefer an
+  // explicitly threaded id (the review→unifier drain + the merge finalizer pass
+  // it), then a previously-persisted id (a crash-recovery resume reuses the
+  // original cycle's `_logs` dir instead of minting a sibling — the root fix for
+  // the cost/status-lineage-blanks defect), else mint a fresh one and anchor it
+  // on the manifest now so every later re-entry threads the same id.
+  const persistedCycleId = !input.cycleId ? readManifestCycleId(input.manifestPath) : null;
+  const cycleId = input.cycleId ?? persistedCycleId ?? newCycleId(input.initiativeId);
+  if (!input.dryRun && !input.cycleId && !persistedCycleId) {
+    persistManifestCycleId(input.manifestPath, cycleId);
+  }
   // Change A (live mid-phase cost): compose the dormant cost-tick consumer into
   // the logger's tee using the mutable-ref pattern from cli/cost-tick.ts docstring.
   // The ref is filled after the logger is created so we avoid the chicken-and-egg

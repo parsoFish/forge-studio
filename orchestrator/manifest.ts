@@ -113,6 +113,17 @@ export type InitiativeManifest = {
   claimed_at?: string;
   claimed_by?: string;
   worktree_path?: string;
+  /**
+   * ADR 026: the durable cycle id for this initiative, persisted on the manifest
+   * at FIRST claim (`runCycle` mints it once). Every later re-entry — a crash-
+   * recovery resume, the review→unifier drain, or the merge finalizer — threads
+   * this SAME id so the initiative stays on ONE `_logs/<cycleId>` dir. Reusing
+   * it is what dissolves the three release-folder defects (cost/status lineage
+   * blanks, sibling cycle on send-back, WI hexes disappearing): one cycleId ⇒
+   * one event log ⇒ one cost rollup ⇒ one set of hexes. Absent on legacy
+   * manifests (the finalizer falls back to the latest matching `_logs` dir).
+   */
+  cycle_id?: string;
 };
 
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -149,6 +160,7 @@ export function parseManifest(content: string): InitiativeManifest {
   if (typeof data.claimed_at === 'string') manifest.claimed_at = data.claimed_at;
   if (typeof data.claimed_by === 'string') manifest.claimed_by = data.claimed_by;
   if (typeof data.worktree_path === 'string') manifest.worktree_path = data.worktree_path;
+  if (typeof data.cycle_id === 'string' && data.cycle_id.length > 0) manifest.cycle_id = data.cycle_id;
   if (Array.isArray(data.quality_gate_cmd)) {
     const cmd = (data.quality_gate_cmd as unknown[]).filter((s): s is string => typeof s === 'string');
     if (cmd.length > 0) manifest.quality_gate_cmd = cmd;
@@ -186,6 +198,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.claimed_at) data.claimed_at = m.claimed_at;
   if (m.claimed_by) data.claimed_by = m.claimed_by;
   if (m.worktree_path) data.worktree_path = m.worktree_path;
+  if (m.cycle_id) data.cycle_id = m.cycle_id;
   if (m.quality_gate_cmd && m.quality_gate_cmd.length > 0) {
     data.quality_gate_cmd = m.quality_gate_cmd;
   }
@@ -280,6 +293,39 @@ export function readManifestOrigin(manifestPath: string): InitiativeOrigin {
     return INITIATIVE_ORIGINS.includes(m.origin) ? m.origin : DEFAULT_ORIGIN;
   } catch {
     return DEFAULT_ORIGIN;
+  }
+}
+
+/**
+ * ADR 026: best-effort read of the manifest's persisted `cycle_id`. Returns
+ * `null` when the file is missing/unparseable (dry-runs, fixtures) or no id has
+ * been persisted yet (legacy manifest). Never throws — lineage threading must
+ * not break a cycle.
+ */
+export function readManifestCycleId(manifestPath: string): string | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return m.cycle_id && m.cycle_id.length > 0 ? m.cycle_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ADR 026: persist `cycle_id` onto the manifest's frontmatter the first time an
+ * initiative is claimed, so every later re-entry reuses the same `_logs` dir.
+ * Idempotent + best-effort: if the manifest already carries a `cycle_id` (or is
+ * missing/unparseable) this is a no-op and never throws. Round-trips through
+ * parse/serialize (the same path `runRequeue` uses to annotate).
+ */
+export function persistManifestCycleId(manifestPath: string, cycleId: string): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (m.cycle_id && m.cycle_id.length > 0) return; // already anchored — never re-stamp
+    writeFileSync(manifestPath, serializeManifest({ ...m, cycle_id: cycleId }));
+  } catch {
+    /* best-effort — a manifest write failure must not fail the cycle */
   }
 }
 

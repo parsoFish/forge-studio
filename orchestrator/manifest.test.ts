@@ -16,6 +16,8 @@ import {
   validateManifest,
   writeManifest,
   readManifestOrigin,
+  readManifestCycleId,
+  persistManifestCycleId,
   type InitiativeManifest,
 } from './manifest.ts';
 
@@ -242,6 +244,40 @@ test('readManifestOrigin: reads the tag from a file, defaults on missing/unparse
     assert.equal(readManifestOrigin(hd), 'human-directed');
     // Missing file → default (telemetry must never throw).
     assert.equal(readManifestOrigin(join(dir, 'nope.md')), 'architect');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 026: cycle_id round-trips and is omitted when absent', () => {
+  // Absent → omit-on-undefined (frontmatter unchanged for legacy manifests).
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /cycle_id:/);
+  assert.equal(parseManifest(plain).cycle_id, undefined);
+
+  // Present → round-trips.
+  const withId = serializeManifest({ ...fixture(), cycle_id: '2026-06-07T10-00-00_INIT-2026-05-04-x' });
+  assert.match(withId, /cycle_id: 2026-06-07T10-00-00_INIT-2026-05-04-x/);
+  assert.equal(parseManifest(withId).cycle_id, '2026-06-07T10-00-00_INIT-2026-05-04-x');
+});
+
+test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it back', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-cycleid-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    // Legacy manifest → no persisted id.
+    assert.equal(readManifestCycleId(p), null);
+
+    persistManifestCycleId(p, 'CYCLE-A');
+    assert.equal(readManifestCycleId(p), 'CYCLE-A');
+    // Idempotent: a second persist never re-stamps (the anchor is immutable).
+    persistManifestCycleId(p, 'CYCLE-B');
+    assert.equal(readManifestCycleId(p), 'CYCLE-A');
+
+    // Missing file → null + no throw.
+    assert.equal(readManifestCycleId(join(dir, 'nope.md')), null);
+    persistManifestCycleId(join(dir, 'nope.md'), 'X'); // no-op, must not throw
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
