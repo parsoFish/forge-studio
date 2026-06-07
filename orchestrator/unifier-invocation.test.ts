@@ -27,38 +27,38 @@ function newTempDir(): string {
 }
 
 test('UNIFIER_ALLOWED_TOOLS includes Bash and Write (needed for tests + commits + PR draft)', () => {
-  assert.ok(UNIFIER_ALLOWED_TOOLS.includes('Bash'));
-  assert.ok(UNIFIER_ALLOWED_TOOLS.includes('Write'));
-  assert.ok(UNIFIER_ALLOWED_TOOLS.includes('Read'));
+  for (const t of ['Bash', 'Write', 'Read'] as const) {
+    assert.ok(UNIFIER_ALLOWED_TOOLS.includes(t), `missing tool: ${t}`);
+  }
 });
 
 test('UNIFIER_DISALLOWED_TOOLS bans web tools', () => {
-  assert.ok(UNIFIER_DISALLOWED_TOOLS.includes('WebFetch'));
-  assert.ok(UNIFIER_DISALLOWED_TOOLS.includes('WebSearch'));
+  for (const t of ['WebFetch', 'WebSearch'] as const) {
+    assert.ok(UNIFIER_DISALLOWED_TOOLS.includes(t), `missing banned tool: ${t}`);
+  }
 });
 
 test('UNIFIER_MODEL is sonnet (per dev-loop model parity)', () => {
   assert.equal(UNIFIER_MODEL, 'claude-sonnet-4-6');
 });
 
-test('buildUnifierSystemPrompt: includes SKILL.md text + Ralph discipline notes', () => {
+test('buildUnifierSystemPrompt: contains all key invariants', () => {
   const sys = buildUnifierSystemPrompt();
+
+  // Substantive content
+  assert.ok(sys.length > 1000, 'system prompt should be substantive');
+  // Skill name + scope
   assert.ok(sys.includes('developer-unifier'), 'should mention skill name');
   assert.ok(sys.includes('initiative'), 'should reference initiative scope');
   assert.ok(sys.includes('Ralph'), 'should reference Ralph loop discipline');
-  assert.ok(sys.length > 1000, 'system prompt should be substantive');
-});
 
-test('buildUnifierSystemPrompt: carries the 4 composed-gate awareness rule', () => {
-  const sys = buildUnifierSystemPrompt();
+  // 4 composed-gate awareness rules
   assert.ok(sys.includes('initiative_gate'), 'must reference initiative_gate');
   assert.ok(sys.includes('demo_runs_clean'), 'must reference demo_runs_clean');
   assert.ok(sys.includes('pr_self_contained'), 'must reference pr_self_contained');
   assert.ok(sys.includes('branches_in_sync'), 'must reference branches_in_sync');
-});
 
-test('buildUnifierSystemPrompt: carries the iter-1-skeleton rule (observed 5+ cycle failure mode)', () => {
-  const sys = buildUnifierSystemPrompt();
+  // iter-1-skeleton rule (observed 5+ cycle failure mode)
   assert.ok(
     sys.includes('skeleton') || sys.includes('SKELETON'),
     'must reference the iter-1 skeleton rule',
@@ -69,34 +69,26 @@ test('buildUnifierSystemPrompt: carries the iter-1-skeleton rule (observed 5+ cy
       sys.includes('skeleton goes in FIRST'),
     'must carry the iter-1 write-first mandate',
   );
-});
 
-test('buildUnifierSystemPrompt: carries the demo contract (no ## Demo section rule)', () => {
-  const sys = buildUnifierSystemPrompt();
+  // Demo contract
   assert.ok(
     sys.includes('## Demo') || sys.includes('Demo section'),
     'must reference the no-## Demo-section rule',
   );
-});
 
-test('buildUnifierSystemPrompt: carries the no-gh-pr-create rule', () => {
-  const sys = buildUnifierSystemPrompt();
+  // No-gh-pr-create rule
   assert.ok(
     sys.includes('gh pr create') || sys.includes('gh pr merge'),
     'must carry the no-gh-pr-create/merge rule',
   );
-});
 
-test('buildUnifierSystemPrompt: carries the no-hallucinated-test-passes rule', () => {
-  const sys = buildUnifierSystemPrompt();
+  // No-hallucinated-test-passes rule
   assert.ok(
     sys.includes('hallucinated') || sys.toLowerCase().includes('prove it'),
     'must carry the no-hallucinated-test-passes rule',
   );
-});
 
-test('buildUnifierSystemPrompt: carries the integrate-not-develop role (unifier role)', () => {
-  const sys = buildUnifierSystemPrompt();
+  // Integrate-not-develop role
   assert.ok(
     sys.includes('integrate') || sys.includes('NOT to implement WIs'),
     'must carry the unifier integrate-not-develop role',
@@ -133,12 +125,9 @@ test('renderUnifierUserPrompt: initial-prep mode references manifest + WIs', () 
     qualityGateCmd: ['npm', 'test'],
     feedbackRef: undefined,
   });
-  assert.ok(prompt.includes('INIT-2026-05-23-test'));
-  assert.ok(prompt.includes('.forge/manifest.md'));
-  assert.ok(prompt.includes('WI-1'));
-  assert.ok(prompt.includes('WI-2'));
-  assert.ok(prompt.includes('browser'));
-  assert.ok(prompt.includes('npm test'));
+  for (const s of ['INIT-2026-05-23-test', '.forge/manifest.md', 'WI-1', 'WI-2', 'browser', 'npm test']) {
+    assert.ok(prompt.includes(s), `missing: ${s}`);
+  }
   assert.ok(!prompt.includes('send-back'), 'initial-prep mode does not mention send-back');
 });
 

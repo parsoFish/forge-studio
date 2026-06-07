@@ -51,16 +51,15 @@ test('pmAgentSpec: disallowedTools matches PM_DISALLOWED_TOOLS', () => {
 });
 
 test('pmAgentSpec: allowedTools includes Read, Glob, Write, Edit (needs them for brain + WI authoring)', () => {
-  assert.ok(pmAgentSpec.allowedTools.includes('Read'));
-  assert.ok(pmAgentSpec.allowedTools.includes('Glob'));
-  assert.ok(pmAgentSpec.allowedTools.includes('Write'));
-  assert.ok(pmAgentSpec.allowedTools.includes('Edit'));
+  for (const t of ['Read', 'Glob', 'Write', 'Edit'] as const) {
+    assert.ok(pmAgentSpec.allowedTools.includes(t), `missing tool: ${t}`);
+  }
 });
 
 test('pmAgentSpec: disallowedTools bans Bash (PM must not run commands) and web tools', () => {
-  assert.ok(pmAgentSpec.disallowedTools.includes('Bash'));
-  assert.ok(pmAgentSpec.disallowedTools.includes('WebFetch'));
-  assert.ok(pmAgentSpec.disallowedTools.includes('WebSearch'));
+  for (const t of ['Bash', 'WebFetch', 'WebSearch'] as const) {
+    assert.ok(pmAgentSpec.disallowedTools.includes(t), `missing banned tool: ${t}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -76,68 +75,47 @@ test('PM_MODEL is sonnet (behaviour-preserving: same model as before migration)'
 });
 
 // ---------------------------------------------------------------------------
-// 3. buildPmSystemPrompt invariants
+// 3. buildPmSystemPrompt invariants (table-driven)
 // ---------------------------------------------------------------------------
 
-test('buildPmSystemPrompt: contains brain-first mandate wording', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(
-    sys.includes('pm.brain-skipped') || sys.includes('brain/'),
-    'should reference the brain-first enforcement or brain path',
-  );
-});
-
-test('buildPmSystemPrompt: contains non-interactive framing', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(
-    sys.toLowerCase().includes('non-interactiv'),
-    'should state the non-interactive operating mode',
-  );
-});
-
-test('buildPmSystemPrompt: contains at least one sharp-gate example', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  // Any of the concrete sharp-gate patterns from SKILL.md suffice
-  const hasSharpGate =
-    sys.includes('node:test') ||
-    sys.includes('--experimental-strip-types') ||
-    sys.includes('pytest') ||
-    sys.includes('go test') ||
-    sys.includes('bats');
-  assert.ok(hasSharpGate, 'should include at least one sharp-gate example (node:test / pytest / go test / bats)');
-});
-
-test('buildPmSystemPrompt: contains the no-shell-pipeline gate rule', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  const hasPipelineRule =
-    sys.includes('bash -c') || sys.includes('shell pipeline') || sys.includes('NEVER wrap');
-  assert.ok(hasPipelineRule, 'should state the no-shell-pipeline / no-chain gate rule');
-});
-
-test('buildPmSystemPrompt: contains hidden-coupling mention', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(
-    sys.includes('detectHiddenCoupling') || sys.includes('hidden-coupling') || sys.includes('Hidden-coupling'),
-    'should reference the hidden-coupling check',
-  );
-});
-
-test('buildPmSystemPrompt: contains YAML-quoting rule', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(
-    sys.includes('double quotes') || sys.includes('YAML') || sys.includes('quoting'),
-    'should state the YAML quoting rule for given/when/then',
-  );
-});
-
-test('buildPmSystemPrompt: contains the project-manager skill contract heading', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(sys.includes('project-manager'), 'should include the skill contract section');
-});
+const SYS = buildPmSystemPrompt(process.cwd());
 
 test('buildPmSystemPrompt: is substantive (> 2000 chars)', () => {
-  const sys = buildPmSystemPrompt(process.cwd());
-  assert.ok(sys.length > 2000, `system prompt too short: ${sys.length} chars`);
+  assert.ok(SYS.length > 2000, `system prompt too short: ${SYS.length} chars`);
+});
+
+test('buildPmSystemPrompt: contains all key invariants', () => {
+  // brain-first mandate
+  assert.ok(
+    SYS.includes('pm.brain-skipped') || SYS.includes('brain/'),
+    'should reference the brain-first enforcement or brain path',
+  );
+  // non-interactive framing
+  assert.ok(SYS.toLowerCase().includes('non-interactiv'), 'should state the non-interactive operating mode');
+  // at least one sharp-gate example
+  const hasSharpGate =
+    SYS.includes('node:test') ||
+    SYS.includes('--experimental-strip-types') ||
+    SYS.includes('pytest') ||
+    SYS.includes('go test') ||
+    SYS.includes('bats');
+  assert.ok(hasSharpGate, 'should include at least one sharp-gate example (node:test / pytest / go test / bats)');
+  // no-shell-pipeline gate rule
+  const hasPipelineRule =
+    SYS.includes('bash -c') || SYS.includes('shell pipeline') || SYS.includes('NEVER wrap');
+  assert.ok(hasPipelineRule, 'should state the no-shell-pipeline / no-chain gate rule');
+  // hidden-coupling mention
+  assert.ok(
+    SYS.includes('detectHiddenCoupling') || SYS.includes('hidden-coupling') || SYS.includes('Hidden-coupling'),
+    'should reference the hidden-coupling check',
+  );
+  // YAML-quoting rule
+  assert.ok(
+    SYS.includes('double quotes') || SYS.includes('YAML') || SYS.includes('quoting'),
+    'should state the YAML quoting rule for given/when/then',
+  );
+  // project-manager skill contract heading
+  assert.ok(SYS.includes('project-manager'), 'should include the skill contract section');
 });
 
 // ---------------------------------------------------------------------------
@@ -151,32 +129,17 @@ const BASE_INPUT = {
   projectName: 'myproject',
 };
 
-test('renderPmUserPrompt: contains the initiative id', () => {
+test('renderPmUserPrompt: contains all dynamic bindings', () => {
   const prompt = renderPmUserPrompt(BASE_INPUT);
-  assert.ok(prompt.includes('INIT-2026-06-07-test'));
-});
-
-test('renderPmUserPrompt: contains the project name', () => {
-  const prompt = renderPmUserPrompt(BASE_INPUT);
-  assert.ok(prompt.includes('myproject'));
-});
-
-test('renderPmUserPrompt: contains the manifest path', () => {
-  const prompt = renderPmUserPrompt(BASE_INPUT);
-  assert.ok(prompt.includes('_queue/in-flight/INIT-2026-06-07-test.md'));
-});
-
-test('renderPmUserPrompt: contains the worktree path', () => {
-  const prompt = renderPmUserPrompt(BASE_INPUT);
-  assert.ok(prompt.includes('/tmp/projects/myproject'));
-});
-
-test('renderPmUserPrompt: contains initiative_id binding instruction', () => {
-  const prompt = renderPmUserPrompt(BASE_INPUT);
-  assert.ok(
-    prompt.includes('INIT-2026-06-07-test'),
-    'should embed the initiative_id for the frontmatter binding',
-  );
+  const EXPECTED = [
+    'INIT-2026-06-07-test',
+    'myproject',
+    '_queue/in-flight/INIT-2026-06-07-test.md',
+    '/tmp/projects/myproject',
+  ];
+  for (const s of EXPECTED) {
+    assert.ok(prompt.includes(s), `missing binding: ${s}`);
+  }
 });
 
 test('renderPmUserPrompt: includes project context block when provided', () => {
@@ -209,24 +172,16 @@ test('renderPmUserPrompt: omits gateRecipe block when not provided', () => {
 
 test('renderPmUserPrompt: does NOT duplicate bulk static prose from SKILL.md', () => {
   const prompt = renderPmUserPrompt(BASE_INPUT);
-  // The detailed static rules live in SKILL.md (system prompt) — the user prompt
-  // must NOT re-embed them. Check a few strong markers.
-  assert.ok(
-    !prompt.includes('detectHiddenCoupling'),
-    'hidden-coupling prose should live in SKILL.md, not the user prompt',
-  );
-  assert.ok(
-    !prompt.includes('Concrete sharp-gate patterns'),
-    'sharp-gate examples should live in SKILL.md, not the user prompt',
-  );
-  assert.ok(
-    !prompt.includes('Self-check (last step before stopping)'),
-    'self-check checklist should live in SKILL.md, not the user prompt',
-  );
-  assert.ok(
-    !prompt.includes('YAML quoting'),
-    'YAML quoting rule should live in SKILL.md, not the user prompt',
-  );
+  // The detailed static rules live in SKILL.md (system prompt) — the user prompt must NOT re-embed them.
+  const BANNED = [
+    'detectHiddenCoupling',
+    'Concrete sharp-gate patterns',
+    'Self-check (last step before stopping)',
+    'YAML quoting',
+  ];
+  for (const s of BANNED) {
+    assert.ok(!prompt.includes(s), `static prose leaked into user prompt: ${s}`);
+  }
 });
 
 test('renderPmUserPrompt: is concise (< 3000 chars without project context)', () => {

@@ -51,9 +51,9 @@ test('reflectorAgentSpec: allowedTools includes Read, Write, Bash, Grep, Glob, E
 
 test('reflectorAgentSpec: disallowedTools bans web tools and NotebookEdit', () => {
   const denied = reflectorAgentSpec.disallowedTools;
-  assert.ok(denied.includes('WebFetch'));
-  assert.ok(denied.includes('WebSearch'));
-  assert.ok(denied.includes('NotebookEdit'));
+  for (const t of ['WebFetch', 'WebSearch', 'NotebookEdit'] as const) {
+    assert.ok(denied.includes(t), `missing banned tool: ${t}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -82,6 +82,7 @@ test('REFLECTOR_DISALLOWED_TOOLS matches spec disallowedTools', () => {
 
 // ---------------------------------------------------------------------------
 // System prompt: brain index + SKILL.md key invariants; no per-cycle data
+// (table-driven — one temp dir, all invariants in a single test block)
 // ---------------------------------------------------------------------------
 
 function makeFakeBrainCwd(): { dir: string; cleanup: () => void } {
@@ -95,92 +96,33 @@ function makeFakeBrainCwd(): { dir: string; cleanup: () => void } {
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-test('buildReflectorSystemPrompt: contains brain navigation header', () => {
+test('buildReflectorSystemPrompt: contains all key invariants and no per-cycle data', () => {
   const { dir, cleanup } = makeFakeBrainCwd();
   try {
     const sys = buildReflectorSystemPrompt(dir);
+
+    // Substantive content
+    assert.ok(sys.length > 2000, 'system prompt should be substantive');
+
+    // PRESENT — key invariants from SKILL.md
     assert.ok(sys.includes('Brain navigation index'), 'should include brain nav header');
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: contains reflector skill contract header', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
     assert.ok(sys.includes('reflector skill contract'), 'should embed skill contract header');
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: brain-first mandate present (from SKILL.md)', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
-    // Key invariant: brain query is mandatory and production gates on it.
     assert.ok(
       sys.includes('brain_consulted') || sys.includes('brain reads are recorded'),
       'should carry the brain-first production gate signal',
     );
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: direct-write brain rule present (from SKILL.md)', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
     assert.ok(
       sys.includes('direct') && sys.includes('Write'),
       'should carry the direct-write brain rule',
     );
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: cycle archive frontmatter present (from SKILL.md)', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
     assert.ok(sys.includes('retention: auto'), 'should include cycle archive retention placeholder');
     assert.ok(sys.includes('cited_by: []'), 'should include cycle archive cited_by placeholder');
     assert.ok(sys.includes('ingested_by: reflector'), 'should include cycle archive ingested_by');
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: AskUserQuestion prohibition present (from SKILL.md)', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
     assert.ok(sys.includes('AskUserQuestion'), 'should carry AskUserQuestion prohibition');
-  } finally {
-    cleanup();
-  }
-});
 
-test('buildReflectorSystemPrompt: does NOT contain per-cycle dynamic data', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
-    // Dynamic cycle-id strings must not appear in the stable system prompt.
+    // ABSENT — per-cycle dynamic data must not appear in the stable system prompt
     assert.ok(!sys.includes('INIT-2026-'), 'system prompt must not embed a real initiative id');
     assert.ok(!sys.includes('cycleId'), 'system prompt must not reference cycleId variable');
-  } finally {
-    cleanup();
-  }
-});
-
-test('buildReflectorSystemPrompt: is substantive (> 2000 chars from SKILL.md content)', () => {
-  const { dir, cleanup } = makeFakeBrainCwd();
-  try {
-    const sys = buildReflectorSystemPrompt(dir);
-    assert.ok(sys.length > 2000, 'system prompt should be substantive');
   } finally {
     cleanup();
   }
@@ -206,39 +148,20 @@ const SAMPLE_INPUT = {
   forgeThemesDirRelPath: 'brain/cycles/themes',
 };
 
-test('renderReflectorUserPrompt: contains initiative id', () => {
+test('renderReflectorUserPrompt: contains all dynamic bindings', () => {
   const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('INIT-2026-06-07-reflector-test'));
-});
-
-test('renderReflectorUserPrompt: contains cycle id', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('CYCLE-2026-06-07-001'));
-});
-
-test('renderReflectorUserPrompt: contains event log path', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('_logs/CYCLE-2026-06-07-001/events.jsonl'));
-});
-
-test('renderReflectorUserPrompt: contains retro output path', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('_logs/CYCLE-2026-06-07-001/retro.md'));
-});
-
-test('renderReflectorUserPrompt: contains themes dir path', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('projects/testproj/brain/themes'));
-});
-
-test('renderReflectorUserPrompt: contains forge themes dir path', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('brain/cycles/themes'));
-});
-
-test('renderReflectorUserPrompt: contains project name', () => {
-  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  assert.ok(prompt.includes('testproj'));
+  const EXPECTED = [
+    'INIT-2026-06-07-reflector-test',
+    'CYCLE-2026-06-07-001',
+    '_logs/CYCLE-2026-06-07-001/events.jsonl',
+    '_logs/CYCLE-2026-06-07-001/retro.md',
+    'projects/testproj/brain/themes',
+    'brain/cycles/themes',
+    'testproj',
+  ];
+  for (const s of EXPECTED) {
+    assert.ok(prompt.includes(s), `missing dynamic binding: ${s}`);
+  }
 });
 
 test('renderReflectorUserPrompt: does NOT contain the static skill prose (that lives in system prompt)', () => {

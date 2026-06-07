@@ -60,72 +60,55 @@ test('DEV_MODEL resolves to claude-sonnet-4-6 (behavior preserved)', () => {
 // Tool allow/disallow list invariants
 // ---------------------------------------------------------------------------
 
-test('DEV_ALLOWED_TOOLS includes Bash, Read, Write (needed for tests + commits)', () => {
-  assert.ok(DEV_ALLOWED_TOOLS.includes('Bash'));
-  assert.ok(DEV_ALLOWED_TOOLS.includes('Read'));
-  assert.ok(DEV_ALLOWED_TOOLS.includes('Write'));
-  assert.ok(DEV_ALLOWED_TOOLS.includes('Edit'));
+test('DEV_ALLOWED_TOOLS includes Bash, Read, Write, Edit (needed for tests + commits)', () => {
+  for (const t of ['Bash', 'Read', 'Write', 'Edit'] as const) {
+    assert.ok(DEV_ALLOWED_TOOLS.includes(t), `missing tool: ${t}`);
+  }
 });
 
 test('DEV_DISALLOWED_TOOLS bans web tools', () => {
-  assert.ok(DEV_DISALLOWED_TOOLS.includes('WebFetch'));
-  assert.ok(DEV_DISALLOWED_TOOLS.includes('WebSearch'));
+  for (const t of ['WebFetch', 'WebSearch'] as const) {
+    assert.ok(DEV_DISALLOWED_TOOLS.includes(t), `missing banned tool: ${t}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
-// System prompt — SKILL.md carries all intent
+// System prompt — SKILL.md carries all intent (table-driven)
 // ---------------------------------------------------------------------------
 
-test('buildDevSystemPrompt: returns substantive text from SKILL.md', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake-brain-cwd');
-  assert.ok(sys.length > 500, 'system prompt should be substantive');
-});
+const SYS = buildDevSystemPrompt('/tmp/fake-brain-cwd');
 
-test('buildDevSystemPrompt: contains the absolute-path / use-relative-paths rule (F-W5-6 blocker)', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
-  // The critical rule: the agent must not guess container paths
+test('buildDevSystemPrompt: contains all key invariants', () => {
+  // Substantive
+  assert.ok(SYS.length > 500, 'system prompt should be substantive');
+  // Absolute-path / use-relative-paths rule (F-W5-6 blocker)
   assert.ok(
-    sys.includes('relative') || sys.includes('worktree'),
+    SYS.includes('relative') || SYS.includes('worktree'),
     'system prompt must reference relative-path discipline',
   );
-});
-
-test('buildDevSystemPrompt: states forge brain is off-limits (brain-read policy)', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
+  // Forge brain off-limits (brain-read policy)
   assert.ok(
-    sys.includes('forge brain') || sys.includes('forge-brain') || sys.includes('Brains 1+2'),
+    SYS.includes('forge brain') || SYS.includes('forge-brain') || SYS.includes('Brains 1+2'),
     'system prompt must reference the forge-brain off-limits policy',
   );
-});
-
-test('buildDevSystemPrompt: includes "continuing not restarting" rule (scope discipline)', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
+  // "continuing not restarting" rule (scope discipline)
   assert.ok(
-    sys.toLowerCase().includes('continuing') || sys.toLowerCase().includes('restarting'),
+    SYS.toLowerCase().includes('continuing') || SYS.toLowerCase().includes('restarting'),
     'system prompt must reference the continue-not-restart discipline',
   );
-});
-
-test('buildDevSystemPrompt: includes no-hallucinated-test-passes rule', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
+  // No-hallucinated-test-passes rule
   assert.ok(
-    sys.includes('hallucinated') || sys.toLowerCase().includes('prove it'),
+    SYS.includes('hallucinated') || SYS.toLowerCase().includes('prove it'),
     'system prompt must reference no-hallucinated-test-passes rule',
   );
-});
-
-test('buildDevSystemPrompt: includes files_in_scope advisory-not-fence rule', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
+  // files_in_scope advisory-not-fence rule
   assert.ok(
-    sys.includes('files_in_scope') && (sys.includes('advisory') || sys.includes('fence')),
+    SYS.includes('files_in_scope') && (SYS.includes('advisory') || SYS.includes('fence')),
     'system prompt must carry the files_in_scope advisory rule',
   );
-});
-
-test('buildDevSystemPrompt: includes creates:/verification_artifact: mandatory-output rule', () => {
-  const sys = buildDevSystemPrompt('/tmp/fake');
+  // creates:/verification_artifact: mandatory-output rule
   assert.ok(
-    sys.includes('creates:') || sys.includes('verification_artifact:'),
+    SYS.includes('creates:') || SYS.includes('verification_artifact:'),
     'system prompt must reference the mandatory creates:/verification_artifact: output rule',
   );
 });
