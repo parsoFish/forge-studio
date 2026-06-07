@@ -45,6 +45,15 @@ export function deriveGraphModel({ events, wiGraph }: GraphModelInputs): GraphMo
     if (wid) wiIds.add(wid);
   }
 
+  // Resumed cycles (send-back / requeue at the PR point) SKIP the PM phase, so
+  // they emit no `pm.work-item-emitted` events — without this fallback every WI
+  // hex disappears from the hex view for the whole resumed run. The persisted WI
+  // graph (cycle snapshot, or the live worktree via /api/graph's fallback) still
+  // describes the work items, so seed the set from it when the stream is silent.
+  if (wiIds.size === 0 && wiGraph) {
+    for (const n of wiGraph.nodes) wiIds.add(n.id);
+  }
+
   let workItems: GraphWorkItem[] = [];
   if (wiIds.size > 0) {
     const titleByWi = new Map<string, string>();

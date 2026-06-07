@@ -635,17 +635,31 @@ function computeBaselineRev(repo: string, initiativeId: string): string | null {
   return null;
 }
 
-function computeDeliveredDiff(
+export function computeDeliveredDiff(
   repo: string,
   branch: string,
 ): { statLines: string[]; filesChanged: number; insertions: number; deletions: number; unified: string | null } | null {
   if (!existsSync(resolve(repo, '.git'))) return null;
-  // Try the merged-into-main case first: HEAD of main vs main^.
-  const ranges = [
-    `${branch}..main`,
-    `main^..main`,
-    `main..${branch}`,
-  ];
+  // Build correctly-directed ranges (the branch/HEAD is always the "to" side, so
+  // files the cycle ADDED read as insertions, not deletions). The old
+  // `${branch}..main` range is INVERTED for an unmerged branch — it renders the
+  // cycle's new files as `deleted file mode` / +0 −N — so it is removed entirely.
+  // (This was the recurring "report diff inverted on a pr-open/resumed cycle" bug.)
+  const ranges: string[] = [];
+  // 1. Branch still exists: diff from the fork point (merge-base, robust to main
+  //    advancing during the cycle) to the branch tip.
+  try {
+    const base = execFileSync('git', ['merge-base', 'main', branch], {
+      cwd: repo,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    }).trim();
+    if (base) ranges.push(`${base}..${branch}`);
+  } catch {
+    /* branch gone (merged + deleted) — fall through to the HEAD-delta range */
+  }
+  // 2. Merged-and-branch-deleted: the merge delta sits at main's HEAD.
+  ranges.push('main^..main');
   for (const range of ranges) {
     try {
       const stat = execFileSync('git', ['diff', '--stat', range], {

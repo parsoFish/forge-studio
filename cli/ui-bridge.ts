@@ -539,8 +539,16 @@ async function handleHttp(
   }
   if (method === 'GET' && url.startsWith('/api/graph/')) {
     const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
-    const filePath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', '_graph.md');
-    if (!existsSync(filePath)) {
+    // Prefer the immutable cycle snapshot; fall back to the live worktree graph
+    // while the cycle is still in-flight (the snapshot is only mirrored at cycle
+    // end). Without this fallback a RESUMED cycle — whose PM phase is skipped, so
+    // it has no snapshot until it finishes — serves no graph, and the WI hexes
+    // vanish from the live hex view for the whole run. Mirrors /api/work-item.
+    const snapshotPath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', '_graph.md');
+    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
+    const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', '_graph.md');
+    const filePath = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
+    if (!filePath) {
       sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId });
       return;
     }

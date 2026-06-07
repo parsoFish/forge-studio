@@ -695,3 +695,67 @@ diagnostic to isolate variables, not a target.**
 - **Provider works live.** `betterado_project` created a real ADO project (10s),
   confirmed via API GET + org-list + tf state, destroyed clean. Evidence bundle:
   `/tmp/live-confirm/evidence/` (this session).
+
+---
+
+## 2026-06-07 — release-folder-data-source cycle assessment (post-merge review)
+
+End-of-cycle review of `INIT-2026-06-07-release-folder-data-source` (PR #14 MERGED).
+The data source shipped and 6/7 AC clauses are met, but the **central AC — "resolves
+attributes against LIVE ADO" — was never proven**, and the review surfaced several
+forge defects. Root-caused via an adversarially-verified investigation workflow.
+
+**✅ FIXED this session (forge `cli/`+`forge-ui/`, betterado `.forge/`):**
+
+- **UI send-back / requeue blanks the hex view.** On a send-back at the PR point the
+  bridge requeues with `resume_from: unifier`, which **skips the PM phase**, so the new
+  (active) cycle emits no `pm.work-item-emitted` events. The UI derived the WI-hex list
+  *exclusively* from those events (`use-graph-model.ts`), so every WI hex vanished, and
+  per-phase cost/status (cycle-scoped) went blank. Fix: (a) `/api/graph` now falls back
+  to the live worktree `_graph.md` when the snapshot is absent (mirrors `/api/work-item`),
+  and (b) `deriveGraphModel` seeds the WI set from the graph when no PM events are present.
+  Tests: `forge-ui/lib/use-graph-model.test.ts`. *(Restores the disappearing WIs. The
+  cost/status fidelity on a resumed cycle is the open lineage follow-up below.)*
+- **Report diff inverted (3rd occurrence).** `computeDeliveredDiff` tried `branch..main`
+  first — the inverted direction for an unmerged branch — so the "What landed" section
+  rendered the cycle's added files as `deleted file mode` / `+0 −N`. Fix: anchor on
+  `merge-base(main, branch)..branch`; the inverted range is gone. Regression test:
+  `cli/forge-metrics-diff.test.ts`.
+- **Live-acc gate didn't fail fast on missing creds (betterado).** `acceptance_gate.requires_env`
+  listed only `TF_ACC`; the PreCheck also demands `AZDO_ORG_SERVICE_URL` + `AZDO_PERSONAL_ACCESS_TOKEN`.
+  TF_ACC was set, so the guard stayed silent and the acc test burned **5 iterations**
+  `t.Fatal`-ing in PreCheck on the missing PAT. Fix: `requires_env` now lists all three,
+  so the guard ERRORs up-front. (`projects/terraform-provider-betterado/.forge/project.json`.)
+
+**⏳ OPEN (forge behavior changes — need operator greenlight; each touches the autonomous pipeline):**
+
+1. **Merge boundary doesn't gate on per-WI status.** WI-2 ended `status: failed` (its live-acc
+   gate never passed) yet the unifier's `canOpenPr` opened a PR (files-present + offline/TF_ACC-
+   stripped CI green), and the operator merged it — so the data source shipped **unverified-live**.
+   Direction: for a project with `acceptance_gate.required`, `canOpenPr` (`orchestrator/phases/developer-loop.ts`)
+   must require every live-acc WI actually PASSED its per-WI gate, or at minimum loudly flag the
+   closure as "live-acc unverified". This is the most important open gap — it's how unproven code merged.
+2. **`forge requeue` has no PR-state guard.** It blindly moves a ready-for-review manifest back to
+   pending, even with an open PR, spawning a wasteful re-run and removing the cycle from
+   `finalizeMergedReadyForReview`'s view. It also never strips `resume_from`/`previous_failure_modes`
+   on the terminal move to `done/`. Direction: probe `gh pr view --json state` before requeue;
+   refuse/route-to-finalizer if OPEN/MERGED; strip resume markers on closure.
+   (`cli/forge-requeue.ts`.)
+3. **Report not regenerated on later merge.** A cycle ends at `pr-open` (unattended), then the
+   operator merges; `finalizeMergedReadyForReview` runs closure+reflector and moves to `done/` but
+   **never rewrites `report.md`**, so the report is permanently stuck at "Status: pr-open / no merge
+   event recorded" while the manifest sits in `done/`. Direction: call `writeCycleReport` in
+   `orchestrator/finalize-merged.ts` after a confirmed merge. (Note: closure's merge detection is
+   *correct* — the apparent "merge not recorded at cycle end" was a misread; PR #14 merged at 03:41,
+   ~27m after the cycle ended at pr-open.)
+4. **Cost/status lineage on resumed cycles (UI Fix #2).** Even with the WI hexes restored, a resumed
+   cycle's PM/dev cost pills read $0 and per-WI status reads `pending`, because cost/status are
+   derived per-active-cycle and the predecessor cycle's spend/status live in the prior `_logs/<id>`.
+   Direction: make the bridge/UI treat the active cycle as the **initiative lineage** — merge the
+   predecessor cycle's events/cost for the same initiativeId (the predecessor cycleId isn't on the
+   manifest today, so this needs either a lineage annotation at requeue time or sibling-dir discovery).
+5. **Derive live-acc required env from the test contract (deeper than the betterado config fix).**
+   The per-project `requires_env` list is hand-maintained and drifted (only TF_ACC). Better: have the
+   live-env guard infer the required vars from the acceptance test's PreCheck, or treat a precheck
+   `t.Fatal`-on-missing-env signature in the gate stdout as a distinct "live-env-missing" classification
+   rather than a code FAIL the agent is asked (and fails) to fix.
