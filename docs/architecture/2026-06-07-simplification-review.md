@@ -111,3 +111,39 @@ therefore extends to the knowledge layer, and every code change carries a knowle
 - **R-B — docs-to-as-built sweep:** ARCHITECTURE / PRINCIPLES / CLAUDE / phases / operator-journey / contract.
 - **R-C — brain cleaning:** consolidate duplicates, archive baked-in history, fix stale themes.
   **Operator-gated** — conservative default is archive-not-delete; the cull list comes to the operator first.
+
+## Close-out (2026-06-07) — final state
+
+**Backlog disposition** (the plan-of-record, items 1-7):
+
+| # | Item | State |
+|---|---|---|
+| 1 | Live-cost fix + telemetry dedup | **done** — `cost-tick` wired in `cycle.ts`; `onUsageDelta` per-turn; `makeAgentWithTelemetry` dedup; UI committed-vs-in-flight reconciliation (no pricing table, no double-count). |
+| 2 | ADR-024 migration (all 5 phases) | **done** — PM, reflector, dev-loop, unifier are `PhaseAgentSpec`s sourcing intent from `SKILL.md`; enforcement stayed orchestrator-side. |
+| 3 | Hooks eventing + ADR 025 | **partial by decision** — ADR 025 written; cost/tokens on the SDK stream shipped. Hook **emission-unification** + `POST /hook-events` **deferred** (the stream parsing they'd replace is load-bearing + only-real-cycle-validatable; live feel already delivered). |
+| 4 | `allowedSkills` seam | **deferred** (operator) — the skills-as-plugins data model is admitted; the seam itself is future work. |
+| 5 | Architect-interview upgrade (D6) | **done** — VoI gate, hypothesis-first options, coverage map, 5-round cap, security hard-block, Y-statement log, EARS/GWT ACs, NOT-DOING block — all in `skills/architect/SKILL.md`, surviving the conciseness pass. |
+| 6 | Tactical cuts | demo-render `--dir` **done**; cycle-report per-WI gate-cmd **done**; `/artifact` (bridge-served) **done**. live-acc lint gate + topo-sort→lib **deferred** (each needs a runtime sub-check / dep approval). |
+| 7 | Close-out | **this section** + [harness-overlay-seam.md](./harness-overlay-seam.md) + ADR/ARCHITECTURE/contract updates; all gates green. |
+
+**Knowledge reconciliation (R-A/B/C, criterion F):** ADRs reconciled + ADR 025 authored (R-A); docs swept to as-built incl. the generalised `forge-project-contract.md` (R-B); brain culled to as-is — **6 themes archived + 3 consolidated**, lint clean, `INDEX.md` regenerated (R-C, operator-approved). A fresh reader of ADRs+docs+brain now sees the *current* system without historical contradictions.
+
+**Gates (all green at close-out):** `npm run build` ✓ · `npm test` 626/626 ✓ · `npm run test:ui` 35/35 ✓ · `npm run ui:journey` ✓ (29-frame video; every DOM-as-metrics assertion incl. the Note-1 proof "unifier hex lit its own status, not folded into dev-loop") · `forge brain lint` 0 errors.
+
+**Net-LOC accounting** (baseline `1f61e98` → HEAD, excluding generated graphs + the `.demo-shots` video/frame assets):
+
+| Area | net | reading |
+|---|---|---|
+| **Production code** | **−75** | simplification intent met (Note 2). |
+| ↳ orchestrator/ (the *capped* surface) | **−129** | shrank — ADR-024 moved prose to `SKILL.md`; new cost/spec wiring < relocated prose. |
+| ↳ skills/ (`SKILL.md`) | −33 | absorbed orchestrator prose then trimmed −320 (Note 3 conciseness) → still net down. |
+| ↳ loops / cli / forge-ui code | +54 / +1 / +22 | small — live-cost + hardening. |
+| Tests | **+~1000** | see finding below. |
+| Docs | +543 | intentional — 5 ADRs, this doc, generalised contract (knowledge reconciliation). |
+| Brain (active themes) | **−723** | the as-is cull. |
+
+**Finding — test count rose, against the operator's hunch that it would fall.** node `--test` cases **567 → 626** (+59); forge-ui vitest **0 → 35** (net-new). One consolidation *did* cut redundant cases (−150 LOC, table-driven invocation tests), but it is outweighed by **net-new coverage**: standing up the forge-ui vitest gate (a previously-untested surface) + tests for the live-cost feature, the ADR-024 migration, and the per-WI testing contract. Production code shrank; tests grew because coverage widened. I did **not** cut tests to hit a count target (that trades real safety for a number). *Open offer:* a dedicated redundancy-consolidation pass over the orchestrator test suite (+839 LOC) could lower the count without losing coverage — operator's call.
+
+**Directions, final:** D1 overlay = **parked** ([harness-overlay-seam.md](./harness-overlay-seam.md) documents the clean `?? sdkQuery` injection seam). D2 skill model = **core, shipped** (all 5 phases). D3 single daemon = **held**. D5/ADR 025 observability = **shipped** (SDK stream; hooks parked with the overlay). D6 interview = **shipped**. D7 knowledge-as-scope = **done**.
+
+**Stopping rule met:** every remaining component is justified by a preservation-inventory function; the next cut would lose a function or is cosmetic; discovery has no gaps; each direction has an operator decision. **Remaining gate before pointing forge at a real project:** `npm run verify:cycle` (real-cycle harness) — operator-gated, deliberately last.
