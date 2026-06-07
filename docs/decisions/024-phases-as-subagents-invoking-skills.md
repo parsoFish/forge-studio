@@ -131,6 +131,16 @@ phase is migrated.
 > gate recipe). Behaviour-preserving — all enforcement (brain-skip abort,
 > `validateWorkItem`, `detectHiddenCoupling`, `tallyToolUse`) stays
 > orchestrator-side and is unchanged. Unit-tested in `pm-invocation.test.ts`.
+>
+> **Landed 2026-06-07 (reflector migrated).** The **reflector** is migrated:
+> `reflectorAgentSpec` declares it (composes `skills/reflector/SKILL.md` at the
+> `sonnet` tier), `REFLECTOR_MODEL` now derives from the spec's tier
+> (behaviour-preserving: still `claude-sonnet-4-6`). Static operational intent
+> (cycle-archive YAML frontmatter with `retention`/`cited_by` placeholders,
+> brain-gate production signal wording, `AskUserQuestion` prohibition) relocated
+> from the TS discipline block into `SKILL.md`; `buildReflectorSystemPrompt`
+> reduced to brain navigation index + `SKILL.md` only (no static prose block).
+> Unit-tested in `orchestrator/reflector-invocation.test.ts`. Remaining: dev-loop.
 
 ## Consequences
 
