@@ -11,7 +11,9 @@ forge-ui/.next/
 forge-ui/out/
 forge-ui/tsconfig.tsbuildinfo
 forge-ui/next-env.d.ts
-forge-ui/.demo-shots/
+# NB: forge-ui/.demo-shots/ (the e2e journey video + frames) is NOT ignored — it
+# is the watchable demo + the DOM-as-metrics regression artifact, version-tracked
+# normally (was previously gitignored-but-force-committed, which drifted silently).
 
 # Runtime state — not source. Ignore contents but keep .gitkeep so structure
 # is preserved in git.
