@@ -17,6 +17,7 @@ import {
   DEV_ALLOWED_TOOLS,
   DEV_DISALLOWED_TOOLS,
   DEV_MODEL,
+  devAgentSpec,
   buildDevSystemPrompt,
   prepareDevWorkspace,
   tallyToolUse as tallyDevToolUse,
@@ -193,6 +194,12 @@ export async function runDeveloperLoop(
     event_type: 'start',
     input_refs: [workItemsDir],
     output_refs: [],
+    metadata: {
+      // ADR 024 seam observability: the agent + tier the orchestrator spawned.
+      agent_skill: devAgentSpec.skill,
+      agent_tier: devAgentSpec.tier,
+      model: DEV_MODEL,
+    },
   });
 
   const { items, parseErrors } = readWorkItemsFromDir(workItemsDir);

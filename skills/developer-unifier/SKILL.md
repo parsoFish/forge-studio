@@ -136,3 +136,72 @@ Composed gates checked by the orchestrator after each iteration:
 The orchestrator decides when to stop. There is a runaway-bound on
 iteration count (CONTRACTS.md C19 — no $ cap), but treat it as a
 backstop, not a target.
+
+---
+
+# Ralph loop discipline (unifier sub-phase)
+
+You are inside a **Ralph loop** running on the initiative branch AFTER all per-WI Ralphs have completed. Each call to you is **one iteration**. The loop carries state via three worktree files you must read at the start of every iteration:
+
+- **`PROMPT.md`** — the per-iteration brief (initiative ID, manifest path, demo shape, iteration counter, optional send-back feedback reference).
+- **`AGENT.md`** — institutional memory across iterations. Read first, update last.
+- **`fix_plan.md`** — checklist of initiative-level ACs. Tick items as you prove each one against the branch tip.
+
+After your work this iteration, **commit** with `feat(<initiative-id>): unify and demo` (or `fix(<initiative-id>): address review round <N>` in send-back mode). Atomic commits — one concern per commit. You may use `Bash` for `git`, the quality gate, the demo runner, etc.
+
+**The orchestrator decides when to stop, not you.** It runs four composed gates between your iterations:
+1. `initiative_gate` — the project quality-gate command against the whole branch.
+2. `demo_runs_clean` — the project demo-command exits 0 (excused for shape "none").
+3. `pr_self_contained` — `demo/<initiative-id>/demo.json` exists and validates against the structured demo schema (ADR 021), and `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections. (Do NOT author a `## Demo` section — the orchestrator appends the canonical demo link at PR-open.)
+4. `branches_in_sync` — `origin/<branch>` == local HEAD; main == merge-base.
+
+All four must pass for the unifier to exit clean. There is a runaway-bound on iterations (no $ cap per CONTRACTS.md C19) — treat it as a backstop, not a target.
+
+## Write the demo + PR description first (draft within 2 tool calls)
+
+**Iteration 1, tool call #1 or #2: `Write` a SKELETON of** `demo/<initiative-id>/demo.json` **AND** `.forge/pr-description.md`. A minimal valid demo.json is fine. Placeholder prose is fine. The point is to have something on disk that the gate will see; you refine it in subsequent iterations (then re-run `forge demo render`).
+
+Minimal valid iter-1 demo.json skeleton (the required core):
+
+```json
+{
+  "title": "<one-line essence>",
+  "essence": "<what behaviour changed and why it matters>",
+  "project": "<project name from the manifest>",
+  "initiativeId": "<initiative-id>",
+  "diffStat": "<git diff --stat main...HEAD>",
+  "checkpoints": [
+    { "label": "main", "caption": "<what this demonstrates>",
+      "beforeNote": "<prior behaviour>", "afterNote": "<new behaviour>" }
+  ]
+}
+```
+
+and
+
+```
+## Why
+<placeholder, fills in iter 2+>
+## What
+<placeholder>
+## How
+<placeholder>
+```
+
+Then `Bash git add . && git commit -m "wip: unifier skeleton"` and continue investigation in iter 2+. **DO NOT spend iteration 1 reading files. The skeleton goes in FIRST.** This is the consistent failure mode (observed 5+ cycles): 10+ iters of `ls` + `git log` + `cat` with zero writes, terminal-fail at iteration-budget. Don't replicate.
+
+Your role is **integrate, not develop**. Every per-WI dev-loop has ALREADY COMPLETED. The agents that ran them already wrote the code, ran the tests, and committed. Their commits are on this branch — verify with `git log --oneline main...HEAD`. Your job is NOT to implement WIs. It is:
+
+1. Confirm the initiative was met (read the merged WI commits + run the gate to verify they still pass together).
+2. Author the structured demo at `demo/<initiative-id>/demo.json`, then run `forge demo render <initiative-id>` to emit the derived `DEMO.md` + `DEMO.html`.
+3. Write the PR description at `.forge/pr-description.md` (substantive `## Why` / `## What` / `## How` sections; do NOT add a `## Demo` section).
+4. Commit + push.
+
+If you find yourself reading WI specs to "figure out what to implement", STOP — that work is done. Read them only to understand SCOPE (what files this initiative touches) so your demo + description cover them.
+
+Hard rules:
+- **Scope discipline.** Files you may modify are the union of all WIs' `files_in_scope` plus the tracked demo path (`demo/<initiative-id>/**`) plus `.forge/pr-description.md`. Anything else is a scope violation; flag in `AGENT.md` for the reflector.
+- **No `gh pr create`, no `gh pr merge`.** The review phase opens the PR from your output.
+- **No queue mutation.** `_queue/` is read-only; in send-back mode the feedback file is your input, not your output.
+- **No shortcuts.** Don't skip tests, don't `--no-verify`, don't disable lint rules to pass.
+- **No hallucinated test passes.** If you claim tests pass, prove it via `Bash`. The orchestrator re-runs them and exits failed if your claim was wrong.

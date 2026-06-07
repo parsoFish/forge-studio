@@ -92,43 +92,14 @@ function loadSkillText(): string {
 }
 
 /**
- * Build the unifier system prompt: the SKILL.md contract plus Ralph
- * discipline notes. Identical shape to `buildDevSystemPrompt` so the SDK
- * adapter can be reused unchanged.
+ * Build the unifier system prompt: the SKILL.md contract (which now includes
+ * the Ralph-loop discipline block and the iter-1-skeleton rule — moved there
+ * as part of the ADR 024 prose migration so the skill is the single source of
+ * intent). Identical shape to `buildDevSystemPrompt` so the SDK adapter can be
+ * reused unchanged.
  */
 export function buildUnifierSystemPrompt(): string {
-  return [
-    '# developer-unifier skill contract',
-    '',
-    loadSkillText(),
-    '',
-    '---',
-    '',
-    '# Ralph loop discipline (unifier sub-phase)',
-    '',
-    'You are inside a **Ralph loop** running on the initiative branch AFTER all per-WI Ralphs have completed. Each call to you is **one iteration**. The loop carries state via three worktree files you must read at the start of every iteration:',
-    '',
-    '- **`PROMPT.md`** — the per-iteration brief (initiative ID, manifest path, demo shape, iteration counter, optional send-back feedback reference).',
-    '- **`AGENT.md`** — institutional memory across iterations. Read first, update last.',
-    '- **`fix_plan.md`** — checklist of initiative-level ACs. Tick items as you prove each one against the branch tip.',
-    '',
-    'After your work this iteration, **commit** with `feat(<initiative-id>): unify and demo` (or `fix(<initiative-id>): address review round <N>` in send-back mode). Atomic commits — one concern per commit. You may use `Bash` for `git`, the quality gate, the demo runner, etc.',
-    '',
-    '**The orchestrator decides when to stop, not you.** It runs four composed gates between your iterations:',
-    '1. `initiative_gate` — the project quality-gate command against the whole branch.',
-    '2. `demo_runs_clean` — the project demo-command exits 0 (excused for shape "none").',
-    '3. `pr_self_contained` — `demo/<initiative-id>/demo.json` exists and validates against the structured demo schema (ADR 021), and `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections. (Do NOT author a `## Demo` section — the orchestrator appends the canonical demo link at PR-open.)',
-    '4. `branches_in_sync` — `origin/<branch>` == local HEAD; main == merge-base.',
-    '',
-    'All four must pass for the unifier to exit clean. There is a runaway-bound on iterations (no $ cap per CONTRACTS.md C19) — treat it as a backstop, not a target.',
-    '',
-    'Hard rules:',
-    '- **Scope discipline.** Files you may modify are the union of all WIs\' `files_in_scope` plus the tracked demo path (`demo/<initiative-id>/**`) plus `.forge/pr-description.md`. Anything else is a scope violation; flag in `AGENT.md` for the reflector.',
-    '- **No `gh pr create`, no `gh pr merge`.** The review phase opens the PR from your output.',
-    '- **No queue mutation.** `_queue/` is read-only; in send-back mode the feedback file is your input, not your output.',
-    '- **No shortcuts.** Don\'t skip tests, don\'t `--no-verify`, don\'t disable lint rules to pass.',
-    '- **No hallucinated test passes.** If you claim tests pass, prove it via `Bash`. The orchestrator re-runs them and exits failed if your claim was wrong.',
-  ].join('\n');
+  return loadSkillText();
 }
 
 export type UnifierUserPromptInput = {
@@ -152,6 +123,11 @@ export type UnifierUserPromptInput = {
  * Render the per-iteration prompt body that gets stamped into PROMPT.md.
  * The runner re-reads PROMPT.md every iteration; this is the body the
  * agent sees as "Iteration N — what to do this round".
+ *
+ * Static instructional prose (role, iter-1-skeleton rule, hard rules) now
+ * lives in SKILL.md (ADR 024 prose migration). This builder emits only the
+ * DYNAMIC run-context: initiative id, manifest path, WI spec list, iteration
+ * counter, demo shape, quality-gate command, and optional send-back feedback.
  */
 export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   const sendBackMode = input.feedbackRef !== undefined;
@@ -160,109 +136,37 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     : '- _(no work items recorded; consult the manifest body)_';
 
   const demoBlock = demoInstructionsForShape(input.demoShape);
-  const sendBackBlock = sendBackMode
-    ? [
-        '',
-        '## Send-back mode (CONTRACTS.md C3b)',
-        '',
-        `This is a send-back round. Read \`${input.feedbackRef}\` (C3a schema: line-level + PR-level review comments) and address each comment by file/line. Commit. Push. Do not exceed the iteration cap. Do not add scope beyond what the comments request.`,
-        '',
-        'After addressing the comments, post an ack comment on the PR:',
-        '',
-        '```',
-        'gh pr comment --body "<!-- forge:verdict-ack --> addressed: <brief summary>"',
-        '```',
-        '',
-      ].join('\n')
-    : '';
 
   return [
     '# Developer-unifier — iteration brief',
     '',
     `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}** · Demo shape: **${input.demoShape}**`,
     '',
-    '## Your role: unifier — integrate, do not develop',
-    '',
-    'Every per-WI dev-loop has ALREADY COMPLETED. The agents that ran',
-    'them already wrote the code, ran the tests, and committed. Their',
-    'commits are on this branch — verify with `git log --oneline ' +
-      'main...HEAD`. Your job is **NOT to implement WIs**. It is:',
-    '',
-    '1. Confirm the initiative was met (read the merged WI commits + run',
-    '   the gate to verify they still pass together).',
-    '2. **Author the structured demo** at `demo/' + input.initiativeId + '/demo.json`',
-    '   (the schema below — this is the contract), then run',
-    '   `forge demo render ' + input.initiativeId + '` to emit the derived',
-    '   `DEMO.md` + `DEMO.html`.',
-    '3. **Write the PR description** at `.forge/pr-description.md`',
-    '   (substantive `## Why` / `## What` / `## How` sections; do NOT add a',
-    '   `## Demo` section — the orchestrator appends the canonical demo link).',
-    '4. Commit + push.',
-    '',
-    'If you find yourself reading WI specs to "figure out what to implement",',
-    'STOP — that work is done. Read them only to understand SCOPE (what',
-    'files this initiative touches) so your demo + description cover them.',
-    '',
-    '## Write the demo + PR description first (draft within 2 tool calls)',
-    '',
-    '**Iteration 1, tool call #1 or #2: `Write` a SKELETON of**',
-    '`demo/' + input.initiativeId + '/demo.json` **AND** `.forge/pr-description.md`.',
-    'A minimal valid demo.json is fine. Placeholder prose is fine. The point is',
-    'to have something on disk that the gate will see; you refine it in',
-    'subsequent iterations (then re-run `forge demo render`).',
-    '',
-    'Minimal valid iter-1 demo.json skeleton (the required core; see the full',
-    'schema below):',
-    '',
-    '```json',
-    '{',
-    '  "title": "<one-line essence>",',
-    '  "essence": "<what behaviour changed and why it matters>",',
-    '  "project": "<project name from the manifest>",',
-    '  "initiativeId": "' + input.initiativeId + '",',
-    '  "diffStat": "<git diff --stat main...HEAD>",',
-    '  "checkpoints": [',
-    '    { "label": "main", "caption": "<what this demonstrates>",',
-    '      "beforeNote": "<prior behaviour>", "afterNote": "<new behaviour>" }',
-    '  ]',
-    '}',
-    '```',
-    '',
-    'and',
-    '',
-    '```',
-    '## Why',
-    '<placeholder, fills in iter 2+>',
-    '## What',
-    '<placeholder>',
-    '## How',
-    '<placeholder>',
-    '```',
-    '',
-    '**Do NOT include a `## Demo` section in your `.forge/pr-description.md`.** The',
-    'orchestrator appends the canonical `## Demo` link automatically when it opens',
-    'the PR (using a repo-root-relative `demo/<id>/DEMO.md` path that resolves',
-    'correctly on GitHub). A hand-authored `## Demo` heading in `pr-description.md`',
-    'will be deduplicated and dropped.',
-    '',
-    '',
-    'Then `Bash git add . && git commit -m "wip: unifier skeleton"` and',
-    'continue investigation in iter 2+. **DO NOT spend iteration 1 reading**',
-    '**files. The skeleton goes in FIRST.** This is the consistent failure',
-    'mode (observed 5+ cycles): 10+ iters of `ls` + `git log` + `cat` with',
-    'zero writes, terminal-fail at iteration-budget. Don\'t replicate.',
-    '',
     '## Inputs',
     '',
     `- Initiative manifest: \`${input.manifestRelPath}\`.`,
     `- Quality-gate command: \`${input.qualityGateCmd.join(' ')}\`.`,
-    '  **The demo must demonstrate THIS command (the gate forge actually ran), verbatim — never a narrower one.** If a harness checkpoint claims a pass on a command that excludes part of what the gate covers (a single package when the gate is whole-module, lint-only when the gate is the full CI), that is dishonest and misleads the operator: forge gated on the real command, so the demo must too. Run the gate command as-is and report its real result.',
+    '  **The demo must demonstrate THIS command (the gate forge actually ran), verbatim — never a narrower one.**',
     '- Per-WI specs:',
     wiList,
     '- `AGENT.md` — institutional memory + prior iteration notes.',
     '- `fix_plan.md` — initiative-level AC checklist.',
-    sendBackMode ? `- Feedback ref: \`${input.feedbackRef}\` (read this BEFORE writing any code).` : '',
-    sendBackBlock,
+    ...(sendBackMode ? [`- Feedback ref: \`${input.feedbackRef}\` (read this BEFORE writing any code).`] : []),
+    ...(sendBackMode
+      ? [
+          '',
+          '## Send-back mode (CONTRACTS.md C3b)',
+          '',
+          `This is a send-back round. Read \`${input.feedbackRef}\` (C3a schema: line-level + PR-level review comments) and address each comment by file/line. Commit. Push. Do not exceed the iteration cap. Do not add scope beyond what the comments request.`,
+          '',
+          'After addressing the comments, post an ack comment on the PR:',
+          '',
+          '```',
+          'gh pr comment --body "<!-- forge:verdict-ack --> addressed: <brief summary>"',
+          '```',
+        ]
+      : []),
+    '',
     '## What to do this iteration',
     '',
     sendBackMode
@@ -278,11 +182,11 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
         ].join('\n')
       : [
           '1. **Read AGENT.md and fix_plan.md.**',
-          `2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).`,
+          '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
           `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
           '4. **Produce the demo** under `demo/<initiative-id>/`:',
           demoBlock,
-          '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff — do NOT claim a file, test, or doc as added unless it appears in `git diff --stat main...HEAD`. The orchestrator appends the `## Demo` section; do not add one yourself.',
+          '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
           '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
           '7. **Push** the branch so `origin/<branch>` == local HEAD.',
           '8. **Update AGENT.md** with what you did this iteration.',
