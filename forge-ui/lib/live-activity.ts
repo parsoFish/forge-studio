@@ -8,6 +8,7 @@
  */
 
 import type { EventLogEntry } from './bridge-client';
+import { canonicalPhase } from './phases';
 
 export type LiveToolNode = {
   /** Stable id for React Flow keying. */
@@ -50,7 +51,7 @@ export function deriveLiveToolBursts(
     if (!md || md.coalesced === true) continue;
     const ageMs = nowMs - Date.parse(e.started_at);
     if (Number.isNaN(ageMs) || ageMs < 0 || ageMs > windowMs) continue;
-    const ownerId = typeof md.work_item_id === 'string' ? md.work_item_id : e.phase;
+    const ownerId = typeof md.work_item_id === 'string' ? md.work_item_id : canonicalPhase(e.phase);
     const ownerKind: 'wi' | 'phase' = typeof md.work_item_id === 'string' ? 'wi' : 'phase';
     const n = perOwnerCount.get(ownerId) ?? 0;
     if (n >= perOwner) continue;

@@ -13,6 +13,7 @@ export type Phase =
   | 'architect'
   | 'project-manager'
   | 'developer-loop'
+  | 'unifier'
   | 'review-loop'
   | 'closure'
   | 'reflection';

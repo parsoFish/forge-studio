@@ -57,7 +57,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
     if (e.phase === 'project-manager' && msg === 'pm.empty-decomposition') { pmEmptyDecomposition = true; ev(e); }
     if (e.phase === 'developer-loop' && msg === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
-    if (e.phase === 'developer-loop' && msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
+    if (msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();

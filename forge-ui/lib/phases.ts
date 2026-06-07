@@ -18,17 +18,12 @@ export const PHASE_ORDER = [
 export type Phase = (typeof PHASE_ORDER)[number];
 
 /**
- * betterado #6: the unifier runs as a sub-phase of the developer-loop (its
- * events carry `phase: 'developer-loop'`, `skill: 'developer-unifier'`), so the
- * dev-loop hex went GREEN at the per-WI completion `end` while the unifier kept
- * looping for many minutes — a misleading display. Surface the unifier as its
- * OWN hex by routing `developer-unifier`-skill events to the `unifier` phase.
- * Keeps the backend event phase ('developer-loop') unchanged — only the UI's
- * phase-status derivation splits them — so nothing server-side (e.g. the
- * failure-classifier's `phase === 'developer-loop'` rules) is affected.
+ * betterado #6 (updated): the backend now emits `phase: 'unifier'` directly for
+ * all unifier events — the old skill→phase remap compensation is gone. This
+ * function is now a thin wrapper around canonicalPhase (closure → review-loop)
+ * and is kept exported because deriveLiveToolBursts also uses it.
  */
 function phaseForEvent(e: EventLogEntry): string {
-  if (e.skill === 'developer-unifier') return 'unifier';
   return canonicalPhase(e.phase);
 }
 
@@ -44,23 +39,21 @@ export function canonicalPhase(raw: string): string {
 }
 
 /**
- * The cost a phase HEX should display. The hex set splits `unifier` out of
- * `developer-loop` (phaseForEvent) and folds `closure` into `review-loop`
- * (canonicalPhase) for STATUS — but `cost.perPhase` is keyed by the RAW backend
- * phase, so cost MUST be split the SAME way or the hexes and the money disagree
- * (the unifier hex showed $0 while its real cost hid inside the dev-loop pill).
+ * The cost a phase HEX should display. The backend now emits `phase: 'unifier'`
+ * directly for all unifier events, so `cost.perPhase` is keyed correctly —
+ * `unifier` has its own bucket, `developer-loop` contains only per-WI dev work.
+ * The only special case remaining is `closure` folding into `review-loop`.
  * ONE rule for status and cost. Use this everywhere a per-hex cost is shown
  * (the hex pill, the detail drawer, the cost panel, the header tooltip).
  */
 export function costForPhaseHex(phase: Phase, cost: CostSummary | null): number {
   if (!cost) return 0;
   const per = (p: string): number => cost.perPhase?.[p]?.cost_usd ?? 0;
-  const unifierCost = cost.perSkill?.['developer-unifier']?.cost_usd ?? 0;
   switch (phase) {
     case 'unifier':
-      return unifierCost; // its events carry phase 'developer-loop'; keyed by skill
+      return per('unifier');
     case 'developer-loop':
-      return Math.max(0, per('developer-loop') - unifierCost); // dev-loop minus the unifier slice
+      return per('developer-loop');
     case 'review-loop':
       return per('review-loop') + per('closure'); // closure folds into the review hex
     default:

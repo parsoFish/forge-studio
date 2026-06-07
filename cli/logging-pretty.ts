@@ -72,6 +72,7 @@ export const PHASE_COLOURS: Record<Phase | 'unknown', string> = {
   architect: 'blue',
   'project-manager': 'yellow',
   'developer-loop': 'green',
+  unifier: 'green',
   'review-loop': 'cyan',
   closure: 'magenta',
   reflection: 'blue',

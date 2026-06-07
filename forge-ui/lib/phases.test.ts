@@ -94,10 +94,10 @@ test('closure events fold into review-loop phase', () => {
   expect(statusOf([ev('closure', 'start')], 'review-loop')).toBe('active');
 });
 
-// betterado #6: the unifier is its own hex (skill developer-unifier → 'unifier'),
-// so the dev-loop hex no longer shows green while the unifier still loops.
+// betterado #6 (updated): the backend now emits phase:'unifier' directly,
+// so unifier events no longer need the skill-remap compensation.
 function unifierEv(event_type: string, metadata: Record<string, unknown> = {}): EventLogEntry {
-  return { ...ev('developer-loop', event_type, metadata), skill: 'developer-unifier' };
+  return { ...ev('unifier', event_type, metadata), skill: 'developer-unifier' };
 }
 
 test('unifier is a distinct phase: dev-loop complete while unifier still active', () => {
@@ -140,14 +140,19 @@ test('resume-from-unifier: dev-loop end complete:0/failed:N/resumed is NOT a fai
   expect(statusOf(events, 'developer-loop')).toBe('complete');
 });
 
-// costForPhaseHex: the per-hex cost must apply the SAME split as the status —
-// unifier carved out of dev-loop (by skill), closure folded into review-loop —
-// or the unifier hex shows $0 while its cost hides in the dev-loop pill.
-test('costForPhaseHex: unifier cost is split out of developer-loop', () => {
+// costForPhaseHex: the backend now emits phase:'unifier' directly, so perPhase
+// has a real 'unifier' bucket. No skill-based split is needed anymore.
+// Closure still folds into review-loop.
+test('costForPhaseHex: unifier cost comes from perPhase unifier bucket directly', () => {
   const cost: CostSummary = {
     totalUsd: 15, total_cost_usd: 15,
-    perPhase: { 'developer-loop': { cost_usd: 12, iterations: 0, duration_ms: 0 }, 'review-loop': { cost_usd: 1, iterations: 0, duration_ms: 0 }, closure: { cost_usd: 0.5, iterations: 0, duration_ms: 0 } },
-    perSkill: { 'developer-unifier': { invocations: 1, cost_usd: 9, duration_ms: 0 } },
+    perPhase: {
+      'developer-loop': { cost_usd: 3, iterations: 0, duration_ms: 0 },
+      'unifier': { cost_usd: 9, iterations: 0, duration_ms: 0 },
+      'review-loop': { cost_usd: 1, iterations: 0, duration_ms: 0 },
+      closure: { cost_usd: 0.5, iterations: 0, duration_ms: 0 },
+    },
+    perSkill: {},
   } as unknown as CostSummary;
   expect(costForPhaseHex('unifier', cost)).toBe(9);
   expect(costForPhaseHex('developer-loop', cost)).toBe(3);

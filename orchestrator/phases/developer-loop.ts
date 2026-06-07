@@ -132,7 +132,7 @@ function makeAgentWithTelemetry(
   sinkCtx: {
     initiativeId: string;
     parentEventId: string;
-    phase: 'developer-loop';
+    phase: 'developer-loop' | 'unifier';
     skill: string;
     workItemId?: string;
   },
@@ -1006,7 +1006,7 @@ export async function runUnifier(
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
-      phase: 'developer-loop',
+      phase: 'unifier',
       skill: 'developer-unifier',
       event_type: 'error',
       input_refs: [input.projectRepoPath],
@@ -1035,7 +1035,7 @@ export async function runUnifier(
   const start = logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
-    phase: 'developer-loop',
+    phase: 'unifier',
     skill: 'developer-unifier',
     event_type: 'start',
     input_refs: [input.worktreePath, input.manifestPath],
@@ -1074,7 +1074,7 @@ export async function runUnifier(
     {
       initiativeId: input.initiativeId,
       parentEventId: start.event_id,
-      phase: 'developer-loop',
+      phase: 'unifier',
       skill: 'developer-unifier',
     },
     {
@@ -1140,7 +1140,7 @@ export async function runUnifier(
           logger.emit({
             initiative_id: input.initiativeId,
             parent_event_id: start.event_id,
-            phase: 'developer-loop',
+            phase: 'unifier',
             skill: 'developer-unifier',
             event_type: 'iteration',
             iteration,
@@ -1171,7 +1171,7 @@ export async function runUnifier(
             logger.emit({
               initiative_id: input.initiativeId,
               parent_event_id: start.event_id,
-              phase: 'developer-loop',
+              phase: 'unifier',
               skill: 'developer-unifier',
               event_type: 'log',
               input_refs: [input.worktreePath],
@@ -1194,7 +1194,7 @@ export async function runUnifier(
   logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
-    phase: 'developer-loop',
+    phase: 'unifier',
     skill: 'developer-unifier',
     event_type: push.pushed ? 'log' : 'error',
     input_refs: [input.worktreePath],
@@ -1224,7 +1224,7 @@ export async function runUnifier(
   logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
-    phase: 'developer-loop',
+    phase: 'unifier',
     skill: 'developer-unifier',
     event_type: succeeded ? 'end' : 'error',
     input_refs: [input.worktreePath],
@@ -1301,7 +1301,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
-      phase: 'developer-loop',
+      phase: 'unifier',
       skill: 'developer-unifier',
       event_type: 'error',
       input_refs: [worktreePath],
@@ -1325,7 +1325,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
-        phase: 'developer-loop',
+        phase: 'unifier',
         skill: 'developer-unifier',
         event_type: 'error',
         input_refs: [worktreePath],
@@ -1371,7 +1371,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
-      phase: 'developer-loop',
+      phase: 'unifier',
       skill: 'developer-unifier',
       event_type: 'error',
       input_refs: [worktreePath],
@@ -1395,7 +1395,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
-      phase: 'developer-loop',
+      phase: 'unifier',
       skill: 'developer-unifier',
       event_type: 'error',
       input_refs: [worktreePath],
@@ -1423,7 +1423,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
-        phase: 'developer-loop',
+        phase: 'unifier',
         skill: 'developer-unifier',
         event_type: 'error',
         input_refs: [worktreePath],
@@ -1437,7 +1437,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
-        phase: 'developer-loop',
+        phase: 'unifier',
         skill: 'developer-unifier',
         event_type: 'error',
         input_refs: [worktreePath],
