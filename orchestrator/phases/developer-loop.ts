@@ -811,6 +811,10 @@ function emitGateEvent(
   parentEventId: string,
   workItemId: string,
   info: GateRunInfo,
+  // ADR 026: a code-fix UWI runs in the unifier phase wearing the dev role —
+  // attribute its gate events to `unifier` so post-mortems don't mis-file them
+  // under developer-loop. Defaults to the dev-loop's own phase/skill.
+  attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },
 ): void {
   // 2026-05-25: iter-0 gate fails are EXPECTED (the L2 sharp-gate
   // check proves the gate isn't hollow before the agent has done any
@@ -825,8 +829,8 @@ function emitGateEvent(
   logger.emit({
     initiative_id: initiativeId,
     parent_event_id: parentEventId,
-    phase: 'developer-loop',
-    skill: 'developer-ralph',
+    phase: attr.phase,
+    skill: attr.skill,
     event_type: info.passed || isExpectedIter0Fail ? 'log' : 'error',
     input_refs: [],
     output_refs: [],
@@ -1374,6 +1378,18 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
   const { uwi, input, logger, startEventId, qualityGateCmd } = args;
 
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
+  // B5 (pre-merge review): does this UWI carry a SHARP gate (one that's RED on the
+  // current branch until the concern is fixed), or is it falling back to the
+  // green project gate? At ready-for-review the branch already has commits, so a
+  // green gate + empty creates[] would take the runner's iter-0 `already-complete`
+  // shortcut → the UWI false-completes with ZERO agent work. So enable the
+  // sharp-gate iter-0 check ONLY with a real sharp gate (red iter-0 → iterate →
+  // real red→green loop); with the project-gate fallback DISABLE it so the agent
+  // gets a turn (the dev-role prompt drives the write-a-failing-test-first work).
+  const hasSharpGate = !!(
+    uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 &&
+    JSON.stringify(uwi.quality_gate_cmd) !== JSON.stringify(qualityGateCmd)
+  );
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
   const uwiAbsPath = resolve(unifierItemsDir(input.worktreePath), `${uwi.work_item_id}.md`);
   const uwiRelPath = `.forge/unifier-items/${uwi.work_item_id}.md`;
@@ -1417,7 +1433,7 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
   const gate = makeQualityGateFromCmd(
     input.worktreePath,
     [...itemGateCmd],
-    (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo); },
+    (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); },
     { requiredPaths: uwi.creates ?? [] },
   );
 
@@ -1435,7 +1451,9 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
         qualityGate: gate,
         requiredPaths: uwi.creates ?? [],
         gateErrored: () => lastGateErrored,
-        // failOnHollowIter0Gate defaults TRUE — the dev-grade sharp-gate discipline.
+        // B5: only enforce the iter-0 sharp-gate check with a real sharp gate
+        // (else the green project-gate fallback false-completes at iter-0).
+        failOnHollowIter0Gate: hasSharpGate,
         onIteration: unifierIterationHandler(args, toolSink),
       },
       agent,

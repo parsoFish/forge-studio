@@ -151,6 +151,48 @@ test('drain: a failed UWI → needs-operator (never auto-retry)', async () => {
   }
 });
 
+test('drain: a thrown drain cycle returns the manifest to ready-for-review (B1, never stranded)', async () => {
+  const { root, queueRoot, wt } = setup();
+  try {
+    seedDrainableQueue(wt);
+    writeManifest(queueRoot, 'ready-for-review', wt, { cycleId: 'CYCLE-XYZ' });
+    const results = await drainPendingUnifierItems({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => false,
+      runDrainCycle: async () => { throw new Error('cycle blew up mid-drain'); },
+    });
+    assert.deepEqual(results.map((r) => r.status), ['error' as DrainStatus]);
+    // Not stranded in in-flight — the finally returned it to ready-for-review.
+    assert.equal(existsSync(join(queueRoot, 'in-flight', `${ID}.md`)), false);
+    assert.equal(existsSync(join(queueRoot, 'ready-for-review', `${ID}.md`)), true);
+    // No leftover heartbeat.
+    assert.equal(existsSync(join(queueRoot, 'in-flight', `${ID}.md.heartbeat`)), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('drain: cycle_id falls back to the latest _logs dir when the manifest lacks one (N1)', async () => {
+  const { root, queueRoot, wt } = setup();
+  try {
+    seedDrainableQueue(wt);
+    writeManifest(queueRoot, 'ready-for-review', wt); // no cycle_id
+    const logsRoot = join(root, '_logs');
+    mkdirSync(join(logsRoot, `2026-06-07T01-02-03_${ID}`), { recursive: true });
+    const calls: CycleInput[] = [];
+    await drainPendingUnifierItems({
+      queueRoot,
+      logsRoot,
+      confirmMerge: () => false,
+      runDrainCycle: async (input) => { calls.push(input); return { status: 'pr-open' }; },
+    });
+    assert.equal(calls[0]!.cycleId, `2026-06-07T01-02-03_${ID}`, 'threads the latest matching _logs dir');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('drain: no worktree → no-worktree, skipped', async () => {
   const { root, queueRoot } = setup();
   try {

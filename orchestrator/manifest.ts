@@ -325,6 +325,24 @@ export function persistManifestCycleId(manifestPath: string, cycleId: string): v
   }
 }
 
+/**
+ * ADR 026: stamp `resume_from: unifier` on the manifest when a review send-back
+ * appends UWIs, so that if the daemon CRASHES mid-drain the recovery sweep can
+ * move the manifest to pending and the scheduler resumes it correctly (reuse the
+ * worktree, skip PM + dev-loop) instead of re-running a full cycle. Idempotent +
+ * best-effort. `forge requeue` (full re-run) clears it.
+ */
+export function persistManifestResumeFromUnifier(manifestPath: string): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (m.resume_from === 'unifier') return;
+    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'unifier' }));
+  } catch {
+    /* best-effort — must not fail the verdict request */
+  }
+}
+
 // ---------- helpers ----------
 
 function stringField(data: Record<string, unknown>, key: string, required: boolean): string {

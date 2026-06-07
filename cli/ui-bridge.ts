@@ -39,7 +39,7 @@ import lockfile from 'proper-lockfile';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
-import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, persistManifestResumeFromUnifier } from '../orchestrator/manifest.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import {
   appendReviewUnifierItems,
@@ -804,6 +804,9 @@ async function handleHttp(
           projectGateCmd,
           estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
         });
+        // ADR 026 (crash recovery): mark the manifest so a daemon crash mid-drain
+        // recovers as a unifier resume (reuse the worktree) rather than a full re-run.
+        persistManifestResumeFromUnifier(manifestPath);
         sendJson(res, 200, {
           ok: true,
           kind,

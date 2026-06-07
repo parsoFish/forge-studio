@@ -19,13 +19,14 @@
  * checks so a concurrent append doesn't race the pending read.
  */
 import { existsSync, readdirSync, readFileSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { parseManifest } from './manifest.ts';
-import { getPaths, moveTo } from './queue.ts';
+import { getPaths, moveTo, writeHeartbeat } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { runCycle } from './cycle.ts';
+import { latestCycleId } from './finalize-merged.ts';
 import {
   pendingUnifierItems,
   hasFailedUnifierItem,
@@ -33,6 +34,10 @@ import {
   UNIFIER_MAX_TOTAL_ITEMS,
 } from './unifier-items.ts';
 import type { CycleInput } from './cycle-context.ts';
+
+/** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
+ *  a crashed daemon leaves a STALE heartbeat the recovery sweep can reclaim. */
+const DRAIN_HEARTBEAT_MS = 30_000;
 
 export type DrainStatus =
   | 'drained'
@@ -42,12 +47,15 @@ export type DrainStatus =
   | 'needs-operator'
   | 'cap-exceeded'
   | 'locked'
+  | 'claimed-elsewhere'
   | 'error';
 export type DrainResult = { initiativeId: string; status: DrainStatus; detail?: string };
 
 export type DrainDeps = {
   /** Queue root. Defaults to the cwd-based queue (matches the scheduler). */
   queueRoot?: string;
+  /** `<forge>/_logs`. Defaults to `<cwd>/_logs` (the cycle_id fallback). */
+  logsRoot?: string;
   /** Merge probe. Defaults to `confirmPrMerged` (gh pr view state == MERGED). */
   confirmMerge?: (worktreePath: string) => boolean | Promise<boolean>;
   /**
@@ -66,6 +74,7 @@ async function defaultRunDrainCycle(input: CycleInput): Promise<{ status: string
 
 export async function drainPendingUnifierItems(deps: DrainDeps = {}): Promise<DrainResult[]> {
   const paths = getPaths(deps.queueRoot);
+  const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve('_logs');
   const confirmMerge = deps.confirmMerge ?? confirmPrMerged;
   const runDrainCycle = deps.runDrainCycle ?? defaultRunDrainCycle;
 
@@ -126,13 +135,27 @@ export async function drainPendingUnifierItems(deps: DrainDeps = {}): Promise<Dr
       // verdict lock first; the rename is the cross-sweep mutual exclusion.
       if (release) { try { await release(); } catch { /* ignore */ } release = null; }
       const inFlightPath = join(paths.inFlight, file);
-      renameSync(manifestPath, inFlightPath);
+      try {
+        renameSync(manifestPath, inFlightPath);
+      } catch (renameErr) {
+        // Another sweep (finalize) or handler claimed/removed it first — skip cleanly.
+        out.push({ initiativeId, status: 'claimed-elsewhere', detail: renameErr instanceof Error ? renameErr.message : String(renameErr) });
+        continue;
+      }
 
-      // ADR 026 mechanism B: reuse the SAME cycle_id (persisted at first claim)
-      // so the drain appends to the original `_logs` dir; resumeFrom 'unifier'
-      // skips PM + the per-WI dev-loop and runs only the pending UWIs + the
-      // full post-unifier spine.
-      const cycleId = m.cycle_id ?? initiativeId;
+      // Heartbeat the claimed manifest so a daemon crash mid-drain leaves a STALE
+      // heartbeat the recovery sweep reclaims to pending — and resumes correctly
+      // (the send-back stamped resume_from:'unifier' on the manifest). moveTo
+      // (closure / the finally below) cleans the heartbeat.
+      writeHeartbeat(file, paths);
+      const heartbeat = setInterval(() => { try { writeHeartbeat(file, paths); } catch { /* best-effort */ } }, DRAIN_HEARTBEAT_MS);
+
+      // ADR 026 mechanism B: reuse the SAME cycle_id so the drain appends to the
+      // original `_logs` dir (prefer the persisted id, then the latest matching
+      // dir, then the initiativeId — never silently fork a second dir). resumeFrom
+      // 'unifier' skips PM + the per-WI dev-loop and runs only the pending UWIs +
+      // the full post-unifier spine.
+      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
       const input: CycleInput = {
         initiativeId,
         manifestPath: inFlightPath,
@@ -141,17 +164,20 @@ export async function drainPendingUnifierItems(deps: DrainDeps = {}): Promise<Dr
         cycleId,
         resumeFrom: 'unifier',
       };
-      const result = await runDrainCycle(input);
-
-      // Closure is the single terminal-move authority (in-flight → ready-for-
-      // review / done). If the cycle threw before closure, the manifest is
-      // stranded in in-flight — return it to ready-for-review so it's never lost.
-      if (existsSync(inFlightPath)) {
-        try { moveTo(file, 'ready-for-review', paths); } catch { /* best-effort */ }
+      try {
+        const result = await runDrainCycle(input);
+        deps.notify?.(`${initiativeId} · drained ${pending.length} unifier work-item(s) → ${result.status}`);
+        out.push({ initiativeId, status: 'drained', detail: result.status });
+      } finally {
+        clearInterval(heartbeat);
+        // Closure is the single terminal-move authority (in-flight → ready-for-
+        // review / done). If the cycle threw/crashed before closure, the manifest
+        // is stranded in in-flight — return it to ready-for-review so it's never
+        // lost. Runs on BOTH the success-but-not-moved and the throw paths.
+        if (existsSync(inFlightPath)) {
+          try { moveTo(file, 'ready-for-review', paths); } catch { /* best-effort */ }
+        }
       }
-
-      deps.notify?.(`${initiativeId} · drained ${pending.length} unifier work-item(s) → ${result.status}`);
-      out.push({ initiativeId, status: 'drained', detail: result.status });
     } catch (err) {
       out.push({ initiativeId, status: 'error', detail: err instanceof Error ? err.message : String(err) });
     } finally {

@@ -189,6 +189,22 @@ test('runRequeue: throws when initiative ID does not resolve', () => {
 // ADR 026 retired the `<id>.pr-feedback.md` send-back thread (review feedback is
 // now appended UWIs in the worktree). Any requeue — resume or not — clears a
 // legacy feedback file, since nothing reads it anymore.
+test('runRequeue: a full (non-resume) requeue CLEARS a stamped resume_from (ADR 026)', () => {
+  const root = setupForgeRoot();
+  try {
+    const id = 'INIT-2026-05-24-rq-test';
+    // A manifest a send-back stamped with resume_from: unifier.
+    const withResume = MANIFEST().replace(/^---$/m, '---\nresume_from: unifier');
+    writeFileSync(join(root, '_queue', 'failed', `${id}.md`), withResume);
+
+    runRequeue(id, { forgeRoot: root }); // full re-run, no --resume-from
+    const moved = readFileSync(join(root, '_queue', 'pending', `${id}.md`), 'utf8');
+    assert.doesNotMatch(moved, /resume_from/, 'a full requeue must clear the resume marker for a true full re-run');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
   const root = setupForgeRoot();
   try {

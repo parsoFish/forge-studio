@@ -23,6 +23,7 @@ import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
+import { pendingUnifierItems } from './unifier-items.ts';
 import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -49,8 +50,9 @@ export type FinalizeDeps = {
 };
 
 /** The timestamped log-dir cycle id for an initiative (most-recent), so the
- *  reflector writes `user-questions.json` where the UI's /api/reflect reads it. */
-function latestCycleId(logsRoot: string, initiativeId: string): string | null {
+ *  reflector writes `user-questions.json` where the UI's /api/reflect reads it.
+ *  Exported so the ADR 026 drain shares the same `_logs`-dir resolution. */
+export function latestCycleId(logsRoot: string, initiativeId: string): string | null {
   if (!existsSync(logsRoot)) return null;
   let best: { id: string; mtime: number } | null = null;
   for (const name of readdirSync(logsRoot)) {
@@ -109,6 +111,16 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       if (!(await confirmMerge(worktreePath))) {
         out.push({ initiativeId, status: 'still-open' });
         continue;
+      }
+      // ADR 026 merge-vs-drain: a merged PR is terminal — finalize WINS over the
+      // drain (running review UWIs against a merged branch is pointless). But if
+      // the operator merged with review work-items still pending, surface it so
+      // the drop is never SILENT (the merge overrides the unrun concerns).
+      const pendingUwis = pendingUnifierItems(worktreePath);
+      if (pendingUwis.length > 0) {
+        deps.notify?.(
+          `${initiativeId} · merged with ${pendingUwis.length} pending review work-item(s) unrun (${pendingUwis.map((p) => p.work_item_id).join(', ')}) — the operator's merge overrides them`,
+        );
       }
       // Re-claim to in-flight/ so closure's terminal move (in-flight → done)
       // has a source. If closure decides NOT merged after all it moves the

@@ -10,6 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
+import { seedStaticUnifierItem, appendReviewUnifierItems } from './unifier-items.ts';
+import { writeWorkItemStatus } from './work-item.ts';
 
 function setup(): { root: string; queueRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'finalize-'));
@@ -114,6 +116,40 @@ test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', a
     assert.deepEqual(results.map((r) => r.status), ['still-open']);
     assert.equal(called, false);
     assert.equal(existsSync(join(queueRoot, 'ready-for-review', 'INIT-2026-05-30-open.md')), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('finalize: merged with pending UWIs still finalizes, but surfaces the drop (B2, non-silent)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    const id = 'INIT-2026-05-30-merged-pending';
+    // A post-send-back worktree: UWI-1 complete, UWI-2/3 still pending.
+    const uwi1 = seedStaticUnifierItem(wt, { initiativeId: id, estimatedIterations: 6, qualityGateCmd: ['go', 'test', './...'] });
+    writeWorkItemStatus(uwi1, 'complete');
+    appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: id,
+      concern: { rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] },
+      projectGateCmd: ['go', 'test', './...'],
+      estimatedIterations: 6,
+    });
+    writeManifest(queueRoot, 'ready-for-review', id, wt);
+    let finalized = false;
+    const notes: string[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true, // operator merged despite pending concerns
+      finalizeOne: async () => { finalized = true; return true; },
+      notify: (m) => notes.push(m),
+    });
+    assert.deepEqual(results.map((r) => r.status), ['finalized']);
+    assert.equal(finalized, true, 'merge is terminal — finalize wins over the drain');
+    assert.ok(notes.some((n) => /pending review work-item/.test(n)), `expected a non-silent drop note, got ${JSON.stringify(notes)}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

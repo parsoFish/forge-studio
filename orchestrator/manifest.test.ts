@@ -18,6 +18,7 @@ import {
   readManifestOrigin,
   readManifestCycleId,
   persistManifestCycleId,
+  persistManifestResumeFromUnifier,
   type InitiativeManifest,
 } from './manifest.ts';
 
@@ -277,6 +278,23 @@ test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it
     // Missing file → null + no throw.
     assert.equal(readManifestCycleId(join(dir, 'nope.md')), null);
     persistManifestCycleId(join(dir, 'nope.md'), 'X'); // no-op, must not throw
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 026: persistManifestResumeFromUnifier stamps the resume marker (crash recovery)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-resume-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, undefined);
+    persistManifestResumeFromUnifier(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'unifier');
+    // Idempotent + missing-file safe.
+    persistManifestResumeFromUnifier(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'unifier');
+    persistManifestResumeFromUnifier(join(dir, 'nope.md')); // no-op, must not throw
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

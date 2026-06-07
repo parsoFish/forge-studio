@@ -117,8 +117,9 @@ export function runRequeue(
     previous_failure_modes: previousFailureModesAfter,
     // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
     // preserved worktree — `unifier` re-runs only the unifier (draining any
-    // pending review UWIs).
-    ...(opts.resumeFromUnifier ? { resume_from: 'unifier' as const } : {}),
+    // pending review UWIs). A full (non-resume) requeue CLEARS any resume marker
+    // (e.g. one a send-back stamped, ADR 026) so the re-run is a true full cycle.
+    resume_from: opts.resumeFromUnifier ? ('unifier' as const) : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
