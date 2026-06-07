@@ -140,7 +140,19 @@ phase is migrated.
 > brain-gate production signal wording, `AskUserQuestion` prohibition) relocated
 > from the TS discipline block into `SKILL.md`; `buildReflectorSystemPrompt`
 > reduced to brain navigation index + `SKILL.md` only (no static prose block).
-> Unit-tested in `orchestrator/reflector-invocation.test.ts`. Remaining: dev-loop.
+> Unit-tested in `orchestrator/reflector-invocation.test.ts`.
+>
+> **Landed 2026-06-07 (dev-loop + unifier prose-move complete — ADR-024 done).** The
+> **developer-loop** adopts `devAgentSpec` (`dev-invocation.ts`, `sonnet` tier;
+> `DEV_MODEL` derives via `modelForSpec`), and the **unifier** prose move is finished:
+> `buildDevSystemPrompt` and `buildUnifierSystemPrompt` are now one-liners
+> (`loadSkillText()`), with the Ralph-discipline + unifier "integrate, don't develop"
+> prose relocated into `skills/developer-ralph/SKILL.md` + `skills/developer-unifier/SKILL.md`.
+> Runtime mechanics (PROMPT/AGENT/fix_plan stamping, iter-0 gate, stop-conditions,
+> demo-shape switch, composed unifier gate) are unchanged. With this, **all five LLM
+> phases — architect, project-manager, reflector, developer-loop, unifier — source
+> their intent from `SKILL.md` via `PhaseAgentSpec`.** Unit-tested in
+> `dev-invocation.test.ts` + `unifier-invocation.test.ts`.
 
 > **Landed 2026-06-07 (developer-loop migration + unifier prose move complete).**
 > `devAgentSpec: PhaseAgentSpec` added to `orchestrator/dev-invocation.ts`
