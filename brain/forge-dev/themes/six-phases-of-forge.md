@@ -17,9 +17,9 @@ keywords:
 created_at: 2026-05-04T17:55:00.000Z
 updated_at: 2026-05-04T17:55:00.000Z
 related_themes:
-  - phase-isolation-benchmarks
   - markdown-artifact-flow
   - unattended-scheduler
+  - brain-read-policy
 ---
 
 # Six phases of forge backed by a brain
@@ -50,7 +50,7 @@ Forge is six phases backed by a brain. Phases run in sequence per initiative; th
 | Review Loop | automated loop | Brain 3 only (advisory) | Review-prep + demo + PR + operator approval |
 | Reflection | human-in-loop, then ingest | reads+writes all | Retro → new theme pages in brain |
 
-Three human interaction points: Architect (ideation), Review (closeout on `/review/<id>` UI screen), Reflection (feedback). Everything else runs unattended.
+Three human interaction points: Architect (ideation), Review (closeout on `/review/<id>` UI screen), Reflection (feedback). Everything else runs unattended. These three moments are **operator-initiated and impossible to silently auto-satisfy** — there is no auto-approve verdict path in production, and all three now run as dedicated in-UI screens (ADR 020/021/023; the UI is the sole operator surface). Simulators belong only to benchmarks, never a live cycle.
 
 ## Sources
 
@@ -59,6 +59,6 @@ Three human interaction points: Architect (ideation), Review (closeout on `/revi
 
 ## See also
 
-- [[phase-isolation-benchmarks]] — how each phase measures improvement.
+- [[brain-read-policy]] — who reads the brain before acting (planners/reflector yes; dev-loop/reviewer no).
 - [[markdown-artifact-flow]] — what flows between the phases.
 - [[unattended-scheduler]] — unattended scheduler with file-based queue + worktree pool.

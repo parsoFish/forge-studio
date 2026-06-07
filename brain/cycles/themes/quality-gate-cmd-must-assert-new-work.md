@@ -6,7 +6,6 @@ created_at: 2026-05-23T11:58:00Z
 updated_at: 2026-05-23T11:58:00Z
 related_themes:
   - file-isolation-constraint-enables-single-iteration
-  - pr-as-sole-review-window
 ---
 
 # Quality-gate-cmd must assert NEW work
@@ -84,5 +83,11 @@ indeterminate (not pass).
 
 - `file-isolation-constraint-enables-single-iteration` — the related
   one-file-per-WI pattern that DOES correlate with single-iteration success.
-- [[pr-as-sole-review-window]] — the unifier's late-stage gate is the
-  load-bearing catch.
+- The unifier's late-stage `pr-not-self-contained` gate is the load-bearing
+  catch (validated by the evidence above) — the safety net even when the
+  per-WI gate false-passes.
+- **Related open gap (reporting layer):** the cycle *report* can show the
+  default gate (`(default: npm test if package.json exists)`) even when the
+  manifest declares a custom `quality_gate_cmd` — the same false-confidence
+  failure mode, surfaced at report time rather than gate time. Tracked in
+  `docs/known-gaps.md`.

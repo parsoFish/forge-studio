@@ -23,8 +23,6 @@ created_at: 2026-05-17T00:00:00.000Z
 updated_at: 2026-05-17T00:00:00.000Z
 related_themes:
   - reactive-constraint-stripback-arc
-  - forge-current-architecture-as-built
-  - chained-phase-benchmarks
   - eval-driven-development
 ---
 
@@ -68,6 +66,4 @@ redefining it is gaming. The loop is resumable from
 ## See also
 
 - [[reactive-constraint-stripback-arc]] — the antipattern this closure remediated.
-- [[forge-current-architecture-as-built]] — superseded by the 2026-05-17 snapshot this arc produced.
-- [[chained-phase-benchmarks]] — the bench model landed in this arc.
 - [[eval-driven-development]] — eval-driven development — every change shows a benchmark delta.

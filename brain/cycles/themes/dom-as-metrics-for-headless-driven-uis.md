@@ -70,7 +70,7 @@ matters for a demo flow — have the demo wait on it instead of sleeping.
 
 ## See also
 
-- [[brain-first-research]] (mirror discipline: keep the source of truth singular, read from it)
+- [[brain-read-policy]] (mirror discipline: keep the source of truth singular, read from it)
 - [[windows-browser-to-wsl-via-window-location]] (`data-bridge-url` is one of these probes)
 - harness: [`scripts/e2e-journey.mjs`](../../../scripts/e2e-journey.mjs) (the consolidated UI-emulation + regression harness)
 - pattern source: [anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code)

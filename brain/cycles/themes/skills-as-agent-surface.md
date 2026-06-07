@@ -15,7 +15,7 @@ created_at: 2026-05-04T17:55:00.000Z
 updated_at: 2026-05-04T17:55:00.000Z
 related_themes:
   - claude-agent-sdk
-  - brain-first-research
+  - brain-read-policy
   - llm-council-pattern
 ---
 
@@ -36,5 +36,5 @@ Trade-off: skill discovery is conventional (filesystem-based), not registered. S
 ## See also
 
 - [[claude-agent-sdk]] — runtime the skills run on.
-- [[brain-first-research]] — every skill's mandated first action.
+- [[brain-read-policy]] — which skills read the brain first (planners/reflector), and which don't (dev-loop/reviewer).
 - [[llm-council-pattern]] — multi-skill chain used in the architect.

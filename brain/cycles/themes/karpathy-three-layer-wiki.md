@@ -15,7 +15,7 @@ keywords:
 created_at: 2026-05-04T17:55:00.000Z
 updated_at: 2026-05-23T00:00:00.000Z
 related_themes:
-  - brain-first-research
+  - brain-read-policy
   - theme-page-format
   - brain-gap-feedback-loop
 ---
@@ -44,6 +44,6 @@ Karpathy's principle: many small navigable pages > few large summaries. A reader
 
 ## See also
 
-- [[brain-first-research]] — why the wiki gets used.
+- [[brain-read-policy]] — why the wiki gets used.
 - [[theme-page-format]] — theme page format.
 - [[brain-gap-feedback-loop]] — how it stays current.

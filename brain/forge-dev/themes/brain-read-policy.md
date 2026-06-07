@@ -24,10 +24,8 @@ keywords:
 created_at: 2026-05-16T00:00:00.000Z
 updated_at: 2026-05-26T00:00:00.000Z
 related_themes:
-  - brain-first-research
   - reactive-constraint-stripback-arc
   - karpathy-three-layer-wiki
-  - forge-current-architecture-as-built
 ---
 
 # Brain-read policy
@@ -82,7 +80,5 @@ work item. Reviewer ← manifest + work-item set. Reflector ↔ brain.
 
 ## See also
 
-- [[brain-first-research]] — the universal mandate this supersedes.
 - [[reactive-constraint-stripback-arc]] — why the dev/reviewer brain gate was removed.
 - [[karpathy-three-layer-wiki]] — the index/metadata the guardrail relies on.
-- [[forge-current-architecture-as-built]] — forge as-built — 5 wired phases + hand-run architect, pm/reflector-only brain-first, ~4,400 loc, a real resilience layer.

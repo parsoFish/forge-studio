@@ -25,7 +25,7 @@ keywords:
 created_at: 2026-05-16T00:00:00.000Z
 updated_at: 2026-05-16T00:00:00.000Z
 related_themes:
-  - brain-first-research
+  - brain-read-policy
   - ralph-loop-pattern
   - quality-gates-orchestrator-verified
   - simplicity-as-architecture
@@ -72,7 +72,7 @@ deliberate redesign.
 
 ## See also
 
-- [[brain-first-research]] — the mandate that was deliberately narrowed to PM/reflector only.
+- [[brain-read-policy]] — the mandate that was deliberately narrowed to PM/reflector only.
 - [[ralph-loop-pattern]] — where the shared-scratch bug lived.
 - [[quality-gates-orchestrator-verified]] — quality gates verified by the orchestrator, not the agent.
 - [[simplicity-as-architecture]] — the principle the strip-backs restored.

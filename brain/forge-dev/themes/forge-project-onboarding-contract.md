@@ -24,7 +24,6 @@ created_at: 2026-05-16T00:00:00.000Z
 updated_at: 2026-05-16T00:00:00.000Z
 related_themes:
   - merge-boundary-stacked-initiative-failure
-  - forge-current-architecture-as-built
   - file-based-state-machine
   - quality-gates-orchestrator-verified
 ---
@@ -96,6 +95,5 @@ The deepened C1/C2 facets and all of C7 are **not yet machine-checked** by
 ## See also
 
 - [[merge-boundary-stacked-initiative-failure]] — C6, the open clause.
-- [[forge-current-architecture-as-built]] — what the contract is enforced against.
 - [[file-based-state-machine]] — file-based state machine for queue management.
 - [[quality-gates-orchestrator-verified]] — C1's enforcement mechanism.

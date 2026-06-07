@@ -10,7 +10,6 @@
 
 - [`six-phases-of-forge`](./themes/six-phases-of-forge.md) — Brain → Architect → PM → Developer Loop → Review Loop → Reflection.
 - [`v1-vs-v2-key-differences`](./themes/v1-vs-v2-key-differences.md) — What v2 kept from v1's mental models and what it replaced with battle-tested tools.
-- [`forge-current-architecture-as-built`](./themes/forge-current-architecture-as-built.md) — Honest as-built snapshot: 5 wired phases + hand-run architect, PM/reflector-only brain-first, ~4,400 LOC, the resilience layer, queue ≠ truth.
 
 ### External-system profiles
 

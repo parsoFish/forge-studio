@@ -51,4 +51,4 @@ Forge v2 uses hooks for:
 
 - [[claude-agent-sdk]] — runtime context.
 - [[claude-sdk-subagents]] — claude agent sdk subagents.
-- [[brain-first-research]] — enforced via hooks.
+- [[brain-read-policy]] — enforced via hooks.

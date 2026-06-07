@@ -21,7 +21,6 @@ keywords:
 created_at: 2026-05-16T00:00:00.000Z
 updated_at: 2026-05-16T00:00:00.000Z
 related_themes:
-  - forge-current-architecture-as-built
   - forge-project-onboarding-contract
   - episodic-not-cumulative-learnings
 ---
@@ -59,6 +58,5 @@ about forge is confounded by the close-out work that produced it.
 
 ## See also
 
-- [[forge-current-architecture-as-built]] — the metrics surface this confounds.
 - [[forge-project-onboarding-contract]] — the contract makes the autonomous mode well-defined.
 - [[episodic-not-cumulative-learnings]] — why hand-authored themes are a smell.

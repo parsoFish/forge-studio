@@ -14,7 +14,7 @@ keywords:
 created_at: 2026-05-04T17:55:00.000Z
 updated_at: 2026-05-04T17:55:00.000Z
 related_themes:
-  - brain-first-research
+  - brain-read-policy
   - karpathy-three-layer-wiki
   - jsonl-event-log
 ---
@@ -39,6 +39,6 @@ This is what makes the brain a self-improving loop rather than a static document
 
 ## See also
 
-- [[brain-first-research]] — why gaps are forced into existence.
+- [[brain-read-policy]] — why gaps are forced into existence.
 - [[karpathy-three-layer-wiki]] — what gets grown.
 - [[jsonl-event-log]] — the log family.

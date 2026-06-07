@@ -24,7 +24,6 @@ updated_at: 2026-05-23T00:00:00.000Z
 related_themes:
   - forge-project-onboarding-contract
   - eval-driven-development
-  - phase-isolation-benchmarks
   - parametric-design-search
 ---
 
@@ -94,5 +93,4 @@ proxy, since even an imperfect one beats none — it converts prose to deltas.
 
 - [[forge-project-onboarding-contract]] — C1–C6 (C7 extends).
 - [[eval-driven-development]] — the principle this clause enforces.
-- [[phase-isolation-benchmarks]] — forge's own (now-retired) per-phase analogue.
 - [[parametric-design-search]] — the ideation pattern C7 enables.

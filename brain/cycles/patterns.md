@@ -8,7 +8,6 @@
 
 ### Brain & knowledge
 
-- [`brain-first-research`](./themes/brain-first-research.md) — Every skill mandates `brain-query` first; gaps logged for next ingest.
 - [`brain-gap-feedback-loop`](./themes/brain-gap-feedback-loop.md) — `brain-query` failures become `brain-ingest` inputs.
 - [`karpathy-three-layer-wiki`](./themes/karpathy-three-layer-wiki.md) — Brain layout: raw → 15-40-line themes → category indexes.
 - [`wiki-over-truncated-context`](./themes/wiki-over-truncated-context.md) — Wiki replaces v1's 2000-char truncated cross-cycle context. Load-bearing argument for the brain.
@@ -52,7 +51,6 @@
 
 ### Evaluation & quality
 
-- [`phase-isolation-benchmarks`](./themes/phase-isolation-benchmarks.md) — Per-phase `benchmarks/<phase>/` for fast feedback.
 - [`eval-driven-development`](./themes/eval-driven-development.md) — Every change shows a benchmark delta; reflection-discovered failures become new cases.
 - [`real-capability-harness`](./themes/real-capability-harness.md) — Forge's standing regression gate is a real dogfood repo (claude-harness), tiered + manually-gated, asserting real-cycle OUTCOMES (reached PR/merge, dev-loop N/N, npm test green, goldens match, cost under ceiling) — not a rubric phases can overfit.
 - [`tdd-with-agents`](./themes/tdd-with-agents.md) — Tests first, verified in a worktree by the orchestrator (never by the agent).
@@ -61,7 +59,6 @@
 
 ### Process discipline
 
-- [`pr-as-sole-review-window`](./themes/pr-as-sole-review-window.md) — Iterate via PR comments; the demo must live IN the PR. Private repos: commit a relative-link DEMO.md, not inline raw URLs (image proxy can't fetch private raw).
 - [`dependency-ordered-work`](./themes/dependency-ordered-work.md) — `depends_on` edges + graph-critic make parallelism a correctness property.
 - [`cost-aware-model-routing`](./themes/cost-aware-model-routing.md) — Opus for design, Sonnet for coding, Haiku for triage; per-skill overrides. v1: 87% cost reduction.
 - [`prompt-caching-strategy`](./themes/prompt-caching-strategy.md) — Stable prefix first; v1 Cycle 3 hit 92% cache reads. Largest cost lever.

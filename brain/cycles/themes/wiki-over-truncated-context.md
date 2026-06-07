@@ -17,7 +17,7 @@ created_at: 2026-05-04T19:30:00.000Z
 updated_at: 2026-05-04T19:30:00.000Z
 related_themes:
   - karpathy-three-layer-wiki
-  - brain-first-research
+  - brain-read-policy
   - brain-gap-feedback-loop
   - episodic-not-cumulative-learnings
 ---
@@ -44,6 +44,6 @@ This theme is the **load-bearing argument for v2's brain** — the brain isn't a
 ## See also
 
 - [[karpathy-three-layer-wiki]] — what the structural fix is.
-- [[brain-first-research]] — what enforces use of the wiki.
+- [[brain-read-policy]] — what enforces use of the wiki.
 - [[brain-gap-feedback-loop]] — what prevents the wiki from going stale.
 - [[episodic-not-cumulative-learnings]] — antipattern this fixes.

@@ -23,7 +23,6 @@ created_at: 2026-05-30T12:00:00.000Z
 updated_at: 2026-05-30T12:00:00.000Z
 related_themes:
   - eval-driven-development
-  - phase-isolation-benchmarks
   - quality-gate-cmd-must-assert-new-work
   - objective-gate-autonomous-closure
   - cycle-event-log-replay
@@ -102,8 +101,6 @@ unambiguous.
 
 - [[eval-driven-development]] — full-cycle runs measure system behaviour; this
   is that clause promoted to a gate.
-- [[phase-isolation-benchmarks]] — the synthetic counterpart this replaces (now
-  retired).
 - [[quality-gate-cmd-must-assert-new-work]] — a real defect this harness class
   surfaced (hollow gate / gate-too-loose).
 - [[objective-gate-autonomous-closure]] — outcome-only gating, same philosophy

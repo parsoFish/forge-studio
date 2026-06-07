@@ -15,7 +15,6 @@ keywords:
 created_at: 2026-05-04T18:00:00.000Z
 updated_at: 2026-05-04T18:00:00.000Z
 related_themes:
-  - phase-isolation-benchmarks
   - tdd-with-agents
   - brain-gap-feedback-loop
 ---
@@ -42,6 +41,5 @@ This is the practitioner-version of forge's principle 3 (phase isolation with fa
 
 ## See also
 
-- [[phase-isolation-benchmarks]] — forge's instantiation.
 - [[tdd-with-agents]] — sister discipline (test-vs-benchmark).
 - [[brain-gap-feedback-loop]] — the brain version.
