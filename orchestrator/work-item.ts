@@ -46,8 +46,20 @@ export type WorkItem = {
   verification_artifact?: string;
   /** Structured marker — files this WI creates from scratch. Subset of files_in_scope. */
   creates?: string[];
+  /**
+   * ADR 026 — UWI dispatch type (unifier-items only; dev WIs leave it unset, so
+   * their frontmatter stays byte-identical). `packaging` runs the
+   * developer-unifier skill against the 5-gate composed unifier gate (UWI-1,
+   * the terminal re-prep, demo/doc tweaks). `code-fix` runs a dev-style role
+   * against the write-a-failing-test-first gate (`failOnHollowIter0Gate=true`)
+   * so review-originated code is held to the same rigor as PM-originated code.
+   * Absent ⇒ treated as `packaging` (the legacy single-mission behaviour).
+   */
+  kind?: 'packaging' | 'code-fix';
   body: string;
 };
+
+export const UNIFIER_ITEM_KINDS: readonly NonNullable<WorkItem['kind']>[] = ['packaging', 'code-fix'];
 
 // `WI-<n>` are dev work items (PM-emitted). `UWI-<n>` are unifier work items
 // (the unifier's own queue, ADR 026): UWI-1 is the static unify/PR-prep mission;
@@ -102,6 +114,9 @@ export function parseWorkItem(content: string): WorkItem {
     const c = (data.creates as unknown[]).filter((s): s is string => typeof s === 'string');
     if (c.length > 0) w.creates = c;
   }
+  if (data.kind === 'packaging' || data.kind === 'code-fix') {
+    w.kind = data.kind;
+  }
 
   return w;
 }
@@ -134,6 +149,9 @@ export function serializeWorkItem(w: WorkItem): string {
   }
   if (w.creates !== undefined && w.creates.length > 0) {
     data.creates = w.creates;
+  }
+  if (w.kind !== undefined) {
+    data.kind = w.kind;
   }
   return matter.stringify('\n' + w.body.replace(/^\n+/, ''), data);
 }
@@ -282,6 +300,9 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
         }
       }
     }
+  }
+  if (w.kind !== undefined && !UNIFIER_ITEM_KINDS.includes(w.kind)) {
+    errors.push(`kind must be one of ${UNIFIER_ITEM_KINDS.join(' | ')} when set: got ${String(w.kind)}`);
   }
 
   return errors;

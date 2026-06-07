@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir, pendingUnifierItems, reopenUnifierItem } from './unifier-items.ts';
+import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir, pendingUnifierItems, reopenUnifierItem, appendReviewUnifierItems, UnifierItemsCapError, ReviewConcernInvalidError } from './unifier-items.ts';
 import { writeWorkItem, parseWorkItem, writeWorkItemStatus, type WorkItem } from './work-item.ts';
 
 const INIT = 'INIT-2026-06-07-release-folder-data-source';
@@ -122,6 +122,130 @@ test('reopenUnifierItem resets a complete UWI back to pending (legacy send-back 
     // No-op when the file is absent.
     reopenUnifierItem(wt, 'UWI-99');
     assert.deepEqual(pendingUnifierItems(wt).map((p) => p.work_item_id), ['UWI-1']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+const PROJECT_GATE = ['go', 'test', '-tags', 'all', './...'];
+
+function seededWorktree(): string {
+  const wt = tmpWorktree();
+  seedStaticUnifierItem(wt, { initiativeId: INIT, estimatedIterations: 8, qualityGateCmd: PROJECT_GATE });
+  return wt;
+}
+
+test('appendReviewUnifierItems: code-fix concern → concern UWI + terminal re-prep UWI', () => {
+  const wt = seededWorktree();
+  try {
+    const { appended } = appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: INIT,
+      concern: {
+        rationale: 'the folder path is computed wrong',
+        acceptanceCriteria: [{ given: 'a nested folder', when: 'the data source reads it', then: 'the full path is returned' }],
+      },
+      projectGateCmd: PROJECT_GATE,
+      estimatedIterations: 6,
+    });
+    assert.deepEqual(appended, ['UWI-2', 'UWI-3']);
+
+    const { items } = readUnifierItems(wt);
+    const u2 = items.find((i) => i.work_item_id === 'UWI-2')!;
+    const u3 = items.find((i) => i.work_item_id === 'UWI-3')!;
+    assert.equal(u2.kind, 'code-fix', 'concern defaults to code-fix');
+    assert.deepEqual(u2.depends_on, ['UWI-1']);
+    assert.equal(u2.acceptance_criteria.length, 1);
+    assert.ok(u2.files_in_scope.includes('.forge/pr-description.md'));
+    assert.equal(u3.kind, 'packaging', 'terminal re-prep is packaging');
+    assert.deepEqual(u3.depends_on, ['UWI-2']);
+
+    // The whole queue is pending in dependency order: UWI-1 (complete? no), 2, 3.
+    const pendingIds = pendingUnifierItems(wt).map((p) => p.work_item_id);
+    assert.deepEqual(pendingIds, ['UWI-1', 'UWI-2', 'UWI-3']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('appendReviewUnifierItems: packaging concern → a single packaging UWI (no re-prep)', () => {
+  const wt = seededWorktree();
+  try {
+    const { appended } = appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: INIT,
+      concern: {
+        rationale: 'the demo caption is unclear',
+        acceptanceCriteria: [{ given: 'the demo', when: 'a reviewer reads it', then: 'the before/after is obvious' }],
+        kind: 'packaging',
+      },
+      projectGateCmd: PROJECT_GATE,
+      estimatedIterations: 4,
+    });
+    assert.deepEqual(appended, ['UWI-2']);
+    const u2 = readUnifierItems(wt).items.find((i) => i.work_item_id === 'UWI-2')!;
+    assert.equal(u2.kind, 'packaging');
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('appendReviewUnifierItems: a sharp concern gate overrides the project gate', () => {
+  const wt = seededWorktree();
+  try {
+    const sharp = ['go', 'test', '-run', 'TestFolderPath', './azuredevops/...'];
+    appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: INIT,
+      concern: { rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }], qualityGateCmd: sharp },
+      projectGateCmd: PROJECT_GATE,
+      estimatedIterations: 6,
+    });
+    const u2 = readUnifierItems(wt).items.find((i) => i.work_item_id === 'UWI-2')!;
+    assert.deepEqual(u2.quality_gate_cmd, sharp, 'code-fix UWI uses the sharp gate');
+    const u3 = readUnifierItems(wt).items.find((i) => i.work_item_id === 'UWI-3')!;
+    assert.deepEqual(u3.quality_gate_cmd, PROJECT_GATE, 're-prep uses the project gate');
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('appendReviewUnifierItems: empty/blank ACs throw ReviewConcernInvalidError (queue untouched)', () => {
+  const wt = seededWorktree();
+  try {
+    assert.throws(
+      () => appendReviewUnifierItems({
+        worktreePath: wt,
+        initiativeId: INIT,
+        concern: { rationale: 'r', acceptanceCriteria: [{ given: ' ', when: '', then: '' }] },
+        projectGateCmd: PROJECT_GATE,
+        estimatedIterations: 6,
+      }),
+      ReviewConcernInvalidError,
+    );
+    // Nothing appended — only UWI-1 remains.
+    assert.deepEqual(readUnifierItems(wt).items.map((i) => i.work_item_id), ['UWI-1']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('appendReviewUnifierItems: the total-UWI cap rejects further rounds', () => {
+  const wt = seededWorktree();
+  try {
+    // maxTotalItems 2 leaves room for only one more UWI; a code-fix needs two.
+    assert.throws(
+      () => appendReviewUnifierItems({
+        worktreePath: wt,
+        initiativeId: INIT,
+        concern: { rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] },
+        projectGateCmd: PROJECT_GATE,
+        estimatedIterations: 6,
+        maxTotalItems: 2,
+      }),
+      UnifierItemsCapError,
+    );
+    assert.deepEqual(readUnifierItems(wt).items.map((i) => i.work_item_id), ['UWI-1']);
   } finally {
     rmSync(wt, { recursive: true, force: true });
   }

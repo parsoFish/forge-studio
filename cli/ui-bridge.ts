@@ -28,7 +28,6 @@ import {
   readFileSync,
   readSync,
   readdirSync,
-  renameSync,
   statSync,
   watch as fsWatch,
   writeFileSync,
@@ -42,7 +41,13 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
-import { runRequeue } from './forge-requeue.ts';
+import {
+  appendReviewUnifierItems,
+  UnifierItemsCapError,
+  ReviewConcernInvalidError,
+} from '../orchestrator/unifier-items.ts';
+import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
+import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -756,12 +761,34 @@ async function handleHttp(
         return;
       }
 
-      // send-back (D1): write the operator's feedback beside the manifest as
-      // `<id>.pr-feedback.md` (the file the resumed unifier reads in send-back
-      // mode), then requeue with resume_from: unifier so the cycle re-runs the
-      // unifier against the preserved worktree + this feedback. We lock the
-      // manifest only for the feedback write, then release before runRequeue
-      // (which moves the manifest) to avoid renaming a locked file.
+      // send-back (ADR 026): the cycle NEVER leaves. Append the operator's
+      // concern to the unifier's own work-item queue in the LIVE worktree; the
+      // drain (a scheduler sweep, sibling of finalize-merged) re-claims this
+      // ready-for-review manifest threading the SAME cycle_id and re-runs the
+      // post-unifier spine over the appended UWIs. One cycleId ⇒ the cost/status
+      // lineage + WI-hex list never blank (no requeue, no sibling cycle).
+      //
+      // Resolve the live worktree + the project gate that backs a packaging UWI.
+      const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
+      const worktreePath = manifest.worktree_path ?? '';
+      if (!worktreePath || !existsSync(worktreePath)) {
+        sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId });
+        return;
+      }
+      let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
+      try {
+        const cfg = loadProjectConfig(manifest.project_repo_path);
+        if (cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0) projectGateCmd = cfg.quality_gate_cmd;
+      } catch { /* fall back to the manifest gate / npm test below */ }
+      if (projectGateCmd.length === 0) {
+        projectGateCmd = existsSync(join(worktreePath, 'package.json')) ? ['npm', 'test'] : ['true'];
+      }
+      const concernKind = (body as { concernKind?: 'packaging' | 'code-fix' }).concernKind;
+      const concernGateCmd = (body as { qualityGateCmd?: string[] }).qualityGateCmd;
+
+      // Lock the manifest to serialise concurrent verdict submissions (the
+      // append reads + bumps the next UWI id). The append itself writes only to
+      // the worktree, so the manifest stays in ready-for-review/ for the drain.
       let release: (() => Promise<void>) | null = null;
       try {
         release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
@@ -769,21 +796,30 @@ async function handleHttp(
         sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) });
         return;
       }
-      const feedbackPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.pr-feedback.md`);
       try {
-        mkdirSync(join(ctx.queueRoot, 'in-flight'), { recursive: true });
-        const tmpPath = feedbackPath + '.tmp';
-        writeFileSync(tmpPath, renderPrFeedback(rationale, acs));
-        renameSync(tmpPath, feedbackPath);
+        const { appended } = appendReviewUnifierItems({
+          worktreePath,
+          initiativeId,
+          concern: { rationale, acceptanceCriteria: acs, kind: concernKind, qualityGateCmd: concernGateCmd },
+          projectGateCmd,
+          estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          kind,
+          appendedUnifierItems: appended,
+          note: 'work items appended to the unifier queue; the drain re-runs them in the same cycle',
+        });
+      } catch (appendErr) {
+        if (appendErr instanceof UnifierItemsCapError) {
+          sendJson(res, 409, { error: appendErr.message });
+        } else if (appendErr instanceof ReviewConcernInvalidError) {
+          sendJson(res, 400, { error: appendErr.message });
+        } else {
+          sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` });
+        }
       } finally {
         if (release) { try { await release(); } catch { /* ignore */ } }
-      }
-      try {
-        const forgeRoot = resolve(ctx.queueRoot, '..');
-        const requeue = runRequeue(initiativeId, { forgeRoot, resumeFromUnifier: true });
-        sendJson(res, 200, { ok: true, kind, wrote: feedbackPath, requeuedTo: requeue.toQueueDir });
-      } catch (requeueErr) {
-        sendJson(res, 500, { error: `send-back requeue failed: ${String(requeueErr)}`, wrote: feedbackPath });
       }
     } catch (err) {
       sendJson(res, 500, { error: String(err) });
@@ -1084,19 +1120,6 @@ async function handleReflect(
   }
 
   return false;
-}
-
-function renderPrFeedback(
-  rationale: string,
-  acs: Array<{ given: string; when: string; then: string }>,
-): string {
-  // The send-back feedback file the resumed unifier reads (cycle-context
-  // unifierFeedbackRef). Freeform markdown: the operator's rationale + the
-  // acceptance criteria to address this round as GIVEN/WHEN/THEN lines.
-  const body = acs
-    .map((a) => `- GIVEN ${a.given.trim()} WHEN ${a.when.trim()} THEN ${a.then.trim()}`)
-    .join('\n');
-  return `# Send-back feedback\n\n${rationale.trim()}\n\n## Acceptance criteria to address this round\n\n${body}\n`;
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {
