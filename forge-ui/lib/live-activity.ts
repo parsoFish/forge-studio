@@ -96,20 +96,35 @@ export type WiActivity = { costUsd: number; tokens: number; lastReasoning: strin
  */
 export function derivePerWiActivity(events: readonly EventLogEntry[]): Record<string, WiActivity> {
   const out: Record<string, WiActivity> = {};
+  // Live token reconciliation (operator: "see some cost live, not only at
+  // closure"): `tokens` = committed (authoritative tokens from iteration/end
+  // events) + in-flight (per-turn `usage_delta` tokens since the last
+  // authoritative event). An authoritative event RESETS in-flight — its total
+  // supersedes the per-turn estimate — so deltas tick the count live DURING an
+  // iteration without double-counting the iteration total. No pricing table:
+  // tokens tick live; $ lands at the authoritative points the SDK gives us.
+  const inflight: Record<string, number> = {};
   for (const e of events) {
-    const md = e.metadata as { work_item_id?: string; last_assistant_text?: string } | undefined;
+    const md = e.metadata as { work_item_id?: string; last_assistant_text?: string; input_tokens?: number; output_tokens?: number } | undefined;
     const wi = md?.work_item_id;
     if (typeof wi !== 'string') continue;
     const a = out[wi] ?? { costUsd: 0, tokens: 0, lastReasoning: '', lastReasoningAt: '' };
-    if (typeof e.cost_usd === 'number') a.costUsd += e.cost_usd;
-    if (typeof e.tokens_in === 'number') a.tokens += e.tokens_in;
-    if (typeof e.tokens_out === 'number') a.tokens += e.tokens_out;
-    if (typeof md?.last_assistant_text === 'string' && md.last_assistant_text) {
-      a.lastReasoning = md.last_assistant_text;
-      a.lastReasoningAt = e.started_at;
+    if (e.message === 'usage_delta') {
+      inflight[wi] = (inflight[wi] ?? 0) + (md?.input_tokens ?? 0) + (md?.output_tokens ?? 0);
+    } else {
+      let authoritative = false;
+      if (typeof e.tokens_in === 'number') { a.tokens += e.tokens_in; authoritative = true; }
+      if (typeof e.tokens_out === 'number') { a.tokens += e.tokens_out; authoritative = true; }
+      if (authoritative) inflight[wi] = 0;
+      if (typeof e.cost_usd === 'number') a.costUsd += e.cost_usd;
+      if (typeof md?.last_assistant_text === 'string' && md.last_assistant_text) {
+        a.lastReasoning = md.last_assistant_text;
+        a.lastReasoningAt = e.started_at;
+      }
     }
     out[wi] = a;
   }
+  for (const wi of Object.keys(out)) out[wi] = { ...out[wi], tokens: out[wi].tokens + (inflight[wi] ?? 0) };
   return out;
 }
 
@@ -120,14 +135,27 @@ export function deriveStageTotals(
   events: readonly EventLogEntry[],
   activeAgentCount: number,
 ): StageTotals {
-  let tokens = 0;
+  // Same committed-vs-in-flight reconciliation as derivePerWiActivity, but
+  // global — keyed by owner (work item, else phase) so a per-turn usage_delta
+  // and its later authoritative iteration event reconcile against each other.
+  let committed = 0;
   let costUsd = 0;
+  const inflight: Record<string, number> = {};
   for (const e of events) {
-    if (typeof e.tokens_in === 'number') tokens += e.tokens_in;
-    if (typeof e.tokens_out === 'number') tokens += e.tokens_out;
-    if (typeof e.cost_usd === 'number') costUsd += e.cost_usd;
+    const md = e.metadata as { work_item_id?: string; input_tokens?: number; output_tokens?: number } | undefined;
+    const owner = md?.work_item_id ?? e.phase ?? '*';
+    if (e.message === 'usage_delta') {
+      inflight[owner] = (inflight[owner] ?? 0) + (md?.input_tokens ?? 0) + (md?.output_tokens ?? 0);
+    } else {
+      let authoritative = false;
+      if (typeof e.tokens_in === 'number') { committed += e.tokens_in; authoritative = true; }
+      if (typeof e.tokens_out === 'number') { committed += e.tokens_out; authoritative = true; }
+      if (authoritative) inflight[owner] = 0;
+      if (typeof e.cost_usd === 'number') costUsd += e.cost_usd;
+    }
   }
-  return { agents: activeAgentCount, tokens, costUsd };
+  const inflightTotal = Object.values(inflight).reduce((s, n) => s + n, 0);
+  return { agents: activeAgentCount, tokens: committed + inflightTotal, costUsd };
 }
 
 /**

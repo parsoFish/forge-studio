@@ -563,7 +563,13 @@ async function main() {
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop start'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-1', tool: 'Edit' } }),
-      () => cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', { iteration: 1, metadata: { work_item_id: 'WI-1' } }),
+      // Live per-turn token ticks (operator: "see some cost live, not only at
+      // closure"): usage_delta beats grow WI-1's token bar DURING the iteration;
+      // the iteration event's authoritative total then supersedes the in-flight
+      // estimate (no double-count — reconciled in lib/live-activity.ts).
+      () => cycleEvent('developer-loop', 'log', 'usage_delta', { metadata: { work_item_id: 'WI-1', input_tokens: 1800, output_tokens: 600 } }),
+      () => cycleEvent('developer-loop', 'log', 'usage_delta', { metadata: { work_item_id: 'WI-1', input_tokens: 2100, output_tokens: 900 } }),
+      () => cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', { iteration: 1, tokens_in: 4200, tokens_out: 1600, cost_usd: 0.21, metadata: { work_item_id: 'WI-1' } }),
       () => cycleEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } }), // → WI-1 green
     ]);
     await sleep(WORK);
