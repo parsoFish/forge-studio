@@ -557,8 +557,9 @@ async function main() {
 
     // STEP 9 — developer loop progresses WIs, respecting dependencies. WI-1
     // runs and goes GREEN (per-WI `end`); only THEN does WI-2 (depends_on WI-1)
-    // start. The dev-loop PHASE hex stays blue throughout (per-WI ends are
-    // non-terminal for the phase).
+    // start. The dev-loop PHASE hex stays blue through the per-WI ends (they are
+    // non-terminal for the phase) and greens on the phase-level ralph.end once
+    // both WIs are done (below) — BEFORE the unifier runs.
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop start'),
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-1', tool: 'Edit' } }),
@@ -571,9 +572,15 @@ async function main() {
       () => cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } }),
       () => cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', { iteration: 1, metadata: { work_item_id: 'WI-2' } }),
       () => cycleEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } }), // → WI-2 green
+      // Matches the real runtime: the dev-loop PHASE end (ralph.end, no
+      // work_item_id, WI-only cost) fires once the WIs are done — BEFORE the
+      // unifier runs (developer-loop.ts emits this end before calling runUnifier).
+      // So the dev-loop hex GREENS here and the unifier is the only active hex
+      // during its run; the unifier's cost is its own, not the dev-loop's.
+      () => cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }), // → dev-loop hex green
     ]);
     await sleep(WORK);
-    await frame(page, 'step09b-wis-green', 'Step 9 — both work items green; the dev-loop hex stays blue (unifier next)');
+    await frame(page, 'step09b-wis-green', 'Step 9 — both work items green and the dev-loop hex GREENS (WIs done, WI-only cost); the unifier runs next on its own hex');
 
     // STEP 10 — unifier reviews + loops to clean the output. These events carry
     // phase 'unifier' (via unifierEvent; Fix-B root-unify) so they land on the
@@ -591,16 +598,14 @@ async function main() {
     // STEP 11 — unifier runs the demo skill → forge-ui-themed demo page; cycle ready.
     // The demo-skill beats are the unifier's (phase 'unifier'), then the unifier's
     // OWN phase-level `end` (no work_item_id) greens the unifier hex — paced AFTER
-    // a visibly-blue dwell. The dev-loop's separate ralph.end (phase
-    // 'developer-loop', no work_item_id) greens the dev hex.
+    // a visibly-blue dwell. (The dev-loop hex already greened at WI-completion,
+    // above — the unifier is a separate phase with its own cost.)
     await paced([
       () => unifierEvent('log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
       () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
       // The unifier finishes: phase-level `end` (no work_item_id) on the
       // developer-unifier skill → the unifier hex goes GREEN with its cost pill.
       () => { writeDemoJson(1); unifierEvent('end', 'unifier.end — demo authored, branch clean', { cost_usd: 0.18, duration_ms: 46000 }); },
-      // The dev-loop phase itself ends (ralph.end — no work_item_id) → dev hex green.
-      () => cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 }),
       // Review phase OPENS (hex goes blue) — but it does NOT close out until the
       // operator finishes reviewing (the closeout fires on approve, step 13).
       () => cycleEvent('review-loop', 'start', 'review-loop start'),
