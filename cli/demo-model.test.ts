@@ -305,7 +305,6 @@ test('validateDemoModel: a valid interactiveSurfaces array passes', () => {
   m.interactiveSurfaces = [
     { kind: 'live-query', label: 'Show the live ADO folder', artifact: 'live-resource.json', portalUrl: 'https://dev.azure.com/org/proj/_release' },
     { kind: 'portal-link', label: 'Open the folder in the portal', portalUrl: 'https://dev.azure.com/org/proj/_release' },
-    { kind: 'hcl-replan', label: 'Re-plan this HCL', seed: 'resource "betterado_release_folder" "x" {}' },
   ];
   assert.deepEqual(validateDemoModel(m), []);
 });

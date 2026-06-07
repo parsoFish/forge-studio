@@ -163,10 +163,8 @@ collapses them gracefully when absent, but their absence means a less useful dem
   now create": **IaC** (terraform/betterado) → `live-query` (the captured API GET of
   the created object) + `portal-link`; **browser** → a `portal-link` to the running
   preview; **API** → a `live-query` of the captured request/response; **CLI/library**
-  → a `portal-link` to docs + the `seed` (the new command/snippet). The executing
-  kinds (`hcl-replan`/`api-replay`/`ui-preview`/`cli-run`/`snippet-run`) are accepted
-  by the schema for forward-compatibility but render disabled until a later stage
-  wires an executor — do NOT rely on them yet.
+  → a `portal-link` to docs + the `seed` (the new command/snippet). Only `portal-link`
+  and `live-query` are supported — do not author other kinds.
 
   ```json
   "interactiveSurfaces": [

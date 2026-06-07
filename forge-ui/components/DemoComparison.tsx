@@ -230,20 +230,17 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
   );
 }
 
-const EXECUTING_SURFACE_KINDS = new Set(['hcl-replan', 'api-replay', 'ui-preview', 'cli-run', 'snippet-run']);
-
 /**
- * One interactive surface. Stage 0/1 is NON-EXECUTING: `portal-link` is a deep
- * link; `live-query` fetches an already-captured artifact (served via the
- * existing /api/artifact route) and renders it on demand, degrading clearly
- * when no capture exists (e.g. a no-credentials run). Executing kinds render a
- * disabled "coming soon" affordance. Mirrors load-bearing state to
- * data-surface-state per the DOM-as-metrics convention.
+ * One interactive surface. Supports two kinds:
+ * - `portal-link`: a deep link to the real resource.
+ * - `live-query`: fetches an already-captured artifact (served via the
+ *   existing /api/artifact route) and renders it on demand, degrading clearly
+ *   when no capture exists (e.g. a no-credentials run).
+ * Mirrors load-bearing state to data-surface-state per the DOM-as-metrics convention.
  */
 function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurface; cycleId?: string }): JSX.Element {
   const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<string | null>(null);
-  const isExecuting = EXECUTING_SURFACE_KINDS.has(surface.kind);
   // A portal-link with no portalUrl is a mis-declared surface: there is nothing
   // to open. Make it first-class so automation sees an `error` surface-state
   // instead of a dead label. portalUrl is optional in the schema, so this is a
@@ -310,15 +307,7 @@ function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurf
             {state === 'running' ? 'Querying…' : 'Show the live resource'}
           </button>
         )}
-        {isExecuting && (
-          <span
-            data-surface-disabled="true"
-            title="Executing surfaces (re-plan / replay / preview) arrive in a later stage"
-            style={{ fontSize: 11, color: '#8b949e', border: '1px dashed #30363d', borderRadius: 6, padding: '2px 8px' }}
-          >
-            interactive run — coming soon
-          </span>
-        )}
+
       </div>
       {surface.seed && (
         <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, marginTop: 8, fontSize: 12, color: '#c9d1d9' }}>

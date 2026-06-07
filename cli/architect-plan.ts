@@ -22,7 +22,7 @@
  * Pure I/O surface:
  *  - `renderPlanDoc(session)`           — returns markdown string
  *  - `renderPlanHtml(session)`          — returns HTML string
- *  - `writePlanDoc(session, root)`      — returns PLAN.md path (also writes PLAN.html + council-transcript.md)
+ *  - `writePlanDoc(session, root)`      — returns PLAN.md path (also writes PLAN.html)
  *
  * The PLAN is reviewed + approved on the in-UI `/architect/<sid>` plan gate
  * (ADR 020/023); the operator's verdict comes through the bridge, not via
@@ -793,14 +793,13 @@ ${rounds.map((r, i) => `      <tr><td>${i + 1}</td><td>${esc(r.question)}</td><t
 // ---------------------------------------------------------------------------
 
 /**
- * Write PLAN.md (+ sibling PLAN.html + sibling council-transcript.md) for a
- * session. Returns the absolute path to the written `PLAN.md`. Creates the
- * parent directory as needed. C12: location is `<projectRoot>/_architect/<sid>/`.
+ * Write PLAN.md + sibling PLAN.html for a session. Returns the absolute path
+ * to the written `PLAN.md`. Creates the parent directory as needed.
+ * C12: location is `<projectRoot>/_architect/<sid>/`.
  *
- * Three artefacts per session:
- *  - `PLAN.md`               — operator's annotation surface (parsed by the CLI)
- *  - `PLAN.html`             — read-only rich viewer (cwc Amendment 2)
- *  - `council-transcript.md` — raw council output, audit / machine-parse
+ * Two artefacts per session:
+ *  - `PLAN.md`   — operator's annotation surface (parsed by the CLI)
+ *  - `PLAN.html` — read-only rich viewer (cwc Amendment 2)
  */
 export function writePlanDoc(session: ArchitectSession, projectRoot: string): string {
   const sessionDir = resolve(projectRoot, '_architect', session.session_id);
@@ -811,29 +810,7 @@ export function writePlanDoc(session: ArchitectSession, projectRoot: string): st
   // read back as input — PLAN.md is the only parse target.
   const htmlPath = join(sessionDir, 'PLAN.html');
   writeFileSync(htmlPath, renderPlanHtml(session));
-  // Raw council transcript for auditability — referenced by PLAN.md's drawer
-  // but kept separate so PLAN.md stays human-readable and the transcript
-  // stays machine-parseable.
-  const transcriptPath = join(sessionDir, 'council-transcript.md');
-  writeFileSync(transcriptPath, renderCouncilTranscript(session));
   return planPath;
-}
-
-function renderCouncilTranscript(session: ArchitectSession): string {
-  const lines: string[] = [];
-  lines.push(`# Council transcript — ${session.session_id}`);
-  lines.push('');
-  lines.push(`Total cost: $${session.council.totalCostUsd.toFixed(4)}`);
-  lines.push('');
-  for (const cr of session.council.perCritic) {
-    lines.push(`## ${capitaliseCritic(cr.critic)} (cost $${cr.costUsd.toFixed(4)})`);
-    lines.push('');
-    lines.push('```json');
-    lines.push(JSON.stringify(cr.verdict, null, 2));
-    lines.push('```');
-    lines.push('');
-  }
-  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -847,7 +824,6 @@ function renderCouncilTranscript(session: ArchitectSession): string {
 export type SessionPaths = {
   sessionDir: string;
   planPath: string;
-  transcriptPath: string;
   feedbackPath: string;
   manifestsDir: string;
 };
@@ -857,7 +833,6 @@ export function sessionPaths(projectRoot: string, sessionId: string): SessionPat
   return {
     sessionDir,
     planPath: join(sessionDir, 'PLAN.md'),
-    transcriptPath: join(sessionDir, 'council-transcript.md'),
     feedbackPath: join(sessionDir, 'feedback.md'),
     manifestsDir: join(sessionDir, 'manifests'),
   };

@@ -31,7 +31,7 @@ Implementation:
 
 > Note (2026-05-25): wedged-detection was removed in Tier 2. The iteration budget is now the only no-progress backstop; the `wedged-detector` stop check is no longer live.
 
-The pattern is **agent-swappable**: `loops/_adapters/` will hold future hermes/aider/openhands adapters that implement the same loop shape with different underlying agents, so they can be A/B'd.
+The pattern is **agent-swappable**: alternative loop runtimes can implement the same `LoopInput`/`LoopResult` interface and be A/B'd against Ralph via the real-capability harness.
 
 ## Consequences
 

@@ -301,7 +301,7 @@ export type DemoTestResultRow = {
  * declared but rendered disabled until Stage 2+ wires an executor.
  */
 export type InteractiveSurfaceKind =
-  | 'portal-link' | 'live-query' | 'hcl-replan' | 'api-replay' | 'ui-preview' | 'cli-run' | 'snippet-run';
+  | 'portal-link' | 'live-query';
 
 export type InteractiveSurface = {
   kind: InteractiveSurfaceKind;

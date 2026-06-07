@@ -51,27 +51,20 @@ export type DemoModelCheckpoint = {
 };
 
 /**
- * Interactive-review surface (re-review #8, Stage 0/1). A declarative affordance
+ * Interactive-review surface (re-review #8). A declarative affordance
  * the operator can poke on `/review/<cycleId>` to EXPLORE the new capability —
  * an enhancement layer on the otherwise-static demo. Authored into `demo.json`
  * by the demo phase agent per the project's declared interactive kinds; the
  * static demo renders unchanged when absent.
  *
- * Stage 0/1 kinds are NON-EXECUTING (no cost, no live mutation, never a merge
- * gate): `portal-link` is a deep link to the real resource; `live-query` serves
- * an ALREADY-CAPTURED artifact the project's demo skill wrote into the bundle.
- * The executing kinds (`hcl-replan`/`api-replay`/`ui-preview`/`cli-run`/
- * `snippet-run`) are declared for forward-compatibility (Stage 2+) but the UI
- * renders them disabled until an executor is wired behind the bridge.
+ * Supported kinds (NON-EXECUTING — no cost, no live mutation, never a merge gate):
+ * - `portal-link`: a deep link to the real resource (e.g. the ADO portal).
+ * - `live-query`: serves an ALREADY-CAPTURED artifact the project's demo skill
+ *   wrote into the bundle, via `/api/artifact/<cycleId>/<artifact>`.
  */
 export type InteractiveSurfaceKind =
   | 'portal-link'
-  | 'live-query'
-  | 'hcl-replan'
-  | 'api-replay'
-  | 'ui-preview'
-  | 'cli-run'
-  | 'snippet-run';
+  | 'live-query';
 
 export type InteractiveSurface = {
   kind: InteractiveSurfaceKind;
@@ -140,7 +133,7 @@ export type DemoModel = {
 
 const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
 const VALID_SURFACE_KINDS = new Set<InteractiveSurfaceKind>([
-  'portal-link', 'live-query', 'hcl-replan', 'api-replay', 'ui-preview', 'cli-run', 'snippet-run',
+  'portal-link', 'live-query',
 ]);
 
 /**

@@ -3,7 +3,12 @@
  * (the server-side SSOT that `cli/architect-plan.ts`'s PLAN.html dependency
  * graph uses). forge-ui is a hard runtime boundary that cannot import orchestrator
  * code, so this is a byte-for-byte algorithm mirror — same convention as
- * `forge-ui/lib/phases.ts` ↔ `orchestrator/logging.ts`. Keep the two in sync.
+ * `forge-ui/lib/phases.ts` ↔ `orchestrator/logging.ts`.
+ *
+ * KEEP IN SYNC WITH: `orchestrator/dep-levels.ts` — algorithm must remain
+ * byte-for-byte identical. Any change there must be mirrored here immediately.
+ * (A cross-boundary node --test is architecturally unsound here; the sync
+ * obligation is enforced by this comment + code review.)
  *
  * Drives the per-project roadmap spine: the same level-by-topo
  * algorithm applied to initiatives (INIT-ids) or work items (WI-ids).

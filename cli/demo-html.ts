@@ -85,8 +85,6 @@ export type DemoComparisonModel = {
   baselineBuild: DemoBuildStatus;
   changedBuild: DemoBuildStatus;
   checkpoints: DemoCheckpoint[];
-  beforeVideo?: string | null;
-  afterVideo?: string | null;
   diffStat?: string;
   acceptanceCriteria?: string[];
 
@@ -271,30 +269,10 @@ function buildVisualChangesSection(model: DemoComparisonModel): string {
   const heading = checkpointsSectionHeading(model.checkpoints);
   const sectionId = heading === 'Test Evidence' ? 'test-evidence-checkpoints' : 'visual-changes';
 
-  const videoRow =
-    model.beforeVideo || model.afterVideo
-      ? `<div class="checkpoint">
-        <h3>Full run</h3>
-        <div class="pair">
-          <figure><figcaption>Before — baseline behaviour</figcaption>${
-            model.beforeVideo
-              ? `<video controls preload="metadata" src="${esc(model.beforeVideo)}"></video>`
-              : '<div class="missing">no video</div>'
-          }</figure>
-          <figure><figcaption>After — this initiative</figcaption>${
-            model.afterVideo
-              ? `<video controls preload="metadata" src="${esc(model.afterVideo)}"></video>`
-              : '<div class="missing">no video</div>'
-          }</figure>
-        </div>
-      </div>`
-      : '';
-
   return `
 <section class="section" id="${sectionId}">
   <h2>${heading}</h2>
   ${items}
-  ${videoRow}
 </section>`;
 }
 

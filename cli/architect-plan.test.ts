@@ -515,7 +515,7 @@ test('renderPlanHtml: HTML-escapes operator content so manifest body cannot brea
 // 16. writePlanDoc — emits PLAN.html sibling next to PLAN.md (Amendment 2)
 // ---------------------------------------------------------------------------
 
-test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md and council-transcript.md', () => {
+test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md', () => {
   const dir = fxTempdir('w2');
   const projectRoot = join(dir, 'project-y');
   mkdirSync(projectRoot, { recursive: true });
@@ -525,7 +525,6 @@ test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md and council-trans
   const sessionDir = resolve(projectRoot, '_architect', '2026-05-24T00-00-00');
   assert.ok(existsSync(planPath), 'PLAN.md exists');
   assert.ok(existsSync(join(sessionDir, 'PLAN.html')), 'PLAN.html sibling exists');
-  assert.ok(existsSync(join(sessionDir, 'council-transcript.md')), 'council-transcript.md sibling exists');
 
   const html = readFileSync(join(sessionDir, 'PLAN.html'), 'utf8');
   assert.match(html, /^<!DOCTYPE html>/);

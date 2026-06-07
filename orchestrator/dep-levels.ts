@@ -13,6 +13,9 @@
  * forge-ui client mirrors this in `forge-ui/lib/dep-layout.ts` (forge-ui is a
  * hard runtime boundary that cannot import orchestrator code — same mirror
  * convention as `forge-ui/lib/phases.ts` ↔ `orchestrator/logging.ts`).
+ *
+ * KEEP IN SYNC WITH: `forge-ui/lib/dep-layout.ts` — algorithm must remain
+ * byte-for-byte identical. Any change here must be mirrored there immediately.
  */
 
 export type DepLevels<T> = {
