@@ -13,23 +13,51 @@ Obsidian renders markdown wikis as graphs natively, supports backlinks, and is r
 
 **The brain is structured as a Karpathy three-layer wiki and rendered as an Obsidian vault.**
 
-Layout:
+> **Amended 2026-05-26 ([ADR 018](./018-three-brain-model.md)):** the brain was
+> restructured into three scoped graphs. The original single-root layout below
+> is superseded by the three-brain model; ADR 018 is the authority on the
+> current structure.
+
+Current layout (post-ADR 018 three-brain restructure):
 
 ```
 brain/
-├── INDEX.md                        # meta-index of categories
+├── INDEX.md                        # meta-index across all three brains
 ├── _raw/                           # immutable raw sources (ground truth)
-├── forge/                          # forge-system knowledge
+├── forge-dev/                      # Brain 1 — forge engineering knowledge
 │   ├── themes/                     # ~15-40 line theme pages
-│   ├── patterns.md                 # category index
-│   ├── antipatterns.md             # category index
-│   ├── decisions.md                # category index
-│   └── operations.md               # category index
-├── projects/<name>/                # per-project sub-wikis
-│   ├── profile.md                  # who/what/taste signals
-│   └── themes/
-├── LINT.md                         # structural rules
+│   ├── graphify-out/               # knowledge graph (auto-built)
+│   └── (category indexes)
+├── cycles/                         # Brain 2 — cross-cycle patterns + archives
+│   ├── themes/
+│   ├── _raw/                       # immutable cycle records
+│   └── graphify-out/
 └── log.md                          # significant operations log
+
+# Brain 3 (per-project) lives inside each managed project's repo:
+projects/<name>/brain/
+├── profile.md                      # who/what/taste signals
+├── themes/
+└── graphify-out/
+```
+
+Original layout (scaffold, superseded by ADR 018):
+
+```
+brain/
+├── INDEX.md
+├── _raw/
+├── forge/                          # now split into brain/forge-dev/ + brain/cycles/
+│   ├── themes/
+│   ├── patterns.md
+│   ├── antipatterns.md
+│   ├── decisions.md
+│   └── operations.md
+├── projects/<name>/                # now lives in each project's own repo
+│   ├── profile.md
+│   └── themes/
+├── LINT.md
+└── log.md
 ```
 
 The brain is itself fronted by three skills:

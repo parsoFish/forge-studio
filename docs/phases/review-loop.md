@@ -74,7 +74,7 @@ The per-phase `benchmarks/review-loop/` was archived 2026-05-23 (S4) when the re
 - **Demo doesn't actually work** — pre-review checklist must include running the demo script in the worktree.
 - **PR description is what-not-why** — explicit prompt rule (formerly also a benchmark check; benchmarks removed 2026-05-25).
 - **Squash-merge stacked PRs** — explicitly forbidden (v1 lesson, in the brain). Use layered merge order.
-- **Stale demo capture** — the demo must capture *this* branch's build, never a stray/ambient dev server (`reuseExistingServer: true` latching the wrong app silently). The reviewer mandates an isolated strict-port server / built `preview`; pattern of record: [`brain/forge/themes/pr-as-sole-review-window.md`](../../brain/forge/themes/pr-as-sole-review-window.md).
+- **Stale demo capture** — the demo must capture *this* branch's build, never a stray/ambient dev server (`reuseExistingServer: true` latching the wrong app silently). The reviewer mandates an isolated strict-port server / built `preview`; pattern of record: [`brain/cycles/themes/pr-as-sole-review-window.md`](../../brain/cycles/themes/pr-as-sole-review-window.md).
 - **Reviewer never reaches the verdict gate** — historically a too-tight per-iteration $/turn budget cut every iteration before a verdict (0 verdicts, mislabelled send-back-cap). Those guards were removed; the loop is bounded only by the iteration cap.
 
 ## Status (as-built)

@@ -26,7 +26,6 @@ The Project Manager phase decomposes initiative features into work items. Each w
 
 ```yaml
 work_item_id: WI-<n>
-feature_id: FEAT-<n>
 initiative_id: INIT-<...>
 status: pending
 depends_on: [WI-1, WI-3]
@@ -38,6 +37,8 @@ files_in_scope:
   - src/...
 estimated_iterations: 3
 ```
+
+> Note (2026-06-04): `feature_id: FEAT-<n>` was removed from the schema. WIs now key on `initiative_id` only. See [ADR 015 Amendment 2026-06-04](../../docs/decisions/015-work-item-format.md).
 
 Discipline:
 

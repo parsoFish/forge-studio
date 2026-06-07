@@ -29,22 +29,21 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 
 ## Success signals
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; the deterministic-metric / LLM-judge thresholds below are historical. Phase quality is now judged on real merged cycles. (`brain-lint` integrity checks remain live.)
+> Note (2026-05-25): the `benchmarks/` harnesses were removed; the deterministic-metric / LLM-judge thresholds below are **historical**. Phase quality is now judged on real merged cycles.
 
-The brain phase is judged on **two axes** — a cheap deterministic metric (per-cycle) plus a periodic LLM-judge validation (every N cycles).
+**Current success signals** (as-built):
 
-**Deterministic metric** (cheap, run every cycle):
+- **`brain-lint` zero findings** — `forge brain lint` exits non-zero on structural errors (orphans, malformed frontmatter, duplicate themes). This is the standing integrity gate.
+- **`brain-gaps.jsonl` trend** — rate of new gaps decreases over consecutive cycles. The gap-flagging rule in [`skills/brain-query/SKILL.md`](../../skills/brain-query/SKILL.md) is load-bearing: answers that name an absence MUST set `gap: true`.
+- **Reflector themes cite ≥1 source path** — theme pages produced by the reflector must reference at least one `_raw/` or cycle artifact path (no floating assertions).
 
-- **Recall:** `benchmarks/brain/questions.json` accuracy ≥80% under the recall-weighted rubric (`0.4 × source_recall + 0.6 × keyword_match`, threshold 0.65, hallucinated paths force 0). (See the former `benchmarks/brain/README.md`, removed 2026-05-25.)
-- **Hallucination rate:** ≤ 5% of cases cite a path that doesn't exist on disk.
-- **Gap detection:** `benchmarks/brain/negatives.json` pass rate ≥ 80% — out-of-scope and forge-adjacent-bait questions correctly flagged with `gap: true` and bounded citations.
-- **Integrity:** `brain-lint` reports zero structural issues (orphans, malformed frontmatter, duplicate themes).
-- **Latency:** `brain-query` p95 response time ≤ 15s with the default model (Haiku) under the agentic SKILL.md. The original 5s target was incompatible with the documented grep-and-read process; revised after May 2026 measurement.
+**Historical signals** (benchmarks removed 2026-05-25):
 
-**LLM-judge metric** (validating, run every cycle worthwhile or on rubric drift):
-
-- **Judge agreement:** Opus judge (`bench:brain:judge`) agrees with the deterministic metric on ≥ 85% of cases. Disagreement flags either rubric drift (deterministic too harsh / lenient) or a content-grounding failure the deterministic metric can't see (Q15-shape).
-- **Judge pass rate:** ≥ 90% of cases pass the judge's "factually correct + grounded + complete + reasonable citations" criteria.
+- Recall ≥80% under `0.4 × source_recall + 0.6 × keyword_match` rubric (`benchmarks/brain/questions.json`).
+- Hallucination rate ≤5% (no cited path absent from disk).
+- Gap detection pass rate ≥80% (`benchmarks/brain/negatives.json`).
+- LLM-judge (Opus) agreement ≥85%; judge pass rate ≥90%.
+- `brain-query` p95 ≤15s (Haiku).
 
 **Coverage signal:**
 

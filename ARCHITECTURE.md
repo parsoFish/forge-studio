@@ -14,7 +14,7 @@
 > human moment** (slash command, not a wired phase); (b) **brain-first
 > is narrowed** — the planner and reflector read the brain; the dev-loop
 > and reviewer do not (see [ADR 010](./docs/decisions/010-brain-first.md)
-> + `brain/cycles/themes/brain-read-policy.md`); (c) the **review-phase
+> + `brain/forge-dev/themes/brain-read-policy.md`); (c) the **review-phase
 > redesign has LANDED** — no auto-merge; the GitHub PR is the operator's
 > surface; `closure.ts` is the single terminal-move authority and
 > reflection fires only on a confirmed merge
@@ -204,7 +204,7 @@ The developer loop is **the Ralph loop pattern** ([ghuntley/how-to-ralph-wiggum]
 
 ```
 loop:
-  read PROMPT.md, AGENT.md (institutional memory), specs/, fix_plan.md
+  read PROMPT.md, AGENT.md (institutional memory), fix_plan.md
   call query() against the worktree
   commit changes
   check stop conditions (quality gates pass | iteration budget)
@@ -224,7 +224,7 @@ Responsibility: closeout of an initiative back to main.
 
 **Unified Ralph runner** (post-pass-1 design — earlier drafts had this split into two phases; the implementation collapsed them after the e2e bench surfaced redundant state shuffling). One Ralph loop on the initiative branch, parameterised by a reviewer system prompt + a verdict-aware quality gate. Iteration 1 prepares the demo + PR draft from scratch; iterations 2+ react to send-back feedback the verdict gate appends to `fix_plan.md`.
 
-The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orchestrator/unifier-invocation.ts`](./orchestrator/unifier-invocation.ts) + verdict providers in [`orchestrator/file-verdict.ts`](./orchestrator/file-verdict.ts) / [`orchestrator/pr-verdict.ts`](./orchestrator/pr-verdict.ts)) runs between iterations and:
+The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orchestrator/unifier-invocation.ts`](./orchestrator/unifier-invocation.ts) + verdict provider in [`orchestrator/file-verdict.ts`](./orchestrator/file-verdict.ts)) runs between iterations and:
 
 1. **Re-runs the project quality gate** (orchestrator-verified — never trusts the agent's claim).
 2. **Asks the verdict provider** — production: the operator reviews via the **`/review/<cycleId>`** UI screen ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)). The file-based `verdict-response.md` handoff is written by the UI bridge.
@@ -236,7 +236,7 @@ The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orche
 
 **No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (via the `/review/<cycleId>` UI screen or directly on GitHub); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), then `alignLocalToRemote` brings the **project's working tree** forward to the merged `main` (a guarded `merge --ff-only`, **stashing/restoring any uncommitted operator state** — never a bare ref move that strands the working tree) and prunes the branch, moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
 
-Cap: diff-scaled iterations (trivial ≤2 files → 4; small ≤10 → 8; larger → 15), computed by `computeAdaptiveReviewIterationCap`. There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict); the loop is bounded only by this iteration cap. Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
+Cap: fixed at ≤2 send-back rounds (iteration cap removed from the reviewer when `computeAdaptiveReviewIterationCap` was deleted with the Ralph reviewer in S4). There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
 The review human moment is the **`/review/<cycleId>` UI screen** ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)) — not a slash command.
 

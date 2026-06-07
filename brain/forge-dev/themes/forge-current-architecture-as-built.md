@@ -29,6 +29,13 @@ related_themes:
 
 # Forge as-built (honest snapshot)
 
+> **SNAPSHOT 2026-05-16 — VERIFY BEFORE USE.** This theme was recorded against
+> the trafficGame arc close. Key deltas since: (a) the architect is now in-UI
+> via the `/architect/<sid>` screen ([ADR 020](../../../docs/decisions/020-architect-in-ui.md)),
+> not hand-run Path-B; (b) `forge-ui` is the sole operator surface ([ADR 023](../../../docs/decisions/023-ui-sole-operator-surface.md));
+> (c) benchmarks were removed 2026-05-25. For current architecture see
+> `ARCHITECTURE.md` + the refocus-architecture docs.
+
 Recorded against the actual code at the close of the trafficGame arc, not
 against ARCHITECTURE.md / PRINCIPLES.md ideals. Where the two differ, the
 docs should be reconciled to this (closure goal G7).

@@ -43,6 +43,16 @@ Mechanism (smallest thing that works — no new state machine):
 
 Auto-retry (F-27) is intentionally **not** changed in this ADR: the failure-classifier does not yet auto-detect "WIs done, only the unifier failed," so resume stays an explicit operator signal for now. A follow-up may add the classifier signature to make a transient unifier failure auto-resume.
 
+## Amendment — `resume_from: developer` variant (implemented)
+
+A second resume variant, `resume_from: developer`, is also implemented in `orchestrator/manifest.ts` and `orchestrator/cycle.ts`. It targets a different failure mode: the **developer loop itself** stalled (e.g. the project-manager WI specs exist but the dev-loop never finished all WIs, or a reviewer send-back needs a fresh dev-loop pass from the WI layer). Mechanism:
+
+- **Manifest field** `resume_from: developer` — skips `runProjectManager` (PM specs already in `.forge/work-items/`), then runs the full per-WI developer loop against those specs, followed by the unifier → reviewer → closure → reflector chain.
+- **CLI** `forge requeue <id> --resume-from=developer` stamps the field, preserves the worktree **and** the initiative branch, and preserves any `<id>.pr-feedback.md` so send-back context survives.
+- **Work-item snapshot**: because the preserved branch is rebased onto current `main` at resume start (same rebase step as the unifier variant), the `.forge/work-items/` directory is snapshotted outside the git worktree before the rebase and restored afterward (the dir is gitignored so a rebase would wipe it).
+
+Use `resume_from: unifier` when all WIs are done and only the unifier failed. Use `resume_from: developer` when the dev-loop itself needs to restart from the existing WI specs.
+
 ## Consequences
 
 - **Cheap recovery.** A unifier-only failure no longer discards the WI work; the operator re-runs only the unifier + downstream phases.

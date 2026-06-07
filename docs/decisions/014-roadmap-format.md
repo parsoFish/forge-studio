@@ -1,14 +1,9 @@
 # ADR 014 — Project roadmap.md schema
 
-**Status:** Accepted
+**Status:** Superseded (2026-06-03)
 **Date:** 2026-05-08
 
-> **Status: Superseded (2026-06-03)** — the architect no longer writes
-> `roadmap.md`; the roadmap is a derived view of the `_queue/` manifests
-> + their `depends_on_initiatives` chain (see
-> [`docs/architecture/refocus-architecture/README.md`](../architecture/refocus-architecture/README.md)
-> + [`docs/phases/architect.md`](../phases/architect.md)). The body
-> below is kept as prior art.
+> The architect no longer writes `roadmap.md`. The roadmap is a derived view of the `_queue/` manifests and their `depends_on_initiatives` chain — not a file the architect authors. See [`docs/architecture/refocus-architecture/README.md`](../architecture/refocus-architecture/README.md) and [`docs/phases/architect.md`](../phases/architect.md). The `roadmap.md` schema defined below is historical prior art; nothing in the current implementation writes it.
 
 ## Context
 
