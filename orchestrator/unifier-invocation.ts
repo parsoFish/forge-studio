@@ -11,10 +11,10 @@
  * `PROMPT.md` (stamped by `prepareUnifierWorkspace`) at the start of every
  * iteration.
  *
- * CONTRACTS.md C3b: when `feedbackRef` is set, the per-iteration prompt
- * augments the brief with send-back semantics. C19: there is no $ cap; an
- * iteration runaway-bound (see `UNIFIER_DEFAULT_ITERATION_CAP`) is the
- * only backstop — this module does not expose any cost-related fields.
+ * C19: there is no $ cap; an iteration runaway-bound (see
+ * `UNIFIER_DEFAULT_ITERATION_CAP`) is the only backstop — this module does not
+ * expose any cost-related fields. (ADR 026 retired the `feedbackRef` send-back
+ * mode: review feedback is now appended UWIs the unifier loop runs in place.)
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -112,11 +112,6 @@ export type UnifierUserPromptInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
-  /**
-   * Optional path to a C3a `pr-feedback.md`. When set, the unifier is in
-   * send-back mode (C3b) and the prompt augments accordingly.
-   */
-  feedbackRef: string | undefined;
 };
 
 /**
@@ -127,10 +122,9 @@ export type UnifierUserPromptInput = {
  * Static instructional prose (role, iter-1-skeleton rule, hard rules) now
  * lives in SKILL.md (ADR 024 prose migration). This builder emits only the
  * DYNAMIC run-context: initiative id, manifest path, WI spec list, iteration
- * counter, demo shape, quality-gate command, and optional send-back feedback.
+ * counter, demo shape, and quality-gate command.
  */
 export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
-  const sendBackMode = input.feedbackRef !== undefined;
   const wiList = input.workItemSpecs.length > 0
     ? input.workItemSpecs.map((p) => `- \`${p}\``).join('\n')
     : '- _(no work items recorded; consult the manifest body)_';
@@ -151,46 +145,20 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     wiList,
     '- `AGENT.md` — institutional memory + prior iteration notes.',
     '- `fix_plan.md` — initiative-level AC checklist.',
-    ...(sendBackMode ? [`- Feedback ref: \`${input.feedbackRef}\` (read this BEFORE writing any code).`] : []),
-    ...(sendBackMode
-      ? [
-          '',
-          '## Send-back mode (CONTRACTS.md C3b)',
-          '',
-          `This is a send-back round. Read \`${input.feedbackRef}\` (C3a schema: line-level + PR-level review comments) and address each comment by file/line. Commit. Push. Do not exceed the iteration cap. Do not add scope beyond what the comments request.`,
-          '',
-          'After addressing the comments, post an ack comment on the PR:',
-          '',
-          '```',
-          'gh pr comment --body "<!-- forge:verdict-ack --> addressed: <brief summary>"',
-          '```',
-        ]
-      : []),
     '',
     '## What to do this iteration',
     '',
-    sendBackMode
-      ? [
-          '1. **Read AGENT.md, fix_plan.md, and the feedback file.**',
-          '2. **Address each comment** in the feedback file. If a comment maps to `path:line`, edit that file. If a comment is general (PR-level), update the PR body or add a `## Notes` section.',
-          '3. **Re-run the quality gate.** Fix anything that breaks.',
-          '4. **Refresh the demo** if the change is user-visible.',
-          '5. **Commit** as `fix(<initiative-id>): address review round <N>`.',
-          '6. **Push** the branch.',
-          '7. **Post the ack comment** on the PR.',
-          '8. **Update AGENT.md** with what you addressed.',
-        ].join('\n')
-      : [
-          '1. **Read AGENT.md and fix_plan.md.**',
-          '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
-          `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-          '4. **Produce the demo** under `demo/<initiative-id>/`:',
-          demoBlock,
-          '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
-          '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
-          '7. **Push** the branch so `origin/<branch>` == local HEAD.',
-          '8. **Update AGENT.md** with what you did this iteration.',
-        ].join('\n'),
+    [
+      '1. **Read AGENT.md and fix_plan.md.**',
+      '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
+      `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
+      '4. **Produce the demo** under `demo/<initiative-id>/`:',
+      demoBlock,
+      '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
+      '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
+      '7. **Push** the branch so `origin/<branch>` == local HEAD.',
+      '8. **Update AGENT.md** with what you did this iteration.',
+    ].join('\n'),
     '',
     '## Constraints',
     '',
@@ -286,8 +254,6 @@ export type PrepareUnifierWorkspaceInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
-  /** Optional send-back feedback file path (per C3b). */
-  feedbackRef: string | undefined;
 };
 
 export type PreparedUnifierWorkspace = {
@@ -334,7 +300,6 @@ export function prepareUnifierWorkspace(
       iterationBudget: input.iterationBudget,
       demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
-      feedbackRef: input.feedbackRef,
     });
     writeFileSync(promptPath, prompt);
   }

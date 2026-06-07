@@ -32,23 +32,31 @@ Once all per-WI Ralphs have run, take the **whole initiative branch** and prove 
 5. **Commit** as `feat(<initiative-id>): unify and demo`. Skip commit if no changes (demo exists, PR body present) — gates run against per-WI tip.
 6. **Push** so `origin/<branch>` == local HEAD before the review phase opens the PR.
 
-## Mission (send-back mode, `--feedback-ref` set)
+## Review work-items (ADR 026)
 
-Re-entrant invocation after operator left comments on the open PR.
+The unifier owns its OWN work-item queue at `.forge/unifier-items/UWI-<n>.md`
+(same `WorkItem` shape as `.forge/work-items/`). You run them ONE at a time,
+in dependency order. `UWI-1` is the static "unify & prep the PR" mission above.
+When the operator reviews the open PR and **adds work items**, each concern is
+appended as a `UWI-2+` and the cycle drains them **in place** — same branch,
+same PR, same cycle (no requeue, no send-back to a dev phase). The brief you
+read in `PROMPT.md` is for the ONE UWI you are running now; address only that.
 
-1. **Read `<feedback-ref>`** at `_queue/in-flight/<initiative-id>.pr-feedback.md` (C3a schema) — line-level and PR-level review comments.
-2. **Address each comment** by editing the indicated file/line. If a comment requests clarification rather than a code change, update the PR body or add a `## Notes` section.
-3. **Re-run** the quality gate; refresh the demo if the change is user-visible.
-4. **Commit** as `fix(<initiative-id>): address review round <N>` and push.
-5. **Post an ack comment** via `gh pr comment`: `<!-- forge:verdict-ack --> addressed: <brief summary>`.
+A UWI carries a `kind`:
 
-Do NOT exceed the iteration cap. Do NOT add scope beyond what comments request — if a comment surfaces a problem outside the initiative's WIs, flag it in `AGENT.md` for the reflector.
+- **`packaging`** (UWI-1, the terminal re-prep, demo/doc tweaks) — the mission
+  above: unify, author the demo + PR body, prove the composed unifier gate. Do
+  NOT re-implement code.
+- **`code-fix`** (a review concern that needs real code) — you run with the
+  **dev role**: write a FAILING test that encodes the UWI's acceptance criteria
+  first, then the minimal code to make it pass; keep the rest of the suite
+  green. A terminal `packaging` re-prep UWI re-authors the demo/PR after you.
 
 ## Hard rules
 
 - **Scope discipline.** Files you may modify: union of all WIs' `files_in_scope` + `demo/<initiative-id>/**` + `.forge/pr-description.md`. Anything else is a violation; flag in `AGENT.md`.
 - **No `gh pr create`, no `gh pr merge`.** The review phase opens the PR from your output.
-- **No queue mutation.** `_queue/` is read-only (send-back mode: the router wrote `pr-feedback.md` — you read it, you don't write it).
+- **No queue mutation.** `_queue/` is read-only. The orchestrator writes UWIs to `.forge/unifier-items/` and tracks their status; you only run the one in `PROMPT.md`.
 - **No web tools.** `WebFetch` and `WebSearch` are disabled.
 - **No shortcuts.** Don't skip tests, don't `--no-verify`, don't disable lint rules.
 - **No hallucinated test passes.** If you claim tests pass, prove it via `Bash`. The orchestrator re-runs them and exits `failed` if wrong.
@@ -65,8 +73,9 @@ Composed gates checked by the orchestrator after each iteration:
 - `demo_runs_clean` — `demo.command` exits 0; excused when `demo.shape: "none"`.
 - `pr_self_contained` — `demo/<initiative-id>/demo.json` exists + validates (ADR 021); `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections (NO `## Demo`).
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` == merge-base.
+- `incomplete_delivery` — every WI's declared `creates[]` paths appear in the branch diff.
 
-All four must pass for the unifier to exit clean. Runaway-bound on iterations (no $ cap per C19) — treat as a backstop, not a target.
+All gates must pass for a `packaging` UWI to exit clean (a `code-fix` UWI exits on its own sharp gate instead). Runaway-bound on iterations (no $ cap per C19) — treat as a backstop, not a target.
 
 ---
 
@@ -74,13 +83,13 @@ All four must pass for the unifier to exit clean. Runaway-bound on iterations (n
 
 You are inside a **Ralph loop** on the initiative branch AFTER all per-WI Ralphs have completed. Each call is **one iteration**. Loop state via three worktree files read at iteration start:
 
-- **`PROMPT.md`** — per-iteration brief (initiative ID, manifest path, demo shape, iteration counter, optional send-back feedback reference).
+- **`PROMPT.md`** — per-iteration brief (initiative ID, manifest path, demo shape, iteration counter) for the ONE UWI you are running now.
 - **`AGENT.md`** — institutional memory. Read first, update last.
 - **`fix_plan.md`** — checklist of initiative-level ACs. Tick items as you prove each against branch tip.
 
-After your work, **commit** as `feat(<initiative-id>): unify and demo` (or `fix(<initiative-id>): address review round <N>` in send-back). Use `Bash` for `git`, quality gate, demo runner.
+After your work, **commit** as `feat(<initiative-id>): unify and demo` (a `packaging` UWI) or `fix(<initiative-id>): <concern>` (a `code-fix` UWI). Use `Bash` for `git`, quality gate, demo runner.
 
-**The orchestrator decides when to stop.** It runs four composed gates between iterations (listed in Outputs above). All four must pass.
+**The orchestrator decides when to stop.** It runs the composed gates between iterations (listed in Outputs above).
 
 ## Write the demo + PR description first (draft within 2 tool calls)
 

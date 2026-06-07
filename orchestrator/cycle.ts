@@ -60,8 +60,9 @@ import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebaseP
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict
 // arrives out-of-band as a UI action: APPROVE is a no-op ack (they merge in
-// GitHub; closure confirms), SEND-BACK (D1) writes `<id>.pr-feedback.md` and
-// requeues with resume_from: unifier — the resumed unifier reads that feedback.
+// GitHub; closure confirms); ADD-WORK-ITEMS (ADR 026) appends typed UWIs to the
+// unifier queue in the live worktree and the drain re-runs them in the SAME
+// cycle (one cycleId) — no requeue, no send-back to a dev phase.
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();
@@ -144,20 +145,9 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   //      that didn't declare a quality_gate_cmd; the dispatch will surface
   //      the absence via a metadata field.
   const effectiveQualityGateCmd = resolveQualityGateCmd(input);
-  // D1: a UI send-back writes `<id>.pr-feedback.md` beside the manifest and
-  // requeues with resume_from: unifier. When that feedback file is present on a
-  // resume, run the unifier in send-back mode (developer-loop already threads
-  // unifierFeedbackRef → the unifier prompt). A manual `forge requeue
-  // --resume-from=unifier` (no feedback file) stays a plain re-prep.
-  const prFeedbackPath = input.manifestPath.replace(/\.md$/, '.pr-feedback.md');
-  const unifierFeedbackRef =
-    (input.resumeFrom === 'unifier' || input.resumeFrom === 'developer') && existsSync(prFeedbackPath)
-      ? prFeedbackPath
-      : input.unifierFeedbackRef;
   const inputWithGate: CycleInput = {
     ...input,
     qualityGateCmd: effectiveQualityGateCmd,
-    unifierFeedbackRef,
   };
 
   // Final cycle outcome. `merged` is reachable ONLY via the closure step
@@ -167,14 +157,13 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
-      // ADR 019: on EITHER resume mode (unifier or developer) the architect + PM
-      // already ran in the prior (stalled) cycle and their output (the WI specs)
-      // survives in the preserved worktree's `.forge/work-items/`. Skip PM and
-      // rebase the preserved branch onto current main. The dev-loop then keys on
-      // `resumeFrom`: 'unifier' runs only the unifier against the existing per-WI
-      // commits; 'developer' re-runs the dev-loop over ALL work items (newly-added
-      // pending WIs get built) before re-unifying.
-      if (input.resumeFrom === 'unifier' || input.resumeFrom === 'developer') {
+      // ADR 019/026: on a unifier resume (a crash-recovery `forge requeue
+      // --resume-from=unifier`, or the review→unifier drain) the architect + PM
+      // already ran in the prior cycle and their output (the WI specs) survives
+      // in the preserved worktree's `.forge/work-items/`. Skip PM and rebase the
+      // preserved branch onto current main; the dev-loop then runs zero per-WI
+      // Ralphs and only the unifier (which drains any pending UWIs).
+      if (input.resumeFrom === 'unifier') {
         // cascade-v4 #4: another cycle may have merged to main during the stall,
         // so the preserved branch no longer has main as its merge-base — the
         // dev-loop-close invariant would fail at the END of this resumed cycle,
@@ -182,16 +171,10 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         // NOW (clean → force-with-lease push the initiative branch; conflict →
         // fail fast with a clear, actionable resume-needs-rebase signal).
         //
-        // resume_from:developer reads the per-WI specs from `.forge/work-items/`,
-        // but that dir is gitignored — the rebase replay clobbers untracked files,
-        // wiping the work items the dev-loop is about to run. Snapshot the dir
-        // OUTSIDE the git worktree (so the rebase can't touch the backup) and
-        // restore it afterward. (Unifier resume runs zero WIs → harmless no-op.)
         // ADR 019 + 026: the rebase replay clobbers gitignored untracked dirs.
-        // Preserve BOTH the dev WI specs (`.forge/work-items`, the
-        // resume-from-developer input) AND the unifier queue
-        // (`.forge/unifier-items`, the pending review UWIs the drain is about to
-        // run) across the rebase, restoring any the rebase emptied.
+        // Preserve BOTH the dev WI specs (`.forge/work-items`) AND the unifier
+        // queue (`.forge/unifier-items`, the pending review UWIs the drain is
+        // about to run) across the rebase, restoring any the rebase emptied.
         const rebase = preservingForgeScratch(
           inputWithGate.worktreePath,
           ['.forge/work-items', '.forge/unifier-items'],
@@ -218,12 +201,6 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         await runProjectManager(inputWithGate, logger);
       }
       const devLoopOutcome = await runDeveloperLoop(inputWithGate, logger);
-      // D1: consume-once — the send-back feedback has now been read by the
-      // unifier; remove it so a later resume doesn't re-enter send-back mode
-      // with stale feedback (a fresh UI send-back writes a new one).
-      if (unifierFeedbackRef) {
-        try { rmSync(unifierFeedbackRef, { force: true }); } catch { /* best-effort */ }
-      }
       // Safety net: commit any uncommitted dev-loop work before the reviewer
       // starts. The dev-loop's prompt tells the agent to commit per
       // iteration, but if it skips, source files would not reach the PR.

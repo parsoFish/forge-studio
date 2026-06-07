@@ -13,7 +13,6 @@
  * (developer-loop.ts) and the verdict handler (ui-bridge.ts) consume them.
  */
 
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -21,7 +20,6 @@ import {
   topologicalOrder,
   validateWorkItemSet,
   writeWorkItem,
-  writeWorkItemStatus,
   type AcceptanceCriterion,
   type WorkItem,
 } from './work-item.ts';
@@ -79,17 +77,6 @@ export function pendingUnifierItems(worktreePath: string): WorkItem[] {
  *  operator rather than auto-retry — see {@link pendingUnifierItems}). */
 export function hasFailedUnifierItem(worktreePath: string): boolean {
   return readUnifierItems(worktreePath).items.some((w) => w.status === 'failed');
-}
-
-/**
- * Reset a UWI's status to `pending` so the loop re-runs it. Used by the legacy
- * send-back bridge (a `feedbackRef` resume re-opens the static unify mission so
- * it re-runs against the operator's feedback) — removed in ADR 026 step 7 once
- * the drain replaces the requeue-driven send-back. No-op if the file is absent.
- */
-export function reopenUnifierItem(worktreePath: string, workItemId: string): void {
-  const path = join(unifierItemsDir(worktreePath), `${workItemId}.md`);
-  if (existsSync(path)) writeWorkItemStatus(path, 'pending');
 }
 
 export type SeedStaticUnifierItemInput = {

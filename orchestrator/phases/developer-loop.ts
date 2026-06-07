@@ -43,7 +43,6 @@ import {
 } from '../unifier-invocation.ts';
 import {
   pendingUnifierItems,
-  reopenUnifierItem,
   seedStaticUnifierItem,
   unifierItemsDir,
 } from '../unifier-items.ts';
@@ -860,12 +859,12 @@ function emitGateEvent(
  * branch sync. The unifier reuses the Ralph runner with:
  *
  *   - System prompt: `buildUnifierSystemPrompt()` (SKILL.md + Ralph discipline)
- *   - Iteration cap: 3 (per CONTRACTS.md C19; no $ cap)
- *   - Quality gate: a composed `unifierQualityGate` checking all four
- *     gates (initiative, demo, pr-self-contained, branches-in-sync).
+ *   - Iteration cap: diff-scaled (per CONTRACTS.md C19; no $ cap)
+ *   - Quality gate: a composed `unifierQualityGate` checking all five
+ *     gates (initiative, demo, pr-self-contained, branches-in-sync, delivery).
  *
- * In send-back mode (`input.unifierFeedbackRef` set per C3b), the prompt is
- * augmented and the iteration cap reset — every nudge is a fresh 3-iter run.
+ * ADR 026: the unifier runs a for-each-pending-UWI loop; review feedback
+ * appends UWIs the drain runs in the same cycle (no send-back to a dev phase).
  *
  * Failure classification per council 04 F7:
  *   - dev-loop-unifier-gate-failed
@@ -968,12 +967,10 @@ export function assertGreenBaseline(
  * trivial (packaging-only) change can't thrash for the full cap (~15 iters /
  * ~$11 observed on a one-file test change). Tiers by files changed on
  * `main...HEAD`: trivial (≤2) → 4, small (≤10) → 8, larger → the full cap.
- * Send-back rounds keep the full cap (operator feedback may need several
- * passes). Best-effort: any measurement failure falls back to the full cap so a
- * real change is never under-budgeted. Exported for unit testing.
+ * Best-effort: any measurement failure falls back to the full cap so a real
+ * change is never under-budgeted. Exported for unit testing.
  */
-export function unifierIterationCap(worktreePath: string, sendBackMode: boolean): number {
-  if (sendBackMode) return UNIFIER_DEFAULT_ITERATION_CAP;
+export function unifierIterationCap(worktreePath: string): number {
   const git = (args: string[]): string => {
     try {
       return execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).toString().trim();
@@ -1024,30 +1021,23 @@ export async function runUnifier(
     projectConfig?.quality_gate_cmd ??
     input.qualityGateCmd ??
     (['npm', 'test'] as string[]);
-  const feedbackRef = input.unifierFeedbackRef;
-
   // betterado #5: right-size the unifier loop to the diff. A trivial change (a
   // one-file test add) was burning ~15 iters / ~$11 packaging-only because the
   // cap was a flat 15. Scale it to the branch's diff size so packaging-only work
-  // can't thrash for 9× the actual work. Send-back rounds keep the full cap
-  // (the operator's feedback may legitimately need several passes).
-  const iterationCap = unifierIterationCap(input.worktreePath, feedbackRef != null);
+  // can't thrash for 9× the actual work.
+  const iterationCap = unifierIterationCap(input.worktreePath);
 
   // ADR 026: the unifier owns a WI queue at `.forge/unifier-items/`. Seed the
   // static `UWI-1 = "unify & prep the PR"` (idempotent — a re-entrant cycle
   // keeps the existing UWI-1). Review feedback later APPENDS `UWI-2+` to the
-  // same queue (the drain, step 6) so the review↔unifier loop stays in ONE
-  // cycle. With only UWI-1 present this loop runs exactly once and is
-  // behaviour-equivalent to the prior single-mission unifier.
+  // same queue (the drain) so the review↔unifier loop stays in ONE cycle. With
+  // only UWI-1 present this loop runs exactly once and is behaviour-equivalent
+  // to the prior single-mission unifier.
   seedStaticUnifierItem(input.worktreePath, {
     initiativeId: input.initiativeId,
     estimatedIterations: iterationCap,
     qualityGateCmd,
   });
-  // Legacy send-back bridge (removed in ADR 026 step 7): a `feedbackRef` resume
-  // re-opens the static unify mission so the loop re-runs it against the
-  // operator's feedback. The drain supersedes this requeue-driven path.
-  if (feedbackRef) reopenUnifierItem(input.worktreePath, 'UWI-1');
 
   const pending = pendingUnifierItems(input.worktreePath);
 
@@ -1059,10 +1049,9 @@ export async function runUnifier(
     event_type: 'start',
     input_refs: [input.worktreePath, input.manifestPath],
     output_refs: [],
-    message: feedbackRef ? 'unifier.start (send-back)' : 'unifier.start',
+    message: 'unifier.start',
     metadata: {
       demo_shape: demoShape,
-      feedback_ref: feedbackRef ?? null,
       iteration_cap: iterationCap,
       pending_uwis: pending.map((p) => p.work_item_id),
       // ADR 024 seam observability: the agent + tier the orchestrator spawned.
@@ -1107,7 +1096,6 @@ export async function runUnifier(
       demoShape,
       qualityGateCmd,
       demoCommand: projectConfig?.demo.command,
-      feedbackRef,
     });
     writeWorkItemStatus(uwiPath, itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
@@ -1196,7 +1184,6 @@ type UnifierItemArgs = {
   demoShape: import('../project-config.ts').DemoShape;
   qualityGateCmd: string[];
   demoCommand: string[] | undefined;
-  feedbackRef: string | undefined;
 };
 type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
 
@@ -1277,7 +1264,7 @@ function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runne
 /** The packaging role: unify, author demo/PR, prove the 5-gate composed unifier
  *  gate. UWI-1, the terminal re-prep, and demo/doc tweaks. */
 async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
-  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand, feedbackRef } = args;
+  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand } = args;
 
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
@@ -1290,7 +1277,6 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     iterationBudget: itemCap,
     demoShape,
     qualityGateCmd: itemGateCmd,
-    feedbackRef,
   });
 
   const systemPrompt = buildUnifierSystemPrompt();

@@ -229,10 +229,9 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   assert.match(resuming, /resume_from: unifier/);
   assert.equal(parseManifest(resuming).resume_from, 'unifier');
 
-  // ADR 019: 'developer' resume mode round-trips the same way.
-  const resumingDev = serializeManifest({ ...fixture(), resume_from: 'developer' });
-  assert.match(resumingDev, /resume_from: developer/);
-  assert.equal(parseManifest(resumingDev).resume_from, 'developer');
+  // ADR 026: the retired 'developer' resume value is dropped on parse (undefined).
+  const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
+  assert.equal(parseManifest(legacy).resume_from, undefined);
 });
 
 test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {

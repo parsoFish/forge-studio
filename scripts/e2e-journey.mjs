@@ -176,10 +176,10 @@ function unifierEvent(eventType, message, opts = {}) {
 }
 function moveManifest(from, to) {
   mkdirSync(QDIR(to), { recursive: true });
-  // Robust to the REAL bridge having moved the manifest out from under us — the
-  // /review send-back now does a real requeue (ui-bridge /api/verdict → runRequeue
-  // moves ready-for-review → pending, ADR 019/D1), so a hard-coded `from` ENOENTs.
-  // Find the manifest wherever it currently lives.
+  // Robust to the REAL bridge having moved the manifest out from under us — a
+  // /review "add work items" verdict (ADR 026) appends UWIs and the drain
+  // re-claims the manifest ready-for-review → in-flight → ready-for-review in
+  // place, so a hard-coded `from` can ENOENT. Find it wherever it lives now.
   const search = [from, 'pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
   for (const q of search) {
     const src = join(QDIR(q), `${INIT}.md`);

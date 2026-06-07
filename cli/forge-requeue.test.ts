@@ -132,7 +132,7 @@ test('runRequeue --resume-from=unifier: stamps resume_from AND preserves the wor
   }
 });
 
-test('runRequeue --resume-from=developer: preserves worktree + branch + feedback AND stamps resume_from: developer', () => {
+test('runRequeue --resume-from=unifier: preserves worktree + branch, stamps resume_from: unifier, clears legacy pr-feedback (ADR 026)', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
@@ -140,24 +140,23 @@ test('runRequeue --resume-from=developer: preserves worktree + branch + feedback
     writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: wt }));
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
-    // (c) the send-back feedback must survive a developer resume (it re-unifies).
+    // A legacy pr-feedback.md (ADR 026 retired the thread) must now be cleared.
     const feedback = join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.pr-feedback.md');
-    writeFileSync(feedback, '# Send-back feedback\n\nbuild the new WI\n');
+    writeFileSync(feedback, '# Send-back feedback\n\nlegacy file\n');
 
-    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromDeveloper: true });
+    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromUnifier: true });
 
     // (a) worktree is the salvaged work — it must NOT be removed.
     assert.equal(r.worktreeRemoved, false);
-    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-developer');
+    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-unifier');
     // (b) the forge/<id> branch must NOT be deleted (no project repo here, so
     //     branchDeleted is false regardless — assert the preservation contract).
-    assert.equal(r.branchDeleted, false, 'branch must be preserved on resume-from-developer');
-    // (c) pr-feedback.md survives the requeue.
-    assert.equal(existsSync(feedback), true, 'pr-feedback.md must survive a developer resume');
-    assert.ok(!r.verdictsRemoved.includes(feedback));
-    // (d) resume_from: developer stamped into the moved manifest.
+    assert.equal(r.branchDeleted, false, 'branch must be preserved on resume-from-unifier');
+    // (c) the retired pr-feedback.md is cleared — it is no longer read.
+    assert.equal(existsSync(feedback), false, 'legacy pr-feedback.md must be cleared');
+    // (d) resume_from: unifier stamped into the moved manifest.
     const moved = readFileSync(join(root, '_queue', 'pending', file), 'utf8');
-    assert.match(moved, /^resume_from:\s*developer\s*$/m);
+    assert.match(moved, /^resume_from:\s*unifier\s*$/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -187,27 +186,9 @@ test('runRequeue: throws when initiative ID does not resolve', () => {
   }
 });
 
-// D1: send-back wiring. A UI send-back writes `<id>.pr-feedback.md` then requeues
-// with resume_from: unifier; that feedback must survive the requeue (it is the
-// resumed unifier's input). A non-resume requeue must instead clear stale feedback.
-test('runRequeue: resume-from-unifier PRESERVES <id>.pr-feedback.md (the send-back input)', () => {
-  const root = setupForgeRoot();
-  try {
-    const id = 'INIT-2026-05-24-rq-test';
-    writeFileSync(join(root, '_queue', 'in-flight', `${id}.md`), MANIFEST());
-    const feedback = join(root, '_queue', 'in-flight', `${id}.pr-feedback.md`);
-    writeFileSync(feedback, '# Send-back feedback\n\nfix the thing\n');
-
-    const r = runRequeue(id, { forgeRoot: root, resumeFromUnifier: true });
-    assert.equal(r.toQueueDir, 'pending');
-    assert.match(readFileSync(join(root, '_queue', 'pending', `${id}.md`), 'utf8'), /resume_from: unifier/);
-    assert.equal(existsSync(feedback), true, 'pr-feedback.md must survive a resume requeue');
-    assert.ok(!r.verdictsRemoved.includes(feedback));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
+// ADR 026 retired the `<id>.pr-feedback.md` send-back thread (review feedback is
+// now appended UWIs in the worktree). Any requeue — resume or not — clears a
+// legacy feedback file, since nothing reads it anymore.
 test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
   const root = setupForgeRoot();
   try {

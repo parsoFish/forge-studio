@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir, pendingUnifierItems, reopenUnifierItem, appendReviewUnifierItems, UnifierItemsCapError, ReviewConcernInvalidError } from './unifier-items.ts';
+import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir, pendingUnifierItems, appendReviewUnifierItems, UnifierItemsCapError, ReviewConcernInvalidError } from './unifier-items.ts';
 import { writeWorkItem, parseWorkItem, writeWorkItemStatus, type WorkItem } from './work-item.ts';
 
 const INIT = 'INIT-2026-06-07-release-folder-data-source';
@@ -106,22 +106,6 @@ test('pendingUnifierItems returns only not-complete UWIs in dependency order', (
     writeWorkItemStatus(uwi1Path, 'complete');
     pending = pendingUnifierItems(wt);
     assert.deepEqual(pending.map((p) => p.work_item_id), ['UWI-2']);
-  } finally {
-    rmSync(wt, { recursive: true, force: true });
-  }
-});
-
-test('reopenUnifierItem resets a complete UWI back to pending (legacy send-back bridge)', () => {
-  const wt = tmpWorktree();
-  try {
-    const uwi1Path = seedStaticUnifierItem(wt, { initiativeId: INIT, estimatedIterations: 8, qualityGateCmd: ['go', 'test', './...'] });
-    writeWorkItemStatus(uwi1Path, 'complete');
-    assert.deepEqual(pendingUnifierItems(wt), []);
-    reopenUnifierItem(wt, 'UWI-1');
-    assert.deepEqual(pendingUnifierItems(wt).map((p) => p.work_item_id), ['UWI-1']);
-    // No-op when the file is absent.
-    reopenUnifierItem(wt, 'UWI-99');
-    assert.deepEqual(pendingUnifierItems(wt).map((p) => p.work_item_id), ['UWI-1']);
   } finally {
     rmSync(wt, { recursive: true, force: true });
   }

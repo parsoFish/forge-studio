@@ -6,9 +6,11 @@
  * review verdict via the bridge; the `forge review` CLI uses these paths to
  * locate the prompt/response files. Pure path resolution — no I/O.
  *
- * (The verdict-response *parser* was removed 2026-06-03: nothing read it — the
- * UI send-back re-enters the cycle via requeue with `resume_from: unifier`, not
- * by parsing this file. See orchestrator/cycle.ts + cli/ui-bridge.ts.)
+ * (The verdict-response *parser* was removed 2026-06-03: nothing read it. ADR
+ * 026: a UI "add work items" verdict appends typed UWIs to the unifier queue in
+ * the live worktree and the drain re-runs them in the same cycle — it does not
+ * write or parse a verdict file. See orchestrator/unifier-items.ts +
+ * orchestrator/drain-unifier-items.ts + cli/ui-bridge.ts.)
  */
 
 import { resolve } from 'node:path';

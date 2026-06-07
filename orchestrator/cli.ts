@@ -1082,23 +1082,22 @@ async function cmdWatch(rest: string[]): Promise<void> {
 function cmdRequeue(rest: string[]): void {
   const initInput = rest.find((a) => !a.startsWith('--'));
   const resetRetries = rest.includes('--reset-retries');
-  // ADR 019: --resume-from={unifier,developer} (or --resume-from <mode>) resumes
-  // the next cycle against the PRESERVED worktree instead of a full re-run.
+  // ADR 019 (amended by ADR 026): --resume-from=unifier (or --resume-from
+  // <mode>) resumes the next cycle against the PRESERVED worktree instead of a
+  // full re-run. The `developer` mode was retired with ADR 026.
   const resumeIdx = rest.findIndex((a) => a === '--resume-from' || a.startsWith('--resume-from='));
   let resumeFromUnifier = false;
-  let resumeFromDeveloper = false;
   if (resumeIdx !== -1) {
     const arg = rest[resumeIdx];
     const value = arg.includes('=') ? arg.split('=')[1] : rest[resumeIdx + 1];
     if (value === 'unifier') resumeFromUnifier = true;
-    else if (value === 'developer') resumeFromDeveloper = true;
     else {
-      console.error(`forge requeue: --resume-from only supports 'unifier' or 'developer' (got '${value ?? ''}')`);
+      console.error(`forge requeue: --resume-from only supports 'unifier' (got '${value ?? ''}')`);
       process.exit(2);
     }
   }
   if (rest.includes('--help') || rest.includes('-h') || !initInput) {
-    console.log(`forge requeue <init-id-or-handle> [--reset-retries] [--resume-from=unifier|developer]
+    console.log(`forge requeue <init-id-or-handle> [--reset-retries] [--resume-from=unifier]
   Recover a stuck initiative back to the pending queue. Idempotent.
   Moves manifest from any queue dir → _queue/pending/, deletes stranded
   verdict files, removes the worktree, and (optionally) resets
@@ -1107,16 +1106,14 @@ function cmdRequeue(rest: string[]): void {
     --reset-retries          Set retry_count to 0 (default: preserve prior count).
     --resume-from=unifier    Resume from the unifier sub-phase (ADR 019): skip
                              PM + per-WI dev-loop and PRESERVE the worktree so
-                             the salvaged WI commits drive the resumed unifier.
-    --resume-from=developer  Resume the dev-loop on the preserved worktree (build
-                             newly-added work items), then re-unify.`);
+                             the salvaged WI commits drive the resumed unifier.`);
     if (!initInput) process.exit(2);
     return;
   }
   void import('../cli/forge-requeue.ts').then(({ runRequeue }) => {
     try {
-      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries, resumeFromUnifier, resumeFromDeveloper });
-      const resumeNote = resumeFromDeveloper ? ' (resume-from=developer)' : resumeFromUnifier ? ' (resume-from=unifier)' : '';
+      const r = runRequeue(initInput, { forgeRoot: FORGE_ROOT, resetRetries, resumeFromUnifier });
+      const resumeNote = resumeFromUnifier ? ' (resume-from=unifier)' : '';
       console.log(`requeued ${r.initiativeId}${resumeNote}`);
       console.log(`  from: ${r.fromQueueDir}/ → pending/`);
       console.log(`  worktree removed: ${r.worktreeRemoved}`);

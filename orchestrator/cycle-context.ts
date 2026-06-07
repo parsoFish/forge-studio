@@ -50,20 +50,15 @@ export type CycleInput = {
    */
   spawnAlignmentDevLoop?: boolean;
   /**
-   * ADR 019: resume a previously-stalled cycle from a later phase instead of
-   * re-running it from scratch, reusing the preserved worktree + branch.
-   *   - `'unifier'`   skips the architect, PM, and per-WI dev-loop — the WI
-   *                   commits already exist on the preserved branch — and runs
-   *                   only the unifier sub-phase + downstream reviewer/closure/
-   *                   reflector.
-   *   - `'developer'` skips the architect + PM but re-runs the dev-loop over ALL
-   *                   work items on the preserved branch (already-complete WIs
-   *                   hit the cheap shortcut; newly-added pending WIs get built),
-   *                   then re-unifies — "send it back for another dev pass".
-   * Absent ⇒ normal full cycle. Set by the scheduler from the manifest's
-   * `resume_from` field (`forge requeue --resume-from={unifier,developer}`).
+   * ADR 019 (amended by ADR 026): resume a previously-stalled cycle from the
+   * unifier sub-phase, reusing the preserved worktree + branch — skips the
+   * architect, PM, and per-WI dev-loop (the WI commits already exist on the
+   * branch) and runs only the unifier (which drains any pending review UWIs) +
+   * downstream closure/reflector. Absent ⇒ normal full cycle. Set by the
+   * scheduler from the manifest's `resume_from` field (`forge requeue
+   * --resume-from=unifier`), and by the review→unifier drain directly.
    */
-  resumeFrom?: 'unifier' | 'developer';
+  resumeFrom?: 'unifier';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**
@@ -82,13 +77,6 @@ export type CycleInput = {
    * Threaded straight through to `createLogger`'s `tee`.
    */
   eventTee?: (entry: import('./logging.ts').EventLogEntry) => void;
-  /**
-   * S4 — when set, the unifier runs in send-back mode (CONTRACTS.md C3b).
-   * Points at a `_queue/in-flight/<id>.pr-feedback.md` file the unifier
-   * reads as its iteration input. Set by the daemon/scheduler when the
-   * review router enqueues a re-entrant unifier run.
-   */
-  unifierFeedbackRef?: string;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

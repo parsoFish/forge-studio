@@ -17,7 +17,6 @@ import { collectMissingDeliveries, emitDeliverySummary, prBodyHasGitTruthSection
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { CycleInput } from '../cycle-context.ts';
 import { parseManifest, serializeManifest } from '../manifest.ts';
-import { UNIFIER_DEFAULT_ITERATION_CAP } from '../unifier-invocation.ts';
 
 function deliveryHarness(): {
   input: CycleInput;
@@ -92,16 +91,14 @@ test('emitDeliverySummary: an empty branch reports zeros (the genuine no-deliver
   }
 });
 
-test('unifierIterationCap: a trivial 1-file diff caps low; send-back keeps the full cap', () => {
+test('unifierIterationCap: a trivial 1-file diff caps low', () => {
   const h = deliveryHarness();
   try {
     h.git(['checkout', '-q', '-b', 'init/x']);
     writeFileSync(join(h.input.worktreePath, 'one.ts'), 'export const a = 1;\n');
     h.git(['add', '-A']);
     h.git(['commit', '-q', '-m', 'trivial']);
-    assert.equal(unifierIterationCap(h.input.worktreePath, false), 4, '≤2 files ⇒ tight cap');
-    // Send-back rounds keep the full cap regardless of diff size.
-    assert.equal(unifierIterationCap(h.input.worktreePath, true), UNIFIER_DEFAULT_ITERATION_CAP);
+    assert.equal(unifierIterationCap(h.input.worktreePath), 4, '≤2 files ⇒ tight cap');
   } finally {
     h.cleanup();
   }
@@ -114,7 +111,7 @@ test('unifierIterationCap: a mid-size diff (5 files) gets the middle cap', () =>
     for (let i = 0; i < 5; i++) writeFileSync(join(h.input.worktreePath, `f${i}.ts`), `export const x${i} = ${i};\n`);
     h.git(['add', '-A']);
     h.git(['commit', '-q', '-m', '5 files']);
-    assert.equal(unifierIterationCap(h.input.worktreePath, false), 8, '3–10 files ⇒ middle cap');
+    assert.equal(unifierIterationCap(h.input.worktreePath), 8, '3–10 files ⇒ middle cap');
   } finally {
     h.cleanup();
   }

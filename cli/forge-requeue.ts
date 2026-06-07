@@ -37,21 +37,13 @@ export type RequeueOptions = {
   /** Reset retry_count to 0 (default false: keep prior count + append to previous_failure_modes). */
   resetRetries?: boolean;
   /**
-   * ADR 019: resume the next cycle from the unifier sub-phase instead of a
-   * full re-run. Sets `resume_from: unifier` on the manifest AND preserves the
-   * worktree (the per-WI commits live there) — so step 5's worktree removal is
-   * skipped. Use after a unifier-only gate failure to salvage the WI work.
+   * ADR 019 (amended by ADR 026): resume the next cycle from the unifier
+   * sub-phase instead of a full re-run. Sets `resume_from: unifier` on the
+   * manifest AND preserves the worktree (the per-WI commits live there) — so
+   * step 5's worktree removal is skipped. Use after a unifier-only gate failure
+   * to salvage the WI work.
    */
   resumeFromUnifier?: boolean;
-  /**
-   * ADR 019: resume the next cycle from the dev-loop on the preserved worktree
-   * instead of a full re-run. Sets `resume_from: developer` on the manifest AND
-   * preserves the worktree + branch (same as resumeFromUnifier) — so step 5's
-   * worktree removal is skipped. The resumed dev-loop runs over ALL work items
-   * (already-complete ones hit the cheap shortcut; newly-added pending WIs get
-   * built), then re-unifies. Mutually exclusive with resumeFromUnifier.
-   */
-  resumeFromDeveloper?: boolean;
 };
 
 export type RequeueResult = {
@@ -86,10 +78,10 @@ export function runRequeue(
   const initiativeId = resolved.canonical;
   const filename = `${initiativeId}.md`;
 
-  // ADR 019: both resume modes preserve the worktree + branch (the salvaged
+  // ADR 019: a unifier resume preserves the worktree + branch (the salvaged
   // per-WI work the resumed cycle runs against). Only a full (non-resume)
   // requeue wipes them for a fresh-from-main re-run.
-  const preserveWorktree = opts.resumeFromUnifier || opts.resumeFromDeveloper;
+  const preserveWorktree = opts.resumeFromUnifier;
 
   // 1. Locate manifest in any queue dir.
   const candidates: Array<{ dir: string; label: string }> = [
@@ -124,14 +116,9 @@ export function runRequeue(
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
     // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
-    // preserved worktree — `developer` re-runs the dev-loop (build newly-added
-    // WIs) then re-unifies; `unifier` re-runs only the unifier. (CLI keeps the
-    // two mutually exclusive; developer takes precedence if both were set.)
-    ...(opts.resumeFromDeveloper
-      ? { resume_from: 'developer' as const }
-      : opts.resumeFromUnifier
-        ? { resume_from: 'unifier' as const }
-        : {}),
+    // preserved worktree — `unifier` re-runs only the unifier (draining any
+    // pending review UWIs).
+    ...(opts.resumeFromUnifier ? { resume_from: 'unifier' as const } : {}),
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
@@ -141,14 +128,11 @@ export function runRequeue(
   renameSync(tmpPath, toPath);
   rmSync(fromPath, { force: true });
 
-  // 4. Remove stranded verdict files. On a resume requeue (unifier OR developer)
-  //    we KEEP `<id>.pr-feedback.md` — it is the send-back input the resumed
-  //    unifier reads (D1), and a developer resume also re-unifies. On a
-  //    non-resume requeue, clear it too so stale feedback can't re-trigger
-  //    send-back mode on a later resume.
+  // 4. Remove stranded verdict files. ADR 026 retired the `<id>.pr-feedback.md`
+  //    send-back thread (review feedback is now appended UWIs in the worktree),
+  //    so always clear any legacy feedback file too — it is no longer read.
   const verdictsRemoved: string[] = [];
-  const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md'];
-  if (!preserveWorktree) staleSuffixes.push('.pr-feedback.md');
+  const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md', '.pr-feedback.md'];
   for (const c of candidates) {
     for (const suffix of staleSuffixes) {
       const path = join(c.dir, `${initiativeId}${suffix}`);

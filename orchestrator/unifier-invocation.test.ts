@@ -104,7 +104,6 @@ test('renderUnifierUserPrompt: is dynamic-only (no static Ralph discipline repet
     iterationBudget: 5,
     demoShape: 'harness',
     qualityGateCmd: ['npm', 'test'],
-    feedbackRef: undefined,
   });
   // The static Ralph discipline header must NOT be duplicated in the user prompt
   // (it now lives only in SKILL.md)
@@ -123,28 +122,11 @@ test('renderUnifierUserPrompt: initial-prep mode references manifest + WIs', () 
     iterationBudget: 3,
     demoShape: 'browser',
     qualityGateCmd: ['npm', 'test'],
-    feedbackRef: undefined,
   });
   for (const s of ['INIT-2026-05-23-test', '.forge/manifest.md', 'WI-1', 'WI-2', 'browser', 'npm test']) {
     assert.ok(prompt.includes(s), `missing: ${s}`);
   }
   assert.ok(!prompt.includes('send-back'), 'initial-prep mode does not mention send-back');
-});
-
-test('renderUnifierUserPrompt: send-back mode references the feedback file', () => {
-  const prompt = renderUnifierUserPrompt({
-    initiativeId: 'INIT-2026-05-23-test',
-    manifestRelPath: '.forge/manifest.md',
-    workItemSpecs: ['.forge/work-items/WI-1.md'],
-    iteration: 1,
-    iterationBudget: 3,
-    demoShape: 'browser',
-    qualityGateCmd: ['npm', 'test'],
-    feedbackRef: '_queue/in-flight/INIT-2026-05-23-test.pr-feedback.md',
-  });
-  assert.ok(prompt.includes('send-back'));
-  assert.ok(prompt.includes('_queue/in-flight/INIT-2026-05-23-test.pr-feedback.md'));
-  assert.ok(prompt.includes('Do not exceed the iteration cap'));
 });
 
 test('renderUnifierUserPrompt: demo shape "none" omits demo runtime instruction', () => {
@@ -156,7 +138,6 @@ test('renderUnifierUserPrompt: demo shape "none" omits demo runtime instruction'
     iterationBudget: 3,
     demoShape: 'none',
     qualityGateCmd: ['true'],
-    feedbackRef: undefined,
   });
   assert.ok(promptNone.includes('rationale block'));
   assert.ok(!promptNone.toLowerCase().includes('playwright'));
@@ -178,7 +159,6 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
       iterationBudget: 3,
       demoShape: 'artifact',
       qualityGateCmd: ['npm', 'test'],
-      feedbackRef: undefined,
     });
     assert.ok(existsSync(out.promptPath));
     assert.ok(existsSync(out.agentMdPath));
@@ -186,28 +166,6 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
     const prompt = readFileSync(out.promptPath, 'utf8');
     assert.ok(prompt.includes('INIT-x'));
     assert.ok(prompt.includes('WI-1'));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('prepareUnifierWorkspace: writes feedback-aware prompt when feedbackRef is set', () => {
-  const root = newTempDir();
-  try {
-    mkdirSync(join(root, '.forge', 'work-items'), { recursive: true });
-    writeFileSync(join(root, '.forge', 'manifest.md'), '# manifest');
-    const out = prepareUnifierWorkspace({
-      initiativeId: 'INIT-x',
-      manifestRelPath: '.forge/manifest.md',
-      worktreePath: root,
-      iterationBudget: 3,
-      demoShape: 'artifact',
-      qualityGateCmd: ['npm', 'test'],
-      feedbackRef: '_queue/in-flight/INIT-x.pr-feedback.md',
-    });
-    const prompt = readFileSync(out.promptPath, 'utf8');
-    assert.ok(prompt.includes('send-back'));
-    assert.ok(prompt.includes('pr-feedback.md'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

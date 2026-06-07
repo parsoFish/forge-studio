@@ -556,16 +556,15 @@ async function runOne(
     // checked-out path fails ("already exists"). If the worktree was GC'd, fall
     // through to `worktree.add`, which re-checks-out the surviving branch (the
     // per-WI commits are durable on the ref).
-    // BOTH resume modes must reuse: 'unifier' runs only the unifier; 'developer'
-    // re-runs the dev-loop over the work-item specs in the gitignored
-    // `.forge/work-items/` — falling through to `worktree.add` re-checks-out the
-    // branch and WIPES those untracked specs at claim time (the dev-loop then
-    // finds "no work items"). So a developer resume reuses, never re-adds.
+    // A unifier resume must REUSE the preserved worktree (the per-WI commits +
+    // the gitignored `.forge/work-items/` + `.forge/unifier-items/` live there);
+    // falling through to `worktree.add` re-checks-out the branch and WIPES those
+    // untracked specs at claim time.
     const liveWorktree =
-      (manifest.resumeFrom === 'unifier' || manifest.resumeFrom === 'developer') &&
+      manifest.resumeFrom === 'unifier' &&
       worktree.list(manifest.projectRepoPath).some((w) => resolve(w.path) === expectedWtPath);
     if (liveWorktree) {
-      if (tee) console.log(`[serve] resume-from-${manifest.resumeFrom}: reusing preserved worktree ${expectedWtPath}`);
+      if (tee) console.log(`[serve] resume-from-unifier: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
       wtHandle = worktree.add({
@@ -593,10 +592,9 @@ async function runOne(
       resumeFrom: manifest.resumeFrom,
       eventTee: tee,
       // No verdict provider is threaded in: the review verdict arrives
-      // out-of-band as a UI action (the bridge writes verdict-response.md and
-      // the send-back loop re-enters via requeue with resume_from: unifier),
-      // so the cycle never blocks waiting on an operator. The reviewer phase
-      // opens the PR and stops at ready-for-review.
+      // out-of-band as a UI action. ADR 026: a send-back appends UWIs the drain
+      // runs in place; the cycle never blocks waiting on an operator. The
+      // review phase opens the PR and stops at ready-for-review.
     });
 
     if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
@@ -690,11 +688,11 @@ type ParsedManifest = {
   project: string;
   projectRepoPath: string;
   /**
-   * ADR 019: resume the cycle against the preserved worktree — 'unifier' runs
-   * only the unifier sub-phase; 'developer' re-runs the dev-loop over all work
-   * items (building newly-added ones) then re-unifies.
+   * ADR 019 (amended by ADR 026): resume the cycle against the preserved
+   * worktree — 'unifier' skips PM + the per-WI dev-loop and runs only the
+   * unifier (draining any pending review UWIs).
    */
-  resumeFrom?: 'unifier' | 'developer';
+  resumeFrom?: 'unifier';
 };
 
 function parseManifest(path: string): ParsedManifest {

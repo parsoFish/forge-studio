@@ -5,11 +5,14 @@ import { useState } from 'react';
 import { submitVerdict, type AcceptanceCriterion } from '@/lib/bridge-client';
 
 /**
- * The review human moment (ADR 020) — approve/send-back a cycle's PR after
- * review. Lives on its own screen (`/review/[cycleId]`), mirroring the
+ * The review human moment (ADR 020) — approve or add work items to a cycle's PR
+ * after review. Lives on its own screen (`/review/[cycleId]`), mirroring the
  * architect plan screen; the inline dashboard box was retired. Approve =
- * rationale only; send-back = rationale + 1+ `GIVEN/WHEN/THEN` acceptance
- * criteria. POSTs the kept `/api/verdict` bridge route.
+ * rationale only; "add work items" = rationale + 1+ `GIVEN/WHEN/THEN` acceptance
+ * criteria. POSTs the kept `/api/verdict` bridge route (wire kind stays
+ * `send-back` for back-compat). ADR 026: the work items are appended to the
+ * unifier's queue and run in the SAME cycle — no send-back to a dev phase, no
+ * new cycle.
  */
 export function ReviewVerdictForm({
   initiativeId,
@@ -63,7 +66,7 @@ export function ReviewVerdictForm({
         <div style={{ fontSize: 13, color: '#3fb950' }}>
           {kind === 'approve'
             ? 'Approved — the reviewer will close out the cycle.'
-            : 'Sent back — the reviewer will react to the new acceptance criteria.'}
+            : 'Work items added — the unifier runs them in the same cycle (no new cycle).'}
         </div>
       </div>
     );
@@ -85,7 +88,7 @@ export function ReviewVerdictForm({
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <input type="radio" name="kind" checked={kind === 'send-back'} onChange={() => setKind('send-back')} />
-          send back
+          add work items
         </label>
       </fieldset>
 
@@ -94,7 +97,7 @@ export function ReviewVerdictForm({
         <textarea
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
-          placeholder={kind === 'approve' ? 'Why is this mergeable?' : 'Why is the work not done yet?'}
+          placeholder={kind === 'approve' ? 'Why is this mergeable?' : 'What still needs fixing? (runs in the same cycle)'}
           style={inputStyle}
           rows={3}
         />
@@ -132,7 +135,7 @@ export function ReviewVerdictForm({
           data-action={kind === 'approve' ? 'approve-and-merge' : 'send-back'}
           style={{ ...buttonStyle, background: kind === 'approve' ? '#238636' : '#9e6a03', opacity: !rationale.trim() ? 0.5 : 1 }}
         >
-          {submitting ? 'submitting…' : kind === 'approve' ? 'approve and merge' : 'send back'}
+          {submitting ? 'submitting…' : kind === 'approve' ? 'approve and merge' : 'add work items'}
         </button>
       </div>
     </div>
