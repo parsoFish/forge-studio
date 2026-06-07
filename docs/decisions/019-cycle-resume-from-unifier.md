@@ -1,6 +1,13 @@
 # ADR 019 — Cycle resume-from-unifier
 
-- **Status:** accepted
+> **Amended 2026-06-07 ([ADR 026](./026-review-unifier-wi-list.md)).** The
+> `resume_from`-on-**review-send-back** mechanism described here is retired:
+> review feedback now appends work-items to the unifier's in-place queue and the
+> cycle never leaves (no requeue, one `cycleId`). The **crash-recovery** resume +
+> the rebase-onto-main step below survive, repurposed (operator-explicit `forge
+> requeue` only, now threading the manifest's `cycle_id`). See ADR 026.
+
+- **Status:** accepted (review-send-back portion amended by ADR 026)
 - **Date:** 2026-05-29
 - **Supersedes / amends:** extends ADR 011 (unattended scheduler), ADR 012 (crash recovery). Builds on the worktree-preservation-on-`failed` behaviour added 2026-05-25 (scheduler.ts).
 

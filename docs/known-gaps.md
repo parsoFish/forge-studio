@@ -729,6 +729,13 @@ forge defects. Root-caused via an adversarially-verified investigation workflow.
 
 **⏳ OPEN (forge behavior changes — need operator greenlight; each touches the autonomous pipeline):**
 
+> **2026-06-07 update:** items **2 (requeue guard)** and **4 (cost/status lineage)** are
+> superseded by **[ADR 026](./decisions/026-review-unifier-wi-list.md)** — the review↔unifier
+> WI-list model removes the requeue-on-review trigger entirely, dissolving both (and the
+> disappearing-hex bug) at their shared root. Item **1 (status-blind merge)** is addressed
+> instead via the first-class `secrets.env` pattern (the live tests now actually run). Items
+> 3 + 5 are done / independent.
+
 1. **Merge boundary doesn't gate on per-WI status.** WI-2 ended `status: failed` (its live-acc
    gate never passed) yet the unifier's `canOpenPr` opened a PR (files-present + offline/TF_ACC-
    stripped CI green), and the operator merged it — so the data source shipped **unverified-live**.
