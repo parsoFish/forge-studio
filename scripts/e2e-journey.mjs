@@ -17,8 +17,8 @@
  *   8.  PM decomposes the initiative's acceptance criteria directly into work items
  *   9.  developer loop progresses work items, respecting dependencies
  *   10. unifier reviews + loops to clean the output
- *   11. unifier runs the demo skill → a rich, INTERACTIVE demo page
- *   12. operator reviews + pokes the new capability live, then sends back / approves
+ *   11. unifier runs the demo skill → a rich demo page (assessed intent + evaluated output + watchable visual)
+ *   12. operator reviews the rich demo, then sends back / approves
  *   13. on approval → reflect
  *
  * No live LLM: the architect runner's turns + the autonomous cycle are emulated
@@ -28,8 +28,7 @@
  * This is also the UI REGRESSION HARNESS (the old scripts/forge-ui-harness.mjs
  * S1–S4 checks were merged in here, 2026-05-30): alongside recording the video
  * it asserts the DOM-as-metrics invariants at each beat (status transitions,
- * ≥5 phase hexes, materialised WI hexes, the per-phase cost rollup, and the
- * interactive demo surfaces).
+ * ≥5 phase hexes, materialised WI hexes, the per-phase cost rollup).
  * Assertions are SOFT — they record into `failures[]` and log ✓/✗ so the video
  * always finishes; a non-zero exit at the end flags any regression for CI.
  *
@@ -187,11 +186,6 @@ function moveManifest(from, to) {
 function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
-  // The real captured output the `live-query` interactive surface serves — the
-  // operator runs it right on the review page to SEE what `--compact` prints
-  // (interactive review, re-review #8), not just read a metric table.
-  writeFileSync(join(artifacts, 'compact-output.txt'),
-    '# Trail — INIT-2026-06-04-demo-cycle\nVerdict: approve\nTotal: $0.24\n');
   writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
     title: `claude-trail --compact: a 3-line glance view${revision > 1 ? ' (round ' + revision + ')' : ''}`,
     essence: 'Running `claude-trail <id> --compact` now prints a terse 3-line summary (title / Verdict / Cost) instead of the full multi-section trail. Mutually exclusive with --format json / --out / --since; default output unchanged.',
@@ -237,10 +231,6 @@ function writeDemoJson(revision) {
       'Operators get a one-glance cycle status without scrolling the full trail.',
       'Scriptable in CI / Slack notifications (terse, stable 3-line shape).',
       'Composes cleanly — conflicting flags fail fast instead of silently surprising.',
-    ],
-    // ── Interactive review surfaces (re-review #8, Stage 0/1) ──
-    interactiveSurfaces: [
-      { kind: 'live-query', label: 'Show the real `--compact` output (captured)', artifact: 'compact-output.txt' },
     ],
   }, null, 2));
 }
@@ -628,23 +618,6 @@ async function main() {
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await sleep(READ); // let the review page settle + be read, not a pop-in
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
-
-    // STEP 12a — interactive review (re-review #8): the operator doesn't just READ
-    // the demo, they POKE the new capability on the review page — running the
-    // captured `--compact` output live to see exactly what it prints.
-    const hasInteractive = await page.locator('[data-section="demo-interactive"]').count() > 0;
-    check(hasInteractive, 'review page renders the interactive "Try it" surfaces');
-    if (hasInteractive) {
-      const liveQuery = page.locator('[data-interactive-surface="live-query"] [data-action="run-live-query"]');
-      if (await liveQuery.count() > 0) {
-        await liveQuery.first().click();
-        await page.waitForSelector('[data-interactive-surface="live-query"][data-surface-state="done"]', { timeout: 8000 }).catch(() => {});
-        await sleep(READ);
-        const ran = await page.locator('[data-interactive-surface="live-query"][data-surface-state="done"]').count() > 0;
-        check(ran, 'interactive: the live-query surface ran and rendered the captured output');
-        await frame(page, 'step12a-interactive', 'Step 12 — the operator runs the captured --compact output right on the review page (interactive review)');
-      }
-    }
 
     // Send back with a new acceptance criterion.
     await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();

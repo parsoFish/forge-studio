@@ -159,14 +159,6 @@ sections were merged into a single hex pipeline):
   `data-form-state` (`editing | submitting | submitted`) + `data-form-kind`
   (`approve | send-back`) + `data-initiative-id` + `data-ac-count`, and the
   harness depends on it.
-- `[data-section="demo-interactive"][data-interactive-count]` — the **interactive
-  review** surfaces on `/review/<cycleId>` (re-review #8, Stage 0/1): an enhancement
-  layer on the static demo so the operator can *explore* the new capability. One
-  `[data-interactive-surface=<kind>][data-surface-state=idle|running|done|error]`
-  card per declared surface (`DemoComparison.tsx`), with `[data-action="open-portal"]`
-  (deep link) / `[data-action="run-live-query"]` (fetches a captured artifact via
-  `/api/artifact/<cycleId>/<file>`) and a `[data-surface-result]` pane. Declared in
-  `demo.json` `interactiveSurfaces[]`; absent ⇒ the static demo renders unchanged.
 - `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
   the primary dashboard, mounted above the cycles tab. Compact by design — the
   heavy interview + PLAN-gate UI lives on the dedicated screen. Carries

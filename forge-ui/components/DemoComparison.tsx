@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchArtifactText, resolveBridgeUrl } from '@/lib/bridge-client';
-import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, InteractiveSurface } from '@/lib/bridge-client';
+import { resolveBridgeUrl } from '@/lib/bridge-client';
+import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib/bridge-client';
 
 /**
  * ADR 021 — renders the unifier-authored structured `demo.json` natively (the
@@ -213,115 +213,6 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
         </pre>
       </details>
 
-      {/* Interactive review surfaces (re-review #8, Stage 0/1) — explore the
-          new capability, not just read about it. Renders only when the demo
-          declares them; the static demo above is unchanged when absent. */}
-      {model.interactiveSurfaces && model.interactiveSurfaces.length > 0 && (
-        <div data-section="demo-interactive" data-interactive-count={model.interactiveSurfaces.length}>
-          <SectionLabel>Try it — explore the new capability</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {model.interactiveSurfaces.map((s, i) => (
-              <InteractiveSurfaceCard key={i} surface={s} cycleId={cycleId} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * One interactive surface. Supports two kinds:
- * - `portal-link`: a deep link to the real resource.
- * - `live-query`: fetches an already-captured artifact (served via the
- *   existing /api/artifact route) and renders it on demand, degrading clearly
- *   when no capture exists (e.g. a no-credentials run).
- * Mirrors load-bearing state to data-surface-state per the DOM-as-metrics convention.
- */
-function InteractiveSurfaceCard({ surface, cycleId }: { surface: InteractiveSurface; cycleId?: string }): JSX.Element {
-  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [result, setResult] = useState<string | null>(null);
-  // A portal-link with no portalUrl is a mis-declared surface: there is nothing
-  // to open. Make it first-class so automation sees an `error` surface-state
-  // instead of a dead label. portalUrl is optional in the schema, so this is a
-  // valid-but-broken model, not a parse failure.
-  const isDeadPortalLink = surface.kind === 'portal-link' && !surface.portalUrl;
-  // surface-state reflects the *interactive* state (idle/running/done/error),
-  // but a dead portal-link is structurally errored regardless of interaction.
-  const surfaceState = isDeadPortalLink ? 'error' : state;
-
-  async function runLiveQuery(): Promise<void> {
-    if (!surface.artifact || !cycleId) {
-      setState('error');
-      setResult('No captured artifact is declared for this surface. Run the project demo skill with live credentials to populate it.');
-      return;
-    }
-    setState('running');
-    // MUST go through the bridge base — /api/artifact lives on the bridge, not
-    // the Next origin (a relative fetch 404s).
-    const { ok, status, text } = await fetchArtifactText(cycleId, surface.artifact);
-    if (!ok) {
-      setState('error');
-      setResult(`No live capture found (${status || 'no bridge'}). Re-run the project's demo skill with credentials to capture the real resource.`);
-      return;
-    }
-    try { setResult(JSON.stringify(JSON.parse(text), null, 2)); } catch { setResult(text); }
-    setState('done');
-  }
-
-  return (
-    <div
-      data-interactive-surface={surface.kind}
-      data-surface-state={surfaceState}
-      style={{ border: '1px solid #21262d', borderRadius: 8, padding: 12, background: '#0b0f14' }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: '#e6edf3', fontWeight: 500 }}>{surface.label}</span>
-        {surface.portalUrl && (
-          <a
-            data-action="open-portal"
-            href={surface.portalUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 12, color: '#79c0ff', textDecoration: 'none', border: '1px solid #21262d', borderRadius: 6, padding: '2px 8px' }}
-          >
-            ↗ Open in portal
-          </a>
-        )}
-        {isDeadPortalLink && (
-          <span
-            data-surface-disabled="true"
-            title="This portal-link surface declares no portalUrl, so there is nothing to open."
-            style={{ fontSize: 11, color: '#f0a4a0', border: '1px dashed #f85149', borderRadius: 6, padding: '2px 8px' }}
-          >
-            no link declared
-          </span>
-        )}
-        {surface.kind === 'live-query' && (
-          <button
-            data-action="run-live-query"
-            onClick={runLiveQuery}
-            disabled={state === 'running'}
-            style={{ fontSize: 12, color: '#e6edf3', background: '#1f6feb', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: state === 'running' ? 'default' : 'pointer' }}
-          >
-            {state === 'running' ? 'Querying…' : 'Show the live resource'}
-          </button>
-        )}
-
-      </div>
-      {surface.seed && (
-        <pre style={{ overflow: 'auto', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, marginTop: 8, fontSize: 12, color: '#c9d1d9' }}>
-          {surface.seed}
-        </pre>
-      )}
-      {result !== null && (
-        <pre
-          data-surface-result
-          style={{ overflow: 'auto', background: '#010409', border: `1px solid ${state === 'error' ? '#f85149' : '#21262d'}`, borderRadius: 6, padding: 10, marginTop: 8, fontSize: 12, color: state === 'error' ? '#f0a4a0' : '#7ee787' }}
-        >
-          {result}
-        </pre>
-      )}
     </div>
   );
 }
