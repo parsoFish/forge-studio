@@ -318,8 +318,7 @@ export type PrRef = { owner: string; repo: string; number: number; url: string }
 /**
  * Resolve the OPEN PullRequest for the worktree's current branch, plus the
  * owner/repo needed to drive `gh api .../comments`. Returns null when there
- * is no open PR, no remote, or `gh` is unavailable — callers fall back to
- * the file-verdict transport so a cycle never strands (P3).
+ * is no open PR, no remote, or `gh` is unavailable.
  */
 export function prRef(worktreePath: string): PrRef | null {
   const branch = currentBranch(worktreePath);
@@ -353,8 +352,7 @@ export function prRef(worktreePath: string): PrRef | null {
  *  - Open PR exists  → push the latest commits so send-back-round fixes land
  *                      on the SAME PR, and return its URL.
  *
- * Returns null only when there is no remote / `gh` is unavailable — the
- * caller then falls back to the file-verdict transport (never strands).
+ * Returns null only when there is no remote / `gh` is unavailable.
  */
 export function ensurePullRequest(
   worktreePath: string,

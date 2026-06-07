@@ -220,27 +220,3 @@ test('logger: round-trips agent_heartbeat events (S7 / C13)', () => {
   }
 });
 
-test('logger: round-trips cost_tick events (S7 / C14)', () => {
-  const root = mkdtempSync(join(tmpdir(), 'forge-log-ct-'));
-  try {
-    const logger = createLogger('cycle-ct', join(root, '_logs'));
-    logger.emit({
-      initiative_id: 'INIT-ct',
-      phase: 'orchestrator',
-      skill: 'cost-tick',
-      event_type: 'cost_tick',
-      input_refs: [],
-      output_refs: [],
-      metadata: {
-        cycle_cost_usd: 0.42,
-        wi_cost_usd: 0.18,
-      },
-    });
-    const entry = JSON.parse(readFileSync(logger.logFilePath, 'utf8').trim());
-    assert.equal(entry.event_type, 'cost_tick');
-    assert.equal(entry.metadata.cycle_cost_usd, 0.42);
-    assert.equal(entry.metadata.wi_cost_usd, 0.18);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});

@@ -29,7 +29,6 @@ import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
-import { fileVerdictPaths } from './file-verdict.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
@@ -478,28 +477,17 @@ async function cmdReview(rest: string[]): Promise<void> {
   if (rest.includes('--approve')) return await cmdReviewApprove(initiativeId);
   if (rest.includes('--abandon')) return cmdReviewAbandon(initiativeId);
 
-  // Default: print the verdict prompt (existing behaviour).
-  const paths = fileVerdictPaths(initiativeId);
-  if (!existsSync(paths.promptPath)) {
-    console.error(`forge review: no open verdict prompt at ${paths.promptPath}`);
-    console.error('No initiative is currently waiting for review under that ID.');
-    console.error('Run `forge status` to see what\'s in flight.');
-    console.error('Other modes: --inspect | --approve | --abandon');
-    process.exit(2);
-  }
-  process.stdout.write(readFileSync(paths.promptPath, 'utf8'));
-  console.log('---');
-  console.log(`Write your verdict to: ${paths.responsePath}`);
-  if (existsSync(paths.responsePath)) {
-    console.log('(a response file already exists; the scheduler will pick it up shortly)');
-  } else {
-    console.log('(use the templates above as a starting point)');
-  }
-  console.log('');
-  console.log('Recovery commands for stuck initiatives:');
-  console.log(`  forge review ${initiativeId} --inspect    show worktree state, branch, PR draft`);
-  console.log(`  forge review ${initiativeId} --approve    force-merge the branch as-is`);
-  console.log(`  forge review ${initiativeId} --abandon    move to failed/ and clean up worktree`);
+  // Default: the file-verdict transport has been removed. Direct the operator
+  // to the UI review screen, which is the sole verdict surface.
+  console.error(`forge review: the file-verdict transport is no longer supported.`);
+  console.error(`Use the forge UI review screen to submit a verdict:`);
+  console.error(`  http://localhost:4124/review/${initiativeId}`);
+  console.error('');
+  console.error('Recovery commands for stuck initiatives:');
+  console.error(`  forge review ${initiativeId} --inspect    show worktree state, branch, PR draft`);
+  console.error(`  forge review ${initiativeId} --approve    force-merge the branch as-is`);
+  console.error(`  forge review ${initiativeId} --abandon    move to failed/ and clean up worktree`);
+  return;
 }
 
 /**
@@ -600,9 +588,11 @@ async function cmdReviewApprove(initiativeId: string): Promise<void> {
   // Move manifest to done/.
   const doneTarget = join(queuePaths.done, basename(located.path));
   execSync(`mv "${located.path}" "${doneTarget}"`);
-  // Best-effort: drop the file-verdict prompt + response.
-  const vp = fileVerdictPaths(initiativeId);
-  for (const p of [vp.promptPath, vp.responsePath]) {
+  // Best-effort: drop any legacy file-verdict prompt + response (pre-removal residue).
+  const queueRoot = getPaths().root;
+  const inFlight = resolve(queueRoot, 'in-flight');
+  for (const suffix of ['.verdict-prompt.md', '.verdict-response.md']) {
+    const p = resolve(inFlight, `${initiativeId}${suffix}`);
     if (existsSync(p)) {
       try { execSync(`rm "${p}"`); } catch { /* ignore */ }
     }
@@ -715,8 +705,11 @@ function cmdReviewAbandon(initiativeId: string): void {
   }
   const failedTarget = join(queuePaths.failed, basename(located.path));
   execSync(`mv "${located.path}" "${failedTarget}"`);
-  const vp = fileVerdictPaths(initiativeId);
-  for (const p of [vp.promptPath, vp.responsePath]) {
+  // Best-effort: drop any legacy file-verdict prompt + response (pre-removal residue).
+  const queueRootForAbandon = getPaths().root;
+  const inFlightForAbandon = resolve(queueRootForAbandon, 'in-flight');
+  for (const suffix of ['.verdict-prompt.md', '.verdict-response.md']) {
+    const p = resolve(inFlightForAbandon, `${initiativeId}${suffix}`);
     if (existsSync(p)) {
       try { execSync(`rm "${p}"`); } catch { /* ignore */ }
     }

@@ -17,8 +17,6 @@ import { resolve } from 'node:path';
 
 import type { EventLogger } from './logging.ts';
 import { createLogger } from './logging.ts';
-import type { EventLogEntry } from './logging.ts';
-import { createCostTickConsumer } from '../cli/cost-tick.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, persistManifestCycleId } from './manifest.ts';
@@ -77,16 +75,9 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   if (!input.dryRun && !input.cycleId && !persistedCycleId) {
     persistManifestCycleId(input.manifestPath, cycleId);
   }
-  // Change A (live mid-phase cost): compose the dormant cost-tick consumer into
-  // the logger's tee using the mutable-ref pattern from cli/cost-tick.ts docstring.
-  // The ref is filled after the logger is created so we avoid the chicken-and-egg
-  // deadlock (logger needs consumer needs logger).
-  const teeSinkRef: { fn?: (e: EventLogEntry) => void } = {};
   const logger = createLogger(cycleId, '_logs', {
-    tee: (e) => teeSinkRef.fn?.(e),
+    tee: input.eventTee,
   });
-  const costTick = createCostTickConsumer(logger, { tee: input.eventTee });
-  teeSinkRef.fn = costTick.consume;
 
   // G6: tag the cohort on the cycle's first event so `forge metrics` (which
   // reconstructs everything from the JSONL log) and the reflector can
@@ -271,9 +262,6 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       }
     }
   } catch (err) {
-    // Flush any pending cost-tick partitions before error events so the UI
-    // sees the final rolled-up cost even on failure.
-    costTick.flushAll();
     logger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',
@@ -308,10 +296,6 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     return result;
   }
 
-  // Success path (no throw). Flush pending cost-tick partitions before
-  // cycle.end so the UI sees the final rolled-up cost.
-  costTick.flushAll();
-
   // Snapshot before cycle.end so the report can include the cycle.end
   // metadata and reference durable artefacts.
   await snapshotCycleArtefacts(input, cycleId).catch(() => { /* best-effort */ });
@@ -341,10 +325,6 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       lint_status: result.lint_status,
     },
   });
-
-  // Detach the cost-tick consumer; further emits (report write) are
-  // administrative and should not produce spurious ticks.
-  costTick.unsubscribe();
 
   // Generate the human-facing report as the final cycle step. Best-effort —
   // a failed report write does not fail the cycle (the merge already

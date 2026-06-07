@@ -58,14 +58,6 @@ export type EventType =
    */
   | 'agent_heartbeat'
   /**
-   * S7 / C14 — derived consumer rollup keyed on cycle_id + wi_id.
-   * Emit site: `orchestrator/cost-tick.ts` (subscribes to the
-   * existing `tee` hook; NOT a writer in this module).
-   * Debounce ≤ 1/s; only emit when cost changed. Metadata:
-   * `{ cycle_cost_usd, wi_cost_usd? }`.
-   */
-  | 'cost_tick'
-  /**
    * Emitted when a planner phase (architect/PM) queries the brain index.
    * Metadata: `{ session_id?, project? }`.
    */

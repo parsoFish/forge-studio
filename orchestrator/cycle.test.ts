@@ -21,7 +21,6 @@ import {
   type CiCommandRunner,
 } from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
-import { createCostTickConsumer } from '../cli/cost-tick.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cycle-test-'));
@@ -317,122 +316,6 @@ test('execCommandVector: strips the named env var from the child process (A3, re
   }
 });
 
-// ---------------------------------------------------------------------------
-// Change A — cost-tick consumer composed into cycle logger (mutable-ref pattern).
-//
-// These tests validate the wiring shape directly (no need to run a full cycle):
-// compose the consumer into a real logger via the mutable-ref pattern and assert
-// that cost_tick events appear in the JSONL when cost-bearing entries are emitted.
-// ---------------------------------------------------------------------------
-
-test('Change A (cost-tick wiring): cost_tick events appear when cost-bearing entries are emitted', () => {
-  // Reproduces the mutable-ref wiring that runCycle now does in production.
-  const { dir, logger } = setupLogger();
-  try {
-    // Simulate the mutable-ref composition:
-    //   const teeSinkRef = { fn: undefined }
-    //   const logger = createLogger(cycleId, logsDir, { tee: (e) => teeSinkRef.fn?.(e) })
-    //   const costTick = createCostTickConsumer(logger, { tee: existingTee })
-    //   teeSinkRef.fn = costTick.consume
-    //
-    // Here we re-use the logger from setupLogger() which has no tee, and manually
-    // chain the consumer onto it to prove the consumer wiring works end-to-end.
-    let clock = 0;
-    const sub = createCostTickConsumer(logger, { now: () => clock });
-
-    // Emit a cost-bearing entry (mimics an iteration event from runDeveloperLoop).
-    sub.consume({
-      event_id: 'EV_test_a',
-      cycle_id: logger.cycleId,
-      initiative_id: 'INIT-change-a',
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: 'iteration',
-      input_refs: [],
-      output_refs: [],
-      started_at: new Date().toISOString(),
-      cost_usd: 0.15,
-      metadata: { work_item_id: 'WI-1' },
-    });
-    clock += 1100; // advance past debounce window
-    sub.consume({
-      event_id: 'EV_test_b',
-      cycle_id: logger.cycleId,
-      initiative_id: 'INIT-change-a',
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: 'iteration',
-      input_refs: [],
-      output_refs: [],
-      started_at: new Date().toISOString(),
-      cost_usd: 0.10,
-      metadata: { work_item_id: 'WI-1' },
-    });
-
-    // flushAll mirrors the flushAll() calls in runCycle at phase boundaries.
-    sub.flushAll();
-
-    const events = readEvents(logger);
-    const ticks = events.filter((e) => e.event_type === 'cost_tick');
-    assert.ok(ticks.length >= 1, `expected ≥1 cost_tick event, got ${ticks.length}`);
-    // The last tick should carry the full rolled-up cycle cost.
-    const last = ticks[ticks.length - 1]!;
-    const md = last.metadata as { cycle_cost_usd: number };
-    assert.equal(md.cycle_cost_usd, 0.25, 'rolled-up cycle cost == sum of both iteration costs');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('Change A (cost-tick wiring): flushAll before cycle.end emits final tick even within debounce window', () => {
-  // Proves the flushAll() at cycle-end in runCycle surfaces a pending tick
-  // that the debounce window would otherwise have held back.
-  const { dir, logger } = setupLogger();
-  try {
-    let clock = 0;
-    const sub = createCostTickConsumer(logger, { now: () => clock, debounceMs: 60_000 });
-
-    // Single cost-bearing event — debounce is 60s so without flushAll no
-    // second tick would fire. First emit fires immediately (null lastEmittedAt).
-    sub.consume({
-      event_id: 'EV_test_flush',
-      cycle_id: logger.cycleId,
-      initiative_id: 'INIT-flush',
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: 'iteration',
-      input_refs: [],
-      output_refs: [],
-      started_at: new Date().toISOString(),
-      cost_usd: 0.42,
-    });
-    // clock does NOT advance — still within the debounce window.
-    clock += 100;
-    // Second cost event: normally debounced. flushAll() must override.
-    sub.consume({
-      event_id: 'EV_test_flush2',
-      cycle_id: logger.cycleId,
-      initiative_id: 'INIT-flush',
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: 'iteration',
-      input_refs: [],
-      output_refs: [],
-      started_at: new Date().toISOString(),
-      cost_usd: 0.08,
-    });
-    sub.flushAll(); // simulates runCycle's pre-cycle.end flushAll()
-
-    const events = readEvents(logger);
-    const ticks = events.filter((e) => e.event_type === 'cost_tick');
-    assert.ok(ticks.length >= 2, `expected ≥2 ticks (first + flush), got ${ticks.length}`);
-    const last = ticks[ticks.length - 1]!;
-    const md = last.metadata as { cycle_cost_usd: number };
-    assert.equal(md.cycle_cost_usd, 0.5, 'final tick carries rolled-up cost after flushAll');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
 
 // S4 deletion: the F-30 adaptive reviewer iteration cap tests are gone —
 // `computeAdaptiveReviewIterationCap` was reviewer-internal logic that
