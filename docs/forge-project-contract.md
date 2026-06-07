@@ -274,6 +274,12 @@ from a pass — it even matches forge's "tests ran" heuristic). The dev-loop
 therefore **errors** a matching gate whose `requires_env` vars are unset, instead
 of false-passing. Origin: the betterADO daemon ran two full cycles without `TF_ACC`
 set and shipped two unverified resources before this gap was closed (2026-06-06).
+`requires_env` must list **every** var the test's `PreCheck` demands, not just the
+trigger — betterADO listed only `TF_ACC` while the `PreCheck` also needed
+`AZDO_ORG_SERVICE_URL` + `AZDO_PERSONAL_ACCESS_TOKEN`, so the guard stayed silent and
+the gate failed deep in `PreCheck` instead (2026-06-07). This seam composes with the
+first-class `secrets.env` above: `secrets.env` (self-loaded by the test) is where the
+creds come from; `requires_env` is the guard that errors fast if they did not arrive.
 
 **2. `standing_work_item_acs: string[]`**
 
@@ -296,14 +302,24 @@ GitHub never sees.
 - Each live test creates uniquely named resources (UUID-prefixed); never reuses names
 - `defer terraform.Destroy(t, opts)` / `t.Cleanup` / `finally` — teardown runs on
   success AND failure
-- Creds supplied out-of-band (gitignored env file → environment variables); never committed
+- **Creds via a first-class `secrets.env`** — a gitignored `secrets.env` at the repo
+  root holds the live creds under the **canonical env var names the tests expect**
+  (never committed). The live tests **load it themselves** at the start of `PreCheck`
+  (walk up to the repo root; set any var not already exported, so a shell/CI export
+  still wins), so a live test is self-sufficient for creds and does NOT depend on the
+  exact env the runner (forge / CI / shell) happens to inject. This is what prevents
+  the "forge ran the gate in a shell that lacked the PAT" failure (betterADO 2026-06-07:
+  `secrets.env` named the PAT `ADO_PAT` while the provider wanted `AZDO_PERSONAL_ACCESS_TOKEN`,
+  so the live gate burned 5 iterations failing in PreCheck on a creds gap forge couldn't fix).
 - Orphan sweep as a fallback: periodic script destroys resources matching the test
   prefix older than N hours
 - Read-back assertion: after create/update, a separate GET/describe call verifies the
   stored state matches the intent (not just that the write returned 200)
 - Non-default fixture values for every field under test (see C9)
-- `PreCheck` function: if required env vars are absent, the test calls `t.Fatal` with
-  a clear message rather than skipping (a skip is a false-pass)
+- `PreCheck` function: **load `secrets.env` first**, then if a required env var is still
+  absent, call `t.Fatal` with a clear message **naming the canonical var + `secrets.env`**
+  rather than skipping (a skip is a false-pass; a cryptic missing-env fail wastes dev-loop
+  iterations the agent cannot fix — it's an environment gap, not a code defect)
 
 ### Live-acc WI linter gap (sharpened 2026-06-06)
 
