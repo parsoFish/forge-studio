@@ -1,25 +1,20 @@
 /**
  * Tests for the scheduler's terminal-status dispatch. Covers F-01 (scheduler
- * mishandles `merged` and `send-back-cap-exhausted` as failures) and the
- * Phase-6 reviewer/closure/cycle contract:
+ * mishandles `merged` as a failure) and the Phase-6 reviewer/closure/cycle
+ * contract:
  *
- *   - 'merged'                  → closure already confirmed the GitHub
- *                                 merge + moved the manifest to done/; no
- *                                 move; notify type 'merged'.
- *   - 'pr-open'                 → review gate passed; demo-embedded PR open
- *                                 awaiting the operator's merge (the
- *                                 reviewer moved the manifest to
- *                                 ready-for-review/). No move; notify
- *                                 'review-ready'. This is the expected
- *                                 unattended terminal state — NOT a failure
- *                                 and NOT an auto-merge (G9).
- *   - 'ready-for-review'        → cycle already moved; no move; notify
- *                                 'review-ready'.
- *   - 'send-back-cap-exhausted' → reviewer already moved manifest to
- *                                 ready-for-review/; no move; notify
- *                                 'review-ready' with cap-exhausted body.
- *   - 'failed'                  → manifest left in-flight; move to failed/;
- *                                 notify 'failed'.
+ *   - 'merged'         → closure already confirmed the GitHub merge + moved
+ *                        the manifest to done/; no move; notify 'merged'.
+ *   - 'pr-open'        → review gate passed; demo-embedded PR open awaiting
+ *                        the operator's merge (the reviewer moved the
+ *                        manifest to ready-for-review/). No move; notify
+ *                        'review-ready'. This is the expected unattended
+ *                        terminal state — NOT a failure and NOT an
+ *                        auto-merge (G9).
+ *   - 'ready-for-review' → cycle already moved; no move; notify
+ *                          'review-ready'.
+ *   - 'failed'         → manifest left in-flight; move to failed/;
+ *                        notify 'failed'.
  *
  * Whatever the status, we never double-move (no rename if file isn't in
  * in-flight) and we always emit exactly one notification.
@@ -149,31 +144,6 @@ test('dispatchTerminalStatus: failed (in in-flight) → move to failed/, notify 
     assert.equal(calls[0].type, 'failed');
     assert.ok(existsSync(join(paths.failed, 'INIT-test.md')));
     assert.ok(!existsSync(join(paths.inFlight, 'INIT-test.md')));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('dispatchTerminalStatus: send-back-cap-exhausted → no move (reviewer moved to ready-for-review/), notify "review-ready"', async () => {
-  // F-11: cap-exhausted is no longer treated as a hard failure. The reviewer
-  // now moves the manifest to ready-for-review/ before the cycle returns;
-  // dispatch must not try to move it again, and must notify the operator
-  // that a PR draft is ready for manual review.
-  const { dir, paths } = setupQueue();
-  try {
-    writeFileSync(join(paths.readyForReview, 'INIT-test.md'), 'manifest');
-    const calls: NotifyEvent[] = [];
-    const out = await dispatchTerminalStatus(makeInput('send-back-cap-exhausted'), {
-      paths,
-      notifyFn: async (e) => { calls.push(e); },
-    });
-
-    assert.equal(out.moved, null);
-    assert.equal(out.notified, 'review-ready');
-    assert.equal(calls[0].type, 'review-ready');
-    assert.match(calls[0].title, /cap exhausted/i);
-    assert.ok(existsSync(join(paths.readyForReview, 'INIT-test.md')));
-    assert.ok(!existsSync(join(paths.failed, 'INIT-test.md')));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -528,22 +498,3 @@ test('classifyCycleFailure: reviewer.pr-open-failed → terminal "unifier did no
 
 // ---- F-28: dispatchTerminalStatus must NOT signal cleanup for ready-for-review ----
 
-test('dispatchTerminalStatus: send-back-cap-exhausted → no manifest move (cycle.ts owns it)', async () => {
-  const { dir, paths } = setupQueue();
-  const calls: NotifyEvent[] = [];
-  try {
-    // Reviewer (cycle.ts) already moved the manifest to ready-for-review/.
-    writeFileSync(join(paths.readyForReview, 'INIT-test.md'), 'ready');
-    const out = await dispatchTerminalStatus(makeInput('send-back-cap-exhausted'), {
-      paths,
-      notifyFn: async (e) => { calls.push(e); },
-    });
-    assert.equal(out.moved, null);
-    assert.equal(out.notified, 'review-ready');
-    assert.equal(calls.length, 1);
-    // Manifest should still be in ready-for-review/ (not moved by dispatch).
-    assert.equal(existsSync(join(paths.readyForReview, 'INIT-test.md')), true);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});

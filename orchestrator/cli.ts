@@ -470,7 +470,7 @@ async function cmdReview(rest: string[]): Promise<void> {
   const initiativeId = resolveOrExit(rawId, 'review');
   // F-31: recovery sub-commands. The default behaviour (print verdict prompt)
   // is preserved; the new flags target the case where a cycle landed in
-  // ready-for-review/ via send-back-cap-exhausted and the human needs to
+  // ready-for-review/ and the human needs to
   // (a) see what was committed without reading events.jsonl,
   // (b) force-merge a worktree the reviewer-Ralph couldn't approve itself,
   // (c) abandon a stuck initiative cleanly (move to failed/, drop worktree).

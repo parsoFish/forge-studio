@@ -619,7 +619,6 @@ async function runOne(
     preserveWorktree =
       result.status === 'pr-open' ||
       result.status === 'ready-for-review' ||
-      result.status === 'send-back-cap-exhausted' ||
       result.status === 'failed';
     await dispatchTerminalStatus(
       {
@@ -652,10 +651,8 @@ async function runOne(
     clearInterval(heartbeat);
     // F-09 + F-28: clean up the worktree + scratch branch on terminal states
     // only. `merged` (cycle.ts already deleted the branch via gh pr merge),
-    // `failed`, or thrown errors all clean up. `ready-for-review` /
-    // `send-back-cap-exhausted` preserve the worktree so the human can
-    // inspect via `forge review <id>` and `forge review --approve` /
-    // `--abandon` triggers cleanup at that point.
+    // `failed`, or thrown errors all clean up. `ready-for-review` preserves
+    // the worktree so the human can inspect via `forge review <id>`.
     if (wtHandle && !preserveWorktree) {
       try {
         worktree.cleanup(wtHandle);

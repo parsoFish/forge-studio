@@ -125,10 +125,9 @@ export type CycleResult = {
    *                              terminal state until the operator merges.
    * - `ready-for-review`       — review did not fully converge / PR not
    *                              produced; operator picks up the worktree.
-   * - `send-back-cap-exhausted`— send-back cap hit before convergence.
    * - `failed`                 — a phase threw.
    */
-  status: 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
+  status: 'merged' | 'pr-open' | 'ready-for-review' | 'failed';
   /**
    * Outcome of the reflection phase. Reflection runs after a successful merge
    * and is log-and-continue: a failed reflector does not change the merge
@@ -152,22 +151,21 @@ export type CycleResult = {
 
 /**
  * Outcome of `runReviewer` (Phase 6: the reviewer no longer merges).
- * - `pr-open`                — review gate passed, demo-embedded PR created;
- *                              control returns to the closure step (which
- *                              decides `merged` vs `pr-open` based on whether
- *                              the operator has merged). The reviewer itself
- *                              never produces `merged`.
- * - `ready-for-review`       — review did not converge / PR creation failed.
- * - `send-back-cap-exhausted`— send-back cap hit.
+ * - `pr-open`          — review gate passed, demo-embedded PR created;
+ *                        control returns to the closure step (which
+ *                        decides `merged` vs `pr-open` based on whether
+ *                        the operator has merged). The reviewer itself
+ *                        never produces `merged`.
+ * - `ready-for-review` — review did not converge / PR creation failed.
  */
-export type ReviewerOutcome = 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted';
+export type ReviewerOutcome = 'pr-open' | 'ready-for-review';
 
 /**
  * Final cycle outcome after the closure step folds in the operator-merge
  * confirmation. `merged` is reachable ONLY here (never from the reviewer)
  * and ONLY when `gh pr view --json state` == MERGED.
  */
-export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted';
+export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';
 
 /**
  * Brain-first runtime gate. CLAUDE.md and every SKILL.md require each phase's

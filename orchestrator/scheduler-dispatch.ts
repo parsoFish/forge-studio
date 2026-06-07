@@ -18,7 +18,7 @@ export type DispatchInput = {
   filename: string;
   manifest: { initiativeId: string; project: string };
   result: {
-    status: 'merged' | 'pr-open' | 'ready-for-review' | 'send-back-cap-exhausted' | 'failed';
+    status: 'merged' | 'pr-open' | 'ready-for-review' | 'failed';
     log_path: string;
   };
 };
@@ -98,18 +98,6 @@ export async function dispatchTerminalStatus(
         type: 'review-ready',
         title: `Ready for review: ${manifest.initiativeId}`,
         body: `${manifest.project} — see ${result.log_path}`,
-      });
-      return { moved: null, notified: 'review-ready' };
-    }
-    case 'send-back-cap-exhausted': {
-      // Reviewer moved the manifest to `ready-for-review/` already (PR draft
-      // exists; cap was hit before approval). Operator picks up via
-      // `forge review <id>` to either approve manually or send back.
-      // Notify as 'review-ready' with a body noting the cap.
-      await notifyFn({
-        type: 'review-ready',
-        title: `Review needed (cap exhausted): ${manifest.initiativeId}`,
-        body: `${manifest.project} — agent exhausted the send-back cap; PR draft is ready. Run \`forge review ${manifest.initiativeId}\`. See ${result.log_path}`,
       });
       return { moved: null, notified: 'review-ready' };
     }

@@ -216,7 +216,7 @@ test('runClosure: confirmMerge throwing → treated as NOT merged (partial/uncon
 });
 
 test('runClosure: non-pr-open reviewer outcome is passed through, never merged, no confirm attempted', async () => {
-  for (const ro of ['ready-for-review', 'send-back-cap-exhausted'] as ReviewerOutcome[]) {
+  for (const ro of ['ready-for-review'] as ReviewerOutcome[]) {
     const h = setup();
     try {
       let confirmCalled = false;

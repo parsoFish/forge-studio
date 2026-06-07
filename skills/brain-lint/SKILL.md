@@ -82,6 +82,6 @@ checks + the contradictions stretch-goal + scope filtering).
 ## Constraints
 
 - **Single source of truth.** Do not reimplement any of the 7 checks. If a check needs improving, change `orchestrator/brain-lint.ts` (with a test added first per the test-first discipline used to build it).
-- **Never delete content.** Lint may flag or auto-fix structurally (index sync). Deletion is `brain-ingest` territory; contamination cleanup is the separate `scripts/brain-scrub-test-contamination.ts` one-shot script.
+- **Never delete content.** Lint may flag or auto-fix structurally (index sync). Deletion is `brain-ingest` territory.
 - **Conservative on auto-fix.** When in doubt, flag rather than fix. `--fix` mode is intentionally limited (Tier B remappings stay with the operator per the standing destructive-instruction rule).
 - **Idempotent.** Running lint twice in a row produces the same exit code and the same findings (modulo new lint events emitted by the run itself).

@@ -185,9 +185,7 @@ function renderHeader(args: {
       ? '🟢'
       : args.status === 'ready-for-review'
         ? '🟡'
-        : args.status === 'send-back-cap-exhausted'
-          ? '🟠'
-          : '🔴';
+        : '🔴';
   const lines: string[] = [
     `# Cycle Report — ${titleLine}`,
     '',
@@ -415,14 +413,8 @@ function renderVerification(
     lines.push('**PR merged.** Quality gate passed before merge (orchestrator-verified between reviewer iterations).');
     if (prUrl) lines.push(`**PR:** ${prUrl}`);
   } else {
-    const sendBackCap = events.find((e) => e.message === 'reviewer.send-back-cap-exhausted');
-    if (sendBackCap) {
-      lines.push('');
-      lines.push('⚠️ Send-back cap exhausted. PR draft exists; manifest is in `_queue/ready-for-review/` for manual operator pickup via `forge review <id>`.');
-    } else {
-      lines.push('');
-      lines.push('_(no merge event recorded for this cycle)_');
-    }
+    lines.push('');
+    lines.push('_(no merge event recorded for this cycle)_');
   }
 
   // Demo bundle from snapshot. Print absolute paths AND how-to-view commands

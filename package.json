@@ -25,7 +25,6 @@
     "forge:brain:index": "node --experimental-strip-types cli/brain-index.ts",
     "ui:journey": "node scripts/e2e-journey.mjs",
     "verify:cycle": "node scripts/verify-cycle.mjs",
-    "brain:scrub": "node --experimental-strip-types scripts/brain-scrub-test-contamination.ts",
     "test:ui": "npm run test --workspace=forge-ui"
   },
   "dependencies": {
@@ -33,7 +32,6 @@
     "blessed-contrib": "^4.11.0",
     "globby": "^14.1.0",
     "gray-matter": "^4.0.3",
-    "pino-pretty": "^11.3.0",
     "proper-lockfile": "^4.1.2",
     "ws": "^8.21.0"
   },

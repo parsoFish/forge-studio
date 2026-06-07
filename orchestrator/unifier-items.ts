@@ -27,9 +27,8 @@ import {
 /**
  * ADR 026: the review-round / total-UWI cap. The unifier has no $ ceiling
  * (CONTRACTS.md C19), so this bounds how many review concerns a single cycle
- * can absorb before the operator is told to take over (it replaces the deleted
- * `send-back-cap-exhausted` backpressure). Counts every UWI including the
- * static UWI-1 and the auto-appended terminal re-prep UWIs.
+ * can absorb before the operator is told to take over. Counts every UWI
+ * including the static UWI-1 and the auto-appended terminal re-prep UWIs.
  */
 export const UNIFIER_MAX_TOTAL_ITEMS = 24;
 

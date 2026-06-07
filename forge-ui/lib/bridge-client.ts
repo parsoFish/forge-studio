@@ -157,25 +157,6 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
   return body.events;
 }
 
-export type InitiativeManifestSummary = {
-  initiativeId: string;
-  project: string;
-};
-
-/**
- * Fetch the initiative manifest summary (id, project). Used by
- * the InitiativeInfo panel so the operator sees what the cycle is
- * actually working on without parsing event metadata. Returns null when
- * the manifest isn't accessible (initiative ID unknown to the bridge,
- * or all queue-state copies are gone).
- */
-export async function fetchManifest(initiativeId: string): Promise<InitiativeManifestSummary | null> {
-  return bridgeGet<InitiativeManifestSummary | null>(
-    `/api/manifest/${encodeURIComponent(initiativeId)}`,
-    null,
-  );
-}
-
 // ---- Work-item definition (Feature #9 — hex-detail drawer) ---------------
 
 export type WorkItemAcceptanceCriterion = { given: string; when: string; then: string };
