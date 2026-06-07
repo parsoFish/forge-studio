@@ -92,8 +92,14 @@ function stageManifest() {
     return false;
   }
   mkdirSync(dirname(pending), { recursive: true });
-  // Reset the lifecycle field for a fresh run; the rest of the corpus manifest is reused as-is.
-  const body = readFileSync(done, 'utf8').replace(/^phase:.*$/m, 'phase: pending');
+  // Reset the lifecycle fields for a fresh run; the rest of the corpus manifest is reused as-is.
+  // Strip the stale cycle_id too (ADR-026 mechanism B persisted it on the original run): if it
+  // survives, the bridge reports the OLD id and findCycleIdForInitiative locks onto it, so the
+  // post-serve status query returns null and auto-approve never fires (a false gate FAIL). With it
+  // removed, serve assigns + persists a fresh cycle_id the bridge reports consistently.
+  const body = readFileSync(done, 'utf8')
+    .replace(/^phase:.*$/m, 'phase: pending')
+    .replace(/^cycle_id:.*$\n?/m, '');
   writeFileSync(pending, body);
   log(`staged corpus manifest → _queue/pending/${initiativeId}.md`);
   return true;
