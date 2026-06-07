@@ -247,7 +247,6 @@ function writeDemoJson(revision) {
     // ── Interactive review surfaces (re-review #8, Stage 0/1) ──
     interactiveSurfaces: [
       { kind: 'live-query', label: 'Show the real `--compact` output (captured)', artifact: 'compact-output.txt' },
-      { kind: 'cli-run', label: 'Re-run `claude-trail … --compact` yourself', seed: 'claude-trail INIT-2026-06-04-demo-cycle --compact' },
     ],
   }, null, 2));
 }
@@ -472,6 +471,10 @@ async function main() {
     writePlan(sid, 1);
     archEvent(sid, 'log', 'plan-emitted (council surfaced 2 design decisions)');
     await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
+    // MVUS artifact phase: the rich PLAN.html renders in the sandboxed iframe, and the
+    // council's design decisions surface as reviewable option-visuals (the plan mockups).
+    check(await page.locator('[data-plan-iframe]').count() > 0, 'plan gate renders the rich PLAN.html iframe');
+    await countAtLeast(page, '[data-escalation-id]', 1, 'plan surfaces ≥1 design decision / option-visual (mockup)');
     await sleep(READ);
     await frame(page, 'step05-council-plan', 'Step 5 — the council reviewed the draft; the plan presents options shaped by its feedback');
 
@@ -534,6 +537,9 @@ async function main() {
     // S1 + S4: the cycle is live and the pipeline spine renders for it.
     await expectCycleStatus(page, 'in-flight');
     await countAtLeast(page, '[data-phase-hex]', 5, 'pipeline spine shows ≥5 phase hexes');
+    // MVUS cross-cutting: cycles are grouped per-project so the operator can observe
+    // work planned + in progress across all projects from one pane.
+    await countAtLeast(page, '[data-project-group]', 1, 'cross-project pane groups cycles by project');
 
     // STEP 8 — PM decomposes initiative ACs directly into work items (events stream live).
     await paced([
@@ -744,6 +750,10 @@ async function main() {
     await expectCycleStatus(page, 'done');
     await countAtLeast(page, '[data-phase-hex]', 5, 'completed cycle still shows ≥5 phase hexes');
     await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
+    // MVUS reflect tuning loop closed in-UI: the reflection hex greens once the operator
+    // answered the questions and the reflector folded the feedback into the brain.
+    const reflStatus = await page.evaluate(() => document.querySelector('[data-phase-hex][data-phase="reflection"]')?.getAttribute('data-phase-status') ?? '(absent)');
+    check(reflStatus === 'complete', `reflection hex greened after tuning feedback (got "${reflStatus}")`);
     // Operator fix: the unifier is its OWN hex — its events (skill 'developer-unifier')
     // must light it up (blue→green), not fold into the dev-loop hex. Regression guard.
     try {
