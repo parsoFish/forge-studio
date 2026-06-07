@@ -154,12 +154,11 @@ function writePlan(sid, round) {
 let cycleSeq = 0;
 function cycleEvent(phase, eventType, message, opts = {}) {
   // `skill` defaults to the phase (the canonical case) but can be OVERRIDDEN via
-  // opts.skill. This matters for the unifier: it runs as a sub-phase of the
-  // developer-loop (backend phase stays 'developer-loop'), but the UI splits it
-  // onto its OWN hex by routing `skill === 'developer-unifier'` events to the
-  // `unifier` phase (forge-ui/lib/phases.ts → phaseForEvent). So the unifier
-  // beats MUST be seeded with skill:'developer-unifier' (phase still
-  // 'developer-loop') or the unifier hex stays grey while the dev hex updates.
+  // opts.skill. The unifier emits `phase: 'unifier'` directly now (the Fix-B
+  // root-unify, 2026-06-07): it is its own phase, not a developer-loop sub-phase,
+  // so there is no UI skill→phase remap any more. Unifier beats are seeded via
+  // `unifierEvent` below with phase 'unifier' (+ skill 'developer-unifier' for
+  // fidelity) so they light the dedicated unifier hex.
   const { metadata = {}, skill = phase, ...extras } = opts;
   mkdirSync(CYCLE_LOG, { recursive: true });
   cycleSeq += 1;
@@ -169,11 +168,11 @@ function cycleEvent(phase, eventType, message, opts = {}) {
     input_refs: [], output_refs: [], message, metadata, ...extras,
   }) + '\n');
 }
-// Sugar for the unifier sub-phase: backend phase stays 'developer-loop' (so the
-// failure-classifier's phase-rules are unchanged) but skill='developer-unifier'
-// so the UI lights the dedicated unifier hex.
+// Sugar for the unifier phase: post Fix-B it emits `phase: 'unifier'` directly
+// (its own identity, not a developer-loop sub-phase). skill='developer-unifier'
+// is kept for fidelity with the real runtime. This lights the dedicated unifier hex.
 function unifierEvent(eventType, message, opts = {}) {
-  return cycleEvent('developer-loop', eventType, message, { ...opts, skill: 'developer-unifier' });
+  return cycleEvent('unifier', eventType, message, { ...opts, skill: 'developer-unifier' });
 }
 function moveManifest(from, to) {
   mkdirSync(QDIR(to), { recursive: true });
@@ -576,12 +575,11 @@ async function main() {
     await sleep(WORK);
     await frame(page, 'step09b-wis-green', 'Step 9 — both work items green; the dev-loop hex stays blue (unifier next)');
 
-    // STEP 10 — unifier reviews + loops to clean the output. These events are
-    // seeded with skill='developer-unifier' (NOT developer-loop) so they route to
-    // the unifier's OWN hex (forge-ui/lib/phases.ts → phaseForEvent); seeding them
-    // as 'developer-loop' would light the dev hex and leave the unifier grey.
-    // The unifier hex goes BLUE here (start, no end yet) and we dwell so it is
-    // visibly blue/pulsing before it greens on its phase-level end in Step 11.
+    // STEP 10 — unifier reviews + loops to clean the output. These events carry
+    // phase 'unifier' (via unifierEvent; Fix-B root-unify) so they land on the
+    // unifier's OWN hex directly — no UI remap. The unifier hex goes BLUE here
+    // (start, no end yet) and we dwell so it is visibly blue/pulsing before it
+    // greens on its phase-level end in Step 11.
     await paced([
       () => unifierEvent('start', 'unifier.start — reviewing the merged work-item output'),
       () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test' } }),
@@ -591,10 +589,10 @@ async function main() {
     await frame(page, 'step10-unifier-clean', 'Step 10 — the unifier (its own hex, blue) reviews the whole branch and loops to clean the output');
 
     // STEP 11 — unifier runs the demo skill → forge-ui-themed demo page; cycle ready.
-    // The demo-skill beats are the unifier's (skill='developer-unifier'), then the
-    // unifier's OWN phase-level `end` (no work_item_id, skill='developer-unifier')
-    // greens the unifier hex — paced AFTER a visibly-blue dwell. The dev-loop's
-    // ralph.end (phase 'developer-loop', no work_item_id) greens the dev hex.
+    // The demo-skill beats are the unifier's (phase 'unifier'), then the unifier's
+    // OWN phase-level `end` (no work_item_id) greens the unifier hex — paced AFTER
+    // a visibly-blue dwell. The dev-loop's separate ralph.end (phase
+    // 'developer-loop', no work_item_id) greens the dev hex.
     await paced([
       () => unifierEvent('log', 'unifier.demo-skill — authoring demo.json (forge-ui themed)'),
       () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } }),
