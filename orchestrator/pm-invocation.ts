@@ -1,16 +1,21 @@
 /**
  * PM invocation contract — system prompt + user prompt builders.
  *
+ * ADR 024: the project-manager is now a declarative `PhaseAgentSpec` — the
+ * orchestrator spawns it at the tier the spec declares, and the SKILL.md is
+ * the single source of PM intent. The TS here is the binding layer: which
+ * model tier, which tools, and (in `renderPmUserPrompt`) the dynamic per-cycle
+ * briefing only.
+ *
  * The system prompt = brain navigation index + skills/project-manager/SKILL.md.
- * The user prompt = a per-cycle, per-initiative briefing telling the agent
- * exactly where the manifest lives, where the worktree lives, and where to
- * write outputs.
+ * The user prompt = a per-cycle, per-initiative briefing (dynamic data only).
  */
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
+import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'project-manager', 'SKILL.md');
@@ -20,7 +25,23 @@ export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch
 
 export const PM_ALLOWED_TOOLS: PmAllowedTool[] = ['Read', 'Grep', 'Glob', 'Write', 'Edit'];
 export const PM_DISALLOWED_TOOLS: PmDisallowedTool[] = ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch'];
-export const PM_MODEL = 'claude-sonnet-4-6';
+
+/**
+ * ADR 024 seam: the project-manager as a declarative phase agent — it COMPOSES
+ * the project-manager skill (the source of its intent), runs at the `sonnet`
+ * tier (planning/decomposition work; Sonnet is the right tier). The orchestrator
+ * resolves the model from the tier.
+ */
+export const pmAgentSpec: PhaseAgentSpec = {
+  phase: 'project-manager',
+  skill: 'skills/project-manager/SKILL.md',
+  tier: 'sonnet',
+  allowedTools: PM_ALLOWED_TOOLS,
+  disallowedTools: PM_DISALLOWED_TOOLS,
+};
+
+/** Concrete model, derived from the spec's tier (single source: the spec). */
+export const PM_MODEL = modelForSpec(pmAgentSpec);
 
 let cachedSkillText: string | null = null;
 function loadSkillText(): string {
@@ -125,136 +146,32 @@ export type PmUserPromptInput = {
 
 /**
  * Render the per-cycle user prompt the SDK sends to the PM agent.
- * Tells the agent the cwd-relative paths and reiterates the contract
- * (brain-first, Given-When-Then, files_in_scope, _graph.md).
  *
- * Hard rules (quality_gate_cmd required, hidden-coupling check) are
- * enforced by the validator in orchestrator/work-item.ts — this prompt
- * states each rule once and defers to that enforcement.
+ * Dynamic per-cycle briefing only: the initiative id, project name, paths,
+ * the inlined project context block (load-bearing — prevents tooling
+ * hallucination), and the language-derived gate recipe. All static operational
+ * intent lives in SKILL.md (the system prompt), per ADR 024.
+ *
+ * S8/C23 caching intent: keeping dynamic data in the USER prompt (not the
+ * system prompt) ensures the system prompt stays stable across invocations
+ * so the server-side prompt cache hits naturally.
  */
 export function renderPmUserPrompt(input: PmUserPromptInput): string {
   const projectContextBlock = renderProjectContextBlock(input.projectContext);
   return [
     '# Project-manager invocation',
     '',
-    'You are running non-interactively. Decompose the initiative body\'s Given-When-Then acceptance criteria directly into atomic outcome-sized work items and write them to disk. **You MUST write at least one work-item file before stopping; finishing without writing files is a failed run.** Do not ask clarifying questions; if something is genuinely under-specified in the manifest, infer the most reasonable choice, note it in the work-item body, and proceed.',
+    'Follow the project-manager skill contract in your system prompt. You are non-interactive; decompose THIS initiative\'s body and write the work items + _graph.md.',
     ...(projectContextBlock ? ['', projectContextBlock] : []),
-    '',
-    '## Step 0 — Brain queries (REQUIRED, before any other action)',
-    '',
-    "**Your first tool calls MUST be `Read` against `brain/...` paths.** The orchestrator records which files you read; if zero of them are under `brain/`, the cycle aborts with a `pm.brain-skipped` error before validation even runs. The brain navigation index is in your system prompt above — use it to pick relevant theme files, then `Read` them in full. Do not infer or fabricate brain-theme content; you must have actually read the file.",
-    '',
-    'Required reads (minimum):',
-    '- One or more `brain/cycles/themes/*.md` covering work-item sizing and file-scope discipline.',
-    `- \`projects/${input.projectName}/brain/profile.md\` — taste signals for this project. Cite this in the WI body.`,
-    `- Any \`projects/${input.projectName}/brain/themes/*.md\` whose description matches the initiative's domain.`,
-    '',
-    'The "Brain themes consulted" footer in each WI body must list paths you actually `Read`-ed.',
-    '',
-    '## Step 0.5 — Project structure enumeration (REQUIRED, before any WI emission)',
-    '',
-    "**You are running with `cwd` set to the project worktree.** All relative paths resolve against the worktree — not forge's root. Use relative paths everywhere.",
-    '',
-    "**You MUST `Glob` the actual project tree before drafting any WI.** Hallucinated `files_in_scope` paths cause dev-loop failures.",
-    '',
-    'Required before drafting any WI:',
-    "- `Glob({ pattern: \"src/**\" })` — enumerate the entire source tree",
-    "- `Glob({ pattern: \"tests/**\" })` (or `spec/**`, `__tests__/**` — try the project's actual convention)",
-    "- `Read({ file_path: \"package.json\" })` (or `pyproject.toml`, `Cargo.toml`) — confirm scripts, deps, project type",
-    "- `Read({ file_path: \"README.md\" })` and `CLAUDE.md` if present",
-    '',
-    "**Never invent files.** Every path in `files_in_scope` must either (a) appear in your Glob results, OR (b) be a new file this WI explicitly creates.",
+    ...(input.gateRecipe ? ['', input.gateRecipe] : []),
     '',
     `## Initiative: ${input.initiativeId}`,
     `## Project: ${input.projectName}`,
     '',
-    '## Decomposition mandate',
-    '',
-    'Read the initiative manifest body carefully. The body carries the vision and ≥1 Given-When-Then acceptance criterion. **Decompose the initiative ACs directly into atomic outcome-sized work items** (one WI = one independently-runnable AC where possible). The initiative body is your single source of intent — there is no features list.',
-    '',
-    '**The initiative TITLE / slug is a filing label, NOT the spec.** Never infer the work from the title — decompose ONLY the manifest **body**. If the title and the body disagree, the **body wins, every time**. (A past cycle hallucinated off a "release-folder" title and built unrelated release-NOTES markdown in the wrong repo, ignoring a crystal-clear body — that is the exact failure this rule prevents.)',
-    '',
-    '**Restate the target before decomposing (REQUIRED).** Before drafting any WI, state in one line — in your reasoning and in the first WI body — the concrete thing the body asks you to build: the specific resource / file / module, and **where it lives in THIS project\'s source tree** (the dirs you enumerated in Step 0.5). Every WI\'s `files_in_scope` must sit under that source tree. Do **not** create unrelated artifacts (release-notes, top-level docs, tracking files) the body didn\'t ask for, and never touch paths outside the project worktree.',
-    '',
-    '**Every GWT block in the initiative body must be exercised by ≥1 WI `quality_gate_cmd`.** Emitting zero work items is a terminal failure. Decompose ONLY the manifest body\'s ACs; do not plan project-setup / brain / tracking-file busywork the architect didn\'t ask for.',
-    '',
-    '**ENRICH, don\'t re-decide the chunking.** When an AC is already the size of one mergeable commit, emit one WI that enriches it (additional ACs + gate + file scope). Split only when two parts change genuinely independent files/surfaces.',
-    ...(input.gateRecipe ? ['', input.gateRecipe] : []),
-    '',
-    '## Per-WI REQUIRED gate + optional fields',
-    '',
-    "**`quality_gate_cmd` is REQUIRED on every WI** — `validateWorkItem` hard-rejects any WI without one. The gate MUST fail on a clean tree before the agent does any work (iter-0 check). If it passes at iter 0, the WI hard-fails with `gate-too-loose`.",
-    '',
-    "**Use only tooling the project actually has.** Before drafting any gate, confirm the command's first arg appears in `package.json` scripts (or `pyproject.toml`, `Cargo.toml`, etc.). A gate referencing absent tooling either passes trivially or fails in a way the agent can't fix.",
-    '',
-    "**For CI/build/quality initiatives:** if `.forge/project.json` declares a `ci_gate`, set the WI's `quality_gate_cmd` to that verbatim — do NOT substitute a narrower proxy.",
-    '',
-    "**For cycle 2+ projects:** the test file your gate references MUST NOT EXIST in the worktree at WI start. Use your Step 0.5 Glob of `tests/**` as the source of truth.",
-    '',
-    "**Concrete sharp-gate patterns (mirror these):**",
-    "- **node:test**: `['node', '--test', '--experimental-strip-types', 'tests/<new-test>.test.ts']` (file doesn't exist yet → iter-0 fails)",
-    "- **jest**: `['npx', 'jest', '--testPathPattern', '<new-test-file>', '--findRelatedTests']`",
-    "- **pytest**: `['pytest', '-k', '<new-test-name>', '-x']`",
-    "- **bats**: `['bats', 'tests/<new-test>.bats']`",
-    "- **go test**: `['go', 'test', '-run', '<NewTestName>', './...']`",
-    '',
-    'Other optional fields (omit-on-undefined):',
-    '- `non_goals: ["docs","the bar component"]` — explicit out-of-scope items.',
-    '- `verification_artifact: "tests/x.test.ts"` — path the dev-loop must produce; must appear in `files_in_scope`.',
-    '- `creates: ["tests/x.test.ts"]` — files this WI creates from scratch (subset of `files_in_scope`).',
-    '',
-    '`demo_hook` is NOT a WI field — it lives at the initiative level only.',
-    '',
-    '## Inputs',
-    '',
-    `- Initiative manifest: \`${input.manifestRelPath}\` (read AFTER brain queries AND structural Globs). The body is your single source of intent.`,
-    `- Worktree: your current directory. \`files_in_scope\` paths can be existing files (edited/moved) OR new files (created) — both are fine.`,
-    '',
-    '## Output requirements',
-    '',
-    `- Write **one work-item file per atomic unit of work** to \`.forge/work-items/WI-<n>.md\`. Use \`WI-1\`, \`WI-2\`, … contiguous and 1-indexed.`,
-    `- Size WIs by consulting brain themes under \`projects/${input.projectName}/brain/themes/\` and \`brain/cycles/themes/\`. No synthetic floor or ceiling — choose the shape that matches the work.`,
-    `- Prefer WIs with empty \`depends_on\` (parallel-from-start). The dev-loop parallelises every DAG level.`,
-    '- **File-scope discipline (enforced).** If two WIs would both edit the same file, prefer in order: (1) split the file, (2) merge the WIs, (3) add a `depends_on` edge. Two WIs sharing a file with no edge fails `detectHiddenCoupling()` at PM close.',
-    '- Frontmatter (locked by ADR 015) — exactly these fields, all required:',
-    '  ```yaml',
-    '  ---',
-    '  work_item_id: WI-<n>',
-    `  initiative_id: ${input.initiativeId}`,
-    '  status: pending',
-    '  depends_on: [WI-...]          # empty array if independent',
-    '  acceptance_criteria:',
-    '    - given: "<precondition>"',
-    '      when:  "<action>"',
-    '      then:  "<observable outcome>"',
-    '  files_in_scope:               # worktree-relative paths (no leading /)',
-    '    - <path>',
-    '  estimated_iterations: <int>   # > 0',
-    '  ---',
-    '  ```',
-    '- **YAML quoting:** wrap every `given` / `when` / `then` value in double quotes. YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators; unquoted values starting with these fail to parse. Same for any value containing a colon-space (`: `).',
-    '- Body: markdown rationale. Cite the brain theme(s) you consulted by path. No implementation code.',
-    `- **Mandatory final step:** write \`.forge/work-items/_graph.md\` containing a single \`graph TD\` mermaid block. One node per WI; edges agree exactly with the union of all \`depends_on\` lists.`,
-    '',
-    '## Self-check (last step before stopping)',
-    '',
-    'Walk this checklist before your final tool call. The orchestrator validates each WI; missing or malformed fields fail the cycle.',
-    '',
-    '**Per work item — frontmatter completeness:**',
-    '- `work_item_id` (matches `WI-<n>` and the filename)',
-    `- \`initiative_id\` set exactly to \`${input.initiativeId}\``,
-    '- `status: pending`',
-    '- `depends_on` (array, possibly empty)',
-    '- `acceptance_criteria` — at least 1 entry, each with `given` / `when` / `then`, all double-quoted',
-    '- `files_in_scope` — at least 1 worktree-relative path, no leading `/`',
-    '- `estimated_iterations` — a positive integer (>= 1)',
-    '- `quality_gate_cmd` — REQUIRED; must fail on a clean tree; first arg must be real project tooling',
-    '',
-    "**AC coverage check:** every GWT block in the initiative body is exercised by ≥1 WI `quality_gate_cmd`. If any body AC has no corresponding WI gate, add the missing WI or expand an existing one.",
-    '',
-    "**Hidden-coupling check:** walk every pair of work items sharing a file in `files_in_scope`. If neither appears in the other's `depends_on` transitively, add the missing edge or merge them. The orchestrator's `detectHiddenCoupling()` hard-fails the cycle on violations.",
-    '',
-    "**Brain-cite sanity check:** the body's \"Brain themes consulted\" footer must reference files you actually `Read`-ed.",
+    `- Initiative manifest: \`${input.manifestRelPath}\` — read this (after brain queries + structural Globs) as your single source of intent.`,
+    `- Worktree: \`${input.worktreeRelPath}\` — your current working directory. All \`files_in_scope\` paths resolve here.`,
+    `- Write work items to \`.forge/work-items/WI-<n>.md\` and the graph to \`.forge/work-items/_graph.md\`.`,
+    `- Set \`initiative_id: ${input.initiativeId}\` exactly on every WI frontmatter.`,
     '',
     'Do not update the manifest frontmatter or status — leave that to the orchestrator. Just write the work items and the graph, then stop.',
   ].join('\n');
@@ -271,7 +188,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
  * context is provided — keeps the bench tests' shorter prompts byte-
  * stable.
  */
-function renderProjectContextBlock(
+export function renderProjectContextBlock(
   ctx: PmUserPromptInput['projectContext'],
 ): string {
   if (!ctx) return '';

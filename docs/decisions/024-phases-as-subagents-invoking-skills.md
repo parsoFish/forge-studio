@@ -118,6 +118,19 @@ phase is migrated.
 > full real-cycle / browser harness run **staged** for a dedicated authorized
 > session. The other phases (PM, dev-loop, reflector) adopt `PhaseAgentSpec`
 > next, one at a time behind the harness gate.
+>
+> **Landed 2026-06-07 (project-manager migrated).** The **project-manager** phase
+> adopts `PhaseAgentSpec`: `pmAgentSpec` in `pm-invocation.ts` declares it
+> (composes `skills/project-manager/SKILL.md` at the `sonnet` tier), and
+> `PM_MODEL` now *derives* from the spec's tier via `modelForSpec`. `SKILL.md`
+> is now the single source of PM intent: the static operational prose (non-interactive
+> framing, brain-first enforcement wording, Step-0.5 Glob/Read enumeration,
+> sharp-gate examples, demo_hook placement, and the itemised self-check checklist)
+> was relocated from `renderPmUserPrompt` into `SKILL.md`. `renderPmUserPrompt`
+> is now dynamic-only (initiative id, project name, paths, project context block,
+> gate recipe). Behaviour-preserving — all enforcement (brain-skip abort,
+> `validateWorkItem`, `detectHiddenCoupling`, `tallyToolUse`) stays
+> orchestrator-side and is unchanged. Unit-tested in `pm-invocation.test.ts`.
 
 ## Consequences
 
