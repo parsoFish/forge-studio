@@ -215,7 +215,7 @@ function renderInitiative(manifest: InitiativeManifest | null): string {
   return [
     '## What was asked',
     '',
-    `**Iteration budget:** ${manifest.iteration_budget} · **Cost budget:** $${manifest.cost_budget_usd.toFixed(2)} · **Quality gate:** \`${manifest.quality_gate_cmd?.join(' ') ?? '(default — npm test)'}\``,
+    `**Iteration budget:** ${manifest.iteration_budget} · **Cost budget:** $${manifest.cost_budget_usd.toFixed(2)} · **Quality gate:** \`${manifest.quality_gate_cmd?.join(' ') ?? '(per-WI quality gates; see work items)'}\``,
     `**Acceptance criteria in body:** ${gwtCount} GWT block${gwtCount !== 1 ? 's' : ''}`,
     '',
     '### Initiative spec',
@@ -404,7 +404,7 @@ function renderVerification(
 ): string {
   const lines: string[] = ['## Verification', ''];
   if (manifest) {
-    const qg = manifest.quality_gate_cmd?.join(' ') ?? '(default: npm test if package.json exists)';
+    const qg = manifest.quality_gate_cmd?.join(' ') ?? '(per-WI quality gates; see work items)';
     lines.push(`**Quality gate command:** \`${qg}\``);
   }
 
