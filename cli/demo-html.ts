@@ -74,6 +74,13 @@ export type TestResultRow = {
   delta?: string;
 };
 
+/** Per-acceptance-criterion evaluated output (MVUS req b). */
+export type AcEvaluationEntry = {
+  criterion: string;
+  verdict: 'met' | 'partial' | 'missed';
+  evidence: string;
+};
+
 export type DemoComparisonModel = {
   title: string;
   initiativeId?: string;
@@ -87,6 +94,12 @@ export type DemoComparisonModel = {
   checkpoints: DemoCheckpoint[];
   diffStat?: string;
   acceptanceCriteria?: string[];
+  /**
+   * Per-AC evaluated output. When present, a foregrounded "Intent & Outcome"
+   * section replaces the plain AC appendix. One entry per AC with verdict
+   * (met/partial/missed) and concrete evidence (MVUS req b).
+   */
+  acEvaluations?: AcEvaluationEntry[];
 
   // ── Rich structured sections ────────────────────────────────────────────
   summary?: DemoSummarySection;
@@ -398,7 +411,42 @@ function buildImpactSection(model: DemoComparisonModel): string {
 </section>`;
 }
 
+/**
+ * Foregrounded "Intent & Outcome" section (MVUS req b). Rendered near the top
+ * when `acEvaluations` is present — one row per AC with a colored verdict badge
+ * and concrete evidence. Carries `data-section="demo-evaluation"` and
+ * `data-ac-eval-count` for e2e assertions.
+ */
+function buildEvaluationSection(model: DemoComparisonModel): string {
+  if (!model.acEvaluations || model.acEvaluations.length === 0) return '';
+
+  const verdictLabel = (v: string): string => v === 'met' ? 'met' : v === 'missed' ? 'missed' : 'partial';
+  const rows = model.acEvaluations
+    .map(
+      (e, i) => `<tr data-ac-verdict="${esc(e.verdict)}">
+        <td class="ac-idx">${i + 1}</td>
+        <td>${esc(e.criterion)}</td>
+        <td><span class="ac-verdict ac-${esc(e.verdict)}">${esc(verdictLabel(e.verdict))}</span></td>
+        <td class="ac-evidence">${esc(e.evidence)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  return `
+<section class="section" id="demo-evaluation" data-section="demo-evaluation" data-ac-eval-count="${model.acEvaluations.length}">
+  <h2>Intent &amp; Outcome</h2>
+  <p class="intent-essence">${esc(model.essence)}</p>
+  <table class="ac-eval">
+    <thead><tr><th class="ac-idx">#</th><th>Acceptance criterion</th><th>Verdict</th><th>Evidence</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</section>`;
+}
+
 function buildAcAppendix(model: DemoComparisonModel): string {
+  // Suppress the plain appendix when acEvaluations is present — the criteria
+  // are already shown upfront with per-AC verdicts (avoid showing twice).
+  if (model.acEvaluations && model.acEvaluations.length > 0) return '';
   if (!model.acceptanceCriteria || model.acceptanceCriteria.length === 0) return '';
   return `<details class="appendix"><summary>Acceptance criteria this demo is grounded in (${model.acceptanceCriteria.length})</summary><ol>${model.acceptanceCriteria
     .map((a) => `<li>${esc(a)}</li>`)
@@ -526,6 +574,18 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
   .appendix ol { font-size: .9rem; }
 
+  /* ── Intent & Outcome (MVUS req b) ── */
+  .intent-essence { margin: 0 0 1rem; font-size: .95rem; color: color-mix(in srgb, currentColor 75%, transparent); font-style: italic; }
+  table.ac-eval { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.ac-eval th, table.ac-eval td { text-align: left; padding: .45rem .8rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.ac-eval th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.ac-eval .ac-idx { width: 2.2rem; color: color-mix(in srgb, currentColor 40%, transparent); }
+  table.ac-eval .ac-evidence { font-size: .82rem; color: color-mix(in srgb, currentColor 65%, transparent); }
+  .ac-verdict { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .55rem; border-radius: 999px; font-weight: 600; }
+  .ac-met { background: color-mix(in srgb, #3fae6a 25%, transparent); color: #2a8a50; }
+  .ac-partial { background: color-mix(in srgb, #e0a800 25%, transparent); color: #9a7200; }
+  .ac-missed { background: color-mix(in srgb, #e0584a 25%, transparent); color: #b03030; }
+
   /* ── Shared utils ── */
   .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
   footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); padding-top: 1rem; }
@@ -544,6 +604,8 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
 ${buildBanner(model)}
 
 ${buildSummarySection(model)}
+
+${buildEvaluationSection(model)}
 
 ${buildVisualChangesSection(model)}
 

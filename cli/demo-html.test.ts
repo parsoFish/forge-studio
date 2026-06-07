@@ -482,3 +482,93 @@ test('renderComparisonHtml: apiDiff entries are HTML-escaped', () => {
   assert.ok(!html.includes('<script>evil()'), 'api entry name escaped');
   assert.match(html, /&lt;script&gt;/);
 });
+
+// ── Assessed intent + per-AC evaluation (MVUS req b) ─────────────────────
+
+test('renderComparisonHtml: acEvaluations present → foregrounded evaluation section', () => {
+  const html = renderComparisonHtml(
+    model({
+      acEvaluations: [
+        { criterion: 'GIVEN a node WHEN clicked THEN inspector opens', verdict: 'met', evidence: 'Test passes; inspector renders.' },
+        { criterion: 'GIVEN inspector WHEN open THEN shows grade', verdict: 'partial', evidence: 'Grade shown but not formatted.' },
+        { criterion: 'GIVEN grade WHEN 0 THEN shows zero state', verdict: 'missed', evidence: 'Zero state not implemented.' },
+      ],
+    }),
+  );
+  // Section must be present and carry data attributes
+  assert.match(html, /data-section="demo-evaluation"/);
+  assert.match(html, /data-ac-eval-count="3"/);
+  // Each row carries the verdict attribute
+  assert.match(html, /data-ac-verdict="met"/);
+  assert.match(html, /data-ac-verdict="partial"/);
+  assert.match(html, /data-ac-verdict="missed"/);
+  // Content present
+  assert.match(html, /GIVEN a node WHEN clicked THEN inspector opens/);
+  assert.match(html, /Test passes; inspector renders\./);
+  // Assessed intent drawn from essence
+  assert.match(html, /Intent &amp; Outcome/);
+});
+
+test('renderComparisonHtml: acEvaluations verdict classes are colored (met=green, missed=red, partial=amber)', () => {
+  const html = renderComparisonHtml(
+    model({
+      acEvaluations: [
+        { criterion: 'AC 1', verdict: 'met', evidence: 'Evidence 1' },
+        { criterion: 'AC 2', verdict: 'missed', evidence: 'Evidence 2' },
+        { criterion: 'AC 3', verdict: 'partial', evidence: 'Evidence 3' },
+      ],
+    }),
+  );
+  assert.match(html, /class="ac-verdict ac-met"/);
+  assert.match(html, /class="ac-verdict ac-missed"/);
+  assert.match(html, /class="ac-verdict ac-partial"/);
+});
+
+test('renderComparisonHtml: acEvaluations section positioned before checkpoints section', () => {
+  const html = renderComparisonHtml(
+    model({
+      acEvaluations: [
+        { criterion: 'AC 1', verdict: 'met', evidence: 'Evidence 1' },
+      ],
+    }),
+  );
+  const evalPos = html.indexOf('data-section="demo-evaluation"');
+  const checkpointsPos = html.indexOf('id="visual-changes"');
+  assert.ok(evalPos > 0, 'evaluation section present');
+  assert.ok(checkpointsPos > 0, 'visual-changes section present');
+  assert.ok(evalPos < checkpointsPos, 'evaluation section appears before checkpoints');
+});
+
+test('renderComparisonHtml: absent acEvaluations → no evaluation section, appendix unchanged', () => {
+  const html = renderComparisonHtml(model({ acEvaluations: undefined }));
+  assert.ok(!html.includes('data-section="demo-evaluation"'), 'no evaluation section when acEvaluations absent');
+  // The plain AC appendix still shows
+  assert.match(html, /Acceptance criteria this demo is grounded in/);
+});
+
+test('renderComparisonHtml: acEvaluations present → plain AC appendix suppressed', () => {
+  const html = renderComparisonHtml(
+    model({
+      acEvaluations: [
+        { criterion: 'GIVEN a node WHEN clicked THEN inspector opens', verdict: 'met', evidence: 'Test passes.' },
+      ],
+    }),
+  );
+  // The foregrounded section is present
+  assert.match(html, /data-section="demo-evaluation"/);
+  // The buried plain appendix should not appear (ACs shown once, upfront)
+  assert.ok(!html.includes('Acceptance criteria this demo is grounded in'), 'plain AC appendix suppressed when acEvaluations present');
+});
+
+test('renderComparisonHtml: acEvaluations content is HTML-escaped', () => {
+  const html = renderComparisonHtml(
+    model({
+      acEvaluations: [
+        { criterion: '<script>evil()</script>', verdict: 'met', evidence: 'a & b' },
+      ],
+    }),
+  );
+  assert.ok(!html.includes('<script>evil()'), 'criterion escaped');
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /a &amp; b/);
+});

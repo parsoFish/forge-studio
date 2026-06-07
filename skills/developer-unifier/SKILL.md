@@ -18,6 +18,7 @@ Once all per-WI Ralphs have run, take the **whole initiative branch** and prove 
 3. **Author the structured demo** at `demo/<initiative-id>/demo.json` (ADR 021):
    - This directory must be **tracked** (committed on the branch). The unifier is the only sub-phase that writes to a tracked path.
    - `demo.json` is the **single source of truth** — schema-validated by the `pr_self_contained` gate (`validateDemoModel`). Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 `checkpoints[]` entry (`label` + `caption`, plus `beforeNote`/`afterNote` describing before-vs-after **behaviour**, never "what is broken").
+   - **MUST populate `acEvaluations[]`** — one entry per acceptance criterion (from each WI's `acceptance_criteria` array) with `verdict` (`met`/`partial`/`missed`) and concrete `evidence` (a test name + result, an API response, a measured value — never "see code"). This powers the foregrounded "Intent & Outcome" section at the top of the review demo. Do not write "tests pass" without naming the specific test. Example: `{ "criterion": "GIVEN X WHEN Y THEN Z", "verdict": "met", "evidence": "test 'X WHEN Y THEN Z' → pass (node:test 42/42 green)" }`.
    - Run `forge demo render <initiative-id>` to derive `DEMO.md` + `DEMO.html` from `demo.json`, then commit all three. **Never hand-write DEMO.md** — derived, so PR artifact and in-UI render never drift.
    - **Check for a `demo.skill` in `.forge/project.json`** before authoring `demo.json`. If present, `Read` that skill file — it specifies the project-specific evidence hierarchy (e.g. betterado's `ado-demo` skill: `terraform apply` → API GET → portal screenshot → `terraform destroy`). For new/changed resources, **attempt live-capability evidence first**; fall back to harness-only if credentials absent, documenting the fallback in `essence`.
    - The project's `demo.shape` in `.forge/project.json` decides HOW you fill checkpoints:
@@ -107,6 +108,9 @@ Minimal valid iter-1 skeleton:
   "checkpoints": [
     { "label": "main", "caption": "<what this demonstrates>",
       "beforeNote": "<prior behaviour>", "afterNote": "<new behaviour>" }
+  ],
+  "acEvaluations": [
+    { "criterion": "<AC text from WI>", "verdict": "met", "evidence": "<concrete evidence — test name + result, API response, etc.>" }
   ]
 }
 ```

@@ -20,9 +20,18 @@
  *                           ROADMAP by invoking the runner per initiative in
  *                           order against an empty repo.
  *   --base-sha <sha>        base commit to reset the harness repo to (routine).
- *   --cost-ceiling <usd>    fail the gate above this total cost (default 25).
+ *   --cost-ceiling <usd>    fail the gate above this total cost (default 25;
+ *                           default 40 when --send-back is set, to accommodate
+ *                           the extra unifier pass).
  *   --project <name>        managed project to run against (default claude-harness).
  *   --force-reset           allow resetting a repo with uncommitted changes.
+ *   --send-back             after the cycle first reaches ready-for-review, POST a
+ *                           real send-back verdict to /api/verdict, re-run forge
+ *                           serve --once to drain the re-queued UWIs through the
+ *                           unifier, then fall through to the existing auto-approve
+ *                           path so the run still reaches `done` and the gate passes.
+ *                           Captures decision-review-evaluation, decision-send-back,
+ *                           and decision-re-review frames around the send-back pass.
  *
  * The manifest is staged from the corpus (_queue/done/) into _queue/pending/
  * if not already pending. Tiered + manual-gate per ADR 022. It auto-approves at
@@ -43,7 +52,7 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const initiativeId = argv.find((a) => !a.startsWith('--'));
 if (!initiativeId) {
-  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--force-reset]');
+  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--force-reset] [--send-back]');
   process.exit(1);
 }
 function flag(name, def) {
@@ -52,7 +61,11 @@ function flag(name, def) {
 }
 const TIER = flag('tier', 'routine');
 const BASE_SHA = flag('base-sha', null);
-const COST_CEILING = parseFloat(flag('cost-ceiling', '25')) || 25;
+const SEND_BACK = argv.includes('--send-back');
+// When --send-back is set the effective default ceiling is $40 to accommodate
+// the extra unifier pass; still overridable by an explicit --cost-ceiling.
+const _ceilingDefault = SEND_BACK ? '40' : '25';
+const COST_CEILING = parseFloat(flag('cost-ceiling', _ceilingDefault)) || (SEND_BACK ? 40 : 25);
 const PROJECT = flag('project', 'claude-harness');
 const FORCE_RESET = argv.includes('--force-reset');
 
@@ -103,6 +116,29 @@ function stageManifest() {
   writeFileSync(pending, body);
   log(`staged corpus manifest → _queue/pending/${initiativeId}.md`);
   return true;
+}
+
+/** Remove residue from a PRIOR verify run of THIS initiative so the bridge tracks only the
+ *  fresh cycle and re-runs start clean. A stale `_logs/<stamp>_<id>` dir made
+ *  findCycleIdForInitiative lock onto an old cycle (→ null status, no auto-approve); a preserved
+ *  worktree or a non-terminal queue copy from a failed/pr-open run would also collide. `_logs` and
+ *  `_worktrees` are gitignored runtime; the corpus manifest in `done/` is left untouched (stageManifest
+ *  re-copies it into `pending/`). */
+function cleanPriorRunState(initiativeId, repoPath) {
+  const logsRoot = join(FORGE_ROOT, '_logs');
+  if (existsSync(logsRoot)) {
+    for (const name of readdirSync(logsRoot)) {
+      if (name === initiativeId || name.endsWith(`_${initiativeId}`)) {
+        rmSync(join(logsRoot, name), { recursive: true, force: true });
+      }
+    }
+  }
+  rmSync(join(FORGE_ROOT, '_worktrees', initiativeId), { recursive: true, force: true });
+  if (existsSync(join(repoPath, '.git'))) git(repoPath, ['worktree', 'prune']);
+  for (const q of ['pending', 'in-flight', 'failed', 'ready-for-review']) {
+    rmSync(join(FORGE_ROOT, '_queue', q, `${initiativeId}.md`), { force: true });
+  }
+  log(`cleaned prior-run residue for ${initiativeId} (stale logs / worktree / non-terminal queue copies)`);
 }
 
 /** Routine tier: hard-reset the harness repo to BASE_SHA (guarded against a dirty tree). */
@@ -164,7 +200,10 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
   const checks = [
-    { name: 'cycle reached merge (done)', pass: finalStatus === 'done', detail: `finalStatus=${finalStatus}` },
+    // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
+    // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
+    // returned null even on cleanly-merged cycles). Accept either signal.
+    { name: 'cycle reached merge (done)', pass: finalStatus === 'done' || existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)), detail: finalStatus === 'done' ? 'finalStatus=done' : (existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)) ? 'manifest in _queue/done/ (merged; bridge status unread post-merge)' : `finalStatus=${finalStatus}, manifest not in done/`) },
     { name: 'dev-loop completed N/N work items', pass: wi.total > 0 && wi.complete === wi.total && wi.failed === 0, detail: `${wi.complete}/${wi.total} complete, ${wi.failed} failed` },
     { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? 'npm test passed' : 'npm test FAILED') : 'no package.json — skipped' },
     { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
@@ -307,6 +346,101 @@ function autoApprove(initiativeId) {
   return true;
 }
 
+/**
+ * captureDecisionPmWorkItems — poll until at least one [data-wi-hex] has
+ * appeared for the focused cycle (the PM has materialised work items), then
+ * capture a named frame. Bounded at 3 min so a slow PM never hangs the run.
+ */
+async function captureDecisionPmWorkItems(page) {
+  try {
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-wi-hex]').length >= 1,
+      undefined,
+      { timeout: 3 * 60_000 },
+    );
+  } catch {
+    log('decision-pm-work-items: [data-wi-hex] not present within 3 min — capturing anyway');
+  }
+  await captureFrame(page, 'decision-pm-work-items');
+}
+
+/**
+ * captureDecisionCostAndTokens — poll (bounded at ~60 s) until any
+ * [data-phase-hex] reports a non-zero data-phase-cost-usd, then frame it.
+ * Highlights live cost + tokens as the dev-loop is in progress.
+ */
+async function captureDecisionCostAndTokens(page) {
+  try {
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-phase-hex]')]
+        .some((e) => (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
+      undefined,
+      { timeout: 60_000 },
+    );
+  } catch {
+    log('decision-cost-and-tokens: no phase-hex with cost > 0 within 60 s — capturing anyway');
+  }
+  await captureFrame(page, 'decision-cost-and-tokens');
+}
+
+/**
+ * captureDecisionReviewEvaluation — navigate to /review/<cycleId>, wait for
+ * the demo-comparison and demo-evaluation sections, then frame.
+ * Returns to the dashboard URL after the frame so subsequent navigation
+ * isn't broken. Defensive: if the selectors don't appear, captures anyway
+ * and logs — never throws.
+ */
+async function captureDecisionReviewEvaluation(page, uiUrl, cycleId) {
+  try {
+    await page.goto(`${uiUrl}/review/${cycleId}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
+      .catch(() => log('decision-review-evaluation: [data-section="demo-comparison"] not found within 15 s'));
+    await page.waitForSelector('[data-section="demo-evaluation"]', { timeout: 5_000 })
+      .catch(() => log('decision-review-evaluation: [data-section="demo-evaluation"] not found within 5 s'));
+  } catch (err) {
+    log(`decision-review-evaluation: navigation error — ${err.message}`);
+  }
+  await captureFrame(page, 'decision-review-evaluation');
+}
+
+/**
+ * postSendBack — POST a send-back verdict to /api/verdict.
+ * Returns true on HTTP 2xx, false (+ logs) on any error.
+ * The payload conforms exactly to the /api/verdict handler:
+ *   { initiativeId, kind: 'send-back', rationale, acceptanceCriteria: [{given,when,then}] }
+ */
+async function postSendBack(bridgeUrl, initiativeId) {
+  const payload = {
+    initiativeId,
+    kind: 'send-back',
+    rationale: 'Automated send-back by scripts/verify-cycle.mjs --send-back: verifying the unifier re-run path (ADR 026). Please re-examine the implementation for any issues raised in acceptance criteria and address them.',
+    acceptanceCriteria: [
+      {
+        given: 'the send-back cycle completes a second unifier pass',
+        when: 'the re-run unifier reviews the branch output',
+        then: 'it produces an updated demo and the cycle reaches ready-for-review again',
+      },
+    ],
+  };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/verdict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text().catch(() => '');
+    if (res.ok) {
+      log(`send-back verdict accepted (${res.status}): ${text.slice(0, 120)}`);
+      return true;
+    }
+    log(`send-back verdict rejected (${res.status}): ${text.slice(0, 200)} — skipping send-back`);
+    return false;
+  } catch (err) {
+    log(`send-back POST failed: ${err.message} — skipping send-back`);
+    return false;
+  }
+}
+
 async function cycleEventCountFromLog(cycleId) {
   const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
   try {
@@ -355,8 +489,9 @@ async function main() {
   mkdirSync(FRAMES_DIR, { recursive: true });
 
   // ADR 022 pre-run: stage the corpus manifest + reset the repo per tier.
-  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}`);
+  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}`);
   const repoPath = projectRepoPath();
+  cleanPriorRunState(initiativeId, repoPath);
   if (!stageManifest()) process.exit(1);
   if (TIER === 'routine') {
     if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
@@ -434,9 +569,13 @@ async function main() {
   // (see SERVE_EXITED above).
   const seenPhase = new Map();
   const phasePoll = (async () => {
+    // Named decision-point frame — PM work items: fire a one-shot capture once
+    // [data-wi-hex] appears (the PM has broken the initiative into WIs). We race
+    // it against the serve-exited sentinel so a fast-exiting serve never hangs.
+    let pmFrameFired = false;
     while (true) {
       const r = await Promise.race([serveEnd, sleep(2000)]);
-      if (r === SERVE_EXITED) return;
+      if (r === SERVE_EXITED) break;
       try {
         const states = await getPhaseStates(page);
         for (const [phase, status] of Object.entries(states)) {
@@ -446,12 +585,56 @@ async function main() {
             await captureFrame(page, `${phase}-${status}`);
           }
         }
+        // One-shot: capture the PM work-item decision frame as soon as WI hexes appear.
+        if (!pmFrameFired) {
+          const wiCount = await page.evaluate(
+            () => document.querySelectorAll('[data-wi-hex]').length,
+          ).catch(() => 0);
+          if (wiCount >= 1) {
+            pmFrameFired = true;
+            await captureFrame(page, 'decision-pm-work-items');
+          }
+        }
+      } catch { /* */ }
+    }
+    // If serve exited before the PM frame fired, capture anyway (the PM may have
+    // emitted WI hexes just before exit).
+    if (!pmFrameFired) {
+      try {
+        const wiCount = await page.evaluate(
+          () => document.querySelectorAll('[data-wi-hex]').length,
+        ).catch(() => 0);
+        if (wiCount >= 1) await captureFrame(page, 'decision-pm-work-items');
+        else log('decision-pm-work-items: no [data-wi-hex] found — skipping frame');
       } catch { /* */ }
     }
   })();
 
+  // Named decision-point frame — cost + tokens: race a parallel poll that fires
+  // once any phase-hex reports cost > 0.  Runs concurrently with phasePoll so it
+  // captures mid-dev-loop without blocking phase-state captures.
+  const costTokenPoll = (async () => {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      const r = await Promise.race([serveEnd, sleep(3000)]);
+      try {
+        const hasCost = await page.evaluate(
+          () => [...document.querySelectorAll('[data-phase-hex]')]
+            .some((e) => (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
+        ).catch(() => false);
+        if (hasCost) {
+          await captureFrame(page, 'decision-cost-and-tokens');
+          return;
+        }
+      } catch { /* */ }
+      if (r === SERVE_EXITED) break;
+    }
+    // Capture at deadline/exit regardless so the frame gallery has an entry.
+    try { await captureFrame(page, 'decision-cost-and-tokens'); } catch { /* */ }
+  })();
+
   await serveEnd;
-  await phasePoll;
+  await Promise.all([phasePoll, costTokenPoll]);
   log('serve --once exited');
 
   // What state did the cycle reach?
@@ -460,7 +643,80 @@ async function main() {
   log(`cycle status after serve exit: ${status}`);
   await captureFrame(page, `after-serve-${status ?? 'unknown'}`);
 
-  // Auto-approve path: if ready-for-review, kick the approve + capture
+  // ---- send-back pass (only when --send-back is set) ----------------------
+  // This block runs BEFORE the auto-approve so it can exercise the full
+  // ADR 026 drain path.  After the send-back the manifest is back in
+  // ready-for-review and the existing auto-approve picks it up normally.
+  if (status === 'ready-for-review' && SEND_BACK) {
+    log('--send-back set: capturing review evaluation frame…');
+    // Decision frame: navigate to /review/<cycleId>, capture the demo with
+    // per-AC evaluated output before touching the verdict form.
+    await captureDecisionReviewEvaluation(page, watch.uiUrl, cycleId);
+
+    // POST the send-back verdict.
+    log('posting send-back verdict to /api/verdict…');
+    const sendBackOk = await postSendBack(watch.bridgeUrl, initiativeId);
+
+    if (sendBackOk) {
+      await captureFrame(page, 'decision-send-back');
+
+      // Re-run serve --once to drain the ready-for-review manifest (the appended
+      // UWIs) through the unifier (ADR 026: runFinalizeSweep + runDrainSweep at
+      // startup claims the manifest and re-runs via runCycle(resumeFrom:unifier)).
+      log('re-running forge serve --once to drain the send-back UWIs…');
+      const serve2 = startServe();
+      serve2.stdout.on('data', (d) => process.stdout.write(d));
+      serve2.stderr.on('data', (d) => process.stderr.write(d));
+      const SERVE2_EXITED = Symbol('serve2-exited');
+      const serve2End = new Promise((res) => serve2.on('exit', () => res(SERVE2_EXITED)));
+
+      // Phase-poll during the re-run (same pattern as primary serve).
+      const serve2PhasePoll = (async () => {
+        while (true) {
+          const r = await Promise.race([serve2End, sleep(2000)]);
+          if (r === SERVE2_EXITED) break;
+          try {
+            const states = await getPhaseStates(page);
+            for (const [phase, st] of Object.entries(states)) {
+              const prev = seenPhase.get(phase);
+              if (prev !== st) {
+                seenPhase.set(phase, st);
+                await captureFrame(page, `sendback-${phase}-${st}`);
+              }
+            }
+          } catch { /* */ }
+        }
+      })();
+
+      await serve2End;
+      await serve2PhasePoll;
+      log('send-back serve --once exited');
+
+      // Navigate to /review/<cycleId> again to capture the unifier's re-run output.
+      await sleep(2000);
+      try {
+        await page.goto(`${watch.uiUrl}/review/${cycleId}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
+          .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
+      } catch (err) {
+        log(`decision-re-review: navigation error — ${err.message}`);
+      }
+      await captureFrame(page, 'decision-re-review');
+
+      // Return to the dashboard so the auto-approve path works cleanly.
+      try {
+        await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+      } catch { /* best-effort */ }
+    } else {
+      log('send-back was skipped (POST failed); continuing to auto-approve');
+    }
+  } else if (status === 'ready-for-review' && !SEND_BACK) {
+    // Only navigate to the review page when not in send-back mode; in send-back
+    // mode we already captured decision-review-evaluation above.
+    // (No action needed here — auto-approve follows directly.)
+  }
+
+  // ---- auto-approve path: if ready-for-review, kick the approve + capture
   // closure + reflection.
   if (status === 'ready-for-review') {
     const ok = autoApprove(initiativeId);

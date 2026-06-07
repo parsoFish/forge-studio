@@ -144,7 +144,37 @@ collapses them gracefully when absent, but their absence means a less useful dem
   ]
   ```
 
-- **`acceptanceCriteria[]`** (optional but recommended) — the ACs the demo proves.
+- **`acceptanceCriteria[]`** (optional) — the raw AC strings, kept for back-compat.
+  Prefer `acEvaluations` (below) which supersedes this for the review screen.
+
+- **`acEvaluations[]`** (required when ≥1 AC was proved) — **the primary AC surface**.
+  One entry per acceptance criterion with a concrete verdict and evidence. The review
+  screen foregrounds this as an "Intent & Outcome" table at the TOP of the demo,
+  before checkpoints. Schema (mirrors `AcEvaluation` in `cli/demo-model.ts`):
+
+  ```json
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN a release definition WHEN applied THEN ADO returns 200",
+      "verdict": "met",
+      "evidence": "terraform apply exited 0; GET /api/release/{id} returned the resource."
+    },
+    {
+      "criterion": "GIVEN an existing definition WHEN destroyed THEN ADO returns 404",
+      "verdict": "partial",
+      "evidence": "destroy exits 0 but GET still returns 200 for ~2s (eventual-consistency)."
+    }
+  ]
+  ```
+
+  **Verdict vocabulary:**
+  - `"met"` — the AC is fully proved by the evidence.
+  - `"partial"` — the AC is mostly met; document the gap in `evidence`.
+  - `"missed"` — the AC was not reached; document why in `evidence`.
+
+  **Evidence discipline:** state a concrete, observable fact — a test name + result,
+  an API response, a measured value. Never write "see code" or "tests pass" without
+  naming the test. One entry per AC; do not merge or split.
 
 ### Three load-bearing disciplines
 

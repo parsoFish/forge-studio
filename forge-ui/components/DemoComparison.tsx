@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { resolveBridgeUrl } from '@/lib/bridge-client';
-import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow } from '@/lib/bridge-client';
+import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, DemoAcEvaluation } from '@/lib/bridge-client';
 
 /**
  * ADR 021 — renders the unifier-authored structured `demo.json` natively (the
@@ -64,6 +64,12 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
           {model.essence}
         </div>
       </div>
+
+      {/* Intent & Outcome — foregrounded per-AC evaluation (MVUS req b).
+          Rendered when acEvaluations is present; replaces the plain AC list. */}
+      {model.acEvaluations && model.acEvaluations.length > 0 && (
+        <AcEvaluationSection essence={model.essence} evaluations={model.acEvaluations} />
+      )}
 
       {/* Summary section */}
       {model.summary && (
@@ -184,8 +190,9 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
         </div>
       )}
 
-      {/* Acceptance criteria */}
-      {model.acceptanceCriteria && model.acceptanceCriteria.length > 0 && (
+      {/* Acceptance criteria — plain list shown only when acEvaluations absent.
+          When acEvaluations is present the AcEvaluationSection above covers it. */}
+      {!model.acEvaluations?.length && model.acceptanceCriteria && model.acceptanceCriteria.length > 0 && (
         <div data-section="demo-acs">
           <SectionLabel>Acceptance criteria</SectionLabel>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#c9d1d9' }}>
@@ -311,6 +318,70 @@ function MetricTable({ rows }: { rows: DemoHarnessMetricRow[] }): JSX.Element {
         </tr>
       </tfoot>
     </table>
+  );
+}
+
+const VERDICT_COLOR: Record<DemoAcEvaluation['verdict'], string> = {
+  met: '#2ea043',
+  partial: '#d29922',
+  missed: '#f85149',
+};
+
+const VERDICT_BG: Record<DemoAcEvaluation['verdict'], string> = {
+  met: 'rgba(46,160,67,0.15)',
+  partial: 'rgba(210,153,34,0.15)',
+  missed: 'rgba(248,81,73,0.15)',
+};
+
+/**
+ * Foregrounded "Intent & Outcome" section (MVUS req b). Shown near the top when
+ * `acEvaluations` is present; mirrors the `data-section="demo-evaluation"` +
+ * `data-ac-verdict` attributes used by the static HTML renderer and e2e harness.
+ */
+function AcEvaluationSection({ essence, evaluations }: { essence: string; evaluations: DemoAcEvaluation[] }): JSX.Element {
+  return (
+    <div
+      data-section="demo-evaluation"
+      data-ac-eval-count={evaluations.length}
+      style={{ border: '1px solid #21262d', borderRadius: 8, padding: 14, background: '#0b0f14' }}
+    >
+      <SectionLabel>Intent &amp; Outcome</SectionLabel>
+      <p style={{ margin: '0 0 12px', fontSize: 13, color: '#8b949e', fontStyle: 'italic' }}>{essence}</p>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ color: '#6e7681', textAlign: 'left' }}>
+            <th style={{ ...th, width: '2rem' }}>#</th>
+            <th style={th}>Acceptance criterion</th>
+            <th style={{ ...th, width: '6rem' }}>Verdict</th>
+            <th style={th}>Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {evaluations.map((e, i) => (
+            <tr key={i} data-ac-verdict={e.verdict} style={{ borderTop: '1px solid #21262d' }}>
+              <td style={{ ...td, color: '#6e7681' }}>{i + 1}</td>
+              <td style={{ ...td, color: '#c9d1d9' }}>{e.criterion}</td>
+              <td style={td}>
+                <span style={{
+                  display: 'inline-block',
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.7,
+                  padding: '2px 7px',
+                  borderRadius: 999,
+                  fontWeight: 600,
+                  color: VERDICT_COLOR[e.verdict],
+                  background: VERDICT_BG[e.verdict],
+                }}>
+                  {e.verdict}
+                </span>
+              </td>
+              <td style={{ ...td, color: '#8b949e', fontFamily: 'inherit' }}>{e.evidence}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

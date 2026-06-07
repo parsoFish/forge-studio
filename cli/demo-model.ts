@@ -50,6 +50,13 @@ export type DemoModelCheckpoint = {
   afterVideoSrc?: string | null;
 };
 
+/** Per-acceptance-criterion evaluated output — one entry per AC the unifier proved. */
+export type AcEvaluation = {
+  criterion: string;
+  verdict: 'met' | 'partial' | 'missed';
+  evidence: string;
+};
+
 export type DemoModel = {
   title: string;
   essence: string;
@@ -61,6 +68,12 @@ export type DemoModel = {
   /** `git diff --stat baseRef..changedRef`. Required — grounds the demo. */
   diffStat: string;
   acceptanceCriteria?: string[];
+  /**
+   * Per-AC evaluated output. When present, the review screen foregrounds this
+   * instead of the plain `acceptanceCriteria` list (MVUS req b). One entry per
+   * AC, with a `verdict` (met/partial/missed) and concrete `evidence`.
+   */
+  acEvaluations?: AcEvaluation[];
 
   // ── Rich structured sections (REV-4 / D3) ──────────────────────────────
   /** High-level summary bullets + PR/branch/SHA metadata. */
@@ -159,6 +172,26 @@ export function validateDemoModel(raw: unknown): string[] {
     errors.push('acceptanceCriteria must be an array of strings when set');
   }
 
+  const VALID_VERDICTS = new Set(['met', 'partial', 'missed']);
+  if (m.acEvaluations !== undefined) {
+    if (!Array.isArray(m.acEvaluations)) {
+      errors.push('acEvaluations must be an array when set');
+    } else {
+      (m.acEvaluations as Array<Record<string, unknown>>).forEach((entry, i) => {
+        const at = `acEvaluations[${i}]`;
+        if (typeof entry.criterion !== 'string' || entry.criterion.trim().length === 0) {
+          errors.push(`${at}.criterion is required (non-empty string)`);
+        }
+        if (!VALID_VERDICTS.has(entry.verdict as string)) {
+          errors.push(`${at}.verdict must be one of met|partial|missed (got "${entry.verdict}")`);
+        }
+        if (typeof entry.evidence !== 'string' || entry.evidence.trim().length === 0) {
+          errors.push(`${at}.evidence is required (non-empty string)`);
+        }
+      });
+    }
+  }
+
   // Validate optional rich sections (loose — don't break on partial data).
   if (m.summary !== undefined) {
     const s = m.summary as Record<string, unknown>;
@@ -211,6 +244,7 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
     })),
     diffStat: stripScratchFromDiffStat(model.diffStat),
     acceptanceCriteria: model.acceptanceCriteria,
+    acEvaluations: model.acEvaluations,
     summary: model.summary,
     apiDiff: model.apiDiff,
     testEvidence: model.testEvidence,
@@ -379,6 +413,20 @@ export function renderDemoMarkdown(model: DemoModel): string {
     if (model.summary.prUrl) lines.push(`- PR: ${model.summary.prUrl}`);
     if (model.summary.branch) lines.push(`- Branch: \`${model.summary.branch}\``);
     if (model.summary.commitSha) lines.push(`- Commit: \`${model.summary.commitSha}\``);
+    lines.push('');
+  }
+
+  if (model.acEvaluations && model.acEvaluations.length > 0) {
+    lines.push('## Intent & Outcome');
+    lines.push('');
+    lines.push(`> _Assessed intent:_ ${model.essence}`);
+    lines.push('');
+    lines.push('| # | Acceptance criterion | Verdict | Evidence |');
+    lines.push('|---|---|---|---|');
+    const verdictSymbol = (v: string): string => v === 'met' ? '✓ met' : v === 'missed' ? '✗ missed' : '~ partial';
+    model.acEvaluations.forEach((e, i) => {
+      lines.push(`| ${i + 1} | ${e.criterion} | ${verdictSymbol(e.verdict)} | ${e.evidence} |`);
+    });
     lines.push('');
   }
 

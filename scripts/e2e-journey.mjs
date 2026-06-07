@@ -195,6 +195,12 @@ function writeDemoJson(revision) {
       'GIVEN a cycle WHEN `claude-trail <id> --compact` THEN stdout is exactly the title, Verdict, and Total cost (3 lines)',
       `GIVEN --compact combined with --format json WHEN the command runs THEN it exits non-zero${revision > 1 ? ' and stderr names BOTH flags (added this round on review feedback)' : ''}`,
     ],
+    // Per-AC evaluated output (MVUS req b) — round 1 leaves AC-2 PARTIAL (the error names only one
+    // flag), which is exactly what the operator sends back on; round 2 makes it MET.
+    acEvaluations: [
+      { criterion: 'compact prints exactly the 3-line glance (title / Verdict / Cost)', verdict: 'met', evidence: 'tests/compact-flag.test.ts golden asserts the exact 3-line stdout; default output byte-identical' },
+      { criterion: '--compact + --format json exits non-zero naming the conflict', verdict: revision > 1 ? 'met' : 'partial', evidence: revision > 1 ? 'exits non-zero AND stderr names BOTH --compact and --format json (fixed this round)' : 'exits non-zero, but stderr names only --format json — operator asked it name BOTH flags' },
+    ],
     // ── Rich git-truth sections (the current demo contract — REV-4 / Wave C) ──
     summary: {
       bullets: [
@@ -618,6 +624,9 @@ async function main() {
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await sleep(READ); // let the review page settle + be read, not a pop-in
     await frame(page, 'step12-review-demo', 'Step 12 — the operator reviews the themed demo page');
+    // MVUS req (b): the demo foregrounds the assessed intent + per-AC evaluated output (met/partial/missed).
+    await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict]', 2, 'review demo foregrounds per-AC evaluated output');
+    check(await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count() > 0, 'an AC reads PARTIAL on round 1 — the gap the operator sends back on');
 
     // Send back with a new acceptance criterion.
     await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();

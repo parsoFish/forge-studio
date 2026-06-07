@@ -402,3 +402,80 @@ test('toComparisonModel: strips scratch files from diffStat', () => {
   assert.ok(!cm.diffStat?.includes('fix_plan.md'));
   assert.ok(cm.diffStat?.includes('src/main.ts'));
 });
+
+// ── acEvaluations — validation ────────────────────────────────────────────
+
+test('validateDemoModel: absent acEvaluations is valid', () => {
+  const m = validModel();
+  assert.deepEqual(validateDemoModel(m), []);
+});
+
+test('validateDemoModel: valid acEvaluations array is accepted', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'met', evidence: 'All 3 tests pass.' },
+    { criterion: 'GIVEN A WHEN B THEN C', verdict: 'partial', evidence: 'Feature exists but edge case missing.' },
+    { criterion: 'GIVEN P WHEN Q THEN R', verdict: 'missed', evidence: 'No implementation yet.' },
+  ];
+  assert.deepEqual(validateDemoModel(m), []);
+});
+
+test('validateDemoModel: acEvaluations must be array when set', () => {
+  const m = validModel();
+  // @ts-expect-error — intentionally malformed
+  m.acEvaluations = 'not-an-array';
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('acEvaluations must be an array')));
+});
+
+test('validateDemoModel: rejects acEvaluations entry with blank criterion', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    { criterion: '   ', verdict: 'met', evidence: 'Some evidence' },
+  ];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('acEvaluations[0].criterion')));
+});
+
+test('validateDemoModel: rejects acEvaluations entry with invalid verdict', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    // @ts-expect-error — intentionally malformed
+    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'pass', evidence: 'Some evidence' },
+  ];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('acEvaluations[0].verdict')));
+});
+
+test('validateDemoModel: rejects acEvaluations entry with blank evidence', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'met', evidence: '' },
+  ];
+  const errs = validateDemoModel(m);
+  assert.ok(errs.some((e) => e.includes('acEvaluations[0].evidence')));
+});
+
+test('toComparisonModel: passes through acEvaluations', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'met', evidence: 'Test passes.' },
+  ];
+  const cm = toComparisonModel(m, 'T');
+  assert.equal(cm.acEvaluations?.length, 1);
+  assert.equal(cm.acEvaluations?.[0].verdict, 'met');
+});
+
+test('renderDemoMarkdown: renders acEvaluations section when present', () => {
+  const m = validModel();
+  m.acEvaluations = [
+    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'met', evidence: 'All tests pass.' },
+    { criterion: 'GIVEN A WHEN B THEN C', verdict: 'missed', evidence: 'Not implemented.' },
+  ];
+  const md = renderDemoMarkdown(m);
+  assert.match(md, /## Intent & Outcome/);
+  assert.match(md, /GIVEN X WHEN Y THEN Z/);
+  assert.match(md, /✓ met/);
+  assert.match(md, /✗ missed/);
+  assert.match(md, /All tests pass\./);
+});
