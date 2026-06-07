@@ -28,6 +28,7 @@ import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
+import { drainPendingUnifierItems } from './drain-unifier-items.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig } from './notify.ts';
@@ -119,6 +120,9 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
   // while the daemon was down (operator merged, nothing re-confirmed it).
   await runFinalizeSweep();
+  // ADR 026: at startup, drain any review work-items appended while the daemon
+  // was down (the operator sent back; the cycle must re-run them in place).
+  await runDrainSweep();
 
   const inFlight = new Map<string, Promise<void>>();
   let stop = false;
@@ -244,8 +248,9 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   // Cleared at shutdown so the process can exit cleanly.
   const recoverTimer = setInterval(() => {
     void runRecoverySweep(cfg);
-    // F-W5-7: also re-confirm ready-for-review cycles the operator has merged.
-    void runFinalizeSweep();
+    // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
+    // then (ADR 026) drain any review work-items appended since the last sweep.
+    void runFinalizeSweep().then(() => runDrainSweep());
   }, cfg.recoverIntervalMs);
 
   console.log(
@@ -470,6 +475,27 @@ async function runFinalizeSweep(): Promise<void> {
         console.log(`[serve] finalized ${r.initiativeId} — operator merged the PR → done + reflection`);
       } else if (r.status === 'error') {
         console.error(`[serve] finalize ${r.initiativeId} failed: ${r.detail}`);
+      }
+    }
+  } catch {
+    /* sweep is best-effort — never throw out of setInterval */
+  }
+}
+
+/**
+ * ADR 026 drain sweep: re-run any ready-for-review cycle that has pending
+ * unifier work-items (a review send-back appended them) in the SAME cycle —
+ * reusing the persisted cycle_id, the worktree, and the open PR. Runs AFTER the
+ * finalize sweep so a freshly-merged PR is finalized first (the drain skips
+ * merged PRs). Best-effort — never throws out of the timer.
+ */
+async function runDrainSweep(): Promise<void> {
+  try {
+    for (const r of await drainPendingUnifierItems({ notify: (m) => console.log(`[serve] ${m}`) })) {
+      if (r.status === 'drained') {
+        console.log(`[serve] drained ${r.initiativeId} — review work items run in the same cycle (${r.detail})`);
+      } else if (r.status === 'error') {
+        console.error(`[serve] drain ${r.initiativeId} failed: ${r.detail}`);
       }
     }
   } catch {

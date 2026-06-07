@@ -1188,7 +1188,7 @@ export async function runUnifier(
  * mirrors the dev-loop's per-WI loop. With only UWI-1 present this is
  * behaviour-equivalent to the prior single-mission unifier.
  */
-async function runUnifierItem(args: {
+type UnifierItemArgs = {
   uwi: WorkItem;
   input: CycleInput;
   logger: EventLogger;
@@ -1197,16 +1197,88 @@ async function runUnifierItem(args: {
   qualityGateCmd: string[];
   demoCommand: string[] | undefined;
   feedbackRef: string | undefined;
-}): Promise<{ id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null }> {
-  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand, feedbackRef } = args;
+};
+type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
 
+async function runUnifierItem(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
   // Wipe per-UWI scratch (PROMPT.md / AGENT.md / fix_plan.md) so this UWI's
   // agent doesn't inherit the previous mission's ticked checklist — same reason
   // the dev-loop wipes between WIs.
-  wipeRalphScratch(input.worktreePath);
+  wipeRalphScratch(args.input.worktreePath);
 
-  // The UWI carries its own gate command (UWI-1 the project gate; a code-fix
-  // UWI a sharp per-WI gate) and its own iteration budget.
+  // ADR 026 typed dispatch: a `code-fix` UWI (a review concern that needs real
+  // code) runs the DEV role against the write-a-failing-test-first gate — the
+  // same rigor as PM-originated code — without ever returning to a dev phase.
+  // Everything else (UWI-1, the terminal re-prep, demo/doc tweaks) is packaging.
+  return args.uwi.kind === 'code-fix' ? runCodeFixUwi(args) : runPackagingUwi(args);
+}
+
+/**
+ * Per-iteration callback shared by both UWI roles: flush the live tool sampler,
+ * emit the `unifier` iteration event, and push the branch so the next gate
+ * check sees `origin == HEAD` (the runner autocommits WIP without pushing —
+ * Finding #2, 2026-05-31). Phase stays `unifier` for both roles: a code-fix UWI
+ * is still unifier work (the unifier owns the queue), it just wears the dev role.
+ */
+function unifierIterationHandler(
+  args: UnifierItemArgs,
+  toolSink: ReturnType<typeof makeToolEventSink>,
+): (iteration: number, info: import('../../loops/ralph/runner.ts').AgentIterationInfo) => void {
+  const { input, logger, startEventId } = args;
+  return (iteration, info) => {
+    toolSink.flushIteration(iteration);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: startEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'iteration',
+      iteration,
+      input_refs: [input.worktreePath],
+      output_refs: info.filesChanged,
+      cost_usd: info.costUsd,
+      tokens_in: info.tokensIn,
+      tokens_out: info.tokensOut,
+      metadata: {
+        work_item_id: args.uwi.work_item_id,
+        tools_used: info.toolsUsed,
+        bash_commands: info.bashCommands,
+        last_assistant_text: info.lastAssistantText,
+      },
+    });
+    const iterSync = pushInitiativeBranch(input.worktreePath);
+    if (!iterSync.pushed) {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: startEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [input.worktreePath],
+        output_refs: [],
+        message: 'unifier.iter-sync-push-skipped',
+        metadata: { iteration, reason: iterSync.reason },
+      });
+    }
+  };
+}
+
+function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runnerError: string | null): UnifierItemOutcome {
+  const status: WorkItem['status'] = loopResult?.status === 'complete' && runnerError === null ? 'complete' : 'failed';
+  return {
+    id: uwi.work_item_id,
+    status,
+    result: loopResult,
+    failureClass: status === 'complete' ? null : 'dev-loop-unifier-gate-failed',
+    runnerError,
+  };
+}
+
+/** The packaging role: unify, author demo/PR, prove the 5-gate composed unifier
+ *  gate. UWI-1, the terminal re-prep, and demo/doc tweaks. */
+async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
+  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand, feedbackRef } = args;
+
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
 
@@ -1227,7 +1299,7 @@ async function runUnifierItem(args: {
   // Change C — Phase A per-tool live telemetry sink + unifier agent built together.
   // ADR 024 seam: the orchestrator picks the model tier + tool policy from the
   // declarative PhaseAgentSpec; it authors no intent here.
-  const { agent, toolSink: unifierToolSink } = makeAgentWithTelemetry(
+  const { agent, toolSink } = makeAgentWithTelemetry(
     logger,
     {
       initiativeId: input.initiativeId,
@@ -1292,53 +1364,7 @@ async function runUnifierItem(args: {
         // (Tier 2 thinning 2026-05-26): wedged-detection was removed
         // from the runner entirely; the unifier no longer needs the
         // Infinity override because the check is gone.
-        onIteration: (iteration, info) => {
-          // Phase A — flush the per-tool sampler's coalesced remainder first.
-          unifierToolSink.flushIteration(iteration);
-          logger.emit({
-            initiative_id: input.initiativeId,
-            parent_event_id: startEventId,
-            phase: 'unifier',
-            skill: 'developer-unifier',
-            event_type: 'iteration',
-            iteration,
-            input_refs: [input.worktreePath],
-            output_refs: info.filesChanged,
-            cost_usd: info.costUsd,
-            tokens_in: info.tokensIn,
-            tokens_out: info.tokensOut,
-            metadata: {
-              tools_used: info.toolsUsed,
-              bash_commands: info.bashCommands,
-              last_assistant_text: info.lastAssistantText,
-            },
-          });
-          // Finding #2 (2026-05-31 dogfood): the runner's per-iteration
-          // autocommit (loops/ralph/runner.ts) commits a `forge-autocommit:` WIP
-          // safety-net WITHOUT pushing, and the unifier loop previously only
-          // pushed once at close — so mid-loop local HEAD sat one commit ahead of
-          // origin and the gate's strict `branches_in_sync` sub-check
-          // (origin == HEAD, orchestrator/pr.ts) was unsatisfiable for the rest of
-          // the loop. The unifier then looped to its cap on `branches-not-in-sync`
-          // even though the work was delivered. Push after every iteration (the
-          // strip is append-only, so this is always a fast-forward) so the NEXT
-          // gate check sees origin == HEAD. Mirrors the per-WI loop, which already
-          // pushes per WI. No-origin projects (claude-harness) no-op the push.
-          const iterSync = pushInitiativeBranch(input.worktreePath);
-          if (!iterSync.pushed) {
-            logger.emit({
-              initiative_id: input.initiativeId,
-              parent_event_id: startEventId,
-              phase: 'unifier',
-              skill: 'developer-unifier',
-              event_type: 'log',
-              input_refs: [input.worktreePath],
-              output_refs: [],
-              message: 'unifier.iter-sync-push-skipped',
-              metadata: { iteration, reason: iterSync.reason },
-            });
-          }
-        },
+        onIteration: unifierIterationHandler(args, toolSink),
       },
       agent,
     );
@@ -1346,14 +1372,93 @@ async function runUnifierItem(args: {
     runnerError = err instanceof Error ? err.message : String(err);
   }
 
-  const status: WorkItem['status'] = loopResult?.status === 'complete' && runnerError === null ? 'complete' : 'failed';
-  return {
-    id: uwi.work_item_id,
-    status,
-    result: loopResult,
-    failureClass: status === 'complete' ? null : 'dev-loop-unifier-gate-failed',
-    runnerError,
-  };
+  return unifierItemClassify(uwi, loopResult, runnerError);
+}
+
+/**
+ * The code-fix role (ADR 026): a review concern that needs real code is held to
+ * dev-grade rigor — the DEV system prompt + the UWI's SHARP gate +
+ * `failOnHollowIter0Gate` ON (the write-a-failing-test-first discipline). At
+ * ready-for-review the branch already has commits, so iter-0 never false-fails
+ * as `gate-too-loose`; a sharp gate (red until the concern is fixed) drives a
+ * real red→green loop, while the project-gate fallback simply iterates with the
+ * dev role. The terminal re-prep (packaging) UWI re-authors demo/PR after.
+ */
+async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
+  const { uwi, input, logger, startEventId, qualityGateCmd } = args;
+
+  const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
+  const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
+  const uwiAbsPath = resolve(unifierItemsDir(input.worktreePath), `${uwi.work_item_id}.md`);
+  const uwiRelPath = `.forge/unifier-items/${uwi.work_item_id}.md`;
+
+  // Stamp the DEV workspace from the UWI spec (dev-role PROMPT.md/AGENT.md).
+  prepareDevWorkspace({
+    initiativeId: input.initiativeId,
+    workItemSpecPath: uwiAbsPath,
+    workItemSpecRelPath: uwiRelPath,
+    worktreePath: input.worktreePath,
+    iterationBudget: itemCap,
+    // Per CONTRACTS.md C19: no $ cap — iteration cap is the only bound.
+    costBudgetUsd: Number.POSITIVE_INFINITY,
+  });
+
+  const forgeRoot = resolve(import.meta.dirname, '..', '..');
+  const systemPrompt = buildDevSystemPrompt(forgeRoot);
+  const sdkQueryFn = sdkQuery as unknown as QueryFn;
+
+  const { agent, toolSink } = makeAgentWithTelemetry(
+    logger,
+    {
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      workItemId: uwi.work_item_id,
+    },
+    {
+      model: DEV_MODEL,
+      allowedTools: [...DEV_ALLOWED_TOOLS],
+      disallowedTools: [...DEV_DISALLOWED_TOOLS],
+      permissionMode: 'acceptEdits',
+      systemPrompt,
+      maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
+      queryFn: sdkQueryFn,
+    },
+  );
+
+  let lastGateErrored = false;
+  const gate = makeQualityGateFromCmd(
+    input.worktreePath,
+    [...itemGateCmd],
+    (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo); },
+    { requiredPaths: uwi.creates ?? [] },
+  );
+
+  let loopResult: LoopResult | null = null;
+  let runnerError: string | null = null;
+  try {
+    loopResult = await runRalph(
+      {
+        workItemSpecPath: uwiAbsPath,
+        worktreePath: input.worktreePath,
+        initiativeBudget: { iterations: itemCap, usd: Number.POSITIVE_INFINITY },
+        brainQueryResults: '',
+        cycleId: logger.cycleId,
+        initiativeId: input.initiativeId,
+        qualityGate: gate,
+        requiredPaths: uwi.creates ?? [],
+        gateErrored: () => lastGateErrored,
+        // failOnHollowIter0Gate defaults TRUE — the dev-grade sharp-gate discipline.
+        onIteration: unifierIterationHandler(args, toolSink),
+      },
+      agent,
+    );
+  } catch (err) {
+    runnerError = err instanceof Error ? err.message : String(err);
+  }
+
+  return unifierItemClassify(uwi, loopResult, runnerError);
 }
 
 type ComposedUnifierGateInput = {

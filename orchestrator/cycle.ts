@@ -187,21 +187,16 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         // wiping the work items the dev-loop is about to run. Snapshot the dir
         // OUTSIDE the git worktree (so the rebase can't touch the backup) and
         // restore it afterward. (Unifier resume runs zero WIs → harmless no-op.)
-        const wiResumeDir = resolve(inputWithGate.worktreePath, '.forge', 'work-items');
-        const wiResumeBak = `${inputWithGate.worktreePath}.work-items-resume-bak`;
-        const preserveWorkItems = existsSync(wiResumeDir);
-        if (preserveWorkItems) {
-          rmSync(wiResumeBak, { recursive: true, force: true });
-          cpSync(wiResumeDir, wiResumeBak, { recursive: true });
-        }
-        const rebase = rebasePreservedBranchOntoMain(inputWithGate.worktreePath);
-        if (preserveWorkItems) {
-          if (!existsSync(wiResumeDir) || readdirSync(wiResumeDir).length === 0) {
-            mkdirSync(wiResumeDir, { recursive: true });
-            cpSync(wiResumeBak, wiResumeDir, { recursive: true });
-          }
-          rmSync(wiResumeBak, { recursive: true, force: true });
-        }
+        // ADR 019 + 026: the rebase replay clobbers gitignored untracked dirs.
+        // Preserve BOTH the dev WI specs (`.forge/work-items`, the
+        // resume-from-developer input) AND the unifier queue
+        // (`.forge/unifier-items`, the pending review UWIs the drain is about to
+        // run) across the rebase, restoring any the rebase emptied.
+        const rebase = preservingForgeScratch(
+          inputWithGate.worktreePath,
+          ['.forge/work-items', '.forge/unifier-items'],
+          () => rebasePreservedBranchOntoMain(inputWithGate.worktreePath),
+        );
         logger.emit({
           initiative_id: input.initiativeId,
           phase: 'orchestrator',
@@ -566,6 +561,39 @@ async function openPrInline(
 function newCycleId(initiativeId: string): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `${ts}_${initiativeId}`;
+}
+
+/**
+ * ADR 019/026: run `fn` (the resume rebase) with the named worktree-relative
+ * `.forge/` scratch dirs preserved. A `git rebase` replay clobbers gitignored
+ * untracked files, so these dirs (the dev WI specs + the unifier queue) are
+ * backed up outside the worktree first and restored afterward IF the rebase
+ * emptied them. Dirs absent before the rebase are skipped. Best-effort restore
+ * — a missing backup never fails the cycle.
+ */
+function preservingForgeScratch<T>(worktreePath: string, relDirs: string[], fn: () => T): T {
+  const backups = relDirs.map((rel) => {
+    const dir = resolve(worktreePath, rel);
+    const bak = `${worktreePath}.${rel.replace(/[\\/]/g, '-')}-resume-bak`;
+    const present = existsSync(dir);
+    if (present) {
+      rmSync(bak, { recursive: true, force: true });
+      cpSync(dir, bak, { recursive: true });
+    }
+    return { dir, bak, present };
+  });
+  try {
+    return fn();
+  } finally {
+    for (const b of backups) {
+      if (!b.present) continue;
+      if (!existsSync(b.dir) || readdirSync(b.dir).length === 0) {
+        mkdirSync(b.dir, { recursive: true });
+        cpSync(b.bak, b.dir, { recursive: true });
+      }
+      rmSync(b.bak, { recursive: true, force: true });
+    }
+  }
 }
 
 /**

@@ -61,16 +61,24 @@ export function nextUnifierItemId(worktreePath: string): string {
 
 /**
  * The UWIs the unifier still has to run, in dependency (topological) order:
- * everything whose `status` is not `complete`. On a fresh cycle this is just
+ * everything whose `status` is exactly `pending`. On a fresh cycle this is just
  * the seeded `UWI-1`; on a review drain (ADR 026) the appended `UWI-2+` plus
- * the terminal re-prep UWI. A dependency on an already-complete UWI (filtered
- * out here) is treated as a satisfied root by `topologicalOrder`, so a concern
- * UWI that `depends_on:[UWI-1]` still runs once UWI-1 is done.
+ * the terminal re-prep UWI. `complete` UWIs are done; `failed` UWIs are NOT
+ * re-run automatically (a failed concern is operator territory — re-running it
+ * forever would be a retry loop). A dependency on an already-complete UWI
+ * (filtered out here) is treated as a satisfied root by `topologicalOrder`, so a
+ * concern UWI that `depends_on:[UWI-1]` still runs once UWI-1 is done.
  */
 export function pendingUnifierItems(worktreePath: string): WorkItem[] {
   const { items } = readUnifierItems(worktreePath);
-  const pending = items.filter((w) => w.status !== 'complete');
+  const pending = items.filter((w) => w.status === 'pending');
   return topologicalOrder(pending);
+}
+
+/** True if any UWI in the queue is in a `failed` state (drain must defer to the
+ *  operator rather than auto-retry — see {@link pendingUnifierItems}). */
+export function hasFailedUnifierItem(worktreePath: string): boolean {
+  return readUnifierItems(worktreePath).items.some((w) => w.status === 'failed');
 }
 
 /**
