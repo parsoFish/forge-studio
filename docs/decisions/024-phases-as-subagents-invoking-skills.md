@@ -222,4 +222,4 @@ phase is migrated.
 - [ADR 007 — Markdown artifact flow](./007-markdown-artifact-flow.md), [ADR 008 — JSONL event log](./008-jsonl-event-log.md) — the inter-phase protocol the seam writes to.
 - `orchestrator/pm-invocation.ts`, `orchestrator/dev-invocation.ts`, `orchestrator/unifier-invocation.ts`, `orchestrator/reflector-invocation.ts` — the current hand-rolled invocations the seam shrinks.
 - `orchestrator/architect-runner.ts` — the in-UI architect runner (ADR 020), an early instance of "a runner spawns turns that invoke a skill."
-- [`ARCHITECTURE.md`](../../ARCHITECTURE.md), [`docs/architecture/c4/`](../_archive/architecture/c4/) — to be revamped (Phase H) to render this seam.
+- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) — to be revamped (Phase H) to render this seam. (The legacy c4/ diagrams were archived prior art, removed 2026-06-07.)

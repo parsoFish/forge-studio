@@ -11,10 +11,6 @@
  *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  *   forge brain lint  [--scope <s>]         structural integrity checks on brain/
- *
- * (The structural graph (per C20-C22) is owned by the real `safishamsi/graphify`
- * Python CLI directly — `cd brain && graphify {update,query,path,explain} ...`.
- * forge does NOT carry a graph shim. See skills/brain-graph/SKILL.md.)
  */
 
 import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, openSync } from 'node:fs';
@@ -152,7 +148,6 @@ Usage:
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
-                                          (structural graph owned by the real safishamsi/graphify CLI — run: bash scripts/brain-graphify-all.sh)
   forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
                                           Bring up the forge operator UI (foreground; Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
@@ -1020,11 +1015,6 @@ function cmdBrainLint(rest: string[]): void {
   );
   process.exit(result.exitCode);
 }
-
-// `cmdBrainGraph*` removed 2026-05-23 — the structural graph is owned by the
-// real `safishamsi/graphify` Python CLI (per C20-C22). The S1.4 deterministic
-// walker (`orchestrator/brain-graph.ts`) was a stop-gap; the migration to the
-// real tool lives in `skills/brain-graph/SKILL.md`. Use `graphify` directly.
 
 // ---------------------------------------------------------------------------
 // forge architect run <session-id>

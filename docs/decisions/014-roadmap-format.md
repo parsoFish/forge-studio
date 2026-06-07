@@ -3,7 +3,7 @@
 **Status:** Superseded (2026-06-03)
 **Date:** 2026-05-08
 
-> The architect no longer writes `roadmap.md`. The roadmap is a derived view of the `_queue/` manifests and their `depends_on_initiatives` chain — not a file the architect authors. See [`docs/architecture/refocus-architecture/README.md`](../architecture/refocus-architecture/README.md) and [`docs/phases/architect.md`](../phases/architect.md). The `roadmap.md` schema defined below is historical prior art; nothing in the current implementation writes it.
+> The architect no longer writes `roadmap.md`. The roadmap is a derived view of the `_queue/` manifests and their `depends_on_initiatives` chain — not a file the architect authors. See [`docs/phases/architect.md`](../phases/architect.md). The `roadmap.md` schema defined below is historical prior art; nothing in the current implementation writes it. (The refocus-architecture design docs were removed 2026-06-07 — see git history.)
 
 ## Context
 

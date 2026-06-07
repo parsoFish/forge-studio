@@ -19,7 +19,7 @@ Take the architect's confirmed initiative and decompose its Given/When/Then acce
 
 Validation enforced by [`orchestrator/work-item.ts:validateWorkItem`](../../orchestrator/work-item.ts) before the orchestrator dispatches work items to the developer loop.
 
-### Optional WI fields (S3 refinement 2026-05-20 / ADR 015 §3a / [CONTRACTS.md C5](../_archive/planning/2026-05-20-refinement/CONTRACTS.md))
+### Optional WI fields (S3 refinement 2026-05-20 / ADR 015 §3a / CONTRACTS.md C5, archived planning doc removed 2026-06-07)
 
 Four optional fields tighten the dev-loop signal on larger initiatives. All four are omit-on-undefined — a WI without any of them serialises byte-identically to the legacy shape:
 
@@ -30,7 +30,7 @@ Four optional fields tighten the dev-loop signal on larger initiatives. All four
 | `verification_artifact` | `string` | Path the dev-loop must produce that the gate exercises. Must appear in `files_in_scope`. |
 | `creates` | `string[]` | Structured marker for files this WI creates from scratch. Subset of `files_in_scope`. Bench's `one_creator_per_file` + `files_real_or_explicitly_new` consume this. |
 
-`demo_hook` is **NOT** a WI field — it's initiative-level only ([CONTRACTS.md](../_archive/planning/2026-05-20-refinement/CONTRACTS.md) C15b).
+`demo_hook` is **NOT** a WI field — it's initiative-level only (CONTRACTS.md C15b, archived planning doc removed 2026-06-07).
 
 ## Skills
 
@@ -63,7 +63,7 @@ If the PM emits a WI whose acceptance criteria or files_in_scope have no groundi
 > Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles. (WI-shape validation lives on in `orchestrator/work-item.ts`.)
 
 `benchmarks/project-manager/` (removed)
-- `initiatives.json` — five fixtures, one per managed project, calibrated against project-specific brain themes. (See the former `benchmarks/project-manager/README.md`, removed 2026-05-25.) Per [CONTRACTS.md C11](../_archive/planning/2026-05-20-refinement/CONTRACTS.md), `score.ts` parses both the old `expected.{min,max}_work_items` shape and the new manifest-topology-derived shape for one release.
+- `initiatives.json` — five fixtures, one per managed project, calibrated against project-specific brain themes. (See the former `benchmarks/project-manager/README.md`, removed 2026-05-25.) Per CONTRACTS.md C11 (archived planning doc, removed 2026-06-07), `score.ts` parses both the old `expected.{min,max}_work_items` shape and the new manifest-topology-derived shape for one release.
 - `score.ts` — invokes the PM skill against fixtures and scores the 9-criteria rubric + 1 gate; pass threshold 0.7. The gate (`feature_id_in_manifest`) trips → 0 score. (`feature_id_in_manifest` was a bench-only guard; it is not present in the live `orchestrator/work-item.ts` validator.)
 - `scoring.ts` / `sdk.ts` / unit tests — pure scoring functions and the SDK invocation shim, both unit-tested. Three new deterministic criteria: `one_creator_per_file`, `quality_gate_cmd_present`, `files_real_or_explicitly_new` (each consumes a structured field — no NLP).
 

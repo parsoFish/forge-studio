@@ -281,7 +281,6 @@ ${projectListing}
 
 - \`forge brain index --write\` — regenerate this file from the filesystem.
 - \`forge brain lint\` — run structural integrity checks; flags orphans, malformed frontmatter, broken citations, contamination, oversized themes.
-- \`bash scripts/brain-graphify-all.sh\` — rebuild Brain 1 (forge-dev) graphify index; \`--all\` also rebuilds all project (Brain 3) graphs. Brain 2 (cycles) is not graphified.
 - \`brain-query --scope=<scope>\` / \`brain-ingest\` skills — query the brain / ingest new sources.
 `;
 

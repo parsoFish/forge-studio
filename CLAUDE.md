@@ -122,47 +122,6 @@ Where to look for as-built detail:
 - Per-project patterns: [`brain/projects/<project>/themes/`](./brain/projects/).
 - Operator UI: [`forge-ui/`](./forge-ui/) (launched by `forge watch`).
 
-## graphify
-
-Three knowledge graphs after the Tier 4 brain restructure (2026-05-26):
-- **Brain 1 (forge-dev):** `brain/forge-dev/graphify-out/` — forge TypeScript source + ADRs + decision/reference themes (~3,375 nodes).
-- **Brain 2 (cycles):** `brain/cycles/graphify-out/` — cycle-derived themes + raw archives (~519 nodes).
-- **Brain 3 (per-project):** `projects/<name>/brain/graphify-out/` — whole-project knowledge (source code + brain themes). trafficGame: 2,578 nodes; terraform-provider-betterado: 6,015 nodes; claude-harness: 553 nodes.
-
-The wrapper script `bash scripts/brain-graphify-all.sh` rebuilds Brain 1 + 2; use `--all` to also rebuild all managed project brains.
-
-**Build commands** (all three brains):
-```bash
-# Brain 1 — forge source + ADRs (GRAPHIFY_OUT overrides the default graphify-out/ subdir)
-GRAPHIFY_OUT=brain/forge-dev/graphify-out GRAPHIFY_FORCE=1 graphify update .
-
-# Brain 2 — cycles themes + raw archives
-GRAPHIFY_OUT=graphify-out GRAPHIFY_FORCE=1 graphify update brain/cycles
-
-# Brain 3 — whole project (code + brain themes); output lands at brain/graphify-out/
-# Each project needs a .graphifyignore excluding node_modules/, dist/, brain/graphify-out/
-GRAPHIFY_OUT=brain/graphify-out graphify update projects/<name>
-```
-
-**Query by domain** (use the right graph for the question):
-```bash
-# Forge code / orchestration architecture
-graphify query "<question>" --graph brain/forge-dev/graphify-out/graph.json
-
-# Cycle patterns / antipatterns / archived cycle evidence
-graphify query "<question>" --graph brain/cycles/graphify-out/graph.json
-
-# Project-specific architecture
-graphify query "<question>" --graph projects/<name>/brain/graphify-out/graph.json
-```
-
-The graphs are a **power-tool, not a mandate** (2026-05-24 rebuild-review): brain-query against
-markdown themes alone is enough for most lookups. Reach for a graph when grep is too noisy or you
-want a cross-cluster relationship — see
-[`skills/brain-graph/SKILL.md`](./skills/brain-graph/SKILL.md) for the query / path / explain commands.
-
-The post-commit hook calls `bash scripts/brain-graphify-all.sh` automatically. Manual invocation is only needed if you skip the hook.
-
 ## forge-ui DOM-as-metrics convention
 
 Every load-bearing UI state in `forge-ui/` is mirrored to `data-*`

@@ -1,12 +1,10 @@
 # Architecture
 
 > This document is the **narrative / intended** architecture. The
-> **canonical current architecture** is
-> [`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/)
-> — the north-star this code is aligned to. The 2026-05-17 as-built
-> snapshot is archived prior art at
-> [`docs/_archive/architecture/as-built-snapshot-2026-05-17.md`](./docs/_archive/architecture/as-built-snapshot-2026-05-17.md).
-> ADRs in [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
+> **canonical current architecture** is captured in [`docs/phases/`](./docs/phases/),
+> [`docs/decisions/`](./docs/decisions/), and [`docs/forge-project-contract.md`](./docs/forge-project-contract.md).
+> The 2026-05-17 as-built snapshot and the pre-simplification refocus-architecture design docs
+> were archived prior art (removed 2026-06-07 — see git history). ADRs in [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
 >
 > **Reconciled 2026-05-16**, refreshed **2026-05-17** post-closure. Key
 > divergences from the idealised description below: (a) **5 phases are
@@ -44,9 +42,8 @@ the planner's work items.
 > **High-level view (revamped 2026-05-31).** The diagram below is the canonical
 > one-glance picture, aligned to the **agent-composes-skills** model
 > ([ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)). It
-> supersedes the legacy swimlane `docs/architecture/forge2.0.drawio` (archived at
-> `docs/_archive/architecture/`). The structural reference is
-> [`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/).
+> supersedes the legacy swimlane diagram (archived, removed 2026-06-07 — see git history).
+> The structural reference is [`docs/phases/`](./docs/phases/) and [`docs/decisions/`](./docs/decisions/).
 
 ```mermaid
 flowchart TB
@@ -180,8 +177,7 @@ Its only handoff to forge is the files it writes
 (`_queue/pending/INIT-*.md`); the scheduler picks those up unattended.
 The roadmap is **not** written by the architect — it is a derived view
 of the `_queue/` manifests + their `depends_on_initiatives` chain (see
-[`docs/architecture/refocus-architecture/`](./docs/architecture/refocus-architecture/)
-+ [`docs/phases/architect.md`](./docs/phases/architect.md)). Design of record:
+[`docs/phases/architect.md`](./docs/phases/architect.md)). Design of record:
 [`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)
 (resolves retro Q4; US-3.1 / US-1.0).
 

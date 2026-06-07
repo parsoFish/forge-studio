@@ -1,6 +1,6 @@
 ---
 name: brain-query
-description: Efficient lookup against the brain. Consults the structural graph for Brain 1/3 (per-brain graphify-out/), then keyword-scans themes. Logs gaps so the next ingest pass can fill them. Accepts a scope parameter to target the right brain: forge-dev, cycles, project, or all.
+description: Efficient lookup against the brain via markdown keyword scan. Logs gaps so the next ingest pass can fill them. Accepts a scope parameter to target the right brain: forge-dev, cycles, project, or all.
 phase: brain
 surface: unattended
 model: claude-haiku-4-5
@@ -18,12 +18,12 @@ This skill is invoked **first** by every other skill, per [ADR 010](../../docs/d
 
 ## Scope routing
 
-| Scope | What to search | Graph available? |
-|---|---|---|
-| `forge-dev` | `brain/forge-dev/` themes + forge source tree | Yes — `brain/forge-dev/graphify-out/graph.json` |
-| `cycles` | `brain/cycles/themes/` + category indexes | No — keyword scan only (BRN-3: cycles graph dropped) |
-| `project` | `<project-repo>/brain/themes/` + `profile.md` | Yes — `<project-repo>/brain/graphify-out/graph.json` |
-| `all` | union of all three (emit a scope-missing warning) | forge-dev + project graphs; cycles keyword-scan |
+| Scope | What to search |
+|---|---|
+| `forge-dev` | `brain/forge-dev/themes/` + category indexes |
+| `cycles` | `brain/cycles/themes/` + category indexes |
+| `project` | `<project-repo>/brain/themes/` + `profile.md` |
+| `all` | union of all three (emit a scope-missing warning) |
 
 **Role defaults** (the calling skill or orchestrator should supply these):
 
@@ -50,7 +50,6 @@ This skill is invoked **first** by every other skill, per [ADR 010](../../docs/d
     answer: string;             // synthesised answer
     confidence: 'high' | 'medium' | 'low';
     sources: string[];          // brain file paths (theme pages only — not raw, not category indexes)
-    structural_neighbours?: string[]; // theme ids found via graph (Brain 1/3 only; informational)
     gap?: boolean;              // true if confidence is low or no source found
   }>;
 }
@@ -61,46 +60,24 @@ For each `gap: true` answer, append to `_logs/<cycle-id>/brain-gaps.jsonl`.
 ## Event-log entries to emit
 
 - `brain-query.start` — with the questions.
-- `brain-query.graph-hit` — one event per question where the graph contributed at least one source (Brain 1/3 only).
 - `brain-query.hit` — one event per question that found high/medium-confidence sources.
 - `brain-query.gap` — one event per question with low/no confidence.
 - `brain-query.end` — summary.
 
 ## Process
 
-### For Brain 1 (forge-dev) and Brain 3 (project) — graph-assisted
+### Keyword scan (all scopes)
 
-1. Run ONE `graphify` call against the scope's graph. Pick the operation by question phrasing:
-   - structural / "what bridges A and B" → `graphify path "<A>" "<B>" --graph <path>`
-   - "describe/what's near <X>" → `graphify explain "<X>" --graph <path>`
-   - "what implements/uses <X>" → `graphify affected "<X>" --graph <path>`
-   - free-form content question → `graphify query "<question>" --graph <path>`
-
-   The graph returns a small set of candidate node ids (paths). Read those files with the `Read` tool (typically 2–5 themes).
-
-2. **Synthesise + cite.** Write a one-paragraph answer preserving exact terminology from the cited themes. Cite by file path. Score confidence:
+1. Read the relevant category index for the scope:
+   - Brain 1 (forge-dev): `brain/forge-dev/decisions.md` or `brain/forge-dev/reference.md`
+   - Brain 2 (cycles): `brain/cycles/patterns.md`, `antipatterns.md`, `operations.md`, or `decisions.md`
+   - Brain 3 (project): `brain/profile.md` + `brain/themes/` listing
+2. Read 2–5 theme files whose slugs or one-liners match the question keywords.
+3. **Synthesise + cite.** Write a one-paragraph answer preserving exact terminology from the cited themes. Cite by file path. Score confidence:
    - **High:** ≥ 2 corroborating themes, all on-topic.
    - **Medium:** 1 source on-topic.
    - **Low / gap:** no good source — set `gap: true`.
-
-3. **Fallback (rare).** If the graph returns an empty subgraph AND the question seems answerable from the brain, read the category index or `brain/INDEX.md` to find candidates. Grep is NOT an option — the graph is the index. After one `graphify` + one `Read` of an index, if still nothing, mark `gap: true`.
-
-### For Brain 2 (cycles) — keyword scan only
-
-Brain 2 has no graph (cycles themes have 0 relational edges — BRN-3). Use keyword scan:
-
-1. Read the relevant category index (`brain/cycles/patterns.md`, `antipatterns.md`, `operations.md`, or `decisions.md`) to find candidate slugs.
-2. Read 2–5 matching theme files.
-3. Synthesise + cite as above.
-
-## Node id conventions (Brains 1 and 3)
-
-| Brain | Theme node id |
-|---|---|
-| forge-dev | `brain/forge-dev/themes/<slug>.md` or `<forge-source-path>` |
-| project | `brain/themes/<slug>.md` (relative to the project repo root) |
-
-Category indexes: `brain/forge-dev/{decisions,reference}.md`; project: `brain/profile.md`.
+4. If still nothing after reading the category index + 2–3 theme candidates, mark `gap: true`.
 
 ## Constraints
 
@@ -112,9 +89,3 @@ Category indexes: `brain/forge-dev/{decisions,reference}.md`; project: `brain/pr
 - **Gaps are logged, not silently failed.** If the brain doesn't know, the brain learns by the next ingest pass. Naming-the-absence without `gap: true` is the worst failure mode.
 - **No web fallback in this skill.** Broader research is the *calling* skill's responsibility.
 - **Fast model by default.** Haiku is the default; per-skill override via the calling skill's frontmatter.
-
-## Sources
-
-- `brain/forge-dev/graphify-out/graph.json` — structural index for forge code + ADRs (Brain 1).
-- `<project-repo>/brain/graphify-out/graph.json` — structural index for project brain + project source tree (Brain 3).
-- See [`skills/brain-graph/SKILL.md`](../brain-graph/SKILL.md) for how each graph is built and maintained.
