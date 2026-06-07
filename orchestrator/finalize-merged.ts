@@ -25,6 +25,7 @@ import { getPaths } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
+import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
 
@@ -67,6 +68,17 @@ async function defaultFinalizeOne(input: CycleInput, logger: EventLogger): Promi
   const closure = await runClosure(input, logger, 'pr-open');
   if (closure.merged) {
     await runReflector(input, logger);
+    // report.md was written once at cycle.end (pr-open). Now that the merge is
+    // confirmed + finalized, regenerate it so the report reflects the MERGED
+    // state (baseline/diff render against the merge commit) instead of staying
+    // permanently "Status: pr-open / no merge event recorded".
+    if (input.cycleId) {
+      try {
+        writeCycleReport({ cycleId: input.cycleId });
+      } catch {
+        /* report regeneration is best-effort — never block finalize on it */
+      }
+    }
     return true;
   }
   return false;
