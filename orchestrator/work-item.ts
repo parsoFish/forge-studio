@@ -49,7 +49,12 @@ export type WorkItem = {
   body: string;
 };
 
-const WORK_ITEM_ID_PATTERN = /^WI-\d+$/;
+// `WI-<n>` are dev work items (PM-emitted). `UWI-<n>` are unifier work items
+// (the unifier's own queue, ADR 026): UWI-1 is the static unify/PR-prep mission;
+// UWI-2+ are appended from review feedback. Both reuse the same WorkItem
+// machinery (parse/serialize/validate/topo/read/write) — only the id prefix and
+// the directory (.forge/unifier-items/) differ.
+const WORK_ITEM_ID_PATTERN = /^U?WI-\d+$/;
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
 
