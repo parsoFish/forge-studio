@@ -57,13 +57,8 @@ function fxCouncilTranscript(overrides: Partial<CouncilTranscript> = {}): Counci
   return {
     flags: [],
     escalations: [],
-    perCritic: [
-      { critic: 'ceo', verdict: { flags: [], escalations: [] }, costUsd: 0.01 },
-      { critic: 'eng', verdict: { flags: [], escalations: [] }, costUsd: 0.01 },
-      { critic: 'design', verdict: { flags: [], escalations: [] }, costUsd: 0.01 },
-      { critic: 'dx', verdict: { flags: [], escalations: [] }, costUsd: 0.01 },
-    ],
-    totalCostUsd: 0.04,
+    perCritic: [],
+    totalCostUsd: 0,
     ...overrides,
   };
 }
@@ -94,9 +89,11 @@ test('renderPlanDoc: produces a markdown document with all required sections', (
   // Cwc Amendment 1: brief + interview section
   assert.match(doc, /## Operator brief \+ interview/);
   assert.match(doc, /## Brain context/);
-  assert.match(doc, /## Council transcript/);
   assert.match(doc, /## Proposed initiatives/);
   assert.match(doc, /## Aggregate footprint/);
+  // Council transcript and open escalations sections removed (MVP per MVUS).
+  assert.ok(!/## Council transcript/.test(doc), 'Council transcript must not appear in rendered PLAN.md');
+  assert.ok(!/## Open escalations/.test(doc), 'Open escalations must not appear in rendered PLAN.md');
   // ARCH-4: verdict placeholder removed (verdict via UI bridge, not PLAN.md annotation)
   assert.ok(!/<!-- verdict:/.test(doc), 'VERDICT_PLACEHOLDER must not appear in rendered PLAN.md');
 });
@@ -179,40 +176,6 @@ test('writePlanDoc: writes to <projectRoot>/_architect/<session-id>/PLAN.md per 
   assert.ok(existsSync(path), 'PLAN.md was written');
   const body = readFileSync(path, 'utf8');
   assert.match(body, /# Architect plan — 2026-05-23T11-22-33/);
-});
-
-// ---------------------------------------------------------------------------
-// 10. renderPlanDoc — council transcript is faithfully embedded
-// ---------------------------------------------------------------------------
-
-test('renderPlanDoc: council escalations + flags surface in transcript section verbatim', () => {
-  const session = fxSession({
-    council: fxCouncilTranscript({
-      flags: [{ id: 'missing-rollback', description: 'No rollback section', appliedFix: 'Added rollback note.' }],
-      escalations: [{
-        critic: 'ceo',
-        question: 'One initiative or two?',
-        options: [
-          { label: 'one', rationale: 'easier review' },
-          { label: 'two', rationale: 'parallel work' },
-        ],
-      }],
-    }),
-  });
-  const doc = renderPlanDoc(session);
-  // Per-critic blocks
-  assert.match(doc, /### CEO critic/i);
-  assert.match(doc, /### Eng critic/i);
-  assert.match(doc, /### Design critic/i);
-  assert.match(doc, /### DX critic/i);
-  // Flag content
-  assert.match(doc, /missing-rollback/);
-  assert.match(doc, /No rollback section/);
-  assert.match(doc, /Added rollback note/);
-  // Escalation content
-  assert.match(doc, /One initiative or two\?/);
-  assert.match(doc, /easier review/);
-  assert.match(doc, /parallel work/);
 });
 
 // ---------------------------------------------------------------------------
@@ -477,25 +440,6 @@ test('renderPlanHtml: no exploration/C27 fields in output (ARCH-4 — dead paths
   assert.ok(!/Initiative type/.test(html), 'Initiative type meta line must not appear');
 });
 
-test('renderPlanHtml: escalation options render as cards (no naked bullet lists)', () => {
-  const html = renderPlanHtml(fxSession({
-    open_escalations: [{
-      critic: 'ceo',
-      question: 'One initiative or two?',
-      options: [
-        { label: 'one', rationale: 'easier review' },
-        { label: 'two', rationale: 'parallel work' },
-      ],
-    }],
-  }));
-  // Critic chip + question + comparative option cards (Phase C structure)
-  assert.match(html, /class="critic-chip">ceo</);
-  assert.match(html, /One initiative or two\?/);
-  assert.match(html, /class="option"/);
-  assert.match(html, /<span class="label">one<\/span>/);
-  assert.match(html, /<div class="rationale">easier review<\/div>/);
-  assert.match(html, /<span class="label">two<\/span>/);
-});
 
 test('renderPlanHtml: HTML-escapes operator content so manifest body cannot break the page', () => {
   const html = renderPlanHtml(fxSession({
@@ -531,85 +475,3 @@ test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md', () => {
   assert.match(html, /<title>PLAN — 2026-05-24T00-00-00 — project-y<\/title>/);
 });
 
-// ---------------------------------------------------------------------------
-// 17. Phase C — comparative design-decision panels (open_escalations)
-// ---------------------------------------------------------------------------
-
-function fxOpenEscalations() {
-  return [
-    {
-      critic: 'design',
-      question: 'How should the cost breakdown surface?',
-      options: [
-        { label: 'Toggled panel', rationale: 'Keeps the canvas clean.', visual: { kind: 'mockup-html' as const, content: '<div style="padding:8px;font:12px sans-serif">$1.46 total</div>', caption: 'Top-right card' }, tradeoffs: { pros: ['Clean canvas'], cons: ['One more click'] } },
-        { label: 'Always-on sidebar', rationale: 'Zero clicks to see cost.', visual: { kind: 'mockup-html' as const, content: '<aside style="border-left:2px solid #888;padding:6px">cost rail</aside>' }, tradeoffs: { pros: ['Always visible'], cons: ['Eats space'] } },
-      ],
-    },
-    {
-      critic: 'eng',
-      question: 'Where should per-tool events be persisted?',
-      options: [
-        { label: 'JSONL append', rationale: 'Durable + replayable.', visual: { kind: 'diagram' as const, content: 'agent -> emit -> events.jsonl -> bridge -> UI' } },
-        { label: 'Ephemeral channel', rationale: 'Leaner log.', visual: { kind: 'code' as const, content: 'channel.publish(toolEvent)', language: 'ts' } },
-      ],
-    },
-    {
-      critic: 'ceo',
-      question: 'Ship MVP first or full scope?',
-      options: [
-        { label: 'MVP first', rationale: 'Faster feedback.' },
-        { label: 'Full scope', rationale: 'Fewer follow-ups.' },
-      ],
-    },
-  ];
-}
-
-test('renderPlanHtml: design decisions render as comparative panels with per-option visuals', () => {
-  const html = renderPlanHtml(fxSession({ open_escalations: fxOpenEscalations() }));
-  // Read-only preview section (resolution moved to the gate) + per-decision identity
-  assert.match(html, /data-section="design-decisions-preview"/);
-  assert.match(html, /data-readonly="true"/);
-  assert.match(html, /data-decision-count="3"/);
-  assert.match(html, /data-escalation-id="esc-0"/);
-  assert.match(html, /data-escalation-question="How should the cost breakdown surface\?"/);
-  // Per-option identity + visual kind
-  assert.match(html, /data-option-label="Toggled panel"/);
-  assert.match(html, /data-option-visual-kind="mockup-html"/);
-  assert.match(html, /data-option-visual-kind="diagram"/);
-  assert.match(html, /data-option-visual-kind="code"/);
-  assert.match(html, /data-option-visual-kind="none"/); // the CEO MVP option has no visual
-  // Visuals render in the right containers
-  assert.match(html, /<iframe class="mockup" sandbox=""/);
-  assert.match(html, /<pre class="diagram">/);
-  assert.match(html, /<pre class="code" data-lang="ts">/);
-  // Tradeoffs render; the preview is READ-ONLY (resolution moved to the gate),
-  // so it carries no radio inputs (operator pref 2026-06-01).
-  assert.match(html, /<ul class="tradeoffs">/);
-  assert.match(html, /<li class="pro">Clean canvas<\/li>/);
-  assert.ok(!/<input type="radio"/.test(html), 'PLAN.html preview must not duplicate the gate radios');
-});
-
-test('renderPlanHtml: mockup HTML is sandboxed (escaped into srcdoc, no live parent script)', () => {
-  const html = renderPlanHtml(fxSession({
-    open_escalations: [{
-      critic: 'design',
-      question: 'q',
-      options: [{ label: 'A', rationale: 'r', visual: { kind: 'mockup-html', content: '<script>alert(1)</script><b>hi</b>' } }],
-    }],
-  }));
-  // sandbox attribute present (empty = no scripts / no same-origin)
-  assert.match(html, /<iframe class="mockup" sandbox=""/);
-  // the script tag must be escaped inside the srcdoc attribute, never a live tag in the parent doc
-  assert.ok(!html.includes('<script>alert(1)</script>'), 'raw script must not appear in the parent document');
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-});
-
-test('renderPlanHtml: backward-compatible with plain options (no visual / tradeoffs)', () => {
-  const html = renderPlanHtml(fxSession({
-    open_escalations: [{ critic: 'ceo', question: 'pick one', options: [{ label: 'A', rationale: 'ra' }, { label: 'B', rationale: 'rb' }] }],
-  }));
-  assert.match(html, /data-section="design-decisions-preview"/);
-  assert.match(html, /data-option-label="A"/);
-  assert.match(html, /data-option-visual-kind="none"/);
-  assert.ok(!html.includes('<iframe class="mockup"'), 'no mockup iframe when options carry no visual');
-});

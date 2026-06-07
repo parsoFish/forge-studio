@@ -378,22 +378,6 @@ export type ArchitectQuestion = {
   options: { label: string; description: string }[];
 };
 
-export type ArchitectEscalation = {
-  id: string;
-  critic: string;
-  question: string;
-  // The gate deliberately omits the council's per-option `visual` field: the
-  // visual renders inside the PLAN.html iframe the gate already shows, not on
-  // the option cards. So this type is intentionally narrower than the runner's
-  // escalation shape — not stale.
-  options: {
-    label: string;
-    rationale: string;
-    /** Phase C — short pros/cons surfaced on each option card (council `tradeoffs`). */
-    tradeoffs?: { pros?: string[]; cons?: string[] };
-  }[];
-};
-
 export type ArchitectSessionSummary = {
   sessionId: string;
   project: string;
@@ -402,7 +386,6 @@ export type ArchitectSessionSummary = {
   round: number;
   idea: string;
   questions: ArchitectQuestion[] | null;
-  escalations: ArchitectEscalation[] | null;
   planUrl: string | null;
 };
 
@@ -442,7 +425,6 @@ export type PlanVerdict = {
   project: string;
   sessionId: string;
   kind: 'approve' | 'revise' | 'reject';
-  selections?: Record<string, string>;
   rationale?: string;
 };
 

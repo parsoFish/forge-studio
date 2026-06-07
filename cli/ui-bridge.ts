@@ -856,10 +856,6 @@ async function handleArchitect(
         s.phase === 'awaiting-answers'
           ? readJsonFile<ArchitectQuestion[]>(join(dir, 'questions.json'))
           : null;
-      const escalations =
-        s.phase === 'awaiting-verdict'
-          ? readJsonFile<unknown[]>(join(dir, 'escalations.json'))
-          : null;
       const planUrl = existsSync(join(dir, 'PLAN.html'))
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
@@ -871,7 +867,6 @@ async function handleArchitect(
         round: s.round,
         idea: s.idea,
         questions,
-        escalations,
         planUrl,
       };
     });
@@ -986,7 +981,6 @@ async function handleArchitect(
         project?: string;
         sessionId?: string;
         kind?: 'approve' | 'revise' | 'reject';
-        selections?: Record<string, string>;
         rationale?: string;
       };
       if (!body.project || !body.sessionId || !body.kind) {
@@ -1005,16 +999,9 @@ async function handleArchitect(
       }
 
       if (body.kind === 'approve') {
-        const selections = body.selections ?? {};
-        writeFileSync(join(dir, 'selections.json'), JSON.stringify(selections, null, 2));
-        const escalations = readJsonFile<Array<{ id: string; question: string }>>(join(dir, 'escalations.json')) ?? [];
-        const lines = ['## Resolved design decisions', ''];
-        for (const [id, label] of Object.entries(selections)) {
-          const esc = escalations.find((e) => e.id === id);
-          lines.push(`- ${esc ? esc.question : id}: **${label}**`);
+        if (body.rationale) {
+          writeFileSync(join(dir, 'feedback.md'), body.rationale.trim() + '\n');
         }
-        if (body.rationale) { lines.push('', body.rationale); }
-        writeFileSync(join(dir, 'feedback.md'), lines.join('\n') + '\n');
         writeStatus(dir, { ...status, phase: 'finalizing' });
         spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
       } else if (body.kind === 'revise') {

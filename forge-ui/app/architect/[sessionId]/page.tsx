@@ -99,7 +99,6 @@ export default function ArchitectSessionPage({
                 project={session.project}
                 sessionId={session.sessionId}
                 planUrl={session.planUrl}
-                escalations={session.escalations ?? []}
                 idea={session.idea}
               />
             )}

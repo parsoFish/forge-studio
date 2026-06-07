@@ -142,12 +142,6 @@ function writePlan(sid, round) {
     <p>Operator brief: a 3-line glance view (title / verdict / cost) for claude-trail, default output unchanged.</p>
     <div class="card"><h2>AC-1 — renderCompact() + --compact flag</h2><p>GIVEN a cycle WHEN --compact THEN print title + verdict + total cost only (3 lines).</p></div>
     <div class="card"><h2>AC-2 — flag-conflict error paths</h2><p>--compact errors when combined with --format json / --out / --since. The PM sizes the work items directly off these acceptance criteria.</p></div></body></html>`);
-  writeFileSync(join(dir, 'escalations.json'), JSON.stringify([
-    { id: 'esc-0', critic: 'design', question: 'What does --compact show when the cycle has no verdict yet?',
-      options: [{ label: 'Placeholders', rationale: 'Keep the strict 3-line shape: "Verdict: (unknown)", "Total: $0.00".' }, { label: 'Error', rationale: 'Refuse — --compact is for completed cycles only.' }] },
-    { id: 'esc-1', critic: 'eng', question: 'Should --compact compose with --out (write to file)?',
-      options: [{ label: 'Reject --out', rationale: 'Pure terminal-glance; stay stdout-only + single-cycle.' }, { label: 'Support --out', rationale: 'Pipe a compact summary to a file for CI/Slack.' }] },
-  ], null, 2));
   writeStatus(sid, { phase: 'awaiting-verdict', round, idea: IDEA });
 }
 
@@ -465,18 +459,14 @@ async function main() {
     await burst(sid, ['Read', 'Edit']);
     await frame(page, 'step04b-planning', 'Step 4 — planning stage: the architect drafts with the answers folded in');
 
-    // STEP 5 — draft → review council → plan options from the council's feedback.
-    archEvent(sid, 'tool_use', 'tool.council', { tool: 'council:ceo/eng/design/dx' });
-    await burst(sid, ['council', 'council', 'council']);
+    // STEP 5 — draft → plan ready for operator review.
     writePlan(sid, 1);
-    archEvent(sid, 'log', 'plan-emitted (council surfaced 2 design decisions)');
+    archEvent(sid, 'log', 'plan-emitted (1 initiative(s), 0 escalation(s))');
     await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
-    // MVUS artifact phase: the rich PLAN.html renders in the sandboxed iframe, and the
-    // council's design decisions surface as reviewable option-visuals (the plan mockups).
+    // MVUS artifact phase: the rich PLAN.html renders in the sandboxed iframe.
     check(await page.locator('[data-plan-iframe]').count() > 0, 'plan gate renders the rich PLAN.html iframe');
-    await countAtLeast(page, '[data-escalation-id]', 1, 'plan surfaces ≥1 design decision / option-visual (mockup)');
     await sleep(READ);
-    await frame(page, 'step05-council-plan', 'Step 5 — the council reviewed the draft; the plan presents options shaped by its feedback');
+    await frame(page, 'step05-council-plan', 'Step 5 — the architect drafted the plan; the operator reviews it');
 
     // STEP 6 — on operator feedback, the architect reruns the last step.
     await page.locator('[data-component="plan-gate"] [data-field="rationale"], [data-section="plan-gate"] [data-field="rationale"]').first()
@@ -484,26 +474,23 @@ async function main() {
     await frame(page, 'step06-send-back', 'Step 6 — the operator sends the plan back with feedback');
     await page.locator('[data-action="revise-plan"]').click();
     await sleep(ACT);
-    // The architect reruns the last step (re-council + re-plan); the screen
+    // The architect reruns the last step (re-plan); the screen
     // transitions live through "drafting" back to a fresh PLAN gate.
     writeStatus(sid, { phase: 'drafting', round: 3, idea: IDEA });
     archEvent(sid, 'start', 'architect turn (phase=drafting) — rerun with operator feedback');
     await page.waitForSelector('[data-section="plan-gate"]', { state: 'detached', timeout: 8000 }).catch(() => {});
-    await burst(sid, ['Read', 'council', 'council']);
+    await burst(sid, ['Read', 'Read']);
     writePlan(sid, 2);
     archEvent(sid, 'log', 'plan-emitted (revised — --compact also rejects --out)');
-    await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="false"]', { timeout: 15000 });
+    await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="true"]', { timeout: 15000 });
     await sleep(READ);
     await frame(page, 'step06b-replan', 'Step 6 — the architect reran the last step; the revised plan is re-presented');
 
     // STEP 7 — on operator approval → PM. Approve, then take the natural
     // in-UI transition ("Watch it build →") back to the dashboard (client-side,
     // no reload) — the journey stays one continuous clip.
-    await page.locator('[data-escalation-id="esc-0"] input[type="radio"]').first().check();
-    await page.locator('[data-escalation-id="esc-1"] input[type="radio"]').first().check();
-    await page.waitForSelector('[data-section="plan-gate"][data-decisions-resolved="true"]', { timeout: 5000 });
     await sleep(ACT);
-    await frame(page, 'step07-approve', 'Step 7 — the operator resolves the decisions and approves');
+    await frame(page, 'step07-approve', 'Step 7 — the operator approves the plan');
     await page.locator('[data-action="approve-plan"]').click();
     await sleep(ACT);
     // Emulate finalize → the autonomous loop claims the initiative.

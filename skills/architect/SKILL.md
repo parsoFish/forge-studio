@@ -14,7 +14,7 @@ Collaborate with the operator during ideation. Emit **one `PLAN.md` operator art
 
 The forge UI is the **sole** operator surface (ADR 023); the old terminal host was retired. Your host is the **in-UI runner** (`orchestrator/architect-runner.ts`) — file-checkpointed, one bounded turn at a time. **You do NOT call `AskUserQuestion`.** Interview is **file-based handoff**:
 - **Interview step** — return `{ done, questions? }` where `questions` is an array of `{ question, header ≤12 chars, options[]: { label, description } }`. Runner writes `questions.json`; operator answers come back in `answers.json`. Set `done: true` once scope/success-signal/constraint ambiguity is resolved.
-- **Draft step** — return initiatives as structured JSON; runner builds manifests, runs council, writes PLAN.md/PLAN.html. On **approve**, resolved design decisions feed one more draft turn before manifests are promoted to `_queue/pending/`.
+- **Draft step** — return initiatives as structured JSON; runner builds manifests, writes PLAN.md/PLAN.html. On **approve**, the runner promotes manifests directly to `_queue/pending/`.
 
 The runner never auto-starts or auto-approves — every turn requires an explicit operator action.
 
@@ -124,7 +124,7 @@ Unresolved items become `[pending]` coverage items (count toward the 5-round cap
 
 ### Y-statement decision log
 
-Every resolved design decision — from operator answer, default, or council escalation — must be recorded in the PLAN:
+Every resolved design decision — from operator answer or default — must be recorded in the PLAN:
 > "In the context of **X** [situation], facing **Y** [concern], we chose **Z** [decision] to achieve **G** [goal], accepting tradeoff **T**."
 
 All five fields required. If you cannot fill all five, the decision is not resolved.
@@ -133,7 +133,6 @@ All five fields required. If you cannot fill all five, the decision is not resol
 
 - `architect.start` — ideation begun.
 - `architect.brain-query` — every brain query (ADR 010).
-- `architect.council-invoked` — when delegating to `architect-llm-council`.
 - `architect.user-decision` — every taste decision the operator makes.
 - `architect.plan-emitted` — when PLAN.md is written.
 - `architect.end` — session complete.
@@ -151,7 +150,7 @@ Runner appends a per-turn task block specifying **interview step** or **draft st
   - Y-statement decision log for every resolved design decision.
   - Explicit `depends_on` where a later initiative needs an earlier one merged first.
 
-The runner owns all mechanics: renders questions, builds manifests, runs council, writes PLAN.md/PLAN.html, emits events, and (only on operator **approve**) promotes manifests. You never call `AskUserQuestion`, `runCouncil`, or `writePlanDoc`.
+The runner owns all mechanics: renders questions, builds manifests, writes PLAN.md/PLAN.html, emits events, and (only on operator **approve**) promotes manifests. You never call `AskUserQuestion` or `writePlanDoc`.
 
 ## Constraints
 

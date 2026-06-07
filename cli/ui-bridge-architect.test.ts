@@ -44,10 +44,6 @@ before(async () => {
     }),
   );
   writeFileSync(join(dir, 'PLAN.html'), '<!doctype html><title>PLAN</title><h1>dark mode</h1>');
-  writeFileSync(
-    join(dir, 'escalations.json'),
-    JSON.stringify([{ id: 'esc-0', critic: 'design', question: 'Default theme?', options: [] }]),
-  );
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
 });
 
@@ -56,14 +52,14 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-test('GET /api/architect/sessions lists the session with escalations + planUrl', async () => {
+test('GET /api/architect/sessions lists the session with planUrl (no escalations field)', async () => {
   const body = (await (await fetch(`${url}/api/architect/sessions`)).json()) as {
-    sessions: Array<{ sessionId: string; phase: string; escalations: unknown[]; planUrl: string | null }>;
+    sessions: Array<{ sessionId: string; phase: string; escalations?: unknown; planUrl: string | null }>;
   };
   const s = body.sessions.find((x) => x.sessionId === sid);
   assert.ok(s, 'session present');
   assert.equal(s!.phase, 'awaiting-verdict');
-  assert.equal(s!.escalations.length, 1);
+  assert.ok(!('escalations' in s!), 'escalations field must be absent from session summary');
   assert.ok(s!.planUrl);
 });
 
@@ -80,18 +76,15 @@ test('GET /api/architect/file serves PLAN.html as text/html with a path-escape g
   assert.equal(escape.status, 400);
 });
 
-test('POST /api/plan-verdict approve writes selections + resolved-decisions + advances to finalizing', async () => {
+test('POST /api/plan-verdict approve advances to finalizing (no selections.json written)', async () => {
   const res = await fetch(`${url}/api/plan-verdict`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ project: 'demo', sessionId: sid, kind: 'approve', selections: { 'esc-0': 'Follow OS' } }),
+    body: JSON.stringify({ project: 'demo', sessionId: sid, kind: 'approve' }),
   });
   assert.equal(res.status, 200);
   const dir = sessionDir();
-  assert.ok(existsSync(join(dir, 'selections.json')));
-  const fb = readFileSync(join(dir, 'feedback.md'), 'utf8');
-  assert.match(fb, /Resolved design decisions/);
-  assert.match(fb, /Follow OS/);
+  assert.ok(!existsSync(join(dir, 'selections.json')), 'selections.json must NOT be written');
   const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
   assert.equal(status.phase, 'finalizing');
 });

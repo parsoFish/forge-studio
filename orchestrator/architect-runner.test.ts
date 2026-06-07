@@ -27,7 +27,7 @@ import {
   readStatus,
   listArchitectSessions,
   type ArchitectStatus,
-  type CouncilQueryFn,
+  type QueryFn,
 } from './architect-runner.ts';
 import { createLogger } from './logging.ts';
 import { parseManifest } from './manifest.ts';
@@ -42,7 +42,7 @@ function* nothing(): Generator<never> {}
 function makeQueryFn(spec: {
   interview?: unknown;
   draft?: unknown;
-}): CouncilQueryFn {
+}): QueryFn {
   return ({ prompt }) => {
     let structured: unknown = null;
     if (prompt.includes('the interview step')) structured = spec.interview;
@@ -51,16 +51,6 @@ function makeQueryFn(spec: {
       yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: structured };
     }
     return structured === null ? (nothing() as unknown as AsyncIterable<unknown>) : gen();
-  };
-}
-
-/** A council queryFn that always returns the given verdict (flags/escalations). */
-function makeCouncilFn(verdict: { flags: unknown[]; escalations: unknown[] }): CouncilQueryFn {
-  return () => {
-    async function* gen(): AsyncGenerator<unknown> {
-      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: verdict };
-    }
-    return gen();
   };
 }
 
@@ -160,19 +150,6 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
       ],
     },
   });
-  const councilQueryFn = makeCouncilFn({
-    flags: [],
-    escalations: [
-      {
-        critic: 'design',
-        question: 'Default theme on first load?',
-        options: [
-          { label: 'Follow OS', rationale: 'Least surprise.' },
-          { label: 'Light', rationale: 'Brand default.' },
-        ],
-      },
-    ],
-  });
 
   const result = await runArchitectTurn({
     sessionId,
@@ -180,7 +157,6 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn,
     logger: logger(logsRoot, sessionId),
   });
 
@@ -192,9 +168,8 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
   const drafts = readdirSync(manifestsDir).filter((f) => f.endsWith('.md'));
   assert.equal(drafts.length, 1);
   assert.match(drafts[0], /^INIT-\d{4}-\d{2}-\d{2}-dark-mode-toggle\.md$/);
-  // Escalations keyed for the gate.
-  const esc = JSON.parse(readFileSync(join(sessionDir, 'escalations.json'), 'utf8'));
-  assert.equal(esc[0].id, 'esc-0');
+  // No escalations.json written (council removed).
+  assert.ok(!existsSync(join(sessionDir, 'escalations.json')));
   // Nothing in the queue yet.
   assert.ok(!existsSync(join(queueRoot, 'pending')));
   assert.equal(readStatus(sessionDir)?.phase, 'awaiting-verdict');
@@ -213,7 +188,7 @@ test('F-W5-1: structured interview/draft steps must NOT run the SDK in plan mode
     JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
   );
   const capturedOptions: Array<Record<string, unknown>> = [];
-  const queryFn: CouncilQueryFn = ({ prompt, options }) => {
+  const queryFn: QueryFn = ({ prompt, options }) => {
     capturedOptions.push((options ?? {}) as Record<string, unknown>);
     let structured: unknown = null;
     if (prompt.includes('the interview step')) structured = { done: true };
@@ -236,15 +211,12 @@ test('F-W5-1: structured interview/draft steps must NOT run the SDK in plan mode
     }
     return gen();
   };
-  const councilQueryFn = makeCouncilFn({ flags: [], escalations: [] });
-
   const result = await runArchitectTurn({
     sessionId,
     projectRoot,
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn,
     logger: logger(logsRoot, sessionId),
   });
 
@@ -273,19 +245,14 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
     phase: 'finalizing',
   });
-  // Prior escalations + the operator's selection + a feedback block.
-  writeFileSync(
-    join(sessionDir, 'escalations.json'),
-    JSON.stringify([{ id: 'esc-0', critic: 'design', question: 'Default theme?', options: [] }]),
-  );
-  writeFileSync(join(sessionDir, 'selections.json'), JSON.stringify({ 'esc-0': 'Follow OS' }));
+  // Seed feedback.md directly (the bridge writes it on approve).
   writeFileSync(
     join(sessionDir, 'feedback.md'),
     '## Resolved design decisions\n\n- Default theme: Follow OS\n',
   );
 
   let draftPrompt = '';
-  const queryFn: CouncilQueryFn = ({ prompt, options }) => {
+  const queryFn: QueryFn = ({ prompt, options }) => {
     if (prompt.includes('draft the initiative')) draftPrompt = prompt;
     async function* gen(): AsyncGenerator<unknown> {
       const structured = prompt.includes('draft the initiative')
@@ -307,14 +274,6 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
     void options;
     return gen();
   };
-  // The council must NOT run on finalize — the operator already resolved its
-  // decisions; re-running it would re-litigate settled choices (2026-05-30
-  // user-confirmed flow: council runs once, before selections). Spy proves it.
-  let councilCalls = 0;
-  const councilQueryFn: CouncilQueryFn = (...args) => {
-    councilCalls += 1;
-    return makeCouncilFn({ flags: [], escalations: [] })(...args);
-  };
 
   const result = await runArchitectTurn({
     sessionId,
@@ -322,12 +281,10 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn,
     logger: logger(logsRoot, sessionId),
   });
 
   assert.equal(result.phase, 'committed');
-  assert.equal(councilCalls, 0, 'council must not run on the finalize pass (decisions already resolved)');
   assert.equal(result.promotedManifestPaths?.length, 1);
   // The resolved decision was fed into the draft prompt.
   assert.match(draftPrompt, /Resolved design decisions/);
@@ -346,10 +303,10 @@ test('drafting: architect emits cross-initiative build order → manifest depend
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
     phase: 'finalizing',
   });
-  // Resolved-decisions block makes the finalize pass skip the council.
+  // Seed feedback.md so finalize reads resolved decisions.
   writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- none\n');
 
-  const queryFn: CouncilQueryFn = ({ prompt }) => {
+  const queryFn: QueryFn = ({ prompt }) => {
     async function* gen(): AsyncGenerator<unknown> {
       const structured = prompt.includes('draft the initiative')
         ? {
@@ -385,7 +342,6 @@ test('drafting: architect emits cross-initiative build order → manifest depend
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
     logger: logger(logsRoot, sessionId),
   });
 
@@ -433,16 +389,11 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
     'Given x exists, when y is done, then z is observable.',
   ].join('\n');
   writeFileSync(join(manifestsDir, 'INIT-2026-05-29-seeded.md'), seeded);
-  // Resolved decisions on disk.
-  writeFileSync(
-    join(sessionDir, 'escalations.json'),
-    JSON.stringify([{ id: 'esc-0', critic: 'design', question: 'Default theme?', options: [] }]),
-  );
-  writeFileSync(join(sessionDir, 'selections.json'), JSON.stringify({ 'esc-0': 'Follow OS' }));
-
+  // Seed feedback.md (operator rationale written by the bridge on approve).
+  writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- Default theme: Follow OS\n');
   // A queryFn that FAILS the test if any draft/SDK turn is attempted.
   let sdkCalls = 0;
-  const queryFn: CouncilQueryFn = () => {
+  const queryFn: QueryFn = () => {
     sdkCalls += 1;
     async function* gen(): AsyncGenerator<unknown> {
       yield { type: 'result', total_cost_usd: 0, structured_output: null };
@@ -456,7 +407,6 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
     logger: logger(logsRoot, sessionId),
   });
 
@@ -510,7 +460,7 @@ test('runner streams tool_use events from the agent stream (drives the architect
     JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
   );
   // queryFn yields an assistant message carrying tool_use blocks, THEN a result.
-  const queryFn: CouncilQueryFn = ({ prompt }) => {
+  const queryFn: QueryFn = ({ prompt }) => {
     const structured = prompt.includes('the interview step')
       ? { done: true }
       : {
@@ -546,7 +496,6 @@ test('runner streams tool_use events from the agent stream (drives the architect
     logsRoot,
     queueRoot,
     queryFn,
-    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
     logger: logger(logsRoot, sessionId),
   });
 
@@ -596,7 +545,7 @@ test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async
   );
 
   // queryFn yields a brain/ Read tool_use block before the structured result.
-  const queryFn: CouncilQueryFn = ({ prompt }) => {
+  const queryFn: QueryFn = ({ prompt }) => {
     const structured = prompt.includes('the interview step')
       ? { done: true }
       : {
@@ -632,7 +581,6 @@ test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async
   const result = await runArchitectTurn({
     sessionId, projectRoot, logsRoot, queueRoot,
     queryFn,
-    councilQueryFn: makeCouncilFn({ flags: [], escalations: [] }),
     logger: logger(logsRoot, sessionId),
   });
 

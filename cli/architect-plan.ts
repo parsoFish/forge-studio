@@ -32,7 +32,6 @@
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import type { Flag, Escalation, CriticVerdict, OptionVisual } from '../skills/architect-llm-council/council.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -54,9 +53,9 @@ export type ProposedInitiative = {
 };
 
 export type CouncilTranscript = {
-  flags: Flag[];
-  escalations: Escalation[];
-  perCritic: { critic: string; verdict: CriticVerdict; costUsd: number }[];
+  flags: unknown[];
+  escalations: unknown[];
+  perCritic: unknown[];
   totalCostUsd: number;
 };
 
@@ -98,8 +97,6 @@ export type ArchitectSession = {
   council: CouncilTranscript;
   /** One or more drafted initiatives — NOT yet written to `_queue/pending/`. */
   initiatives: ProposedInitiative[];
-  /** Optional list of unresolved taste decisions the operator must settle. */
-  open_escalations?: Escalation[];
 };
 
 // ---------------------------------------------------------------------------
@@ -118,9 +115,8 @@ export function renderPlanDoc(session: ArchitectSession): string {
   // Operator quick-start — the plan is reviewed + approved on the in-UI plan gate.
   parts.push(
     '> **Operator review.** This plan is presented on the `/architect/' + session.session_id +
-      '` screen in the forge UI. Read each section there, resolve the council\'s design ' +
-      'decisions, and click **approve**, **revise**, or **reject** — the runner finalizes ' +
-      'your verdict, promoting the manifests to the queue only on approve.',
+      '` screen in the forge UI. Read each section there, then click **approve**, **revise**, ' +
+      'or **reject** — the runner finalizes your verdict, promoting the manifests to the queue only on approve.',
   );
   parts.push('');
 
@@ -156,65 +152,6 @@ export function renderPlanDoc(session: ArchitectSession): string {
     }
   }
   parts.push('');
-
-  // --- Council transcript (aggregate flags + escalations, then one block per critic) ---
-  parts.push('## Council transcript');
-  parts.push('');
-  parts.push(`Total cost: \`$${session.council.totalCostUsd.toFixed(4)}\``);
-  parts.push('');
-
-  // Aggregate flags (auto-applied across the council)
-  if (session.council.flags.length > 0) {
-    parts.push('### Flags (auto-applied)');
-    parts.push('');
-    for (const f of session.council.flags) {
-      parts.push(`- \`${f.id}\` — ${f.description}. _Applied:_ ${f.appliedFix}`);
-    }
-    parts.push('');
-  }
-
-  // Aggregate escalations (de-duplicated across the council)
-  if (session.council.escalations.length > 0) {
-    parts.push('### Escalations (taste decisions surfaced)');
-    parts.push('');
-    for (const e of session.council.escalations) {
-      parts.push(`- (${e.critic}) ${e.question}`);
-      for (const o of e.options) {
-        parts.push(`  - **${o.label}** — ${o.rationale}`);
-      }
-    }
-    parts.push('');
-  }
-
-  for (const cr of session.council.perCritic) {
-    parts.push(`### ${capitaliseCritic(cr.critic)} critic`);
-    parts.push('');
-    parts.push(`Cost: \`$${cr.costUsd.toFixed(4)}\``);
-    parts.push('');
-    if (cr.verdict.flags.length === 0) {
-      parts.push('- _no mechanical flags_');
-    } else {
-      parts.push('**Flags (auto-resolved):**');
-      parts.push('');
-      for (const f of cr.verdict.flags) {
-        parts.push(`- \`${f.id}\` — ${f.description}. _Applied:_ ${f.appliedFix}`);
-      }
-    }
-    parts.push('');
-    if (cr.verdict.escalations.length === 0) {
-      parts.push('- _no taste escalations_');
-    } else {
-      parts.push('**Escalations (taste decisions):**');
-      parts.push('');
-      for (const e of cr.verdict.escalations) {
-        parts.push(`- ${e.question}`);
-        for (const o of e.options) {
-          parts.push(`  - **${o.label}** — ${o.rationale}`);
-        }
-      }
-    }
-    parts.push('');
-  }
 
   // --- Proposed initiatives ---
   parts.push('## Proposed initiatives');
@@ -262,23 +199,6 @@ export function renderPlanDoc(session: ArchitectSession): string {
   }
   parts.push('');
 
-  // --- Open escalations (operator must resolve on the /architect gate) ---
-  const open = session.open_escalations ?? [];
-  if (open.length > 0) {
-    parts.push('## Open escalations');
-    parts.push('');
-    parts.push('_These taste decisions the council surfaced are unresolved. Resolve each ' +
-      'on the `/architect` plan gate — your selection is applied at approval._');
-    parts.push('');
-    for (const e of open) {
-      parts.push(`- (${e.critic}) ${e.question}`);
-      for (const o of e.options) {
-        parts.push(`  - **${o.label}** — ${o.rationale}`);
-      }
-    }
-    parts.push('');
-  }
-
   // --- Footer breadcrumb ---
   parts.push('---');
   parts.push('');
@@ -289,12 +209,6 @@ export function renderPlanDoc(session: ArchitectSession): string {
   parts.push('');
 
   return parts.join('\n');
-}
-
-function capitaliseCritic(name: string): string {
-  if (name === 'dx') return 'DX';
-  if (name === 'ceo') return 'CEO';
-  return name[0]?.toUpperCase() + name.slice(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,58 +227,6 @@ function esc(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-/**
- * Phase C — render an option's visual (mockup / diagram / code) for the
- * comparative panel. `mockup-html` goes in a sandboxed iframe (no scripts, no
- * same-origin); diagram/code render as preformatted text to stay zero-dep.
- */
-function renderOptionVisual(v?: OptionVisual): string {
-  if (!v || v.kind === 'none' || !v.content) return '';
-  const cap = v.caption ? `<div class="cap">${esc(v.caption)}</div>` : '';
-  if (v.kind === 'mockup-html') {
-    return `<div class="opt-visual"><iframe class="mockup" sandbox="" title="mockup" srcdoc="${esc(v.content)}"></iframe>${cap}</div>`;
-  }
-  if (v.kind === 'code') {
-    const lang = v.language ? ` data-lang="${esc(v.language)}"` : '';
-    return `<div class="opt-visual"><pre class="code"${lang}><code>${esc(v.content)}</code></pre>${cap}</div>`;
-  }
-  return `<div class="opt-visual"><pre class="diagram">${esc(v.content)}</pre>${cap}</div>`;
-}
-
-function renderTradeoffs(t?: { pros?: string[]; cons?: string[] }): string {
-  const pros = t?.pros ?? [];
-  const cons = t?.cons ?? [];
-  if (pros.length === 0 && cons.length === 0) return '';
-  return `<ul class="tradeoffs">${pros.map((p) => `<li class="pro">${esc(p)}</li>`).join('')}${cons.map((c) => `<li class="con">${esc(c)}</li>`).join('')}</ul>`;
-}
-
-/**
- * Phase C — one escalated decision as a READ-ONLY comparative panel: the
- * question + its 2-4 options side by side, each card showing rationale,
- * tradeoffs, and the option's visual. Resolution happens on the `/architect`
- * plan-gate cards (the single interactive surface — operator pref 2026-06-01);
- * this preview deliberately has NO radio input. `data-*` mirrors the
- * decision/option identity for automation.
- */
-function renderEscalationCard(e: Escalation, i: number): string {
-  const opts = e.options
-    .map(
-      (o) => `      <div class="option" data-option-label="${esc(o.label)}" data-option-visual-kind="${esc(o.visual?.kind ?? 'none')}">
-        <div class="opt-head"><span class="label">${esc(o.label)}</span></div>
-        <div class="rationale">${esc(o.rationale)}</div>
-        ${renderTradeoffs(o.tradeoffs)}
-        ${renderOptionVisual(o.visual)}
-      </div>`,
-    )
-    .join('\n');
-  return `    <div class="escalation" data-decision="${i}" data-escalation-id="esc-${i}" data-escalation-question="${esc(e.question)}">
-      <div class="q"><span class="critic-chip">${esc(e.critic)}</span>${esc(e.question)}</div>
-      <div class="options">
-${opts}
-      </div>
-    </div>`;
 }
 
 /**
@@ -417,7 +279,6 @@ export function renderPlanHtml(session: ArchitectSession): string {
   const totalIterations = session.initiatives.reduce((s, i) => s + i.iteration_budget, 0);
   const knownCost = session.initiatives.filter((i) => typeof i.estimated_cost_usd === 'number');
   const totalEstimated = knownCost.reduce((s, i) => s + (i.estimated_cost_usd ?? 0), 0);
-  const open = session.open_escalations ?? [];
 
   // Per-initiative card: AC list from body + body drawer
   function renderInitiativeCard(init: ProposedInitiative, idx: number): string {
@@ -608,64 +469,6 @@ export function renderPlanHtml(session: ArchitectSession): string {
   }
   .body-drawer summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); padding: 0.2rem 0; }
   .body-drawer[open] summary { margin-bottom: 0.5rem; }
-  /* ── Design decision cards ── */
-  .decisions { display: grid; gap: 1.25rem; }
-  .escalation {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-  }
-  .escalation .q { font-weight: 600; margin-bottom: 0.65rem; font-size: 0.95rem; }
-  .escalation .critic-chip {
-    display: inline-block;
-    font-size: 0.67rem;
-    background: var(--accent);
-    color: white;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    margin-right: 0.45rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .escalation .options {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: stretch;
-  }
-  .escalation .option {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem 0.9rem;
-    font-size: 0.83rem;
-  }
-  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
-  .escalation .option .label { font-weight: 700; font-size: 0.88rem; }
-  .escalation .option .rationale { color: var(--muted); font-size: 0.82rem; }
-  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.55rem 0 0; font-size: 0.77rem; display: grid; gap: 0.15rem; }
-  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.3rem; }
-  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.3rem; }
-  .escalation .option .opt-visual { margin-top: 0.6rem; }
-  .escalation .option .opt-visual iframe.mockup { width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117; display: block; }
-  .escalation .option .opt-visual pre.code,
-  .escalation .option .opt-visual pre.diagram {
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
-    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
-  }
-  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.7rem; font-style: italic; margin-top: 0.3rem; }
-  /* ── Council accordions ── */
-  details.council-critic {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.4rem 0.9rem;
-    margin: 0.4rem 0;
-  }
-  details.council-critic summary { cursor: pointer; font-weight: 500; font-size: 0.88rem; padding: 0.25rem 0; }
-  details.council-critic[open] summary { margin-bottom: 0.5rem; }
   /* ── Brain context ── */
   .brain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.3rem; }
   .brain-list li { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid #d2a8ff; border-radius: 4px; padding: 0.35rem 0.75rem; font-size: 0.83rem; }
@@ -702,15 +505,13 @@ export function renderPlanHtml(session: ArchitectSession): string {
       ${knownCost.length === session.initiatives.length && session.initiatives.length > 0
         ? `<div class="stat-card"><div class="num">$${totalEstimated.toFixed(0)}</div><div class="lbl">est. cost</div></div>`
         : ''}
-      ${open.length > 0 ? `<div class="stat-card" style="border-color: var(--warn)"><div class="num" style="color: var(--warn)">${open.length}</div><div class="lbl">decisions</div></div>` : ''}
     </div>
   </div>
 
   <div class="notice">
     <strong>Read-only viewer.</strong> Review on the
     <code>/architect/${esc(session.session_id)}</code> screen in the forge UI —
-    approve, revise, or reject there. Your selections on design decisions are
-    applied at approval.
+    approve, revise, or reject there.
   </div>
 
   <!-- ── 2. INITIATIVE CARDS ── -->
@@ -719,19 +520,7 @@ export function renderPlanHtml(session: ArchitectSession): string {
 ${session.initiatives.map((init, idx) => renderInitiativeCard(init, idx)).join('\n')}
   </div>
 
-  <!-- ── 3. DESIGN DECISIONS (comparative cards) ── -->
-  ${open.length === 0 ? '' : `
-  <h2>Design decisions <span class="badge">${open.length} unresolved</span></h2>
-  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.85rem">
-    The council surfaced the following taste decisions. Options are shown side-by-side
-    with pros/cons and visual mockups where available. Resolve each one on the
-    <code>/architect</code> plan gate; your selection is applied at approval.
-  </p>
-  <div class="decisions" data-section="design-decisions-preview" data-readonly="true" data-decision-count="${open.length}">
-${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
-  </div>`}
-
-  <!-- ── 4. BRAIN CONTEXT ── -->
+  <!-- ── 3. BRAIN CONTEXT ── -->
   <h2>Brain context</h2>
   ${session.brain_context.length === 0
     ? '<p class="empty">No brain entries consulted (brain-gap event emitted).</p>'
@@ -739,21 +528,7 @@ ${open.map((e, i) => renderEscalationCard(e, i)).join('\n')}
 ${session.brain_context.map((e) => `    <li><code>${esc(e.path)}</code> — ${esc(e.summary)}</li>`).join('\n')}
   </ul>`}
 
-  <!-- ── 5. COUNCIL TRANSCRIPT (collapsed) ── -->
-  <h2>Council transcript</h2>
-  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.6rem">Total cost <code>$${session.council.totalCostUsd.toFixed(4)}</code></p>
-  ${session.council.perCritic.map((cr) => `
-  <details class="council-critic">
-    <summary>${esc(capitaliseCritic(cr.critic))} critic — <code>$${cr.costUsd.toFixed(4)}</code></summary>
-    ${cr.verdict.flags.length === 0
-      ? '<p class="empty">No mechanical flags.</p>'
-      : `<h3>Flags (auto-resolved)</h3><ul>${cr.verdict.flags.map((f) => `<li><code>${esc(f.id)}</code> — ${esc(f.description)}. <em>Applied:</em> ${esc(f.appliedFix)}</li>`).join('')}</ul>`}
-    ${cr.verdict.escalations.length === 0
-      ? '<p class="empty">No taste escalations.</p>'
-      : `<h3>Escalations</h3><div class="decisions">${cr.verdict.escalations.map((e) => `<div class="escalation"><div class="q">${esc(e.question)}</div><div class="options">${e.options.map((o) => `<div class="option"><div class="opt-head"><span class="label">${esc(o.label)}</span></div><div class="rationale">${esc(o.rationale)}</div></div>`).join('')}</div></div>`).join('')}</div>`}
-  </details>`).join('')}
-
-  <!-- ── 6. AGGREGATE FOOTPRINT (C19 informational) ── -->
+  <!-- ── 4. AGGREGATE FOOTPRINT (C19 informational) ── -->
   <h2>Aggregate footprint <span class="badge">informational</span></h2>
   <div class="footprint">
     <div class="summary">${session.initiatives.length} initiative${session.initiatives.length === 1 ? '' : 's'} · total iteration budget <strong>${totalIterations}</strong>${knownCost.length === session.initiatives.length && session.initiatives.length > 0 ? ` · total estimated cost <strong>$${totalEstimated.toFixed(2)}</strong>` : knownCost.length > 0 ? ` · partial estimated cost <strong>$${totalEstimated.toFixed(2)}</strong> (${knownCost.length}/${session.initiatives.length} have estimates)` : ''}</div>
@@ -767,7 +542,7 @@ ${session.initiatives.map((i, idx) => {
     <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
   </div>
 
-  <!-- ── 7. OPERATOR BRIEF + INTERVIEW ── -->
+  <!-- ── 5. OPERATOR BRIEF + INTERVIEW ── -->
   <h2>Operator brief + interview</h2>
   ${rounds.length === 0
     ? '<p class="empty">No interview rounds — operator drafted directly.</p>'

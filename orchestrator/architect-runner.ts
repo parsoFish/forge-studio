@@ -45,14 +45,8 @@ import { join, resolve } from 'node:path';
 
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
-import {
-  runCouncil,
-  defaultCritics,
-  type CouncilQueryFn,
-  type Escalation,
-} from '../skills/architect-llm-council/council.ts';
+export type QueryFn = (params: { prompt: string; options?: Record<string, unknown> }) => AsyncIterable<unknown>;
 
-export type { CouncilQueryFn } from '../skills/architect-llm-council/council.ts';
 import {
   writePlanDoc,
   archiveSessionDir,
@@ -122,9 +116,7 @@ export type RunArchitectTurnInput = {
   sessionId: string;
   projectRoot: string;
   /** Inject a fake `query` for tests. Defaults to the SDK. */
-  queryFn?: CouncilQueryFn;
-  /** Separate seam for council calls; defaults to `queryFn`. */
-  councilQueryFn?: CouncilQueryFn;
+  queryFn?: QueryFn;
   /** `_logs/` root; defaults to `<cwd>/_logs`. */
   logsRoot?: string;
   /** `_queue/` root; defaults to `<cwd>/_queue`. */
@@ -184,8 +176,7 @@ export async function runArchitectTurn(
   const logger =
     input.logger ??
     createLogger(`_architect-${input.sessionId}`, input.logsRoot ?? resolve('_logs'));
-  const queryFn: CouncilQueryFn = input.queryFn ?? (sdkQuery as unknown as CouncilQueryFn);
-  const councilQueryFn = input.councilQueryFn ?? queryFn;
+  const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
   // ARCH-1: load brain navigation index at turn start and inject into prompts.
@@ -273,14 +264,13 @@ export async function runArchitectTurn(
       paths,
       status,
       queryFn,
-      councilQueryFn,
       logger,
       resolvedDecisions: null,
       brainIndex,
       onToolUse,
     });
   } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, councilQueryFn, logger, brainIndex, onToolUse });
+    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse });
   } else if (phase === 'rejected') {
     // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
     // phase=rejected before spawning this turn; we move the session dir to
@@ -347,7 +337,7 @@ const INTERVIEW_SCHEMA = {
 async function runInterviewStep(args: {
   status: ArchitectStatus;
   interview: InterviewRound[];
-  queryFn: CouncilQueryFn;
+  queryFn: QueryFn;
   skillPromptPath?: string;
   /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
   brainIndex?: string;
@@ -447,15 +437,14 @@ async function runDraftStep(args: {
   input: RunArchitectTurnInput;
   paths: ReturnType<typeof sessionPaths>;
   status: ArchitectStatus;
-  queryFn: CouncilQueryFn;
-  councilQueryFn: CouncilQueryFn;
+  queryFn: QueryFn;
   logger: EventLogger;
   resolvedDecisions: string | null;
   /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
 }): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, councilQueryFn, logger, resolvedDecisions, brainIndex, onToolUse } = args;
+  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse } = args;
   const interview = readInterview(paths.sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
@@ -540,27 +529,7 @@ async function runDraftStep(args: {
     buildManifest(d, status, datePart, created_at, knownSlugs),
   );
 
-  // The council reviews the FIRST draft once, to surface design decisions for
-  // the operator. When `resolvedDecisions` is present this is the FINALIZE pass:
-  // the operator has already resolved those decisions, so the architect just
-  // generates the final manifest to hand to the PM — re-running the council
-  // would re-litigate settled choices and cost a whole extra critic pass
-  // (2026-05-30, user-confirmed flow: council runs once, before selections).
-  const combinedBody = manifests.map((m) => m.body).join('\n\n---\n\n');
-  const council = resolvedDecisions
-    ? { flags: [], escalations: [], perCritic: [], totalCostUsd: 0, fallbackCritics: [] }
-    : await runCouncil({
-        draft: combinedBody,
-        critics: defaultCritics(),
-        projectContext: `Project: ${status.project}\nVision: ${vision}`,
-        queryFn: councilQueryFn,
-      });
-  const councilTranscript: CouncilTranscript = {
-    flags: council.flags,
-    escalations: council.escalations,
-    perCritic: council.perCritic,
-    totalCostUsd: council.totalCostUsd,
-  };
+  const councilTranscript: CouncilTranscript = { flags: [], escalations: [], perCritic: [], totalCostUsd: 0 };
 
   // Write draft manifests (promoted to the queue only on finalize/approve).
   if (!existsSync(paths.manifestsDir)) mkdirSync(paths.manifestsDir, { recursive: true });
@@ -604,15 +573,9 @@ async function runDraftStep(args: {
     brain_context,
     council: councilTranscript,
     initiatives: proposed,
-    open_escalations: council.escalations,
   };
 
   const planPath = writePlanDoc(session, input.projectRoot);
-  // Persist the escalation set keyed for the gate (esc-<index>).
-  writeFileSync(
-    join(paths.sessionDir, 'escalations.json'),
-    JSON.stringify(keyEscalations(council.escalations), null, 2),
-  );
   writeStatus(paths.sessionDir, { ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
@@ -622,11 +585,11 @@ async function runDraftStep(args: {
     event_type: 'log',
     input_refs: [],
     output_refs: [planPath],
-    message: `plan-emitted (${manifests.length} initiative(s), ${council.escalations.length} escalation(s))`,
+    message: `plan-emitted (${manifests.length} initiative(s), 0 escalation(s))`,
     metadata: {
       session_id: input.sessionId,
       initiative_ids: manifests.map((m) => m.initiative_id),
-      escalation_count: council.escalations.length,
+      escalation_count: 0,
     },
   });
 
@@ -641,8 +604,7 @@ async function runFinalizeStep(args: {
   input: RunArchitectTurnInput;
   paths: ReturnType<typeof sessionPaths>;
   status: ArchitectStatus;
-  queryFn: CouncilQueryFn;
-  councilQueryFn: CouncilQueryFn;
+  queryFn: QueryFn;
   logger: EventLogger;
   /** Brain navigation index; passed through to fallback draft step (ARCH-1). */
   brainIndex?: string;
@@ -751,16 +713,6 @@ function slugify(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Escalation keying — stable ids the PLAN gate selects against
-// ---------------------------------------------------------------------------
-
-export type KeyedEscalation = Escalation & { id: string };
-
-export function keyEscalations(escalations: Escalation[]): KeyedEscalation[] {
-  return escalations.map((e, i) => ({ ...e, id: `esc-${i}` }));
-}
-
-// ---------------------------------------------------------------------------
 // Structured-output query (mirrors council's parse path)
 // ---------------------------------------------------------------------------
 
@@ -771,7 +723,7 @@ type StructuredResult<T> = {
 };
 
 async function runStructured<T>(args: {
-  queryFn: CouncilQueryFn;
+  queryFn: QueryFn;
   prompt: string;
   schema: unknown;
   onToolUse?: (d: ToolUseLiveDetail) => void;
@@ -922,32 +874,13 @@ export function readInterview(sessionDir: string): InterviewRound[] {
   }
 }
 
-/** Read `selections.json` + `feedback.md` into a markdown block the draft step
- *  bakes into the regenerated manifests. */
+/** Read `feedback.md` into a markdown block the draft step bakes into the
+ *  regenerated manifests. Returns the trimmed content or null if absent/empty. */
 function readResolvedDecisions(sessionDir: string): string | null {
-  const parts: string[] = [];
-  const selPath = join(sessionDir, 'selections.json');
-  if (existsSync(selPath)) {
-    try {
-      const sel = JSON.parse(readFileSync(selPath, 'utf8')) as Record<string, string>;
-      const escPath = join(sessionDir, 'escalations.json');
-      const escalations: KeyedEscalation[] = existsSync(escPath)
-        ? (JSON.parse(readFileSync(escPath, 'utf8')) as KeyedEscalation[])
-        : [];
-      for (const [id, label] of Object.entries(sel)) {
-        const esc = escalations.find((e) => e.id === id);
-        parts.push(`- ${esc ? esc.question : id}: **${label}**`);
-      }
-    } catch {
-      /* ignore malformed selections */
-    }
-  }
   const fbPath = join(sessionDir, 'feedback.md');
-  if (existsSync(fbPath)) {
-    const fb = readFileSync(fbPath, 'utf8').trim();
-    if (fb) parts.push('', fb);
-  }
-  return parts.length ? parts.join('\n') : null;
+  if (!existsSync(fbPath)) return null;
+  const fb = readFileSync(fbPath, 'utf8').trim();
+  return fb || null;
 }
 
 /** Discover every architect session under `projects/<name>/_architect/<sid>/`
