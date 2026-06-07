@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir } from './unifier-items.ts';
-import { writeWorkItem, parseWorkItem, type WorkItem } from './work-item.ts';
+import { seedStaticUnifierItem, readUnifierItems, nextUnifierItemId, unifierItemsDir, pendingUnifierItems, reopenUnifierItem } from './unifier-items.ts';
+import { writeWorkItem, parseWorkItem, writeWorkItemStatus, type WorkItem } from './work-item.ts';
 
 const INIT = 'INIT-2026-06-07-release-folder-data-source';
 
@@ -68,6 +68,60 @@ test('nextUnifierItemId appends (UWI-2 after seeding UWI-1; UWI-3 after a UWI-2)
     };
     writeWorkItem(uwi2, wt, { workItemsDir: unifierItemsDir(wt) });
     assert.equal(nextUnifierItemId(wt), 'UWI-3');
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('pendingUnifierItems returns only not-complete UWIs in dependency order', () => {
+  const wt = tmpWorktree();
+  try {
+    // Empty queue → nothing pending.
+    assert.deepEqual(pendingUnifierItems(wt), []);
+
+    const uwi1Path = seedStaticUnifierItem(wt, { initiativeId: INIT, estimatedIterations: 8, qualityGateCmd: ['go', 'test', './...'] });
+    // Fresh seed → UWI-1 pending.
+    let pending = pendingUnifierItems(wt);
+    assert.deepEqual(pending.map((p) => p.work_item_id), ['UWI-1']);
+
+    // Append a UWI-2 that depends on UWI-1 (the shape a review concern takes).
+    const uwi2: WorkItem = {
+      work_item_id: 'UWI-2',
+      initiative_id: INIT,
+      status: 'pending',
+      depends_on: ['UWI-1'],
+      acceptance_criteria: [{ given: 'g', when: 'w', then: 't' }],
+      files_in_scope: ['azuredevops/x.go'],
+      quality_gate_cmd: ['go', 'test', '-run', 'X', './...'],
+      estimated_iterations: 3,
+      body: '# UWI-2',
+    };
+    writeWorkItem(uwi2, wt, { workItemsDir: unifierItemsDir(wt) });
+    // Both pending, UWI-1 before UWI-2 (its prerequisite).
+    pending = pendingUnifierItems(wt);
+    assert.deepEqual(pending.map((p) => p.work_item_id), ['UWI-1', 'UWI-2']);
+
+    // Mark UWI-1 complete — only UWI-2 remains pending (its now-complete
+    // prerequisite drops out but UWI-2 still runs as a satisfied root).
+    writeWorkItemStatus(uwi1Path, 'complete');
+    pending = pendingUnifierItems(wt);
+    assert.deepEqual(pending.map((p) => p.work_item_id), ['UWI-2']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('reopenUnifierItem resets a complete UWI back to pending (legacy send-back bridge)', () => {
+  const wt = tmpWorktree();
+  try {
+    const uwi1Path = seedStaticUnifierItem(wt, { initiativeId: INIT, estimatedIterations: 8, qualityGateCmd: ['go', 'test', './...'] });
+    writeWorkItemStatus(uwi1Path, 'complete');
+    assert.deepEqual(pendingUnifierItems(wt), []);
+    reopenUnifierItem(wt, 'UWI-1');
+    assert.deepEqual(pendingUnifierItems(wt).map((p) => p.work_item_id), ['UWI-1']);
+    // No-op when the file is absent.
+    reopenUnifierItem(wt, 'UWI-99');
+    assert.deepEqual(pendingUnifierItems(wt).map((p) => p.work_item_id), ['UWI-1']);
   } finally {
     rmSync(wt, { recursive: true, force: true });
   }

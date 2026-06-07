@@ -41,6 +41,12 @@ import {
   UNIFIER_DEFAULT_ITERATION_CAP,
   unifierAgentSpec,
 } from '../unifier-invocation.ts';
+import {
+  pendingUnifierItems,
+  reopenUnifierItem,
+  seedStaticUnifierItem,
+  unifierItemsDir,
+} from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel } from '../../cli/demo-model.ts';
@@ -991,11 +997,6 @@ export async function runUnifier(
   logger: EventLogger,
   parentEventId: string,
 ): Promise<{ succeeded: boolean; failureClass: string | null }> {
-  // Wipe per-WI scratch files before stamping the unifier's prompts. The
-  // unifier is a fresh mission with a different role; without this the
-  // agent would inherit the last WI's ticked checklist.
-  wipeRalphScratch(input.worktreePath);
-
   // Load the project config (mandatory per CONTRACTS.md C1 + council 04 F8).
   // The config tells the unifier which demo.shape to author and which
   // quality_gate_cmd to run.
@@ -1032,6 +1033,24 @@ export async function runUnifier(
   // (the operator's feedback may legitimately need several passes).
   const iterationCap = unifierIterationCap(input.worktreePath, feedbackRef != null);
 
+  // ADR 026: the unifier owns a WI queue at `.forge/unifier-items/`. Seed the
+  // static `UWI-1 = "unify & prep the PR"` (idempotent — a re-entrant cycle
+  // keeps the existing UWI-1). Review feedback later APPENDS `UWI-2+` to the
+  // same queue (the drain, step 6) so the review↔unifier loop stays in ONE
+  // cycle. With only UWI-1 present this loop runs exactly once and is
+  // behaviour-equivalent to the prior single-mission unifier.
+  seedStaticUnifierItem(input.worktreePath, {
+    initiativeId: input.initiativeId,
+    estimatedIterations: iterationCap,
+    qualityGateCmd,
+  });
+  // Legacy send-back bridge (removed in ADR 026 step 7): a `feedbackRef` resume
+  // re-opens the static unify mission so the loop re-runs it against the
+  // operator's feedback. The drain supersedes this requeue-driven path.
+  if (feedbackRef) reopenUnifierItem(input.worktreePath, 'UWI-1');
+
+  const pending = pendingUnifierItems(input.worktreePath);
+
   const start = logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
@@ -1045,6 +1064,7 @@ export async function runUnifier(
       demo_shape: demoShape,
       feedback_ref: feedbackRef ?? null,
       iteration_cap: iterationCap,
+      pending_uwis: pending.map((p) => p.work_item_id),
       // ADR 024 seam observability: the agent + tier the orchestrator spawned.
       agent_skill: unifierAgentSpec.skill,
       agent_tier: unifierAgentSpec.tier,
@@ -1052,14 +1072,152 @@ export async function runUnifier(
     },
   });
 
-  // Stamp PROMPT.md / AGENT.md / fix_plan.md for the unifier.
+  // Run each pending UWI in dependency order (mirrors the dev-loop per-WI loop).
+  const uwiDir = unifierItemsDir(input.worktreePath);
+  const uwiOutcomes: Array<{
+    id: string;
+    status: WorkItem['status'];
+    result: LoopResult | null;
+    failureClass: string | null;
+    runnerError: string | null;
+  }> = [];
+  for (const uwi of pending) {
+    const uwiPath = resolve(uwiDir, `${uwi.work_item_id}.md`);
+    if (prerequisiteFailed(uwi, uwiOutcomes)) {
+      writeWorkItemStatus(uwiPath, 'failed');
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [uwiPath],
+        output_refs: [],
+        message: 'unifier.uwi-skipped',
+        metadata: { work_item_id: uwi.work_item_id, reason: 'prerequisite-failed' },
+      });
+      uwiOutcomes.push({ id: uwi.work_item_id, status: 'failed', result: null, failureClass: 'dev-loop-unifier-gate-failed', runnerError: null });
+      continue;
+    }
+    const itemOutcome = await runUnifierItem({
+      uwi,
+      input,
+      logger,
+      startEventId: start.event_id,
+      demoShape,
+      qualityGateCmd,
+      demoCommand: projectConfig?.demo.command,
+      feedbackRef,
+    });
+    writeWorkItemStatus(uwiPath, itemOutcome.status);
+    uwiOutcomes.push(itemOutcome);
+    // Stop the batch on the first failure — a failed concern UWI must not let a
+    // later re-prep UWI re-package over a broken state.
+    if (itemOutcome.status === 'failed') break;
+  }
+
+  // Push once more at unifier close, then assert sync. The unifier may have
+  // committed the demo bundle + closing commit; push so origin matches local.
+  const push = pushInitiativeBranch(input.worktreePath);
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'unifier',
+    skill: 'developer-unifier',
+    event_type: push.pushed ? 'log' : 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: push.pushed ? 'unifier.branch-pushed' : 'unifier.branch-push-failed',
+    metadata: push.pushed ? { branch: push.branch } : { reason: push.reason },
+  });
+
+  // Classify the aggregate unifier outcome. The unifier succeeds only when every
+  // pending UWI completed; an empty pending set (all already complete) is a
+  // no-op success.
+  const firstFailure = uwiOutcomes.find((o) => o.status !== 'complete');
+  const succeeded = pending.length === 0 ? true : uwiOutcomes.length > 0 && firstFailure === undefined;
+  // Default classification — the composed gate's own events specialise this
+  // further (dev-loop-unifier-{gate,demo}-failed are emitted from inside
+  // composedUnifierGate when the relevant sub-gate fails).
+  let failureClass: string | null = succeeded ? null : (firstFailure?.failureClass ?? 'dev-loop-unifier-gate-failed');
+
+  // Branch-divergence check (last). If branches aren't in sync, that dominates
+  // the failure class — surface it specifically. (As before, this relabels the
+  // failure class but does not flip a passing run.)
+  try {
+    assertLocalRemoteSynced(input.worktreePath);
+  } catch {
+    failureClass = 'dev-loop-unifier-branch-divergence';
+  }
+
+  const repResult = firstFailure?.result ?? (uwiOutcomes.length > 0 ? uwiOutcomes[uwiOutcomes.length - 1]!.result : null);
+  const totalCost = uwiOutcomes.reduce((acc, o) => acc + (o.result?.cost_usd ?? 0), 0);
+  const totalIterations = uwiOutcomes.reduce((acc, o) => acc + (o.result?.iterations ?? 0), 0);
+  const totalDuration = uwiOutcomes.reduce((acc, o) => acc + (o.result?.duration_ms ?? 0), 0);
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'unifier',
+    skill: 'developer-unifier',
+    event_type: succeeded ? 'end' : 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [input.worktreePath],
+    duration_ms: totalDuration,
+    cost_usd: totalCost,
+    message: succeeded ? 'unifier.end' : 'unifier.failed',
+    metadata: {
+      status: succeeded ? 'complete' : (repResult?.status ?? 'crashed'),
+      iterations: totalIterations,
+      stop_reason: repResult?.stop_reason ?? (succeeded ? 'complete' : 'crashed'),
+      demo_shape: demoShape,
+      runner_error: firstFailure?.runnerError ?? null,
+      failure_class: failureClass,
+      uwis_run: uwiOutcomes.map((o) => ({ id: o.id, status: o.status })),
+    },
+  });
+
+  return { succeeded, failureClass };
+}
+
+/**
+ * Run ONE unifier work-item (UWI). The packaging UWI-1 ("unify & prep the PR")
+ * and any review-feedback UWI-2+ all flow through here: stamp the per-UWI
+ * prompt, spawn the unifier agent, run the Ralph loop against the composed
+ * unifier gate (with per-iteration push so `branches_in_sync` stays
+ * satisfiable), and classify. Extracted from `runUnifier` so the per-UWI loop
+ * mirrors the dev-loop's per-WI loop. With only UWI-1 present this is
+ * behaviour-equivalent to the prior single-mission unifier.
+ */
+async function runUnifierItem(args: {
+  uwi: WorkItem;
+  input: CycleInput;
+  logger: EventLogger;
+  startEventId: string;
+  demoShape: import('../project-config.ts').DemoShape;
+  qualityGateCmd: string[];
+  demoCommand: string[] | undefined;
+  feedbackRef: string | undefined;
+}): Promise<{ id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null }> {
+  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand, feedbackRef } = args;
+
+  // Wipe per-UWI scratch (PROMPT.md / AGENT.md / fix_plan.md) so this UWI's
+  // agent doesn't inherit the previous mission's ticked checklist — same reason
+  // the dev-loop wipes between WIs.
+  wipeRalphScratch(input.worktreePath);
+
+  // The UWI carries its own gate command (UWI-1 the project gate; a code-fix
+  // UWI a sharp per-WI gate) and its own iteration budget.
+  const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
+  const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
+
+  // Stamp PROMPT.md / AGENT.md / fix_plan.md for this UWI.
   const { promptPath } = prepareUnifierWorkspace({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
     worktreePath: input.worktreePath,
-    iterationBudget: iterationCap,
+    iterationBudget: itemCap,
     demoShape,
-    qualityGateCmd,
+    qualityGateCmd: itemGateCmd,
     feedbackRef,
   });
 
@@ -1073,7 +1231,7 @@ export async function runUnifier(
     logger,
     {
       initiativeId: input.initiativeId,
-      parentEventId: start.event_id,
+      parentEventId: startEventId,
       phase: 'unifier',
       skill: 'developer-unifier',
     },
@@ -1099,12 +1257,12 @@ export async function runUnifier(
     composedUnifierGate({
       worktreePath: input.worktreePath,
       initiativeId: input.initiativeId,
-      qualityGateCmd,
+      qualityGateCmd: itemGateCmd,
       demoShape,
-      demoCommand: projectConfig?.demo.command,
+      demoCommand,
       logger,
       initiativeIdForEvent: input.initiativeId,
-      parentEventId: start.event_id,
+      parentEventId: startEventId,
       workItemsDir: resolve(input.worktreePath, '.forge/work-items'),
     });
 
@@ -1116,7 +1274,7 @@ export async function runUnifier(
         workItemSpecPath: promptPath,
         worktreePath: input.worktreePath,
         initiativeBudget: {
-          iterations: iterationCap,
+          iterations: itemCap,
           usd: Number.POSITIVE_INFINITY,
         },
         brainQueryResults: '',
@@ -1139,7 +1297,7 @@ export async function runUnifier(
           unifierToolSink.flushIteration(iteration);
           logger.emit({
             initiative_id: input.initiativeId,
-            parent_event_id: start.event_id,
+            parent_event_id: startEventId,
             phase: 'unifier',
             skill: 'developer-unifier',
             event_type: 'iteration',
@@ -1170,7 +1328,7 @@ export async function runUnifier(
           if (!iterSync.pushed) {
             logger.emit({
               initiative_id: input.initiativeId,
-              parent_event_id: start.event_id,
+              parent_event_id: startEventId,
               phase: 'unifier',
               skill: 'developer-unifier',
               event_type: 'log',
@@ -1188,61 +1346,14 @@ export async function runUnifier(
     runnerError = err instanceof Error ? err.message : String(err);
   }
 
-  // Push once more at unifier close, then assert sync. The unifier may have
-  // committed the demo bundle + closing commit; push so origin matches local.
-  const push = pushInitiativeBranch(input.worktreePath);
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'unifier',
-    skill: 'developer-unifier',
-    event_type: push.pushed ? 'log' : 'error',
-    input_refs: [input.worktreePath],
-    output_refs: [],
-    message: push.pushed ? 'unifier.branch-pushed' : 'unifier.branch-push-failed',
-    metadata: push.pushed ? { branch: push.branch } : { reason: push.reason },
-  });
-
-  // Classify the unifier outcome.
-  const succeeded = loopResult?.status === 'complete' && runnerError === null;
-  let failureClass: string | null = null;
-  if (!succeeded) {
-    // Default classification — the composed gate's own events specialise
-    // this further (dev-loop-unifier-{gate,demo}-failed are emitted from
-    // inside composedUnifierGate when the relevant sub-gate fails).
-    failureClass = 'dev-loop-unifier-gate-failed';
-  }
-
-  // Branch-divergence check (last). If branches aren't in sync, that
-  // dominates the failure class — surface it specifically.
-  try {
-    assertLocalRemoteSynced(input.worktreePath);
-  } catch {
-    failureClass = 'dev-loop-unifier-branch-divergence';
-  }
-
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'unifier',
-    skill: 'developer-unifier',
-    event_type: succeeded ? 'end' : 'error',
-    input_refs: [input.worktreePath],
-    output_refs: [input.worktreePath],
-    duration_ms: loopResult?.duration_ms ?? 0,
-    cost_usd: loopResult?.cost_usd ?? 0,
-    message: succeeded ? 'unifier.end' : 'unifier.failed',
-    metadata: {
-      status: loopResult?.status ?? 'crashed',
-      iterations: loopResult?.iterations ?? 0,
-      stop_reason: loopResult?.stop_reason ?? 'crashed',
-      demo_shape: demoShape,
-      runner_error: runnerError,
-      failure_class: failureClass,
-    },
-  });
-
-  return { succeeded, failureClass };
+  const status: WorkItem['status'] = loopResult?.status === 'complete' && runnerError === null ? 'complete' : 'failed';
+  return {
+    id: uwi.work_item_id,
+    status,
+    result: loopResult,
+    failureClass: status === 'complete' ? null : 'dev-loop-unifier-gate-failed',
+    runnerError,
+  };
 }
 
 type ComposedUnifierGateInput = {

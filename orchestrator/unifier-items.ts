@@ -13,11 +13,14 @@
  * (developer-loop.ts) and the verdict handler (ui-bridge.ts) consume them.
  */
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   readWorkItemsFromDir,
+  topologicalOrder,
   writeWorkItem,
+  writeWorkItemStatus,
   type WorkItem,
 } from './work-item.ts';
 
@@ -43,6 +46,31 @@ export function nextUnifierItemId(worktreePath: string): string {
     if (m) max = Math.max(max, Number(m[1]));
   }
   return `UWI-${max + 1}`;
+}
+
+/**
+ * The UWIs the unifier still has to run, in dependency (topological) order:
+ * everything whose `status` is not `complete`. On a fresh cycle this is just
+ * the seeded `UWI-1`; on a review drain (ADR 026) the appended `UWI-2+` plus
+ * the terminal re-prep UWI. A dependency on an already-complete UWI (filtered
+ * out here) is treated as a satisfied root by `topologicalOrder`, so a concern
+ * UWI that `depends_on:[UWI-1]` still runs once UWI-1 is done.
+ */
+export function pendingUnifierItems(worktreePath: string): WorkItem[] {
+  const { items } = readUnifierItems(worktreePath);
+  const pending = items.filter((w) => w.status !== 'complete');
+  return topologicalOrder(pending);
+}
+
+/**
+ * Reset a UWI's status to `pending` so the loop re-runs it. Used by the legacy
+ * send-back bridge (a `feedbackRef` resume re-opens the static unify mission so
+ * it re-runs against the operator's feedback) — removed in ADR 026 step 7 once
+ * the drain replaces the requeue-driven send-back. No-op if the file is absent.
+ */
+export function reopenUnifierItem(worktreePath: string, workItemId: string): void {
+  const path = join(unifierItemsDir(worktreePath), `${workItemId}.md`);
+  if (existsSync(path)) writeWorkItemStatus(path, 'pending');
 }
 
 export type SeedStaticUnifierItemInput = {
