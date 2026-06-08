@@ -234,6 +234,27 @@ export async function runArchitectTurn(
     try { writeFileSync(heartbeatPath, new Date().toISOString()); } catch { /* best-effort */ }
   };
 
+  // P3: Emit each non-empty reasoning text block from the agent stream as a log
+  // event so the operator's activity panel can show live architect reasoning.
+  // Cap at 400 chars to keep the event log readable; skip pure-whitespace blocks.
+  const MAX_REASONING_TEXT = 400;
+  const initiativeIdForLog = `architect-session-${input.sessionId}`;
+  const onText = (text: string): void => {
+    const capped = text.length > MAX_REASONING_TEXT
+      ? `${text.slice(0, MAX_REASONING_TEXT)}…`
+      : text;
+    logger.emit({
+      initiative_id: initiativeIdForLog,
+      phase: 'architect',
+      skill: 'architect-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: capped,
+      metadata: { session_id: input.sessionId, kind: 'reasoning' },
+    });
+  };
+
   let result: RunArchitectTurnResult;
 
   // Interview phase — may flow straight through to drafting when ready.
@@ -248,6 +269,7 @@ export async function runArchitectTurn(
       brainIndex,
       onToolUse,
       onHeartbeat,
+      onText,
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(paths.sessionDir, decision.questions);
@@ -282,9 +304,10 @@ export async function runArchitectTurn(
       brainIndex,
       onToolUse,
       onHeartbeat,
+      onText,
     });
   } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat });
+    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat, onText });
   } else if (phase === 'rejected') {
     // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
     // phase=rejected before spawning this turn; we move the session dir to
@@ -357,8 +380,10 @@ async function runInterviewStep(args: {
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
+  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
+  onText?: (text: string) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat } = args;
+  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
   const skill = loadSkillPrompt(skillPromptPath);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -403,6 +428,7 @@ async function runInterviewStep(args: {
     schema: INTERVIEW_SCHEMA,
     onToolUse,
     onHeartbeat,
+    onText,
   });
   const questions = Array.isArray(out?.questions) ? out!.questions! : [];
   return { done: out?.done === true, questions };
@@ -460,8 +486,10 @@ async function runDraftStep(args: {
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
+  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
+  onText?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat } = args;
+  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText } = args;
   const interview = readInterview(paths.sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
@@ -531,6 +559,7 @@ async function runDraftStep(args: {
     schema: DRAFT_SCHEMA,
     onToolUse,
     onHeartbeat,
+    onText,
   });
   const vision = (draft?.vision ?? status.idea).trim();
   const draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
@@ -628,6 +657,8 @@ async function runFinalizeStep(args: {
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
+  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
+  onText?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, logger } = args;
   const resolved = readResolvedDecisions(paths.sessionDir);
@@ -748,6 +779,12 @@ async function runStructured<T>(args: {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   /** Called at most once per HEARTBEAT_THROTTLE_MS during the SDK stream. */
   onHeartbeat?: () => void;
+  /**
+   * Called for each non-empty assistant text block (reasoning). The caller
+   * can forward these to the event log so the operator sees the architect's
+   * reasoning stream in the activity panel.
+   */
+  onText?: (text: string) => void;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
@@ -812,6 +849,10 @@ async function runStructured<T>(args: {
         }
         if (block?.type === 'text' && typeof block.text === 'string') {
           rawText += (rawText ? '\n' : '') + block.text;
+          const trimmed = block.text.trim();
+          if (trimmed && args.onText) {
+            args.onText(trimmed);
+          }
         }
       }
       continue;

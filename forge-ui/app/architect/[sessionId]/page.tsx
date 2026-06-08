@@ -9,6 +9,7 @@ import {
 } from '@/lib/bridge-client';
 import { ArchitectStageHex } from '@/components/MomentHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
+import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
 import { PlanGate } from '@/components/PlanGate';
 import { ScreenShell } from '@/components/ScreenShell';
 import { useNowTicker } from '@/lib/use-now-ticker';
@@ -81,7 +82,7 @@ export default function ArchitectSessionPage({
 
             {/* The question FORM only appears once the architect has emitted
                 questions (phase 'awaiting-answers'); interviewing/drafting are
-                working states that show a 'thinking…' status, not the form. */}
+                working states that show the live activity panel + a status line. */}
             {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
               <ArchitectQuestionForm
                 project={session.project}
@@ -89,11 +90,22 @@ export default function ArchitectSessionPage({
                 round={session.round}
                 questions={session.questions}
               />
-            ) : (session.phase === 'interviewing' || session.phase === 'awaiting-answers' || session.phase === 'drafting') ? (
-              <Status label={`The architect is thinking… (round ${session.round})`} />
             ) : null}
 
-            {session.phase === 'drafting' && <Status label="The architect is drafting the plan…" />}
+            {(session.phase === 'interviewing' || session.phase === 'drafting' || session.phase === 'finalizing') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Status
+                  label={
+                    session.phase === 'drafting'
+                      ? 'The architect is drafting the plan…'
+                      : session.phase === 'finalizing'
+                      ? 'The architect is finalizing the plan…'
+                      : `The architect is thinking… (round ${session.round})`
+                  }
+                />
+                <ArchitectActivityLog events={events} />
+              </div>
+            )}
 
             {session.phase === 'awaiting-verdict' && (
               <PlanGate
@@ -105,7 +117,7 @@ export default function ArchitectSessionPage({
               />
             )}
 
-            {(session.phase === 'finalizing' || session.phase === 'committed') && (
+            {session.phase === 'committed' && (
               <div
                 data-section="architect-status"
                 style={{ border: '1px solid #2ea04366', borderRadius: 10, padding: '16px 18px', background: '#07140d', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
