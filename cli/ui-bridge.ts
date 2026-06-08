@@ -49,6 +49,8 @@ import {
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
+import { mergePullRequest } from '../orchestrator/pr.ts';
+import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listArchitectSessions,
@@ -92,6 +94,16 @@ export type BridgeOptions = {
   port?: number;
   /** Pre-existing snapshot of cycles — defaults to filesystem scan. */
   scanCycles?: () => { live: Cycle[]; recent: Cycle[] };
+  /**
+   * Injectable for tests — defaults to the real `mergePullRequest` from
+   * orchestrator/pr.ts. Called by the POST /api/verdict 'approve' handler.
+   */
+  mergePr?: (worktreePath: string) => boolean;
+  /**
+   * Injectable for tests — defaults to the real `finalizeMergedReadyForReview`
+   * from orchestrator/finalize-merged.ts. Fired (void, non-blocking) on approve.
+   */
+  finalizeAfterMerge?: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
 };
 
 type TailState = {
@@ -109,6 +121,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const queuePaths = getPaths(resolve(forgeRoot, '_queue'));
   const logsRoot = resolve(forgeRoot, '_logs');
   const projectsRoot = resolve(forgeRoot, 'projects');
+  const mergePrFn = opts.mergePr ?? mergePullRequest;
+  const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
 
   const clients = new Set<WebSocket>();
   const tails = new Map<string, TailState>();
@@ -333,6 +347,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // bursts stream to the dedicated screen's hex. The runner writes to
       // `_logs/_architect-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
       ensureArchitectTail: (sessionId: string) => ensureTailFor(`_architect-${sessionId}`),
+      mergePr: mergePrFn,
+      finalizeAfterMerge: finalizeAfterMergeFn,
     });
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -422,6 +438,10 @@ type HttpContext = {
   /** Start (idempotently) live-tailing an architect session's event log so its
    *  tool_use bursts stream to the dedicated screen. */
   ensureArchitectTail: (sessionId: string) => void;
+  /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
+  mergePr: (worktreePath: string) => boolean;
+  /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
+  finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
 };
 
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
@@ -717,13 +737,37 @@ async function handleHttp(
       const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
 
       if (kind === 'approve') {
-        // G9: forge never auto-merges. Approve is the operator's signal that the
-        // PR is good — they merge it in GitHub and `closure` confirms the merge
-        // (then reflection fires). Nothing to persist here.
+        // Supersedes G9: the in-UI approve IS the merge gate (ADR-023 "UI is the
+        // sole operator surface"; operator never leaves forge UI). Read the
+        // manifest — same pattern as the send-back branch — to get the worktree
+        // path, merge the remote PR via `gh pr merge`, then immediately fire the
+        // finalize sweep so closure → done → reflection runs without waiting for
+        // the next 5-minute sweep.
+        const approveManifest = parseManifest(readFileSync(manifestPath, 'utf8'));
+        const approveWorktreePath = approveManifest.worktree_path ?? '';
+        if (!approveWorktreePath || !existsSync(approveWorktreePath)) {
+          sendJson(res, 409, {
+            error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
+            initiativeId,
+          });
+          return;
+        }
+        const merged = ctx.mergePr(approveWorktreePath);
+        if (!merged) {
+          sendJson(res, 409, {
+            error: 'gh pr merge failed — merge the PR manually on GitHub',
+            initiativeId,
+          });
+          return;
+        }
+        // Fire finalization in the background — must NOT throw or await here so
+        // the HTTP response is always sent promptly. Closure moves the manifest to
+        // done/, aligns local↔remote, and triggers reflection.
+        void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
         sendJson(res, 200, {
           ok: true,
           kind,
-          note: 'approved — merge the PR in GitHub; closure confirms the merge and triggers reflection',
+          note: 'PR merged and finalization triggered',
         });
         return;
       }

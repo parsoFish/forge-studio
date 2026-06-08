@@ -130,9 +130,13 @@ parallel screen/handler/codec stacks into one.
   UI bridge wrote."
 - **No behavior change** from this pass: the deleted code had no production
   caller; the send-back loop already works via requeue (`resume_from: unifier`).
-- **The PR is still the merge boundary** (closure confirms a real GitHub merge),
-  and projects remain remote-git-backed — only the operator's *input* surface
-  narrows to the UI.
+- **The UI approve IS the merge** (updated 2026-06-08, superseding G9): the
+  `POST /api/verdict 'approve'` handler calls `mergePullRequest` + fires
+  `finalizeMergedReadyForReview` immediately — the operator never leaves the UI
+  to merge on GitHub, consistent with "the operator never leaves the forge UI."
+  Projects remain remote-git-backed and the no-auto-approve invariant is
+  preserved (the operator must click approve; forge calls `gh pr merge` on their
+  behalf). See ADR-021 Consequences for the full rationale.
 - **Follow-up carries risk** the dead-code removal did not: retiring the live CLI
   fallbacks needs UI parity first, and `gh-shim` removal touches the
   invariant-critical `pr.ts`. Those are staged, not bundled here.

@@ -15,10 +15,13 @@
  *   - `alignLocalToRemote` — on confirmed merge, ff local `main` and
  *      prune the initiative branch (closure aligns local↔remote).
  *
- * `mergePullRequest` is intentionally NOT called by any product code path
- * after Phase 6 (G9): the GitHub PR is the operator's merge surface. It is
- * retained only for bench/operator-tool use and is unreachable from
- * `runReviewer` / `runCycle` / the scheduler.
+ * `mergePullRequest` IS now called by the approve paths (superseding G9):
+ *   - `POST /api/verdict` 'approve' in `cli/ui-bridge.ts` — the UI approve
+ *     merges the remote PR immediately and fires `finalizeMergedReadyForReview`.
+ *   - `forge review --approve` in `orchestrator/cli.ts` — merges the remote PR
+ *     before the local fast-forward so `confirmPrMerged` sees state == MERGED.
+ * The operator's approve IS the merge gate (ADR-023 + ADR-021 supersede G9).
+ * It remains unreachable from `runReviewer` / `runCycle` / the scheduler.
  *
  * Production assumes a real GitHub remote. Projects without a GitHub
  * remote (e.g. claude-harness fixtures) will no longer run locally.

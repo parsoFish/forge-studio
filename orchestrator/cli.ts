@@ -27,6 +27,7 @@ import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
+import { mergePullRequest } from './pr.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import {
   runArchitectTurn,
@@ -569,6 +570,14 @@ async function cmdReviewApprove(initiativeId: string): Promise<void> {
   const projectRepoPath = m.project_repo_path;
   const branch = `forge/${initiativeId}`;
   try {
+    // Merge the remote GitHub PR first so confirmPrMerged sees state == MERGED.
+    // This is consistent with the UI approve path (both must close the remote PR).
+    console.log(`Merging remote PR for ${branch}…`);
+    const remoteMerged = mergePullRequest(wt);
+    if (!remoteMerged) {
+      console.error('forge review --approve: gh pr merge failed — merge the PR manually on GitHub before approving here.');
+      process.exit(1);
+    }
     console.log(`Merging ${branch} → main in ${projectRepoPath}…`);
     execSync(`git -C "${projectRepoPath}" checkout main`, { stdio: 'inherit' });
     execSync(`git -C "${projectRepoPath}" merge --ff-only "${branch}"`, { stdio: 'inherit' });

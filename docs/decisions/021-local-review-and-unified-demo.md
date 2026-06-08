@@ -34,10 +34,12 @@ operator chose to bring review local too, to tighten and simplify iteration.
 review screen (`/review/[cycleId]`), not by engaging the GitHub PR.
 
 - **Preserved intent:** the PR is **still created** by the review phase and
-  **still merged on approve** (closure aligns local↔remote); there is **still no
-  auto-approve** — the operator's verdict gates the merge. What changes is *where
-  the operator reviews* (local UI, not the PR thread) and that this tightens the
-  loop while iterating on forge itself "right now."
+  **merged by the in-UI approve** (`POST /api/verdict 'approve'` calls
+  `mergePullRequest` + fires `finalizeMergedReadyForReview`; see ADR-021 update
+  below); there is **still no auto-approve** — the operator's explicit verdict
+  gates the merge. What changes is *where the operator reviews* (local UI, not
+  the PR thread) and that the approve IS the merge gate — the operator never
+  needs to leave the forge UI to merge on GitHub.
 
 **2. The demo author is unified around one structured artifact.** The unifier
 produces a single schema-validated **`demo.json`** (an authorable subset of
@@ -77,9 +79,16 @@ screen (and the `/plan` `/demo` routes).
   information the unifier already had to produce; DEMO.md stays available
   (derived) for the PR; the gate change is verified against a real cycle before
   being relied on.
-- **PR still the merge boundary.** Closure still merges the PR on approve;
-  no-auto-merge / no-auto-approve are preserved — only the *review surface*
-  moved.
+- **UI approve IS the merge.** The in-UI approve (`POST /api/verdict 'approve'`)
+  calls `mergePullRequest(worktreePath)` (from `orchestrator/pr.ts`) then fires
+  `finalizeMergedReadyForReview` immediately — the operator's approve click
+  performs the merge without leaving the UI. The "no-auto-approve" invariant
+  is preserved: the operator must still click approve; only the *mechanism*
+  changed (forge calls `gh pr merge` rather than the operator doing it manually
+  on GitHub). This supersedes the G9 policy ("forge never auto-merges") which was
+  inconsistent with ADR-023 ("operator never leaves the forge UI"). `forge review
+  --approve` (CLI fallback) was updated in the same pass to also call
+  `mergePullRequest` so the remote PR is closed there too.
 
 ## Alternatives considered
 
