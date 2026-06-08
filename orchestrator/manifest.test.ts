@@ -299,3 +299,46 @@ test('ADR 026: persistManifestResumeFromUnifier stamps the resume marker (crash 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------- P4: architect telemetry fields (cost + duration) ----------
+
+test('P4: architect_session_id / architect_cost_usd / architect_duration_ms round-trip', () => {
+  const m: InitiativeManifest = {
+    ...fixture(),
+    architect_session_id: 'sid-abc123',
+    architect_cost_usd: 0.46,
+    architect_duration_ms: 95000,
+  };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /architect_session_id: sid-abc123/);
+  assert.match(serialised, /architect_cost_usd: 0\.46/);
+  assert.match(serialised, /architect_duration_ms: 95000/);
+
+  const parsed = parseManifest(serialised);
+  assert.equal(parsed.architect_session_id, 'sid-abc123');
+  assert.equal(parsed.architect_cost_usd, 0.46);
+  assert.equal(parsed.architect_duration_ms, 95000);
+});
+
+test('P4: architect telemetry fields absent on legacy manifest (omit-when-undefined)', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /architect_session_id/);
+  assert.doesNotMatch(plain, /architect_cost_usd/);
+  assert.doesNotMatch(plain, /architect_duration_ms/);
+
+  const parsed = parseManifest(plain);
+  assert.equal(parsed.architect_session_id, undefined);
+  assert.equal(parsed.architect_cost_usd, undefined);
+  assert.equal(parsed.architect_duration_ms, undefined);
+});
+
+test('P4: architect_cost_usd of 0 round-trips (zero is a valid measurement)', () => {
+  const m: InitiativeManifest = {
+    ...fixture(),
+    architect_cost_usd: 0,
+    architect_duration_ms: 0,
+  };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.architect_cost_usd, 0);
+  assert.equal(parsed.architect_duration_ms, 0);
+});

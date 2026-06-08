@@ -26,6 +26,7 @@ import {
   writeStatus,
   readStatus,
   listArchitectSessions,
+  readArchitectSessionStats,
   type ArchitectStatus,
   type QueryFn,
 } from './architect-runner.ts';
@@ -635,4 +636,78 @@ test('ARCH-6: rejected turn on already-archived session does not throw (idempote
     logger: logger(logsRoot, sessionId),
   });
   assert.equal(result.phase, 'rejected');
+});
+
+// ---------------------------------------------------------------------------
+// P4: readArchitectSessionStats — compute cost + duration from session event log
+// ---------------------------------------------------------------------------
+
+test('P4: readArchitectSessionStats sums cost_usd and computes duration from started_at', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arch-stats-'));
+  const logsRoot = join(dir, '_logs');
+  const sid = 'sid-stats-test';
+  const sessionLogDir = join(logsRoot, `_architect-${sid}`);
+  mkdirSync(sessionLogDir, { recursive: true });
+
+  const t0 = '2026-06-08T10:00:00.000Z';
+  const t1 = '2026-06-08T10:01:00.000Z'; // 60 000 ms after t0
+  const t2 = '2026-06-08T10:02:30.000Z'; // 150 000 ms after t0
+
+  const events = [
+    { event_id: 'EV1', cycle_id: `_architect-${sid}`, started_at: t0, cost_usd: 0.10 },
+    { event_id: 'EV2', cycle_id: `_architect-${sid}`, started_at: t1, cost_usd: 0.23 },
+    { event_id: 'EV3', cycle_id: `_architect-${sid}`, started_at: t2, cost_usd: 0.13 },
+  ];
+  writeFileSync(
+    join(sessionLogDir, 'events.jsonl'),
+    events.map((e) => JSON.stringify(e)).join('\n') + '\n',
+  );
+
+  const stats = readArchitectSessionStats(logsRoot, sid);
+  assert.ok(stats !== null, 'expected non-null stats');
+  // Cost: sum of all cost_usd fields → 0.10 + 0.23 + 0.13 = 0.46
+  assert.ok(Math.abs(stats!.cost_usd - 0.46) < 1e-9, `cost_usd: expected 0.46, got ${stats!.cost_usd}`);
+  // Duration: last − first → 150 000 ms
+  assert.equal(stats!.duration_ms, 150000);
+});
+
+test('P4: readArchitectSessionStats returns null when log is absent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arch-stats-missing-'));
+  const stats = readArchitectSessionStats(join(dir, '_logs'), 'no-such-sid');
+  assert.equal(stats, null);
+});
+
+test('P4: readArchitectSessionStats returns null on empty log', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arch-stats-empty-'));
+  const logsRoot = join(dir, '_logs');
+  const sid = 'sid-empty';
+  mkdirSync(join(logsRoot, `_architect-${sid}`), { recursive: true });
+  writeFileSync(join(logsRoot, `_architect-${sid}`, 'events.jsonl'), '');
+  const stats = readArchitectSessionStats(logsRoot, sid);
+  assert.equal(stats, null);
+});
+
+test('P4: readArchitectSessionStats handles events without cost_usd gracefully (non-LLM events)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arch-stats-nocost-'));
+  const logsRoot = join(dir, '_logs');
+  const sid = 'sid-nocost';
+  const sessionLogDir = join(logsRoot, `_architect-${sid}`);
+  mkdirSync(sessionLogDir, { recursive: true });
+
+  const t0 = '2026-06-08T09:00:00.000Z';
+  const t1 = '2026-06-08T09:00:05.000Z'; // 5 000 ms after t0
+  const events = [
+    // No cost_usd on start events — they're orchestrator bookkeeping
+    { event_id: 'EV1', started_at: t0 },
+    { event_id: 'EV2', started_at: t1, cost_usd: 0.05 },
+  ];
+  writeFileSync(
+    join(sessionLogDir, 'events.jsonl'),
+    events.map((e) => JSON.stringify(e)).join('\n') + '\n',
+  );
+
+  const stats = readArchitectSessionStats(logsRoot, sid);
+  assert.ok(stats !== null);
+  assert.equal(stats!.cost_usd, 0.05);
+  assert.equal(stats!.duration_ms, 5000);
 });

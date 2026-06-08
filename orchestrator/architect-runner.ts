@@ -688,6 +688,29 @@ async function runFinalizeStep(args: {
       writeFileSync(p, serializeManifest({ ...m, body }));
     }
   }
+  // P4: compute architect cost + duration from the session's own event log and
+  // stamp them onto every promoted manifest so `runCycle` can emit real (not
+  // synthetic/hardcoded) architect start/end events into the cycle log.
+  const archStats = readArchitectSessionStats(
+    input.logsRoot ?? resolve('_logs'),
+    input.sessionId,
+  );
+  if (archStats !== null) {
+    const reReadFiles = existsSync(paths.manifestsDir)
+      ? readdirSync(paths.manifestsDir).filter((f) => f.endsWith('.md'))
+      : [];
+    for (const f of reReadFiles) {
+      const p = join(paths.manifestsDir, f);
+      const m = parseManifest(readFileSync(p, 'utf8'));
+      writeFileSync(p, serializeManifest({
+        ...m,
+        architect_session_id: input.sessionId,
+        architect_cost_usd: archStats.cost_usd,
+        architect_duration_ms: archStats.duration_ms,
+      }));
+    }
+  }
+
   const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
@@ -979,5 +1002,55 @@ function safeReaddir(dir: string): string[] {
       .map((d) => d.name);
   } catch {
     return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P4: architect session stats (cost + duration from the session event log)
+// ---------------------------------------------------------------------------
+
+type ArchitectSessionStats = { cost_usd: number; duration_ms: number };
+
+/**
+ * P4: Read the architect session's own event log (`_logs/_architect-<sid>/events.jsonl`)
+ * and compute:
+ *   - `cost_usd`:    sum of all numeric `cost_usd` fields across events.
+ *   - `duration_ms`: last `started_at` minus first `started_at`, in ms.
+ *
+ * Returns `null` if the log is absent, empty, or unparseable — best-effort so
+ * a missing log never blocks manifest promotion.
+ */
+export function readArchitectSessionStats(
+  logsRoot: string,
+  sessionId: string,
+): ArchitectSessionStats | null {
+  const logPath = join(resolve(logsRoot), `_architect-${sessionId}`, 'events.jsonl');
+  if (!existsSync(logPath)) return null;
+  try {
+    const lines = readFileSync(logPath, 'utf8')
+      .split('\n')
+      .filter(Boolean);
+    if (lines.length === 0) return null;
+
+    let totalCost = 0;
+    let firstTs: number | null = null;
+    let lastTs: number | null = null;
+
+    for (const line of lines) {
+      const ev = JSON.parse(line) as Record<string, unknown>;
+      if (typeof ev.cost_usd === 'number') totalCost += ev.cost_usd;
+      if (typeof ev.started_at === 'string') {
+        const t = new Date(ev.started_at).getTime();
+        if (!Number.isNaN(t)) {
+          if (firstTs === null || t < firstTs) firstTs = t;
+          if (lastTs === null || t > lastTs) lastTs = t;
+        }
+      }
+    }
+
+    const duration_ms = firstTs !== null && lastTs !== null ? lastTs - firstTs : 0;
+    return { cost_usd: totalCost, duration_ms };
+  } catch {
+    return null;
   }
 }

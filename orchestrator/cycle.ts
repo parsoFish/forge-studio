@@ -19,7 +19,7 @@ import type { EventLogger } from './logging.ts';
 import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { readManifestOrigin, readManifestCycleId, persistManifestCycleId } from './manifest.ts';
+import { readManifestOrigin, readManifestCycleId, persistManifestCycleId, parseManifest } from './manifest.ts';
 import { loadProjectConfig } from './project-config.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
@@ -96,16 +96,26 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     metadata: { origin },
   });
 
-  // 2026-05-25: the architect phase runs OUT-OF-CYCLE (operator invokes
-  // /forge-architect in their own Claude session before the scheduler
-  // claims this cycle). So the architect emits no events into this
-  // cycle's log — yet the UI's six-phase state machine has an architect
-  // row that stays pending forever without them. The cycle would not
-  // exist without architect having already produced the manifest, so we
-  // emit a synthetic architect start+end pair at cycle.start that
-  // records this truth. metadata.origin tracks who triggered the cycle
-  // (architect vs reflector vs operator). Input ref is the manifest;
-  // output ref is the manifest itself (architect's product).
+  // P4: emit architect start+end events into the cycle log. The architect ran
+  // OUT-OF-CYCLE (in-UI session before the scheduler claimed this cycle). The
+  // manifest carries the session's real cost + duration when the finalize step
+  // stamped them (P4); fall back to a zero-cost synthetic pair for legacy/
+  // hand-authored manifests that lack the fields.
+  //
+  // metadata.origin tracks who triggered the cycle (architect vs reflector vs
+  // operator). Input ref is the manifest; output ref is the manifest itself
+  // (architect's product).
+  let architectCostUsd: number | undefined;
+  let architectDurationMs: number | undefined;
+  let architectSessionId: string | undefined;
+  try {
+    const mf = parseManifest(readFileSync(input.manifestPath, 'utf8'));
+    if (typeof mf.architect_cost_usd === 'number') architectCostUsd = mf.architect_cost_usd;
+    if (typeof mf.architect_duration_ms === 'number') architectDurationMs = mf.architect_duration_ms;
+    if (mf.architect_session_id) architectSessionId = mf.architect_session_id;
+  } catch {
+    /* best-effort — a missing/unreadable manifest must not block the cycle */
+  }
   logger.emit({
     initiative_id: input.initiativeId,
     phase: 'architect',
@@ -113,8 +123,12 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     event_type: 'start',
     input_refs: [],
     output_refs: [input.manifestPath],
-    message: 'architect.synthetic-start',
-    metadata: { origin, note: 'architect ran out-of-cycle; synthetic event emitted by orchestrator so the UI can reflect the phase as complete' },
+    message: 'architect.start',
+    metadata: {
+      origin,
+      ...(architectSessionId ? { session_id: architectSessionId } : {}),
+      note: 'architect ran out-of-cycle; event emitted by orchestrator so the UI can reflect the phase as complete',
+    },
   });
   logger.emit({
     initiative_id: input.initiativeId,
@@ -123,8 +137,13 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
     event_type: 'end',
     input_refs: [],
     output_refs: [input.manifestPath],
-    message: 'architect.synthetic-end',
-    metadata: { origin },
+    message: 'architect.end',
+    ...(typeof architectCostUsd === 'number' ? { cost_usd: architectCostUsd } : {}),
+    ...(typeof architectDurationMs === 'number' ? { duration_ms: architectDurationMs } : {}),
+    metadata: {
+      origin,
+      ...(architectSessionId ? { session_id: architectSessionId } : {}),
+    },
   });
 
   // F-04 / F-06: derive the effective quality-gate command once per cycle so

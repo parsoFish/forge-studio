@@ -36,7 +36,7 @@
  * Cleans up the throwaway projects/_e2e-demo/ + _logs/_queue state afterwards.
  */
 import { spawn, execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -122,13 +122,25 @@ function writeQuestions(sid) {
       ] },
   ], null, 2));
 }
+// P4: emulated architect telemetry — mirrors what the real finalize step stamps.
+// The cycleEvent calls below read these constants so the mock sources cost from
+// the manifest field, mirroring the real path.
+const EMULATED_ARCHITECT_COST_USD = 0.46;
+const EMULATED_ARCHITECT_DURATION_MS = 95000;
+
 function writePlan(sid, round) {
   const dir = archDir(sid);
   mkdirSync(join(dir, 'manifests'), { recursive: true });
   writeFileSync(join(dir, 'manifests', `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
-    'origin: architect', '---', '',
+    'origin: architect',
+    // P4: stamp architect telemetry so runCycle (real path) emits real architect
+    // events from these fields rather than hardcoded mock values.
+    `architect_session_id: ${sid}`,
+    `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
+    `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
+    '---', '',
     '# claude-trail --compact', '',
     'Given a cycle, when `claude-trail <id> --compact` is run, then it prints the title, verdict, and total cost only.',
     'Given `--compact` is combined with `--format json`, when the command runs, then it exits non-zero.',
@@ -494,11 +506,20 @@ async function main() {
     execSync(`cp ${join(archDir(sid), 'manifests', `${INIT}.md`)} ${join(QDIR('pending'), `${INIT}.md`)}`);
     writeStatus(sid, { phase: 'committed', round: 3, idea: IDEA });
     cycleEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
-    // Record the architect's work + cost in the cycle's lineage so its hex on
-    // the dashboard pipeline shows GREEN with a cost pill (the architect ran in
-    // the in-UI session before this cycle).
-    cycleEvent('architect', 'start', 'architect (in-UI session) — idea → plan');
-    cycleEvent('architect', 'end', 'architect.end', { cost_usd: 0.46, duration_ms: 95000 });
+    // P4: record the architect's work + cost in the cycle's lineage so its hex
+    // on the dashboard pipeline shows GREEN with a real cost pill. Source cost
+    // and duration from the manifest's stamped fields (set by writePlan above via
+    // EMULATED_ARCHITECT_COST_USD/DURATION) so this emulated path mirrors the
+    // real runCycle path (which reads the same manifest fields).
+    {
+      const manifestText = readFileSync(join(archDir(sid), 'manifests', `${INIT}.md`), 'utf8');
+      const costMatch = /^architect_cost_usd:\s*([\d.]+)/m.exec(manifestText);
+      const durMatch = /^architect_duration_ms:\s*(\d+)/m.exec(manifestText);
+      const archCost = costMatch ? parseFloat(costMatch[1]) : EMULATED_ARCHITECT_COST_USD;
+      const archDur = durMatch ? parseInt(durMatch[1], 10) : EMULATED_ARCHITECT_DURATION_MS;
+      cycleEvent('architect', 'start', 'architect.start', { metadata: { origin: 'architect' } });
+      cycleEvent('architect', 'end', 'architect.end', { cost_usd: archCost, duration_ms: archDur });
+    }
     moveManifest('pending', 'in-flight');
     // The screen flips to "Approved — Watch it build →" once finalize lands; take it.
     await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 15000 });

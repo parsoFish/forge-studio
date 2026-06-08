@@ -120,6 +120,27 @@ export type InitiativeManifest = {
    * manifests (the finalizer falls back to the latest matching `_logs` dir).
    */
   cycle_id?: string;
+  /**
+   * P4: architect session id from the in-UI architect runner that produced this
+   * manifest. Stamped during `runFinalizeStep` so the cycle's event log can emit
+   * real architect start/end events (grounding the architect hex in actual data
+   * rather than a synthetic mock). Absent when the manifest was created without
+   * an in-UI architect session (legacy / hand-authored manifests).
+   */
+  architect_session_id?: string;
+  /**
+   * P4: total cost (USD) accrued by the architect session that produced this
+   * manifest, summed from its `_logs/_architect-<sid>/events.jsonl`. When
+   * present, `runCycle` emits a real architect end event with this cost so the
+   * architect hex shows an accurate cost pill instead of a hardcoded mock value.
+   */
+  architect_cost_usd?: number;
+  /**
+   * P4: wall-clock duration (ms) of the architect session, computed as
+   * `last started_at − first started_at` across the session event log. Emitted
+   * alongside `architect_cost_usd` in the cycle's architect end event.
+   */
+  architect_duration_ms?: number;
 };
 
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -157,6 +178,15 @@ export function parseManifest(content: string): InitiativeManifest {
   if (typeof data.claimed_by === 'string') manifest.claimed_by = data.claimed_by;
   if (typeof data.worktree_path === 'string') manifest.worktree_path = data.worktree_path;
   if (typeof data.cycle_id === 'string' && data.cycle_id.length > 0) manifest.cycle_id = data.cycle_id;
+  if (typeof data.architect_session_id === 'string' && data.architect_session_id.length > 0) {
+    manifest.architect_session_id = data.architect_session_id;
+  }
+  if (typeof data.architect_cost_usd === 'number' && data.architect_cost_usd >= 0) {
+    manifest.architect_cost_usd = data.architect_cost_usd;
+  }
+  if (typeof data.architect_duration_ms === 'number' && data.architect_duration_ms >= 0) {
+    manifest.architect_duration_ms = data.architect_duration_ms;
+  }
   if (Array.isArray(data.quality_gate_cmd)) {
     const cmd = (data.quality_gate_cmd as unknown[]).filter((s): s is string => typeof s === 'string');
     if (cmd.length > 0) manifest.quality_gate_cmd = cmd;
@@ -195,6 +225,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.claimed_by) data.claimed_by = m.claimed_by;
   if (m.worktree_path) data.worktree_path = m.worktree_path;
   if (m.cycle_id) data.cycle_id = m.cycle_id;
+  if (m.architect_session_id) data.architect_session_id = m.architect_session_id;
+  if (typeof m.architect_cost_usd === 'number') data.architect_cost_usd = m.architect_cost_usd;
+  if (typeof m.architect_duration_ms === 'number') data.architect_duration_ms = m.architect_duration_ms;
   if (m.quality_gate_cmd && m.quality_gate_cmd.length > 0) {
     data.quality_gate_cmd = m.quality_gate_cmd;
   }

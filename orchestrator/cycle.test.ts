@@ -17,10 +17,12 @@ import {
   decideFinalCiGate,
   execCommandVector,
   recordBrainGateResult,
+  runCycle,
   snapshotCycleArtefacts,
   type CiCommandRunner,
 } from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
+import { serializeManifest, type InitiativeManifest } from './manifest.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cycle-test-'));
@@ -321,6 +323,107 @@ test('execCommandVector: strips the named env var from the child process (A3, re
 // `computeAdaptiveReviewIterationCap` was reviewer-internal logic that
 // moves away with the Ralph-reviewer deletion. The new router-driven
 // review phase doesn't iterate (the unifier owns iteration in S4 mode).
+
+// P4: architect events emitted from real manifest fields at cycle start.
+
+/** Build a minimal valid InitiativeManifest fixture for cycle tests. */
+function cycleManifestFixture(extra: Partial<InitiativeManifest> = {}): InitiativeManifest {
+  return {
+    initiative_id: 'INIT-2026-06-08-p4test',
+    project: 'test-project',
+    project_repo_path: '/tmp/test-project',
+    created_at: '2026-06-08T00:00:00Z',
+    iteration_budget: 3,
+    cost_budget_usd: 2,
+    phase: 'pending',
+    origin: 'architect',
+    body: '# P4 test\n\nACc: test.',
+    ...extra,
+  };
+}
+
+test('P4: runCycle emits architect end event with real cost_usd + duration_ms from manifest fields', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-p4-'));
+  const forgeRoot = resolve(import.meta.dirname, '..');
+  const cycleId = `TEST-p4-arch-${process.pid}-${Date.now()}`;
+  try {
+    // Write a manifest that carries real architect telemetry.
+    const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
+    writeFileSync(manifestPath, serializeManifest(cycleManifestFixture({
+      architect_session_id: 'sid-p4-test',
+      architect_cost_usd: 1.23,
+      architect_duration_ms: 42000,
+    })));
+
+    await runCycle({
+      initiativeId: 'INIT-2026-06-08-p4test',
+      manifestPath,
+      projectRepoPath: root,
+      worktreePath: root,
+      cycleId,
+      dryRun: true,
+    });
+
+    // The cycle emits into the real _logs/ dir (same pattern as snapshotCycleArtefacts test).
+    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    assert.ok(existsSync(logPath), `expected events.jsonl at ${logPath}`);
+    const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
+      .split('\n').filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+
+    const archEnd = events.find((e) => e.phase === 'architect' && e.event_type === 'end');
+    assert.ok(archEnd, 'expected an architect end event');
+    assert.equal(archEnd!.cost_usd, 1.23, 'cost_usd must come from manifest field');
+    assert.equal(archEnd!.duration_ms, 42000, 'duration_ms must come from manifest field');
+    assert.equal(
+      (archEnd!.metadata as Record<string, unknown>)?.session_id,
+      'sid-p4-test',
+      'session_id propagated to metadata',
+    );
+
+    const archStart = events.find((e) => e.phase === 'architect' && e.event_type === 'start');
+    assert.ok(archStart, 'expected an architect start event');
+  } finally {
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('P4: runCycle emits architect end event without cost/duration for legacy manifest (no telemetry fields)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-p4-legacy-'));
+  const forgeRoot = resolve(import.meta.dirname, '..');
+  const cycleId = `TEST-p4-legacy-${process.pid}-${Date.now()}`;
+  try {
+    const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
+    // Legacy manifest: no architect telemetry fields.
+    writeFileSync(manifestPath, serializeManifest(cycleManifestFixture()));
+
+    await runCycle({
+      initiativeId: 'INIT-2026-06-08-p4test',
+      manifestPath,
+      projectRepoPath: root,
+      worktreePath: root,
+      cycleId,
+      dryRun: true,
+    });
+
+    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    assert.ok(existsSync(logPath), `expected events.jsonl at ${logPath}`);
+    const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
+      .split('\n').filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+
+    const archEnd = events.find((e) => e.phase === 'architect' && e.event_type === 'end');
+    assert.ok(archEnd, 'expected an architect end event even for legacy manifest');
+    // cost_usd + duration_ms must be ABSENT (not present as 0/undefined) when the
+    // manifest carries no telemetry — the UI cost pill must stay blank, not show $0.
+    assert.equal(archEnd!.cost_usd, undefined, 'cost_usd must be absent for legacy manifest');
+    assert.equal(archEnd!.duration_ms, undefined, 'duration_ms must be absent for legacy manifest');
+  } finally {
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 // ADR 021: snapshotCycleArtefacts mirrors the tracked demo bundle + the
 // architect PLAN.html into _logs/<cycleId>/artifacts/ so the bridge can serve
