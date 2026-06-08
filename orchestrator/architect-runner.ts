@@ -458,6 +458,7 @@ const DRAFT_SCHEMA = {
     vision: { type: 'string' },
     initiatives: {
       type: 'array',
+      minItems: 1,
       items: {
         type: 'object',
         properties: {
@@ -553,18 +554,54 @@ async function runDraftStep(args: {
       'independent files/surfaces — never to reach a count.',
   ].join('\n');
 
-  const { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+  let { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
     queryFn,
     prompt,
     schema: DRAFT_SCHEMA,
     onToolUse,
     onHeartbeat,
     onText,
+    maxTurns: 50, // research-heavy ideas need room to reach the structured emit
   });
-  const vision = (draft?.vision ?? status.idea).trim();
-  const draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
+  let draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
+  // Convergence guard: a broad/research-heavy idea can burn the turn budget before
+  // the model emits the structured draft (observed 2026-06-08 on the release-CRUD
+  // idea — the turn ended mid-research with zero initiatives, throwing a fatal error
+  // that left the session stuck in `drafting`). Re-issue ONE focused, research-light
+  // turn that forbids further tools and demands ≥1 initiative, so the agent
+  // synthesizes what it already gathered rather than failing the whole session.
   if (draftInitiatives.length === 0) {
-    throw new Error('architect runner: draft step returned no initiatives');
+    logger.emit({
+      initiative_id: `architect-session-${input.sessionId}`,
+      phase: 'architect',
+      skill: 'architect-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'draft returned no initiatives — retrying with a forced-emit turn (no further research)',
+      metadata: { session_id: input.sessionId },
+    });
+    const retry = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+      queryFn,
+      prompt: `${prompt}\n\n## EMIT NOW — do not research further\nYou have already done enough research (this turn and the interview rounds). Do NOT call any more tools. Synthesize what you already know and return the structured draft immediately, with AT LEAST ONE initiative.`,
+      schema: DRAFT_SCHEMA,
+      onToolUse,
+      onHeartbeat,
+      onText,
+      maxTurns: 6,
+    });
+    if (Array.isArray(retry.output?.initiatives) && retry.output!.initiatives!.length > 0) {
+      draft = retry.output;
+      brainReads.push(...retry.brainReads);
+      draftInitiatives = retry.output!.initiatives!;
+    }
+  }
+  const vision = (draft?.vision ?? status.idea).trim();
+  if (draftInitiatives.length === 0) {
+    throw new Error(
+      'architect runner: draft step returned no initiatives after a forced-emit retry — the idea may be ' +
+      'too broad to plan in one pass. Re-run to retry, or split/refine the idea or interview answers.',
+    );
   }
 
   const created_at = new Date().toISOString();
@@ -808,6 +845,9 @@ async function runStructured<T>(args: {
    * reasoning stream in the activity panel.
    */
   onText?: (text: string) => void;
+  /** Per-call SDK turn budget (default 30). The draft raises it for research-heavy
+   *  ideas and uses a low value for the forced-emit retry. */
+  maxTurns?: number;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
@@ -826,7 +866,7 @@ async function runStructured<T>(args: {
     // toolset still produces the tool_use stream the architect hex shows.
     allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
     outputFormat: { type: 'json_schema', schema: args.schema },
-    maxTurns: 30,
+    maxTurns: args.maxTurns ?? 30,
   };
   // Idle-deadline (#6-extend, 2026-06-01): the architect's structured interview /
   // draft SDK calls were the one stream loop not yet guarded — a usage-limit

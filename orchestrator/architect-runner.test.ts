@@ -300,6 +300,61 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
   assert.equal(readStatus(sessionDir)?.phase, 'committed');
 });
 
+test('draft: empty initiatives triggers a forced-emit retry that succeeds → awaiting-verdict', async () => {
+  // Regression (2026-06-08): a research-heavy idea burned the turn budget and the
+  // draft returned ZERO initiatives, throwing a fatal error that left the session
+  // stuck in `drafting`. The runner now re-issues one forced-emit turn.
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ phase: 'drafting' });
+  let drafts = 0;
+  let sawEmitNow = false;
+  const queryFn: QueryFn = ({ prompt }) => {
+    const isDraft = prompt.includes('draft the initiative');
+    const isRetry = prompt.includes('EMIT NOW');
+    if (isDraft) drafts += 1;
+    if (isRetry) sawEmitNow = true;
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = !isDraft
+        ? null
+        : isRetry
+          ? {
+              vision: 'Dark mode that follows the OS.',
+              initiatives: [
+                { slug: 'dark-mode-toggle', title: 'Dark mode toggle', iteration_budget: 4, cost_budget_usd: 6,
+                  body: '## Dark mode\n\nGiven settings, when toggled, then theme persists.' },
+              ],
+            }
+          : { vision: 'Dark mode that follows the OS.', initiatives: [] }; // first call: empty → must retry
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  assert.equal(drafts, 2, 'the draft ran twice: initial (empty) + forced-emit retry');
+  assert.ok(sawEmitNow, 'the retry used the forced-emit prompt (no further research)');
+  assert.equal(readStatus(sessionDir)?.phase, 'awaiting-verdict');
+});
+
+test('draft: still-empty after the forced-emit retry throws a clear, recoverable error', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'drafting' });
+  let drafts = 0;
+  const queryFn: QueryFn = ({ prompt }) => {
+    if (prompt.includes('draft the initiative')) drafts += 1;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: { vision: 'x', initiatives: [] } };
+    }
+    return gen();
+  };
+
+  await assert.rejects(
+    () => runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    /no initiatives after a forced-emit retry/,
+  );
+  assert.equal(drafts, 2, 'it tried the initial draft + one forced-emit retry before giving up');
+});
+
 test('drafting: architect emits cross-initiative build order → manifest depends_on_initiatives', async () => {
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
     phase: 'finalizing',
