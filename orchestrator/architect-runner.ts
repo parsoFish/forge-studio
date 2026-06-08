@@ -341,7 +341,7 @@ const INTERVIEW_SCHEMA = {
             },
           },
         },
-        required: ['question', 'header', 'options'],
+        required: ['question', 'header'],
       },
     },
   },

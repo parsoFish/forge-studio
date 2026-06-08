@@ -97,7 +97,7 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
                       <legend style={{ fontSize: 13, color: '#e6edf3', marginBottom: 6, padding: 0 }}>{q.question}</legend>
                       {hasOptions ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {q.options.map((opt) => {
+                          {(q.options ?? []).map((opt) => {
                             const selected = choices[i] === opt.label;
                             return (
                               <label key={opt.label} data-option-label={opt.label} data-option-selected={selected ? 'true' : 'false'}

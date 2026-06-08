@@ -347,7 +347,8 @@ export type ArchitectPhase =
 export type ArchitectQuestion = {
   question: string;
   header: string;
-  options: { label: string; description: string }[];
+  /** Options may be absent when the architect poses an open-ended question. */
+  options?: { label: string; description: string }[];
 };
 
 export type ArchitectSessionSummary = {
