@@ -561,15 +561,14 @@ async function runDraftStep(args: {
     onToolUse,
     onHeartbeat,
     onText,
-    maxTurns: 50, // research-heavy ideas need room to reach the structured emit
   });
   let draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
-  // Convergence guard: a broad/research-heavy idea can burn the turn budget before
-  // the model emits the structured draft (observed 2026-06-08 on the release-CRUD
-  // idea — the turn ended mid-research with zero initiatives, throwing a fatal error
-  // that left the session stuck in `drafting`). Re-issue ONE focused, research-light
-  // turn that forbids further tools and demands ≥1 initiative, so the agent
-  // synthesizes what it already gathered rather than failing the whole session.
+  // Convergence backstop: if the model still returns zero initiatives (e.g. it did not
+  // honour the schema's minItems), re-issue ONE focused, research-light turn that forbids
+  // further tools and demands ≥1 initiative, so the agent synthesizes what it already
+  // gathered rather than failing the whole session. (The turn cap that originally caused
+  // empty drafts on the release-CRUD idea, 2026-06-08, has been removed — the architect
+  // is operator-driven, so it now runs uncapped.)
   if (draftInitiatives.length === 0) {
     logger.emit({
       initiative_id: `architect-session-${input.sessionId}`,
@@ -588,7 +587,6 @@ async function runDraftStep(args: {
       onToolUse,
       onHeartbeat,
       onText,
-      maxTurns: 6,
     });
     if (Array.isArray(retry.output?.initiatives) && retry.output!.initiatives!.length > 0) {
       draft = retry.output;
@@ -845,9 +843,6 @@ async function runStructured<T>(args: {
    * reasoning stream in the activity panel.
    */
   onText?: (text: string) => void;
-  /** Per-call SDK turn budget (default 30). The draft raises it for research-heavy
-   *  ideas and uses a low value for the forced-emit retry. */
-  maxTurns?: number;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
@@ -866,7 +861,10 @@ async function runStructured<T>(args: {
     // toolset still produces the tool_use stream the architect hex shows.
     allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
     outputFormat: { type: 'json_schema', schema: args.schema },
-    maxTurns: args.maxTurns ?? 30,
+    // No maxTurns: the architect is operator-driven + interactive (unlike the
+    // autonomous PM/dev/reflector phases, which cap for cost/safety). Its research +
+    // draft turns run until they emit the structured output — a cap here only risks
+    // ending a turn mid-research with no result. withIdleDeadline still aborts a true stall.
   };
   // Idle-deadline (#6-extend, 2026-06-01): the architect's structured interview /
   // draft SDK calls were the one stream loop not yet guarded — a usage-limit
