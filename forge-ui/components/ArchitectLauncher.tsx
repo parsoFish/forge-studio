@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { NewIdeaBox } from './NewIdeaBox';
 import type { ArchitectPhase, ArchitectSessionSummary } from '@/lib/bridge-client';
 
+const WORKING_PHASES_LAUNCHER = new Set<ArchitectPhase>(['interviewing', 'drafting', 'finalizing']);
+const STALE_THRESHOLD_MS = 120_000;
+
 /**
  * ADR 020 — the compact architect entry on the primary dashboard. Keeps the
  * dashboard uncluttered: just the "new idea" box plus one slim row per active
@@ -50,6 +53,7 @@ export function ArchitectLauncher({
       {active.map((s) => {
         const planReady = s.phase === 'awaiting-verdict';
         const needsYou = planReady || s.phase === 'awaiting-answers';
+        const isStale = WORKING_PHASES_LAUNCHER.has(s.phase) && (s.staleMs ?? 0) > STALE_THRESHOLD_MS;
         return (
           <Link
             key={s.sessionId}
@@ -57,13 +61,14 @@ export function ArchitectLauncher({
             data-architect-session-id={s.sessionId}
             data-architect-phase={s.phase}
             data-architect-project={s.project}
+            {...(isStale ? { 'data-architect-stale': 'true', 'data-architect-stale-ms': s.staleMs } : {})}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 12,
               textDecoration: 'none',
-              border: `1px solid ${planReady ? '#2ea04366' : '#30363d'}`,
+              border: `1px solid ${planReady ? '#2ea04366' : isStale ? '#9e6a0366' : '#30363d'}`,
               borderRadius: 8,
               padding: '10px 14px',
               background: planReady ? '#07140d' : '#0d1117',
@@ -76,6 +81,11 @@ export function ArchitectLauncher({
               <span style={{ fontSize: 11, color: '#8b949e', fontFamily: 'ui-monospace, Menlo, monospace' }}>
                 {s.project} · {PHASE_TEXT[s.phase] ?? s.phase}
               </span>
+              {isStale && (
+                <span style={{ fontSize: 11, color: '#d29922' }}>
+                  ⚠ stalled {Math.round((s.staleMs ?? 0) / 60_000)}m ago
+                </span>
+              )}
             </span>
             <span
               data-action={planReady ? 'open-plan' : 'open-architect'}

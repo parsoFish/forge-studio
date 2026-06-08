@@ -43,6 +43,8 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+const HEARTBEAT_THROTTLE_MS = 2000;
+
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 export type QueryFn = (params: { prompt: string; options?: Record<string, unknown> }) => AsyncIterable<unknown>;
@@ -222,6 +224,16 @@ export async function runArchitectTurn(
   });
   const onToolUse = sink.onToolUse;
 
+  // Heartbeat: write an ISO timestamp to <logsRoot>/_architect-<sid>/.heartbeat
+  // on each SDK stream message (throttled). The bridge reads this file's mtime
+  // to compute staleMs for the stuck-warning in the UI.
+  const heartbeatDir = join(input.logsRoot ?? resolve('_logs'), `_architect-${input.sessionId}`);
+  mkdirSync(heartbeatDir, { recursive: true });
+  const heartbeatPath = join(heartbeatDir, '.heartbeat');
+  const onHeartbeat = (): void => {
+    try { writeFileSync(heartbeatPath, new Date().toISOString()); } catch { /* best-effort */ }
+  };
+
   let result: RunArchitectTurnResult;
 
   // Interview phase — may flow straight through to drafting when ready.
@@ -235,6 +247,7 @@ export async function runArchitectTurn(
       skillPromptPath: input.skillPromptPath,
       brainIndex,
       onToolUse,
+      onHeartbeat,
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(paths.sessionDir, decision.questions);
@@ -268,9 +281,10 @@ export async function runArchitectTurn(
       resolvedDecisions: null,
       brainIndex,
       onToolUse,
+      onHeartbeat,
     });
   } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse });
+    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat });
   } else if (phase === 'rejected') {
     // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
     // phase=rejected before spawning this turn; we move the session dir to
@@ -342,8 +356,9 @@ async function runInterviewStep(args: {
   /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse } = args;
+  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat } = args;
   const skill = loadSkillPrompt(skillPromptPath);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -387,6 +402,7 @@ async function runInterviewStep(args: {
     prompt,
     schema: INTERVIEW_SCHEMA,
     onToolUse,
+    onHeartbeat,
   });
   const questions = Array.isArray(out?.questions) ? out!.questions! : [];
   return { done: out?.done === true, questions };
@@ -443,8 +459,9 @@ async function runDraftStep(args: {
   /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
 }): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse } = args;
+  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat } = args;
   const interview = readInterview(paths.sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
@@ -513,6 +530,7 @@ async function runDraftStep(args: {
     prompt,
     schema: DRAFT_SCHEMA,
     onToolUse,
+    onHeartbeat,
   });
   const vision = (draft?.vision ?? status.idea).trim();
   const draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
@@ -609,6 +627,7 @@ async function runFinalizeStep(args: {
   /** Brain navigation index; passed through to fallback draft step (ARCH-1). */
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, logger } = args;
   const resolved = readResolvedDecisions(paths.sessionDir);
@@ -727,6 +746,8 @@ async function runStructured<T>(args: {
   prompt: string;
   schema: unknown;
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  /** Called at most once per HEARTBEAT_THROTTLE_MS during the SDK stream. */
+  onHeartbeat?: () => void;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
@@ -756,10 +777,19 @@ async function runStructured<T>(args: {
   let rawText = '';
   let toolSeq = 0;
   const brainReads: string[] = [];
+  let lastHeartbeatMs = 0;
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: 'architect-structured',
     abortController,
   })) {
+    // Throttled heartbeat — signals liveness to the UI stale-checker.
+    if (args.onHeartbeat) {
+      const now = Date.now();
+      if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
+        args.onHeartbeat();
+        lastHeartbeatMs = now;
+      }
+    }
     const m = msg as {
       type?: string;
       structured_output?: unknown;

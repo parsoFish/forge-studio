@@ -359,6 +359,9 @@ export type ArchitectSessionSummary = {
   idea: string;
   questions: ArchitectQuestion[] | null;
   planUrl: string | null;
+  /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
+   *  Use this to detect a stalled runner. */
+  staleMs?: number;
 };
 
 export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {

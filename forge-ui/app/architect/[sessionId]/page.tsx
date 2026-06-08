@@ -77,6 +77,8 @@ export default function ArchitectSessionPage({
               {session.project}
             </div>
 
+            <StuckWarning session={session} />
+
             {/* The question FORM only appears once the architect has emitted
                 questions (phase 'awaiting-answers'); interviewing/drafting are
                 working states that show a 'thinking…' status, not the form. */}
@@ -134,6 +136,37 @@ function Status({ label }: { label: string }): JSX.Element {
       style={{ border: '1px solid #30363d', borderRadius: 10, padding: '14px 18px', background: '#0d1117', fontSize: 13, color: '#8b949e' }}
     >
       {label}
+    </div>
+  );
+}
+
+const WORKING_PHASES = new Set<ArchitectSessionSummary['phase']>(['interviewing', 'drafting', 'finalizing']);
+const STALE_THRESHOLD_MS = 120_000;
+
+function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.Element | null {
+  if (!WORKING_PHASES.has(session.phase)) return null;
+  if ((session.staleMs ?? 0) <= STALE_THRESHOLD_MS) return null;
+  const staleMinutes = Math.round((session.staleMs ?? 0) / 60_000);
+  return (
+    <div
+      data-architect-stale="true"
+      data-architect-stale-ms={session.staleMs}
+      style={{
+        marginBottom: 12,
+        border: '1px solid #9e6a0388',
+        borderRadius: 8,
+        padding: '10px 14px',
+        background: '#1a110033',
+        fontSize: 13,
+        color: '#d29922',
+      }}
+    >
+      ⚠ No architect activity for {staleMinutes}m — it may have stalled.
+      Check{' '}
+      <code style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}>
+        _logs/_architect-{session.sessionId}/stderr.log
+      </code>{' '}
+      or re-run.
     </div>
   );
 }

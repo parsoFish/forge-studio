@@ -807,15 +807,23 @@ async function handleHttp(
  *  spawn pattern). Best-effort + fire-and-forget — the runner checkpoints to
  *  the session dir and the fsWatch/`architect-list-changed` signal drives the
  *  UI re-fetch. `FORGE_ARCHITECT_NO_SPAWN=1` disables the spawn for harness /
- *  curl runs that pre-seed session state (mirrors `FORGE_BRIDGE_DEBUG`). */
+ *  curl runs that pre-seed session state (mirrors `FORGE_BRIDGE_DEBUG`).
+ *
+ *  The runner's stderr (uncaught exceptions, SDK errors) is captured to
+ *  `_logs/_architect-<sid>/stderr.log` so stalls are diagnosable via the
+ *  existing GET /api/architect/file/<project>/<sid>/stderr.log endpoint. */
 function spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
   try {
+    const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
       ['--experimental-strip-types', 'orchestrator/cli.ts', 'architect', 'run', sessionId, '--project', project],
-      { cwd: forgeRoot, detached: true, stdio: 'ignore' },
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
+    closeSync(stderrFd);
     proc.unref();
   } catch { /* best-effort */ }
 }
@@ -859,6 +867,18 @@ async function handleArchitect(
       const planUrl = existsSync(join(dir, 'PLAN.html'))
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
+
+      // staleMs: ms since the last sign of life — heartbeat mtime if present,
+      // else the status.json updated_at timestamp.
+      const heartbeatPath = join(ctx.logsRoot, `_architect-${s.session_id}`, '.heartbeat');
+      let staleMs: number;
+      if (existsSync(heartbeatPath)) {
+        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
+      } else {
+        const parsedAt = Date.parse(s.updated_at);
+        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
+      }
+
       return {
         sessionId: s.session_id,
         project: s.project,
@@ -868,6 +888,7 @@ async function handleArchitect(
         idea: s.idea,
         questions,
         planUrl,
+        staleMs,
       };
     });
     sendJson(res, 200, { sessions });
