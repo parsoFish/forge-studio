@@ -114,3 +114,47 @@ test('deriveStageTotals: reconciles per-owner across the cycle (no double-count)
   expect(totals.tokens).toBe(8000); // 6000 committed + 2000 WI-2 in-flight
   expect(totals.costUsd).toBe(0.5);
 });
+
+// --- cost de-duplication: iteration-only for phases that emit iterations ---
+
+const endEv = (phase: string, cost: number, message = '') =>
+  ev({ phase: phase as EventLogEntry['phase'], event_type: 'end', cost_usd: cost, message });
+const phaseIterEv = (phase: string, cost: number) =>
+  ev({ phase: phase as EventLogEntry['phase'], event_type: 'iteration', cost_usd: cost });
+
+test('derivePerWiActivity: ralph.end event does NOT add cost (iteration already counted it)', () => {
+  // The per-WI 'end' (ralph.end) carries the same dollars as the iteration event.
+  // Adding both would double-count WI cost in the hex pill.
+  const ralphEnd = ev({ event_type: 'end', message: 'ralph.end', work_item_id: 'WI-1', cost_usd: 1.0, tokens_in: 5000, tokens_out: 1000 });
+  const out = derivePerWiActivity([
+    iterationEv('WI-1', 5000, 1000, 1.0), // authoritative cost
+    ralphEnd,                               // must NOT add another $1.0
+  ]);
+  expect(out['WI-1']!.costUsd).toBe(1.0); // 1x, not 2x
+});
+
+test('deriveStageTotals: developer-loop iteration+end → cost counted only once', () => {
+  // Mirrors the real cycle pattern: each WI emits iteration + ralph.end +
+  // the phase emits a phase-level end that sums all WIs.
+  const totals = deriveStageTotals([
+    iterationEv('WI-1', 4000, 1000, 1.027781),
+    endEv('developer-loop', 1.027781, 'ralph.end'),   // re-statement — must not add
+    iterationEv('WI-2', 2000, 500, 0.439271),
+    endEv('developer-loop', 0.439271, 'ralph.end'),   // re-statement — must not add
+    endEv('developer-loop', 1.467052),                // phase-level rollup — must not add
+  ], 2);
+  expect(totals.costUsd).toBeCloseTo(1.467052, 5);   // 1x, not 3x
+});
+
+test('deriveStageTotals: single-call phase (PM) with only an end event is still counted', () => {
+  // project-manager emits NO iteration events — cost lives on its single 'end'.
+  // With no iterations to trigger the filter, the end cost must be included.
+  const totals = deriveStageTotals([
+    endEv('project-manager', 0.700842),
+    iterationEv('WI-1', 5000, 1000, 1.0),            // developer-loop has iterations
+    endEv('developer-loop', 1.0, 'ralph.end'),         // re-statement — excluded
+    endEv('developer-loop', 1.0),                      // phase rollup — excluded
+  ], 1);
+  // PM $0.700842 (end, no iterations) + dev-loop $1.0 (1x iteration only)
+  expect(totals.costUsd).toBeCloseTo(1.700842, 5);
+});

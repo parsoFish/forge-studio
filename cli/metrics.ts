@@ -66,9 +66,23 @@ export function summariseAll(logsDir = '_logs'): CycleMetrics[] {
   return listCycles(logsDir).map((id) => summariseCycle(id, logsDir));
 }
 
-function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
+export function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
   const m = emptyCycle(cycleId);
   const initiatives = new Set<string>();
+
+  // Pre-scan: determine which phases emit at least one 'iteration' event.
+  // For phases WITH iteration events (developer-loop, unifier) the same dollar
+  // amount is re-stated on the per-WI 'ralph.end' AND the phase-level 'end'
+  // event — counting all three would triple/double the cost.
+  // Rule: for a phase with ≥1 iteration event, count ONLY iteration events.
+  // For a phase with NO iteration events (project-manager, architect,
+  // reflection, closure, orchestrator) the cost lands exclusively on its
+  // 'end' event — count all events so those phases are not zeroed out.
+  const phasesWithIterations = new Set<Phase>();
+  for (const e of events) {
+    if (e.event_type === 'iteration') phasesWithIterations.add(e.phase);
+  }
+
   for (const e of events) {
     initiatives.add(e.initiative_id);
     // G6: the cohort tag rides on the orchestrator's `cycle.start` event.
@@ -76,7 +90,6 @@ function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
       const o = (e.metadata as { origin?: unknown } | undefined)?.origin;
       if (o === 'human-directed' || o === 'architect') m.origin = o;
     }
-    m.total_cost_usd += e.cost_usd ?? 0;
     m.total_tokens_in += e.tokens_in ?? 0;
     m.total_tokens_out += e.tokens_out ?? 0;
     m.total_duration_ms += e.duration_ms ?? 0;
@@ -84,9 +97,23 @@ function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
     if (e.event_type === 'error') m.errors += 1;
 
     m.per_phase[e.phase] ??= { cost_usd: 0, iterations: 0, duration_ms: 0 };
-    m.per_phase[e.phase].cost_usd += e.cost_usd ?? 0;
     m.per_phase[e.phase].duration_ms += e.duration_ms ?? 0;
     if (e.event_type === 'iteration') m.per_phase[e.phase].iterations += 1;
+
+    // Cost attribution: count only the authoritative (non-restating) events
+    // per phase. If a phase has iteration events, only those carry the
+    // canonical per-turn cost; 'end' events re-state the same dollars and
+    // must be excluded. If a phase has no iteration events, its cost is on
+    // 'end' events only (count everything).
+    const countCost =
+      phasesWithIterations.has(e.phase)
+        ? e.event_type === 'iteration'
+        : true;
+    if (countCost) {
+      const cost = e.cost_usd ?? 0;
+      m.per_phase[e.phase].cost_usd += cost;
+      m.total_cost_usd += cost;
+    }
 
     m.per_skill[e.skill] ??= { invocations: 0, cost_usd: 0, duration_ms: 0 };
     if (e.event_type === 'start') m.per_skill[e.skill].invocations += 1;

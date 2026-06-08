@@ -116,7 +116,10 @@ export function derivePerWiActivity(events: readonly EventLogEntry[]): Record<st
       if (typeof e.tokens_in === 'number') { a.tokens += e.tokens_in; authoritative = true; }
       if (typeof e.tokens_out === 'number') { a.tokens += e.tokens_out; authoritative = true; }
       if (authoritative) inflight[wi] = 0;
-      if (typeof e.cost_usd === 'number') a.costUsd += e.cost_usd;
+      // Count cost only on 'iteration' events. The per-WI 'ralph.end' event
+      // (event_type='end', message='ralph.end') re-states the same dollars
+      // already counted on the iteration events — adding it would double-count.
+      if (e.event_type === 'iteration' && typeof e.cost_usd === 'number') a.costUsd += e.cost_usd;
       if (typeof md?.last_assistant_text === 'string' && md.last_assistant_text) {
         a.lastReasoning = md.last_assistant_text;
         a.lastReasoningAt = e.started_at;
@@ -138,6 +141,17 @@ export function deriveStageTotals(
   // Same committed-vs-in-flight reconciliation as derivePerWiActivity, but
   // global — keyed by owner (work item, else phase) so a per-turn usage_delta
   // and its later authoritative iteration event reconcile against each other.
+  //
+  // Cost de-duplication: for phases that emit 'iteration' events (developer-loop,
+  // unifier) the same dollars also appear on 'end' events — count only iteration
+  // events for those phases to avoid 2x/3x over-counting. Phases with no
+  // iteration events (project-manager, reflection, …) carry their cost only on
+  // 'end' events and are counted as-is.
+  const phasesWithIterations = new Set<string>();
+  for (const e of events) {
+    if (e.event_type === 'iteration') phasesWithIterations.add(e.phase ?? '');
+  }
+
   let committed = 0;
   let costUsd = 0;
   const inflight: Record<string, number> = {};
@@ -151,7 +165,10 @@ export function deriveStageTotals(
       if (typeof e.tokens_in === 'number') { committed += e.tokens_in; authoritative = true; }
       if (typeof e.tokens_out === 'number') { committed += e.tokens_out; authoritative = true; }
       if (authoritative) inflight[owner] = 0;
-      if (typeof e.cost_usd === 'number') costUsd += e.cost_usd;
+      const countCost = phasesWithIterations.has(e.phase ?? '')
+        ? e.event_type === 'iteration'
+        : true;
+      if (countCost && typeof e.cost_usd === 'number') costUsd += e.cost_usd;
     }
   }
   const inflightTotal = Object.values(inflight).reduce((s, n) => s + n, 0);
