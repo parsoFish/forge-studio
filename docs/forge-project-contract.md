@@ -281,6 +281,18 @@ the gate failed deep in `PreCheck` instead (2026-06-07). This seam composes with
 first-class `secrets.env` above: `secrets.env` (self-loaded by the test) is where the
 creds come from; `requires_env` is the guard that errors fast if they did not arrive.
 
+**Resolution order (2026-06-11):** the guard resolves each `requires_env` var from
+the forge process env **or** the project's `secrets.env` at the worktree root
+(process env wins), and injects the `secrets.env` vars into the gate child process.
+The injection matters for vars a framework checks *before* the test's own secrets
+loading runs — Go's `TF_ACC` skip-check fires before `PreCheck`, so `TF_ACC=1`
+belongs in `secrets.env` alongside the creds. Before this, the guard read only the
+daemon's env, so a daemon started without the creds exported errored every live-acc
+gate (`live-env-missing`) even though `secrets.env` held them — three betterADO
+cycles failed this way on 2026-06-08. Injection is scoped to `requires_env`-bearing
+gates only; the `ci_gate` still runs with `ci_gate_unset_env` stripped and never
+sees `secrets.env`.
+
 **2. `standing_work_item_acs: string[]`**
 
 Verbatim testing invariants forge appends to **every** WI body as a

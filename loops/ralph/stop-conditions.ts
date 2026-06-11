@@ -7,6 +7,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
@@ -217,9 +219,49 @@ export type GateTighteningOptions = {
    * Empty/absent ⇒ no env requirement (default behaviour). Surfaced after the
    * forge daemon ran betterado cycles without TF_ACC → live-acc gates skipped +
    * false-passed and the resources shipped unverified (2026-06-06).
+   *
+   * Resolution order (2026-06-11): a var counts as "set" if it is in the forge
+   * process env OR in the project's gitignored `secrets.env` at the worktree
+   * root (the contract's first-class live-creds file; process env wins on
+   * conflict). The secrets.env vars are also injected into the gate child
+   * process, so framework-level pre-checks that run before the test's own
+   * secrets loading (e.g. the Go TF_ACC skip-check) see them too. Previously
+   * the guard only consulted `process.env`, so a daemon started without the
+   * creds exported errored EVERY live-acc gate (`live-env-missing`) even
+   * though secrets.env held them — the 2026-06-08 betterado cycle failures.
    */
   requiredEnv?: readonly string[];
 };
+
+/**
+ * Minimal dotenv read of `<worktreePath>/secrets.env` — the forge↔project
+ * contract's first-class live-creds file (gitignored, canonical var names).
+ * Mirrors the project-side loader semantics (betterado testutils/secrets.go):
+ * skip blanks + `#` comments, allow `export ` prefix, strip surrounding
+ * quotes. Returns {} when the file is absent/unreadable — the requiredEnv
+ * guard then reports exactly which var is missing.
+ */
+export function readWorktreeSecretsEnv(worktreePath: string): Record<string, string> {
+  let content: string;
+  try {
+    content = readFileSync(resolve(worktreePath, 'secrets.env'), 'utf8');
+  } catch {
+    return {};
+  }
+  const vars: Record<string, string> = {};
+  for (const raw of content.split('\n')) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const stripped = line.startsWith('export ') ? line.slice('export '.length) : line;
+    const eq = stripped.indexOf('=');
+    if (eq <= 0) continue;
+    const key = stripped.slice(0, eq).trim();
+    if (key === '') continue;
+    const val = stripped.slice(eq + 1).trim().replace(/^(["'])(.*)\1$/, '$2');
+    vars[key] = val;
+  }
+  return vars;
+}
 
 /** Default quality-gates implementation: shells to `npm test` in the worktree. */
 export function defaultQualityGates(
@@ -296,24 +338,35 @@ function runGateCapturing(
   // could ONLY skip, so ERROR it (could-not-validate, a broken gate) rather than
   // let it false-pass. Errored ⇒ the runner stops early + the classifier says
   // "fix the gate", instead of shipping an unverified resource.
-  const missingEnv = (options?.requiredEnv ?? []).filter((v) => !process.env[v]);
-  if (missingEnv.length > 0) {
-    onRun?.({
-      passed: false,
-      errored: true,
-      exitCode: -5, // synthetic — gate could not validate (live-test env absent)
-      durationMs: 0,
-      stdoutTail: '',
-      stderrTail:
-        `[forge gate-errored] live-acceptance gate requires ${missingEnv.join(', ')} to be set so the test ` +
-        `actually runs against the live system; unset ⇒ the runner SKIPS and the gate would FALSE-PASS ` +
-        `("ok … 0.00s"). Set ${missingEnv.join(', ')} (+ creds) in the cycle env before running this gate ` +
-        `(e.g. \`export TF_ACC=1\` + source secrets.env, or run via \`forge serve --once\` with them exported).`,
-      command,
-      rejectReason: 'live-env-missing',
-      iteration,
-    });
-    return false;
+  //
+  // 2026-06-11: the vars are resolved from the process env AND the project's
+  // `secrets.env` at the worktree root (process env wins), and the merged env
+  // is handed to the gate child process — see GateTighteningOptions.requiredEnv.
+  let gateEnv: NodeJS.ProcessEnv | undefined;
+  const requiredEnv = options?.requiredEnv ?? [];
+  if (requiredEnv.length > 0) {
+    const secrets = readWorktreeSecretsEnv(worktreePath);
+    gateEnv = { ...secrets, ...process.env };
+    const missingEnv = requiredEnv.filter((v) => !gateEnv![v]);
+    if (missingEnv.length > 0) {
+      onRun?.({
+        passed: false,
+        errored: true,
+        exitCode: -5, // synthetic — gate could not validate (live-test env absent)
+        durationMs: 0,
+        stdoutTail: '',
+        stderrTail:
+          `[forge gate-errored] live-acceptance gate requires ${missingEnv.join(', ')} to be set so the test ` +
+          `actually runs against the live system; unset ⇒ the runner SKIPS and the gate would FALSE-PASS ` +
+          `("ok … 0.00s"). Checked the cycle env AND \`secrets.env\` at the project root — add ` +
+          `${missingEnv.join(', ')} under these exact names to secrets.env (the gitignored live-creds file), ` +
+          `or export them in the environment forge runs in.`,
+        command,
+        rejectReason: 'live-env-missing',
+        iteration,
+      });
+      return false;
+    }
   }
   const startedAt = Date.now();
   let passed = false;
@@ -325,7 +378,7 @@ function runGateCapturing(
   // (no-work / required-paths) OR when the command itself could not run (errored).
   let rejectReason: GateRunInfo['rejectReason'];
   try {
-    const out = execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
+    const out = execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe', ...(gateEnv ? { env: gateEnv } : {}) });
     stdout = out.toString('utf8');
     passed = true;
   } catch (err) {

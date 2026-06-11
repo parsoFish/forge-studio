@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeQualityGateFromCmd, type GateRunInfo } from './stop-conditions.ts';
+import { makeQualityGateFromCmd, readWorktreeSecretsEnv, type GateRunInfo } from './stop-conditions.ts';
 
 test('makeQualityGateFromCmd: returns true when command exits 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
@@ -109,6 +109,87 @@ test('makeQualityGateFromCmd: requiredEnv satisfied → gate runs + passes norma
     assert.equal(gate(), true, 'gate runs (and passes) when the required env var is set');
   } finally {
     delete process.env[present];
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: requiredEnv satisfied by the worktree secrets.env → gate runs with it injected', () => {
+  // 2026-06-11: the contract puts live creds in the project's gitignored
+  // secrets.env (self-loaded by the tests) — the guard must accept that as a
+  // source AND hand the var to the gate child process (framework pre-checks
+  // like Go's TF_ACC skip-check run before the test's own secrets loading).
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-secrets-'));
+  const fromSecrets = 'FORGE_TEST_SECRETS_ONLY_ENV_XYZ';
+  delete process.env[fromSecrets];
+  try {
+    writeFileSync(join(dir, 'secrets.env'), `# live creds\n${fromSecrets}=from-secrets\n`);
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', `test "$${fromSecrets}" = from-secrets`],
+      (i) => { info = i; },
+      { requiredEnv: [fromSecrets] },
+    );
+    assert.equal(gate(), true, 'secrets.env var satisfies the guard and reaches the child process');
+    assert.equal(info?.errored ?? false, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: process env WINS over secrets.env on conflict', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-secrets-'));
+  const conflicted = 'FORGE_TEST_CONFLICT_ENV_XYZ';
+  process.env[conflicted] = 'from-process';
+  try {
+    writeFileSync(join(dir, 'secrets.env'), `${conflicted}=from-secrets\n`);
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', `test "$${conflicted}" = from-process`],
+      undefined,
+      { requiredEnv: [conflicted] },
+    );
+    assert.equal(gate(), true, 'an exported var must never be overridden by secrets.env');
+  } finally {
+    delete process.env[conflicted];
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readWorktreeSecretsEnv: parses KEY=VALUE, skips comments/blanks, strips export + quotes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-secrets-parse-'));
+  try {
+    writeFileSync(
+      join(dir, 'secrets.env'),
+      [
+        '# comment',
+        '',
+        'PLAIN=value',
+        'export EXPORTED=ok',
+        'QUOTED="with spaces"',
+        "SINGLE='single'",
+        'EQ_IN_VALUE=a=b',
+        '=novalue',
+        'not-a-pair',
+      ].join('\n'),
+    );
+    assert.deepEqual(readWorktreeSecretsEnv(dir), {
+      PLAIN: 'value',
+      EXPORTED: 'ok',
+      QUOTED: 'with spaces',
+      SINGLE: 'single',
+      EQ_IN_VALUE: 'a=b',
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readWorktreeSecretsEnv: missing file → empty object (guard then names the missing var)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-secrets-parse-'));
+  try {
+    assert.deepEqual(readWorktreeSecretsEnv(dir), {});
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
