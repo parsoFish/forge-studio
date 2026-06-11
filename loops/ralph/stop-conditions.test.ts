@@ -194,6 +194,28 @@ test('readWorktreeSecretsEnv: missing file → empty object (guard then names th
   }
 });
 
+test('readWorktreeSecretsEnv: falls back to the MAIN checkout when the worktree lacks secrets.env', () => {
+  // secrets.env is gitignored, so `git worktree add` never materialises it in
+  // cycle worktrees — the loader must find the main checkout's copy.
+  const root = mkdtempSync(join(tmpdir(), 'forge-secrets-wt-'));
+  const repo = join(root, 'repo');
+  const wt = join(root, 'wt');
+  try {
+    execFileSync('git', ['init', '-q', repo]);
+    execFileSync('git', ['-C', repo, 'commit', '--allow-empty', '-m', 'init', '-q'], {
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
+      },
+    });
+    writeFileSync(join(repo, 'secrets.env'), 'FROM_MAIN_CHECKOUT=yes\n');
+    execFileSync('git', ['-C', repo, 'worktree', 'add', '-q', wt, '-b', 'wt-branch']);
+    assert.deepEqual(readWorktreeSecretsEnv(wt), { FROM_MAIN_CHECKOUT: 'yes' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('makeQualityGateFromCmd: returns false on empty command', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
   try {

@@ -234,19 +234,30 @@ export type GateTighteningOptions = {
 };
 
 /**
- * Minimal dotenv read of `<worktreePath>/secrets.env` — the forge↔project
+ * Minimal dotenv read of the project's `secrets.env` — the forge↔project
  * contract's first-class live-creds file (gitignored, canonical var names).
- * Mirrors the project-side loader semantics (betterado testutils/secrets.go):
- * skip blanks + `#` comments, allow `export ` prefix, strip surrounding
- * quotes. Returns {} when the file is absent/unreadable — the requiredEnv
- * guard then reports exactly which var is missing.
+ * Looks in the worktree root first, then falls back to the MAIN project
+ * checkout (via `git rev-parse --git-common-dir`): secrets.env is gitignored,
+ * so `git worktree add` never materialises it in cycle worktrees — the main
+ * checkout is where the operator actually keeps it. Mirrors the project-side
+ * loader semantics (betterado testutils/secrets.go): skip blanks + `#`
+ * comments, allow `export ` prefix, strip surrounding quotes. Returns {} when
+ * no file is found — the requiredEnv guard then reports the missing var.
  */
 export function readWorktreeSecretsEnv(worktreePath: string): Record<string, string> {
-  let content: string;
+  let content: string | undefined;
   try {
     content = readFileSync(resolve(worktreePath, 'secrets.env'), 'utf8');
   } catch {
-    return {};
+    try {
+      const gitCommonDir = execFileSync('git', ['-C', worktreePath, 'rev-parse', '--git-common-dir'], {
+        stdio: 'pipe',
+      }).toString('utf8').trim();
+      const mainRoot = resolve(worktreePath, gitCommonDir, '..');
+      content = readFileSync(resolve(mainRoot, 'secrets.env'), 'utf8');
+    } catch {
+      return {};
+    }
   }
   const vars: Record<string, string> = {};
   for (const raw of content.split('\n')) {
