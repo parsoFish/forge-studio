@@ -51,7 +51,7 @@ goal G1); flag partial merges instead of approving them.
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the 12-cycle merge-outcome table.
-- [`retro.md`](../../../_logs/_archived/2026-05-16_trafficgame-arc-reflection/retro.md) — §1 fidelity, Inconsistency #1, closure goal G1.
+- [`retro.md`](../_raw/2026-05-16_trafficgame-arc-reflection.md) — §1 fidelity, Inconsistency #1, closure goal G1.
 
 ## See also
 

@@ -90,7 +90,7 @@ The deepened C1/C2 facets and all of C7 are **not yet machine-checked** by
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the structural-prerequisite evidence.
-- [`retro.md`](../../../_logs/_archived/2026-05-16_trafficgame-arc-reflection/retro.md) — §3 contract derivation, §6 closure goals G2/G6.
+- [`retro.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — §3 contract derivation, §6 closure goals G2/G6.
 
 ## See also
 
