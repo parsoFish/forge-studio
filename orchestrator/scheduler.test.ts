@@ -22,7 +22,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -498,3 +498,31 @@ test('classifyCycleFailure: reviewer.pr-open-failed → terminal "unifier did no
 
 // ---- F-28: dispatchTerminalStatus must NOT signal cleanup for ready-for-review ----
 
+
+// 2026-06-12: annotateManifest vs folded YAML scalars. serializeManifest
+// (gray-matter/js-yaml) emits long values (e.g. worktree_path ≥ ~80 chars) as
+// folded `>-` two-line scalars. annotateManifest's single-line regex replace
+// used to swap only the `key: >-` line and leave the indented continuation —
+// producing a multi-line plain scalar that parses as "path path" (the value
+// doubled with a space). Bit the env-config + artifact-trigger close-outs.
+test('annotateManifest: replaces folded >- scalar without leaving continuation lines', async () => {
+  const { annotateManifest } = await import('./scheduler.ts');
+  const { serializeManifest, parseManifest } = await import('./manifest.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'forge-annotate-'));
+  try {
+    const longPath = '/home/parso/forge/_worktrees/INIT-2026-06-08-release-definition-artifact-trigger-enhancements';
+    const manifest = parseManifest(`---\ninitiative_id: INIT-2026-06-08-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-06-08T10:00:00Z'\niteration_budget: 10\ncost_budget_usd: 10\nphase: pending\norigin: architect\n---\n# body\n`);
+    const withPath = { ...manifest, worktree_path: longPath };
+    const p = join(dir, 'INIT-2026-06-08-x.md');
+    writeFileSync(p, serializeManifest(withPath));
+    // Precondition: the serializer folded the long path across two lines.
+    assert.match(readFileSync(p, 'utf8'), /worktree_path: >-\n/);
+
+    annotateManifest(p, { worktree_path: longPath });
+
+    const reparsed = parseManifest(readFileSync(p, 'utf8'));
+    assert.equal(reparsed.worktree_path, longPath);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

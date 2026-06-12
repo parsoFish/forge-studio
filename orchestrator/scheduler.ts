@@ -702,13 +702,17 @@ function parseManifest(path: string): ParsedManifest {
   };
 }
 
-function annotateManifest(path: string, fields: Record<string, string>): void {
+export function annotateManifest(path: string, fields: Record<string, string>): void {
   const content = readFileSync(path, 'utf8');
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (!fmMatch) return;
   let fm = fmMatch[1];
   for (const [k, v] of Object.entries(fields)) {
-    const re = new RegExp(`^${k}:.*$`, 'm');
+    // Consume the key line AND any indented continuation lines: serializeManifest
+    // (js-yaml) folds long values into `key: >-\n  value` block scalars, and a
+    // single-line replace would leave the continuation behind — the manifest then
+    // parses as the value doubled ("path path").
+    const re = new RegExp(`^${k}:[^\\n]*(?:\\n[ \\t]+[^\\n]*)*`, 'm');
     if (re.test(fm)) {
       fm = fm.replace(re, `${k}: ${v}`);
     } else {
