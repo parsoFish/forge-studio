@@ -129,8 +129,8 @@ async function bridgePost(
   if (!base) return { ok: false, error: 'no bridge configured' };
   try {
     const res = await fetch(`${base}${path}`, body === undefined
-      ? { method: 'POST' }
-      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      ? { method: 'POST', headers: { 'x-forge-csrf': '1' } }
+      : { method: 'POST', headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body) });
     const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
     if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
     return { ok: !!data.ok, data };

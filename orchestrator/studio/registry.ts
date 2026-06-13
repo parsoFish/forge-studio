@@ -251,7 +251,8 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
   if (def.budgets.wedgeKillMs !== undefined) budgets['wedgeKillMs'] = def.budgets.wedgeKillMs;
   data['budgets'] = budgets;
 
-  return matter.stringify('\n' + def.body.replace(/^\n+/, ''), data);
+  const safeBody = def.body.replace(/^-{3,}/gm, (m) => m.replace(/-/g, '–'));
+  return matter.stringify('\n' + safeBody.replace(/^\n+/, ''), data);
 }
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {

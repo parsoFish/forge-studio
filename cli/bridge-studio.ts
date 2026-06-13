@@ -49,13 +49,45 @@ export type StudioContext = {
 };
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Anti-CSRF + CORS helpers
 // ---------------------------------------------------------------------------
 
-export function sendJson(res: ServerResponse, status: number, body: unknown): void {
+/** Anti-CSRF sentinel. Any non-GET request must include this header.
+ *  The value is a static sentinel — security comes from it being a
+ *  non-safelisted header (requires a preflight), not from secrecy. */
+export const CSRF_HEADER = 'x-forge-csrf';
+
+/** Regex matching the forge-ui dev origin (any port on localhost/127.0.0.1). */
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/**
+ * Returns the request's Origin if it matches the forge-ui dev-origin pattern,
+ * otherwise returns 'null' (the literal string that signals "no access").
+ * Used to tighten CORS beyond the old wildcard.
+ */
+export function allowedOrigin(req: IncomingMessage, _pattern?: RegExp): string {
+  const origin = req.headers?.['origin'];
+  if (typeof origin === 'string' && LOCAL_ORIGIN_RE.test(origin)) return origin;
+  return 'null';
+}
+
+export function sendJson(res: ServerResponse, status: number, body: unknown, origin = 'null'): void {
   const payload = JSON.stringify(body);
-  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'access-control-allow-origin': origin,
+    'vary': 'origin',
+  });
   res.end(payload);
+}
+
+/**
+ * Strip absolute filesystem paths from error strings before sending them to
+ * the browser. Prevents leaking the operator's directory layout.
+ * Pattern: any token starting with / that looks like a path segment.
+ */
+function sanitizeError(err: unknown): string {
+  return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
 }
 
 /** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle'). */
@@ -281,14 +313,14 @@ function loadAllFlows(forgeRoot: string): FlowDefinition[] {
  * Returns true if the route was handled (even on error), false for unknown URLs.
  * Never throws — all errors caught, returned as JSON.
  *
- * @param _req  - Incoming request (unused for GET routes; kept for signature parity with handleArchitect)
+ * @param req    - Incoming request (used for origin check)
  * @param res   - Server response
  * @param ctx   - Minimal context: forgeRoot + logsRoot
  * @param rawUrl - Full URL including query string (e.g. '/api/runs?flow=forge-cycle')
  * @param method - HTTP method string
  */
 export async function handleStudioRoutes(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   ctx: StudioContext,
   rawUrl: string,
@@ -297,6 +329,7 @@ export async function handleStudioRoutes(
   if (method !== 'GET') return false;
 
   const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
 
   // ---- /api/runs (list) ---------------------------------------------------
   if (url === '/api/runs') {
@@ -307,9 +340,9 @@ export async function handleStudioRoutes(
       if (flowFilter) {
         runs = runs.filter((r) => r.flowId === flowFilter);
       }
-      sendJson(res, 200, { runs });
+      sendJson(res, 200, { runs }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -321,7 +354,7 @@ export async function handleStudioRoutes(
     const nodeId = decodeURIComponent(phaseLogMatch[2]);
 
     if (!runId || !nodeId) {
-      sendJson(res, 400, { error: 'expected /api/runs/<id>/phases/<node>/log' });
+      sendJson(res, 400, { error: 'expected /api/runs/<id>/phases/<node>/log' }, origin);
       return true;
     }
 
@@ -333,11 +366,11 @@ export async function handleStudioRoutes(
       const safeLogsBase = resolve(ctx.logsRoot);
       const eventsPath = resolve(safeLogsBase, runId, 'events.jsonl');
       if (!eventsPath.startsWith(safeLogsBase + sep)) {
-        sendJson(res, 400, { error: 'invalid run id' });
+        sendJson(res, 400, { error: 'invalid run id' }, origin);
         return true;
       }
       if (!existsSync(eventsPath)) {
-        sendJson(res, 404, { error: 'no events.jsonl for run', runId });
+        sendJson(res, 404, { error: 'no events.jsonl for run', runId }, origin);
         return true;
       }
 
@@ -364,9 +397,9 @@ export async function handleStudioRoutes(
         lines = lines.slice(lines.length - 200);
       }
 
-      sendJson(res, 200, { lines });
+      sendJson(res, 200, { lines }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -376,18 +409,18 @@ export async function handleStudioRoutes(
   if (runIdMatch) {
     const runId = decodeURIComponent(runIdMatch[1]);
     if (!runId) {
-      sendJson(res, 400, { error: 'expected /api/runs/<id>' });
+      sendJson(res, 400, { error: 'expected /api/runs/<id>' }, origin);
       return true;
     }
     try {
       const run = findRun(ctx.forgeRoot, runId);
       if (!run) {
-        sendJson(res, 404, { error: 'run not found' });
+        sendJson(res, 404, { error: 'run not found' }, origin);
         return true;
       }
-      sendJson(res, 200, { run });
+      sendJson(res, 200, { run }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -397,9 +430,9 @@ export async function handleStudioRoutes(
     try {
       const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
       const agents = listAgentDefinitions(skillsDir);
-      sendJson(res, 200, { agents });
+      sendJson(res, 200, { agents }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -408,9 +441,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/flows') {
     try {
       const flows = loadAllFlows(ctx.forgeRoot);
-      sendJson(res, 200, { flows });
+      sendJson(res, 200, { flows }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -419,9 +452,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/projects') {
     try {
       const projects = loadProjectsWithMeta(ctx.forgeRoot);
-      sendJson(res, 200, { projects });
+      sendJson(res, 200, { projects }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -430,9 +463,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/kbs') {
     try {
       const kbs = loadKbDescriptors(ctx.forgeRoot);
-      sendJson(res, 200, { kbs });
+      sendJson(res, 200, { kbs }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -442,13 +475,13 @@ export async function handleStudioRoutes(
     try {
       const catalogPath = join(resolve(ctx.forgeRoot), 'studio', 'catalog.yaml');
       if (!existsSync(catalogPath)) {
-        sendJson(res, 404, { error: 'catalog.yaml not found' });
+        sendJson(res, 404, { error: 'catalog.yaml not found' }, origin);
         return true;
       }
       const catalog = loadCatalog(catalogPath);
-      sendJson(res, 200, { catalog });
+      sendJson(res, 200, { catalog }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -483,6 +516,7 @@ export async function handleStudioWriteRoutes(
   if (method !== 'PUT') return false;
 
   const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
 
   // ---- PUT /api/studio/agents/:slug ----------------------------------------
   const agentMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);
@@ -492,7 +526,7 @@ export async function handleStudioWriteRoutes(
 
       // 1. Validate slug before any fs operation (blocks path traversal)
       if (!SLUG_RE.test(slug)) {
-        sendJson(res, 400, { error: 'invalid slug — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' });
+        sendJson(res, 400, { error: 'invalid slug — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
         return true;
       }
 
@@ -500,7 +534,7 @@ export async function handleStudioWriteRoutes(
       const skillsBase = resolve(ctx.forgeRoot, 'skills');
       const skillMdPath = resolve(skillsBase, slug, 'SKILL.md');
       if (!skillMdPath.startsWith(skillsBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' });
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
 
@@ -509,11 +543,11 @@ export async function handleStudioWriteRoutes(
       try {
         body = await readJson(req);
       } catch {
-        sendJson(res, 400, { error: 'invalid JSON body' });
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
         return true;
       }
       if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-        sendJson(res, 400, { error: 'body must be a JSON object' });
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
         return true;
       }
       const b = body as Record<string, unknown>;
@@ -524,7 +558,7 @@ export async function handleStudioWriteRoutes(
         try {
           existing = loadAgentDefinition(skillMdPath);
         } catch (err) {
-          sendJson(res, 500, { error: `failed to load existing SKILL.md: ${String(err)}` });
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
           return true;
         }
       }
@@ -592,7 +626,7 @@ export async function handleStudioWriteRoutes(
       const findings = validateAgent(merged);
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
-        sendJson(res, 400, { error: 'validation failed', findings });
+        sendJson(res, 400, { error: 'validation failed', findings }, origin);
         return true;
       }
 
@@ -605,9 +639,9 @@ export async function handleStudioWriteRoutes(
       writeFileSync(skillMdPath, serialized, 'utf8');
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
-      sendJson(res, 200, { ok: true, slug, findings: flagFindings });
+      sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -620,34 +654,42 @@ export async function handleStudioWriteRoutes(
 
       // 1. Validate id before any fs operation
       if (!SLUG_RE.test(id)) {
-        sendJson(res, 400, { error: 'invalid project id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' });
+        sendJson(res, 400, { error: 'invalid project id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
         return true;
       }
 
       // 2. Resolve the project path from studio/projects.yaml
       const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
       if (!existsSync(projectsYamlPath)) {
-        sendJson(res, 404, { error: 'unknown project' });
+        sendJson(res, 404, { error: 'unknown project' }, origin);
         return true;
       }
       let registry;
       try {
+        // Note: projectRef.path is operator-authored config from projects.yaml.
+        // It is now guarded below against escaping the forge root.
         registry = loadProjectsRegistry(projectsYamlPath);
       } catch {
-        sendJson(res, 500, { error: 'failed to load projects registry' });
+        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
         return true;
       }
       const projectRef = registry.projects.find((p) => p.id === id);
       if (!projectRef) {
-        sendJson(res, 404, { error: 'unknown project' });
+        sendJson(res, 404, { error: 'unknown project' }, origin);
         return true;
       }
 
       // 3. Resolve the project.json path and prefix-guard it
       const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      // Guard: projectRef.path from projects.yaml must not escape the forge root.
+      // Stops an absolute or `..`-containing path writing outside the repo.
+      if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
+        sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
+        return true;
+      }
       const projectJsonPath = resolve(projectRoot, '.forge', 'project.json');
       if (!projectJsonPath.startsWith(projectRoot + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' });
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
 
@@ -656,11 +698,11 @@ export async function handleStudioWriteRoutes(
       try {
         body = await readJson(req);
       } catch {
-        sendJson(res, 400, { error: 'invalid JSON body' });
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
         return true;
       }
       if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-        sendJson(res, 400, { error: 'body must be a JSON object' });
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
         return true;
       }
       const b = body as Record<string, unknown>;
@@ -671,7 +713,7 @@ export async function handleStudioWriteRoutes(
         try {
           existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
         } catch (err) {
-          sendJson(res, 500, { error: `failed to read existing project.json: ${String(err)}` });
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
           return true;
         }
       }
@@ -689,7 +731,7 @@ export async function handleStudioWriteRoutes(
       try {
         validateProjectConfig(merged);
       } catch (err) {
-        sendJson(res, 400, { error: String(err) });
+        sendJson(res, 400, { error: String(err) }, origin);
         return true;
       }
 
@@ -700,9 +742,9 @@ export async function handleStudioWriteRoutes(
       }
       writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
 
-      sendJson(res, 200, { ok: true, id });
+      sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -710,14 +752,26 @@ export async function handleStudioWriteRoutes(
   return false;
 }
 
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
+
 /**
  * Read and parse the JSON request body. Used by write routes.
+ * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
  * Shared helper (mirrors readJson in ui-bridge.ts).
  */
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolveJson, rejectJson) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let totalBytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        rejectJson(new Error('request body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
       try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }

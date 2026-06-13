@@ -108,6 +108,22 @@ export function validateAgent(def: AgentDefinition): Finding[] {
     findings.push(err(obj, 'readiness/runtime', `Runtime not fully configured — ${detail}`));
   }
 
+  // composition array entries: each must match a safe identifier regex
+  const COMP_ENTRY_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+  const compArrays: [string, string[]][] = [
+    ['composition/skills', def.composition.skills],
+    ['composition/tools', def.composition.tools],
+    ['composition/mcps', def.composition.mcps],
+    ['composition/hooks', def.composition.hooks],
+  ];
+  for (const [field, entries] of compArrays) {
+    for (const entry of entries) {
+      if (typeof entry !== 'string' || !COMP_ENTRY_RE.test(entry)) {
+        findings.push(err(obj, field, `Entry "${entry}" in ${field} must match ${COMP_ENTRY_RE}`));
+      }
+    }
+  }
+
   return findings;
 }
 

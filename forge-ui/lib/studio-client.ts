@@ -169,6 +169,26 @@ async function studioGet<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
+async function studioPut(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: !!data.ok, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 /** Fetch all runs (optionally filtered by flowId). */
 export async function fetchRuns(flowId?: string): Promise<Run[]> {
   const qs = flowId ? `?flow=${encodeURIComponent(flowId)}` : '';
@@ -254,4 +274,23 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
 export async function fetchStudioCatalog(): Promise<Catalog> {
   const body = await studioGet<Catalog>('/api/studio/catalog', {});
   return body;
+}
+
+/** Save (PUT) an agent definition by slug. */
+export async function saveAgent(
+  slug: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string; findings?: unknown[] }> {
+  const r = await studioPut(`/api/studio/agents/${encodeURIComponent(slug)}`, body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, findings: Array.isArray(r.data?.findings) ? r.data!.findings : [] };
+}
+
+/** Save (PUT) a project's config fields. */
+export async function saveProject(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
+  return { ok: r.ok, error: r.error };
 }

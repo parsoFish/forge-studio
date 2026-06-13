@@ -167,10 +167,10 @@ after(async () => {
 // Helper: PUT request
 // ---------------------------------------------------------------------------
 
-async function putJson(url: string, body: unknown): Promise<Response> {
+async function putJson(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return fetch(url, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -409,4 +409,120 @@ test('OPTIONS preflight returns PUT in access-control-allow-methods', async () =
   assert.equal(res.status, 204);
   const methods = res.headers.get('access-control-allow-methods') ?? '';
   assert.ok(methods.includes('PUT'), `PUT must be in CORS methods, got: ${methods}`);
+});
+
+// ---------------------------------------------------------------------------
+// CSRF header enforcement
+// ---------------------------------------------------------------------------
+
+test('PUT without x-forge-csrf header → 403', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/agents/write-agent`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(makePutAgentBody()),
+  });
+  assert.equal(res.status, 403);
+  const body = (await res.json()) as { error: string };
+  assert.ok(body.error.includes('CSRF'), `expected CSRF error, got: ${body.error}`);
+});
+
+test('PUT with x-forge-csrf header → succeeds (200)', async () => {
+  // Reset to known state
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody());
+  assert.equal(res.status, 200);
+});
+
+// ---------------------------------------------------------------------------
+// OPTIONS preflight — foreign origin must not be echoed
+// ---------------------------------------------------------------------------
+
+test('OPTIONS from a foreign origin → origin not echoed', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/agents/write-agent`, {
+    method: 'OPTIONS',
+    headers: {
+      'origin': 'https://evil.example.com',
+      'access-control-request-method': 'PUT',
+    },
+  });
+  assert.equal(res.status, 204);
+  const origin = res.headers.get('access-control-allow-origin') ?? '';
+  assert.ok(
+    origin !== 'https://evil.example.com',
+    `foreign origin must not be echoed, got: ${origin}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// projectRef.path escapes forge root → 400
+// ---------------------------------------------------------------------------
+
+test('PUT /api/studio/projects/:id with absolute path in projects.yaml → 400 escapes-root', async () => {
+  // Temporarily overwrite projects.yaml with an absolute path
+  const badYaml = ['projects:', '  - id: escape-project', '    path: /tmp/evil-escape'].join('\n');
+  writeFileSync(join(forgeRoot, 'studio', 'projects.yaml'), badYaml);
+
+  const res = await putJson(`${bridgeUrl}/api/studio/projects/escape-project`, {
+    northStar: 'Escaped.',
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.ok(
+    body.error.includes('escapes'),
+    `expected path-escape error, got: ${body.error}`,
+  );
+
+  // Restore projects.yaml
+  writeFileSync(
+    join(forgeRoot, 'studio', 'projects.yaml'),
+    makeProjectsYaml('projects/write-project'),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Body size cap
+// ---------------------------------------------------------------------------
+
+test('PUT with oversized body → rejected (not 200)', async () => {
+  // Generate a body > 1 MiB
+  const bigString = 'x'.repeat(1.2 * 1024 * 1024);
+  // The bridge destroys the socket when the cap is hit; Node's undici may
+  // surface this as a thrown TypeError ('fetch failed') OR as a 4xx/5xx
+  // response depending on how far into the request the server has read.
+  // Either outcome is acceptable — we just must not get a 200.
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/agents/write-agent`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ ...makePutAgentBody(), purpose: bigString }),
+    });
+    assert.ok(res.status !== 200, `expected non-200 for oversized body, got ${res.status}`);
+  } catch (err) {
+    // fetch failed because the server destroyed the connection — that's the correct behaviour
+    assert.ok(String(err).includes('fetch failed') || String(err).includes('ECONNRESET'),
+      `expected connection error for oversized body, got: ${String(err)}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Composition entry with bad char → validateAgent error finding
+// ---------------------------------------------------------------------------
+
+test('PUT with composition entry containing bad char → 400 validation error', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const body = makePutAgentBody({
+    composition: {
+      skills: ['tdd-workflow', 'bad skill!'],
+      tools: [],
+      mcps: [],
+      hooks: ['event-log'],
+    },
+  });
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, body);
+  assert.equal(res.status, 400);
+  const respBody = (await res.json()) as { error: string; findings?: Array<{ check: string }> };
+  assert.equal(respBody.error, 'validation failed');
+  assert.ok(Array.isArray(respBody.findings));
+  const compFinding = respBody.findings!.find((f) => f.check.startsWith('composition/'));
+  assert.ok(compFinding, `expected a composition/* finding, got: ${JSON.stringify(respBody.findings)}`);
 });

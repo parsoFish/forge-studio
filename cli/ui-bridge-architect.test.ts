@@ -79,7 +79,7 @@ test('GET /api/architect/file serves PLAN.html as text/html with a path-escape g
 test('POST /api/plan-verdict approve advances to finalizing (no selections.json written)', async () => {
   const res = await fetch(`${url}/api/plan-verdict`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify({ project: 'demo', sessionId: sid, kind: 'approve' }),
   });
   assert.equal(res.status, 200);
@@ -107,7 +107,7 @@ test('POST /api/architect/answer appends an interview round', async () => {
   );
   const res = await fetch(`${url}/api/architect/answer`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify({ project: 'demo', sessionId: sid2, answers: [{ question: 'Q', answer: 'A' }] }),
   });
   assert.equal(res.status, 200);
@@ -163,7 +163,7 @@ test('GET /api/architect/sessions live-tails the session log → WS event stream
 test('POST /api/architect/start creates a session dir + status', async () => {
   const res = await fetch(`${url}/api/architect/start`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify({ project: 'demo', idea: 'A brand new idea.' }),
   });
   assert.equal(res.status, 200);
