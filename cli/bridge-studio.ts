@@ -518,7 +518,7 @@ export async function handleStudioRoutes(
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;
       }
-      const report = await runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const report = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
       const clauses = report.clauses.map((c) => ({
         id: c.clause,
         title: c.title,
