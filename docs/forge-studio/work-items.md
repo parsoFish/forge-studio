@@ -149,8 +149,14 @@ the corpus manifest's `resume_from` (fixed in M2) must be cleared before a fresh
 All five WIs landed on `feat/studio-m4` (954 tests, build, brain lint 0 errors, studio lint 0 errors,
 ui:journey 52 frames 0 failures all green). Exit criteria met: BUILD tab live (6 nodes/5 edges,
 palette + FlowHeader); unified /artifact viewer live (6-chip trail, demo + verdict gate surfaces);
-DemoComparison `.checkpoints` null-guard fixed (first live run bug). Gate: operator-authorized
-`npm run verify:cycle` (gate path touched via fold-in redirects — parent task M4-5).
+DemoComparison `.checkpoints` null-guard fixed (first live run bug).
+
+**verify:cycle (gate path) — RAN 2026-06-13, GATE PASS ✓ ($4.18 real spend).** The M4 fold-in routes
+both human gates (review verdict + architect PLAN) through the unified `/artifact` viewer; the
+engine-path cycle ran green end-to-end through that path (claim → PM → dev WI-1 complete iters=1
+gates-pass → unifier → review → merge; 1/1 WI, tests green, $4.18/$25). Confirms the viewer fold-in
+didn't break real-cycle gating. Same setup as M3 (base f61d186, `FORGE_SKIP_CONTRACT_CHECK`, clear
+stale `origin/forge/<id>` branch first).
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
