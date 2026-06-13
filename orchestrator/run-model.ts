@@ -72,6 +72,9 @@ export type Run = {
 
 const FLOW_ID = 'forge-cycle';
 
+/** Valid origin values for a Run — anything else defaults to 'architect'. */
+const VALID_ORIGINS = new Set(['architect', 'human-directed']);
+
 /** Queue dir name → RunStatus */
 const QUEUE_STATE_TO_RUN_STATUS: Record<QueueState, RunStatus> = {
   'pending': 'planned',
@@ -155,9 +158,16 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
     }
 
     return mapping;
-  } catch {
-    // Flow or registry unavailable — use fallback hardcoded table
-    // (e.g. tests running from a tmp root without studio/)
+  } catch (err) {
+    // Flow or registry unavailable — fall back to the hardcoded table so the
+    // bridge never crashes mid-edit. Log anything that is NOT a plain ENOENT
+    // so real configuration errors are observable.
+    const isEnoent =
+      (err as NodeJS.ErrnoException).code === 'ENOENT' ||
+      (err instanceof Error && err.message.includes('no such file'));
+    if (!isEnoent) {
+      console.error('[run-model] definition load failed, using fallback mapping:', err);
+    }
     return new Map(Object.entries(FALLBACK_PHASE_TO_NODE));
   }
 }
@@ -169,14 +179,6 @@ const PROGRESS_EVENT_TYPES = new Set([
 
 /** 30 minutes in ms */
 const WEDGE_THRESHOLD_MS = 30 * 60 * 1000;
-
-const QUEUE_DIR_NAMES: Record<QueueState, string> = {
-  'pending': 'pending',
-  'in-flight': 'in-flight',
-  'ready-for-review': 'ready-for-review',
-  'done': 'done',
-  'failed': 'failed',
-};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -200,7 +202,7 @@ export function listRuns(root: string, nowMs: number): Run[] {
   const nodeMapping = buildNodeMapping(root);
 
   for (const state of allStates) {
-    const queueDir = join(resolve(root), '_queue', QUEUE_DIR_NAMES[state]);
+    const queueDir = join(resolve(root), '_queue', state);
     if (!existsSync(queueDir)) continue;
 
     let files: string[];
@@ -267,7 +269,7 @@ function aggregateRunWithMapping(args: {
   const eventsPath = join(logDir, 'events.jsonl');
   const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
 
-  return buildRun({ manifest, cycleId, events, logDir, runStatus, nowMs, nodeMapping });
+  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping });
 }
 
 // ---------------------------------------------------------------------------
@@ -279,11 +281,12 @@ function buildRun(args: {
   cycleId: string;
   events: EventLogEntry[];
   logDir: string;
+  root: string;
   runStatus: RunStatus;
   nowMs: number;
   nodeMapping: Map<string, string | null>;
 }): Run {
-  const { manifest, cycleId, events, logDir, runStatus, nowMs, nodeMapping } = args;
+  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping } = args;
 
   // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
   const phases = deriveNodeStatuses(events, runStatus, nodeMapping);
@@ -298,7 +301,7 @@ function buildRun(args: {
   const hasReflectionEvents = events.some((e) => e.phase === 'reflection');
 
   // --- Artifacts ---
-  const artifactsReady = deriveArtifacts(logDir, runStatus, manifest.initiative_id, hasReflectionEvents);
+  const artifactsReady = deriveArtifacts(logDir, root, runStatus, manifest.initiative_id, hasReflectionEvents);
 
   // --- Cost rollup ---
   const costUsd = events.reduce((sum, e) => sum + (e.cost_usd ?? 0), 0);
@@ -319,13 +322,15 @@ function buildRun(args: {
   // --- Initiative title from manifest body first heading ---
   const initiative = extractTitle(manifest.body, manifest.initiative_id);
 
+  const validatedOrigin: Run['origin'] = (origin !== undefined && VALID_ORIGINS.has(origin)) ? (origin as Run['origin']) : 'architect';
+
   return {
     id: cycleId,
     flowId: FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative,
     status: runStatus,
-    origin: origin as 'architect' | 'human-directed',
+    origin: validatedOrigin,
     costUsd,
     startedAt,
     phases,
@@ -342,7 +347,6 @@ function buildRun(args: {
 // ---------------------------------------------------------------------------
 
 type NodeAccum = {
-  firstAt: string;
   lastAt: string;
   ended: boolean;
   errored: boolean;
@@ -363,7 +367,6 @@ function deriveNodeStatuses(
     if (nodeId === null) continue;
 
     const acc = seen.get(nodeId) ?? {
-      firstAt: e.started_at,
       lastAt: e.started_at,
       ended: false,
       errored: false,
@@ -492,7 +495,8 @@ function buildNodeMeta(
 
 function findModel(events: readonly EventLogEntry[]): string | undefined {
   for (const e of events) {
-    if (typeof e.metadata?.model === 'string') return e.metadata.model as string;
+    const model = e.metadata?.model;
+    if (typeof model === 'string') return model;
   }
   return undefined;
 }
@@ -504,7 +508,8 @@ function countBrainReads(events: readonly EventLogEntry[]): number {
     if (e.message === 'pm.brain-query') { count++; continue; }
     // tool_use events reading from brain/ paths
     if (e.event_type === 'tool_use') {
-      const summary = (e.metadata?.input_summary as string | undefined) ?? '';
+      const inputSummary = e.metadata?.input_summary;
+      const summary = typeof inputSummary === 'string' ? inputSummary : '';
       if (summary.includes('brain/')) count++;
     }
   }
@@ -553,9 +558,11 @@ function computeIterations(
         iter = e.iteration;
       }
     }
-    if (e.message === 'ralph.end' && typeof e.metadata?.iterations === 'number') {
-      const ri = e.metadata.iterations as number;
-      if (iter === undefined || ri > iter) iter = ri;
+    if (e.message === 'ralph.end') {
+      const iterations = e.metadata?.iterations;
+      if (typeof iterations === 'number') {
+        if (iter === undefined || iterations > iter) iter = iterations;
+      }
     }
   }
 
@@ -593,11 +600,14 @@ function findGateChecks(
   for (const e of events) {
     if (e.message === 'unifier.gate.sub-check' && e.metadata) {
       const m = e.metadata;
-      if (typeof m.check_id === 'string' && typeof m.pass === 'boolean') {
+      const checkId = m.check_id;
+      const pass = m.pass;
+      const detail = m.detail;
+      if (typeof checkId === 'string' && typeof pass === 'boolean') {
         checks.push({
-          id: m.check_id as string,
-          pass: m.pass as boolean,
-          ...(typeof m.detail === 'string' ? { detail: m.detail as string } : {}),
+          id: checkId,
+          pass,
+          ...(typeof detail === 'string' ? { detail } : {}),
         });
       }
     }
@@ -692,6 +702,7 @@ function hasErrorBetween(events: readonly EventLogEntry[], afterIdx: number, bef
 
 function deriveArtifacts(
   logDir: string,
+  root: string,
   runStatus: RunStatus,
   initiativeId: string,
   hasReflectionEvents = false,
@@ -726,7 +737,7 @@ function deriveArtifacts(
 
   // verdict: <initiativeId>.verdict-response.md in any queue dir (walk up)
   const verdictFile = `${initiativeId}.verdict-response.md`;
-  const queueRoot = join(logDir, '..', '..', '_queue');
+  const queueRoot = join(resolve(root), '_queue');
   for (const state of ['done', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
     if (existsSync(join(queueRoot, state, verdictFile))) {
       artifacts['verdict'] = 'view';
@@ -826,8 +837,9 @@ function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
 
 function findOrigin(events: readonly EventLogEntry[]): string | undefined {
   for (const e of events) {
-    if (e.message === 'cycle.start' && typeof e.metadata?.origin === 'string') {
-      return e.metadata.origin as string;
+    const origin = e.metadata?.origin;
+    if (e.message === 'cycle.start' && typeof origin === 'string') {
+      return origin;
     }
   }
   return undefined;
@@ -881,13 +893,14 @@ function findNewestCycleId(root: string, initiativeId: string): string | null {
 // ---------------------------------------------------------------------------
 
 function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
+  const origin: Run['origin'] = VALID_ORIGINS.has(manifest.origin) ? (manifest.origin as Run['origin']) : 'architect';
   return {
     id: manifest.initiative_id,
     flowId: FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative: extractTitle(manifest.body, manifest.initiative_id),
     status: 'planned',
-    origin: manifest.origin as 'architect' | 'human-directed',
+    origin,
     costUsd: 0,
     phases: {},
     phaseMeta: {},

@@ -49,7 +49,7 @@ function writeManifest(dir: string, state: string, initId: string, extra: Record
     created_at: '2026-01-01T00:00:00Z',
     iteration_budget: 10,
     cost_budget_usd: 5,
-    phase: state === 'in-flight' ? 'in-flight' : state === 'ready-for-review' ? 'ready-for-review' : state === 'done' ? 'done' : state === 'failed' ? 'failed' : 'pending',
+    phase: state,
     origin: 'architect',
     ...extra,
   };
@@ -163,10 +163,12 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
       Math.abs(pmCost - 1.072940) < 0.001,
       `pm cost should be ~1.072940, got ${pmCost}`,
     );
+    // dev band wider because float accumulation across hundreds of usage events
     assert.ok(
       Math.abs(devCost - 12.883512) < 0.1,
       `dev cost should be ~12.883512, got ${devCost}`,
     );
+    // dev band wider because float accumulation across hundreds of usage events
     assert.ok(
       Math.abs(run.costUsd - 13.956451) < 0.1,
       `total cost should be ~13.956451, got ${run.costUsd}`,
@@ -248,7 +250,9 @@ test('aggregateRun: complete-release-definition real fixture — status gated, 5
     const pmCost = run.phaseMeta['pm']?.costUsd ?? 0;
     const devCost = run.phaseMeta['dev']?.costUsd ?? 0;
     assert.ok(Math.abs(pmCost - 0.777214) < 0.01, `pm cost ${pmCost}`);
+    // dev band wider because float accumulation across hundreds of usage events
     assert.ok(Math.abs(devCost - 23.633504) < 0.1, `dev cost ${devCost}`);
+    // dev band wider because float accumulation across hundreds of usage events
     assert.ok(Math.abs(run.costUsd - 24.410718) < 0.1, `total cost ${run.costUsd}`);
 
     // 5 WIs, all complete
