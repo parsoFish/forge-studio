@@ -1,5 +1,5 @@
 /**
- * flow-runner.ts — Definition-driven DAG executor (ADR-028, M3-1/2).
+ * flow-runner.ts — Definition-driven DAG executor (ADR-028, M3-1/2/3).
  *
  * Walks a FlowDefinition in topological order and dispatches each node to its
  * executor function. Phase functions are UNCHANGED — they are invoked as node
@@ -16,6 +16,21 @@
  * run (the architect ran out-of-cycle via the UI). When flow-runner encounters
  * the architect node it emits the same synthetic start/end events that
  * cycle.ts:119-147 emitted — then proceeds.
+ *
+ * M3-3 budgets/safety (additive — flows without these fields behave exactly as before):
+ *   - costCeilingUsd: runner wraps the logger to accumulate cost_usd from every
+ *     emitted event; at ≥70% emits flow.cost-warn; at ≥100% at the next clean
+ *     node boundary emits flow.cost-ceiling-stop + throws CostCeilingError
+ *     (resumable classification).
+ *   - wedgeKillMs: per-node WedgeDetector watches the event stream; if heartbeats
+ *     fire but no tool_use/file_change/test_run for wedgeKillMs ms → emits
+ *     phase.wedge-killed + throws WedgeKillError (resumable). Detection runs via
+ *     the logger wrapper. Abort wiring into the SDK executor is a TODO (no clean
+ *     seam without invasive changes to phase functions); detection + event emission
+ *     fires synchronously when the node finishes (post-execution wedge check).
+ *   - rate-limit gate: before spawning each node, awaits RateLimitGate.waitIfNeeded();
+ *     when an executor throws a rate-limit error, gate.recordRateLimit() is called
+ *     and the error is rethrown (scheduler auto-retry handles the actual retry).
  *
  * The 8 ported items from the former hardcoded runCycle sequence:
  *   1. resolveQualityGateCmd → inputWithGate threading (caller's responsibility;
@@ -35,7 +50,8 @@ import { fileURLToPath } from 'node:url';
 import type { EventLogger } from './logging.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
 import type { ClosureResult } from './phases/closure.ts';
-import type { FlowDefinition, FlowNode } from './studio/types.ts';
+import type { FlowDefinition, FlowNode, AgentBudgets } from './studio/types.ts';
+import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
 
 import { runProjectManager } from './phases/project-manager.ts';
 import { runDeveloperLoop } from './phases/developer-loop.ts';
@@ -241,7 +257,99 @@ export type FlowRunArgs = {
   input: CycleInput;
   logger: EventLogger;
   deps?: Partial<FlowRunnerDeps>;
+  /**
+   * Optional per-node agent budget overrides keyed by node id.
+   * Used to supply wedgeKillMs for wedge detection without requiring a full
+   * agent registry query inside the runner. Falls back to undefined (no
+   * wedge detection) when absent.
+   */
+  nodeBudgets?: Map<string, AgentBudgets>;
+  /**
+   * Injectable rate-limit gate. Default: a fresh RateLimitGate (no wait).
+   * Inject a shared gate across calls to preserve recorded resetsAt across retries.
+   */
+  rateLimitGate?: RateLimitGate;
 };
+
+// ---------------------------------------------------------------------------
+// Budget helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap the logger so every emitted event's cost_usd is fed to the CostTracker.
+ * Returns a new EventLogger whose emit() intercepts cost and then delegates.
+ */
+function wrapLoggerForCost(logger: EventLogger, tracker: CostTracker): EventLogger {
+  return {
+    ...logger,
+    emit(partial) {
+      const entry = logger.emit(partial);
+      if (typeof entry.cost_usd === 'number' && entry.cost_usd > 0) {
+        tracker.addCost(entry.cost_usd);
+      }
+      return entry;
+    },
+  };
+}
+
+/**
+ * Wrap the logger so every emitted event feeds the WedgeDetector.
+ * Heartbeat events advance the detector's heartbeat clock;
+ * tool_use / file_change / test_run events reset the progress clock.
+ */
+function wrapLoggerForWedge(
+  logger: EventLogger,
+  detector: WedgeDetector,
+  getNow: () => number,
+): EventLogger {
+  return {
+    ...logger,
+    emit(partial) {
+      const entry = logger.emit(partial);
+      const t = getNow();
+      if (entry.event_type === 'agent_heartbeat') {
+        detector.onHeartbeat(t);
+      } else if (
+        entry.event_type === 'tool_use' ||
+        entry.event_type === 'file_change' ||
+        entry.event_type === 'test_run'
+      ) {
+        detector.onToolProgress(t);
+      }
+      return entry;
+    },
+  };
+}
+
+/** True if an error message carries a rate-limit signature. */
+function isRateLimitError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('rate_limit') ||
+    msg.includes('rate-limit') ||
+    msg.includes('429') ||
+    msg.includes('usage limit') ||
+    msg.includes('overloaded')
+  );
+}
+
+/**
+ * Extract a resetsAt timestamp (ms) from a rate-limit error if the SDK
+ * or error message carries one. Returns null when not parseable.
+ *
+ * The Claude SDK does not currently expose a structured resetsAt on
+ * rate-limit errors — this function is the extension point for when it does.
+ * For now it returns null (gate falls back to conservative backoff in callers).
+ */
+function extractResetsAt(_err: unknown): number | null {
+  // TODO: when the Claude SDK surfaces resetsAt on RateLimitError, read it here.
+  // For now, use a conservative 60s backoff so the gate still protects spawns.
+  return Date.now() + 60_000;
+}
+
+// ---------------------------------------------------------------------------
+// runFlow
+// ---------------------------------------------------------------------------
 
 /**
  * Walk the flow's nodes in topological order and execute each node.
@@ -264,6 +372,8 @@ export async function runFlow({
   input,
   logger,
   deps: depOverrides,
+  nodeBudgets,
+  rateLimitGate: injectedGate,
 }: FlowRunArgs): Promise<{
   cycleOutcome: CycleOutcome;
   reflectionStatus: string;
@@ -271,8 +381,20 @@ export async function runFlow({
 }> {
   const deps: FlowRunnerDeps = { ...DEFAULT_DEPS, ...depOverrides };
 
+  // M3-3: Budget setup — additive, no-ops when ceiling is 0/absent
+  const costTracker = new CostTracker({
+    ceilingUsd: flow.costCeilingUsd ?? 0,
+    initiativeId: input.initiativeId,
+    logger,
+  });
+  const rateLimitGate = injectedGate ?? new RateLimitGate();
+
   const order = topoSort(flow);
   const nodeById = new Map<string, FlowNode>(flow.nodes.map((n) => [n.id, n]));
+
+  // Wrap the logger once for cost tracking. Node-level wedge wrapping happens
+  // per-node below so each node gets a fresh WedgeDetector.
+  const costLogger = wrapLoggerForCost(logger, costTracker);
 
   // Track outcome state — mirrors cycle.ts. 'failed' never appears here:
   // failures throw and are caught by runCycle's outer try/catch.
@@ -288,116 +410,177 @@ export async function runFlow({
 
     const kind = classifyNode(node);
 
-    switch (kind) {
-      case 'architect': {
-        // Item 2: pure marker — runCycle emitted the real synthetic architect
-        // events (emitSyntheticArchitectEvents) before calling runFlow. The DAG
-        // walk records this node as visited but performs no emission itself.
-        break;
-      }
+    // M3-3: Rate-limit gate — before every node spawn, wait if a prior
+    // rate-limit recorded a resetsAt. No-op when nothing is recorded.
+    await rateLimitGate.waitIfNeeded();
 
-      case 'pm': {
-        if (input.resumeFrom === 'unifier') {
-          // Item 3: rebase the preserved branch onto main before running the dev-loop
-          deps.rebaseForResume(input, logger);
-          logger.emit({
+    // M3-3: Per-node wedge detector. Each node gets a fresh detector so the
+    // clock starts from the first event seen within that node's execution.
+    const nodeBudget = nodeBudgets?.get(nodeId);
+    const wedgeDetector = new WedgeDetector({
+      wedgeKillMs: nodeBudget?.wedgeKillMs,
+      nodeId,
+    });
+    // Wrap costLogger with wedge tracking for this node's execution.
+    const nodeLogger = wrapLoggerForWedge(costLogger, wedgeDetector, () => Date.now());
+
+    try {
+      switch (kind) {
+        case 'architect': {
+          // Item 2: pure marker — runCycle emitted the real synthetic architect
+          // events (emitSyntheticArchitectEvents) before calling runFlow. The DAG
+          // walk records this node as visited but performs no emission itself.
+          break;
+        }
+
+        case 'pm': {
+          if (input.resumeFrom === 'unifier') {
+            // Item 3: rebase the preserved branch onto main before running the dev-loop
+            deps.rebaseForResume(input, nodeLogger);
+            nodeLogger.emit({
+              initiative_id: input.initiativeId,
+              phase: 'orchestrator',
+              skill: 'flow-runner',
+              event_type: 'log',
+              input_refs: [],
+              output_refs: [],
+              message: 'flow-runner.pm-skipped-resume',
+              metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+            });
+            break;
+          }
+          await deps.runProjectManager(input, nodeLogger);
+          break;
+        }
+
+        case 'dev': {
+          // M3 coupling: runDeveloperLoop calls runUnifier internally.
+          // The flow's separate unifier node is a marker (handled in 'unifier' case).
+          // Items 4-8: the dev-loop close contract runs immediately after.
+          const devLoopOutcome = await deps.runDeveloperLoop(input, nodeLogger);
+
+          // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
+          deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
+
+          // Item 5: push once more + assert local↔remote invariant.
+          deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId);
+
+          // Item 6: delivery gate — unifier must have passed.
+          if (!devLoopOutcome.unifierSucceeded) {
+            throw new Error(
+              `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
+                `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
+            );
+          }
+
+          // Item 7: empty-branch guard.
+          deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, nodeLogger);
+
+          // Item 8: final CI delivery gate (before openPrInline in review node).
+          deps.enforceFinalCiGate(input, nodeLogger);
+
+          break;
+        }
+
+        case 'unifier': {
+          // MARKER ONLY — runDeveloperLoop already called runUnifier internally.
+          // Document: M3 coupling. A clean per-node split is deferred.
+          nodeLogger.emit({
             initiative_id: input.initiativeId,
             phase: 'orchestrator',
             skill: 'flow-runner',
             event_type: 'log',
             input_refs: [],
             output_refs: [],
-            message: 'flow-runner.pm-skipped-resume',
-            metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+            message: 'flow-runner.unifier-marker',
+            metadata: {
+              node_id: nodeId,
+              note: 'M3 coupling: runUnifier was called inside runDeveloperLoop; this node is a DAG marker only',
+            },
           });
           break;
         }
-        await deps.runProjectManager(input, logger);
-        break;
-      }
 
-      case 'dev': {
-        // M3 coupling: runDeveloperLoop calls runUnifier internally.
-        // The flow's separate unifier node is a marker (handled in 'unifier' case).
-        // Items 4-8: the dev-loop close contract runs immediately after.
-        const devLoopOutcome = await deps.runDeveloperLoop(input, logger);
-
-        // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
-        deps.commitDevLoopBoundary(input.worktreePath, logger, input.initiativeId);
-
-        // Item 5: push once more + assert local↔remote invariant.
-        deps.enforceDevLoopCloseInvariant(input.worktreePath, logger, input.initiativeId);
-
-        // Item 6: delivery gate — unifier must have passed.
-        if (!devLoopOutcome.unifierSucceeded) {
-          throw new Error(
-            `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
-              `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
-          );
+        case 'review': {
+          // Gate node: open the PR, then run closure.
+          // Item 8 (enforceFinalCiGate) already ran in the 'dev' node so the
+          // branch is CI-clean before we open the PR.
+          reviewerOutcome = await deps.openPrInline(input, nodeLogger);
+          closure = await deps.runClosure(input, nodeLogger, reviewerOutcome);
+          cycleOutcome = closure.outcome as CycleOutcome;
+          break;
         }
 
-        // Item 7: empty-branch guard.
-        deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, logger);
-
-        // Item 8: final CI delivery gate (before openPrInline in review node).
-        deps.enforceFinalCiGate(input, logger);
-
-        break;
-      }
-
-      case 'unifier': {
-        // MARKER ONLY — runDeveloperLoop already called runUnifier internally.
-        // Document: M3 coupling. A clean per-node split is deferred.
-        logger.emit({
-          initiative_id: input.initiativeId,
-          phase: 'orchestrator',
-          skill: 'flow-runner',
-          event_type: 'log',
-          input_refs: [],
-          output_refs: [],
-          message: 'flow-runner.unifier-marker',
-          metadata: {
-            node_id: nodeId,
-            note: 'M3 coupling: runUnifier was called inside runDeveloperLoop; this node is a DAG marker only',
-          },
-        });
-        break;
-      }
-
-      case 'review': {
-        // Gate node: open the PR, then run closure.
-        // Item 8 (enforceFinalCiGate) already ran in the 'dev' node so the
-        // branch is CI-clean before we open the PR.
-        reviewerOutcome = await deps.openPrInline(input, logger);
-        closure = await deps.runClosure(input, logger, reviewerOutcome);
-        cycleOutcome = closure.outcome as CycleOutcome;
-        break;
-      }
-
-      case 'reflect': {
-        // Only run if the closure confirmed a merge (G10)
-        if (closure?.merged) {
-          const reflectorResult = await deps.runReflector(input, logger);
-          reflectionStatus = reflectorResult.reflection_status;
-          lintStatus = reflectorResult.lint_status;
+        case 'reflect': {
+          // Only run if the closure confirmed a merge (G10)
+          if (closure?.merged) {
+            const reflectorResult = await deps.runReflector(input, nodeLogger);
+            reflectionStatus = reflectorResult.reflection_status;
+            lintStatus = reflectorResult.lint_status;
+          }
+          break;
         }
-        break;
-      }
 
-      default: {
-        logger.emit({
-          initiative_id: input.initiativeId,
-          phase: 'orchestrator',
-          skill: 'flow-runner',
-          event_type: 'log',
-          input_refs: [],
-          output_refs: [],
-          message: 'flow-runner.unknown-node-skipped',
-          metadata: { node_id: nodeId, agent: node.agent, gate: node.gate },
-        });
-        break;
+        default: {
+          nodeLogger.emit({
+            initiative_id: input.initiativeId,
+            phase: 'orchestrator',
+            skill: 'flow-runner',
+            event_type: 'log',
+            input_refs: [],
+            output_refs: [],
+            message: 'flow-runner.unknown-node-skipped',
+            metadata: { node_id: nodeId, agent: node.agent, gate: node.gate },
+          });
+          break;
+        }
       }
+    } catch (err) {
+      // M3-3: Rate-limit recording — if the executor threw a rate-limit error,
+      // record the resetsAt so the next spawn will wait. Then rethrow so the
+      // scheduler's auto-retry machinery handles the actual retry.
+      if (isRateLimitError(err)) {
+        const resetsAt = extractResetsAt(err);
+        if (resetsAt !== null) rateLimitGate.recordRateLimit(resetsAt);
+      }
+      throw err;
     }
+
+    // M3-3: Post-node wedge check. Because phase functions don't expose an
+    // abort seam (they own their own SDK stream loops), wedge detection runs
+    // POST-EXECUTION rather than mid-stream. This catches the case where the
+    // agent ran for wedgeKillMs without tool progress and only then returned.
+    // A clean mid-stream abort (AbortController into the SDK executor) is a
+    // TODO for a future milestone once the phase function seam is clean.
+    //
+    // TODO(M4): wire AbortController into runDeveloperLoop / runProjectManager
+    // so wedge-kill aborts mid-stream rather than post-execution.
+    if (wedgeDetector.active && wedgeDetector.check(Date.now())) {
+      const killError = wedgeDetector.buildKillError(Date.now());
+      costLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'phase.wedge-killed',
+        metadata: {
+          node: nodeId,
+          wedgeKillMs: nodeBudget?.wedgeKillMs,
+          lastProgressAt: killError.lastProgressAt,
+        },
+      });
+      throw killError;
+    }
+
+    // M3-3: Cost-ceiling check — at every clean node boundary (after the node
+    // completes, before the next spawns). Never mid-write.
+    //
+    // Peek at the NEXT node id so we can report it in the stop event metadata.
+    const currentIdx = order.indexOf(nodeId);
+    const nextNodeId = currentIdx >= 0 ? (order[currentIdx + 1] ?? null) : null;
+    costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
   }
 
   return { cycleOutcome, reflectionStatus, lintStatus };
