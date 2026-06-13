@@ -457,7 +457,7 @@ function writeCycleReportSafely(cycleId: string): void {
  * structured `unifier.prerequisite-missing` event on failure (matching the
  * former reviewer.ts behaviour exactly).
  */
-async function openPrInline(
+export async function openPrInline(
   input: CycleInput,
   logger: EventLogger,
 ): Promise<import('./cycle-context.ts').ReviewerOutcome> {
