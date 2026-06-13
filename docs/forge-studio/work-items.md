@@ -11,9 +11,11 @@ Legend: `⛓ depends-on` · AC = acceptance criteria · spine = `npm test` +
 
 ---
 
-## M0 — Definitions as data
+## M0 — Definitions as data ✅ COMPLETE 2026-06-13
 
 Detailed executable plan: [`docs/superpowers/plans/2026-06-13-forge-studio-m0.md`](../superpowers/plans/2026-06-13-forge-studio-m0.md).
+All five WIs landed on `feat/studio-m0` (751 tests, build, brain lint, studio lint all green;
+exit criteria met: definitions lint clean, no-drift derivation test, zero hot-path change).
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
