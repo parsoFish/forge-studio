@@ -178,12 +178,12 @@ export function KbCard({ kb, index }: { kb: Kb; index: number }) {
   const scopeLabel = kb.scope === 'agent-integration' ? 'agent-integration' : kb.scope;
 
   return (
-    <div
+    <Link
+      href={`/knowledge?id=${encodeURIComponent(kb.id)}`}
       className="lib-card"
       data-card-type="kb"
       data-card-id={kb.id}
-      style={{ animationDelay: `${index * 0.045}s`, cursor: 'default' }}
-      title="Knowledge builder lands in M5"
+      style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{kb.name}</span>
@@ -194,6 +194,6 @@ export function KbCard({ kb, index }: { kb: Kb; index: number }) {
         <span className="card-stat">{layerStat}</span>
         <span className={`badge ${scopeBadgeClass}`}>{scopeLabel}</span>
       </div>
-    </div>
+    </Link>
   );
 }
