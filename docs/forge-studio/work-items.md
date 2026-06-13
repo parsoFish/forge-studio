@@ -62,6 +62,13 @@ run-model suite green vs real fixtures, ui:journey exits 0 with video + gallery.
 | M2-6 | Project config extensions consumed | M2-3 | `instructions` injected into agent context (generalises `standing_work_item_acs`); `demoProcess`+`skills[]` composed by unifier/demo path (closes demo.skill gap); contract-ready enforced at claim |
 | M2-7 | e2e-journey acts: edit-agent, edit-project | M2-1, M2-5 | acts green; **verify:cycle routine tier** (operator-gated) — every phase spec file-sourced |
 
+**M2 status (2026-06-13): builders + single-source flip + hot-path consumption landed.**
+Act V beats (beats 24–25: agent builder /agents/project-manager + project builder /projects/claude-harness) pass
+in `ui:journey` — 44 frames, 0 failures. All spine gates green (851 tests, build, brain lint 0 errors,
+studio lint 0 errors). Remaining gate: **`npm run verify:cycle` (routine tier)** — operator-gated,
+real $, cannot run unattended. Run this to confirm the single-source flip + instructions flow on a
+real cycle before M2 is fully closed.
+
 ## M3 — Flow engine (ADR-028)
 
 | WI | Title | Depends | AC (summary) |

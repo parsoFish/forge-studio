@@ -7,11 +7,12 @@
  *   Three human moments are the spine (architect interview / review demo / reflect);
  *   everything else is autonomous and every phase is costed.
  *
- * STRUCTURE: 25 beats across 4 acts, grounded in real session behaviour:
+ * STRUCTURE: 27 beats across 5 acts, grounded in real session behaviour:
  *   ACT I  — Live architecting  (P1 stall cameo, P2 free-text, P3 activity panel, P4 real cost)
  *   ACT II — Autonomous build   (fast-forwarded, honest running timer, TDD gate, WI dependency)
  *   ACT III— Review + teach     (PARTIAL→MET, new AC authored in-loop, reflect)
  *   ACT IV — Studio monitor     (library page /; flow monitor /flows/forge-cycle; seeded gated run)
+ *   ACT V  — Studio builders    (agent builder /agents/project-manager; project builder /projects/claude-harness)
  *
  * No live LLM: the architect runner's turns + autonomous cycle are emulated by seeding
  * the same files/events the real phases write, grounded in real cycle event sequences.
@@ -486,7 +487,7 @@ async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   }
 }
 
-// ── THE 23-BEAT JOURNEY ────────────────────────────────────────────────────────
+// ── THE 27-BEAT JOURNEY ────────────────────────────────────────────────────────
 
 async function main() {
   cleanProjectDir();
@@ -1364,8 +1365,185 @@ async function main() {
     await sleep(READ);
     await frame(page, 'beat23c-monitor-tail', 'Beat 23 — event tail [data-tail-count] attribute present');
 
-    // ── BEAT 24: End card ─────────────────────────────────────────────────────
-    console.log('\n[beat 24] End card');
+    // ── ACT V: Studio builders ────────────────────────────────────────────────
+    // First live run of the agent builder + project builder against the real
+    // bridge — read-only interaction (no save, no mutation of real definitions).
+
+    // ── BEAT 24: Agent builder — /agents/project-manager ─────────────────────
+    console.log('\n[beat 24] Agent builder — /agents/project-manager');
+    await page.goto(watch.uiUrl + '/agents/project-manager', { waitUntil: 'domcontentloaded' });
+    let agentPageReady = false;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 25000 },
+      );
+      agentPageReady = true;
+      check(true, 'agent-builder: [data-page="agents"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') ?? '(no data-page=agents)');
+      check(false, `agent-builder: data-page-ready (got "${pr}")`);
+    }
+
+    await caption(page, 'The agent builder — edit composition, runtime and readiness without leaving the UI.');
+    await sleep(ACT);
+
+    if (agentPageReady) {
+      // Catalog palette: ≥1 chip rendered (data-id)
+      await countAtLeast(page, '[data-id]', 1, 'agent-builder: catalog palette renders ≥1 chip');
+
+      // 4 typed drop zones present
+      for (const kind of ['skill', 'tool', 'mcp', 'hook']) {
+        check(
+          await page.evaluate((k) => document.querySelector(`[data-accepts="${k}"]`) !== null, kind),
+          `agent-builder: drop zone [data-accepts="${kind}"] present`,
+        );
+      }
+
+      // Loaded agent id non-empty — project-manager resolves from the real agent list
+      const agentId = await page.evaluate(() =>
+        document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ??
+        document.querySelector('[data-agent-id]')?.getAttribute('data-agent-id') ?? '');
+      check(agentId.length > 0, `agent-builder: data-agent-id non-empty (got "${agentId}")`);
+
+      // Readiness panel: data-ready-count present (project-manager is fully seeded → expect 6)
+      const readyCount = await page.evaluate(() => {
+        const el = document.querySelector('[data-ready-count]');
+        return el ? el.getAttribute('data-ready-count') : null;
+      });
+      check(readyCount !== null, `agent-builder: [data-ready-count] attribute present (got ${readyCount})`);
+      if (readyCount !== null) {
+        check(parseInt(readyCount, 10) >= 4, `agent-builder: readiness ≥4 checks pass for project-manager (got ${readyCount})`);
+      }
+
+      // Runtime section: data-sdk reflects claude
+      const sdk = await page.evaluate(() =>
+        document.querySelector('[data-sdk]')?.getAttribute('data-sdk') ?? '');
+      check(sdk.length > 0, `agent-builder: [data-sdk] attribute present (got "${sdk}")`);
+
+      await frame(page, 'beat24-agent-builder', 'Beat 24 — agent builder loaded: catalog, drop zones, runtime, readiness panel');
+
+      // Dirty-flag: type into the purpose field and assert data-dirty flips
+      const purposeInput = page.locator('#purpose-input');
+      if ((await purposeInput.count()) > 0) {
+        const originalPurpose = await purposeInput.inputValue();
+        await purposeInput.click();
+        await purposeInput.pressSequentially(' (e2e test edit)', { delay: 18 });
+        await sleep(THINK);
+        const dirtyVal = await page.evaluate(() =>
+          document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
+        check(dirtyVal === 'true', `agent-builder: data-dirty="true" after editing purpose field (got "${dirtyVal}")`);
+        // Restore: click Discard to clean up (no save)
+        const discardBtn = page.locator('#btn-discard');
+        if ((await discardBtn.count()) > 0) {
+          await discardBtn.click();
+          await sleep(THINK);
+        } else {
+          // Fallback: just clear back to original text
+          await purposeInput.fill(originalPurpose);
+        }
+        await frame(page, 'beat24b-agent-dirty', 'Beat 24 — data-dirty="true" flips after purpose field edit (discarded, no save)');
+      } else {
+        check(false, 'agent-builder: #purpose-input present to test dirty flag');
+      }
+    } else {
+      check(false, 'agent-builder: page did not become ready — remaining agent-builder checks skipped');
+    }
+
+    // ── BEAT 25: Project builder — /projects/claude-harness ──────────────────
+    console.log('\n[beat 25] Project builder — /projects/claude-harness');
+    await page.goto(watch.uiUrl + '/projects/claude-harness', { waitUntil: 'domcontentloaded' });
+    let projectPageReady = false;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 25000 },
+      );
+      projectPageReady = true;
+      check(true, 'project-builder: [data-page="projects"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') ?? '(no data-page=projects)');
+      check(false, `project-builder: data-page-ready (got "${pr}")`);
+    }
+
+    await caption(page, 'The project builder — north star, demo timeline, skills, contract readiness in one screen.');
+    await sleep(ACT);
+
+    if (projectPageReady) {
+      // Project id wired
+      const projectId = await page.evaluate(() =>
+        document.querySelector('[data-project-id]')?.getAttribute('data-project-id') ?? '');
+      check(projectId === 'claude-harness', `project-builder: data-project-id="claude-harness" (got "${projectId}")`);
+
+      // North star field present
+      check(
+        await page.evaluate(() => document.querySelector('[data-component="north-star"]') !== null ||
+          // fallback: the NorthStar component may render as a section/textarea without a data-component
+          document.querySelectorAll('textarea').length > 0 ||
+          document.querySelector('[placeholder*="north star" i]') !== null ||
+          document.querySelector('[placeholder*="goal" i]') !== null ||
+          document.querySelector('[placeholder*="outcome" i]') !== null),
+        'project-builder: north star field present',
+      );
+
+      // Demo timeline data-step-count present
+      const stepCount = await page.evaluate(() => {
+        const el = document.querySelector('[data-step-count]');
+        return el ? el.getAttribute('data-step-count') : null;
+      });
+      check(stepCount !== null, `project-builder: [data-step-count] attribute present (got ${stepCount})`);
+
+      // Skills bind data-count present
+      const skillsCount = await page.evaluate(() => {
+        const el = document.querySelector('[data-count]');
+        return el ? el.getAttribute('data-count') : null;
+      });
+      check(skillsCount !== null, `project-builder: [data-count] attribute present (got ${skillsCount})`);
+
+      // Contract readiness: data-ready-count + data-flow-ready
+      const contractReadyCount = await page.evaluate(() => {
+        const el = document.querySelector('[data-ready-count]');
+        return el ? el.getAttribute('data-ready-count') : null;
+      });
+      check(contractReadyCount !== null, `project-builder: [data-ready-count] attribute present (got ${contractReadyCount})`);
+
+      const flowReady = await page.evaluate(() => {
+        const el = document.querySelector('[data-flow-ready]');
+        return el ? el.getAttribute('data-flow-ready') : null;
+      });
+      check(flowReady !== null, `project-builder: [data-flow-ready] attribute present (got "${flowReady}")`);
+
+      await frame(page, 'beat25-project-builder', 'Beat 25 — project builder loaded: north star, demo timeline, skills, contract readiness');
+
+      // Add a demo step via the "+ Add step" button and assert data-step-count increments + dirty flips.
+      // The preset chips use data-kind; the plain "Add step" button is the simplest reliable target.
+      const presetBtn = page.locator('button').filter({ hasText: /^\+ Add step$/ }).first();
+      const presetPresent = (await presetBtn.count()) > 0;
+      if (presetPresent) {
+        const before = parseInt(stepCount ?? '0', 10);
+        await presetBtn.click();
+        await sleep(THINK);
+        const after = await page.evaluate(() => {
+          const el = document.querySelector('[data-step-count]');
+          return el ? parseInt(el.getAttribute('data-step-count') ?? '0', 10) : 0;
+        });
+        check(after > before, `project-builder: data-step-count incremented after preset click (${before}→${after})`);
+        const dirtyAfter = await page.evaluate(() =>
+          document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
+        check(dirtyAfter === 'true', `project-builder: data-dirty="true" after adding demo step (got "${dirtyAfter}")`);
+        await frame(page, 'beat25b-project-dirty', `Beat 25 — data-step-count incremented (${before}→${after}), data-dirty="true" (no save)`);
+      } else {
+        // Soft-fail: the presets may have a different label or be in a submenu
+        check(false, 'project-builder: preset/add-step button present (soft — builder loaded, step-count assertion skipped)');
+      }
+    } else {
+      check(false, 'project-builder: page did not become ready — remaining project-builder checks skipped');
+    }
+
+    // ── BEAT 26: End card ─────────────────────────────────────────────────────
+    console.log('\n[beat 26] End card');
     await page.evaluate(() => {
       let card = document.getElementById('demo-end-card');
       if (!card) {
@@ -1390,7 +1568,7 @@ async function main() {
       }
     });
     await caption(page, 'Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher.');
-    await frame(page, 'beat24-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
+    await frame(page, 'beat26-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
     await sleep(READ);
 
     console.log('\n[e2e] journey complete.');
