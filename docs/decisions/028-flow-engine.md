@@ -1,0 +1,79 @@
+# ADR 028 — Definition-driven flow engine
+
+**Status:** Accepted — 2026-06-13. Implementation staged per
+[`docs/forge-studio/roadmap.md`](../forge-studio/roadmap.md) (M1 run model,
+M3 engine + cutover). Amends ADR 011 (queue serves flow runs), ADR 019
+(resume points become `resumable` node flags), ADR 026 (gate send-back
+generalised). Generalises the human moments of ADR 020/021/023 into declared
+gates. The forge cycle's behaviour is preserved bit-for-bit; ADR 022's
+harness is the cutover oracle.
+
+## Context
+
+`orchestrator/cycle.ts` hardcodes PM → dev-loop → unifier → PR → closure →
+reflector. Studio requires arbitrary operator-authored flows. The brain
+binds twelve hard constraints on any such engine (see
+`docs/forge-studio/README.md` §non-negotiables) — most critically: human
+gates are structural, gates are orchestrator-verified, the system never
+self-modifies while running, and resume never discards work.
+
+## Decision
+
+1. **`orchestrator/flow-runner.ts` interprets FlowDefinitions (ADR 027).**
+   Node kinds:
+   - **static** — spawn the agent from its definition (Ralph loop or
+     single-pass per the agent's process); orchestrator-verified gate after.
+   - **fanOut** — multiplicity resolved at runtime from the named upstream
+     artifact: one instance per item, worktree each, `depends_on` DAG
+     respected. This is today's per-WI dev-loop engine, invoked as a node
+     executor — not a reimplementation.
+   - **gate** — park the run as `gated`; surface the artifact; wait on the
+     verdict endpoint. Approve continues; send-back appends typed work items
+     to the flow's declared handler node (the ADR 026 UWI mechanism,
+     generalised: review→unifier is the first instance).
+2. **Existing phase functions become node executors.** `runCycle` shrinks to
+   "load flow.yaml → flow-runner". No parallel old/new implementations
+   survive cutover: the hardcoded sequence is deleted once
+   `verify-cycle` routine AND release tiers pass on the engine path.
+3. **Run = derived, never stored.** `orchestrator/run-model.ts` aggregates
+   queue state + manifest + `events.jsonl` + artifacts dir into the run view
+   (phases, phaseMeta, artifactsReady, gate, failedAt, origin). Read-only;
+   zero new write paths. The event log's `phase` field carries the flow-node
+   id (ADR 008 schema: enum widens to string).
+4. **Budgets and safety live in the runner, not in prompts:**
+   - flow `costCeilingUsd` — warn at 70%, stop at a clean phase boundary at
+     100% (never mid-write);
+   - per-node `wedgeKillMs` — heartbeat-without-tool-progress ceiling kills
+     the node, emits `phase.wedge-killed`, classifies resumable (closes the
+     33h-wedge gap);
+   - rate-limit `resetsAt` gates every spawn;
+   - iteration/turn budgets carry over from agent definitions unchanged.
+5. **Resume** targets any node flagged `resumable`; worktree preserved;
+   rebase-onto-main at resume start (ADR 019 semantics, generalised).
+6. **Edit lock / versioning:** a flow with in-flight runs is read-only;
+   saving creates `version: n+1`, used by new runs only. The runtime never
+   modifies definitions (forge-never-self-modifies, applied to Studio).
+7. **Triggers:** terminal states may enqueue another flow's run
+   (`on: complete → flow`). `knowledge-ingest` is the second seed flow and
+   the proof a non-cycle flow runs end-to-end.
+8. **Claim refuses:** project not contract-ready (`forge preflight`,
+   ADR 017), flow invalid/locked, zero-gate non-disposable flow. Every run
+   is origin-tagged (`architect | human-directed`).
+9. **Gate endpoints are generalised:** `POST /api/runs/:id/gates/:gateId`
+   (approve | send-back{notes}); `/api/verdict` and `/api/plan-verdict`
+   become aliases. Server-verified; no auto-approve code path exists.
+
+## Consequences
+
+- New flows are data: authoring one requires no orchestrator change, only
+  definitions that pass `forge studio lint`.
+- The scheduler/queue (ADR 011/012) is untouched in shape — `_queue/`
+  directories now hold flow-run manifests; atomic-mv claims, heartbeats, and
+  the two-sweep recovery work as-is.
+- Human-moment screens (ADR 020/021/023) survive as renderers of declared
+  gates; the unified artifact viewer routes them (roadmap M4).
+- The harness suite must evolve with the engine: e2e-journey gains acts per
+  surface; verify-cycle gates every milestone touching the execution path
+  and is the only authority for deleting the hardcoded path.
+- Exploration-type flows stay deferred (schema reserves `type:`); zero-gate
+  autonomy stays rejected absent new evidence (v1 review-spin incident).
