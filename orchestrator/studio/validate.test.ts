@@ -55,7 +55,6 @@ function makeFlow(overrides: Partial<FlowDefinition> = {}): FlowDefinition {
     kb: null,
     costCeilingUsd: 10,
     origin: 'seed',
-    disposable: false,
     nodes: [
       { id: 'step-a', agent: 'my-agent' },
       { id: 'gate', gate: 'verdict' },
@@ -98,6 +97,17 @@ describe('SLUG_RE', () => {
     assert.ok(!SLUG_RE.test('My_Agent'));
     assert.ok(!SLUG_RE.test('1agent'));
     assert.ok(!SLUG_RE.test('_agent'));
+  });
+
+  it('rejects consecutive hyphens and trailing hyphens', () => {
+    assert.ok(!SLUG_RE.test('my--agent'));
+    assert.ok(!SLUG_RE.test('agent-'));
+  });
+
+  it('accepts single-char slug and multi-segment slugs', () => {
+    assert.ok(SLUG_RE.test('a'));
+    assert.ok(SLUG_RE.test('forge-cycle'));
+    assert.ok(SLUG_RE.test('claude-harness'));
   });
 });
 
@@ -497,8 +507,7 @@ describe('validateFlow — zero-gate', () => {
   });
 
   it('no gate nodes and disposable absent → error zero-gate', () => {
-    const flow: FlowDefinition = { ...makeFlow(), nodes: [{ id: 'step-a', agent: 'my-agent' }], edges: [] };
-    delete (flow as { disposable?: boolean }).disposable;
+    const flow = makeFlow({ nodes: [{ id: 'step-a', agent: 'my-agent' }], edges: [] });
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
     const f = findings.find((x) => x.check === 'zero-gate');
     assert.ok(f, 'expected zero-gate finding');
@@ -576,7 +585,7 @@ describe('validateCatalog — model-sdk', () => {
     const f = findings.find((x) => x.check === 'model-sdk');
     assert.ok(f, 'expected model-sdk finding');
     assert.equal(f.level, 'error');
-    assert.ok(f.message.includes('nope') || f.message.includes('claude-sonnet-4-6'));
+    assert.ok(f.message.includes('nope') && f.message.includes('claude-sonnet-4-6'));
   });
 
   it('model with valid sdk → no model-sdk finding', () => {

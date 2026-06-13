@@ -2,6 +2,8 @@
  * Forge Studio definition validation (ADR 027, §6).
  * Pure semantic checks — no I/O, no mutation of inputs.
  * Consumed by: bridge PUT routes (M2) and `forge studio lint` (Task 5).
+ *
+ * validateKb intentionally checks only the slug; the scope enum is enforced at load time in registry.ts.
  */
 
 import type {
@@ -23,7 +25,7 @@ export type Finding = {
   message: string;
 };
 
-export const SLUG_RE = /^[a-z][a-z0-9-]*$/;
+export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -199,8 +201,10 @@ export function validateFlow(
       if (deg === 0) queue.push(id);
     }
     let processed = 0;
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head];
+      head += 1;
       processed++;
       for (const neighbor of adj.get(current) ?? []) {
         const newDeg = (inDegree.get(neighbor) ?? 0) - 1;
@@ -276,6 +280,8 @@ export function validateCatalog(c: Catalog): Finding[] {
   const obj = 'catalog';
 
   // unique-ids within each section
+  // Note: catalog entry ids are free-form display ids (model ids contain dots/uppercase —
+  // e.g. "claude-sonnet-4-6"), deliberately not slug-checked.
   const sections: [string, { id: string }[]][] = [
     ['sdks', c.sdks],
     ['models', c.models],
