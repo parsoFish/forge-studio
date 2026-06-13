@@ -264,10 +264,22 @@ function stopWatch(proc) {
 }
 
 function startServe() {
+  // FORGE_SKIP_CONTRACT_CHECK=1: bypass the preflight hard-clause check in
+  // validateClaimable for the routine-tier harness, where the corpus repo is
+  // reset to a frozen SHA that deliberately fails C2 scratch-hygiene. This
+  // harness tests ENGINE EXECUTION, not project onboarding — the contract gate
+  // is orthogonal here. Flow-validity + zero-gate structural checks are never
+  // skipped (they fire before the env is consulted in claim-validator.ts).
+  log('contract-readiness claim check skipped (routine-tier execution test)');
   return spawn(
     process.execPath,
     ['--experimental-strip-types', 'orchestrator/cli.ts', 'serve', '--once'],
-    { cwd: FORGE_ROOT, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
+    {
+      cwd: FORGE_ROOT,
+      env: { ...process.env, FORGE_SKIP_CONTRACT_CHECK: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    },
   );
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { subscribe, type EventLogEntry } from '@/lib/bridge-client';
+import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows } from '@/lib/studio-client';
 import type { Run, Flow } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
@@ -136,6 +136,25 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // ---- start / resume ----
+
+  const handleStartRun = useCallback(async () => {
+    const signal = { cancelled: false };
+    const r = await startRun(flow?.project ?? id);
+    if (r.ok) {
+      void loadData(signal);
+    }
+  }, [flow, id, loadData]);
+
+  const handleResumeRun = useCallback(async () => {
+    if (!activeRun) return;
+    const signal = { cancelled: false };
+    const r = await resumeRun(activeRun.id);
+    if (r.ok) {
+      void loadData(signal);
+    }
+  }, [activeRun, loadData]);
+
   // ---- run selection ----
 
   const handleSelectRun = useCallback(
@@ -168,6 +187,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       data-flow-id={id}
       data-active-run={activeRun?.id ?? ''}
       data-page-ready={ready ? 'true' : 'false'}
+      data-run-count={runs.length}
+      data-can-start={flow ? 'true' : 'false'}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
@@ -268,6 +289,71 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Gated banner */}
               {runs.some((r) => r.status === 'gated') && (
                 <GatedBanner runs={runs} onSelect={handleSelectRun} />
+              )}
+
+              {/* Start Run CTA — shown when the flow is known but no runs exist yet */}
+              {ready && flow && runs.length === 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 20px',
+                    background: 'var(--panel)',
+                    borderBottom: '1px solid var(--line)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: 'var(--dim)' }}>No runs yet.</span>
+                  <button
+                    data-action="start-run"
+                    onClick={() => void handleStartRun()}
+                    style={{
+                      fontSize: 12,
+                      padding: '3px 12px',
+                      background: 'var(--accent)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Start Run
+                  </button>
+                </div>
+              )}
+
+              {/* Resume CTA — shown when the active run has failed */}
+              {activeRun?.status === 'failed' && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 20px',
+                    background: 'rgba(255,80,80,0.06)',
+                    borderBottom: '1px solid rgba(255,80,80,0.2)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: 'var(--faint)' }}>Run failed.</span>
+                  <button
+                    data-action="resume-run"
+                    data-run-id={activeRun.id}
+                    onClick={() => void handleResumeRun()}
+                    style={{
+                      fontSize: 12,
+                      padding: '3px 12px',
+                      background: 'var(--ember)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Resume
+                  </button>
+                </div>
               )}
 
               {/* Summary strip */}

@@ -44,8 +44,11 @@ self-modifies while running, and resume never discards work.
    - flow `costCeilingUsd` — warn at 70%, stop at a clean phase boundary at
      100% (never mid-write);
    - per-node `wedgeKillMs` — heartbeat-without-tool-progress ceiling kills
-     the node, emits `phase.wedge-killed`, classifies resumable (closes the
-     33h-wedge gap);
+     the node via a concurrent `Promise.race` timer (not post-execution),
+     emits `phase.wedge-killed`, classifies resumable. The race unblocks the
+     cycle even when the executor hangs forever (closes the 33h-wedge gap).
+     SDK abort is threaded into PM and accepted (not yet chained in dev-loop's
+     per-WI Ralphs — TODO);
    - rate-limit `resetsAt` gates every spawn;
    - iteration/turn budgets carry over from agent definitions unchanged.
 5. **Resume** targets any node flagged `resumable`; worktree preserved;

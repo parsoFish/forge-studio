@@ -48,12 +48,15 @@ import type {
 } from './cycle-context.ts';
 import { resolveQualityGateCmd } from './cycle-context.ts';
 
-// Phase runners (extracted from this module — cycle.ts is the thin spine).
-import { runProjectManager } from './phases/project-manager.ts';
-import { runDeveloperLoop } from './phases/developer-loop.ts';
-import { runReflector } from './phases/reflector.ts';
-import { runClosure } from './phases/closure.ts';
-import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
+// Phase runners are now invoked via flow-runner.ts (ADR-028 M3-2).
+// cycle.ts retains only the helper functions (openPrInline, commitDevLoopBoundary,
+// enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch,
+// assertNonEmptyDelivery) exported for use by flow-runner.
+import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
+
+// Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
+import { runFlow, forgeCycleFlowPath } from './flow-runner.ts';
+import { loadFlowDefinition } from './studio/registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict
@@ -61,6 +64,66 @@ import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch, rebaseP
 // GitHub; closure confirms); ADD-WORK-ITEMS (ADR 026) appends typed UWIs to the
 // unifier queue in the live worktree and the drain re-runs them in the SAME
 // cycle (one cycleId) — no requeue, no send-back to a dev phase.
+
+/**
+ * P4: emit synthetic architect start+end events into the cycle log.
+ *
+ * The architect ran OUT-OF-CYCLE (in-UI session before the scheduler claimed
+ * this cycle). The manifest carries the session's real cost + duration when
+ * the finalize step stamped them; falls back gracefully for legacy manifests.
+ *
+ * Emitted unconditionally (including dry-run) so the UI can always reflect
+ * the architect phase as complete, and so P4 tests can verify the events.
+ *
+ * Exported for use by flow-runner.ts's default `emitSyntheticArchitect` dep.
+ */
+export function emitSyntheticArchitectEvents(
+  input: CycleInput,
+  logger: EventLogger,
+  origin?: string,
+): void {
+  const resolvedOrigin = origin ?? readManifestOrigin(input.manifestPath);
+  let architectCostUsd: number | undefined;
+  let architectDurationMs: number | undefined;
+  let architectSessionId: string | undefined;
+  try {
+    const mf = parseManifest(readFileSync(input.manifestPath, 'utf8'));
+    if (typeof mf.architect_cost_usd === 'number') architectCostUsd = mf.architect_cost_usd;
+    if (typeof mf.architect_duration_ms === 'number') architectDurationMs = mf.architect_duration_ms;
+    if (mf.architect_session_id) architectSessionId = mf.architect_session_id;
+  } catch {
+    /* best-effort — a missing/unreadable manifest must not block the cycle */
+  }
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'architect',
+    skill: 'architect',
+    event_type: 'start',
+    input_refs: [],
+    output_refs: [input.manifestPath],
+    message: 'architect.start',
+    metadata: {
+      origin: resolvedOrigin,
+      ...(architectSessionId ? { session_id: architectSessionId } : {}),
+      note: 'architect ran out-of-cycle; event emitted by orchestrator so the UI can reflect the phase as complete',
+    },
+  });
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'architect',
+    skill: 'architect',
+    event_type: 'end',
+    input_refs: [],
+    output_refs: [input.manifestPath],
+    message: 'architect.end',
+    ...(typeof architectCostUsd === 'number' ? { cost_usd: architectCostUsd } : {}),
+    ...(typeof architectDurationMs === 'number' ? { duration_ms: architectDurationMs } : {}),
+    metadata: {
+      origin: resolvedOrigin,
+      ...(architectSessionId ? { session_id: architectSessionId } : {}),
+    },
+  });
+}
 
 export async function runCycle(input: CycleInput): Promise<CycleResult> {
   const started = Date.now();
@@ -102,49 +165,9 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   // stamped them (P4); fall back to a zero-cost synthetic pair for legacy/
   // hand-authored manifests that lack the fields.
   //
-  // metadata.origin tracks who triggered the cycle (architect vs reflector vs
-  // operator). Input ref is the manifest; output ref is the manifest itself
-  // (architect's product).
-  let architectCostUsd: number | undefined;
-  let architectDurationMs: number | undefined;
-  let architectSessionId: string | undefined;
-  try {
-    const mf = parseManifest(readFileSync(input.manifestPath, 'utf8'));
-    if (typeof mf.architect_cost_usd === 'number') architectCostUsd = mf.architect_cost_usd;
-    if (typeof mf.architect_duration_ms === 'number') architectDurationMs = mf.architect_duration_ms;
-    if (mf.architect_session_id) architectSessionId = mf.architect_session_id;
-  } catch {
-    /* best-effort — a missing/unreadable manifest must not block the cycle */
-  }
-  logger.emit({
-    initiative_id: input.initiativeId,
-    phase: 'architect',
-    skill: 'architect',
-    event_type: 'start',
-    input_refs: [],
-    output_refs: [input.manifestPath],
-    message: 'architect.start',
-    metadata: {
-      origin,
-      ...(architectSessionId ? { session_id: architectSessionId } : {}),
-      note: 'architect ran out-of-cycle; event emitted by orchestrator so the UI can reflect the phase as complete',
-    },
-  });
-  logger.emit({
-    initiative_id: input.initiativeId,
-    phase: 'architect',
-    skill: 'architect',
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [input.manifestPath],
-    message: 'architect.end',
-    ...(typeof architectCostUsd === 'number' ? { cost_usd: architectCostUsd } : {}),
-    ...(typeof architectDurationMs === 'number' ? { duration_ms: architectDurationMs } : {}),
-    metadata: {
-      origin,
-      ...(architectSessionId ? { session_id: architectSessionId } : {}),
-    },
-  });
+  // Emitted here (not inside runFlow) so dry-run cycles also produce the
+  // architect events — the P4 tests verify this unconditional emission.
+  emitSyntheticArchitectEvents(input, logger, origin);
 
   // F-04 / F-06: derive the effective quality-gate command once per cycle so
   // the dev-loop and reviewer use exactly the same gate. Precedence:
@@ -167,118 +190,15 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   let lintStatus: LintStatus = 'skipped';
   try {
     if (!input.dryRun) {
-      // ADR 019/026: on a unifier resume (a crash-recovery `forge requeue
-      // --resume-from=unifier`, or the review→unifier drain) the architect + PM
-      // already ran in the prior cycle and their output (the WI specs) survives
-      // in the preserved worktree's `.forge/work-items/`. Skip PM and rebase the
-      // preserved branch onto current main; the dev-loop then runs zero per-WI
-      // Ralphs and only the unifier (which drains any pending UWIs).
-      if (input.resumeFrom === 'unifier') {
-        // cascade-v4 #4: another cycle may have merged to main during the stall,
-        // so the preserved branch no longer has main as its merge-base — the
-        // dev-loop-close invariant would fail at the END of this resumed cycle,
-        // wasting the unifier run. Rebase the preserved branch onto current main
-        // NOW (clean → force-with-lease push the initiative branch; conflict →
-        // fail fast with a clear, actionable resume-needs-rebase signal).
-        //
-        // ADR 019 + 026: the rebase replay clobbers gitignored untracked dirs.
-        // Preserve BOTH the dev WI specs (`.forge/work-items`) AND the unifier
-        // queue (`.forge/unifier-items`, the pending review UWIs the drain is
-        // about to run) across the rebase, restoring any the rebase emptied.
-        const rebase = preservingForgeScratch(
-          inputWithGate.worktreePath,
-          ['.forge/work-items', '.forge/unifier-items'],
-          () => rebasePreservedBranchOntoMain(inputWithGate.worktreePath),
-        );
-        logger.emit({
-          initiative_id: input.initiativeId,
-          phase: 'orchestrator',
-          skill: 'cycle',
-          event_type: rebase.ok ? 'log' : 'error',
-          input_refs: [inputWithGate.worktreePath],
-          output_refs: [],
-          message: rebase.ok
-            ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
-            : 'cycle.resume-needs-rebase',
-          metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
-        });
-        if (!rebase.ok) {
-          throw new Error(
-            `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
-          );
-        }
-      } else {
-        await runProjectManager(inputWithGate, logger);
-      }
-      const devLoopOutcome = await runDeveloperLoop(inputWithGate, logger);
-      // Safety net: commit any uncommitted dev-loop work before the reviewer
-      // starts. The dev-loop's prompt tells the agent to commit per
-      // iteration, but if it skips, source files would not reach the PR.
-      // This boundary commit catches any drift. Files matching .gitignore
-      // (Ralph scratch: PROMPT.md / AGENT.md / fix_plan.md, node_modules)
-      // are excluded by `git add` automatically.
-      commitDevLoopBoundary(inputWithGate.worktreePath, logger, inputWithGate.initiativeId);
-      // G8: the boundary commit may have added a commit on top of the
-      // dev-loop's last per-WI push, so push once more and then assert the
-      // local↔remote invariant. This is the precondition the review
-      // redesign depends on: at dev-loop close `origin/<branch>` == local
-      // HEAD and `main` == merge-base (no divergence). A violation throws
-      // and is classified — the branch is not in a reviewable state.
-      enforceDevLoopCloseInvariant(inputWithGate.worktreePath, logger, inputWithGate.initiativeId);
-
-      // cascade-v4 #3: DELIVERY GATE. A unifier that did not pass its composed
-      // gate (project tests green + structured demo + self-contained PR +
-      // branches synced) has NOT produced a review-ready branch. Letting the
-      // reviewer open a PR here is the quality escape an inattentive operator
-      // could merge (final gate fails, mergeable PR still appears). Block PR
-      // creation with a classified failure instead — the manifest routes to
-      // triage, not to a misleading "ready" PR. (Demo-missing was already
-      // blocked by openPullRequest's assertTrackedDemoExists; this closes the
-      // demo-present-but-gate-failed gap.)
-      if (!devLoopOutcome.unifierSucceeded) {
-        throw new Error(
-          `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
-            `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
-        );
-      }
-
-      // DEV-1: empty-branch guard. A branch with zero commits ahead of base AND
-      // zero insertions has nothing to review — opening a PR against it is
-      // misleading and was the root cause of the empty PR #1 incident (a
-      // resume-from-unifier cycle with complete:0 and no commits ahead of base).
-      assertNonEmptyDelivery(devLoopOutcome, inputWithGate.initiativeId, inputWithGate.worktreePath, logger);
-
-      // FINAL CI DELIVERY GATE. The dev-loop's gates are SCOPED per-WI, so a
-      // cycle can reach here with the project's FULL CI (whole-module test +
-      // gofmt/terrafmt + lint) red — which shipped a real PR with formatting +
-      // lint red at review. Before opening the PR, auto-apply the project's
-      // formatters then run its operator-configured `ci_gate` DIRECTLY; a red
-      // gate throws `ci-gate-failed` so the manifest routes to triage instead
-      // of producing a CI-red "ready" PR. The ci_gate is a trusted
-      // `["bash","-c","…&&…"]` chain — run via execFileSync here, NOT through
-      // the pipe-banned per-WI gate runner (runShellGate / gateIsShellPipeline).
-      enforceFinalCiGate(inputWithGate, logger);
-
-      // Open the PR inline (REV-6: the reviewer phase is now just PR-opening;
-      // inlined here so the spine is: dev-loop → delivery gate → open PR → closure).
-      // All reviewer.* events are preserved verbatim so the forge-ui phase hexes
-      // and e2e harness keep working without change.
-      const reviewerOutcome = await openPrInline(inputWithGate, logger);
-
-      // Closure: reflection fires ONLY on a GitHub-confirmed merge (G10),
-      // and `_queue/done/` ⇒ the PR is MERGED (G1). The closure step asks
-      // GitHub `gh pr view --json state`; on MERGED it aligns local↔remote
-      // (ff main, prune the initiative branch) and moves the manifest to
-      // `done/`; otherwise the manifest stays in `ready-for-review/`
-      // flagged and reflection is skipped. The operator merging the PR in
-      // GitHub is what closes the review phase — nothing here auto-merges.
-      const closure = await runClosure(inputWithGate, logger, reviewerOutcome);
-      cycleOutcome = closure.outcome;
-      if (closure.merged) {
-        const reflectorResult = await runReflector(inputWithGate, logger);
-        reflectionStatus = reflectorResult.reflection_status;
-        lintStatus = reflectorResult.lint_status;
-      }
+      // ADR-028 M3-2: delegate the phase sequence to flow-runner.
+      // Load the forge-cycle flow definition and run the DAG walk.
+      // The outer scaffolding (cycleId, logger, cycle.start/end, failure
+      // classification, snapshot, report) stays here in runCycle.
+      const flow = loadFlowDefinition(forgeCycleFlowPath());
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger });
+      cycleOutcome = flowResult.cycleOutcome;
+      reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
+      lintStatus = flowResult.lintStatus as LintStatus;
     }
   } catch (err) {
     logger.emit({
@@ -457,7 +377,7 @@ function writeCycleReportSafely(cycleId: string): void {
  * structured `unifier.prerequisite-missing` event on failure (matching the
  * former reviewer.ts behaviour exactly).
  */
-async function openPrInline(
+export async function openPrInline(
   input: CycleInput,
   logger: EventLogger,
 ): Promise<import('./cycle-context.ts').ReviewerOutcome> {
@@ -547,7 +467,7 @@ function newCycleId(initiativeId: string): string {
  * emptied them. Dirs absent before the rebase are skipped. Best-effort restore
  * — a missing backup never fails the cycle.
  */
-function preservingForgeScratch<T>(worktreePath: string, relDirs: string[], fn: () => T): T {
+export function preservingForgeScratch<T>(worktreePath: string, relDirs: string[], fn: () => T): T {
   const backups = relDirs.map((rel) => {
     const dir = resolve(worktreePath, rel);
     const bak = `${worktreePath}.${rel.replace(/[\\/]/g, '-')}-resume-bak`;
@@ -665,7 +585,7 @@ function emitFailureClassification(
  * `--allow-empty` so a no-op cycle doesn't error, and `|| true`-style
  * try/catch so non-git worktrees (e.g. early dry-runs) don't fail the cycle.
  */
-function commitDevLoopBoundary(
+export function commitDevLoopBoundary(
   worktreePath: string,
   logger: EventLogger,
   initiativeId: string,
@@ -721,7 +641,7 @@ function commitDevLoopBoundary(
  * sync is the precondition the review-phase redesign depends on
  * (architecture.md §G / brain theme `review-phase-target-design`).
  */
-function enforceDevLoopCloseInvariant(
+export function enforceDevLoopCloseInvariant(
   worktreePath: string,
   logger: EventLogger,
   initiativeId: string,
@@ -873,7 +793,7 @@ export function decideFinalCiGate(
  * CI-red PR. Best-effort config read — a missing/unreadable project.json
  * simply skips the gate (the dev-loop's scoped gates still ran).
  */
-function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
+export function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void {
   if (input.dryRun) return;
 
   let ciGate: string[] | null = null;

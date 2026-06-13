@@ -7,12 +7,13 @@
  *   Three human moments are the spine (architect interview / review demo / reflect);
  *   everything else is autonomous and every phase is costed.
  *
- * STRUCTURE: 27 beats across 5 acts, grounded in real session behaviour:
+ * STRUCTURE: 30 beats across 6 acts, grounded in real session behaviour:
  *   ACT I  — Live architecting  (P1 stall cameo, P2 free-text, P3 activity panel, P4 real cost)
  *   ACT II — Autonomous build   (fast-forwarded, honest running timer, TDD gate, WI dependency)
  *   ACT III— Review + teach     (PARTIAL→MET, new AC authored in-loop, reflect)
  *   ACT IV — Studio monitor     (library page /; flow monitor /flows/forge-cycle; seeded gated run)
  *   ACT V  — Studio builders    (agent builder /agents/project-manager; project builder /projects/claude-harness)
+ *   ACT VI — Flow-engine beats  (start-run CTA, cost-ceiling-warn gauge, gate control, resume button)
  *
  * No live LLM: the architect runner's turns + autonomous cycle are emulated by seeding
  * the same files/events the real phases write, grounded in real cycle event sequences.
@@ -1542,8 +1543,307 @@ async function main() {
       check(false, 'project-builder: page did not become ready — remaining project-builder checks skipped');
     }
 
-    // ── BEAT 26: End card ─────────────────────────────────────────────────────
-    console.log('\n[beat 26] End card');
+    // ── ACT VI: Flow-engine beats (M3-7) ──────────────────────────────────────
+    // Four emulated beats proving the M3-4 controls render correctly:
+    //   Beat 26 — start-run CTA (flow with no runs → [data-action="start-run"] enabled)
+    //   Beat 27 — cost-ceiling-warn (cost > 70% of ceiling → amber gauge)
+    //   Beat 28 — gate control (gated run → "Open gate →" link present; already seeded by Act IV)
+    //   Beat 29 — resume button (failed run → [data-action="resume-run"] present)
+    // All are SOFT assertions only (check()/countAtLeast). No real runs are started/resumed.
+
+    // ── BEAT 26: Start-run CTA — /flows/knowledge-ingest (no runs) ───────────
+    // knowledge-ingest is the M3-5 seed flow with no queue manifests → runs.length === 0
+    // → the empty-state start-run CTA renders.
+    console.log('\n[beat 26] Flow engine — start-run CTA (knowledge-ingest, no runs)');
+    await page.goto(watch.uiUrl + '/flows/knowledge-ingest', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'Act VI: flow-monitor ready for knowledge-ingest');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
+      check(false, `Act VI: flow-monitor ready for knowledge-ingest (got "${pr}")`);
+    }
+    await caption(page, 'Flow engine — Start Run CTA enabled: the engine can launch any planned flow directly from the UI.');
+    await sleep(ACT);
+
+    // data-can-start="true" on the page root (M3-4: enabled when flow is known)
+    const canStart = await page.evaluate(() =>
+      document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
+    check(canStart === 'true', `Act VI: data-can-start="true" on flow-monitor page (got "${canStart}")`);
+
+    // Start Run button must be present and interactive (not disabled)
+    let startBtnPresent = false;
+    try {
+      await page.waitForSelector('[data-action="start-run"]', { timeout: 8000 });
+      startBtnPresent = true;
+      check(true, 'Act VI: [data-action="start-run"] CTA present for flow with no runs');
+    } catch {
+      check(false, 'Act VI: [data-action="start-run"] CTA present for flow with no runs (not found)');
+    }
+    if (startBtnPresent) {
+      const disabled = await page.evaluate(() =>
+        (document.querySelector('[data-action="start-run"]'))?.disabled ?? true);
+      check(!disabled, 'Act VI: start-run button is not disabled (interactive)');
+    }
+    // run-count should be 0 on the page attr
+    const runCount = await page.evaluate(() =>
+      document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-run-count') ?? '(absent)');
+    check(runCount === '0', `Act VI: data-run-count="0" for empty-state flow (got "${runCount}")`);
+    await frame(page, 'beat26-start-run-cta', 'Act VI beat 26 — Start Run CTA enabled on flow with no runs (knowledge-ingest)');
+    await sleep(READ);
+
+    // ── BEAT 27: Cost-ceiling-warn — seed a run at 75% of $25 ceiling ─────────
+    // Seed INIT3 in-flight with enough cost events to push total past $18.75 (75%).
+    // The MonitorSummary cost gauge renders amber fill at ≥70%.
+    console.log('\n[beat 27] Flow engine — cost-ceiling-warn (gauge amber at 75% of $25 ceiling)');
+    const INIT3 = `INIT-${DATE}-e2e-flow-ceiling`;
+    const STAMP3 = new Date(Date.now() + 2000).toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+    const CYCLE_ID3 = `${STAMP3}_${INIT3}`;
+    const CYCLE_LOG3 = join(FORGE_ROOT, '_logs', CYCLE_ID3);
+    let ceSeq = 0;
+    function ceilEvent(phase, eventType, message, opts = {}) {
+      const { metadata = {}, skill = phase, cost_usd, ...extras } = opts;
+      mkdirSync(CYCLE_LOG3, { recursive: true });
+      ceSeq += 1;
+      appendFileSync(join(CYCLE_LOG3, 'events.jsonl'), JSON.stringify({
+        event_id: `EV_ce_${ceSeq}`, cycle_id: CYCLE_ID3, initiative_id: INIT3,
+        started_at: new Date().toISOString(), phase, skill,
+        event_type: eventType, input_refs: [], output_refs: [], message, metadata,
+        ...(cost_usd !== undefined ? { cost_usd } : {}),
+        ...extras,
+      }) + '\n');
+    }
+
+    // Write the manifest into in-flight
+    mkdirSync(QDIR('in-flight'), { recursive: true });
+    writeFileSync(join(QDIR('in-flight'), `${INIT3}.md`), [
+      '---', `initiative_id: ${INIT3}`, `project: ${PROJECT}`,
+      `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`,
+      `cycle_id: ${CYCLE_ID3}`,
+      'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: in-flight',
+      'origin: architect',
+      '---', '',
+      '# Flow-engine ceiling demo — 75% of $25 ceiling',
+      '',
+      'A synthetic run seeded for the cost-ceiling-warn gauge demo.',
+    ].join('\n'));
+
+    // Emit events totalling ~$18.75 (75% of $25) — spread across phases
+    ceilEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
+    ceilEvent('architect', 'start', 'architect.start');
+    ceilEvent('architect', 'end', 'architect.end', { cost_usd: 2.50 });
+    ceilEvent('project-manager', 'start', 'pm phase start');
+    ceilEvent('project-manager', 'end', 'pm.end', { cost_usd: 3.25 });
+    ceilEvent('developer-loop', 'start', 'dev-loop start');
+    ceilEvent('developer-loop', 'log', 'usage_delta', { cost_usd: 8.00, metadata: { work_item_id: 'WI-1' } });
+    ceilEvent('developer-loop', 'log', 'usage_delta', { cost_usd: 5.00, metadata: { work_item_id: 'WI-2' } });
+    // Total: 2.50 + 3.25 + 8.00 + 5.00 = $18.75 → 75% of $25 ceiling → amber
+
+    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'Act VI: flow-monitor ready (forge-cycle, ceiling run)');
+    } catch {
+      check(false, 'Act VI: flow-monitor ready (forge-cycle, ceiling run)');
+    }
+    await caption(page, 'Flow engine — cost ceiling gauge: 75% of $25 reached → amber warning before the engine halts.');
+    await sleep(ACT);
+
+    // Select the ceiling run from the rail (it's the active in-flight run by default priority)
+    // The summary strip shows the cost gauge when ceiling is set on the flow
+    try {
+      await page.waitForSelector(`[data-run-id="${CYCLE_ID3}"]`, { timeout: 8000 });
+      await page.locator(`[data-run-id="${CYCLE_ID3}"]`).click();
+      await sleep(ACT);
+    } catch {
+      // run may auto-select; proceed
+    }
+
+    // Assert the summary strip shows the cost gauge (fb-summary-strip with data-run-cost-usd)
+    const stripCost = await page.evaluate(() => {
+      const strip = document.querySelector('.fb-summary-strip[data-run-cost-usd]');
+      return strip ? parseFloat(strip.getAttribute('data-run-cost-usd') ?? '0') : null;
+    });
+    check(stripCost !== null && stripCost > 0, `Act VI: summary strip data-run-cost-usd > 0 (got ${stripCost})`);
+
+    // Assert the gauge bar is present with amber fill (the cost gauge renders when ceiling is set)
+    // The gauge renders when flow.costCeilingUsd is set — forge-cycle flow has costCeilingUsd:25
+    // We check that the gauge container is rendered (it renders when a run is selected + ceiling set)
+    const hasGauge = await page.evaluate(() => {
+      // The gauge is a filled bar inside the fb-summary-strip
+      // It renders with a div whose background is var(--amber) when 70-90% filled
+      const strip = document.querySelector('.fb-summary-strip');
+      if (!strip) return false;
+      // Look for the cost gauge text "of $25 ceiling"
+      return strip.textContent?.includes('of $25 ceiling') ?? false;
+    });
+    check(hasGauge, 'Act VI: cost gauge "of $25 ceiling" text present in summary strip');
+
+    // The gauge fills amber at ≥70% — assert the fill colour via inline style
+    const gaugeIsAmber = await page.evaluate(() => {
+      const strip = document.querySelector('.fb-summary-strip');
+      if (!strip) return false;
+      // Find any div with amber background color inside the strip
+      // The fill div uses background: var(--amber) in the warn range
+      const allDivs = [...strip.querySelectorAll('div[style]')];
+      return allDivs.some((el) => {
+        const bg = el.style.background || el.style.backgroundColor;
+        return bg.includes('var(--amber)') || bg.includes('amber');
+      });
+    });
+    check(hasGauge && gaugeIsAmber, 'Act VI: cost gauge fill is amber (≥70% of ceiling)');
+    await frame(page, 'beat27-ceiling-warn', `Act VI beat 27 — cost ceiling gauge amber: $18.75 of $25 (75%) — engine will stop at 100%`);
+    await sleep(READ);
+
+    // ── BEAT 28: Gate control — gated run "Open gate →" ──────────────────────
+    // INIT2 (seeded by Act IV) is already in ready-for-review (= gated status).
+    // The RunRail shows it with the "Open gate →" link.
+    console.log('\n[beat 28] Flow engine — gate control (gated run, "Open gate →" link)');
+    await caption(page, 'Flow engine — human gate: the gated run surfaces its review link directly in the run rail.');
+    await sleep(ACT);
+
+    // Select the gated run in the rail
+    try {
+      await page.waitForSelector('[data-run-status="gated"]', { timeout: 8000 });
+      await page.locator('[data-run-status="gated"]').first().click();
+      await sleep(ACT);
+    } catch {
+      // May already be selected; proceed
+    }
+
+    // Assert the gate control is present — the RunCard renders "Open gate →" for gated runs
+    let gateControlPresent = false;
+    try {
+      await page.waitForSelector('[data-run-status="gated"]', { timeout: 8000 });
+      gateControlPresent = true;
+      check(true, 'Act VI: [data-run-status="gated"] run card present in run rail');
+    } catch {
+      check(false, 'Act VI: [data-run-status="gated"] run card present in run rail');
+    }
+    if (gateControlPresent) {
+      // The gated card has an "Open gate →" anchor routing to /review/<runId>
+      const gateLink = await page.evaluate(() => {
+        const gatedCard = document.querySelector('[data-run-status="gated"]');
+        if (!gatedCard) return null;
+        const link = gatedCard.querySelector('a[href*="/review/"]');
+        return link ? link.href : null;
+      });
+      check(gateLink !== null, `Act VI: gated run card has "Open gate →" link to /review/<runId> (got ${gateLink})`);
+    }
+    await frame(page, 'beat28-gate-control', 'Act VI beat 28 — gate control: gated run shows "Open gate →" link; routes through postGate endpoint');
+    await sleep(READ);
+
+    // ── BEAT 29: Resume button — seed a failed run ────────────────────────────
+    console.log('\n[beat 29] Flow engine — resume button (failed run)');
+    const INIT4 = `INIT-${DATE}-e2e-flow-failed`;
+    const STAMP4 = new Date(Date.now() + 3000).toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+    const CYCLE_ID4 = `${STAMP4}_${INIT4}`;
+    const CYCLE_LOG4 = join(FORGE_ROOT, '_logs', CYCLE_ID4);
+    let failSeq = 0;
+    function failEvent(phase, eventType, message, opts = {}) {
+      const { metadata = {}, skill = phase, cost_usd, ...extras } = opts;
+      mkdirSync(CYCLE_LOG4, { recursive: true });
+      failSeq += 1;
+      appendFileSync(join(CYCLE_LOG4, 'events.jsonl'), JSON.stringify({
+        event_id: `EV_fa_${failSeq}`, cycle_id: CYCLE_ID4, initiative_id: INIT4,
+        started_at: new Date().toISOString(), phase, skill,
+        event_type: eventType, input_refs: [], output_refs: [], message, metadata,
+        ...(cost_usd !== undefined ? { cost_usd } : {}),
+        ...extras,
+      }) + '\n');
+    }
+
+    // Write the manifest into failed queue
+    mkdirSync(QDIR('failed'), { recursive: true });
+    writeFileSync(join(QDIR('failed'), `${INIT4}.md`), [
+      '---', `initiative_id: ${INIT4}`, `project: ${PROJECT}`,
+      `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`,
+      `cycle_id: ${CYCLE_ID4}`,
+      'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: failed',
+      'origin: architect',
+      '---', '',
+      '# Flow-engine resume demo — failed run',
+      '',
+      'A synthetic failed run seeded for the resume-button demo.',
+    ].join('\n'));
+
+    // Seed events — run started then failed at dev-loop phase
+    failEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
+    failEvent('architect', 'start', 'architect.start');
+    failEvent('architect', 'end', 'architect.end', { cost_usd: 0.18 });
+    failEvent('project-manager', 'start', 'pm phase start');
+    failEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.22 });
+    failEvent('developer-loop', 'start', 'dev-loop start');
+    failEvent('developer-loop', 'error', 'stream-deadline-exceeded', {
+      metadata: { work_item_id: 'WI-1', failure_class: 'transient' },
+    });
+    failEvent('orchestrator', 'log', 'failure_classification', {
+      metadata: { failure_kind: 'transient', recoverable: true, reason: 'stream-deadline-exceeded' },
+    });
+
+    // Reload the page so the bridge picks up the new failed manifest
+    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'Act VI: flow-monitor ready (forge-cycle, failed run)');
+    } catch {
+      check(false, 'Act VI: flow-monitor ready (forge-cycle, failed run)');
+    }
+    await caption(page, 'Flow engine — Resume: a failed run surfaces the Resume button; clicking POSTs to /api/runs/:id/resume.');
+    await sleep(ACT);
+
+    // Select the failed run from the rail
+    try {
+      await page.waitForSelector(`[data-run-id="${CYCLE_ID4}"]`, { timeout: 8000 });
+      await page.locator(`[data-run-id="${CYCLE_ID4}"]`).click();
+      await sleep(ACT);
+    } catch {
+      // May already be selected as highest-priority; proceed
+    }
+
+    // Assert the resume button is present (rendered when activeRun.status === 'failed')
+    let resumeBtnPresent = false;
+    try {
+      await page.waitForSelector('[data-action="resume-run"]', { timeout: 8000 });
+      resumeBtnPresent = true;
+      check(true, 'Act VI: [data-action="resume-run"] button present for failed run');
+    } catch {
+      check(false, 'Act VI: [data-action="resume-run"] button present for failed run (not found)');
+    }
+    if (resumeBtnPresent) {
+      const runIdAttr = await page.evaluate(() =>
+        document.querySelector('[data-action="resume-run"]')?.getAttribute('data-run-id') ?? '');
+      check(runIdAttr === CYCLE_ID4, `Act VI: resume button data-run-id matches failed run (got "${runIdAttr}")`);
+      const btnDisabled = await page.evaluate(() =>
+        (document.querySelector('[data-action="resume-run"]'))?.disabled ?? true);
+      check(!btnDisabled, 'Act VI: resume button is not disabled (interactive)');
+    }
+    await frame(page, 'beat29-resume-button', 'Act VI beat 29 — Resume button present for failed run; POSTs /api/runs/:id/resume (not clicked — no real cycle)');
+    await sleep(READ);
+
+    // Act VI cleanup — remove the seeded ceiling + failed manifests + log dirs
+    // (the finally block handles INIT2 via the studioLogDirs pattern; add INIT3/INIT4 here)
+    try {
+      for (const q of ['in-flight', 'failed']) {
+        try { rmSync(join(QDIR(q), `${INIT3}.md`), { force: true }); } catch { /* */ }
+        try { rmSync(join(QDIR(q), `${INIT4}.md`), { force: true }); } catch { /* */ }
+      }
+    } catch { /* best-effort */ }
+
+    // ── BEAT 30: End card ─────────────────────────────────────────────────────
+    console.log('\n[beat 30] End card');
     await page.evaluate(() => {
       let card = document.getElementById('demo-end-card');
       if (!card) {
@@ -1599,6 +1899,21 @@ async function main() {
         for (const f of entries) rmSync(join(QDIR(q), f), { force: true });
       }
     } catch { /* studio cleanup best-effort */ }
+    // ACT VI flow-engine cleanup (ceiling + failed synthetic runs)
+    try {
+      const actVIPatterns = ['e2e-flow-ceiling', 'e2e-flow-failed'];
+      const actVILogDirs = existsSync(join(FORGE_ROOT, '_logs'))
+        ? readdirSync(join(FORGE_ROOT, '_logs')).filter((d) => actVIPatterns.some((p) => d.includes(p)))
+        : [];
+      for (const d of actVILogDirs) {
+        rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
+      }
+      for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+        if (!existsSync(QDIR(q))) continue;
+        const entries = readdirSync(QDIR(q)).filter((f) => actVIPatterns.some((p) => f.includes(p)));
+        for (const f of entries) rmSync(join(QDIR(q), f), { force: true });
+      }
+    } catch { /* act VI cleanup best-effort */ }
     if (createdSid) {
       try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${createdSid}`), { recursive: true, force: true }); } catch { /* */ }
     }

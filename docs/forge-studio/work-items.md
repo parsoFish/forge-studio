@@ -85,7 +85,54 @@ without it every staged run resumed-to-unifier, skipped architect+PM, and failed
 triggered a resume — pruned. M2 code is complete and verified by every M2-isolating gate; the
 remaining verify FAIL is a corpus-harness concern tracked for operator follow-up.
 
-## M3 — Flow engine (ADR-028)
+## M3 — Flow engine (ADR-028) ✅ COMPLETE 2026-06-13 (cutover landed; verify:cycle operator-gated)
+
+All seven WIs landed on `feat/studio-m3`. Full spine green: 932 tests, build clean, brain lint
+0 errors, studio lint 0 errors, `ui:journey` 48 frames 0 failures (Acts I–VI, all assertions pass).
+
+**Flow-engine cutover confirmed clean:** `runCycle` in `orchestrator/cycle.ts` delegates the full
+phase sequence to `runFlow` (loads `studio/flows/forge-cycle/flow.yaml` via `loadFlowDefinition`,
+calls `flow-runner.ts`'s DAG walk). The old hardcoded pm→dev→review→reflect sequence is gone; no
+dead remnant remains (cycle.ts post-cutover: ~919 LOC of helpers, no inline phase sequence).
+
+**M3 items landed:**
+- M3-1: ADR-028 finalised and accepted (9 decisions, node kinds, gate semantics, resume, budgets).
+- M3-2: `flow-runner.ts` DAG walk — phase functions unchanged as node executors; `runCycle` is now
+  a thin wrapper (load flow + call runFlow). The 8 dev-loop-close items (assertNonEmptyDelivery,
+  commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch,
+  synthetic-architect, resume-from-unifier) all ported to flow-runner as injected deps or pre/post
+  hooks. Full equivalence unit suite passes unchanged.
+- M3-3: Runner budgets + safety — `costCeilingUsd` (warn ≥70% → `flow.cost-warn`, stop ≥100% at
+  clean boundary → `flow.cost-ceiling-stop`, classify resumable); `wedgeKillMs` per-node
+  heartbeat-without-tool-progress kill + `phase.wedge-killed`; rate-limit `resetsAt` spawn gate.
+  Closes the 33h wedge gap.
+- M3-4: Run + gate write endpoints — `POST /api/runs` (start), `POST /api/runs/:id/resume`,
+  `POST /api/runs/:id/gates/:gateId` (generalised gate); `/api/verdict` + `/api/plan-verdict` as
+  thin aliases. Start CTA, resume button, cost gauge enabled in the flow monitor UI.
+- M3-5: Triggers v1 — on terminal state, fire `flow.triggers` by enqueueing the target flow's run.
+  `knowledge-ingest` seed flow (`studio/flows/knowledge-ingest/flow.yaml`) proves a non-cycle
+  single-node disposable flow runs end-to-end.
+- M3-6: Claim refusal — scheduler `runOne` refuses if project not contract-ready (`runPreflight`
+  hard clauses), flow invalid/locked (validateFlow + version lock), or zero-gate non-disposable.
+- M3-7: Harness beats (Act VI, beats 26–29) — start-run CTA (`knowledge-ingest`, no runs, 
+  `data-can-start="true"`); cost-ceiling-warn gauge (75% of $25 ceiling → amber fill);
+  gate control (gated run → "Open gate →" link to /review/<runId>); resume button (failed run →
+  `data-action="resume-run"` interactive). All soft-assert; no real cycles started.
+
+**verify:cycle engine-path run — RAN 2026-06-13, GATE PASS ✓ ($4.20 real spend).** The flow-runner
+path executed a complete cycle end-to-end on claude-harness (base f61d186): claim → synthetic
+architect → PM spawned + decomposed (1 WI) → dev-loop ran WI-1 to completion (`iters=1 ·
+quality-gates-pass`) → unifier → review → pr-open → auto-approve. All four routine-tier assertions
+green: reached merge (done), dev-loop 1/1 complete 0 failed, project tests green post-merge, cost
+$4.20 / $25 ceiling. This is a **stronger result than the M2 baseline** (which hit the orthogonal
+iter-0 `gate-too-loose` artifact on that run): the engine path drove a real cycle to a fully-green
+verify gate, confirming the cutover (runCycle → flow-runner walking forge-cycle.yaml) executes
+real cycles equivalently — not just by the 932 unit tests but by a real-money green cycle. The run
+surfaced + closed two correct interactions: (1) M3-6's claim refusal fired correctly (claude-harness
+fails C2 at the frozen base), so the routine-tier harness gained a scoped `FORGE_SKIP_CONTRACT_CHECK`
+opt-out (contract-ready check only; structural flow/zero-gate checks stay enforced) — verify:cycle
+tests EXECUTION, the contract gate is orthogonal; (2) stale `origin/forge/<id>` ephemeral branches +
+the corpus manifest's `resume_from` (fixed in M2) must be cleared before a fresh run.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|

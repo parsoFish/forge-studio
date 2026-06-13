@@ -35,20 +35,25 @@ import {
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
-import lockfile from 'proper-lockfile';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
-import { parseManifest, persistManifestResumeFromUnifier } from '../orchestrator/manifest.ts';
-import { handleStudioRoutes, handleStudioWriteRoutes, sendJson, allowedOrigin, CSRF_HEADER } from './bridge-studio.ts';
-import { parseWorkItem } from '../orchestrator/work-item.ts';
+import { parseManifest } from '../orchestrator/manifest.ts';
 import {
-  appendReviewUnifierItems,
-  UnifierItemsCapError,
-  ReviewConcernInvalidError,
-} from '../orchestrator/unifier-items.ts';
-import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
-import { loadProjectConfig } from '../orchestrator/project-config.ts';
+  handleStudioRoutes,
+  handleStudioWriteRoutes,
+  sanitizeError,
+  sendJson,
+  allowedOrigin,
+  CSRF_HEADER,
+} from './bridge-studio.ts';
+import {
+  handleStudioPostRoutes,
+  applyReviewVerdict,
+  applyPlanVerdict,
+  type StudioPostContext,
+} from './bridge-studio-runs.ts';
+import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
@@ -655,6 +660,17 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
+  const studioPostCtx: StudioPostContext = {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    queueRoot: ctx.queueRoot,
+    projectsRoot: ctx.projectsRoot,
+    mergePr: ctx.mergePr,
+    finalizeAfterMerge: ctx.finalizeAfterMerge,
+    broadcastArchitectChanged: ctx.broadcastArchitectChanged,
+  };
+  if (await handleStudioPostRoutes(req, res, studioPostCtx, url, method)) return;
 
   // Scheduler lifecycle.
   if (method === 'GET' && url === '/api/scheduler/status') {
@@ -716,144 +732,23 @@ async function handleHttp(
     return;
   }
 
-  // Review verdict — the M2-C intervention surface.
+  // Review verdict — the M2-C intervention surface. Delegates to applyReviewVerdict.
   if (method === 'POST' && url === '/api/verdict') {
     try {
       const body = await readJson(req);
-      const { initiativeId, kind, rationale } = body as {
-        initiativeId?: string;
-        kind?: 'approve' | 'send-back';
-        rationale?: string;
-        acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
-      };
-      if (!initiativeId || !kind || !rationale) {
-        sendJson(res, 400, { error: 'initiativeId, kind, rationale required' }, origin);
-        return;
-      }
-      if (kind !== 'approve' && kind !== 'send-back') {
-        sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
-        return;
-      }
-      const acs = (body as { acceptanceCriteria?: Array<{ given: string; when: string; then: string }> }).acceptanceCriteria ?? [];
-      if (kind === 'send-back' && acs.length === 0) {
-        sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' }, origin);
-        return;
-      }
-      // Accept the verdict for a manifest in EITHER in-flight/ OR
-      // ready-for-review/ (closure moves it to ready-for-review/ once the PR is
-      // open, which is the common case by the time the operator opens the form).
-      const inFlightPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
-      const readyForReviewPath = join(ctx.queueRoot, 'ready-for-review', `${initiativeId}.md`);
-      if (!existsSync(inFlightPath) && !existsSync(readyForReviewPath)) {
-        sendJson(res, 409, {
-          error: 'no manifest for initiative in in-flight/ or ready-for-review/ (already resolved?)',
-          initiativeId,
-        }, origin);
-        return;
-      }
-      const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
-
-      if (kind === 'approve') {
-        // Supersedes G9: the in-UI approve IS the merge gate (ADR-023 "UI is the
-        // sole operator surface"; operator never leaves forge UI). Read the
-        // manifest — same pattern as the send-back branch — to get the worktree
-        // path, merge the remote PR via `gh pr merge`, then immediately fire the
-        // finalize sweep so closure → done → reflection runs without waiting for
-        // the next 5-minute sweep.
-        const approveManifest = parseManifest(readFileSync(manifestPath, 'utf8'));
-        const approveWorktreePath = approveManifest.worktree_path ?? '';
-        if (!approveWorktreePath || !existsSync(approveWorktreePath)) {
-          sendJson(res, 409, {
-            error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
-            initiativeId,
-          }, origin);
-          return;
-        }
-        const merged = ctx.mergePr(approveWorktreePath);
-        if (!merged) {
-          sendJson(res, 409, {
-            error: 'gh pr merge failed — merge the PR manually on GitHub',
-            initiativeId,
-          }, origin);
-          return;
-        }
-        // Fire finalization in the background — must NOT throw or await here so
-        // the HTTP response is always sent promptly. Closure moves the manifest to
-        // done/, aligns local↔remote, and triggers reflection.
-        void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
-        sendJson(res, 200, {
-          ok: true,
-          kind,
-          note: 'PR merged and finalization triggered',
-        }, origin);
-        return;
-      }
-
-      // send-back (ADR 026): the cycle NEVER leaves. Append the operator's
-      // concern to the unifier's own work-item queue in the LIVE worktree; the
-      // drain (a scheduler sweep, sibling of finalize-merged) re-claims this
-      // ready-for-review manifest threading the SAME cycle_id and re-runs the
-      // post-unifier spine over the appended UWIs. One cycleId ⇒ the cost/status
-      // lineage + WI-hex list never blank (no requeue, no sibling cycle).
-      //
-      // Resolve the live worktree + the project gate that backs a packaging UWI.
-      const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
-      const worktreePath = manifest.worktree_path ?? '';
-      if (!worktreePath || !existsSync(worktreePath)) {
-        sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
-        return;
-      }
-      let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
-      try {
-        const cfg = loadProjectConfig(manifest.project_repo_path);
-        if (cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0) projectGateCmd = cfg.quality_gate_cmd;
-      } catch { /* fall back to the manifest gate / npm test below */ }
-      if (projectGateCmd.length === 0) {
-        projectGateCmd = existsSync(join(worktreePath, 'package.json')) ? ['npm', 'test'] : ['true'];
-      }
-      const concernKind = (body as { concernKind?: 'packaging' | 'code-fix' }).concernKind;
-      const concernGateCmd = (body as { qualityGateCmd?: string[] }).qualityGateCmd;
-
-      // Lock the manifest to serialise concurrent verdict submissions (the
-      // append reads + bumps the next UWI id). The append itself writes only to
-      // the worktree, so the manifest stays in ready-for-review/ for the drain.
-      let release: (() => Promise<void>) | null = null;
-      try {
-        release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
-      } catch (lockErr) {
-        sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) }, origin);
-        return;
-      }
-      try {
-        const { appended } = appendReviewUnifierItems({
-          worktreePath,
-          initiativeId,
-          concern: { rationale, acceptanceCriteria: acs, kind: concernKind, qualityGateCmd: concernGateCmd },
-          projectGateCmd,
-          estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
-        });
-        // ADR 026 (crash recovery): mark the manifest so a daemon crash mid-drain
-        // recovers as a unifier resume (reuse the worktree) rather than a full re-run.
-        persistManifestResumeFromUnifier(manifestPath);
-        sendJson(res, 200, {
-          ok: true,
-          kind,
-          appendedUnifierItems: appended,
-          note: 'work items appended to the unifier queue; the drain re-runs them in the same cycle',
-        }, origin);
-      } catch (appendErr) {
-        if (appendErr instanceof UnifierItemsCapError) {
-          sendJson(res, 409, { error: appendErr.message }, origin);
-        } else if (appendErr instanceof ReviewConcernInvalidError) {
-          sendJson(res, 400, { error: appendErr.message }, origin);
-        } else {
-          sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` }, origin);
-        }
-      } finally {
-        if (release) { try { await release(); } catch { /* ignore */ } }
-      }
+      const b = body as Record<string, unknown>;
+      await applyReviewVerdict(req, res, studioPostCtx, {
+        initiativeId: typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '',
+        kind: (b['kind'] as 'approve' | 'send-back') ?? 'send-back',
+        rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
+        acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])
+          ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
+          : undefined,
+        concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
+        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
+      });
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
   }
@@ -1056,50 +951,28 @@ async function handleArchitect(
     return true;
   }
 
-  // POST /api/plan-verdict {project, sessionId, kind, selections?, rationale?}
-  //   approve → write selections + resolved-decisions feedback, finalize turn
-  //   revise  → write feedback, re-open the interview
-  //   reject  → mark rejected
+  // POST /api/plan-verdict — delegates to applyPlanVerdict in bridge-studio.ts.
   if (method === 'POST' && url === '/api/plan-verdict') {
     try {
-      const body = (await readJson(req)) as {
-        project?: string;
-        sessionId?: string;
-        kind?: 'approve' | 'revise' | 'reject';
-        rationale?: string;
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const planCtx: StudioPostContext = {
+        forgeRoot: ctx.forgeRoot,
+        logsRoot: ctx.logsRoot,
+        queueRoot: ctx.queueRoot,
+        projectsRoot: ctx.projectsRoot,
+        mergePr: ctx.mergePr,
+        finalizeAfterMerge: ctx.finalizeAfterMerge,
+        broadcastArchitectChanged: ctx.broadcastArchitectChanged,
+        spawnArchitectTurnFn: spawnArchitectTurn,
       };
-      if (!body.project || !body.sessionId || !body.kind) {
-        sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
-        return true;
-      }
-      if (!['approve', 'revise', 'reject'].includes(body.kind)) {
-        sendJson(res, 400, { error: `unknown kind: ${body.kind}` }, origin);
-        return true;
-      }
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      const status = readStatus(dir);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-
-      if (body.kind === 'approve') {
-        if (body.rationale) {
-          writeFileSync(join(dir, 'feedback.md'), body.rationale.trim() + '\n');
-        }
-        writeStatus(dir, { ...status, phase: 'finalizing' });
-        spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
-      } else if (body.kind === 'revise') {
-        writeFileSync(join(dir, 'feedback.md'), (body.rationale ?? '').trim() + '\n');
-        writeStatus(dir, { ...status, phase: 'interviewing', round: status.round + 1 });
-        spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
-      } else {
-        writeStatus(dir, { ...status, phase: 'rejected' });
-      }
-      ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, kind: body.kind }, origin);
+      await applyPlanVerdict(req, res, planCtx, {
+        project: typeof body['project'] === 'string' ? body['project'] : '',
+        sessionId: typeof body['sessionId'] === 'string' ? body['sessionId'] : '',
+        kind: (body['kind'] as 'approve' | 'revise' | 'reject') ?? 'reject',
+        rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
+      });
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }

@@ -91,7 +91,10 @@ async function postVerdict(
 test('approve: 200, calls mergePr once with worktreePath, fires finalizeAfterMerge once', async () => {
   const s = makeStubs();
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
-  const worktreePath = mkdtempSync(join(tmpdir(), 'wt-'));
+  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/) or the
+  // bounds check rejects it.  Use a subdir inside projects/ so the guard passes.
+  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-approve');
+  mkdirSync(worktreePath, { recursive: true });
   const initiativeId = 'INIT-2026-01-01-test-approve';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
@@ -124,7 +127,6 @@ test('approve: 200, calls mergePr once with worktreePath, fires finalizeAfterMer
   } finally {
     await close();
     rmSync(forgeRoot, { recursive: true, force: true });
-    rmSync(worktreePath, { recursive: true, force: true });
   }
 });
 
@@ -170,7 +172,9 @@ test('approve when mergePr returns false: 409 gh-pr-merge-failed, finalize not c
   s.stubs.mergeReturn = false;
 
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
-  const worktreePath = mkdtempSync(join(tmpdir(), 'wt-fail-'));
+  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/).
+  const worktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-merge-fail');
+  mkdirSync(worktreePath, { recursive: true });
   const initiativeId = 'INIT-2026-01-01-test-merge-fail';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
@@ -203,7 +207,6 @@ test('approve when mergePr returns false: 409 gh-pr-merge-failed, finalize not c
   } finally {
     await close();
     rmSync(forgeRoot, { recursive: true, force: true });
-    rmSync(worktreePath, { recursive: true, force: true });
   }
 });
 

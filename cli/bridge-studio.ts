@@ -3,6 +3,7 @@
  *
  * Boolean-returning route module plugged into handleHttp after handleReflect.
  * All routes are read-only GET endpoints; write routes land in M2.
+ * POST run/gate routes (M3-4) live in bridge-studio-runs.ts.
  *
  * Routes:
  *   GET /api/runs                           → { runs: Run[] }
@@ -49,6 +50,9 @@ export type StudioContext = {
   logsRoot: string;
 };
 
+// Safe-ID guard: blocks path traversal in run/gate IDs
+export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
 // ---------------------------------------------------------------------------
@@ -86,21 +90,50 @@ export function sendJson(res: ServerResponse, status: number, body: unknown, ori
  * Strip absolute filesystem paths from error strings before sending them to
  * the browser. Prevents leaking the operator's directory layout.
  * Pattern: any token starting with / that looks like a path segment.
+ * Exported so alias catch-blocks in ui-bridge.ts can reuse it (M2).
  */
-function sanitizeError(err: unknown): string {
+export function sanitizeError(err: unknown): string {
   return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
 }
 
 /** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle'). */
-function parseQuery(rawUrl: string): URLSearchParams {
+export function parseQuery(rawUrl: string): URLSearchParams {
   const idx = rawUrl.indexOf('?');
   return new URLSearchParams(idx >= 0 ? rawUrl.slice(idx + 1) : '');
 }
 
 /** Strip the query-string from a URL string. */
-function pathOnly(rawUrl: string): string {
+export function pathOnly(rawUrl: string): string {
   const idx = rawUrl.indexOf('?');
   return idx >= 0 ? rawUrl.slice(0, idx) : rawUrl;
+}
+
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
+
+/**
+ * Read and parse the JSON request body. Used by write routes.
+ * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
+ * Shared helper (mirrors readJson in ui-bridge.ts).
+ */
+export function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolveJson, rejectJson) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        rejectJson(new Error('request body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
+    });
+    req.on('error', rejectJson);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -798,32 +831,4 @@ export async function handleStudioWriteRoutes(
   }
 
   return false;
-}
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
-
-/**
- * Read and parse the JSON request body. Used by write routes.
- * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
- * Shared helper (mirrors readJson in ui-bridge.ts).
- */
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
 }

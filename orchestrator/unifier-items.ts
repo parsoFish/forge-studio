@@ -16,6 +16,7 @@
 import { join } from 'node:path';
 
 import {
+  gateIsShellPipeline,
   readWorkItemsFromDir,
   topologicalOrder,
   validateWorkItemSet,
@@ -200,6 +201,19 @@ export function appendReviewUnifierItems(
   }
   if (!input.projectGateCmd || input.projectGateCmd.length === 0) {
     throw new ReviewConcernInvalidError('projectGateCmd is required to back a review UWI gate');
+  }
+  // H1: validate body-supplied qualityGateCmd entries (non-empty strings, no shell pipeline)
+  // to prevent RCE via a review send-back that injects a `bash -c "…"` gate.
+  // Mirrors the gateIsShellPipeline check enforced on PM-authored work items.
+  if (concern.qualityGateCmd !== undefined) {
+    if (!concern.qualityGateCmd.every((s) => typeof s === 'string' && s.length > 0)) {
+      throw new ReviewConcernInvalidError('qualityGateCmd entries must be non-empty strings');
+    }
+    if (gateIsShellPipeline(concern.qualityGateCmd)) {
+      throw new ReviewConcernInvalidError(
+        'qualityGateCmd must be ONE runnable command — not a shell pipeline or chain (bash -c "… | …", &&, ;)',
+      );
+    }
   }
 
   const kind: 'packaging' | 'code-fix' = concern.kind === 'packaging' ? 'packaging' : 'code-fix';
