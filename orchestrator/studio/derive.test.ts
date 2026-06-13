@@ -19,6 +19,7 @@ import { reflectorAgentSpec } from '../reflector-invocation.ts';
 
 // architect excluded: it has no PhaseAgentSpec constant until the
 // architect-runner migrates to the derived spec (roadmap M2-4, ADR-024 gap).
+// Update this list in M2 when architect gains its PhaseAgentSpec constant (M2-4).
 const CASES = [
   ['skills/project-manager/SKILL.md', pmAgentSpec],
   ['skills/developer-ralph/SKILL.md', devAgentSpec],

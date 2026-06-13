@@ -216,6 +216,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   };
 }
 
+// consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
   // Fixed key order: name, description, phase?, surface?, purpose, composition,
   // runtime, brainAccess, interactivity, allowed-tools, disallowed-tools, budgets
@@ -364,6 +365,7 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
   return { id, name, version, goal, project, kb, costCeilingUsd, origin, disposable, nodes, edges, triggers, path: flowYamlPath };
 }
 
+// consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeFlowDefinition(def: FlowDefinition): string {
   // Strip path before serializing; fixed key order; lineWidth 100
   const { path: _path, ...rest } = def;

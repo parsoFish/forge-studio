@@ -406,16 +406,16 @@ This agent is broken.
 });
 
 // ---------------------------------------------------------------------------
-// Test 8: no skills/ dir at all → error finding with object 'agents'
+// Test 8: no skills/ dir at all → error finding with object 'studio:agents'
 // ---------------------------------------------------------------------------
 
-test('missing skills/ dir → error finding with object "agents"', () => {
+test('missing skills/ dir → error finding with object "studio:agents"', () => {
   const root = tmpRoot();
 
   // studio dir present with minimum valid files, but no skills/ dir
   const flowDir = join(root, 'studio', 'flows', 'any-flow');
   mkdirSync(flowDir, { recursive: true });
-  // flow references a non-existent agent — but the error we assert is specifically the agents/load one
+  // flow references a non-existent agent — but the error we assert is specifically the studio:agents/load one
   writeFileSync(
     join(flowDir, 'flow.yaml'),
     `id: any-flow
@@ -439,11 +439,49 @@ triggers: []
   const result = runStudioLint(root);
 
   const agentsLoadError = result.findings.find(
-    (f) => f.level === 'error' && f.object === 'agents' && f.check === 'load',
+    (f) => f.level === 'error' && f.object === 'studio:agents' && f.check === 'load',
   );
   assert.ok(
     agentsLoadError !== undefined,
-    `Expected an error finding with object "agents" and check "load", got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, level: f.level })))}`,
+    `Expected an error finding with object "studio:agents" and check "load", got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, level: f.level })))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 9: flow dir-name != flow.id → dir-name error
+// ---------------------------------------------------------------------------
+
+test('flow dir "my-cycle" with id "other-name" → dir-name error', () => {
+  const root = tmpRoot();
+
+  // skills/test-agent/SKILL.md
+  const agentSlug = 'test-agent';
+  const skillDir = join(root, 'skills', agentSlug);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, 'SKILL.md'), validSkillMd(agentSlug));
+
+  // studio/flows/my-cycle/flow.yaml — id is 'other-name', dir is 'my-cycle'
+  const flowDir = join(root, 'studio', 'flows', 'my-cycle');
+  mkdirSync(flowDir, { recursive: true });
+  writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('other-name', agentSlug));
+
+  writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+
+  const result = runStudioLint(root);
+
+  const dirNameError = result.findings.find(
+    (f) => f.level === 'error' && f.object === 'flow:my-cycle' && f.check === 'dir-name',
+  );
+  assert.ok(
+    dirNameError !== undefined,
+    `Expected a dir-name error for flow:my-cycle, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, level: f.level, message: f.message })))}`,
+  );
+  assert.ok(
+    dirNameError.message.includes('other-name') && dirNameError.message.includes('my-cycle'),
+    `Expected message to mention both ids, got: "${dirNameError.message}"`,
   );
 
   cleanup(root);

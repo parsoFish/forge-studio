@@ -16,7 +16,7 @@
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -62,19 +62,19 @@ export function runStudioLint(root: string): StudioLintResult {
   if (!existsSync(skillsDir)) {
     findings.push({
       level: 'error',
-      object: 'agents',
+      object: 'studio:agents',
       check: 'load',
       message: `Required directory "${skillsDir}" is missing — skills/ must exist in a forge repo`,
     });
   } else {
-    let skillEntries: import('node:fs').Dirent[];
+    let skillEntries: Dirent[];
     try {
       skillEntries = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
     } catch (err) {
       skillEntries = [];
       findings.push({
         level: 'error',
-        object: 'agents',
+        object: 'studio:agents',
         check: 'load',
         message: `Cannot read skills directory "${skillsDir}" — ${(err as Error).message}`,
       });
@@ -153,6 +153,14 @@ export function runStudioLint(root: string): StudioLintResult {
       const flowPath = join(flowsDir, dir, 'flow.yaml');
       try {
         const flow = loadFlowDefinition(flowPath);
+        if (flow.id !== dir) {
+          findings.push({
+            level: 'error',
+            object: `flow:${dir}`,
+            check: 'dir-name',
+            message: `flow id "${flow.id}" must match its directory name "${dir}"`,
+          });
+        }
         findings.push(...validateFlow(flow, agentMap));
       } catch (err) {
         findings.push({
@@ -174,7 +182,7 @@ export function runStudioLint(root: string): StudioLintResult {
   if (!existsSync(catalogPath)) {
     findings.push({
       level: 'error',
-      object: 'catalog',
+      object: 'studio:catalog',
       check: 'seed-present',
       message: `Required file "${catalogPath}" is missing — run the M0 seed step`,
     });
@@ -185,7 +193,7 @@ export function runStudioLint(root: string): StudioLintResult {
     } catch (err) {
       findings.push({
         level: 'error',
-        object: 'catalog',
+        object: 'studio:catalog',
         check: 'load',
         message: `Cannot load catalog.yaml — ${(err as Error).message}`,
       });
@@ -201,7 +209,7 @@ export function runStudioLint(root: string): StudioLintResult {
   if (!existsSync(projectsPath)) {
     findings.push({
       level: 'error',
-      object: 'projects',
+      object: 'studio:projects',
       check: 'seed-present',
       message: `Required file "${projectsPath}" is missing — run the M0 seed step`,
     });
@@ -212,7 +220,7 @@ export function runStudioLint(root: string): StudioLintResult {
     } catch (err) {
       findings.push({
         level: 'error',
-        object: 'projects',
+        object: 'studio:projects',
         check: 'load',
         message: `Cannot load projects.yaml — ${(err as Error).message}`,
       });
