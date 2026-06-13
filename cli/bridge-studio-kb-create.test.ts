@@ -223,3 +223,40 @@ test('POST /api/studio/kbs: kb.yaml content has correct fields', async () => {
   assert.ok(content.includes('scope: agent-integration'));
   assert.ok(content.includes('desc: Checking yaml content.'));
 });
+
+// ---------------------------------------------------------------------------
+// Fix #1: YAML injection — name with embedded newline must not inject extra keys
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/kbs: newline in name does not inject extra YAML keys', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'injection-brain',
+    name: 'foo\nscope: evil',
+    scope: 'project',
+    desc: 'Normal desc.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+
+  const kbYamlPath = join(forgeRoot, 'brain', 'injection-brain', 'kb.yaml');
+  // Round-trip via loadKbDescriptor — must parse to the literal name, no injected scope
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  assert.equal(descriptor.name, 'foo\nscope: evil', 'name round-trips to literal value');
+  assert.equal(descriptor.scope, 'project', 'scope is not overwritten by injection');
+  assert.equal(descriptor.id, 'injection-brain');
+  assert.equal(descriptor.desc, 'Normal desc.');
+});
+
+test('POST /api/studio/kbs: YAML-special desc value round-trips correctly', async () => {
+  const specialDesc = 'Brain: "a:b" > c & d [test]';
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'special-desc-brain',
+    name: 'Special Desc Brain',
+    scope: 'flow',
+    desc: specialDesc,
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+
+  const kbYamlPath = join(forgeRoot, 'brain', 'special-desc-brain', 'kb.yaml');
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  assert.equal(descriptor.desc, specialDesc, 'YAML-special desc round-trips correctly');
+});

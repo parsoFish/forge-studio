@@ -479,6 +479,20 @@ export async function pinGuidance(
   return { ok: true, file: typeof r.data?.file === 'string' ? (r.data.file as string) : undefined };
 }
 
+/**
+ * Resolve which KB owns a given node id.
+ * Calls GET /api/studio/kbs/resolve-node/:nodeId → { kbId: string }.
+ * Returns null if the node is not found or the bridge is offline.
+ */
+export async function resolveKbNode(nodeId: string): Promise<{ kbId: string } | null> {
+  const body = await studioGet<{ kbId?: string } | null>(
+    `/api/studio/kbs/resolve-node/${encodeURIComponent(nodeId)}`,
+    null,
+  );
+  if (!body?.kbId) return null;
+  return { kbId: body.kbId };
+}
+
 /** Create a new KB (scaffold brain/<id>/ + kb.yaml + themes/ + _raw/). */
 export async function createKb(body: {
   id: string;

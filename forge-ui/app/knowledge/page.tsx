@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { fetchStudioKbs, fetchKb, fetchKbNode } from '@/lib/studio-client';
+import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
@@ -39,6 +39,7 @@ export default function KnowledgePage() {
 function KnowledgePageInner() {
   const searchParams = useSearchParams();
   const idParam      = searchParams.get('id') ?? '';
+  const nodeParam    = searchParams.get('node') ?? '';
 
   const [allKbs,       setAllKbs]       = useState<Kb[]>([]);
   const [currentId,    setCurrentId]    = useState<string>('');
@@ -47,6 +48,8 @@ function KnowledgePageInner() {
   const [article,      setArticle]      = useState<KbNodeArticle | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
   const [ready,        setReady]        = useState(false);
+  // Pending node to select once the KB detail is loaded
+  const pendingNodeRef = useRef<string | null>(null);
 
   // track mounted signal to avoid setState on unmounted
   const mountedRef = useRef(true);
@@ -62,8 +65,38 @@ function KnowledgePageInner() {
     return () => { signal.cancelled = true; };
   }, []);
 
-  // ── Resolve active KB id (from URL param → first KB) ─────────────────────
+  // ── Resolve active KB id (from URL params → first KB) ────────────────────
+  // Priority: ?node= drives KB resolution via resolve-node endpoint.
+  //           ?id= selects a KB directly.
+  //           Falls back to first KB in list.
   useEffect(() => {
+    if (nodeParam) {
+      // ?node= given — resolve which KB owns this node, then set it as active.
+      // Store the node slug so the detail-load effect can select it.
+      pendingNodeRef.current = nodeParam;
+      if (idParam) {
+        // Both ?id= and ?node= given: trust the id, just queue the node selection.
+        setCurrentId(idParam);
+        return;
+      }
+      // Only ?node= given: call resolve-node to find the owning KB.
+      const signal = { cancelled: false };
+      resolveKbNode(nodeParam).then((result) => {
+        if (signal.cancelled) return;
+        if (result?.kbId) {
+          setCurrentId(result.kbId);
+        } else if (allKbs.length > 0) {
+          // Node not found in any KB — fall back to first KB, clear pending node.
+          pendingNodeRef.current = null;
+          setCurrentId(allKbs[0].id);
+        }
+      }).catch(() => {
+        if (signal.cancelled) return;
+        pendingNodeRef.current = null;
+        if (allKbs.length > 0) setCurrentId(allKbs[0].id);
+      });
+      return () => { signal.cancelled = true; };
+    }
     if (idParam) {
       setCurrentId(idParam);
       return;
@@ -72,7 +105,7 @@ function KnowledgePageInner() {
       setCurrentId(allKbs[0].id);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idParam, allKbs]);
+  }, [idParam, nodeParam, allKbs]);
 
   // ── Load KB detail when id changes ────────────────────────────────────────
   useEffect(() => {
@@ -87,6 +120,21 @@ function KnowledgePageInner() {
       if (signal.cancelled) return;
       setKbDetail(detail);
       setReady(true);
+      // If a node was requested via ?node=, select it now that the graph is loaded.
+      const pending = pendingNodeRef.current;
+      if (pending) {
+        pendingNodeRef.current = null;
+        // Verify the node exists in this graph before selecting.
+        const nodeExists = detail?.graph?.nodes.some((n) => n.id === pending) ?? false;
+        if (nodeExists) {
+          setSelectedNode(pending);
+          // Fetch its article immediately.
+          fetchKbNode(currentId, pending).then((art) => {
+            if (signal.cancelled) return;
+            setArticle(art);
+          }).catch(() => {/* non-fatal */});
+        }
+      }
     }).catch(() => {
       if (signal.cancelled) return;
       setReady(true);  // reach page-ready even on error
@@ -134,6 +182,7 @@ function KnowledgePageInner() {
     <main
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
+      {...(selectedNode ? { 'data-selected-node': selectedNode } : {})}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
     >
       <StudioNav />
