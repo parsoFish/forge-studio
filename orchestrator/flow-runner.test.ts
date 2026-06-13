@@ -77,6 +77,12 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
       tracker.calls.push('runReflector');
       return { reflection_status: 'complete', lint_status: 'ok' };
     },
+    // Dev-loop close contract helpers — no-ops in tests (no real git/fs)
+    commitDevLoopBoundary: (_wt, _logger, _id) => { /* no-op */ },
+    enforceDevLoopCloseInvariant: (_wt, _logger, _id) => { /* no-op */ },
+    assertNonEmptyDelivery: (_outcome, _id, _wt, _logger) => { /* no-op */ },
+    enforceFinalCiGate: (_input, _logger) => { /* no-op */ },
+    rebaseForResume: (_input, _logger) => { /* no-op */ },
   };
 }
 

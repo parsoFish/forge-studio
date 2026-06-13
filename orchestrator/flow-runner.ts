@@ -15,12 +15,18 @@
  * Architect node: the PLAN gate is satisfied before the queue picks up the
  * run (the architect ran out-of-cycle via the UI). When flow-runner encounters
  * the architect node it emits the same synthetic start/end events that
- * cycle.ts:119-147 emits today — then proceeds. No architect execution inside
- * the runner. Synthetic event lifting into the runner is completed in Task 2
- * (the full runCycle → runFlow cutover).
+ * cycle.ts:119-147 emitted — then proceeds.
  *
- * TODO (Task 2): lift the full synthetic-architect-events block from cycle.ts
- * into this runner. The `emitSyntheticArchitect` dep below is the seam.
+ * The 8 ported items from the former hardcoded runCycle sequence:
+ *   1. resolveQualityGateCmd → inputWithGate threading (caller's responsibility;
+ *      runFlow receives the already-resolved inputWithGate)
+ *   2. emitSyntheticArchitect — real manifest-read + architect.start/end events
+ *   3. Resume rebase (preservingForgeScratch + rebasePreservedBranchOntoMain)
+ *   4. commitDevLoopBoundary after runDeveloperLoop
+ *   5. enforceDevLoopCloseInvariant after boundary commit
+ *   6. Unifier delivery gate (!devLoopOutcome.unifierSucceeded → throw)
+ *   7. assertNonEmptyDelivery after unifier gate
+ *   8. enforceFinalCiGate before openPrInline
  */
 
 import { resolve, dirname } from 'node:path';
@@ -35,7 +41,16 @@ import { runProjectManager } from './phases/project-manager.ts';
 import { runDeveloperLoop } from './phases/developer-loop.ts';
 import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
-import { openPrInline } from './cycle.ts';
+import { rebasePreservedBranchOntoMain } from './pr.ts';
+import {
+  openPrInline,
+  assertNonEmptyDelivery,
+  commitDevLoopBoundary,
+  enforceDevLoopCloseInvariant,
+  enforceFinalCiGate,
+  preservingForgeScratch,
+  emitSyntheticArchitectEvents,
+} from './cycle.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -50,11 +65,7 @@ export type FlowRunnerDeps = {
   /**
    * Emits synthetic architect start/end events into the cycle log.
    * The architect ran out-of-cycle; these events make the UI reflect the
-   * phase as complete.
-   *
-   * TODO (Task 2): this will be filled with the real synthetic-event block
-   * lifted from cycle.ts:119-147. For now the default is a documented no-op
-   * so the skeleton is test-driveable without the full lift.
+   * phase as complete. Reads manifest fields for real cost/duration/sessionId.
    */
   emitSyntheticArchitect: (input: CycleInput, logger: EventLogger) => void;
 
@@ -83,6 +94,29 @@ export type FlowRunnerDeps = {
     input: CycleInput,
     logger: EventLogger,
   ) => Promise<{ reflection_status: string; lint_status: string }>;
+
+  /**
+   * Dev-loop close contract helpers. Injected for testability (tests supply
+   * no-ops; production uses the real implementations from cycle.ts).
+   */
+  commitDevLoopBoundary: (worktreePath: string, logger: EventLogger, initiativeId: string) => void;
+  enforceDevLoopCloseInvariant: (worktreePath: string, logger: EventLogger, initiativeId: string) => void;
+  assertNonEmptyDelivery: (
+    outcome: { commitsAhead: number; filesChanged: number; insertions: number },
+    initiativeId: string,
+    worktreePath: string,
+    logger: EventLogger,
+  ) => void;
+  enforceFinalCiGate: (input: CycleInput, logger: EventLogger) => void;
+
+  /**
+   * Resume rebase: preserving .forge scratch dirs, rebase the preserved branch
+   * onto main. Returns the rebase result object.
+   */
+  rebaseForResume: (
+    input: CycleInput,
+    logger: EventLogger,
+  ) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -164,11 +198,48 @@ function classifyNode(node: FlowNode): NodeKind {
 // Default deps (real executors)
 // ---------------------------------------------------------------------------
 
+/**
+ * Item 2: the architect node in the DAG is a marker — `runCycle` emits the
+ * real synthetic architect events (via `emitSyntheticArchitectEvents`) before
+ * calling `runFlow`, so that dry-run paths also produce them. The dep here is
+ * a no-op by default; tests override it to assert it is NOT called (the
+ * architect events come from runCycle's outer scaffolding, not the DAG walk).
+ *
+ * `emitSyntheticArchitectEvents` is exported from cycle.ts for callers that
+ * need to emit outside the flow (e.g., a standalone dry-run harness).
+ */
 function defaultEmitSyntheticArchitect(_input: CycleInput, _logger: EventLogger): void {
-  // TODO (Task 2): lift the synthetic architect event block from cycle.ts:119-147
-  // into here so the flow-runner is the single source. Until the full runCycle→
-  // runFlow cutover (Task 2), cycle.ts still emits these events itself before
-  // delegating. This no-op keeps the skeleton test-driveable.
+  // no-op: runCycle already emitted architect events before calling runFlow.
+  void emitSyntheticArchitectEvents; // keep import alive for external callers
+}
+
+/**
+ * Item 3 (ported from cycle.ts:176-209): rebase the preserved branch onto
+ * main for a unifier resume, preserving .forge scratch dirs across the rebase.
+ */
+function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
+  const rebase = preservingForgeScratch(
+    input.worktreePath,
+    ['.forge/work-items', '.forge/unifier-items'],
+    () => rebasePreservedBranchOntoMain(input.worktreePath),
+  );
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: rebase.ok ? 'log' : 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: rebase.ok
+      ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
+      : 'cycle.resume-needs-rebase',
+    metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
+  });
+  if (!rebase.ok) {
+    throw new Error(
+      `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
+    );
+  }
 }
 
 const DEFAULT_DEPS: FlowRunnerDeps = {
@@ -178,6 +249,11 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
   openPrInline,
   runClosure,
   runReflector,
+  commitDevLoopBoundary,
+  enforceDevLoopCloseInvariant,
+  assertNonEmptyDelivery,
+  enforceFinalCiGate,
+  rebaseForResume: defaultRebaseForResume,
 };
 
 // ---------------------------------------------------------------------------
@@ -197,12 +273,15 @@ export type FlowRunArgs = {
  * Threading: CycleInput is passed UNCHANGED to every executor — same object,
  * no mutation. Matches the contract of the hardcoded cycle.ts sequence.
  *
- * resumeFrom: when `input.resumeFrom === 'unifier'`, the pm node is skipped
- * and the dev-loop runs without per-WI Ralphs (runDeveloperLoop handles this
- * internally; the unifier node is still a marker-only skip).
+ * The caller (runCycle) must have already resolved resolveQualityGateCmd and
+ * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * Returns a CycleResult-compatible object. The caller (runCycle, scheduler)
- * maps it to the terminal move as today.
+ * resumeFrom: when `input.resumeFrom === 'unifier'`, the pm node is skipped
+ * and a rebase is performed before the dev-loop (item 3). The dev-loop runs
+ * without per-WI Ralphs (runDeveloperLoop handles this internally; the unifier
+ * node is still a marker-only skip).
+ *
+ * Returns enough for runCycle to build the full CycleResult.
  */
 export async function runFlow({
   flow,
@@ -210,7 +289,7 @@ export async function runFlow({
   logger,
   deps: depOverrides,
 }: FlowRunArgs): Promise<{
-  cycleOutcome: 'ready-for-review' | 'merged' | 'failed';
+  cycleOutcome: 'ready-for-review' | 'merged' | 'pr-open';
   reflectionStatus: string;
   lintStatus: string;
 }> {
@@ -219,8 +298,9 @@ export async function runFlow({
   const order = topoSort(flow);
   const nodeById = new Map<string, FlowNode>(flow.nodes.map((n) => [n.id, n]));
 
-  // Track outcome state — mirrors cycle.ts
-  let cycleOutcome: 'ready-for-review' | 'merged' | 'failed' = 'ready-for-review';
+  // Track outcome state — mirrors cycle.ts. 'failed' never appears here:
+  // failures throw and are caught by runCycle's outer try/catch.
+  let cycleOutcome: 'ready-for-review' | 'merged' | 'pr-open' = 'ready-for-review';
   let reflectionStatus = 'skipped';
   let lintStatus = 'skipped';
   let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
@@ -234,14 +314,15 @@ export async function runFlow({
 
     switch (kind) {
       case 'architect': {
-        // Pre-satisfied gate: emit synthetic events (no-op in M3-1; real lift in Task 2)
+        // Item 2: pre-satisfied gate — emit real synthetic architect events
         deps.emitSyntheticArchitect(input, logger);
         break;
       }
 
       case 'pm': {
-        // Skip PM on unifier resume — the WI specs survive in the preserved worktree
         if (input.resumeFrom === 'unifier') {
+          // Item 3: rebase the preserved branch onto main before running the dev-loop
+          deps.rebaseForResume(input, logger);
           logger.emit({
             initiative_id: input.initiativeId,
             phase: 'orchestrator',
@@ -261,7 +342,29 @@ export async function runFlow({
       case 'dev': {
         // M3 coupling: runDeveloperLoop calls runUnifier internally.
         // The flow's separate unifier node is a marker (handled in 'unifier' case).
-        await deps.runDeveloperLoop(input, logger);
+        // Items 4-8: the dev-loop close contract runs immediately after.
+        const devLoopOutcome = await deps.runDeveloperLoop(input, logger);
+
+        // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
+        deps.commitDevLoopBoundary(input.worktreePath, logger, input.initiativeId);
+
+        // Item 5: push once more + assert local↔remote invariant.
+        deps.enforceDevLoopCloseInvariant(input.worktreePath, logger, input.initiativeId);
+
+        // Item 6: delivery gate — unifier must have passed.
+        if (!devLoopOutcome.unifierSucceeded) {
+          throw new Error(
+            `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
+              `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
+          );
+        }
+
+        // Item 7: empty-branch guard.
+        deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, logger);
+
+        // Item 8: final CI delivery gate (before openPrInline in review node).
+        deps.enforceFinalCiGate(input, logger);
+
         break;
       }
 
@@ -285,10 +388,12 @@ export async function runFlow({
       }
 
       case 'review': {
-        // Gate node: open the PR, then run closure
+        // Gate node: open the PR, then run closure.
+        // Item 8 (enforceFinalCiGate) already ran in the 'dev' node so the
+        // branch is CI-clean before we open the PR.
         reviewerOutcome = await deps.openPrInline(input, logger);
         closure = await deps.runClosure(input, logger, reviewerOutcome);
-        cycleOutcome = closure.outcome as 'ready-for-review' | 'merged' | 'failed';
+        cycleOutcome = closure.outcome as 'ready-for-review' | 'merged' | 'pr-open';
         break;
       }
 
