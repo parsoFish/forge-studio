@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { aggregateRun, listRuns } from './run-model.ts';
+import { aggregateRun, listRuns, buildNodeMapping } from './run-model.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, 'run-model.fixtures');
@@ -648,6 +648,89 @@ test('aggregateRun: retries counted from gate.fail events in dev phase', () => {
 
     const retries = run.phaseMeta['dev']?.retries ?? 0;
     assert.ok(retries >= 2, `retries should be >= 2 (gate.fail count), got ${retries}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// buildNodeMapping (a): derived from real repo matches expected table
+// ---------------------------------------------------------------------------
+
+test('buildNodeMapping: derived from real studio/flows + skills equals expected table', () => {
+  // FORGE_ROOT is the repo root; orchestrator/ is one level below __dirname
+  const FORGE_ROOT = join(__dirname, '..');
+
+  const mapping = buildNodeMapping(FORGE_ROOT);
+
+  // Primary derivations: SKILL.md frontmatter phase → flow node id
+  assert.equal(mapping.get('architect'), 'architect', 'architect phase → architect node');
+  assert.equal(mapping.get('project-manager'), 'pm', 'project-manager phase → pm node');
+  assert.equal(mapping.get('developer-loop'), 'dev', 'developer-loop phase → dev node');
+  assert.equal(mapping.get('unifier'), 'unifier', 'unifier phase → unifier node');
+
+  // Canonicalization overrides (hardcoded layer on top of derived)
+  assert.equal(mapping.get('reflection'), 'reflect', 'reflection → reflect (canonicalization: events say reflection, frontmatter says reflector)');
+  assert.equal(mapping.get('review-loop'), 'review', 'review-loop → review (gate-only node)');
+  assert.equal(mapping.get('closure'), 'review', 'closure → review (folds into review node)');
+  assert.equal(mapping.get('orchestrator'), null, 'orchestrator → null (ignored)');
+  assert.equal(mapping.get('brain'), null, 'brain → null (ignored)');
+});
+
+// ---------------------------------------------------------------------------
+// buildNodeMapping (b): tmp root without studio/ → fallback, aggregation works
+// ---------------------------------------------------------------------------
+
+test('buildNodeMapping: missing studio/ falls back to hardcoded table; aggregateRun still works', () => {
+  const root = makeTmp();
+  try {
+    // root has NO studio/ dir — forces the fallback path
+    const initId = 'INIT-2026-01-01-fallback';
+    const cycleId = '2026-01-01T07-00-00_INIT-2026-01-01-fallback';
+
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    // Write a minimal cycle log with events from all the phases we care about
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
+      ev('architect', 'start'), ev('architect', 'end'),
+      ev('project-manager', 'start'), ev('project-manager', 'end'),
+      ev('developer-loop', 'start'),
+      ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-1' }),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1', status: 'complete' }),
+      ev('developer-loop', 'end'),
+      ev('unifier', 'start'), ev('unifier', 'end'),
+      ev('review-loop', 'start'), ev('review-loop', 'end'),
+      ev('closure', 'start'), ev('closure', 'end'),
+      ev('reflection', 'start', 'reflector.start'),
+      ev('reflection', 'end', 'reflector.end'),
+      ev('orchestrator', 'end', 'cycle.end', { status: 'done' }),
+    ]);
+
+    // Fallback mapping: verify it contains the expected entries
+    const mapping = buildNodeMapping(root);
+    assert.equal(mapping.get('architect'), 'architect', 'fallback: architect mapped');
+    assert.equal(mapping.get('project-manager'), 'pm', 'fallback: project-manager mapped');
+    assert.equal(mapping.get('developer-loop'), 'dev', 'fallback: developer-loop mapped');
+    assert.equal(mapping.get('unifier'), 'unifier', 'fallback: unifier mapped');
+    assert.equal(mapping.get('reflection'), 'reflect', 'fallback: reflection mapped');
+    assert.equal(mapping.get('review-loop'), 'review', 'fallback: review-loop mapped');
+    assert.equal(mapping.get('closure'), 'review', 'fallback: closure mapped');
+    assert.equal(mapping.get('orchestrator'), null, 'fallback: orchestrator null');
+    assert.equal(mapping.get('brain'), null, 'fallback: brain null');
+
+    // Full aggregation must still work correctly with the fallback mapping
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs: Date.now() });
+
+    assert.equal(run.status, 'complete');
+    assert.equal(run.phases['architect'], 'complete');
+    assert.equal(run.phases['pm'], 'complete');
+    assert.equal(run.phases['dev'], 'complete');
+    assert.equal(run.phases['unifier'], 'complete');
+    assert.equal(run.phases['review'], 'complete', 'review-loop + closure both fold into review node');
+    assert.equal(run.phases['reflect'], 'complete');
+    assert.equal(run.workItems?.length, 1, 'WI-1 materialised');
+    assert.equal(run.workItems?.[0].id, 'WI-1');
   } finally {
     cleanup(root);
   }

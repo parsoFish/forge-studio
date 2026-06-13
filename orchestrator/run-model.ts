@@ -7,14 +7,17 @@
  * No caching. Called per-request from the bridge (logs are small; note
  * perf deferral to M3 if needed).
  *
- * Node↔phase mapping (hardcoded here; ADR-028 engine will own it in M3):
- *   architect  → event phase 'architect'
- *   pm         → event phase 'project-manager'
- *   dev        → event phase 'developer-loop'
- *   unifier    → event phase 'unifier'
- *   review     → event phases 'review-loop' + 'closure' (gate-only node)
- *   reflect    → event phase 'reflection'
- *   (orchestrator / brain → ignored for phase status)
+ * Node↔phase mapping: derived at runtime from studio/flows/forge-cycle/flow.yaml
+ * + skills/<agent>/SKILL.md frontmatter `phase` field. Each flow node with an
+ * `agent` field maps: SKILL.md[phase] → node.id.
+ *
+ * Canonicalization layer (hardcoded — ADR-028 engine will own the full table in M3):
+ *   reflection  → reflect node (frontmatter says 'reflector', events say 'reflection')
+ *   review-loop → review node (gate-only; no agent in flow.yaml)
+ *   closure     → review node (closure folds into the review node)
+ *   orchestrator/brain → null (ignored for phase status)
+ *
+ * If flow.yaml or registry loading fails the fallback hardcoded table is used.
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -22,6 +25,7 @@ import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import type { QueueState } from './queue.ts';
+import { loadFlowDefinition, listAgentDefinitions } from './studio/registry.ts';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)
@@ -78,21 +82,85 @@ const QUEUE_STATE_TO_RUN_STATUS: Record<QueueState, RunStatus> = {
 };
 
 /**
- * Event phase → flow node id.
- * reflection → reflect, closure/review-loop → review, orchestrator/brain → ignored.
+ * Canonicalization overrides applied on top of the derived mapping.
  * ADR-028 engine will own this table in M3.
+ *
+ * - reflection → reflect (frontmatter phase is 'reflector', events emit 'reflection')
+ * - review-loop/closure → review (gate-only node; no agent in flow.yaml)
+ * - orchestrator/brain → null (ignored for phase status)
  */
-const EVENT_PHASE_TO_NODE: Record<string, string | null> = {
+const CANONICAL_PHASE_OVERRIDES: Record<string, string | null> = {
+  reflection: 'reflect',   // events say 'reflection'; frontmatter says 'reflector'
+  'review-loop': 'review', // gate-only node has no agent
+  closure: 'review',       // closure folds into review node
+  orchestrator: null,      // ignored for phase status
+  brain: null,             // ignored for phase status
+};
+
+/**
+ * Fallback mapping used when flow.yaml or registry loading fails.
+ * Kept in sync with the expected derived result manually.
+ */
+const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
   architect: 'architect',
   'project-manager': 'pm',
   'developer-loop': 'dev',
   unifier: 'unifier',
   'review-loop': 'review',
-  closure: 'review',       // closure folds into review node
+  closure: 'review',
   reflection: 'reflect',
-  orchestrator: null,      // ignored for phase status
-  brain: null,             // ignored for phase status
+  orchestrator: null,
+  brain: null,
 };
+
+/**
+ * Build the event-phase → flow-node-id mapping from the real forge-cycle
+ * flow definition and agent SKILL.md frontmatter. Falls back to the hardcoded
+ * table if the studio/ directory or any required file is missing.
+ *
+ * Called once per aggregateRun / listRuns invocation. Results are not cached
+ * (bridge adds none in M1 — definitions are small).
+ *
+ * Exported for testing; not part of the public run-aggregation API.
+ */
+export function buildNodeMapping(root: string): Map<string, string | null> {
+  try {
+    const flowPath = join(resolve(root), 'studio', 'flows', 'forge-cycle', 'flow.yaml');
+    const skillsDir = join(resolve(root), 'skills');
+
+    const flow = loadFlowDefinition(flowPath);
+    const agents = listAgentDefinitions(skillsDir);
+
+    // Index agents by slug for O(1) lookup
+    const agentBySlug = new Map(agents.map((a) => [a.slug, a]));
+
+    const mapping = new Map<string, string | null>();
+
+    // Apply canonicalization overrides first so they take precedence
+    for (const [phase, nodeId] of Object.entries(CANONICAL_PHASE_OVERRIDES)) {
+      mapping.set(phase, nodeId);
+    }
+
+    // Derive from flow nodes that have an agent
+    for (const node of flow.nodes) {
+      if (!node.agent) continue; // gate-only nodes have no agent
+      const agentDef = agentBySlug.get(node.agent);
+      if (!agentDef?.phase) continue;
+      // Only set if not already covered by a canonicalization override
+      if (!mapping.has(agentDef.phase)) {
+        mapping.set(agentDef.phase, node.id);
+      }
+      // Also handle 'reflector' frontmatter → 'reflect' node via the reflection override
+      // (already covered: CANONICAL_PHASE_OVERRIDES sets reflection → reflect)
+    }
+
+    return mapping;
+  } catch {
+    // Flow or registry unavailable — use fallback hardcoded table
+    // (e.g. tests running from a tmp root without studio/)
+    return new Map(Object.entries(FALLBACK_PHASE_TO_NODE));
+  }
+}
 
 /** Progress event types that update lastProgressAt / determine wedge */
 const PROGRESS_EVENT_TYPES = new Set([
@@ -120,7 +188,63 @@ export function aggregateRun(args: {
   manifestPath: string;
   nowMs: number;
 }): Run {
-  const { root, queueState, manifestPath, nowMs } = args;
+  // Build mapping once per call from flow.yaml + registry (falls back if unavailable)
+  const nodeMapping = buildNodeMapping(args.root);
+  return aggregateRunWithMapping({ ...args, nodeMapping });
+}
+
+export function listRuns(root: string, nowMs: number): Run[] {
+  const runs: Run[] = [];
+  const allStates: QueueState[] = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
+  // Build mapping once for the entire list pass
+  const nodeMapping = buildNodeMapping(root);
+
+  for (const state of allStates) {
+    const queueDir = join(resolve(root), '_queue', QUEUE_DIR_NAMES[state]);
+    if (!existsSync(queueDir)) continue;
+
+    let files: string[];
+    try {
+      files = readdirSync(queueDir).filter((f) => f.endsWith('.md') && !f.endsWith('.heartbeat'));
+    } catch {
+      continue;
+    }
+
+    for (const file of files) {
+      const manifestPath = join(queueDir, file);
+      try {
+        runs.push(aggregateRunWithMapping({ root, queueState: state, manifestPath, nowMs, nodeMapping }));
+      } catch (err) {
+        // Corrupt manifest: produce a degraded Run entry rather than crashing the list
+        const initId = file.replace(/\.md$/, '');
+        runs.push(makeDegradedRun(initId, state, manifestPath));
+      }
+    }
+  }
+
+  // Sort newest-first by startedAt (plans without startedAt go to end)
+  runs.sort((a, b) => {
+    if (!a.startedAt && !b.startedAt) return 0;
+    if (!a.startedAt) return 1;
+    if (!b.startedAt) return -1;
+    return b.startedAt.localeCompare(a.startedAt);
+  });
+
+  return runs;
+}
+
+// ---------------------------------------------------------------------------
+// Internal implementation (accepts pre-built node mapping)
+// ---------------------------------------------------------------------------
+
+function aggregateRunWithMapping(args: {
+  root: string;
+  queueState: QueueState;
+  manifestPath: string;
+  nowMs: number;
+  nodeMapping: Map<string, string | null>;
+}): Run {
+  const { root, queueState, manifestPath, nowMs, nodeMapping } = args;
 
   // Parse manifest (throws on unreadable — caller wraps for listRuns)
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
@@ -143,45 +267,7 @@ export function aggregateRun(args: {
   const eventsPath = join(logDir, 'events.jsonl');
   const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
 
-  return buildRun({ manifest, cycleId, events, logDir, runStatus, nowMs });
-}
-
-export function listRuns(root: string, nowMs: number): Run[] {
-  const runs: Run[] = [];
-  const allStates: QueueState[] = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
-
-  for (const state of allStates) {
-    const queueDir = join(resolve(root), '_queue', QUEUE_DIR_NAMES[state]);
-    if (!existsSync(queueDir)) continue;
-
-    let files: string[];
-    try {
-      files = readdirSync(queueDir).filter((f) => f.endsWith('.md') && !f.endsWith('.heartbeat'));
-    } catch {
-      continue;
-    }
-
-    for (const file of files) {
-      const manifestPath = join(queueDir, file);
-      try {
-        runs.push(aggregateRun({ root, queueState: state, manifestPath, nowMs }));
-      } catch (err) {
-        // Corrupt manifest: produce a degraded Run entry rather than crashing the list
-        const initId = file.replace(/\.md$/, '');
-        runs.push(makeDegradedRun(initId, state, manifestPath));
-      }
-    }
-  }
-
-  // Sort newest-first by startedAt (plans without startedAt go to end)
-  runs.sort((a, b) => {
-    if (!a.startedAt && !b.startedAt) return 0;
-    if (!a.startedAt) return 1;
-    if (!b.startedAt) return -1;
-    return b.startedAt.localeCompare(a.startedAt);
-  });
-
-  return runs;
+  return buildRun({ manifest, cycleId, events, logDir, runStatus, nowMs, nodeMapping });
 }
 
 // ---------------------------------------------------------------------------
@@ -195,17 +281,18 @@ function buildRun(args: {
   logDir: string;
   runStatus: RunStatus;
   nowMs: number;
+  nodeMapping: Map<string, string | null>;
 }): Run {
-  const { manifest, cycleId, events, logDir, runStatus, nowMs } = args;
+  const { manifest, cycleId, events, logDir, runStatus, nowMs, nodeMapping } = args;
 
   // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
-  const phases = deriveNodeStatuses(events, runStatus);
+  const phases = deriveNodeStatuses(events, runStatus, nodeMapping);
 
   // --- Per-node metadata ---
-  const phaseMeta = deriveNodeMeta(events, manifest.iteration_budget, nowMs);
+  const phaseMeta = deriveNodeMeta(events, manifest.iteration_budget, nowMs, nodeMapping);
 
   // --- Work items (dev node fanOut) ---
-  const workItems = deriveWorkItems(events);
+  const workItems = deriveWorkItems(events, nodeMapping);
 
   // --- Reflection present flag (from events, not just files) ---
   const hasReflectionEvents = events.some((e) => e.phase === 'reflection');
@@ -227,7 +314,7 @@ function buildRun(args: {
   const gateNote = gate ? findGateNote(logDir) : undefined;
 
   // --- Failure ---
-  const { failedAt, failNote } = findFailure(events);
+  const { failedAt, failNote } = findFailure(events, nodeMapping);
 
   // --- Initiative title from manifest body first heading ---
   const initiative = extractTitle(manifest.body, manifest.initiative_id);
@@ -265,13 +352,14 @@ type NodeAccum = {
 function deriveNodeStatuses(
   events: readonly EventLogEntry[],
   runStatus: RunStatus,
+  nodeMapping: Map<string, string | null>,
 ): Record<string, RunPhaseStatus> {
   const cycleFailed = runStatus === 'failed';
 
   const seen = new Map<string, NodeAccum>();
 
   for (const e of events) {
-    const nodeId = eventToNodeId(e.phase);
+    const nodeId = eventToNodeId(e.phase, nodeMapping);
     if (nodeId === null) continue;
 
     const acc = seen.get(nodeId) ?? {
@@ -333,11 +421,12 @@ function deriveNodeMeta(
   events: readonly EventLogEntry[],
   iterationBudget: number,
   nowMs: number,
+  nodeMapping: Map<string, string | null>,
 ): Record<string, RunPhaseMeta> {
   // Bucket events by nodeId
   const buckets = new Map<string, EventLogEntry[]>();
   for (const e of events) {
-    const nodeId = eventToNodeId(e.phase);
+    const nodeId = eventToNodeId(e.phase, nodeMapping);
     if (nodeId === null) continue;
     if (!buckets.has(nodeId)) buckets.set(nodeId, []);
     buckets.get(nodeId)!.push(e);
@@ -522,6 +611,7 @@ function findGateChecks(
 
 function deriveWorkItems(
   events: readonly EventLogEntry[],
+  nodeMapping: Map<string, string | null>,
 ): { id: string; status: RunPhaseStatus }[] {
   // Collect WI ids in order of first appearance
   const wiOrder: string[] = [];
@@ -538,7 +628,7 @@ function deriveWorkItems(
   if (wiOrder.length === 0) return [];
 
   // Only dev-phase events are relevant for per-WI status
-  const devEvents = events.filter((e) => eventToNodeId(e.phase) === 'dev');
+  const devEvents = events.filter((e) => eventToNodeId(e.phase, nodeMapping) === 'dev');
 
   const LIFECYCLE_TYPES = new Set(['start', 'iteration', 'tool_use', 'end', 'error']);
 
@@ -672,7 +762,10 @@ function findGateNote(logDir: string): string {
 // Failure info
 // ---------------------------------------------------------------------------
 
-function findFailure(events: readonly EventLogEntry[]): {
+function findFailure(
+  events: readonly EventLogEntry[],
+  nodeMapping: Map<string, string | null>,
+): {
   failedAt?: string;
   failNote?: string;
 } {
@@ -683,7 +776,7 @@ function findFailure(events: readonly EventLogEntry[]): {
       const m = e.metadata;
       const reason = typeof m.reason === 'string' ? m.reason : undefined;
       // Find the node of the last error event before this classifier
-      const failedNode = findLastErrorNode(events, i);
+      const failedNode = findLastErrorNode(events, i, nodeMapping);
       return {
         failedAt: failedNode ?? 'unifier',
         failNote: reason,
@@ -695,7 +788,7 @@ function findFailure(events: readonly EventLogEntry[]): {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
-      const nodeId = eventToNodeId(e.phase);
+      const nodeId = eventToNodeId(e.phase, nodeMapping);
       return { failedAt: nodeId ?? 'unifier' };
     }
   }
@@ -703,10 +796,14 @@ function findFailure(events: readonly EventLogEntry[]): {
   return {};
 }
 
-function findLastErrorNode(events: readonly EventLogEntry[], beforeIdx: number): string | null {
+function findLastErrorNode(
+  events: readonly EventLogEntry[],
+  beforeIdx: number,
+  nodeMapping: Map<string, string | null>,
+): string | null {
   for (let i = beforeIdx - 1; i >= 0; i--) {
     if (events[i].event_type === 'error' && events[i].metadata?.expected_fail !== true) {
-      return eventToNodeId(events[i].phase);
+      return eventToNodeId(events[i].phase, nodeMapping);
     }
   }
   return null;
@@ -716,8 +813,8 @@ function findLastErrorNode(events: readonly EventLogEntry[], beforeIdx: number):
 // Misc helpers
 // ---------------------------------------------------------------------------
 
-function eventToNodeId(phase: string): string | null {
-  return EVENT_PHASE_TO_NODE[phase] ?? null;
+function eventToNodeId(phase: string, nodeMapping: Map<string, string | null>): string | null {
+  return nodeMapping.get(phase) ?? null;
 }
 
 function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
