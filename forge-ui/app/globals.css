@@ -463,6 +463,7 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
   border: 1px solid rgba(255,158,74,0.4);
   text-decoration: none;
   letter-spacing: 0.03em;
+  cursor: default;
 }
 .chip-gated:hover { background: rgba(255,158,74,0.18); text-decoration: none; }
 .chip-failed {
@@ -478,6 +479,7 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
   background: rgba(248,113,113,0.08);
   border: 1px solid rgba(248,113,113,0.35);
   letter-spacing: 0.03em;
+  cursor: default;
 }
 @keyframes ember-pulse-chip {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255,158,74,0); }

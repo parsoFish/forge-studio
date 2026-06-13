@@ -55,6 +55,9 @@ export function StudioNav() {
                 className="nav-disabled"
                 data-nav={item.id}
                 title={item.title}
+                role="link"
+                aria-disabled="true"
+                aria-label={`${item.label} — coming in milestone ${item.title}`}
               >
                 {item.label}
               </span>

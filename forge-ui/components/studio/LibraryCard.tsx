@@ -137,13 +137,9 @@ export function FlowCard({
           </span>
         )}
         {gatedRuns.length > 0 && (
-          <Link
-            href={`/flows/${encodeURIComponent(flow.id)}`}
-            className="chip chip-gated pulse-ember"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <span className="chip chip-gated pulse-ember">
             {gatedRuns.length} need{gatedRuns.length === 1 ? 's' : ''} you
-          </Link>
+          </span>
         )}
         {failedRuns.length > 0 && (
           <span className="chip chip-failed">

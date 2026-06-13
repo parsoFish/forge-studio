@@ -36,48 +36,54 @@ export default function LibraryPage() {
   const [ready, setReady] = useState(false);
 
   // ---- data loading ----
-  async function loadAll(): Promise<void> {
-    const [a, f, p, k, r] = await Promise.all([
-      fetchStudioAgents(),
-      fetchStudioFlows(),
-      fetchStudioProjects(),
-      fetchStudioKbs(),
-      fetchRuns(),
-    ]);
-    setAgents(a);
-    setFlows(f);
-    setProjects(p);
-    setKbs(k);
-    setRuns(r);
-    setReady(true);
+  async function loadAll(signal: { cancelled: boolean }): Promise<void> {
+    try {
+      const [a, f, p, k, r] = await Promise.all([
+        fetchStudioAgents(),
+        fetchStudioFlows(),
+        fetchStudioProjects(),
+        fetchStudioKbs(),
+        fetchRuns(),
+      ]);
+      if (signal.cancelled) return;
+      setAgents(a);
+      setFlows(f);
+      setProjects(p);
+      setKbs(k);
+      setRuns(r);
+    } finally {
+      if (!signal.cancelled) setReady(true);
+    }
   }
 
-  async function refreshRuns(): Promise<void> {
+  async function refreshRuns(signal: { cancelled: boolean }): Promise<void> {
     const r = await fetchRuns();
+    if (signal.cancelled) return;
     setRuns(r);
   }
 
   useEffect(() => {
-    let cancelled = false;
+    // intentional mount-only — loadAll/refreshRuns are stable fetch helpers
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const signal = { cancelled: false };
 
-    void loadAll();
+    void loadAll(signal);
 
     // Subscribe to bridge WS to re-fetch runs on cycle-list-changed.
     const sub = subscribe({
       onState: () => { /* page does not show connection state */ },
       onMessage: (msg) => {
-        if (cancelled) return;
+        if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
-          void refreshRuns();
+          void refreshRuns(signal);
         }
       },
     });
 
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
       sub.close();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- pulse counts ----
@@ -294,7 +300,7 @@ export default function LibraryPage() {
 // Operator pulse row
 // ---------------------------------------------------------------------------
 
-function PulseRow({ dotClass, label, value }: { dotClass: string; label: string; value: number | string }) {
+function PulseRow({ dotClass, label, value }: { dotClass: 'ember' | 'active' | 'dim'; label: string; value: number | string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <span
