@@ -25,6 +25,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { parseRetroMd } from '../../cli/reflection-doc.ts';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EventLogger, EventLogEntry } from '../logging.ts';
@@ -366,7 +367,16 @@ export async function runReflector(
   // Always written on a successful reflector close (additive — does NOT
   // gate reflection_status; per CONTRACTS.md C15a the PR-comment surface
   // belongs to plan 04).
-  const themesWritten = listFreshThemes(themesDir, startedAtMs).map((t) => t.path);
+  const freshThemes = listFreshThemes(themesDir, startedAtMs);
+  const themesWritten = freshThemes.map((t) => t.path);
+  // M5-5: write structured reflection.json with KB-node targets so the
+  // artifact viewer's /artifact?type=reflection path can render lesson → KB
+  // badges. Best-effort — a failure here must NOT break the cycle close.
+  writeReflectionDocBestEffort({
+    cycleLogDir,
+    retroPath: resolve(cycleLogDir, 'retro.md'),
+    freshThemeSlugs: freshThemes.map((t) => basename(t.path, '.md')),
+  });
   const recapResult = writeCycleRecap({
     forgeRoot,
     cycleId,
@@ -790,6 +800,32 @@ function stripOptionLines(body: string): string {
     .filter((l) => !/^\s*[-*]\s+/.test(l))
     .join('\n')
     .trim();
+}
+
+/**
+ * M5-5: parse the cycle's retro.md → ReflectionDoc (with KB-node targets on
+ * lessons) and write it to `_logs/<cycleId>/artifacts/reflection.json` so the
+ * artifact viewer can fetch it via `/api/artifact/<cycleId>/reflection.json`.
+ *
+ * Best-effort: any error is swallowed. A missing retro.md (the agent didn't
+ * write one, or the cycle is a stub) results in an empty doc being written —
+ * the viewer degrades gracefully to "None logged." for all sections.
+ */
+function writeReflectionDocBestEffort(opts: {
+  cycleLogDir: string;
+  retroPath: string;
+  freshThemeSlugs: string[];
+}): void {
+  const { cycleLogDir, retroPath, freshThemeSlugs } = opts;
+  try {
+    const raw = existsSync(retroPath) ? readFileSync(retroPath, 'utf8') : '';
+    const doc = parseRetroMd(raw, freshThemeSlugs);
+    const artifactsDir = resolve(cycleLogDir, 'artifacts');
+    mkdirSync(artifactsDir, { recursive: true });
+    writeFileSync(resolve(artifactsDir, 'reflection.json'), JSON.stringify(doc, null, 2));
+  } catch {
+    /* best-effort — reflection.json is a non-critical side-output */
+  }
 }
 
 // Re-export the legacy ReflectionStatus type for ergonomic imports.
