@@ -14,7 +14,7 @@
  * No external tool dependency — reads the brain FS directly.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { execSync } from 'node:child_process';
 // gray-matter has no usable types; treated as any for parsing.
@@ -322,6 +322,43 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
     addNode({ id: rawId, title, layer: 'raw' });
   }
 
+  // ---- Guidance nodes from _guidance/*.md --------------------------------
+  // Pending human guidance notes render as amber-diamond nodes until consumed
+  // by the next brain-ingest pass (which deletes them).
+  const guidanceDir = join(kbDir, '_guidance');
+  if (existsSync(guidanceDir)) {
+    let guidanceEntries: string[];
+    try {
+      guidanceEntries = readdirSync(guidanceDir).filter((f) => f.endsWith('.md'));
+    } catch {
+      guidanceEntries = [];
+    }
+    for (const filename of guidanceEntries) {
+      const guidancePath = join(guidanceDir, filename);
+      const guidanceNodeId = `guidance-${basename(filename, '.md')}`;
+      let guidanceTargetNode: string | undefined;
+      try {
+        const raw = readFileSync(guidancePath, 'utf8');
+        const parsed = parseMd(raw);
+        guidanceTargetNode = parsed.data.target_node as string | undefined;
+      } catch {
+        // skip unreadable guidance file
+        continue;
+      }
+      // KbNode does not carry body — the body is returned by getKbNodeArticle.
+      addNode({
+        id: guidanceNodeId,
+        title: 'guidance',
+        layer: 'guidance',
+      });
+      // If target_node is set and the target exists, add an edge (dashed amber link)
+      if (guidanceTargetNode && typeof guidanceTargetNode === 'string') {
+        // edge is added after all nodes are registered — defer it
+        edges.push({ from: guidanceNodeId, to: guidanceTargetNode });
+      }
+    }
+  }
+
   // ---- Edges from theme → related_themes + wiki-links ---------------------
   for (const [fromId, data] of themeData) {
     // related_themes edges
@@ -420,7 +457,12 @@ export function getKbNodeArticle(
   let filePath: string | null = null;
   let body = '';
 
-  if (node.layer === 'theme') {
+  if (node.layer === 'guidance') {
+    // guidance node id is 'guidance-<filename-without-.md>'
+    const slug = nodeId.startsWith('guidance-') ? nodeId.slice('guidance-'.length) : nodeId;
+    const candidate = join(kbDir, '_guidance', `${slug}.md`);
+    if (existsSync(candidate)) filePath = candidate;
+  } else if (node.layer === 'theme') {
     const candidate = join(kbDir, 'themes', `${nodeId}.md`);
     if (existsSync(candidate)) filePath = candidate;
   } else if (node.layer === 'raw') {
@@ -474,4 +516,81 @@ export function getKbNodeArticle(
     outbound,
     touchedBy,
   };
+}
+
+// ---------------------------------------------------------------------------
+// consumeGuidance — list pending guidance files for brain-ingest to process
+// ---------------------------------------------------------------------------
+
+export type PendingGuidance = {
+  /** Absolute path to the guidance .md file */
+  file: string;
+  /** The guidance text (body after frontmatter) */
+  text: string;
+  /** Optional target node slug from frontmatter.target_node */
+  targetNode?: string;
+};
+
+/**
+ * List all pending guidance files in `brain/<kbId>/_guidance/*.md`.
+ *
+ * Called by the brain-ingest skill to discover what human guidance notes
+ * are waiting to be incorporated. The skill reads each note, incorporates
+ * it into the appropriate theme, then calls `deleteGuidanceFile` to remove
+ * the consumed file.
+ *
+ * Returns an empty array if no _guidance/ dir or no pending files.
+ * Throws on unknown kbId (unknown brain dir).
+ */
+export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGuidance[] {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const guidanceDir = join(kbDir, '_guidance');
+  if (!existsSync(guidanceDir)) return [];
+
+  let entries: string[];
+  try {
+    entries = readdirSync(guidanceDir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+
+  const result: PendingGuidance[] = [];
+  for (const filename of entries) {
+    const filePath = join(guidanceDir, filename);
+    try {
+      const raw = readFileSync(filePath, 'utf8');
+      const parsed = parseMd(raw);
+      const text = parsed.content.trim();
+      const targetNode = parsed.data.target_node as string | undefined;
+      result.push({ file: filePath, text, targetNode });
+    } catch {
+      // skip unreadable file
+    }
+  }
+  return result;
+}
+
+/**
+ * Delete a consumed guidance file.
+ *
+ * Called by the brain-ingest skill after it has incorporated a guidance note
+ * into the appropriate theme. Validates the path stays within the _guidance
+ * directory before deleting.
+ *
+ * Returns true if the file was deleted, false if it was already gone.
+ */
+export function deleteGuidanceFile(forgeRoot: string, kbId: string, filePath: string): boolean {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const guidanceDir = join(kbDir, '_guidance');
+  const resolvedFile = resolve(filePath);
+  const resolvedGuidanceDir = resolve(guidanceDir);
+
+  // Path-guard: the file must be inside _guidance/
+  if (!resolvedFile.startsWith(resolvedGuidanceDir + '/')) {
+    throw new Error(`deleteGuidanceFile: path traversal — "${filePath}" is not under _guidance/`);
+  }
+
+  if (!existsSync(resolvedFile)) return false;
+  rmSync(resolvedFile);
+  return true;
 }

@@ -811,7 +811,7 @@ export async function handleStudioWriteRoutes(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  if (method !== 'PUT') return false;
+  if (method !== 'PUT' && method !== 'POST') return false;
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
@@ -1176,6 +1176,114 @@ export async function handleStudioWriteRoutes(
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
       sendJson(res, 200, { ok: true, id, version, findings: flagFindings }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/kbs/:id/guidance (M5-3) -------------------------
+  const guidanceMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/guidance$/);
+  if (guidanceMatch && method === 'POST') {
+    try {
+      const kbId = decodeURIComponent(guidanceMatch[1]);
+
+      // 1. Slug-guard kbId before any fs operation (blocks path traversal)
+      if (!SLUG_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+
+      // 2. Path-guard: kbId must not escape brain/
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      const kbDir = resolve(brainBase, kbId);
+      if (!kbDir.startsWith(brainBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // 3. Resolve kb (must have a kb.yaml — use loadKbDescriptors to find it)
+      const kbs = loadKbDescriptors(ctx.forgeRoot);
+      const kb = kbs.find((k) => k.id === kbId);
+      if (!kb) {
+        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+        return true;
+      }
+
+      // 4. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 5. Validate text (non-empty)
+      const text = typeof b['text'] === 'string' ? b['text'].trim() : '';
+      if (!text) {
+        sendJson(res, 400, { error: 'text is required and must be non-empty' }, origin);
+        return true;
+      }
+
+      // 6. Validate targetNode if present (SLUG_RE + path guard)
+      const targetNodeRaw = b['targetNode'];
+      let targetNode: string | undefined;
+      if (targetNodeRaw !== undefined && targetNodeRaw !== null && targetNodeRaw !== '') {
+        if (typeof targetNodeRaw !== 'string') {
+          sendJson(res, 400, { error: 'targetNode must be a string' }, origin);
+          return true;
+        }
+        // Node ids may have 'raw:' prefix — allow alphanumeric, dash, underscore, colon, dot
+        const NODE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/;
+        if (!NODE_ID_RE.test(targetNodeRaw)) {
+          sendJson(res, 400, { error: 'invalid targetNode — must be a valid node id' }, origin);
+          return true;
+        }
+        targetNode = targetNodeRaw;
+      }
+
+      // 7. Build the _guidance dir path and guard it stays under brain/<kb>/
+      const guidanceDir = join(kbDir, '_guidance');
+      const guardedGuidanceDir = resolve(guidanceDir);
+      if (!guardedGuidanceDir.startsWith(kbDir + sep) && guardedGuidanceDir !== kbDir) {
+        sendJson(res, 400, { error: 'path traversal detected in guidance dir' }, origin);
+        return true;
+      }
+
+      // 8. Mkdir _guidance/ if absent
+      if (!existsSync(guidanceDir)) {
+        mkdirSync(guidanceDir, { recursive: true });
+      }
+
+      // 9. Build filename: ISO-timestamp slug (e.g. 2026-06-13T14-30-00-000Z.md)
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${ts}.md`;
+      const filePath = join(guidanceDir, filename);
+
+      // Path-guard the resolved file path
+      if (!resolve(filePath).startsWith(guardedGuidanceDir + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected in guidance file' }, origin);
+        return true;
+      }
+
+      // 10. Write frontmatter + body
+      const frontmatterLines = [
+        '---',
+        `created_at: "${new Date().toISOString()}"`,
+        ...(targetNode ? [`target_node: "${targetNode}"`] : []),
+        '---',
+        '',
+        text,
+      ];
+      writeFileSync(filePath, frontmatterLines.join('\n'), 'utf8');
+
+      sendJson(res, 200, { ok: true, file: `brain/${kbId}/_guidance/${filename}` }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

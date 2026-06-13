@@ -235,6 +235,26 @@ async function studioPut(
   }
 }
 
+async function studioPost(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: !!data.ok, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 /** Fetch all runs (optionally filtered by flowId). */
 export async function fetchRuns(flowId?: string): Promise<Run[]> {
   const qs = flowId ? `?flow=${encodeURIComponent(flowId)}` : '';
@@ -437,4 +457,24 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
     null,
   );
   return body;
+}
+
+/**
+ * Pin a human guidance note to a KB.
+ *
+ * Posts to POST /api/studio/kbs/:id/guidance {text, targetNode?}.
+ * On success, the guidance file is written under brain/<kb-id>/_guidance/
+ * and will appear as an amber-diamond node in the KB graph on the next fetch.
+ * brain-ingest consumes and deletes it on the next ingest pass.
+ */
+export async function pinGuidance(
+  kbId: string,
+  text: string,
+  targetNode?: string,
+): Promise<{ ok: boolean; file?: string; error?: string }> {
+  const body: Record<string, unknown> = { text };
+  if (targetNode) body['targetNode'] = targetNode;
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(kbId)}/guidance`, body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, file: typeof r.data?.file === 'string' ? (r.data.file as string) : undefined };
 }

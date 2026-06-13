@@ -8,11 +8,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildKbGraph, getKbNodeArticle } from './kb-graph.ts';
+import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile } from './kb-graph.ts';
 
 // Resolve forge root relative to this test file's location
 import { fileURLToPath } from 'node:url';
@@ -323,6 +323,179 @@ test('getKbNodeArticle(synthetic) — null for missing node', () => {
   try {
     const article = getKbNodeArticle(root, 'test-kb', 'no-such-node');
     assert.equal(article, null);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// M5-3: Guidance nodes + listPendingGuidance + deleteGuidanceFile
+// ---------------------------------------------------------------------------
+
+function makeSyntheticKbWithGuidance(): {
+  root: string;
+  guidanceFile1: string;
+  guidanceFile2: string;
+  cleanup: () => void;
+} {
+  const { root, cleanup } = makeSyntheticKb();
+  const guidanceDir = join(root, 'brain', 'test-kb', '_guidance');
+  mkdirSync(guidanceDir, { recursive: true });
+
+  // Guidance file 1: floating (no target_node)
+  const file1 = join(guidanceDir, '2026-06-13T10-00-00-000Z.md');
+  writeFileSync(
+    file1,
+    `---\ncreated_at: "2026-06-13T10:00:00.000Z"\n---\n\nThe worktree traps theme should be split.\n`,
+  );
+
+  // Guidance file 2: targeted at theme-alpha
+  const file2 = join(guidanceDir, '2026-06-13T11-00-00-000Z.md');
+  writeFileSync(
+    file2,
+    `---\ncreated_at: "2026-06-13T11:00:00.000Z"\ntarget_node: "theme-alpha"\n---\n\nConsider adding a section on cwd resolution.\n`,
+  );
+
+  return { root, guidanceFile1: file1, guidanceFile2: file2, cleanup };
+}
+
+test('buildKbGraph(synthetic with _guidance) — includes guidance nodes', () => {
+  const { root, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    const graph = buildKbGraph(root, 'test-kb');
+    const guidanceNodes = graph.nodes.filter((n) => n.layer === 'guidance');
+    assert.equal(guidanceNodes.length, 2, 'should have 2 guidance nodes');
+    for (const gn of guidanceNodes) {
+      assert.ok(gn.id.startsWith('guidance-'), `guidance node id should start with guidance-, got ${gn.id}`);
+      assert.equal(gn.title, 'guidance');
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildKbGraph(synthetic with _guidance) — targeted guidance node has edge to target', () => {
+  const { root, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    const graph = buildKbGraph(root, 'test-kb');
+    // guidance file 2 targets theme-alpha
+    const guidanceEdges = graph.edges.filter(
+      (e) => e.from.startsWith('guidance-') && e.to === 'theme-alpha',
+    );
+    assert.equal(guidanceEdges.length, 1, 'should have one edge from targeted guidance to theme-alpha');
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildKbGraph(synthetic with _guidance) — floating guidance node has no guidance edge', () => {
+  const { root, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    const graph = buildKbGraph(root, 'test-kb');
+    const nodeIds = new Set(graph.nodes.map((n) => n.id));
+    // All edges should have valid endpoints (no dangling)
+    for (const edge of graph.edges) {
+      assert.ok(nodeIds.has(edge.from), `dangling edge.from: ${edge.from}`);
+      assert.ok(nodeIds.has(edge.to), `dangling edge.to: ${edge.to}`);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('buildKbGraph(synthetic) — no _guidance dir → no guidance nodes (backward compat)', () => {
+  const { root, cleanup } = makeSyntheticKb();
+  try {
+    const graph = buildKbGraph(root, 'test-kb');
+    const guidanceNodes = graph.nodes.filter((n) => n.layer === 'guidance');
+    assert.equal(guidanceNodes.length, 0, 'no guidance nodes when no _guidance/ dir');
+  } finally {
+    cleanup();
+  }
+});
+
+test('getKbNodeArticle — returns guidance body for a guidance node', () => {
+  const { root, guidanceFile1, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    // Derive the guidance node id from the filename
+    const filename = guidanceFile1.split('/').pop()!;
+    const slug = filename.replace(/\.md$/, '');
+    const nodeId = `guidance-${slug}`;
+
+    const article = getKbNodeArticle(root, 'test-kb', nodeId);
+    assert.ok(article !== null, 'should return article for guidance node');
+    assert.equal(article!.layer, 'guidance');
+    assert.ok(article!.body.includes('worktree traps'), 'body should contain the guidance text');
+  } finally {
+    cleanup();
+  }
+});
+
+test('listPendingGuidance — lists all _guidance files', () => {
+  const { root, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    const pending = listPendingGuidance(root, 'test-kb');
+    assert.equal(pending.length, 2, 'should list 2 guidance files');
+    const withTarget = pending.find((g) => g.targetNode === 'theme-alpha');
+    assert.ok(withTarget, 'should have one guidance with targetNode = theme-alpha');
+    const floating = pending.find((g) => !g.targetNode);
+    assert.ok(floating, 'should have one floating guidance');
+    assert.ok(floating!.text.includes('worktree traps'), 'floating guidance text should match');
+  } finally {
+    cleanup();
+  }
+});
+
+test('listPendingGuidance — returns empty when no _guidance/ dir', () => {
+  const { root, cleanup } = makeSyntheticKb();
+  try {
+    const pending = listPendingGuidance(root, 'test-kb');
+    assert.equal(pending.length, 0, 'should return empty array when no _guidance/ dir');
+  } finally {
+    cleanup();
+  }
+});
+
+test('listPendingGuidance — throws on unknown kbId', () => {
+  assert.throws(
+    () => listPendingGuidance(FORGE_ROOT, 'no-such-kb'),
+    /Unknown kbId/,
+  );
+});
+
+test('deleteGuidanceFile — deletes the file', () => {
+  const { root, guidanceFile1, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    assert.ok(existsSync(guidanceFile1), 'file should exist before delete');
+    const deleted = deleteGuidanceFile(root, 'test-kb', guidanceFile1);
+    assert.equal(deleted, true, 'should return true when file existed');
+    assert.ok(!existsSync(guidanceFile1), 'file should not exist after delete');
+  } finally {
+    cleanup();
+  }
+});
+
+test('deleteGuidanceFile — returns false when file already gone', () => {
+  const { root, guidanceFile1, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    // Delete twice
+    deleteGuidanceFile(root, 'test-kb', guidanceFile1);
+    const result = deleteGuidanceFile(root, 'test-kb', guidanceFile1);
+    assert.equal(result, false, 'should return false when file not found');
+  } finally {
+    cleanup();
+  }
+});
+
+test('deleteGuidanceFile — throws on path traversal', () => {
+  const { root, cleanup } = makeSyntheticKbWithGuidance();
+  try {
+    // Attempt traversal
+    const maliciousPath = join(root, 'brain', 'test-kb', '_guidance', '..', 'kb.yaml');
+    assert.throws(
+      () => deleteGuidanceFile(root, 'test-kb', maliciousPath),
+      /path traversal/,
+    );
   } finally {
     cleanup();
   }

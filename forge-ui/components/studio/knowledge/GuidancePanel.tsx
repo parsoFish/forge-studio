@@ -1,31 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { KbNodeArticle } from '@/lib/studio-client';
-
-// TODO(M5-3): wire the POST /api/studio/kbs/:id/guidance here once the route exists.
-// For M5-2 the panel renders with a present-but-inert button (no POST is made).
+import { pinGuidance } from '@/lib/studio-client';
 
 interface Props {
   selectedArticle: KbNodeArticle | null;
   kbId: string;
+  /** Called on successful pin so the parent can re-fetch the KB graph */
+  onPinned?: () => void;
 }
 
-export function GuidancePanel({ selectedArticle, kbId: _kbId }: Props) {
+export function GuidancePanel({ selectedArticle, kbId, onPinned }: Props) {
   const [text, setText] = useState('');
+  const [pinning, setPinning] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const targetLabel = selectedArticle
     ? `— attaches to "${selectedArticle.title}"`
     : '(no node selected — will float)';
 
-  const handlePin = () => {
-    // TODO(M5-3): POST to /api/studio/kbs/:id/guidance { text, targetNode: selectedArticle?.id }
-    // For now the button is present — the POST wiring lands in M5-3.
-    setText('');
-  };
+  const handlePin = useCallback(async () => {
+    const trimmed = text.trim();
+    if (!trimmed || pinning) return;
+    setPinning(true);
+    setError(null);
+    try {
+      const result = await pinGuidance(kbId, trimmed, selectedArticle?.id ?? undefined);
+      if (result.ok) {
+        setText('');
+        setPinned(true);
+        // Signal for e2e harness
+        onPinned?.();
+        // Reset the success state after a short delay
+        setTimeout(() => setPinned(false), 3000);
+      } else {
+        setError(result.error ?? 'Pin failed');
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPinning(false);
+    }
+  }, [kbId, text, pinning, selectedArticle, onPinned]);
 
   return (
-    <div style={{ borderBottom: '1px solid var(--line)' }}>
+    <div
+      data-guidance-pinned={pinned ? 'true' : undefined}
+      style={{ borderBottom: '1px solid var(--line)' }}
+    >
       <div className="panel-head">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M6,1 L7.5,4.5 L11,5 L8.5,7.5 L9.2,11 L6,9.5 L2.8,11 L3.5,7.5 L1,5 L4.5,4.5 Z"
@@ -52,17 +76,25 @@ export function GuidancePanel({ selectedArticle, kbId: _kbId }: Props) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="e.g. 'The worktree traps theme needs to split: cwd resolution vs path encoding are distinct failure modes.'"
+          disabled={pinning}
         />
+        {error && (
+          <div style={{ marginTop: 5, fontSize: 12, color: 'var(--red)' }}>{error}</div>
+        )}
+        {pinned && (
+          <div style={{ marginTop: 5, fontSize: 12, color: 'var(--c-kb)' }}>
+            Guidance pinned — will appear in graph and be consumed on the next ingest pass.
+          </div>
+        )}
         <div style={{ marginTop: 8 }}>
           <button
             className="btn btn-primary"
             id="pin-guidance-btn"
             style={{ width: '100%' }}
-            onClick={handlePin}
-            disabled={!text.trim()}
-            title="TODO(M5-3): POST wiring"
+            onClick={() => { void handlePin(); }}
+            disabled={!text.trim() || pinning}
           >
-            Pin guidance
+            {pinning ? 'Pinning…' : 'Pin guidance'}
           </button>
         </div>
       </div>

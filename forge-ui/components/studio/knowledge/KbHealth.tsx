@@ -36,8 +36,6 @@ export function KbHealth({ health }: Props) {
   const staleRaw   = staleness?.staleRawCount   ?? 0;
   const staleTheme = staleness?.staleThemeCount  ?? 0;
 
-  const firstThemeHint = ''; // no per-theme title available here
-
   return (
     <div>
       <div className="panel-head">

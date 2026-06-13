@@ -119,6 +119,14 @@ function KnowledgePageInner() {
     handleSelectNode(nodeId);
   }, [handleSelectNode]);
 
+  // ── Re-fetch the KB graph after a guidance pin ────────────────────────────
+  const handlePinned = useCallback(() => {
+    if (!currentId) return;
+    fetchKb(currentId).then((detail) => {
+      if (mountedRef.current) setKbDetail(detail);
+    }).catch(() => {/* non-fatal — graph may be briefly stale */});
+  }, [currentId]);
+
   // ── Current KB meta ───────────────────────────────────────────────────────
   const currentKb = kbDetail?.kb ?? allKbs.find((k) => k.id === currentId) ?? null;
 
@@ -203,6 +211,7 @@ function KnowledgePageInner() {
           <GuidancePanel
             selectedArticle={article}
             kbId={currentId}
+            onPinned={handlePinned}
           />
           {kbDetail?.health && (
             <KbHealth health={kbDetail.health} />
