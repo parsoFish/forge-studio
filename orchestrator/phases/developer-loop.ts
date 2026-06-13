@@ -1512,12 +1512,36 @@ export function prBodyHasGitTruthSections(body: string): boolean {
   return hasWhat && hasWhyOrHow && body.trim().length > 150;
 }
 
-async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
+export async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
   const { worktreePath, initiativeId, qualityGateCmd, demoShape, demoCommand, logger } = input;
+
+  // Local helper: emit one structured sub-check observation (always — pass OR fail).
+  // This is ADDITIVE: existing failure events below are untouched.
+  type CheckId = 'initiative_gate' | 'demo_runs_clean' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
+  const emitSubCheck = (checkId: CheckId, pass: boolean, detail: string): void => {
+    logger.emit({
+      initiative_id: input.initiativeIdForEvent,
+      parent_event_id: input.parentEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'log',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: 'unifier.gate.sub-check',
+      metadata: { check_id: checkId, pass, detail },
+    });
+  };
 
   // 1. initiative_gate
   const initiativeGate = runShellGate(worktreePath, qualityGateCmd);
   if (!initiativeGate.passed) {
+    emitSubCheck(
+      'initiative_gate',
+      false,
+      initiativeGate.errored
+        ? `gate command errored: ${initiativeGate.stderr.slice(-400)}`
+        : `gate command failed (exit non-zero): ${initiativeGate.stderr.slice(-400)}`,
+    );
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
@@ -1537,11 +1561,19 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     });
     return false;
   }
+  emitSubCheck('initiative_gate', true, `gate command exited 0 (${qualityGateCmd.join(' ')})`);
 
   // 2. demo_runs_clean — excused for shape "none"
   if (demoShape !== 'none' && demoCommand && demoCommand.length > 0) {
     const demoGate = runShellGate(worktreePath, demoCommand);
     if (!demoGate.passed) {
+      emitSubCheck(
+        'demo_runs_clean',
+        false,
+        demoGate.errored
+          ? `demo command errored: ${demoGate.stderr.slice(-400)}`
+          : `demo command failed (exit non-zero): ${demoGate.stderr.slice(-400)}`,
+      );
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
@@ -1560,6 +1592,9 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       });
       return false;
     }
+    emitSubCheck('demo_runs_clean', true, `demo command exited 0 (${demoCommand.join(' ')})`);
+  } else {
+    emitSubCheck('demo_runs_clean', true, 'demo shape none — excused');
   }
 
   // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
@@ -1588,6 +1623,10 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     prBodyOk = prBodyHasGitTruthSections(body);
   }
   if (!demoOk || !prBodyOk) {
+    const failReasons: string[] = [];
+    if (!demoOk) failReasons.push(`demo.json errors: ${demoErrors.join('; ')}`);
+    if (!prBodyOk) failReasons.push('pr-description.md missing or lacks Why/What/How');
+    emitSubCheck('pr_self_contained', false, failReasons.join(' | '));
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
@@ -1607,11 +1646,14 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     });
     return false;
   }
+  emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
 
   // 4. branches_in_sync
   try {
     assertLocalRemoteSynced(worktreePath);
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    emitSubCheck('branches_in_sync', false, `branch divergence: ${errMsg}`);
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
       parent_event_id: input.parentEventId,
@@ -1623,11 +1665,12 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       message: 'unifier.gate.branches-not-in-sync',
       metadata: {
         failure_class: 'dev-loop-unifier-branch-divergence',
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg,
       },
     });
     return false;
   }
+  emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
 
   // 5. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
   //    `creates[]` paths must appear in `git diff --name-only main...HEAD`.
@@ -1640,6 +1683,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
     if (delivery.indeterminate) {
       // re-review #2: fail CLOSED — we could not verify the WIs delivered their
       // declared outputs, so do NOT open a PR that might silently omit work.
+      emitSubCheck('complete_delivery', false, `delivery check indeterminate: ${delivery.reason}`);
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
@@ -1654,6 +1698,8 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       return false;
     }
     if (delivery.missing.length > 0) {
+      const missingPaths = delivery.missing.map((m) => m.path).join(', ');
+      emitSubCheck('complete_delivery', false, `missing declared paths: ${missingPaths}`);
       logger.emit({
         initiative_id: input.initiativeIdForEvent,
         parent_event_id: input.parentEventId,
@@ -1670,6 +1716,7 @@ async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boo
       });
       return false;
     }
+    emitSubCheck('complete_delivery', true, 'all declared creates[] paths present in branch diff');
   }
 
   return true;
