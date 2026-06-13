@@ -1594,7 +1594,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
     }
     emitSubCheck('demo_runs_clean', true, `demo command exited 0 (${demoCommand.join(' ')})`);
   } else {
-    emitSubCheck('demo_runs_clean', true, 'demo shape none — excused');
+    emitSubCheck(
+      'demo_runs_clean',
+      true,
+      demoShape === 'none' ? 'demo shape none — excused' : 'demo command not configured — excused',
+    );
   }
 
   // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
