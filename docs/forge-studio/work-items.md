@@ -85,7 +85,45 @@ without it every staged run resumed-to-unifier, skipped architect+PM, and failed
 triggered a resume — pruned. M2 code is complete and verified by every M2-isolating gate; the
 remaining verify FAIL is a corpus-harness concern tracked for operator follow-up.
 
-## M3 — Flow engine (ADR-028)
+## M3 — Flow engine (ADR-028) ✅ COMPLETE 2026-06-13 (cutover landed; verify:cycle operator-gated)
+
+All seven WIs landed on `feat/studio-m3`. Full spine green: 932 tests, build clean, brain lint
+0 errors, studio lint 0 errors, `ui:journey` 48 frames 0 failures (Acts I–VI, all assertions pass).
+
+**Flow-engine cutover confirmed clean:** `runCycle` in `orchestrator/cycle.ts` delegates the full
+phase sequence to `runFlow` (loads `studio/flows/forge-cycle/flow.yaml` via `loadFlowDefinition`,
+calls `flow-runner.ts`'s DAG walk). The old hardcoded pm→dev→review→reflect sequence is gone; no
+dead remnant remains (cycle.ts post-cutover: ~919 LOC of helpers, no inline phase sequence).
+
+**M3 items landed:**
+- M3-1: ADR-028 finalised and accepted (9 decisions, node kinds, gate semantics, resume, budgets).
+- M3-2: `flow-runner.ts` DAG walk — phase functions unchanged as node executors; `runCycle` is now
+  a thin wrapper (load flow + call runFlow). The 8 dev-loop-close items (assertNonEmptyDelivery,
+  commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch,
+  synthetic-architect, resume-from-unifier) all ported to flow-runner as injected deps or pre/post
+  hooks. Full equivalence unit suite passes unchanged.
+- M3-3: Runner budgets + safety — `costCeilingUsd` (warn ≥70% → `flow.cost-warn`, stop ≥100% at
+  clean boundary → `flow.cost-ceiling-stop`, classify resumable); `wedgeKillMs` per-node
+  heartbeat-without-tool-progress kill + `phase.wedge-killed`; rate-limit `resetsAt` spawn gate.
+  Closes the 33h wedge gap.
+- M3-4: Run + gate write endpoints — `POST /api/runs` (start), `POST /api/runs/:id/resume`,
+  `POST /api/runs/:id/gates/:gateId` (generalised gate); `/api/verdict` + `/api/plan-verdict` as
+  thin aliases. Start CTA, resume button, cost gauge enabled in the flow monitor UI.
+- M3-5: Triggers v1 — on terminal state, fire `flow.triggers` by enqueueing the target flow's run.
+  `knowledge-ingest` seed flow (`studio/flows/knowledge-ingest/flow.yaml`) proves a non-cycle
+  single-node disposable flow runs end-to-end.
+- M3-6: Claim refusal — scheduler `runOne` refuses if project not contract-ready (`runPreflight`
+  hard clauses), flow invalid/locked (validateFlow + version lock), or zero-gate non-disposable.
+- M3-7: Harness beats (Act VI, beats 26–29) — start-run CTA (`knowledge-ingest`, no runs, 
+  `data-can-start="true"`); cost-ceiling-warn gauge (75% of $25 ceiling → amber fill);
+  gate control (gated run → "Open gate →" link to /review/<runId>); resume button (failed run →
+  `data-action="resume-run"` interactive). All soft-assert; no real cycles started.
+
+**Remaining gate: operator-gated `verify:cycle` engine-path equivalence run.** The routine tier
+must confirm the flow-runner path reproduces the M2 baseline behaviour (same fresh execution —
+architect synthetic → PM spawns → dev-loop runs — same `gate-too-loose` corpus artifact at f61d186).
+Until that run completes, the behavioural equivalence proof is unit-test-only. The parent task
+(M3-7) authorised the runner to execute this; it is queued for the next operator-present session.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
