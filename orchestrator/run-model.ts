@@ -1,0 +1,814 @@
+/**
+ * Forge Studio — Run Aggregator (M1-1, ADR-027/028)
+ *
+ * Pure aggregation: queue state + manifest + _logs/<cycleId>/events.jsonl
+ * + artifacts dir → a structured Run object for the Studio UI.
+ *
+ * No caching. Called per-request from the bridge (logs are small; note
+ * perf deferral to M3 if needed).
+ *
+ * Node↔phase mapping (hardcoded here; ADR-028 engine will own it in M3):
+ *   architect  → event phase 'architect'
+ *   pm         → event phase 'project-manager'
+ *   dev        → event phase 'developer-loop'
+ *   unifier    → event phase 'unifier'
+ *   review     → event phases 'review-loop' + 'closure' (gate-only node)
+ *   reflect    → event phase 'reflection'
+ *   (orchestrator / brain → ignored for phase status)
+ */
+
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { parseManifest } from './manifest.ts';
+import type { EventLogEntry } from './logging.ts';
+import type { QueueState } from './queue.ts';
+
+// ---------------------------------------------------------------------------
+// Exported types (binding API per M1 design §1)
+// ---------------------------------------------------------------------------
+
+export type RunStatus = 'planned' | 'active' | 'gated' | 'complete' | 'failed';
+export type RunPhaseStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';
+
+export type RunPhaseMeta = {
+  costUsd: number;
+  retries: number;
+  model?: string;
+  lastProgressAt?: string;          // ISO — UI computes "Nm ago"
+  wedged?: boolean;                 // no tool progress ≥30 min while active|retrying
+  iter?: number;
+  iterBudget?: number;
+  brainReads?: number;
+  delivered?: { files: number; insertions: number; commits: number };
+  gateChecks?: { id: string; pass: boolean; detail?: string }[];  // unifier node, M1-3 events
+};
+
+export type Run = {
+  id: string;                        // cycleId (or initiativeId for planned runs)
+  flowId: string;                    // 'forge-cycle'
+  initiativeId: string;
+  initiative: string;                // manifest title
+  status: RunStatus;
+  origin: 'architect' | 'human-directed';
+  costUsd: number;
+  startedAt?: string;
+  phases: Record<string, RunPhaseStatus>;       // keyed by FLOW NODE id
+  phaseMeta: Record<string, RunPhaseMeta>;
+  artifactsReady: Partial<Record<'plan' | 'work-items' | 'pr' | 'demo' | 'verdict' | 'reflection', 'view' | 'gate'>>;
+  gate?: string;                     // node id awaiting human ('review')
+  gateNote?: string;
+  failedAt?: string;                 // node id
+  failNote?: string;
+  workItems?: { id: string; status: RunPhaseStatus }[];
+};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const FLOW_ID = 'forge-cycle';
+
+/** Queue dir name → RunStatus */
+const QUEUE_STATE_TO_RUN_STATUS: Record<QueueState, RunStatus> = {
+  'pending': 'planned',
+  'in-flight': 'active',
+  'ready-for-review': 'gated',
+  'done': 'complete',
+  'failed': 'failed',
+};
+
+/**
+ * Event phase → flow node id.
+ * reflection → reflect, closure/review-loop → review, orchestrator/brain → ignored.
+ * ADR-028 engine will own this table in M3.
+ */
+const EVENT_PHASE_TO_NODE: Record<string, string | null> = {
+  architect: 'architect',
+  'project-manager': 'pm',
+  'developer-loop': 'dev',
+  unifier: 'unifier',
+  'review-loop': 'review',
+  closure: 'review',       // closure folds into review node
+  reflection: 'reflect',
+  orchestrator: null,      // ignored for phase status
+  brain: null,             // ignored for phase status
+};
+
+/** Progress event types that update lastProgressAt / determine wedge */
+const PROGRESS_EVENT_TYPES = new Set([
+  'tool_use', 'file_change', 'test_run', 'iteration',
+]);
+
+/** 30 minutes in ms */
+const WEDGE_THRESHOLD_MS = 30 * 60 * 1000;
+
+const QUEUE_DIR_NAMES: Record<QueueState, string> = {
+  'pending': 'pending',
+  'in-flight': 'in-flight',
+  'ready-for-review': 'ready-for-review',
+  'done': 'done',
+  'failed': 'failed',
+};
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function aggregateRun(args: {
+  root: string;
+  queueState: QueueState;
+  manifestPath: string;
+  nowMs: number;
+}): Run {
+  const { root, queueState, manifestPath, nowMs } = args;
+
+  // Parse manifest (throws on unreadable — caller wraps for listRuns)
+  const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
+  const runStatus = QUEUE_STATE_TO_RUN_STATUS[queueState];
+
+  // For planned runs there's no cycle log yet
+  if (runStatus === 'planned') {
+    return makePlannedRun(manifest);
+  }
+
+  // Resolve cycleId: prefer manifest.cycle_id, else find newest matching log dir
+  const cycleId = manifest.cycle_id ?? findNewestCycleId(root, manifest.initiative_id);
+
+  if (!cycleId) {
+    // No log dir found — treat as planned
+    return makePlannedRun(manifest);
+  }
+
+  const logDir = join(resolve(root), '_logs', cycleId);
+  const eventsPath = join(logDir, 'events.jsonl');
+  const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
+
+  return buildRun({ manifest, cycleId, events, logDir, runStatus, nowMs });
+}
+
+export function listRuns(root: string, nowMs: number): Run[] {
+  const runs: Run[] = [];
+  const allStates: QueueState[] = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
+
+  for (const state of allStates) {
+    const queueDir = join(resolve(root), '_queue', QUEUE_DIR_NAMES[state]);
+    if (!existsSync(queueDir)) continue;
+
+    let files: string[];
+    try {
+      files = readdirSync(queueDir).filter((f) => f.endsWith('.md') && !f.endsWith('.heartbeat'));
+    } catch {
+      continue;
+    }
+
+    for (const file of files) {
+      const manifestPath = join(queueDir, file);
+      try {
+        runs.push(aggregateRun({ root, queueState: state, manifestPath, nowMs }));
+      } catch (err) {
+        // Corrupt manifest: produce a degraded Run entry rather than crashing the list
+        const initId = file.replace(/\.md$/, '');
+        runs.push(makeDegradedRun(initId, state, manifestPath));
+      }
+    }
+  }
+
+  // Sort newest-first by startedAt (plans without startedAt go to end)
+  runs.sort((a, b) => {
+    if (!a.startedAt && !b.startedAt) return 0;
+    if (!a.startedAt) return 1;
+    if (!b.startedAt) return -1;
+    return b.startedAt.localeCompare(a.startedAt);
+  });
+
+  return runs;
+}
+
+// ---------------------------------------------------------------------------
+// Core build function
+// ---------------------------------------------------------------------------
+
+function buildRun(args: {
+  manifest: ReturnType<typeof parseManifest>;
+  cycleId: string;
+  events: EventLogEntry[];
+  logDir: string;
+  runStatus: RunStatus;
+  nowMs: number;
+}): Run {
+  const { manifest, cycleId, events, logDir, runStatus, nowMs } = args;
+
+  // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
+  const phases = deriveNodeStatuses(events, runStatus);
+
+  // --- Per-node metadata ---
+  const phaseMeta = deriveNodeMeta(events, manifest.iteration_budget, nowMs);
+
+  // --- Work items (dev node fanOut) ---
+  const workItems = deriveWorkItems(events);
+
+  // --- Reflection present flag (from events, not just files) ---
+  const hasReflectionEvents = events.some((e) => e.phase === 'reflection');
+
+  // --- Artifacts ---
+  const artifactsReady = deriveArtifacts(logDir, runStatus, manifest.initiative_id, hasReflectionEvents);
+
+  // --- Cost rollup ---
+  const costUsd = events.reduce((sum, e) => sum + (e.cost_usd ?? 0), 0);
+
+  // --- startedAt from first orchestrator start or first event ---
+  const startedAt = findStartedAt(events);
+
+  // --- Origin from cycle.start event or manifest ---
+  const origin = findOrigin(events) ?? manifest.origin;
+
+  // --- Gate ---
+  const gate = runStatus === 'gated' ? 'review' : undefined;
+  const gateNote = gate ? findGateNote(logDir) : undefined;
+
+  // --- Failure ---
+  const { failedAt, failNote } = findFailure(events);
+
+  // --- Initiative title from manifest body first heading ---
+  const initiative = extractTitle(manifest.body, manifest.initiative_id);
+
+  return {
+    id: cycleId,
+    flowId: FLOW_ID,
+    initiativeId: manifest.initiative_id,
+    initiative,
+    status: runStatus,
+    origin: origin as 'architect' | 'human-directed',
+    costUsd,
+    startedAt,
+    phases,
+    phaseMeta,
+    artifactsReady,
+    ...(gate !== undefined ? { gate, gateNote } : {}),
+    ...(failedAt !== undefined ? { failedAt, failNote } : {}),
+    ...(workItems.length > 0 ? { workItems } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase status derivation — ported from forge-ui/lib/phases.ts
+// ---------------------------------------------------------------------------
+
+type NodeAccum = {
+  firstAt: string;
+  lastAt: string;
+  ended: boolean;
+  errored: boolean;
+  endFailed: boolean;
+};
+
+function deriveNodeStatuses(
+  events: readonly EventLogEntry[],
+  runStatus: RunStatus,
+): Record<string, RunPhaseStatus> {
+  const cycleFailed = runStatus === 'failed';
+
+  const seen = new Map<string, NodeAccum>();
+
+  for (const e of events) {
+    const nodeId = eventToNodeId(e.phase);
+    if (nodeId === null) continue;
+
+    const acc = seen.get(nodeId) ?? {
+      firstAt: e.started_at,
+      lastAt: e.started_at,
+      ended: false,
+      errored: false,
+      endFailed: false,
+    };
+
+    acc.lastAt = e.started_at;
+
+    // Per-WI end events do NOT end the dev phase
+    const isPerWiEnd = e.event_type === 'end' && typeof e.metadata?.work_item_id === 'string';
+    if (e.event_type === 'end' && !isPerWiEnd) {
+      acc.ended = true;
+      if (endMetaIndicatesFailure(e.metadata)) acc.endFailed = true;
+    }
+
+    if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
+      acc.errored = true;
+    }
+
+    seen.set(nodeId, acc);
+  }
+
+  const result: Record<string, RunPhaseStatus> = {};
+
+  for (const [nodeId, acc] of seen) {
+    if (acc.ended) {
+      result[nodeId] = acc.endFailed ? 'failed' : 'complete';
+    } else if (acc.errored) {
+      result[nodeId] = cycleFailed ? 'failed' : 'retrying';
+    } else {
+      result[nodeId] = 'active';
+    }
+  }
+
+  return result;
+}
+
+function endMetaIndicatesFailure(meta: EventLogEntry['metadata']): boolean {
+  if (!meta) return false;
+  if (meta.resumed === true) return false;
+  if (meta.status === 'failed') return true;
+  if (typeof meta.failed === 'number' && meta.failed > 0) return true;
+  if (
+    typeof meta.work_item_count === 'number' && meta.work_item_count > 0 &&
+    typeof meta.complete === 'number' && meta.complete < meta.work_item_count
+  ) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Per-node metadata derivation
+// ---------------------------------------------------------------------------
+
+function deriveNodeMeta(
+  events: readonly EventLogEntry[],
+  iterationBudget: number,
+  nowMs: number,
+): Record<string, RunPhaseMeta> {
+  // Bucket events by nodeId
+  const buckets = new Map<string, EventLogEntry[]>();
+  for (const e of events) {
+    const nodeId = eventToNodeId(e.phase);
+    if (nodeId === null) continue;
+    if (!buckets.has(nodeId)) buckets.set(nodeId, []);
+    buckets.get(nodeId)!.push(e);
+  }
+
+  const result: Record<string, RunPhaseMeta> = {};
+
+  for (const [nodeId, nodeEvents] of buckets) {
+    result[nodeId] = buildNodeMeta(nodeId, nodeEvents, iterationBudget, nowMs);
+  }
+
+  return result;
+}
+
+function buildNodeMeta(
+  nodeId: string,
+  events: readonly EventLogEntry[],
+  iterationBudget: number,
+  nowMs: number,
+): RunPhaseMeta {
+  // Cost
+  const costUsd = events.reduce((sum, e) => sum + (e.cost_usd ?? 0), 0);
+
+  // Model (first event with metadata.model)
+  const model = findModel(events);
+
+  // Brain reads: pm.brain-query messages + brain-query event_type + tool_use reading brain/
+  const brainReads = countBrainReads(events);
+
+  // retries: gate.fail count for dev; error events for others
+  const retries = nodeId === 'dev'
+    ? countGateFails(events)
+    : events.filter((e) => e.event_type === 'error' && e.metadata?.expected_fail !== true).length;
+
+  // Progress tracking (lastProgressAt, wedged)
+  const { lastProgressAt, wedged } = computeProgress(events, nowMs);
+
+  // Iteration tracking (dev node)
+  const { iter, iterBudget } = computeIterations(nodeId, events, iterationBudget);
+
+  // Delivered (dev node — from dev-loop.delivered message)
+  const delivered = nodeId === 'dev' ? findDelivered(events) : undefined;
+
+  // GateChecks (unifier node — from unifier.gate.sub-check messages)
+  const gateChecks = nodeId === 'unifier' ? findGateChecks(events) : undefined;
+
+  const meta: RunPhaseMeta = {
+    costUsd,
+    retries,
+    wedged,
+  };
+
+  if (model !== undefined) meta.model = model;
+  if (lastProgressAt !== undefined) meta.lastProgressAt = lastProgressAt;
+  if (brainReads > 0) meta.brainReads = brainReads;
+  if (iter !== undefined) meta.iter = iter;
+  if (iterBudget !== undefined) meta.iterBudget = iterBudget;
+  if (delivered !== undefined) meta.delivered = delivered;
+  if (gateChecks !== undefined && gateChecks.length > 0) meta.gateChecks = gateChecks;
+
+  return meta;
+}
+
+function findModel(events: readonly EventLogEntry[]): string | undefined {
+  for (const e of events) {
+    if (typeof e.metadata?.model === 'string') return e.metadata.model as string;
+  }
+  return undefined;
+}
+
+function countBrainReads(events: readonly EventLogEntry[]): number {
+  let count = 0;
+  for (const e of events) {
+    if (e.event_type === 'brain-query') { count++; continue; }
+    if (e.message === 'pm.brain-query') { count++; continue; }
+    // tool_use events reading from brain/ paths
+    if (e.event_type === 'tool_use') {
+      const summary = (e.metadata?.input_summary as string | undefined) ?? '';
+      if (summary.includes('brain/')) count++;
+    }
+  }
+  return count;
+}
+
+function countGateFails(events: readonly EventLogEntry[]): number {
+  return events.filter((e) => e.message === 'gate.fail').length;
+}
+
+function computeProgress(
+  events: readonly EventLogEntry[],
+  nowMs: number,
+): { lastProgressAt?: string; wedged: boolean } {
+  let lastProgressAt: string | undefined;
+
+  for (const e of events) {
+    if (PROGRESS_EVENT_TYPES.has(e.event_type)) {
+      if (lastProgressAt === undefined || e.started_at > lastProgressAt) {
+        lastProgressAt = e.started_at;
+      }
+    }
+  }
+
+  if (lastProgressAt === undefined) {
+    return { wedged: false };
+  }
+
+  const ageMs = nowMs - new Date(lastProgressAt).getTime();
+  return { lastProgressAt, wedged: ageMs >= WEDGE_THRESHOLD_MS };
+}
+
+function computeIterations(
+  nodeId: string,
+  events: readonly EventLogEntry[],
+  iterationBudget: number,
+): { iter?: number; iterBudget?: number } {
+  if (nodeId !== 'dev') return {};
+
+  // iter: latest iteration event's iteration field (or ralph.end iterations)
+  let iter: number | undefined;
+
+  for (const e of events) {
+    if (e.event_type === 'iteration' && typeof e.iteration === 'number') {
+      if (iter === undefined || e.iteration > iter) {
+        iter = e.iteration;
+      }
+    }
+    if (e.message === 'ralph.end' && typeof e.metadata?.iterations === 'number') {
+      const ri = e.metadata.iterations as number;
+      if (iter === undefined || ri > iter) iter = ri;
+    }
+  }
+
+  return {
+    iter,
+    iterBudget: iter !== undefined ? iterationBudget : undefined,
+  };
+}
+
+function findDelivered(
+  events: readonly EventLogEntry[],
+): { files: number; insertions: number; commits: number } | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.message === 'dev-loop.delivered' && e.metadata) {
+      const m = e.metadata;
+      // Accept both files_changed and files
+      const files =
+        typeof m.files_changed === 'number' ? m.files_changed :
+        typeof m.files === 'number' ? m.files : 0;
+      const insertions = typeof m.insertions === 'number' ? m.insertions : 0;
+      const commits = typeof m.commits === 'number' ? m.commits : 0;
+      if (files > 0 || insertions > 0 || commits > 0) {
+        return { files, insertions, commits };
+      }
+    }
+  }
+  return undefined;
+}
+
+function findGateChecks(
+  events: readonly EventLogEntry[],
+): { id: string; pass: boolean; detail?: string }[] {
+  const checks: { id: string; pass: boolean; detail?: string }[] = [];
+  for (const e of events) {
+    if (e.message === 'unifier.gate.sub-check' && e.metadata) {
+      const m = e.metadata;
+      if (typeof m.check_id === 'string' && typeof m.pass === 'boolean') {
+        checks.push({
+          id: m.check_id as string,
+          pass: m.pass as boolean,
+          ...(typeof m.detail === 'string' ? { detail: m.detail as string } : {}),
+        });
+      }
+    }
+  }
+  return checks;
+}
+
+// ---------------------------------------------------------------------------
+// Work item derivation — ported from forge-ui/lib/wi-status.ts
+// ---------------------------------------------------------------------------
+
+function deriveWorkItems(
+  events: readonly EventLogEntry[],
+): { id: string; status: RunPhaseStatus }[] {
+  // Collect WI ids in order of first appearance
+  const wiOrder: string[] = [];
+  const wiIdSet = new Set<string>();
+
+  for (const e of events) {
+    const wiId = e.metadata?.work_item_id;
+    if (typeof wiId === 'string' && !wiIdSet.has(wiId)) {
+      wiOrder.push(wiId);
+      wiIdSet.add(wiId);
+    }
+  }
+
+  if (wiOrder.length === 0) return [];
+
+  // Only dev-phase events are relevant for per-WI status
+  const devEvents = events.filter((e) => eventToNodeId(e.phase) === 'dev');
+
+  const LIFECYCLE_TYPES = new Set(['start', 'iteration', 'tool_use', 'end', 'error']);
+
+  const buckets = new Map<string, EventLogEntry[]>();
+  for (const id of wiOrder) buckets.set(id, []);
+  for (const e of devEvents) {
+    const wiId = e.metadata?.work_item_id;
+    if (typeof wiId !== 'string') continue;
+    if (!LIFECYCLE_TYPES.has(e.event_type)) continue;
+    // Only events that match a known WI
+    const bucket = buckets.get(wiId);
+    if (bucket) bucket.push(e);
+  }
+
+  return wiOrder.map((id) => ({
+    id,
+    status: wiStatusFor(buckets.get(id) ?? []),
+  }));
+}
+
+function wiStatusFor(events: readonly EventLogEntry[]): RunPhaseStatus {
+  if (events.length === 0) return 'pending';
+
+  const lastEndIdx = lastIndexOfType(events, 'end');
+  const lastStartIdx = lastIndexOfType(events, 'start');
+
+  if (lastEndIdx >= 0 && lastEndIdx > lastStartIdx) {
+    const status = events[lastEndIdx].metadata?.status;
+    if (status === 'failed') return 'failed';
+    if (status === 'complete') return 'complete';
+    return hasErrorBetween(events, lastStartIdx, lastEndIdx) ? 'failed' : 'complete';
+  }
+
+  if (lastStartIdx >= 0) {
+    const erroredSinceStart = hasErrorBetween(events, lastStartIdx, events.length);
+    const reattempt = lastEndIdx >= 0 && lastEndIdx < lastStartIdx;
+    if (erroredSinceStart || reattempt) return 'retrying';
+  }
+  return 'active';
+}
+
+function lastIndexOfType(events: readonly EventLogEntry[], type: string): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].event_type === type) return i;
+  }
+  return -1;
+}
+
+function hasErrorBetween(events: readonly EventLogEntry[], afterIdx: number, beforeIdx: number): boolean {
+  for (let i = afterIdx + 1; i < beforeIdx; i++) {
+    if (events[i].event_type !== 'error') continue;
+    if (events[i].metadata?.expected_fail === true) continue;
+    return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Artifact detection
+// ---------------------------------------------------------------------------
+
+function deriveArtifacts(
+  logDir: string,
+  runStatus: RunStatus,
+  initiativeId: string,
+  hasReflectionEvents = false,
+): Run['artifactsReady'] {
+  const artifacts: Run['artifactsReady'] = {};
+  const artifactsDir = join(logDir, 'artifacts');
+  const mode = (runStatus === 'gated') ? 'gate' : 'view';
+
+  // plan: PLAN.html in artifacts/
+  if (existsSync(join(artifactsDir, 'PLAN.html'))) {
+    artifacts['plan'] = 'view'; // plan is always view-only
+  }
+
+  // work-items: work-items-snapshot/ non-empty
+  const wiSnapshotDir = join(logDir, 'work-items-snapshot');
+  if (existsSync(wiSnapshotDir)) {
+    try {
+      const files = readdirSync(wiSnapshotDir).filter((f) => f.endsWith('.md'));
+      if (files.length > 0) artifacts['work-items'] = 'view';
+    } catch { /* ignore */ }
+  }
+
+  // pr: pr-description.md
+  if (existsSync(join(logDir, 'pr-description.md'))) {
+    artifacts['pr'] = mode;
+  }
+
+  // demo: artifacts/demo.json
+  if (existsSync(join(artifactsDir, 'demo.json'))) {
+    artifacts['demo'] = mode;
+  }
+
+  // verdict: <initiativeId>.verdict-response.md in any queue dir (walk up)
+  const verdictFile = `${initiativeId}.verdict-response.md`;
+  const queueRoot = join(logDir, '..', '..', '_queue');
+  for (const state of ['done', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
+    if (existsSync(join(queueRoot, state, verdictFile))) {
+      artifacts['verdict'] = 'view';
+      break;
+    }
+  }
+
+  // reflection: present when reflector events exist in the event log
+  if (hasReflectionEvents) {
+    artifacts['reflection'] = 'view';
+  }
+
+  return artifacts;
+}
+
+// ---------------------------------------------------------------------------
+// Gate note
+// ---------------------------------------------------------------------------
+
+function findGateNote(logDir: string): string {
+  const prPath = join(logDir, 'pr-description.md');
+  if (existsSync(prPath)) {
+    try {
+      const content = readFileSync(prPath, 'utf8');
+      const match = content.match(/^#+ (.+)/m);
+      if (match) return match[1].trim();
+    } catch { /* ignore */ }
+  }
+  return 'Awaiting operator verdict';
+}
+
+// ---------------------------------------------------------------------------
+// Failure info
+// ---------------------------------------------------------------------------
+
+function findFailure(events: readonly EventLogEntry[]): {
+  failedAt?: string;
+  failNote?: string;
+} {
+  // Find failure_classification event
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.message === 'failure_classification' && e.metadata) {
+      const m = e.metadata;
+      const reason = typeof m.reason === 'string' ? m.reason : undefined;
+      // Find the node of the last error event before this classifier
+      const failedNode = findLastErrorNode(events, i);
+      return {
+        failedAt: failedNode ?? 'unifier',
+        failNote: reason,
+      };
+    }
+  }
+
+  // Fallback: last error event's node
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
+      const nodeId = eventToNodeId(e.phase);
+      return { failedAt: nodeId ?? 'unifier' };
+    }
+  }
+
+  return {};
+}
+
+function findLastErrorNode(events: readonly EventLogEntry[], beforeIdx: number): string | null {
+  for (let i = beforeIdx - 1; i >= 0; i--) {
+    if (events[i].event_type === 'error' && events[i].metadata?.expected_fail !== true) {
+      return eventToNodeId(events[i].phase);
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Misc helpers
+// ---------------------------------------------------------------------------
+
+function eventToNodeId(phase: string): string | null {
+  return EVENT_PHASE_TO_NODE[phase] ?? null;
+}
+
+function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
+  for (const e of events) {
+    if (e.phase === 'orchestrator' && e.event_type === 'start') return e.started_at;
+  }
+  return events[0]?.started_at;
+}
+
+function findOrigin(events: readonly EventLogEntry[]): string | undefined {
+  for (const e of events) {
+    if (e.message === 'cycle.start' && typeof e.metadata?.origin === 'string') {
+      return e.metadata.origin as string;
+    }
+  }
+  return undefined;
+}
+
+function extractTitle(body: string, fallback: string): string {
+  const match = body.match(/^#+ (.+)/m);
+  return match ? match[1].trim() : fallback;
+}
+
+function readEventsJsonl(path: string): EventLogEntry[] {
+  const content = readFileSync(path, 'utf8');
+  const entries: EventLogEntry[] = [];
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      entries.push(JSON.parse(trimmed) as EventLogEntry);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return entries;
+}
+
+/**
+ * Find the newest cycle log directory for this initiative.
+ * cycleId format: <ISO-dashes>_<initiativeId>
+ */
+function findNewestCycleId(root: string, initiativeId: string): string | null {
+  const logsRoot = join(resolve(root), '_logs');
+  if (!existsSync(logsRoot)) return null;
+
+  let candidates: string[];
+  try {
+    candidates = readdirSync(logsRoot)
+      .filter((d) => d.endsWith(`_${initiativeId}`));
+  } catch {
+    return null;
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Sort descending by dir name (ISO prefix ensures lexicographic = chronological)
+  candidates.sort((a, b) => b.localeCompare(a));
+  return candidates[0];
+}
+
+// ---------------------------------------------------------------------------
+// Degraded / planned run constructors
+// ---------------------------------------------------------------------------
+
+function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
+  return {
+    id: manifest.initiative_id,
+    flowId: FLOW_ID,
+    initiativeId: manifest.initiative_id,
+    initiative: extractTitle(manifest.body, manifest.initiative_id),
+    status: 'planned',
+    origin: manifest.origin as 'architect' | 'human-directed',
+    costUsd: 0,
+    phases: {},
+    phaseMeta: {},
+    artifactsReady: {},
+  };
+}
+
+function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
+  return {
+    id: initiativeId,
+    flowId: FLOW_ID,
+    initiativeId,
+    initiative: '(unreadable manifest)',
+    status: QUEUE_STATE_TO_RUN_STATUS[state],
+    origin: 'architect',
+    costUsd: 0,
+    phases: {},
+    phaseMeta: {},
+    artifactsReady: {},
+  };
+}
