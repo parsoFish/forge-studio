@@ -171,17 +171,18 @@ async function studioGet<T>(path: string, fallback: T): Promise<T> {
 /** Fetch all runs (optionally filtered by flowId). */
 export async function fetchRuns(flowId?: string): Promise<Run[]> {
   const qs = flowId ? `?flow=${encodeURIComponent(flowId)}` : '';
-  const body = await studioGet<{ runs: Run[] }>(`/api/runs${qs}`, { runs: [] });
-  return body.runs;
+  const body = await studioGet<{ runs: unknown[] }>(`/api/runs${qs}`, { runs: [] });
+  return (body.runs ?? []).map(parseRun);
 }
 
 /** Fetch a single run by id. */
 export async function fetchRun(id: string): Promise<Run | null> {
-  const body = await studioGet<{ run: Run } | null>(
+  const body = await studioGet<{ run: unknown } | null>(
     `/api/runs/${encodeURIComponent(id)}`,
     null,
   );
-  return body?.run ?? null;
+  if (!body?.run) return null;
+  return parseRun(body.run);
 }
 
 /** Fetch phase log lines for a run's node. */
@@ -196,6 +197,32 @@ export async function fetchPhaseLog(
     { lines: [] },
   );
   return body.lines;
+}
+
+/**
+ * Normalise a raw server Run, filling in any missing sub-shapes so
+ * downstream components never crash on an incomplete response.
+ */
+export function parseRun(raw: unknown): Run {
+  const r = (raw ?? {}) as Partial<Run>;
+  return {
+    id:            r.id            ?? '',
+    flowId:        r.flowId        ?? '',
+    initiativeId:  r.initiativeId  ?? '',
+    initiative:    r.initiative    ?? '',
+    status:        r.status        ?? 'planned',
+    origin:        r.origin        ?? 'human-directed',
+    costUsd:       r.costUsd       ?? 0,
+    startedAt:     r.startedAt,
+    phases:        r.phases        ?? {},
+    phaseMeta:     r.phaseMeta     ?? {},
+    artifactsReady: r.artifactsReady ?? {},
+    gate:          r.gate,
+    gateNote:      r.gateNote,
+    failedAt:      r.failedAt,
+    failNote:      r.failNote,
+    workItems:     r.workItems     ?? [],
+  };
 }
 
 /** Fetch all agent definitions. */
