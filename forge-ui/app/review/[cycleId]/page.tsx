@@ -62,7 +62,7 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
         <div style={{ color: '#8b949e', fontSize: 13 }}>Loading cycle…</div>
       ) : !cycle ? (
         <div style={{ color: '#8b949e', fontSize: 13 }}>
-          Cycle not found. <Link href="/" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
+          Cycle not found. <Link href="/dashboard" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>

@@ -66,7 +66,7 @@ export default function ArchitectSessionPage({
       ) : !session ? (
         <div style={{ color: '#8b949e', fontSize: 13 }}>
           Session not found (it may still be starting, or has been committed/rejected).{' '}
-          <Link href="/" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
+          <Link href="/dashboard" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
@@ -126,7 +126,7 @@ export default function ArchitectSessionPage({
                   Approved — manifests queued; the autonomous loop is building it now.
                 </span>
                 <Link
-                  href="/"
+                  href="/dashboard"
                   data-action="watch-it-build"
                   style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 600, color: '#fff', background: '#238636', border: '1px solid #30363d', borderRadius: 6, padding: '6px 14px', textDecoration: 'none' }}
                 >

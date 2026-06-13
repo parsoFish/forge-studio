@@ -181,4 +181,6 @@ V1 grew rich infrastructure: a job queue, a worker pool, a resource controller, 
 
 ## License
 
-TBD. v1 was BSL-1.1 → MIT; v2 will likely follow the same pattern.
+[GNU Affero General Public License v3.0 or later](./LICENSE) (AGPL-3.0-or-later).
+Network use is distribution: anyone who runs a modified forge as a service must
+make the modified source available to its users.

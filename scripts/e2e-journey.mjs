@@ -7,10 +7,11 @@
  *   Three human moments are the spine (architect interview / review demo / reflect);
  *   everything else is autonomous and every phase is costed.
  *
- * STRUCTURE: 23 beats across 3 acts, grounded in real session behaviour:
+ * STRUCTURE: 25 beats across 4 acts, grounded in real session behaviour:
  *   ACT I  — Live architecting  (P1 stall cameo, P2 free-text, P3 activity panel, P4 real cost)
  *   ACT II — Autonomous build   (fast-forwarded, honest running timer, TDD gate, WI dependency)
  *   ACT III— Review + teach     (PARTIAL→MET, new AC authored in-loop, reflect)
+ *   ACT IV — Studio monitor     (library page /; flow monitor /flows/forge-cycle; seeded gated run)
  *
  * No live LLM: the architect runner's turns + autonomous cycle are emulated by seeding
  * the same files/events the real phases write, grounded in real cycle event sequences.
@@ -33,7 +34,7 @@
  * architect session from a real project).
  */
 import { spawn, execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -512,7 +513,7 @@ async function main() {
 
     // ── BEAT 0: Title card ─────────────────────────────────────────────────────
     console.log('\n[beat 0] Title card');
-    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 30000 });
     await caption(page, 'Idea to merged PR — three human decisions.');
     await page.evaluate(() => {
@@ -1138,7 +1139,7 @@ async function main() {
     await sleep(ACT);
     await frame(page, 'beat21b-reflected', 'Beat 21 — feedback captured; reflector folds it into the brain');
     // Regression guard: reflection hex greens after tuning
-    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' }).catch(() => {});
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
     await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
     await sleep(ACT);
@@ -1156,8 +1157,215 @@ async function main() {
       check(false, `reflection hex greened after tuning feedback (got "${reflStatus}")`);
     }
 
-    // ── BEAT 22: End card ─────────────────────────────────────────────────────
-    console.log('\n[beat 22] End card');
+    // ── ACT IV: Studio ────────────────────────────────────────────────────────
+    // Seed a synthetic gated run so the library flow card shows a "needs you"
+    // chip and the monitor run rail shows the NEEDS YOU group.
+    // The main cycle (INIT/CYCLE_ID) is in `done` at this point, so we seed a
+    // separate INIT2/CYCLE_ID2 in `ready-for-review` — this is the lower-risk
+    // option vs restructuring beat order.
+    const INIT2 = `INIT-${DATE}-e2e-studio-demo`;
+    const STAMP2 = new Date(Date.now() + 1000).toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+    const CYCLE_ID2 = `${STAMP2}_${INIT2}`;
+    const CYCLE_LOG2 = join(FORGE_ROOT, '_logs', CYCLE_ID2);
+    let studioSeqBase = 0;
+    function studioEvent(phase, eventType, message, opts = {}) {
+      const { metadata = {}, skill = phase, ...extras } = opts;
+      mkdirSync(CYCLE_LOG2, { recursive: true });
+      studioSeqBase += 1;
+      appendFileSync(join(CYCLE_LOG2, 'events.jsonl'), JSON.stringify({
+        event_id: `EV_stu_${studioSeqBase}`, cycle_id: CYCLE_ID2, initiative_id: INIT2,
+        started_at: new Date().toISOString(), phase, skill,
+        event_type: eventType, input_refs: [], output_refs: [], message, metadata, ...extras,
+      }) + '\n');
+    }
+
+    // Write manifest for the gated run
+    mkdirSync(QDIR('ready-for-review'), { recursive: true });
+    writeFileSync(join(QDIR('ready-for-review'), `${INIT2}.md`), [
+      '---', `initiative_id: ${INIT2}`, `project: ${PROJECT}`,
+      `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`,
+      `cycle_id: ${CYCLE_ID2}`,
+      'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review',
+      'origin: architect',
+      '---', '',
+      '# Studio demo — gated run for Act IV',
+      '',
+      'Add a --verbose flag to the output formatter.',
+    ].join('\n'));
+
+    // Seed cycle events: all phases up to review, then leave gated
+    studioEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
+    studioEvent('architect', 'start', 'architect.start');
+    studioEvent('architect', 'end', 'architect.end', { cost_usd: 0.22 });
+    studioEvent('project-manager', 'start', 'pm phase start');
+    studioEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.15 });
+    studioEvent('developer-loop', 'start', 'dev-loop start');
+    studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.48 });
+    // Unifier with gate sub-checks (M1-3 structured event shape)
+    studioEvent('unifier', 'start', 'unifier.start', { skill: 'developer-unifier' });
+    for (const [checkId, pass, detail] of [
+      ['initiative_gate',    true,  'PLAN.md present'],
+      ['demo_runs_clean',    true,  'demo.json valid'],
+      ['pr_self_contained',  true,  'no cross-WI deps'],
+      ['branches_in_sync',   true,  'branch up-to-date'],
+      ['complete_delivery',  true,  'all WIs delivered'],
+    ]) {
+      studioEvent('unifier', 'log', 'unifier.gate.sub-check',
+        { skill: 'developer-unifier', metadata: { check_id: checkId, pass, detail } });
+    }
+    studioEvent('unifier', 'end', 'unifier.end', { skill: 'developer-unifier', cost_usd: 0.11 });
+    studioEvent('review-loop', 'start', 'review-loop start');
+    studioEvent('review-loop', 'log', 'reviewer.pr-opened');
+    // Seed artifacts dir (demo.json for artifactsReady)
+    const artifacts2 = join(CYCLE_LOG2, 'artifacts');
+    mkdirSync(artifacts2, { recursive: true });
+    writeFileSync(join(artifacts2, 'demo.json'), JSON.stringify({
+      title: 'Studio demo — gated run', project: PROJECT, initiativeId: INIT2,
+    }, null, 2));
+    writeFileSync(join(artifacts2, 'DEMO.html'), '<html><body>demo</body></html>');
+
+    // ── BEAT 22: Library page (`/`) ───────────────────────────────────────────
+    console.log('\n[beat 22] Studio library page');
+    await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'library: [data-page="library"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') ?? '(no data-page=library)');
+      check(false, `library: data-page-ready (got "${pr}")`);
+    }
+    await caption(page, 'The Studio library — flows, agents, projects, and knowledge in one screen.');
+    await sleep(ACT);
+    // 4 sections present with data-count
+    await countAtLeast(page, '[data-section="flows"]', 1, 'library: [data-section="flows"] present');
+    await countAtLeast(page, '[data-section="agents"]', 1, 'library: [data-section="agents"] present');
+    await countAtLeast(page, '[data-section="projects"]', 1, 'library: [data-section="projects"] present');
+    await countAtLeast(page, '[data-section="kbs"]', 1, 'library: [data-section="kbs"] present');
+    // Pulse panel present
+    const pulsePresent = await page.evaluate(
+      () => document.querySelector('[data-pulse-flows]') !== null,
+    );
+    check(pulsePresent, 'library: operator pulse panel ([data-pulse-flows]) present');
+    // flows section has ≥1 card (forge-cycle flow should appear)
+    await countAtLeast(page, '[data-section="flows"] [data-card-type="flow"]', 1, 'library: ≥1 flow card in flows section');
+    // agents section has ≥1 card
+    await countAtLeast(page, '[data-section="agents"] [data-card-type="agent"]', 1, 'library: ≥1 agent card in agents section');
+    // projects section has ≥1 card
+    await countAtLeast(page, '[data-section="projects"] [data-card-type="project"]', 1, 'library: ≥1 project card in projects section');
+    // kbs section has ≥1 card
+    await countAtLeast(page, '[data-section="kbs"] [data-card-type="kb"]', 1, 'library: ≥1 kb card in kbs section');
+    // data-count ≥1 on each section
+    const sectionCounts = await page.evaluate(() => {
+      const sections = ['flows', 'agents', 'projects', 'kbs'];
+      return Object.fromEntries(sections.map((s) => [
+        s,
+        parseInt(document.querySelector(`[data-section="${s}"]`)?.getAttribute('data-count') ?? '0', 10),
+      ]));
+    });
+    check(sectionCounts.flows >= 1, `library: flows section data-count ≥1 (got ${sectionCounts.flows})`);
+    check(sectionCounts.agents >= 1, `library: agents section data-count ≥1 (got ${sectionCounts.agents})`);
+    check(sectionCounts.projects >= 1, `library: projects section data-count ≥1 (got ${sectionCounts.projects})`);
+    check(sectionCounts.kbs >= 1, `library: kbs section data-count ≥1 (got ${sectionCounts.kbs})`);
+    await sleep(READ);
+    await frame(page, 'beat22-library', 'Beat 22 — Studio library: 4 sections (flows/agents/projects/kbs) with live data');
+
+    // ── BEAT 23: Monitor page (`/flows/forge-cycle`) ──────────────────────────
+    console.log('\n[beat 23] Flow monitor — /flows/forge-cycle');
+    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'monitor: [data-page="flow-monitor"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(no data-page=flow-monitor)');
+      check(false, `monitor: data-page-ready (got "${pr}")`);
+    }
+    await caption(page, 'The flow monitor — live topology of every agent phase with phase logs and gate sub-checks.');
+    await sleep(ACT);
+    // Run rail has ≥1 data-run-id card (the seeded gated run should be visible)
+    await countAtLeast(page, '[data-run-id]', 1, 'monitor: run rail shows ≥1 [data-run-id]');
+    // Topology has ≥6 data-mon-node hexes (forge-cycle flow has 6 nodes)
+    await countAtLeast(page, '[data-mon-node]', 6, 'monitor: topology renders ≥6 [data-mon-node] hexes');
+    await sleep(READ);
+    await frame(page, 'beat23-monitor', 'Beat 23 — flow monitor: run rail + topology with ≥6 phase hexes');
+
+    // Click the unifier hex → drawer opens
+    const unifierHex = page.locator('[data-node-id="unifier"]').first();
+    let drawerOpened = false;
+    if ((await unifierHex.count()) > 0) {
+      await unifierHex.click();
+      try {
+        await page.waitForFunction(
+          () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
+          null, { timeout: 8000 },
+        );
+        drawerOpened = true;
+        check(true, 'monitor: clicking unifier hex opens drawer (data-drawer-open="true")');
+      } catch {
+        const state = await page.evaluate(() =>
+          document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') ?? '(absent)');
+        check(false, `monitor: unifier hex opens drawer (got data-drawer-open="${state}")`);
+      }
+    } else {
+      check(false, 'monitor: [data-node-id="unifier"] hex present to click');
+    }
+
+    if (drawerOpened) {
+      await sleep(ACT);
+      // Gate sub-checks rendered (from the seeded unifier.gate.sub-check events):
+      // look for the "Gate sub-checks" section header text as a signal
+      const hasGateSection = await page.evaluate(() => {
+        const drawer = document.querySelector('#phase-drawer');
+        if (!drawer) return false;
+        return drawer.textContent?.includes('Gate sub-checks') ?? false;
+      });
+      check(hasGateSection, 'monitor: drawer shows Gate sub-checks section');
+      // Phase log section present and non-empty (even loading indicator counts)
+      const hasPhaseLog = await page.evaluate(() => {
+        const drawer = document.querySelector('#phase-drawer');
+        if (!drawer) return false;
+        return drawer.textContent?.includes('Phase log') ?? false;
+      });
+      check(hasPhaseLog, 'monitor: drawer shows Phase log section');
+      await frame(page, 'beat23b-monitor-drawer', 'Beat 23 — phase drawer open: gate sub-checks + phase log visible');
+
+      // Toggle stderr checkbox and assert drawer still renders
+      const stderrCheck = page.locator('#phase-drawer input[type="checkbox"]').first();
+      if ((await stderrCheck.count()) > 0) {
+        await stderrCheck.check();
+        await sleep(THINK);
+        const drawerStillOpen = await page.evaluate(() =>
+          document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true');
+        check(drawerStillOpen, 'monitor: drawer still renders after toggling stderr checkbox');
+        await stderrCheck.uncheck();
+      } else {
+        check(false, 'monitor: stderr checkbox present in drawer');
+      }
+    }
+
+    // Event tail data-tail-count present (may be 0 since this is a historical run;
+    // the attribute exists and is a number)
+    const tailCount = await page.evaluate(() => {
+      const el = document.querySelector('[data-tail-count]');
+      return el ? el.getAttribute('data-tail-count') : null;
+    });
+    check(tailCount !== null, `monitor: [data-tail-count] attribute present (got ${tailCount})`);
+    await sleep(READ);
+    await frame(page, 'beat23c-monitor-tail', 'Beat 23 — event tail [data-tail-count] attribute present');
+
+    // ── BEAT 24: End card ─────────────────────────────────────────────────────
+    console.log('\n[beat 24] End card');
     await page.evaluate(() => {
       let card = document.getElementById('demo-end-card');
       if (!card) {
@@ -1182,7 +1390,7 @@ async function main() {
       }
     });
     await caption(page, 'Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher.');
-    await frame(page, 'beat22-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
+    await frame(page, 'beat24-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
     await sleep(READ);
 
     console.log('\n[e2e] journey complete.');
@@ -1197,6 +1405,22 @@ async function main() {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
       try { rmSync(join(QDIR(q), `${INIT}.verdict-response.md`), { force: true }); } catch { /* */ }
     }
+    // ACT IV studio cleanup
+    try {
+      // CYCLE_LOG2 and INIT2 are defined inside try{}; access via the path pattern
+      const studioLogDirs = existsSync(join(FORGE_ROOT, '_logs'))
+        ? readdirSync(join(FORGE_ROOT, '_logs')).filter((d) => d.includes('e2e-studio-demo'))
+        : [];
+      for (const d of studioLogDirs) {
+        rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
+      }
+      for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+        const entries = existsSync(QDIR(q))
+          ? readdirSync(QDIR(q)).filter((f) => f.includes('e2e-studio-demo'))
+          : [];
+        for (const f of entries) rmSync(join(QDIR(q), f), { force: true });
+      }
+    } catch { /* studio cleanup best-effort */ }
     if (createdSid) {
       try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${createdSid}`), { recursive: true, force: true }); } catch { /* */ }
     }

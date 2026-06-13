@@ -4,6 +4,7 @@
   "description": "Idea machine for one human across many side projects. Autonomous multi-agent system.",
   "type": "module",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "bin": {
     "forge": "./bin/forge.mjs"
   },

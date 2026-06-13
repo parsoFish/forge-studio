@@ -82,7 +82,7 @@ export default function ReflectCyclePage({ params }: { params: { cycleId: string
 
             {done ? (
               <div data-section="reflect-done" style={{ border: '1px solid #2ea04366', borderRadius: 10, padding: '14px 18px', background: '#07140d', fontSize: 13, color: '#3fb950' }}>
-                Reflection captured — the reflector will fold it into the brain. <Link href="/" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
+                Reflection captured — the reflector will fold it into the brain. <Link href="/dashboard" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
               </div>
             ) : questions.length === 0 ? (
               <div style={{ border: '1px solid #30363d', borderRadius: 10, padding: '14px 18px', background: '#0d1117', fontSize: 13, color: '#8b949e' }}>
