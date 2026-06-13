@@ -1,8 +1,9 @@
 /**
- * No-drift lock for ADR-027 M0 ws-4: until M2 flips invocation files to
- * single-source, any change to either the hardcoded PhaseAgentSpec constants
- * or the SKILL.md frontmatter must update both sides. This test locks them
- * together by asserting deep equality between the two representations.
+ * Frontmatter-regression lock for ADR-027 M2 ws-3: invocation files now derive
+ * from SKILL.md (single source), so the M0 dual-source deep-equal became a
+ * tautology. This test replaces it: assert each derived spec deep-equals an
+ * EXPLICIT expected literal (the known-good values). Any frontmatter regression
+ * (wrong tool list, wrong tier/model, wrong phase key) will surface here.
  */
 
 import { test } from 'node:test';
@@ -12,32 +13,50 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveAgentSpec } from './derive.ts';
-import { pmAgentSpec } from '../pm-invocation.ts';
-import { devAgentSpec } from '../dev-invocation.ts';
-import { unifierAgentSpec } from '../unifier-invocation.ts';
-import { reflectorAgentSpec } from '../reflector-invocation.ts';
 
-// architect excluded: it has no PhaseAgentSpec constant until the
-// architect-runner migrates to the derived spec (roadmap M2-4, ADR-024 gap).
-// Update this list in M2 when architect gains its PhaseAgentSpec constant (M2-4).
-const CASES = [
-  ['skills/project-manager/SKILL.md', pmAgentSpec],
-  ['skills/developer-ralph/SKILL.md', devAgentSpec],
-  ['skills/developer-unifier/SKILL.md', unifierAgentSpec],
-  ['skills/reflector/SKILL.md', reflectorAgentSpec],
-] as const;
+// ---------------------------------------------------------------------------
+// Explicit expected-literal assertions (frontmatter-regression lock, M2-3)
+// ---------------------------------------------------------------------------
 
-for (const [skill, hardcoded] of CASES) {
-  test(`derived spec deep-equals hardcoded: ${hardcoded.phase}`, () => {
-    // No-drift lock (roadmap M0 ws-4): until M2 flips invocation files to
-    // single-source, any change to either side must update both.
-    assert.deepEqual(deriveAgentSpec(skill), {
-      ...hardcoded,
-      allowedTools: [...hardcoded.allowedTools],
-      disallowedTools: [...hardcoded.disallowedTools],
-    });
+test('deriveAgentSpec: project-manager spec matches known-good literal', () => {
+  assert.deepEqual(deriveAgentSpec('skills/project-manager/SKILL.md'), {
+    phase: 'project-manager',
+    skill: 'skills/project-manager/SKILL.md',
+    tier: 'sonnet',
+    allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit'],
+    disallowedTools: ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch'],
   });
-}
+});
+
+test('deriveAgentSpec: developer-loop spec matches known-good literal', () => {
+  assert.deepEqual(deriveAgentSpec('skills/developer-ralph/SKILL.md'), {
+    phase: 'developer-loop',
+    skill: 'skills/developer-ralph/SKILL.md',
+    tier: 'sonnet',
+    allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
+    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+  });
+});
+
+test('deriveAgentSpec: unifier spec matches known-good literal', () => {
+  assert.deepEqual(deriveAgentSpec('skills/developer-unifier/SKILL.md'), {
+    phase: 'unifier',
+    skill: 'skills/developer-unifier/SKILL.md',
+    tier: 'sonnet',
+    allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
+    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+  });
+});
+
+test('deriveAgentSpec: reflector spec matches known-good literal', () => {
+  assert.deepEqual(deriveAgentSpec('skills/reflector/SKILL.md'), {
+    phase: 'reflector',
+    skill: 'skills/reflector/SKILL.md',
+    tier: 'sonnet',
+    allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash'],
+    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Negative tests via in-memory tmp fixtures

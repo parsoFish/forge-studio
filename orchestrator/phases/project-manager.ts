@@ -15,6 +15,7 @@ import {
   PM_ALLOWED_TOOLS,
   PM_DISALLOWED_TOOLS,
   PM_MODEL,
+  PM_BRAIN_ACCESS,
   buildPmSystemPrompt,
   renderPmUserPrompt,
   tallyToolUse,
@@ -236,12 +237,16 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
-  // F-13 / F-19: enforce the brain-first mandate at the orchestrator. If the
-  // PM agent skipped brain-query entirely, fail fast with a distinct error
-  // (rather than continuing into validateWorkItemSet, where the
-  // brain-skip's downstream effect — incomplete frontmatter — surfaces
-  // instead, masking the real cause).
+  // F-13 / F-19: enforce the brain-first mandate at the orchestrator when the
+  // agent's brainAccess is 'mandatory'. If the PM agent skipped brain-query
+  // entirely, fail fast with a distinct error (rather than continuing into
+  // validateWorkItemSet, where the brain-skip's downstream effect — incomplete
+  // frontmatter — surfaces instead, masking the real cause).
+  // M2-3: gate is conditional on PM_BRAIN_ACCESS so a hypothetical advisory
+  // agent would not abort on 0 reads. PM IS mandatory, so behaviour is
+  // identical in production.
   if (
+    PM_BRAIN_ACCESS === 'mandatory' &&
     !recordBrainGateResult('project-manager', 'project-manager', toolUseSummary.brainReads, {
       initiativeId: input.initiativeId,
       logger,

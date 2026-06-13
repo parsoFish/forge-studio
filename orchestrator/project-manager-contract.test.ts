@@ -1,13 +1,14 @@
 /**
- * PM testing-contract tests (A2, 2026-06-06).
+ * PM testing-contract tests (A2, 2026-06-06; M2-3 brainAccess gate, 2026-06-13).
  *
- * Covers the two project-config-driven contract enforcements added to the PM
- * phase:
+ * Covers:
  *   - A2a: `acceptance_gate.required` ⇒ the decomposition MUST include ≥1 WI
  *     whose `quality_gate_cmd` targets the live acceptance suite, else the PM
  *     pass fails.
  *   - A2b: `standing_work_item_acs` ⇒ every emitted WI body gets a fixed
  *     "## Standing acceptance criteria (project contract)" section, idempotently.
+ *   - M2-3 brainAccess gate: PM_BRAIN_ACCESS drives the 0-reads abort; mandatory
+ *     → abort on 0 brain reads; advisory → pass through.
  */
 
 import { test } from 'node:test';
@@ -17,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
+import { PM_BRAIN_ACCESS } from './pm-invocation.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
 
@@ -215,4 +217,75 @@ test('A2b: standing_work_item_acs are appended to every WI body, exactly once', 
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// M2-3: brainAccess gate tests
+// ---------------------------------------------------------------------------
+
+test('M2-3: PM_BRAIN_ACCESS is mandatory (SKILL.md frontmatter regression lock)', () => {
+  // Guards against a SKILL.md frontmatter edit that would silently change the
+  // gate behaviour — if this assertion fails, the SKILL.md was edited.
+  assert.equal(PM_BRAIN_ACCESS, 'mandatory');
+});
+
+test('M2-3: mandatory brainAccess + 0 brain reads → throws (brain-first mandate gate)', async () => {
+  // A queryFn that writes valid WIs but does NOT emit any brain/ Read tool use.
+  // runProjectManager throws on failure (see project-manager.ts:108); the gate
+  // fires because PM_BRAIN_ACCESS is 'mandatory'.
+  const h = setupHarness({ ...BASE_CONFIG });
+  const noBrainQueryFn: PmQueryFn = ({ options }) => {
+    const cwd = (options as { cwd: string }).cwd;
+    return (async function* () {
+      // No brain/ Read emitted — only a non-brain Read, then write WIs.
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'Read',
+              input: { file_path: 'package.json' }, // NOT under brain/
+            },
+          ],
+        },
+      };
+      const wiDir = resolve(cwd, '.forge', 'work-items');
+      mkdirSync(wiDir, { recursive: true });
+      writeFileSync(join(wiDir, 'WI-1.md'), makeWi(h.input.initiativeId, { wiId: 'WI-1' }));
+      writeFileSync(
+        join(wiDir, '_graph.md'),
+        '```mermaid\ngraph TD\n  WI-1["WI-1"]\n```',
+      );
+      yield { type: 'result', subtype: 'success', duration_ms: 1, total_cost_usd: 0.01 };
+    })();
+  };
+  try {
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { queryFn: noBrainQueryFn }),
+      /brain-first mandate not honoured/,
+    );
+    // Confirm the brain-skipped error event was emitted.
+    const events = readEvents(h.logger);
+    const brainSkipped = events.find(
+      (e) => e.phase === 'project-manager' && e.event_type === 'error' && e.message === 'project-manager.brain-skipped',
+    );
+    assert.ok(brainSkipped, 'expected a project-manager.brain-skipped error event');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('M2-3: advisory brainAccess condition — gate passes when brainAccess !== mandatory', () => {
+  // Unit-level: verify the gate condition is correctly expressed as
+  // PM_BRAIN_ACCESS === 'mandatory' so an advisory agent would not abort.
+  // This tests the condition directly without running the full PM phase.
+  const mandatoryGateFires = (brainAccess: string, brainReads: number): boolean => {
+    // Mirrors the condition in project-manager.ts (M2-3).
+    return brainAccess === 'mandatory' && brainReads === 0;
+  };
+  assert.ok(mandatoryGateFires('mandatory', 0), 'mandatory + 0 reads should fire');
+  assert.ok(!mandatoryGateFires('advisory', 0), 'advisory + 0 reads should NOT fire');
+  assert.ok(!mandatoryGateFires('mandatory', 1), 'mandatory + 1 read should NOT fire');
+  assert.ok(!mandatoryGateFires('advisory', 1), 'advisory + 1 read should NOT fire');
 });

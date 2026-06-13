@@ -27,7 +27,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 import { parseWorkItem, type WorkItem } from './work-item.ts';
-import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
@@ -35,31 +36,16 @@ const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
 export type DevAllowedTool = 'Read' | 'Write' | 'Edit' | 'MultiEdit' | 'Bash' | 'Grep' | 'Glob';
 export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-export const DEV_ALLOWED_TOOLS: DevAllowedTool[] = [
-  'Read',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'Bash',
-  'Grep',
-  'Glob',
-];
-export const DEV_DISALLOWED_TOOLS: DevDisallowedTool[] = ['NotebookEdit', 'WebFetch', 'WebSearch'];
-
 /**
- * ADR 024 seam: the developer-loop (Ralph) as a declarative phase agent. It
- * composes the developer-ralph skill (the single source of its intent). The
- * orchestrator spawns it at the `sonnet` tier (implementation work — not
- * opus-level reasoning). Other phases adopt the same `PhaseAgentSpec` shape.
- * The orchestrator resolves the model from the tier.
+ * ADR 024 / M2-3: the developer-loop spec derived from SKILL.md (single
+ * source). The orchestrator resolves the model from the tier declared in the
+ * frontmatter.
  */
-export const devAgentSpec: PhaseAgentSpec = {
-  phase: 'developer-loop',
-  skill: 'skills/developer-ralph/SKILL.md',
-  tier: 'sonnet',
-  allowedTools: DEV_ALLOWED_TOOLS,
-  disallowedTools: DEV_DISALLOWED_TOOLS,
-};
+export const devAgentSpec = deriveAgentSpec('skills/developer-ralph/SKILL.md');
+
+/** Tool lists derived from the spec — exported for downstream consumers. */
+export const DEV_ALLOWED_TOOLS = devAgentSpec.allowedTools as DevAllowedTool[];
+export const DEV_DISALLOWED_TOOLS = devAgentSpec.disallowedTools as DevDisallowedTool[];
 
 /** Concrete model, derived from the spec's tier (single source: the spec). */
 export const DEV_MODEL = modelForSpec(devAgentSpec);

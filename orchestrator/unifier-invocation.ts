@@ -22,7 +22,8 @@ import { join, resolve } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
 import type { DemoShape } from './project-config.ts';
-import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
@@ -37,34 +38,15 @@ export type UnifierAllowedTool =
   | 'Glob';
 export type UnifierDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-export const UNIFIER_ALLOWED_TOOLS: UnifierAllowedTool[] = [
-  'Read',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'Bash',
-  'Grep',
-  'Glob',
-];
-export const UNIFIER_DISALLOWED_TOOLS: UnifierDisallowedTool[] = [
-  'NotebookEdit',
-  'WebFetch',
-  'WebSearch',
-];
 /**
- * ADR 024 seam (first concrete phase): the unifier as a declarative phase
- * agent — it COMPOSES the developer-unifier skill (the source of its intent),
- * the orchestrator spawns it clean at the `sonnet` tier (packaging/unify work,
- * not opus-justifying). Other phases adopt the same `PhaseAgentSpec` shape
- * incrementally. The orchestrator resolves the model from the tier.
+ * ADR 024 / M2-3: the unifier spec derived from SKILL.md (single source).
+ * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
-export const unifierAgentSpec: PhaseAgentSpec = {
-  phase: 'unifier',
-  skill: 'skills/developer-unifier/SKILL.md',
-  tier: 'sonnet',
-  allowedTools: UNIFIER_ALLOWED_TOOLS,
-  disallowedTools: UNIFIER_DISALLOWED_TOOLS,
-};
+export const unifierAgentSpec = deriveAgentSpec('skills/developer-unifier/SKILL.md');
+
+/** Tool lists derived from the spec — exported for downstream consumers. */
+export const UNIFIER_ALLOWED_TOOLS = unifierAgentSpec.allowedTools as UnifierAllowedTool[];
+export const UNIFIER_DISALLOWED_TOOLS = unifierAgentSpec.disallowedTools as UnifierDisallowedTool[];
 
 /** Concrete model, derived from the spec's tier (single source: the spec). */
 export const UNIFIER_MODEL = modelForSpec(unifierAgentSpec);
