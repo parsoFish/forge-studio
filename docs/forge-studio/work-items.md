@@ -173,6 +173,19 @@ All six WIs landed on `feat/studio-m5` (1027 tests, build clean, brain lint 0 er
 brain filesystem walk, gray-matter, wiki-link resolution), `/knowledge` force-graph viewer hand-rolled
 (SVG spring sim, no new dep), guidance loop (POST → `_guidance/*.md` → amber-diamond node → cleanup),
 scope guard (checkCategoryScope in brain-lint), KB create endpoint, reflection→KB links.
+Post-review hardening: KB-create writes kb.yaml via js-yaml dump (YAML-injection safe), guidance text
+8 KiB cap, reflection deeplink lands on the node (`/knowledge?node=<slug>` + a resolve-node endpoint),
+`cli/bridge-studio.ts` split into `bridge-studio-kbs.ts` + `bridge-studio-writes.ts` (all <800 LOC).
+1036 tests. M5-4 also caught + fixed 2 mis-routed brain themes (antipatterns moved forge-dev→cycles).
+
+**verify:cycle — RAN 2026-06-13, GATE FAIL on the orthogonal corpus artifact (NOT M5).** The cycle
+ran fresh through the engine (claim → PM → dev) but the dev agent hit `WI-1 dev failed · iters=0 ·
+gate-too-loose` ($0.58) — the same iter-0 hollow-pass corpus artifact as the M2 baseline (the dev
+agent is non-deterministic: M3/M4 runs did real work and went green, this run + M2 hit the hollow-pass
+guard). The cycle died at the dev gate before reflection ran, so M5's reflector change (best-effort
+`reflection.json` write) wasn't even exercised. **M5 code is not implicated** — the flow-engine
+faithfully ran claim→PM→dev as in every prior verify; the FAIL is the documented dev-agent corpus
+non-determinism, orthogonal to M5.
 
 **Act VIII (beats 32–33) confirmed live against the real brain:**
 - browse-KB: 104 nodes, 200 edges from the `cycles` brain (67 themes + index/raw nodes); all layer
