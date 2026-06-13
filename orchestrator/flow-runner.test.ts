@@ -55,9 +55,6 @@ function makeCallTracker() {
 /** Build a complete FlowRunnerDeps set where all fns are call-tracking spies. */
 function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
   return {
-    emitSyntheticArchitect: (_input, _logger) => {
-      tracker.calls.push('emitSyntheticArchitect');
-    },
     runProjectManager: async (_input, _logger) => {
       tracker.calls.push('runProjectManager');
     },
@@ -82,7 +79,7 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     enforceDevLoopCloseInvariant: (_wt, _logger, _id) => { /* no-op */ },
     assertNonEmptyDelivery: (_outcome, _id, _wt, _logger) => { /* no-op */ },
     enforceFinalCiGate: (_input, _logger) => { /* no-op */ },
-    rebaseForResume: (_input, _logger) => { /* no-op */ },
+    rebaseForResume: (_input, _logger) => { tracker.calls.push('rebaseForResume'); },
   };
 }
 
@@ -127,7 +124,7 @@ function makeForgeCycleFlow(): FlowDefinition {
 // ---------------------------------------------------------------------------
 
 describe('flow-runner full run', () => {
-  it('calls executors in order: emitSyntheticArchitect → runProjectManager → runDeveloperLoop → openPrInline → runClosure → runReflector', async () => {
+  it('calls executors in order: runProjectManager → runDeveloperLoop → openPrInline → runClosure → runReflector (architect node is a silent marker)', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
     const input = makeInput();
@@ -150,15 +147,16 @@ describe('flow-runner full run', () => {
 
     await runFlow({ flow, input, logger, deps });
 
-    // Correct sequence (unifier is a marker, not in call list)
+    // Correct sequence: architect node is a silent marker — no dep call.
+    // Unifier is also a marker (called inside runDeveloperLoop). Neither appears here.
     assert.deepEqual(tracker.calls, [
-      'emitSyntheticArchitect',
       'runProjectManager',
       'runDeveloperLoop',
       'openPrInline',
       'runClosure',
       'runReflector',
     ]);
+    assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep — it is runCycle\'s job');
 
     // Every executor received the same CycleInput object
     for (const seen of seenInputs) {
@@ -186,7 +184,7 @@ describe('flow-runner full run', () => {
 // ---------------------------------------------------------------------------
 
 describe('flow-runner resumeFrom=unifier', () => {
-  it('skips runProjectManager but still calls runDeveloperLoop', async () => {
+  it('skips runProjectManager but still calls runDeveloperLoop, rebase runs before dev-loop', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
     const input = makeInput({ resumeFrom: 'unifier' });
@@ -197,6 +195,20 @@ describe('flow-runner resumeFrom=unifier', () => {
 
     assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on unifier resume');
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'runDeveloperLoop must still be called on unifier resume');
+
+    // Highest-risk resume step: rebase must have been called AND must precede the dev-loop.
+    assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on unifier resume');
+    assert.ok(
+      tracker.calls.indexOf('rebaseForResume') < tracker.calls.indexOf('runDeveloperLoop'),
+      'rebaseForResume must execute before runDeveloperLoop',
+    );
+
+    // The pm node emits the skip event into the logger.
+    const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string }>;
+    assert.ok(
+      events.some((e) => e.message === 'flow-runner.pm-skipped-resume'),
+      'logger must capture a flow-runner.pm-skipped-resume event on unifier resume',
+    );
   });
 
   it('still calls openPrInline, runClosure, runReflector on unifier resume', async () => {
@@ -261,15 +273,16 @@ describe('flow-runner with real forge-cycle.yaml', () => {
 
     await runFlow({ flow, input, logger, deps });
 
-    // Must produce the full sequence — proving the real definition is correct
+    // Must produce the full sequence — proving the real definition is correct.
+    // The architect node is a silent marker: no dep call, so it does NOT appear here.
     assert.deepEqual(tracker.calls, [
-      'emitSyntheticArchitect',
       'runProjectManager',
       'runDeveloperLoop',
       'openPrInline',
       'runClosure',
       'runReflector',
-    ], 'real forge-cycle.yaml must produce the full executor sequence in order');
+    ], 'real forge-cycle.yaml must produce the full executor sequence in order (architect node is a silent marker)');
+    assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep on real flow');
   });
 
   it('loads the real forge-cycle flow and skips pm on unifier resume', async () => {

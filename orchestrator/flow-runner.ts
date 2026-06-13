@@ -33,7 +33,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { EventLogger } from './logging.ts';
-import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
+import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
 import type { ClosureResult } from './phases/closure.ts';
 import type { FlowDefinition, FlowNode } from './studio/types.ts';
 
@@ -49,7 +49,6 @@ import {
   enforceDevLoopCloseInvariant,
   enforceFinalCiGate,
   preservingForgeScratch,
-  emitSyntheticArchitectEvents,
 } from './cycle.ts';
 
 // ---------------------------------------------------------------------------
@@ -62,13 +61,6 @@ import {
  * touching the filesystem or spawning agents.
  */
 export type FlowRunnerDeps = {
-  /**
-   * Emits synthetic architect start/end events into the cycle log.
-   * The architect ran out-of-cycle; these events make the UI reflect the
-   * phase as complete. Reads manifest fields for real cost/duration/sessionId.
-   */
-  emitSyntheticArchitect: (input: CycleInput, logger: EventLogger) => void;
-
   runProjectManager: (input: CycleInput, logger: EventLogger) => Promise<void>;
 
   runDeveloperLoop: (
@@ -199,21 +191,6 @@ function classifyNode(node: FlowNode): NodeKind {
 // ---------------------------------------------------------------------------
 
 /**
- * Item 2: the architect node in the DAG is a marker — `runCycle` emits the
- * real synthetic architect events (via `emitSyntheticArchitectEvents`) before
- * calling `runFlow`, so that dry-run paths also produce them. The dep here is
- * a no-op by default; tests override it to assert it is NOT called (the
- * architect events come from runCycle's outer scaffolding, not the DAG walk).
- *
- * `emitSyntheticArchitectEvents` is exported from cycle.ts for callers that
- * need to emit outside the flow (e.g., a standalone dry-run harness).
- */
-function defaultEmitSyntheticArchitect(_input: CycleInput, _logger: EventLogger): void {
-  // no-op: runCycle already emitted architect events before calling runFlow.
-  void emitSyntheticArchitectEvents; // keep import alive for external callers
-}
-
-/**
  * Item 3 (ported from cycle.ts:176-209): rebase the preserved branch onto
  * main for a unifier resume, preserving .forge scratch dirs across the rebase.
  */
@@ -243,7 +220,6 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
 }
 
 const DEFAULT_DEPS: FlowRunnerDeps = {
-  emitSyntheticArchitect: defaultEmitSyntheticArchitect,
   runProjectManager,
   runDeveloperLoop,
   openPrInline,
@@ -289,7 +265,7 @@ export async function runFlow({
   logger,
   deps: depOverrides,
 }: FlowRunArgs): Promise<{
-  cycleOutcome: 'ready-for-review' | 'merged' | 'pr-open';
+  cycleOutcome: CycleOutcome;
   reflectionStatus: string;
   lintStatus: string;
 }> {
@@ -300,7 +276,7 @@ export async function runFlow({
 
   // Track outcome state — mirrors cycle.ts. 'failed' never appears here:
   // failures throw and are caught by runCycle's outer try/catch.
-  let cycleOutcome: 'ready-for-review' | 'merged' | 'pr-open' = 'ready-for-review';
+  let cycleOutcome: CycleOutcome = 'ready-for-review';
   let reflectionStatus = 'skipped';
   let lintStatus = 'skipped';
   let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
@@ -314,8 +290,9 @@ export async function runFlow({
 
     switch (kind) {
       case 'architect': {
-        // Item 2: pre-satisfied gate — emit real synthetic architect events
-        deps.emitSyntheticArchitect(input, logger);
+        // Item 2: pure marker — runCycle emitted the real synthetic architect
+        // events (emitSyntheticArchitectEvents) before calling runFlow. The DAG
+        // walk records this node as visited but performs no emission itself.
         break;
       }
 
@@ -393,7 +370,7 @@ export async function runFlow({
         // branch is CI-clean before we open the PR.
         reviewerOutcome = await deps.openPrInline(input, logger);
         closure = await deps.runClosure(input, logger, reviewerOutcome);
-        cycleOutcome = closure.outcome as 'ready-for-review' | 'merged' | 'pr-open';
+        cycleOutcome = closure.outcome as CycleOutcome;
         break;
       }
 
