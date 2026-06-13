@@ -1,0 +1,523 @@
+/**
+ * Tests for the Studio bridge routes (M1-2).
+ *
+ * Spins up a real bridge against a tmp forge-root fixture with:
+ *   - a synthetic _queue/done/<init>.md manifest
+ *   - a matching _logs/<cycleId>/events.jsonl (minimal synthetic events)
+ *   - studio/ directory (flows, catalog, projects.yaml)
+ *   - brain/ directory with kb.yaml files
+ *   - skills/ directory with one stub studio SKILL.md
+ *
+ * All assertions check payload shape and HTTP status codes.
+ * Non-studio URLs return false (bridge returns 404/falls through).
+ */
+
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { startBridge } from './ui-bridge.ts';
+import { handleStudioRoutes } from './bridge-studio.ts';
+
+// ---------------------------------------------------------------------------
+// Fixture helpers
+// ---------------------------------------------------------------------------
+
+const CYCLE_ID = '2026-05-30T22-45-07_INIT-TEST-001';
+const INIT_ID = 'INIT-TEST-001';
+
+/** Minimal manifest in YAML frontmatter format */
+function makeManifest(options: { initId: string } = { initId: INIT_ID }): string {
+  return [
+    '---',
+    `initiative_id: ${options.initId}`,
+    'project: test-project',
+    'project_repo_path: /tmp/test-project',
+    'worktree_path: /tmp/worktrees/test',
+    'origin: architect',
+    'created_at: 2026-05-30T22:45:00.000Z',
+    'iteration_budget: 5',
+    'cost_budget_usd: 2.0',
+    '---',
+    '',
+    '# Test initiative title',
+    '',
+    'Some body text.',
+  ].join('\n');
+}
+
+/** Minimal EventLogEntry JSONL lines for a simple complete run */
+function makeEventsJsonl(cycleId: string, initId: string): string {
+  const baseEvent = {
+    cycle_id: cycleId,
+    initiative_id: initId,
+    input_refs: [],
+    output_refs: [],
+  };
+
+  const events = [
+    {
+      ...baseEvent,
+      event_id: 'EV_001',
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'start',
+      started_at: '2026-05-30T22:45:07.000Z',
+      message: 'cycle.start',
+      metadata: { origin: 'architect' },
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_002',
+      phase: 'architect',
+      skill: 'architect',
+      event_type: 'start',
+      started_at: '2026-05-30T22:45:10.000Z',
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_003',
+      phase: 'architect',
+      skill: 'architect',
+      event_type: 'tool_use',
+      started_at: '2026-05-30T22:45:11.000Z',
+      metadata: { tool_name: 'Read' },
+      cost_usd: 0.001,
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_004',
+      phase: 'architect',
+      skill: 'architect',
+      event_type: 'error',
+      started_at: '2026-05-30T22:45:12.000Z',
+      message: 'Transient error',
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_005',
+      phase: 'architect',
+      skill: 'architect',
+      event_type: 'end',
+      started_at: '2026-05-30T22:45:15.000Z',
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_006',
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'start',
+      started_at: '2026-05-30T22:46:00.000Z',
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_007',
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'end',
+      started_at: '2026-05-30T22:46:30.000Z',
+    },
+    {
+      ...baseEvent,
+      event_id: 'EV_008',
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'end',
+      started_at: '2026-05-30T23:00:00.000Z',
+      message: 'cycle.end',
+      metadata: { status: 'complete' },
+    },
+  ];
+
+  return events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+}
+
+/** Minimal studio SKILL.md with required frontmatter for listAgentDefinitions */
+function makeSkillMd(): string {
+  return [
+    '---',
+    'name: Test Agent',
+    'description: A test agent for unit tests.',
+    'phase: architect',
+    'purpose: Testing purposes only.',
+    'brainAccess: advisory',
+    'interactivity: none',
+    'composition:',
+    '  skills: []',
+    '  tools: []',
+    '  mcps: []',
+    '  hooks: []',
+    'runtime:',
+    '  sdk: claude-code',
+    '  strategy: fixed',
+    '  model: claude-sonnet-4-5',
+    'allowed-tools: []',
+    'disallowed-tools: []',
+    'budgets: {}',
+    '---',
+    '',
+    '# Test Agent',
+    '',
+    'Agent body text.',
+  ].join('\n');
+}
+
+/** Minimal flow.yaml */
+function makeFlowYaml(flowId = 'forge-cycle'): string {
+  return [
+    `id: ${flowId}`,
+    `name: ${flowId}`,
+    'version: 1',
+    'goal: Test flow.',
+    'project: null',
+    'kb: null',
+    'costCeilingUsd: 5',
+    'origin: architect',
+    'nodes:',
+    '  - id: architect',
+    '    agent: test-agent',
+    '  - id: pm',
+    '    agent: test-agent',
+    '  - id: review',
+    '    gate: human',
+    'edges:',
+    '  - from: architect',
+    '    to: pm',
+    '    artifact: PLAN.md',
+    '  - from: pm',
+    '    to: review',
+    '    artifact: work-items',
+    'triggers: []',
+  ].join('\n');
+}
+
+/** Minimal catalog.yaml */
+function makeCatalogYaml(): string {
+  return [
+    'sdks:',
+    '  - id: claude-code',
+    '    name: Claude Code',
+    '    available: true',
+    'models:',
+    '  - id: claude-sonnet-4-5',
+    '    name: Claude Sonnet 4.5',
+    '    sdk: claude-code',
+    '    tier: standard',
+    'tools: []',
+    'mcps: []',
+    'hooks: []',
+  ].join('\n');
+}
+
+/** Minimal projects.yaml */
+function makeProjectsYaml(): string {
+  return [
+    'projects:',
+    '  - id: test-project',
+    '    path: projects/test-project',
+  ].join('\n');
+}
+
+/** Minimal kb.yaml */
+function makeKbYaml(id: string, name: string): string {
+  return [
+    `id: ${id}`,
+    `name: ${name}`,
+    'scope: agent-integration',
+    `desc: Test KB ${name}.`,
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Global fixtures
+// ---------------------------------------------------------------------------
+
+let forgeRoot: string;
+let bridgeUrl: string;
+let closeBridge: () => Promise<void>;
+
+before(async () => {
+  // Create tmp forge-root
+  forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-'));
+
+  // -- _queue/done/<init>.md --
+  mkdirSync(join(forgeRoot, '_queue', 'done'), { recursive: true });
+  writeFileSync(join(forgeRoot, '_queue', 'done', `${INIT_ID}.md`), makeManifest());
+
+  // -- _logs/<cycleId>/events.jsonl --
+  mkdirSync(join(forgeRoot, '_logs', CYCLE_ID), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_logs', CYCLE_ID, 'events.jsonl'),
+    makeEventsJsonl(CYCLE_ID, INIT_ID),
+  );
+
+  // -- skills/test-agent/SKILL.md --
+  mkdirSync(join(forgeRoot, 'skills', 'test-agent'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', 'test-agent', 'SKILL.md'), makeSkillMd());
+
+  // -- studio/flows/forge-cycle/flow.yaml --
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-cycle'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'flows', 'forge-cycle', 'flow.yaml'), makeFlowYaml());
+
+  // -- studio/catalog.yaml --
+  writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), makeCatalogYaml());
+
+  // -- studio/projects.yaml --
+  writeFileSync(join(forgeRoot, 'studio', 'projects.yaml'), makeProjectsYaml());
+
+  // -- brain/forge-dev/kb.yaml + themes/ --
+  mkdirSync(join(forgeRoot, 'brain', 'forge-dev', 'themes'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), makeKbYaml('forge-dev', 'Forge Engineering'));
+  writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'themes', 'theme-1.md'), '# Theme 1\n');
+  writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'themes', 'theme-2.md'), '# Theme 2\n');
+
+  // -- brain/cycles/kb.yaml --
+  mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'brain', 'cycles', 'kb.yaml'), makeKbYaml('cycles', 'Cycle Patterns'));
+
+  // Start bridge
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const result = await startBridge({ forgeRoot, port: 0 });
+  bridgeUrl = result.url;
+  closeBridge = result.close;
+});
+
+after(async () => {
+  if (closeBridge) await closeBridge();
+  if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// /api/runs
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs returns runs array with the seeded complete run', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { runs: Array<{ id: string; status: string }> };
+  assert.ok(Array.isArray(body.runs), 'runs must be an array');
+  const run = body.runs.find((r) => r.id === CYCLE_ID);
+  assert.ok(run, 'seeded run must appear in the list');
+  assert.equal(run!.status, 'complete');
+});
+
+test('GET /api/runs?flow=forge-cycle returns only forge-cycle runs', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs?flow=forge-cycle`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { runs: Array<{ flowId: string }> };
+  assert.ok(Array.isArray(body.runs));
+  for (const r of body.runs) {
+    assert.equal(r.flowId, 'forge-cycle');
+  }
+});
+
+test('GET /api/runs?flow=nonexistent-flow returns empty array', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs?flow=nonexistent-flow`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { runs: unknown[] };
+  assert.deepEqual(body.runs, []);
+});
+
+// ---------------------------------------------------------------------------
+// /api/runs/<id>
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<id> returns the seeded run', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs/${encodeURIComponent(CYCLE_ID)}`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { run: { id: string; status: string; initiative: string; costUsd: number } };
+  assert.equal(body.run.id, CYCLE_ID);
+  assert.equal(body.run.status, 'complete');
+  assert.equal(body.run.initiative, 'Test initiative title');
+  assert.ok(typeof body.run.costUsd === 'number');
+});
+
+test('GET /api/runs/<bad-id> returns 404 with error', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs/nonexistent-run-id-xyz`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.ok(typeof body.error === 'string');
+});
+
+// ---------------------------------------------------------------------------
+// /api/runs/<id>/phases/<node>/log
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<id>/phases/architect/log returns lines array', async () => {
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodeURIComponent(CYCLE_ID)}/phases/architect/log`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lines: Array<{ at: string; kind: string; text: string }> };
+  assert.ok(Array.isArray(body.lines), 'lines must be an array');
+  // Should have at least start + tool_use + error + end events for architect
+  assert.ok(body.lines.length >= 1, 'should have at least one line');
+  // Every line must have at/kind/text
+  for (const line of body.lines) {
+    assert.ok(typeof line.at === 'string', 'at must be string');
+    assert.ok(['info', 'tool', 'cost', 'stderr', 'retry'].includes(line.kind), `unexpected kind: ${line.kind}`);
+    assert.ok(typeof line.text === 'string', 'text must be string');
+  }
+});
+
+test('GET /api/runs/<id>/phases/architect/log classifies tool_use as "tool" kind', async () => {
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodeURIComponent(CYCLE_ID)}/phases/architect/log`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lines: Array<{ kind: string; text: string }> };
+  const toolLine = body.lines.find((l) => l.kind === 'tool');
+  assert.ok(toolLine, 'should have at least one tool line');
+  assert.match(toolLine!.text, /Read/, 'tool text should include tool name');
+});
+
+test('GET /api/runs/<id>/phases/architect/log?stderr=1 filters to stderr lines only', async () => {
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodeURIComponent(CYCLE_ID)}/phases/architect/log?stderr=1`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lines: Array<{ kind: string }> };
+  assert.ok(Array.isArray(body.lines));
+  // After filtering, every remaining line must be stderr
+  for (const line of body.lines) {
+    assert.equal(line.kind, 'stderr', `expected stderr, got ${line.kind}`);
+  }
+  // Fixture has 1 error event for architect — should have exactly 1 stderr line
+  assert.equal(body.lines.length, 1, 'should have exactly 1 stderr line from the error event');
+});
+
+test('GET /api/runs/<bad-id>/phases/architect/log returns 404', async () => {
+  const res = await fetch(`${bridgeUrl}/api/runs/nonexistent-id/phases/architect/log`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.ok(typeof body.error === 'string');
+});
+
+// ---------------------------------------------------------------------------
+// /api/studio/agents
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/agents returns agents array', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/agents`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { agents: Array<{ slug: string; name: string }> };
+  assert.ok(Array.isArray(body.agents), 'agents must be array');
+  assert.ok(body.agents.length >= 1, 'at least 1 agent from fixture');
+  const agent = body.agents.find((a) => a.slug === 'test-agent');
+  assert.ok(agent, 'test-agent must appear');
+  assert.equal(agent!.name, 'Test Agent');
+});
+
+// ---------------------------------------------------------------------------
+// /api/studio/flows
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/flows returns flows array', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/flows`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { flows: Array<{ id: string; nodes: unknown[] }> };
+  assert.ok(Array.isArray(body.flows), 'flows must be array');
+  assert.ok(body.flows.length >= 1, 'at least 1 flow');
+  const flow = body.flows.find((f) => f.id === 'forge-cycle');
+  assert.ok(flow, 'forge-cycle flow must appear');
+  assert.ok(Array.isArray(flow!.nodes), 'nodes must be array');
+});
+
+// ---------------------------------------------------------------------------
+// /api/studio/projects
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/projects returns projects array', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/projects`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { projects: Array<{ id: string; path: string }> };
+  assert.ok(Array.isArray(body.projects), 'projects must be array');
+  const proj = body.projects.find((p) => p.id === 'test-project');
+  assert.ok(proj, 'test-project must appear');
+  assert.ok(typeof proj!.path === 'string');
+});
+
+// ---------------------------------------------------------------------------
+// /api/studio/kbs
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/kbs returns kbs array with counts', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    kbs: Array<{ id: string; name: string; counts: { index: number; themes: number; raw: number } }>;
+  };
+  assert.ok(Array.isArray(body.kbs), 'kbs must be array');
+  assert.ok(body.kbs.length >= 1, 'at least 1 kb');
+  const forgeDev = body.kbs.find((k) => k.id === 'forge-dev');
+  assert.ok(forgeDev, 'forge-dev kb must appear');
+  assert.ok(typeof forgeDev!.counts === 'object', 'counts object must be present');
+  assert.ok(typeof forgeDev!.counts.themes === 'number', 'themes count must be a number');
+  // We seeded 2 theme files
+  assert.equal(forgeDev!.counts.themes, 2, 'should count 2 seeded theme files');
+});
+
+// ---------------------------------------------------------------------------
+// /api/studio/catalog
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/catalog returns catalog object with sdks + models', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/catalog`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    catalog: { sdks: Array<{ id: string }>; models: Array<{ id: string }> };
+  };
+  assert.ok(body.catalog, 'catalog key must be present');
+  assert.ok(Array.isArray(body.catalog.sdks), 'sdks must be array');
+  assert.ok(Array.isArray(body.catalog.models), 'models must be array');
+  const sdk = body.catalog.sdks.find((s) => s.id === 'claude-code');
+  assert.ok(sdk, 'claude-code sdk must appear');
+});
+
+// ---------------------------------------------------------------------------
+// Non-studio URL → returns false (handler passes through)
+// ---------------------------------------------------------------------------
+
+test('non-studio URL (e.g. /api/health) returns false from handleStudioRoutes', async () => {
+  // Test the handler function directly (not via the bridge) to verify the
+  // boolean return contract.
+  let statusWritten: number | null = null;
+
+  // Minimal mock response object
+  const mockRes = {
+    writeHead: (status: number) => { statusWritten = status; },
+    end: (_body: string) => { /* no-op */ },
+  } as unknown as import('node:http').ServerResponse;
+
+  const mockReq = {} as import('node:http').IncomingMessage;
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+
+  const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/health', 'GET');
+  assert.equal(handled, false, 'non-studio URL must return false');
+  assert.equal(statusWritten, null, 'should not write any response');
+});
+
+test('non-GET method returns false from handleStudioRoutes', async () => {
+  const mockRes = {} as import('node:http').ServerResponse;
+  const mockReq = {} as import('node:http').IncomingMessage;
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+
+  const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/runs', 'POST');
+  assert.equal(handled, false, 'POST method must return false for studio routes');
+});
+
+test('/api/studio/nonexistent-endpoint returns false from handleStudioRoutes', async () => {
+  const mockRes = {} as import('node:http').ServerResponse;
+  const mockReq = {} as import('node:http').IncomingMessage;
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+
+  const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  assert.equal(handled, false, 'unknown studio sub-route must return false');
+});

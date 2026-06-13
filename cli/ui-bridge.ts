@@ -40,6 +40,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest, persistManifestResumeFromUnifier } from '../orchestrator/manifest.ts';
+import { handleStudioRoutes } from './bridge-studio.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import {
   appendReviewUnifierItems,
@@ -638,6 +639,8 @@ async function handleHttp(
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
+  // ---- Studio read routes (M1-2) ----------------------------------------
+  if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
   // Scheduler lifecycle.
   if (method === 'GET' && url === '/api/scheduler/status') {
