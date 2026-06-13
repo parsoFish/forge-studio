@@ -27,6 +27,7 @@ import { join } from 'node:path';
 
 import {
   validateClaimable,
+  isNonTerminalRefused,
   clearAllPendingRefusalLogs,
   clearPendingRefusalLog,
   type ClaimValidationResult,
@@ -456,4 +457,83 @@ test('checkFlowVersionSeam: no log when flow.path is missing (test stubs)', () =
   checkFlowVersionSeam(flow, 1, 'INIT-nopath', stubLogger as Parameters<typeof checkFlowVersionSeam>[3]);
 
   assert.equal(logs.length, 0, 'no log when no path');
+});
+
+// ---------------------------------------------------------------------------
+// K. Process-lifetime skip-set (M3-6 fix): isNonTerminalRefused wired to
+//    the skip-set so the scheduler avoids re-claiming broken initiatives.
+// ---------------------------------------------------------------------------
+
+test('isNonTerminalRefused: false before first refusal', () => {
+  clearAllPendingRefusalLogs();
+  assert.equal(isNonTerminalRefused('INIT-fresh'), false);
+});
+
+test('isNonTerminalRefused: true after non-terminal refusal, false after clear', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot } = setupForgeRoot(root, VALID_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'not-ready');
+    mkdirSync(projectDir, { recursive: true });
+    // Missing C4 (no roadmap.md) → non-terminal refusal
+    writeFileSync(join(projectDir, 'package.json'), JSON.stringify({ name: 'x', scripts: { test: 'node t.mjs' } }));
+    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+
+    const id = 'INIT-skip-set-test';
+
+    assert.equal(isNonTerminalRefused(id), false, 'not in skip-set before first call');
+
+    const result = validateClaimable(id, projectDir, forgeRoot);
+    assert.ok(!result.ok, 'expected refusal');
+    assert.equal((result as Extract<ClaimValidationResult, { ok: false }>).terminal, false);
+
+    assert.equal(isNonTerminalRefused(id), true, 'in skip-set after non-terminal refusal');
+
+    // Simulate a fresh process: clear the set → should be checkable again
+    clearPendingRefusalLog(id);
+    assert.equal(isNonTerminalRefused(id), false, 'not in skip-set after clear (simulates fresh forge serve)');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});
+
+test('isNonTerminalRefused: terminal refusal does NOT add to skip-set', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot, flowPath } = setupForgeRoot(root, INVALID_FLOW_YAML);
+
+    const id = 'INIT-terminal-no-skip';
+    const result = validateClaimable(id, '/nonexistent/path', forgeRoot, flowPath);
+    assert.ok(!result.ok);
+    assert.equal((result as Extract<ClaimValidationResult, { ok: false }>).terminal, true);
+
+    // Terminal refusals go to failed/ — they must NOT be in the non-terminal skip-set
+    assert.equal(isNonTerminalRefused(id), false, 'terminal refusal must not enter skip-set');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});
+
+test('isNonTerminalRefused: contract-ready claim does NOT add to skip-set', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot } = setupForgeRoot(root, VALID_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'ready');
+    mkdirSync(projectDir, { recursive: true });
+    setupContractReadyProject(projectDir);
+
+    const id = 'INIT-ready-no-skip';
+    const result = validateClaimable(id, projectDir, forgeRoot);
+    assert.ok(result.ok, 'should pass');
+
+    assert.equal(isNonTerminalRefused(id), false, 'successful claim must not enter skip-set');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
 });

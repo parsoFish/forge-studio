@@ -40,22 +40,34 @@ export type ClaimValidationResult =
   | { ok: false; reason: string; terminal: boolean };
 
 // ---------------------------------------------------------------------------
-// Internal: spin-guard — log a non-contract-ready refusal only once per
-// initiative per process lifetime so a paused/unready project does not spam
-// stdout every poll tick.
+// Internal: skip-set — per-process set of initiative IDs refused for a
+// non-terminal reason (project not contract-ready). The scheduler's claim
+// path checks this set BEFORE calling claim() so a broken project is
+// evaluated once per `forge serve` process, not every 5-second poll tick —
+// killing the inFlight slot churn while preserving the manifest in pending/
+// so a fresh `forge serve` (after the operator fixes the project) re-checks.
 // ---------------------------------------------------------------------------
 
 const _loggedPendingRefusals = new Set<string>();
 
 /**
- * Clear the spin-guard for a given initiativeId. Exported for tests so they
+ * Returns true if the given initiativeId has already been refused as
+ * non-terminal in this process lifetime. The scheduler uses this to skip
+ * re-claiming the initiative on subsequent poll ticks.
+ */
+export function isNonTerminalRefused(initiativeId: string): boolean {
+  return _loggedPendingRefusals.has(`${initiativeId}:preflight`);
+}
+
+/**
+ * Clear the skip-set for a given initiativeId. Exported for tests so they
  * can reset state between runs without module reload.
  */
 export function clearPendingRefusalLog(initiativeId: string): void {
-  _loggedPendingRefusals.delete(initiativeId);
+  _loggedPendingRefusals.delete(`${initiativeId}:preflight`);
 }
 
-/** Clear all spin-guard state (test utility). */
+/** Clear all skip-set state (test utility). */
 export function clearAllPendingRefusalLogs(): void {
   _loggedPendingRefusals.clear();
 }
@@ -174,12 +186,11 @@ export function validateClaimable(
         `(failing hard clause(s): ${failingClauses}) — ` +
         `fix the project contract before retrying`;
 
-      // Spin-guard: only log this once per initiative so we don't spam stdout.
-      const logKey = `${initiativeId}:preflight`;
-      const firstTime = !_loggedPendingRefusals.has(logKey);
-      if (firstTime) {
-        _loggedPendingRefusals.add(logKey);
-      }
+      // Skip-set: record this initiative so the scheduler skips re-claiming it
+      // on subsequent poll ticks (once per process lifetime — a fresh `forge
+      // serve` after the operator fixes the project will re-check). The
+      // scheduler reads isNonTerminalRefused() before calling claim().
+      _loggedPendingRefusals.add(`${initiativeId}:preflight`);
       return {
         ok: false,
         reason,

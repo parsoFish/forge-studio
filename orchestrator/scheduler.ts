@@ -39,7 +39,7 @@ import {
   decideAutoRetry,
   MAX_AUTO_RETRIES,
 } from './scheduler-dispatch.ts';
-import { validateClaimable } from './claim-validator.ts';
+import { validateClaimable, isNonTerminalRefused } from './claim-validator.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
@@ -178,6 +178,12 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
           continue;
         }
         announcedBlocked.delete(initiativeId);
+        // M3-6: skip initiatives refused as non-contract-ready in this process
+        // lifetime. validateClaimable already recorded the reason on the first
+        // attempt; re-claiming every 5 s would churn an inFlight slot and spam
+        // stdout. The manifest stays in pending/ so a fresh `forge serve` (after
+        // the operator fixes the project) re-checks from scratch.
+        if (isNonTerminalRefused(initiativeId)) continue;
         const c = claim(filename, getPaths(cfg.queueRoot));
         if (c) {
           claimed = c;
@@ -579,13 +585,16 @@ async function runOne(
         );
         return; // runOne done — no worktree, no cycle
       } else {
-        // Non-terminal (project not contract-ready) → leave in pending, log once.
-        // The manifest is already in in-flight from the claim() call; put it back.
+        // Non-terminal (project not contract-ready): move back to pending/ and
+        // log once. validateClaimable already recorded this initiativeId in the
+        // process-lifetime skip-set so tick() will not re-claim it on the next
+        // poll — no inFlight slot churn. A fresh `forge serve` after the
+        // operator fixes the project clears the set and re-checks.
         moveTo(filename, 'pending', paths);
         console.warn(
           `[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`,
         );
-        return; // runOne done — scheduler will pick it up again later
+        return; // runOne done — isNonTerminalRefused() guards future polls
       }
     }
 
@@ -727,7 +736,7 @@ export type {
 // ADR-028 §8 (M3-6): re-export claim validator + version-seam utilities
 // so tests can import them from the scheduler module without reaching into
 // the implementation detail.
-export { validateClaimable, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';
+export { validateClaimable, isNonTerminalRefused, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';
 export type { ClaimValidationResult } from './claim-validator.ts';
 
 type ParsedManifest = {
