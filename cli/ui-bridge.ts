@@ -47,6 +47,7 @@ import {
   allowedOrigin,
   CSRF_HEADER,
 } from './bridge-studio.ts';
+import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import {
   handleStudioPostRoutes,
   applyReviewVerdict,
@@ -660,6 +661,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
   const studioPostCtx: StudioPostContext = {
     forgeRoot: ctx.forgeRoot,

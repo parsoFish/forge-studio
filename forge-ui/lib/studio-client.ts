@@ -136,6 +136,46 @@ export type Kb = {
   counts: { index: number; themes: number; raw: number };
 };
 
+export type KbLayer = 'index' | 'theme' | 'raw' | 'guidance';
+
+export type KbNode = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  updatedAt?: string;
+};
+
+export type KbEdge = { from: string; to: string };
+
+export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
+
+export type KbHealth = {
+  layerBalance: { index: number; theme: number; raw: number };
+  orphans: number;
+  linkDensity: number;
+  staleness: { staleRawCount: number; staleThemeCount: number };
+  lintFlags: number;
+  lintErrors: number;
+};
+
+export type KbNodeArticle = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  body: string;
+  inbound: { id: string; title: string }[];
+  outbound: { id: string; title: string }[];
+  touchedBy?: string;
+};
+
+export type KbDetail = {
+  kb: Kb;
+  graph: KbGraph;
+  health: KbHealth;
+};
+
 export type CatalogItem = {
   id: string;
   name: string;
@@ -184,6 +224,26 @@ async function studioPut(
   try {
     const res = await fetch(`${base}${path}`, {
       method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: !!data.ok, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function studioPost(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),
     });
@@ -311,6 +371,25 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
   return body.kbs;
 }
 
+/** Fetch a single KB with its graph and health. Returns null if not found. */
+export async function fetchKb(id: string): Promise<KbDetail | null> {
+  const body = await studioGet<{ kb?: Kb; graph?: KbGraph; health?: KbHealth } | null>(
+    `/api/studio/kbs/${encodeURIComponent(id)}`,
+    null,
+  );
+  if (!body?.kb || !body.graph || !body.health) return null;
+  return { kb: body.kb, graph: body.graph, health: body.health };
+}
+
+/** Fetch a single KB node article. Returns null if not found. */
+export async function fetchKbNode(id: string, nodeId: string): Promise<KbNodeArticle | null> {
+  const body = await studioGet<{ node?: KbNodeArticle } | null>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeId)}`,
+    null,
+  );
+  return body?.node ?? null;
+}
+
 /** Fetch the studio catalog. */
 export async function fetchStudioCatalog(): Promise<Catalog> {
   const body = await studioGet<{ catalog?: Catalog }>('/api/studio/catalog', {});
@@ -378,4 +457,50 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
     null,
   );
   return body;
+}
+
+/**
+ * Pin a human guidance note to a KB.
+ *
+ * Posts to POST /api/studio/kbs/:id/guidance {text, targetNode?}.
+ * On success, the guidance file is written under brain/<kb-id>/_guidance/
+ * and will appear as an amber-diamond node in the KB graph on the next fetch.
+ * brain-ingest consumes and deletes it on the next ingest pass.
+ */
+export async function pinGuidance(
+  kbId: string,
+  text: string,
+  targetNode?: string,
+): Promise<{ ok: boolean; file?: string; error?: string }> {
+  const body: Record<string, unknown> = { text };
+  if (targetNode) body['targetNode'] = targetNode;
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(kbId)}/guidance`, body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, file: typeof r.data?.file === 'string' ? (r.data.file as string) : undefined };
+}
+
+/**
+ * Resolve which KB owns a given node id.
+ * Calls GET /api/studio/kbs/resolve-node/:nodeId → { kbId: string }.
+ * Returns null if the node is not found or the bridge is offline.
+ */
+export async function resolveKbNode(nodeId: string): Promise<{ kbId: string } | null> {
+  const body = await studioGet<{ kbId?: string } | null>(
+    `/api/studio/kbs/resolve-node/${encodeURIComponent(nodeId)}`,
+    null,
+  );
+  if (!body?.kbId) return null;
+  return { kbId: body.kbId };
+}
+
+/** Create a new KB (scaffold brain/<id>/ + kb.yaml + themes/ + _raw/). */
+export async function createKb(body: {
+  id: string;
+  name: string;
+  scope: string;
+  desc: string;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const r = await studioPost('/api/studio/kbs', body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id };
 }

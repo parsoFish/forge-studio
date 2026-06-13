@@ -387,6 +387,102 @@ test('C2: POST /api/plan-verdict with valid slug project + real sessionId format
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/guidance (M5-3)
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/kbs/:id/guidance — writes _guidance file → 200 {ok, file}', async () => {
+  // Set up a minimal brain with a kb.yaml so loadKbDescriptors can find it
+  const brainDir = join(forgeRoot, 'brain', 'test-kb');
+  mkdirSync(join(brainDir, 'themes'), { recursive: true });
+  writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nscope: flow\ndesc: Test.\n');
+
+  const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {
+    text: 'The worktree traps theme should be split.',
+  });
+
+  assert.equal(status, 200);
+  const b = json as Record<string, unknown>;
+  assert.equal(b.ok, true);
+  assert.ok(typeof b.file === 'string', 'response should include file path');
+  assert.ok((b.file as string).includes('_guidance'), 'file path should reference _guidance');
+
+  // Verify the file was actually written
+  const guidanceDir = join(brainDir, '_guidance');
+  assert.ok(existsSync(guidanceDir), '_guidance dir should be created');
+  const { readdirSync } = await import('node:fs');
+  const files = readdirSync(guidanceDir);
+  assert.equal(files.length, 1, 'should have written 1 guidance file');
+});
+
+test('POST /api/studio/kbs/:id/guidance with targetNode — written to frontmatter', async () => {
+  const brainDir = join(forgeRoot, 'brain', 'test-kb');
+  if (!existsSync(brainDir)) {
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nscope: flow\ndesc: Test.\n');
+  }
+
+  const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {
+    text: 'Add cwd resolution section.',
+    targetNode: 'theme-alpha',
+  });
+  assert.equal(status, 200);
+  assert.equal((json as Record<string, unknown>).ok, true);
+
+  // Verify the target_node is in the written file
+  const guidanceDir = join(brainDir, '_guidance');
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const files = readdirSync(guidanceDir).filter((f: string) => f.endsWith('.md'));
+  const contents = files.map((f: string) => readFileSync(join(guidanceDir, f), 'utf8'));
+  const targetted = contents.find((c: string) => c.includes('target_node'));
+  assert.ok(targetted, 'at least one file should have target_node in frontmatter');
+  assert.ok(targetted?.includes('theme-alpha'), 'target_node value should be theme-alpha');
+});
+
+test('POST /api/studio/kbs/:id/guidance with empty text → 400', async () => {
+  const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {
+    text: '   ',
+  });
+  assert.equal(status, 400);
+  assert.ok((json as Record<string, unknown>).error);
+});
+
+test('POST /api/studio/kbs/:id/guidance with unknown kb → 404', async () => {
+  const { status, json } = await post(bridgeUrl, '/api/studio/kbs/no-such-kb-xyz/guidance', {
+    text: 'Some guidance text.',
+  });
+  assert.equal(status, 404);
+  assert.ok((json as Record<string, unknown>).error);
+});
+
+test('POST /api/studio/kbs/:id/guidance with invalid id (traversal) → 400', async () => {
+  const { status } = await post(bridgeUrl, '/api/studio/kbs/..%2Fetc/guidance', {
+    text: 'Traversal attempt.',
+  });
+  // The route won't match (%2F decodes to / which doesn't fit the capture group),
+  // or the slug guard returns 400
+  assert.ok(status >= 400, `expected 4xx, got ${status}`);
+});
+
+test('POST /api/studio/kbs/:id/guidance with invalid targetNode → 400', async () => {
+  const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {
+    text: 'Valid guidance text.',
+    targetNode: '../escape/path',
+  });
+  assert.equal(status, 400);
+  assert.ok((json as Record<string, unknown>).error);
+});
+
+test('POST /api/studio/kbs/:id/guidance without CSRF header → 403', async () => {
+  const { status } = await post(
+    bridgeUrl,
+    '/api/studio/kbs/test-kb/guidance',
+    { text: 'Some guidance.' },
+    true, // nocsrf
+  );
+  assert.equal(status, 403);
+});
+
+// ---------------------------------------------------------------------------
 // Security: H2 — worktree_path outside projectsRoot → 409
 // ---------------------------------------------------------------------------
 

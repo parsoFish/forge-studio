@@ -689,6 +689,57 @@ export function checkContradictions(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- checkCategoryScope (brain gap #8) ----------
+
+/**
+ * Verify that each theme's `category` routes to the brain sub-wiki it
+ * actually lives in, per CATEGORY_TO_BRAIN_SUBDIR.
+ *
+ * A `pattern|antipattern|operation` theme must live in `brain/cycles/themes/`;
+ * a `decision|reference` theme must live in `brain/forge-dev/themes/`.
+ * A mis-routed theme (e.g. an `antipattern` in `forge-dev/themes/`) is a
+ * structural routing violation → `error` (matching the whitelist-enforcement
+ * style used by checkFrontmatter).
+ *
+ * Closes brain gap #8.
+ */
+export function checkCategoryScope(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  const brainRoot = join(forgeRoot, 'brain');
+
+  for (const file of readThemeFiles(brainRoot)) {
+    const parsed = parseTheme(file);
+    if (!parsed) continue;
+    const cat = String(parsed.data.category ?? '');
+    // Only check categories we recognise (checkFrontmatter catches unknown ones)
+    if (!ALLOWED_CATEGORIES.has(cat)) continue;
+
+    const expectedSubdir = CATEGORY_TO_BRAIN_SUBDIR[cat];
+    if (!expectedSubdir) continue;
+
+    // Derive the actual brain sub-wiki from the file's path
+    // file is: <brainRoot>/<subdir>/themes/<slug>.md
+    const rel = file.slice(brainRoot.length).replace(/\\/g, '/');
+    // rel looks like /cycles/themes/foo.md or /forge-dev/themes/foo.md
+    const parts = rel.split('/').filter(Boolean); // ['cycles','themes','foo.md']
+    const actualSubdir = parts[0] ?? '';
+
+    if (actualSubdir !== expectedSubdir) {
+      findings.push({
+        category: 'error',
+        file,
+        message:
+          `category "${cat}" belongs in brain/${expectedSubdir}/themes/ ` +
+          `but this file is in brain/${actualSubdir}/themes/ ` +
+          `(category→brain routing: ${cat}→${expectedSubdir})`,
+        check: 'checkCategoryScope',
+      });
+    }
+  }
+
+  return findings;
+}
+
 // ---------- runBrainLint ----------
 
 function filterFindingsByScope(
@@ -755,6 +806,7 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...checkOrphans(opts.cwd),
     ...checkLengthSoftCap(opts.cwd),
     ...checkContradictions(opts.cwd),
+    ...checkCategoryScope(opts.cwd),
     // S6A — cleanup-candidates only contributes when scope is
     // `cleanup-dry-run`; filterFindingsByScope drops everything else.
     ...(opts.scope === 'cleanup-dry-run' ? checkCleanupCandidates(opts.cwd) : []),

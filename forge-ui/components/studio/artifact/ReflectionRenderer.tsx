@@ -126,7 +126,7 @@ export function ReflectionRenderer({ doc }: { doc: ReflectionDoc }) {
                 </div>
                 {lesson.target && (
                   <a
-                    href={`/knowledge?id=${encodeURIComponent(lesson.target)}`}
+                    href={`/knowledge?node=${encodeURIComponent(lesson.target)}`}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
