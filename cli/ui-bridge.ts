@@ -40,7 +40,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest, persistManifestResumeFromUnifier } from '../orchestrator/manifest.ts';
-import { handleStudioRoutes } from './bridge-studio.ts';
+import { handleStudioRoutes, sendJson } from './bridge-studio.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import {
   appendReviewUnifierItems,
@@ -1161,12 +1161,6 @@ function readJson(req: IncomingMessage): Promise<unknown> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
-  res.end(payload);
 }
 
 // ---- Tail mechanics --------------------------------------------------------

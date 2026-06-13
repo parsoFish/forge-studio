@@ -557,3 +557,81 @@ test('/api/studio/nonexistent-endpoint returns false from handleStudioRoutes', a
   const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'unknown studio sub-route must return false');
 });
+
+// ---------------------------------------------------------------------------
+// Fix 1: Path traversal guard
+// ---------------------------------------------------------------------------
+
+test('path traversal in run id returns 400 and does not read outside logsRoot', async () => {
+  // ..%2F..%2Fetc%2Fpasswd decoded becomes ../../etc/passwd — would escape logsRoot
+  const encodedTraversal = '..%2F..%2Fetc%2Fpasswd';
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodedTraversal}/phases/architect/log`,
+  );
+  assert.equal(res.status, 400, 'path traversal attempt must return 400');
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, 'invalid run id', 'error message must be "invalid run id"');
+});
+
+// ---------------------------------------------------------------------------
+// Fix 2: classifyEvent ordering — failure_classification with recoverable=true
+// ---------------------------------------------------------------------------
+
+test('classifyEvent: failure_classification + recoverable=true → retry (not stderr)', async () => {
+  // Seed an events.jsonl that has a failure_classification event with event_type=error + recoverable=true
+  const retryInitId = 'INIT-RETRY-001';
+  const retryCycleId = `2026-05-30T22-45-07_${retryInitId}`;
+
+  mkdirSync(join(forgeRoot, '_queue', 'done'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_queue', 'done', `${retryInitId}.md`),
+    makeManifest({ initId: retryInitId }),
+  );
+  mkdirSync(join(forgeRoot, '_logs', retryCycleId), { recursive: true });
+  const retryEvent = JSON.stringify({
+    cycle_id: retryCycleId,
+    initiative_id: retryInitId,
+    event_id: 'EV_RET_001',
+    phase: 'architect',
+    skill: 'architect',
+    event_type: 'error',
+    started_at: '2026-05-30T22:45:20.000Z',
+    message: 'failure_classification',
+    metadata: { recoverable: true, reason: 'transient' },
+    input_refs: [],
+    output_refs: [],
+  });
+  const nonRecoverableEvent = JSON.stringify({
+    cycle_id: retryCycleId,
+    initiative_id: retryInitId,
+    event_id: 'EV_RET_002',
+    phase: 'architect',
+    skill: 'architect',
+    event_type: 'error',
+    started_at: '2026-05-30T22:45:21.000Z',
+    message: 'failure_classification',
+    metadata: { recoverable: false },
+    input_refs: [],
+    output_refs: [],
+  });
+  writeFileSync(
+    join(forgeRoot, '_logs', retryCycleId, 'events.jsonl'),
+    retryEvent + '\n' + nonRecoverableEvent + '\n',
+  );
+
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodeURIComponent(retryCycleId)}/phases/architect/log`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lines: Array<{ kind: string; text: string }> };
+  assert.ok(Array.isArray(body.lines));
+  assert.equal(body.lines.length, 2, 'should have 2 lines (one for each event)');
+
+  const retryLine = body.lines.find((l) => l.text.includes('failure_classification') && l.text.includes('transient'));
+  assert.ok(retryLine, 'recoverable failure_classification must produce a line');
+  assert.equal(retryLine!.kind, 'retry', 'recoverable=true must classify as "retry", not "stderr"');
+
+  const stderrLine = body.lines.find((l) => !l.text.includes('transient'));
+  assert.ok(stderrLine, 'non-recoverable failure_classification must produce a line');
+  assert.equal(stderrLine!.kind, 'stderr', 'recoverable=false must classify as "stderr"');
+});

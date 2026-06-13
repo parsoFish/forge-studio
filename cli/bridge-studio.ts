@@ -21,7 +21,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import type { Run } from '../orchestrator/run-model.ts';
@@ -33,6 +33,7 @@ import {
   loadProjectsRegistry,
   loadCatalog,
 } from '../orchestrator/studio/registry.ts';
+import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -86,7 +87,9 @@ type LogLine = { at: string; kind: LogLineKind; text: string };
 function classifyEvent(e: EventLogEntry): LogLine {
   let kind: LogLineKind = 'info';
 
-  if (e.event_type === 'error') {
+  if (e.message === 'failure_classification' && e.metadata?.recoverable === true) {
+    kind = 'retry';
+  } else if (e.event_type === 'error') {
     kind = 'stderr';
   } else if (e.event_type === 'tool_use') {
     kind = 'tool';
@@ -96,8 +99,6 @@ function classifyEvent(e: EventLogEntry): LogLine {
     (e.cost_usd !== undefined && e.cost_usd > 0 && e.event_type === 'log')
   ) {
     kind = 'cost';
-  } else if (e.message === 'failure_classification' && e.metadata?.recoverable === true) {
-    kind = 'retry';
   }
 
   // Build a concise text from message + brief metadata
@@ -240,7 +241,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 // Flows loader
 // ---------------------------------------------------------------------------
 
-function loadAllFlows(forgeRoot: string) {
+function loadAllFlows(forgeRoot: string): FlowDefinition[] {
   const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
   if (!existsSync(flowsDir)) return [];
 
@@ -253,7 +254,7 @@ function loadAllFlows(forgeRoot: string) {
     return [];
   }
 
-  const flows = [];
+  const flows: FlowDefinition[] = [];
   for (const entry of entries) {
     const flowYamlPath = join(flowsDir, entry, 'flow.yaml');
     if (!existsSync(flowYamlPath)) continue;
@@ -324,8 +325,13 @@ export async function handleStudioRoutes(
       const qs = parseQuery(rawUrl);
       const stderrOnly = qs.get('stderr') === '1';
 
-      // The run id is the cycleId for non-planned runs
-      const eventsPath = join(ctx.logsRoot, runId, 'events.jsonl');
+      // Guard against path traversal via a crafted runId.
+      const safeLogsBase = resolve(ctx.logsRoot);
+      const eventsPath = resolve(safeLogsBase, runId, 'events.jsonl');
+      if (!eventsPath.startsWith(safeLogsBase + sep)) {
+        sendJson(res, 400, { error: 'invalid run id' });
+        return true;
+      }
       if (!existsSync(eventsPath)) {
         sendJson(res, 404, { error: 'no events.jsonl for run', runId });
         return true;
@@ -372,7 +378,7 @@ export async function handleStudioRoutes(
     try {
       const run = findRun(ctx.forgeRoot, runId);
       if (!run) {
-        sendJson(res, 404, { error: 'run not found', runId });
+        sendJson(res, 404, { error: 'run not found' });
         return true;
       }
       sendJson(res, 200, { run });
