@@ -9,9 +9,9 @@
  *   mode — gate | view (auto-inferred if absent)
  *
  * Gate-bar wiring:
- *   plan  → GateBar  (gateId='plan', approve disabled until decisions resolved)
- *   demo  → GateBar  (gateId='verdict', decisions always resolved for demo)
- *   verdict → ReviewVerdictForm (the harness depends on its data-* intact)
+ *   plan    → PlanRenderer + GateBar (gateId='plan', approve disabled until decisions resolved)
+ *   demo    → GateBar  (gateId='verdict', decisions always resolved for demo)
+ *   verdict → DemoComparison (evidence) + ReviewVerdictForm (the harness depends on its data-* intact)
  *   workitems / pr / reflection → view only (no gate bar)
  *
  * data-* contract (main):
@@ -19,11 +19,14 @@
  *   data-mode, data-gate-state
  *
  * Preserved from existing components:
- *   data-section="demo-evaluation" data-ac-verdict (DemoComparison)
+ *   data-section="demo-comparison" data-section="demo-evaluation" data-ac-verdict (DemoComparison)
  *   data-component="verdict-form" data-form-state data-action="approve-and-merge"|"send-back" (ReviewVerdictForm)
- *   data-section="plan-gate" data-decisions-resolved (PlanGate — not used here;
- *     plan in this viewer uses PlanRenderer + GateBar to avoid duplicate
- *     architect-session plumbing; the fold-in task (M4-4) will wire the redirect)
+ *
+ * Fold-in (M4-4):
+ *   type=verdict&mode=gate is the canonical review gate surface — it renders
+ *   DemoComparison (evidence) + ReviewVerdictForm (the gate). Both /artifact and
+ *   /review/[cycleId] render these same components; /review is the thin legacy
+ *   wrapper that preserves data-page="review-cycle" for the harness.
  */
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
@@ -40,10 +43,10 @@ import { VerdictRenderer, type VerdictDoc } from '@/components/studio/artifact/V
 import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/artifact/ReflectionRenderer';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
+import { PlanGate } from '@/components/PlanGate';
 
 import { fetchRun, type Run } from '@/lib/studio-client';
-import { fetchDemoModel, fetchWorkItem, fetchReflection, type DemoModel, type ReflectionData } from '@/lib/bridge-client';
-import { resolveBridgeUrl } from '@/lib/bridge-client';
+import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // Types for artifact docs fetched from the bridge
@@ -152,6 +155,8 @@ async function fetchArtifactDoc(
     if (type === 'verdict') {
       const verdictJson = await fetchJsonArtifact<VerdictDoc>(runId, 'verdict.json');
       if (verdictJson) return { type: 'verdict', doc: verdictJson };
+      // In gate mode the verdict doesn't exist yet (it's being authored).
+      // Return empty so gate-mode path shows the form unconditionally.
       return { type: 'empty' };
     }
   } catch {
@@ -310,6 +315,10 @@ function ArtifactPageInner() {
   const [run,        setRun]        = useState<Run | null>(null);
   const [artifact,   setArtifact]   = useState<ArtifactDoc | null>(null);
   const [verdictDoc, setVerdictDoc] = useState<VerdictDoc | null>(null);
+  // For verdict gate-mode: the demo evidence shown above the verdict form
+  const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
+  // For plan gate-mode via an architect session (runId = '_architect-<sessionId>')
+  const [archSession, setArchSession] = useState<ArchitectSessionSummary | null>(null);
   const [ready,      setReady]      = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
   // For plan gate-mode: track whether all decisions are resolved
@@ -350,6 +359,23 @@ function ArtifactPageInner() {
       const artifactDoc = await fetchArtifactDoc(runId, type, fetchedRun);
       if (signal.cancelled) return;
       setArtifact(artifactDoc);
+
+      // For verdict gate-mode: also fetch the demo evidence to show above the form.
+      // (DemoComparison handles missing demo gracefully.)
+      if (type === 'verdict' && mode === 'gate') {
+        const dm = await fetchDemoModel(runId);
+        if (!signal.cancelled) setDemoModel(dm);
+      }
+
+      // For plan via an architect session: runId is '_architect-<sessionId>'.
+      // Fetch the session so we can render the PlanGate iframe as a fallback
+      // when no structured plan.json exists.
+      if (type === 'plan' && runId.startsWith('_architect-')) {
+        const sessionId = runId.slice('_architect-'.length);
+        const sessions = await fetchArchitectSessions().catch(() => [] as ArchitectSessionSummary[]);
+        const match = sessions.find((s) => s.sessionId === sessionId) ?? null;
+        if (!signal.cancelled) setArchSession(match);
+      }
 
       // Also fetch verdict doc for view-mode stamp (when type != verdict)
       if (type !== 'verdict' && mode !== 'gate') {
@@ -537,8 +563,6 @@ function ArtifactPageInner() {
         <div>
           {!ready ? (
             <div style={{ fontSize: 13, color: 'var(--faint)', padding: '40px 0' }}>Loading…</div>
-          ) : !artifact || artifact.type === 'empty' ? (
-            <EmptyState type={type} flowId={flowId} />
           ) : (
             <>
               {/* View-mode approval stamp (skip for verdict — it IS the verdict) */}
@@ -546,8 +570,45 @@ function ArtifactPageInner() {
                 <ViewStampStrip verdictDoc={verdictDoc} />
               )}
 
-              {/* Type-specific renderer */}
-              {artifact.type === 'plan' && (
+              {/* Verdict gate-mode: demo evidence above the form (M4-4 fold-in).
+                  Render even when artifact is empty (verdict.json doesn't exist
+                  yet — we're authoring it). */}
+              {type === 'verdict' && isGateMode && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Demo evidence panel — mirrors /review/[cycleId] layout */}
+                  {demoModel ? (
+                    <DemoComparison model={demoModel} cycleId={runId} />
+                  ) : (
+                    <div style={{
+                      border: '1px solid var(--line)',
+                      borderRadius: 8,
+                      padding: '14px 18px',
+                      background: 'var(--panel)',
+                      fontSize: 13,
+                      color: 'var(--dim)',
+                    }}>
+                      No structured demo (<code>demo.json</code>) filed for this run yet.
+                    </div>
+                  )}
+
+                  {/* Verdict form — harness asserts data-component="verdict-form" + data-action=* */}
+                  <ReviewVerdictForm
+                    initiativeId={run?.initiativeId ?? runId}
+                    onSubmitted={(kind) => {
+                      setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* All other types: show empty state when artifact is absent.
+                  Exception: plan type with an archSession falls through to PlanGate. */}
+              {type !== 'verdict' && (!artifact || artifact.type === 'empty') && !(type === 'plan' && archSession) && (
+                <EmptyState type={type} flowId={flowId} />
+              )}
+
+              {/* Type-specific renderers for non-verdict types */}
+              {artifact && artifact.type === 'plan' && (
                 <PlanRenderer
                   doc={artifact.doc}
                   gateMode={isGateMode}
@@ -557,35 +618,38 @@ function ArtifactPageInner() {
                 />
               )}
 
-              {artifact.type === 'workitems' && (
+              {/* Plan gate fallback: use PlanGate iframe when running via an
+                  architect session (runId='_architect-<id>') and no plan.json.
+                  Preserves data-section="plan-gate" + data-decisions-resolved (M4-4). */}
+              {type === 'plan' && (!artifact || artifact.type === 'empty') && archSession && (
+                <PlanGate
+                  fullPage
+                  project={archSession.project}
+                  sessionId={archSession.sessionId}
+                  planUrl={archSession.planUrl}
+                  idea={archSession.idea}
+                />
+              )}
+
+              {artifact && artifact.type === 'workitems' && (
                 <WorkItemsRenderer items={artifact.doc} />
               )}
 
-              {artifact.type === 'pr' && (
+              {artifact && artifact.type === 'pr' && (
                 <PrRenderer doc={artifact.doc} />
               )}
 
-              {artifact.type === 'demo' && (
+              {artifact && artifact.type === 'demo' && (
                 <div data-section="demo-evaluation">
                   <DemoComparison model={artifact.doc} cycleId={runId} />
                 </div>
               )}
 
-              {artifact.type === 'verdict' && isGateMode && (
-                /* Gate mode: use ReviewVerdictForm — harness asserts its data-* */
-                <ReviewVerdictForm
-                  initiativeId={run?.initiativeId ?? runId}
-                  onSubmitted={(kind) => {
-                    setGateState(kind === 'approve' ? 'approved' : 'sent-back');
-                  }}
-                />
-              )}
-
-              {artifact.type === 'verdict' && !isGateMode && (
+              {artifact && artifact.type === 'verdict' && !isGateMode && (
                 <VerdictRenderer doc={artifact.doc} />
               )}
 
-              {artifact.type === 'reflection' && (
+              {artifact && artifact.type === 'reflection' && (
                 <ReflectionRenderer doc={artifact.doc} />
               )}
             </>

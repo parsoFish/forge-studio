@@ -17,10 +17,19 @@ import { useNowTicker } from '@/lib/use-now-ticker';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 
 /**
- * ADR 021 — the standalone review screen. Aligned with the architect plan
- * screen: a focused review hex (left) + the rich artifact and controls (right).
- * The structured demo renders large on its own page (the review equivalent of
- * the PLAN gate), with the verdict form below.
+ * ADR 021 — the standalone review screen (thin wrapper, M4-4).
+ *
+ * This page is the legacy harness-compatible surface that preserves
+ * data-page="review-cycle" (asserted by e2e-journey) while reusing the exact
+ * same components as the unified artifact viewer (/artifact?type=verdict&mode=gate):
+ *   - DemoComparison  → data-section="demo-comparison" / "demo-evaluation"
+ *   - ReviewVerdictForm → data-component="verdict-form" / data-action="approve-and-merge"|"send-back"
+ *
+ * The artifact viewer is the canonical single implementation; this route is the
+ * thin wrapper that keeps the harness green without a redirect.
+ *
+ * Deep link: /artifact?run=<cycleId>&type=verdict&mode=gate serves the same
+ * content for the new direct-link path (ADR 023 / M4-4).
  */
 export default function ReviewCyclePage({ params }: { params: { cycleId: string } }): JSX.Element {
   const cycleId = decodeURIComponent(params.cycleId);
@@ -69,7 +78,15 @@ export default function ReviewCyclePage({ params }: { params: { cycleId: string 
           <ReviewStageHex status={cycle.status} events={events} nowMs={nowMs} />
 
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ fontSize: 12, color: '#8b949e' }}>{cycle.project ?? '(no project)'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 12, color: '#8b949e' }}>{cycle.project ?? '(no project)'}</div>
+              <Link
+                href={`/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`}
+                style={{ fontSize: 11, color: '#8b949e', textDecoration: 'none', fontFamily: 'ui-monospace, Menlo, monospace' }}
+              >
+                artifact viewer →
+              </Link>
+            </div>
 
             {demo ? (
               <DemoComparison model={demo} cycleId={cycleId} />
