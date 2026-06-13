@@ -136,6 +136,46 @@ export type Kb = {
   counts: { index: number; themes: number; raw: number };
 };
 
+export type KbLayer = 'index' | 'theme' | 'raw' | 'guidance';
+
+export type KbNode = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  updatedAt?: string;
+};
+
+export type KbEdge = { from: string; to: string };
+
+export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
+
+export type KbHealth = {
+  layerBalance: { index: number; theme: number; raw: number };
+  orphans: number;
+  linkDensity: number;
+  staleness: { staleRawCount: number; staleThemeCount: number };
+  lintFlags: number;
+  lintErrors: number;
+};
+
+export type KbNodeArticle = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  body: string;
+  inbound: { id: string; title: string }[];
+  outbound: { id: string; title: string }[];
+  touchedBy?: string;
+};
+
+export type KbDetail = {
+  kb: Kb;
+  graph: KbGraph;
+  health: KbHealth;
+};
+
 export type CatalogItem = {
   id: string;
   name: string;
@@ -309,6 +349,25 @@ export async function fetchStudioProjects(): Promise<Project[]> {
 export async function fetchStudioKbs(): Promise<Kb[]> {
   const body = await studioGet<{ kbs: Kb[] }>('/api/studio/kbs', { kbs: [] });
   return body.kbs;
+}
+
+/** Fetch a single KB with its graph and health. Returns null if not found. */
+export async function fetchKb(id: string): Promise<KbDetail | null> {
+  const body = await studioGet<{ kb?: Kb; graph?: KbGraph; health?: KbHealth } | null>(
+    `/api/studio/kbs/${encodeURIComponent(id)}`,
+    null,
+  );
+  if (!body?.kb || !body.graph || !body.health) return null;
+  return { kb: body.kb, graph: body.graph, health: body.health };
+}
+
+/** Fetch a single KB node article. Returns null if not found. */
+export async function fetchKbNode(id: string, nodeId: string): Promise<KbNodeArticle | null> {
+  const body = await studioGet<{ node?: KbNodeArticle } | null>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeId)}`,
+    null,
+  );
+  return body?.node ?? null;
 }
 
 /** Fetch the studio catalog. */

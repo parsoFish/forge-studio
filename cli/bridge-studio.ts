@@ -41,6 +41,8 @@ import {
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig } from '../orchestrator/project-config.ts';
+import { buildKbGraph, getKbNodeArticle } from '../orchestrator/kb-graph.ts';
+import { runBrainLint } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -262,6 +264,82 @@ function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// KB health computation
+// ---------------------------------------------------------------------------
+
+type KbHealth = {
+  layerBalance: { index: number; theme: number; raw: number };
+  orphans: number;
+  linkDensity: number;
+  staleness: { staleRawCount: number; staleThemeCount: number };
+  lintFlags: number;
+  lintErrors: number;
+};
+
+/**
+ * Build the health object for a single KB by:
+ *   1. Using the pre-computed layer counts from KbWithCounts.
+ *   2. Running runBrainLint(scope:'full') and filtering findings to this kb's dir.
+ *   3. Deriving orphans (nodes with degree 0), link density (edges/nodes),
+ *      and staleness (nodes with updated_at older than 30 days).
+ */
+function buildKbHealth(
+  forgeRoot: string,
+  kbId: string,
+  graph: import('../orchestrator/kb-graph.ts').KbGraph,
+  _counts: { index: number; themes: number; raw: number },
+): KbHealth {
+  const { nodes, edges } = graph;
+
+  // Layer balance from graph node counts (more accurate than the raw dir count)
+  const layerBalance = {
+    index: nodes.filter((n) => n.layer === 'index').length,
+    theme: nodes.filter((n) => n.layer === 'theme').length,
+    raw: nodes.filter((n) => n.layer === 'raw').length,
+  };
+
+  // Orphans: nodes with degree 0 (no inbound AND no outbound edges)
+  const degree = new Map<string, number>();
+  for (const n of nodes) degree.set(n.id, 0);
+  for (const e of edges) {
+    degree.set(e.from, (degree.get(e.from) ?? 0) + 1);
+    degree.set(e.to, (degree.get(e.to) ?? 0) + 1);
+  }
+  const orphans = nodes.filter((n) => (degree.get(n.id) ?? 0) === 0).length;
+
+  // Link density
+  const linkDensity = nodes.length > 0 ? edges.length / nodes.length : 0;
+
+  // Staleness: themes/raw with updatedAt older than 30 days
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  let staleThemeCount = 0;
+  let staleRawCount = 0;
+  for (const n of nodes) {
+    if (!n.updatedAt) continue;
+    const ts = new Date(n.updatedAt).getTime();
+    if (!isNaN(ts) && ts < thirtyDaysAgo) {
+      if (n.layer === 'theme') staleThemeCount++;
+      else if (n.layer === 'raw') staleRawCount++;
+    }
+  }
+
+  // Run brain-lint and filter findings to this kb's directory
+  let lintFlags = 0;
+  let lintErrors = 0;
+  try {
+    const kbDir = resolve(forgeRoot, 'brain', kbId);
+    const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+    const kbFindings = findings.filter((f) => f.file.startsWith(kbDir));
+    lintFlags = kbFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+    lintErrors = kbFindings.filter((f) => f.category === 'error').length;
+  } catch {
+    // Non-fatal: lint failure doesn't break the health response
+  }
+
+  return { layerBalance, orphans, linkDensity, staleness: { staleRawCount, staleThemeCount }, lintFlags, lintErrors };
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +611,113 @@ export async function handleStudioRoutes(
     try {
       const kbs = loadKbDescriptors(ctx.forgeRoot);
       sendJson(res, 200, { kbs }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/kbs/:id/nodes/:nodeId (node article) -------------------
+  // Must be matched before /api/studio/kbs/:id (more specific path).
+  const kbNodeMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/nodes\/([^/]+)$/);
+  if (kbNodeMatch) {
+    try {
+      const kbId = decodeURIComponent(kbNodeMatch[1]);
+      const nodeId = decodeURIComponent(kbNodeMatch[2]);
+
+      // Slug-guard both ids (SLUG_RE covers typical slugs; nodeIds may have
+      // 'raw:' prefix — use a slightly broader guard for nodeId).
+      if (!SLUG_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      // Node ids: allow alphanumeric, dash, underscore, colon, dot (for raw: prefixed ids)
+      const NODE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/;
+      if (!NODE_ID_RE.test(nodeId)) {
+        sendJson(res, 400, { error: 'invalid node id' }, origin);
+        return true;
+      }
+
+      // Path-guard: kbId must not escape brain/
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      const kbDir = resolve(brainBase, kbId);
+      if (!kbDir.startsWith(brainBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      let article;
+      try {
+        article = getKbNodeArticle(ctx.forgeRoot, kbId, nodeId);
+      } catch (err) {
+        // Unknown kbId → 404
+        const msg = String(err);
+        if (msg.includes('Unknown kbId')) {
+          sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+          return true;
+        }
+        throw err;
+      }
+
+      if (!article) {
+        sendJson(res, 404, { error: `unknown node: ${nodeId}` }, origin);
+        return true;
+      }
+
+      sendJson(res, 200, { node: article }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/kbs/:id (single kb — graph + health) -------------------
+  const kbGetMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)$/);
+  if (kbGetMatch) {
+    try {
+      const kbId = decodeURIComponent(kbGetMatch[1]);
+
+      // Slug-guard before any fs operation
+      if (!SLUG_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+
+      // Path-guard: kbId must not escape brain/
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      const kbDir = resolve(brainBase, kbId);
+      if (!kbDir.startsWith(brainBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // Resolve the kb descriptor (finds by walking brain/ for kb.yaml)
+      const kbs = loadKbDescriptors(ctx.forgeRoot);
+      const kb = kbs.find((k) => k.id === kbId);
+      if (!kb) {
+        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+        return true;
+      }
+
+      // Build the per-kb graph from the brain filesystem
+      let graph;
+      try {
+        graph = buildKbGraph(ctx.forgeRoot, kbId);
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes('Unknown kbId')) {
+          sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+          return true;
+        }
+        throw err;
+      }
+
+      // Health: run brain-lint + derive metrics for this kb
+      const health = buildKbHealth(ctx.forgeRoot, kbId, graph, kb.counts);
+
+      // Drop 'path' from the KB response (client Kb type doesn't carry it)
+      const { path: _path, ...kbPublic } = kb;
+      sendJson(res, 200, { kb: kbPublic, graph, health }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
