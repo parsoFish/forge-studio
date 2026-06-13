@@ -69,6 +69,21 @@ import { withIdleDeadline } from './stream-deadline.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
+
+// ---------------------------------------------------------------------------
+// ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
+// ---------------------------------------------------------------------------
+
+/**
+ * The architect's PhaseAgentSpec — derived from SKILL.md frontmatter so the
+ * model tier and tool allow-list have one source of truth (ADR-024).
+ */
+export const architectAgentSpec = deriveAgentSpec('skills/architect/SKILL.md');
+
+/** Concrete model id resolved from the spec's tier. */
+export const ARCHITECT_MODEL = modelForSpec(architectAgentSpec);
 
 // ---------------------------------------------------------------------------
 // Session-dir state contract
@@ -859,7 +874,8 @@ async function runStructured<T>(args: {
     //     direct contradiction with wanting a structured result.
     // Both are fixed here: wrap the schema correctly and drop plan mode. The read
     // toolset still produces the tool_use stream the architect hex shows.
-    allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
+    model: ARCHITECT_MODEL,
+    allowedTools: architectAgentSpec.allowedTools,
     outputFormat: { type: 'json_schema', schema: args.schema },
     // No maxTurns: the architect is operator-driven + interactive (unlike the
     // autonomous PM/dev/reflector phases, which cap for cost/safety). Its research +
