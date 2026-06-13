@@ -6,6 +6,7 @@
  * validateKb intentionally checks only the slug; the scope enum is enforced at load time in registry.ts.
  */
 
+import { DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentDefinition,
   Catalog,
@@ -320,8 +321,6 @@ export function validateCatalog(c: Catalog): Finding[] {
 // validateProject
 // ---------------------------------------------------------------------------
 
-const DEMO_STEP_KINDS = new Set(['capture', 'verify', 'present']);
-
 export function validateProject(def: ProjectDefinition): Finding[] {
   const findings: Finding[] = [];
   const obj = `project:${def.id}`;
@@ -347,7 +346,7 @@ export function validateProject(def: ProjectDefinition): Finding[] {
   // demoProcess: each step's kind must be in the enum
   for (let i = 0; i < def.demoProcess.length; i++) {
     const step = def.demoProcess[i];
-    if (!DEMO_STEP_KINDS.has(step.kind)) {
+    if (!DEMO_STEP_KINDS.includes(step.kind)) {
       findings.push(
         err(
           obj,

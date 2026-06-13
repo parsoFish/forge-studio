@@ -84,7 +84,8 @@ export type CatalogSdk = { id: string; name: string; available: boolean };
 export type CatalogModel = { id: string; name: string; sdk: string; tier: string; costIn?: number; costOut?: number };
 export type CatalogEntry = { id: string; name: string; desc?: string };
 
-export type DemoStepKind = 'capture' | 'verify' | 'present';
+export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
+export type DemoStepKind = (typeof DEMO_STEP_KINDS)[number];
 export type DemoStep = { kind: DemoStepKind; text: string };
 
 export type ProjectDefinition = {

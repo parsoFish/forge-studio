@@ -20,9 +20,11 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEMO_STEP_KINDS } from './studio/types.ts';
 import type { DemoStep, DemoStepKind } from './studio/types.ts';
 
 export type { DemoStep, DemoStepKind } from './studio/types.ts';
+export { DEMO_STEP_KINDS } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
@@ -375,8 +377,7 @@ function parseSweep(raw: unknown): SweepConfig | undefined {
   return { start_command, draw_function, measurement_extractor };
 }
 
-const DEMO_STEP_KINDS: ReadonlySet<string> = new Set(['capture', 'verify', 'present']);
-
+// empty string is allowed here; the business-level emptiness check lives in validateProject.
 function parseNorthStar(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== 'string') {
@@ -408,7 +409,7 @@ function parseDemoProcess(v: unknown): DemoStep[] | undefined {
       throw new Error(`project-config: demoProcess[${i}] must be an object`);
     }
     const s = item as Record<string, unknown>;
-    if (typeof s.kind !== 'string' || !DEMO_STEP_KINDS.has(s.kind)) {
+    if (typeof s.kind !== 'string' || !DEMO_STEP_KINDS.includes(s.kind as DemoStepKind)) {
       throw new Error(
         `project-config: demoProcess[${i}].kind must be one of capture|verify|present (got ${JSON.stringify(s.kind)})`,
       );
