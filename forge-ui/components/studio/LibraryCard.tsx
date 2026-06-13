@@ -63,12 +63,12 @@ export function AgentCard({ agent, index }: { agent: Agent; index: number }) {
   const runtimeLabel = agent.runtime?.label ?? null;
 
   return (
-    <div
+    <Link
+      href={`/agents/${encodeURIComponent(agent.id)}`}
       className="lib-card"
       data-card-type="agent"
       data-card-id={agent.id}
-      style={{ animationDelay: `${index * 0.045}s`, cursor: 'default' }}
-      title="Agent builder lands in M2"
+      style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{agent.name}</span>
@@ -84,7 +84,7 @@ export function AgentCard({ agent, index }: { agent: Agent; index: number }) {
       {runtimeLabel && (
         <div className="agent-runtime-line">{runtimeLabel}</div>
       )}
-    </div>
+    </Link>
   );
 }
 
