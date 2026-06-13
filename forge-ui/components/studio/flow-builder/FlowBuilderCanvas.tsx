@@ -123,13 +123,6 @@ type FlowNodeData = {
 };
 
 const HEX_CLIP = 'polygon(25% 3%, 75% 3%, 98% 50%, 75% 97%, 25% 97%, 2% 50%)';
-const HANDLE_STYLE: React.CSSProperties = {
-  opacity: 0,
-  width: 12,
-  height: 12,
-  background: 'transparent',
-  border: 'none',
-};
 const HANDLE_VISIBLE_STYLE: React.CSSProperties = {
   width: 12,
   height: 12,
@@ -706,10 +699,7 @@ export function FlowBuilderCanvas({
         nodeTypes={NODE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={(conn, ...rest) => {
-          // ReactFlow 11 onConnect receives (connection), but we need the event
-          // The second arg is the event in ReactFlow 11 — however the types don't expose it cleanly.
-          // We'll use a wrapper on the ReactFlow div to capture last mouse position.
+        onConnect={(conn) => {
           onConnect(conn);
         }}
         onConnectEnd={(event) => {

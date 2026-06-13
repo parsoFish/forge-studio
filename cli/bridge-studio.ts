@@ -967,6 +967,12 @@ export async function handleStudioWriteRoutes(
       }
 
       // 8. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
+      // The predicate `r.flowId === id` is correct. It is fully effective today
+      // because run-model stamps every run with flowId = 'forge-cycle' (the only
+      // flow the scheduler runs). When multi-flow scheduling lands, run-model must
+      // derive the real flowId from the manifest/flow that spawned each run (see
+      // FLOW_ID note in run-model.ts) — until then, non-forge-cycle flows would
+      // not be locked (latent gap; no such flows exist today).
       const activeRun = listRuns(ctx.forgeRoot, Date.now()).find(
         (r) => r.flowId === id && r.status === 'active',
       );

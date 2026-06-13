@@ -8,17 +8,15 @@
  *   - Goal textarea + data-goal-set warning when empty
  *   - Project + KB selects
  *   - Trigger chips (on complete → flow picker)
- *   - Save button → calls saveFlow PUT; handles 423 edit-lock
+ *   - Save button → calls onSave() (parent PUT); handles 423 edit-lock
  *
  * Props receive the current header state; parent owns the state (FlowBuilder).
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  fetchStudioFlows,
   fetchStudioProjects,
   fetchStudioKbs,
-  saveFlow,
 } from '@/lib/studio-client';
 import type { Flow, Project, Kb, FlowTrigger } from '@/lib/studio-client';
 
@@ -61,7 +59,6 @@ export function FlowHeader({
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [lockBanner, setLockBanner] = useState<string | null>(null);
-  const [showTriggerPicker, setShowTriggerPicker] = useState(false);
 
   // Load projects + KBs
   useEffect(() => {
@@ -108,7 +105,6 @@ export function FlowHeader({
       ...state,
       triggers: [...state.triggers, { on: 'complete', flow: target.id }],
     });
-    setShowTriggerPicker(false);
   }, [flows, flowId, state, onChange]);
 
   const removeTrigger = useCallback((i: number) => {
