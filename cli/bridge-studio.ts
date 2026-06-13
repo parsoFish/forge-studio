@@ -201,6 +201,8 @@ type ProjectWithMeta = {
   path: string;
   northStar?: string;
   kb?: string;
+  instructions?: string;
+  skills?: string[];
 };
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
@@ -222,6 +224,10 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
         const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
         if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
         if (typeof raw.kb === 'string') result.kb = raw.kb;
+        if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
+        if (Array.isArray(raw.skills) && raw.skills.every((s) => typeof s === 'string')) {
+          result.skills = raw.skills as string[];
+        }
       } catch {
         // ignore unreadable project.json
       }

@@ -216,13 +216,25 @@ function makeCatalogYaml(): string {
   ].join('\n');
 }
 
-/** Minimal projects.yaml */
+/** Minimal projects.yaml with two projects (second has no project.json) */
 function makeProjectsYaml(): string {
   return [
     'projects:',
     '  - id: test-project',
     '    path: projects/test-project',
+    '  - id: bare-project',
+    '    path: projects/bare-project',
   ].join('\n');
+}
+
+/** project.json with all mergeable fields */
+function makeProjectJson(): string {
+  return JSON.stringify({
+    northStar: 'Ship a great product.',
+    kb: 'forge-dev',
+    instructions: 'Always write tests first.',
+    skills: ['tdd-workflow', 'coding-standards'],
+  });
 }
 
 /** Minimal kb.yaml */
@@ -271,6 +283,13 @@ before(async () => {
 
   // -- studio/projects.yaml --
   writeFileSync(join(forgeRoot, 'studio', 'projects.yaml'), makeProjectsYaml());
+
+  // -- projects/test-project/.forge/project.json (with instructions + skills) --
+  mkdirSync(join(forgeRoot, 'projects', 'test-project', '.forge'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'projects', 'test-project', '.forge', 'project.json'), makeProjectJson());
+
+  // -- projects/bare-project/ exists but has no .forge/project.json --
+  mkdirSync(join(forgeRoot, 'projects', 'bare-project'), { recursive: true });
 
   // -- brain/forge-dev/kb.yaml + themes/ --
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', 'themes'), { recursive: true });
@@ -437,11 +456,28 @@ test('GET /api/studio/flows returns flows array', async () => {
 test('GET /api/studio/projects returns projects array', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/projects`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { projects: Array<{ id: string; path: string }> };
+  const body = (await res.json()) as {
+    projects: Array<{ id: string; path: string; instructions?: string; skills?: string[] }>;
+  };
   assert.ok(Array.isArray(body.projects), 'projects must be array');
   const proj = body.projects.find((p) => p.id === 'test-project');
   assert.ok(proj, 'test-project must appear');
   assert.ok(typeof proj!.path === 'string');
+  // instructions + skills should surface from project.json
+  assert.equal(proj!.instructions, 'Always write tests first.');
+  assert.deepEqual(proj!.skills, ['tdd-workflow', 'coding-standards']);
+});
+
+test('GET /api/studio/projects tolerates project without project.json', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/projects`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    projects: Array<{ id: string; instructions?: unknown; skills?: unknown }>;
+  };
+  const bare = body.projects.find((p) => p.id === 'bare-project');
+  assert.ok(bare, 'bare-project must appear in list');
+  assert.equal(bare!.instructions, undefined, 'instructions must be absent when no project.json');
+  assert.equal(bare!.skills, undefined, 'skills must be absent when no project.json');
 });
 
 // ---------------------------------------------------------------------------
