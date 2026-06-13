@@ -408,6 +408,34 @@ export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean
   return bridgePost('/api/plan-verdict', input);
 }
 
+// ---- Run + gate write endpoints (M3-4) ----------------------------------
+
+/** Start a planned run for the given initiativeId. */
+export async function startRun(
+  initiativeId: string,
+): Promise<{ ok: boolean; error?: string; runId?: string }> {
+  const r = await bridgePost('/api/runs', { initiativeId, origin: 'human-directed' });
+  return { ok: r.ok, error: r.error, runId: r.data?.runId as string | undefined };
+}
+
+/** Resume a failed run (wraps forge requeue --resume-from=unifier). */
+export async function resumeRun(runId: string): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/runs/${encodeURIComponent(runId)}/resume`);
+}
+
+/** Post a gate verdict for a run (approve or send-back). */
+export async function postGate(
+  runId: string,
+  gateId: string,
+  verdict: 'approve' | 'send-back',
+  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[] },
+): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/runs/${encodeURIComponent(runId)}/gates/${encodeURIComponent(gateId)}`, {
+    verdict,
+    ...options,
+  });
+}
+
 // ---- Reflection (the third human moment, in-UI) -------------------------
 
 export type ReflectionData = {

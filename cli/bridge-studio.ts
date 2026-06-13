@@ -20,8 +20,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
+import lockfile from 'proper-lockfile';
 
 import { runPreflight } from './preflight.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
@@ -38,7 +40,17 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent } from '../orchestrator/studio/validate.ts';
-import { validateProjectConfig } from '../orchestrator/project-config.ts';
+import { validateProjectConfig, loadProjectConfig } from '../orchestrator/project-config.ts';
+import { getPaths } from '../orchestrator/queue.ts';
+import { parseManifest, persistManifestResumeFromUnifier, serializeManifest } from '../orchestrator/manifest.ts';
+import {
+  appendReviewUnifierItems,
+  UnifierItemsCapError,
+  ReviewConcernInvalidError,
+} from '../orchestrator/unifier-items.ts';
+import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
+import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
+import { runRequeue } from './forge-requeue.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -48,6 +60,240 @@ export type StudioContext = {
   forgeRoot: string;
   logsRoot: string;
 };
+
+/**
+ * Extended context for POST write routes (verdict + plan gates, run start/resume).
+ * Extends StudioContext with all dependencies needed for gate dispatch.
+ */
+export type StudioPostContext = StudioContext & {
+  queueRoot: string;
+  projectsRoot: string;
+  mergePr: (worktreePath: string) => boolean;
+  finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  broadcastArchitectChanged: () => void;
+  spawnArchitectTurnFn?: (forgeRoot: string, project: string, sessionId: string) => void;
+};
+
+// ---------------------------------------------------------------------------
+// Architect session helpers (private copies — avoids circular import from ui-bridge)
+// ---------------------------------------------------------------------------
+
+function _architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
+  return join(projectsRoot, project, '_architect', sessionId);
+}
+
+function _readStatus(dir: string): ArchitectStatus | null {
+  const path = join(dir, 'status.json');
+  if (!existsSync(path)) return null;
+  try { return JSON.parse(readFileSync(path, 'utf8')) as ArchitectStatus; } catch { return null; }
+}
+
+function _writeStatus(dir: string, status: ArchitectStatus): void {
+  writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2));
+}
+
+/** Spawn one architect-runner turn as a detached child.
+ *  `FORGE_ARCHITECT_NO_SPAWN=1` disables spawn for test harnesses. */
+function _spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  try {
+    const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(
+      process.execPath,
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'architect', 'run', sessionId, '--project', project],
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
+    );
+    closeSync(stderrFd);
+    proc.unref();
+  } catch { /* best-effort */ }
+}
+
+// ---------------------------------------------------------------------------
+// Shared verdict implementations — called by both the legacy aliases in
+// ui-bridge.ts (POST /api/verdict, POST /api/plan-verdict) and the new
+// generalised gate handler (POST /api/runs/:id/gates/:gateId).
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a review verdict (approve or send-back) for the given initiativeId.
+ *
+ * Returns true and writes the HTTP response; never throws (all errors caught).
+ */
+export async function applyReviewVerdict(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioPostContext,
+  body: {
+    initiativeId: string;
+    kind: 'approve' | 'send-back';
+    rationale: string;
+    acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
+    concernKind?: 'packaging' | 'code-fix';
+    qualityGateCmd?: string[];
+  },
+): Promise<void> {
+  const origin = allowedOrigin(req);
+  const { initiativeId, kind, rationale } = body;
+  const acs = body.acceptanceCriteria ?? [];
+
+  if (!initiativeId || !kind || !rationale) {
+    sendJson(res, 400, { error: 'initiativeId, kind, rationale required' }, origin);
+    return;
+  }
+  if (kind !== 'approve' && kind !== 'send-back') {
+    sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
+    return;
+  }
+  if (kind === 'send-back' && acs.length === 0) {
+    sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' }, origin);
+    return;
+  }
+
+  const inFlightPath = join(ctx.queueRoot, 'in-flight', `${initiativeId}.md`);
+  const readyForReviewPath = join(ctx.queueRoot, 'ready-for-review', `${initiativeId}.md`);
+  if (!existsSync(inFlightPath) && !existsSync(readyForReviewPath)) {
+    sendJson(res, 409, {
+      error: 'no manifest for initiative in in-flight/ or ready-for-review/ (already resolved?)',
+      initiativeId,
+    }, origin);
+    return;
+  }
+  const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
+
+  if (kind === 'approve') {
+    const approveManifest = parseManifest(readFileSync(manifestPath, 'utf8'));
+    const approveWorktreePath = approveManifest.worktree_path ?? '';
+    if (!approveWorktreePath || !existsSync(approveWorktreePath)) {
+      sendJson(res, 409, {
+        error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
+        initiativeId,
+      }, origin);
+      return;
+    }
+    const merged = ctx.mergePr(approveWorktreePath);
+    if (!merged) {
+      sendJson(res, 409, {
+        error: 'gh pr merge failed — merge the PR manually on GitHub',
+        initiativeId,
+      }, origin);
+      return;
+    }
+    void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
+    sendJson(res, 200, { ok: true, kind, note: 'PR merged and finalization triggered' }, origin);
+    return;
+  }
+
+  // send-back path
+  const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
+  const worktreePath = manifest.worktree_path ?? '';
+  if (!worktreePath || !existsSync(worktreePath)) {
+    sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
+    return;
+  }
+  let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
+  try {
+    const cfg = loadProjectConfig(manifest.project_repo_path);
+    if (cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0) projectGateCmd = cfg.quality_gate_cmd;
+  } catch { /* fall back */ }
+  if (projectGateCmd.length === 0) {
+    projectGateCmd = existsSync(join(worktreePath, 'package.json')) ? ['npm', 'test'] : ['true'];
+  }
+  const concernKind = body.concernKind;
+  const concernGateCmd = body.qualityGateCmd;
+
+  let release: (() => Promise<void>) | null = null;
+  try {
+    release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
+  } catch (lockErr) {
+    sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) }, origin);
+    return;
+  }
+  try {
+    const { appended } = appendReviewUnifierItems({
+      worktreePath,
+      initiativeId,
+      concern: { rationale, acceptanceCriteria: acs, kind: concernKind, qualityGateCmd: concernGateCmd },
+      projectGateCmd,
+      estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
+    });
+    persistManifestResumeFromUnifier(manifestPath);
+    sendJson(res, 200, {
+      ok: true,
+      kind,
+      appendedUnifierItems: appended,
+      note: 'work items appended to the unifier queue; the drain re-runs them in the same cycle',
+    }, origin);
+  } catch (appendErr) {
+    if (appendErr instanceof UnifierItemsCapError) {
+      sendJson(res, 409, { error: (appendErr as Error).message }, origin);
+    } else if (appendErr instanceof ReviewConcernInvalidError) {
+      sendJson(res, 400, { error: (appendErr as Error).message }, origin);
+    } else {
+      sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` }, origin);
+    }
+  } finally {
+    if (release) { try { await release(); } catch { /* ignore */ } }
+  }
+}
+
+/**
+ * Apply a plan verdict (approve / revise / reject) for an architect session.
+ *
+ * Writes the HTTP response and never throws.
+ */
+export async function applyPlanVerdict(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioPostContext,
+  body: {
+    project: string;
+    sessionId: string;
+    kind: 'approve' | 'revise' | 'reject';
+    rationale?: string;
+  },
+): Promise<void> {
+  const origin = allowedOrigin(req);
+  const { project, sessionId, kind, rationale } = body;
+
+  if (!project || !sessionId || !kind) {
+    sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
+    return;
+  }
+  if (!['approve', 'revise', 'reject'].includes(kind)) {
+    sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
+    return;
+  }
+
+  const dir = _architectSessionDir(ctx.projectsRoot, project, sessionId);
+  const status = _readStatus(dir);
+  if (!status) {
+    sendJson(res, 404, { error: 'session not found', sessionId }, origin);
+    return;
+  }
+
+  const spawnTurn = ctx.spawnArchitectTurnFn ?? _spawnArchitectTurn;
+
+  if (kind === 'approve') {
+    if (rationale) {
+      writeFileSync(join(dir, 'feedback.md'), rationale.trim() + '\n');
+    }
+    _writeStatus(dir, { ...status, phase: 'finalizing' });
+    spawnTurn(ctx.forgeRoot, project, sessionId);
+  } else if (kind === 'revise') {
+    writeFileSync(join(dir, 'feedback.md'), (rationale ?? '').trim() + '\n');
+    _writeStatus(dir, { ...status, phase: 'interviewing', round: status.round + 1 });
+    spawnTurn(ctx.forgeRoot, project, sessionId);
+  } else {
+    _writeStatus(dir, { ...status, phase: 'rejected' });
+  }
+  ctx.broadcastArchitectChanged();
+  sendJson(res, 200, { ok: true, kind }, origin);
+}
+
+// Safe-ID guard: blocks path traversal in run/gate IDs
+const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
@@ -794,6 +1040,186 @@ export async function handleStudioWriteRoutes(
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
+    return true;
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// POST routes — generalised run + gate write endpoints (M3-4)
+// ---------------------------------------------------------------------------
+
+// Regex to validate initiativeId format
+const INIT_ID_RE = /^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * Handle Forge Studio POST write routes (run start, run resume, gate verdicts).
+ *
+ * Routes:
+ *   POST /api/runs                          → start a planned run
+ *   POST /api/runs/:id/resume               → resume a failed run
+ *   POST /api/runs/:id/gates/:gateId        → dispatch a gate verdict
+ *
+ * Returns true iff handled; false for unrecognised URLs.
+ * Never throws — all errors caught and returned as JSON.
+ */
+export async function handleStudioPostRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioPostContext,
+  rawUrl: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'POST') return false;
+
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  // ---- POST /api/runs — start a planned run --------------------------------
+  if (url === '/api/runs') {
+    try {
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+      const initiativeId = typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '';
+      const originTag = typeof b['origin'] === 'string' ? b['origin'] : 'human-directed';
+
+      if (!initiativeId || !INIT_ID_RE.test(initiativeId)) {
+        sendJson(res, 400, { error: 'initiativeId is required and must match INIT-YYYY-MM-DD-slug format' }, origin);
+        return true;
+      }
+
+      const queuePaths = getPaths(ctx.queueRoot);
+      const filename = `${initiativeId}.md`;
+
+      // Check if already in-flight or done → 409
+      if (existsSync(join(queuePaths.inFlight, filename))) {
+        sendJson(res, 409, { error: 'initiative is already in-flight', initiativeId }, origin);
+        return true;
+      }
+      if (existsSync(join(queuePaths.done, filename))) {
+        sendJson(res, 409, { error: 'initiative is already done', initiativeId }, origin);
+        return true;
+      }
+
+      // Already pending → 200 immediately
+      if (existsSync(join(queuePaths.pending, filename))) {
+        sendJson(res, 200, { ok: true, runId: initiativeId, note: 'already pending' }, origin);
+        return true;
+      }
+
+      // In failed or ready-for-review → move to pending with origin tag
+      const srcCandidates = [queuePaths.readyForReview, queuePaths.failed];
+      let srcPath: string | null = null;
+      for (const dir of srcCandidates) {
+        const candidate = join(dir, filename);
+        if (existsSync(candidate)) { srcPath = candidate; break; }
+      }
+
+      if (!srcPath) {
+        sendJson(res, 404, { error: 'initiative not found in any queue dir', initiativeId }, origin);
+        return true;
+      }
+
+      // Parse, annotate with origin, move to pending
+      const raw = readFileSync(srcPath, 'utf8');
+      const manifest = parseManifest(raw);
+      const safeOrigin: 'architect' | 'human-directed' =
+        originTag === 'architect' ? 'architect' : 'human-directed';
+      const updated = { ...manifest, origin: safeOrigin };
+      const toPath = join(queuePaths.pending, filename);
+      const tmpPath = toPath + '.tmp';
+      writeFileSync(tmpPath, serializeManifest(updated));
+      renameSync(tmpPath, toPath);
+      // Remove from source (best-effort)
+      try { rmSync(srcPath, { force: true }); } catch { /* best-effort */ }
+
+      sendJson(res, 200, { ok: true, runId: initiativeId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/runs/:id/resume — resume a run ----------------------------
+  const resumeMatch = url.match(/^\/api\/runs\/([^/]+)\/resume$/);
+  if (resumeMatch) {
+    const runId = decodeURIComponent(resumeMatch[1]);
+    if (!runId || !SAFE_ID_RE.test(runId)) {
+      sendJson(res, 400, { error: 'invalid run id' }, origin);
+      return true;
+    }
+    try {
+      runRequeue(runId, { forgeRoot: ctx.forgeRoot, resumeFromUnifier: true });
+      sendJson(res, 200, { ok: true, runId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/runs/:id/gates/:gateId — gate verdict --------------------
+  const gateMatch = url.match(/^\/api\/runs\/([A-Za-z0-9_-]+)\/gates\/([A-Za-z0-9_-]+)$/);
+  if (gateMatch) {
+    const runId = decodeURIComponent(gateMatch[1]);
+    const gateId = decodeURIComponent(gateMatch[2]);
+
+    if (!runId || !SAFE_ID_RE.test(runId)) {
+      sendJson(res, 400, { error: 'invalid run id' }, origin);
+      return true;
+    }
+    if (!gateId || !SAFE_ID_RE.test(gateId)) {
+      sendJson(res, 400, { error: 'invalid gate id' }, origin);
+      return true;
+    }
+
+    let body: unknown;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+      return true;
+    }
+    const b = body as Record<string, unknown>;
+    const verdict = typeof b['verdict'] === 'string' ? b['verdict'] : '';
+
+    if (gateId === 'verdict') {
+      // Map to applyReviewVerdict: runId is the initiativeId
+      const kind = verdict === 'approve' || verdict === 'send-back' ? verdict : (b['kind'] as string | undefined);
+      await applyReviewVerdict(req, res, ctx, {
+        initiativeId: runId,
+        kind: (kind as 'approve' | 'send-back') ?? 'send-back',
+        rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
+        acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])
+          ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
+          : undefined,
+        concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
+        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
+      });
+      return true;
+    }
+
+    if (gateId === 'plan') {
+      // Map to applyPlanVerdict: runId is the sessionId; body must carry project + kind
+      await applyPlanVerdict(req, res, ctx, {
+        project: typeof b['project'] === 'string' ? b['project'] : '',
+        sessionId: runId,
+        kind: (verdict === 'approve' || verdict === 'revise' || verdict === 'reject'
+          ? verdict
+          : (b['kind'] as string | undefined) ?? '') as 'approve' | 'revise' | 'reject',
+        rationale: typeof b['rationale'] === 'string' ? b['rationale'] : undefined,
+      });
+      return true;
+    }
+
+    // Unknown gateId
+    sendJson(res, 404, { error: `unknown gate: ${gateId}` }, origin);
     return true;
   }
 
