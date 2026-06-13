@@ -46,7 +46,7 @@
 
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
@@ -430,10 +430,7 @@ async function raceWithWedge<T>(
  */
 export function readOnDiskFlowVersion(flowPath: string): number | null {
   try {
-    // Use the Node.js fs module that's already loaded in this process.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('node:fs') as typeof import('node:fs');
-    const content: string = fs.readFileSync(flowPath, 'utf8');
+    const content = readFileSync(flowPath, 'utf8');
     const m = content.match(/^version:\s*(\d+)/m);
     if (!m) return null;
     const v = parseInt(m[1], 10);

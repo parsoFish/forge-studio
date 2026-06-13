@@ -10,9 +10,10 @@
  * and exits — used in tests and for one-shot runs.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { setInterval, clearInterval } from 'node:timers';
 import {
   claim,
@@ -38,6 +39,7 @@ import {
   decideAutoRetry,
   MAX_AUTO_RETRIES,
 } from './scheduler-dispatch.ts';
+import { validateClaimable } from './claim-validator.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
@@ -549,6 +551,48 @@ async function runOne(
   try {
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
+
+    // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const claimCheck = validateClaimable(
+      manifest.initiativeId,
+      manifest.projectRepoPath,
+      forgeRoot,
+    );
+    if (!claimCheck.ok) {
+      // Emit a structured claim.refused event to the initiative's log dir
+      // (best-effort — cycle logger isn't open yet; we write directly).
+      emitClaimRefusedEvent(manifest.initiativeId, claimCheck.reason, claimCheck.terminal, forgeRoot);
+      if (claimCheck.terminal) {
+        // Terminal refusals (invalid/locked flow) → move to failed/ permanently.
+        console.error(
+          `[serve] ${manifest.initiativeId} — claim refused (terminal): ${claimCheck.reason}`,
+        );
+        moveTo(filename, 'failed', paths);
+        await notify(
+          {
+            type: 'failed',
+            title: `Claim refused (terminal): ${manifest.initiativeId}`,
+            body: claimCheck.reason,
+          },
+          cfg.notify,
+        );
+        return; // runOne done — no worktree, no cycle
+      } else {
+        // Non-terminal (project not contract-ready) → leave in pending, log once.
+        // The manifest is already in in-flight from the claim() call; put it back.
+        moveTo(filename, 'pending', paths);
+        console.warn(
+          `[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`,
+        );
+        return; // runOne done — scheduler will pick it up again later
+      }
+    }
+
+    // Record the flow version at claim time (edit-lock seam, ADR-028 §6/M3-6).
+    // If the on-disk flow version changes mid-run the runner warns (M4 will enforce).
+    annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion) });
+
     const branch = `forge/${manifest.initiativeId}`;
     const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
     // ADR 019: on a resume reuse the preserved worktree (it already holds the
@@ -680,6 +724,12 @@ export type {
   AutoRetryDecision,
 } from './scheduler-dispatch.ts';
 
+// ADR-028 §8 (M3-6): re-export claim validator + version-seam utilities
+// so tests can import them from the scheduler module without reaching into
+// the implementation detail.
+export { validateClaimable, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';
+export type { ClaimValidationResult } from './claim-validator.ts';
+
 type ParsedManifest = {
   initiativeId: string;
   project: string;
@@ -721,6 +771,40 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
   }
   const updated = content.replace(/^---\n[\s\S]*?\n---/, `---\n${fm}\n---`);
   writeFileSync(path, updated);
+}
+
+/**
+ * ADR-028 §8 (M3-6): emit a claim.refused event to the initiative's JSONL log.
+ * Best-effort — the cycle logger is not open yet at claim time, so we write
+ * directly to the log dir. Missing dir is created on the fly.
+ */
+function emitClaimRefusedEvent(
+  initiativeId: string,
+  reason: string,
+  terminal: boolean,
+  forgeRoot: string,
+): void {
+  try {
+    const logDir = resolve(forgeRoot, '_logs', initiativeId);
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+    const logPath = join(logDir, 'events.jsonl');
+    const entry = {
+      event_id: `claim-refused-${Date.now()}`,
+      cycle_id: initiativeId,
+      initiative_id: initiativeId,
+      started_at: new Date().toISOString(),
+      phase: 'orchestrator',
+      skill: 'scheduler',
+      event_type: 'error',
+      input_refs: [] as string[],
+      output_refs: [] as string[],
+      message: 'claim.refused',
+      metadata: { reason, terminal },
+    };
+    appendFileSync(logPath, JSON.stringify(entry) + '\n');
+  } catch {
+    /* best-effort — never throw from a refusal path */
+  }
 }
 
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }): void {
