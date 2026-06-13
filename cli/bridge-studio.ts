@@ -1182,6 +1182,93 @@ export async function handleStudioWriteRoutes(
     return true;
   }
 
+  // ---- POST /api/studio/kbs (create a new KB) (M5-4) ---------------------
+  if (url === '/api/studio/kbs' && method === 'POST') {
+    try {
+      // 1. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 2. Validate id (slug-guard blocks path traversal)
+      const id = typeof b['id'] === 'string' ? b['id'].trim() : '';
+      if (!id) {
+        sendJson(res, 400, { error: 'id is required' }, origin);
+        return true;
+      }
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid kb id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+
+      // 3. Validate name + desc (non-empty strings)
+      const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
+      if (!name) {
+        sendJson(res, 400, { error: 'name is required and must be non-empty' }, origin);
+        return true;
+      }
+      const desc = typeof b['desc'] === 'string' ? b['desc'].trim() : '';
+      if (!desc) {
+        sendJson(res, 400, { error: 'desc is required and must be non-empty' }, origin);
+        return true;
+      }
+
+      // 4. Validate scope enum
+      const KB_SCOPES_ALLOWED = ['project', 'flow', 'agent-integration'] as const;
+      type KbScopeAllowed = typeof KB_SCOPES_ALLOWED[number];
+      const scope = typeof b['scope'] === 'string' ? b['scope'] : '';
+      if (!KB_SCOPES_ALLOWED.includes(scope as KbScopeAllowed)) {
+        sendJson(res, 400, { error: `scope must be one of: ${KB_SCOPES_ALLOWED.join(', ')}` }, origin);
+        return true;
+      }
+
+      // 5. Path-guard: resolved kb dir must stay under brain/
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      const kbDir = resolve(brainBase, id);
+      if (!kbDir.startsWith(brainBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // 6. Reject if already exists (409)
+      if (existsSync(kbDir)) {
+        sendJson(res, 409, { error: `kb already exists: ${id}` }, origin);
+        return true;
+      }
+
+      // 7. Scaffold: mkdir brain/<id>/ + brain/<id>/themes/ + brain/<id>/_raw/
+      mkdirSync(join(kbDir, 'themes'), { recursive: true });
+      mkdirSync(join(kbDir, '_raw'), { recursive: true });
+
+      // 8. Write brain/<id>/kb.yaml (id/name/scope/desc)
+      const kbYamlPath = join(kbDir, 'kb.yaml');
+      const kbYamlContent = [
+        `id: ${id}`,
+        `name: ${name}`,
+        `scope: ${scope}`,
+        `desc: ${desc}`,
+      ].join('\n') + '\n';
+      writeFileSync(kbYamlPath, kbYamlContent, 'utf8');
+
+      // 9. Verify loadKbDescriptor can round-trip it
+      loadKbDescriptor(kbYamlPath);
+
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- POST /api/studio/kbs/:id/guidance (M5-3) -------------------------
   const guidanceMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/guidance$/);
   if (guidanceMatch && method === 'POST') {

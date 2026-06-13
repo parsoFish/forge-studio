@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  checkCategoryScope,
   checkContradictions,
   checkFrontmatter,
   checkIndexSync,
@@ -516,4 +517,89 @@ test('runBrainLint: cleanup-dry-run scope is inventory-only — exits 0', () => 
   } finally {
     cleanup(root);
   }
+});
+
+// ---------- checkCategoryScope (brain gap #8) ----------
+
+test('checkCategoryScope: correctly-routed pattern in cycles/themes/ produces no finding', () => {
+  const root = buildBrainFixture({
+    themes: [{ path: 'cycles/themes/good-pattern.md', fm: { category: 'pattern' } }],
+  });
+  try {
+    const findings = checkCategoryScope(root);
+    assert.equal(findings.filter((f) => f.file.endsWith('good-pattern.md')).length, 0);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkCategoryScope: correctly-routed decision in forge-dev/themes/ produces no finding', () => {
+  const root = buildBrainFixture({
+    themes: [{ path: 'forge-dev/themes/good-decision.md', fm: { category: 'decision' } }],
+  });
+  try {
+    const findings = checkCategoryScope(root);
+    assert.equal(findings.filter((f) => f.file.endsWith('good-decision.md')).length, 0);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkCategoryScope: decision theme in cycles/themes/ (mis-routed) → error', () => {
+  const root = buildBrainFixture({
+    themes: [{ path: 'cycles/themes/misrouted-decision.md', fm: { category: 'decision' } }],
+  });
+  try {
+    const findings = checkCategoryScope(root);
+    const f = findings.filter((f) => f.file.endsWith('misrouted-decision.md'));
+    assert.equal(f.length, 1);
+    assert.equal(f[0].category, 'error');
+    assert.ok(f[0].message.includes('forge-dev'));
+    assert.equal(f[0].check, 'checkCategoryScope');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkCategoryScope: antipattern theme in forge-dev/themes/ (mis-routed) → error', () => {
+  const root = buildBrainFixture({
+    themes: [{ path: 'forge-dev/themes/misrouted-antipattern.md', fm: { category: 'antipattern' } }],
+  });
+  try {
+    const findings = checkCategoryScope(root);
+    const f = findings.filter((f) => f.file.endsWith('misrouted-antipattern.md'));
+    assert.equal(f.length, 1);
+    assert.equal(f[0].category, 'error');
+    assert.ok(f[0].message.includes('cycles'));
+    assert.equal(f[0].check, 'checkCategoryScope');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkCategoryScope: reference theme in forge-dev/themes/ (correctly routed) produces no finding', () => {
+  const root = buildBrainFixture({
+    themes: [{ path: 'forge-dev/themes/good-reference.md', fm: { category: 'reference' } }],
+  });
+  try {
+    const findings = checkCategoryScope(root);
+    assert.equal(findings.filter((f) => f.file.endsWith('good-reference.md')).length, 0);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkCategoryScope: real brain has 0 scope-guard errors', async () => {
+  // This test asserts the real brain is clean under the scope-guard rule.
+  // If it fails, that is a genuine brain data inconsistency (not a test bug).
+  const { resolve: nodeResolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const dir = nodeResolve(fileURLToPath(import.meta.url), '..', '..');
+  const findings = checkCategoryScope(dir);
+  const errors = findings.filter((f) => f.category === 'error');
+  assert.equal(
+    errors.length,
+    0,
+    `Real brain has ${errors.length} mis-routed theme(s):\n${errors.map((f) => `  ${f.file}: ${f.message}`).join('\n')}`,
+  );
 });

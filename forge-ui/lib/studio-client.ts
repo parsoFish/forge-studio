@@ -478,3 +478,15 @@ export async function pinGuidance(
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, file: typeof r.data?.file === 'string' ? (r.data.file as string) : undefined };
 }
+
+/** Create a new KB (scaffold brain/<id>/ + kb.yaml + themes/ + _raw/). */
+export async function createKb(body: {
+  id: string;
+  name: string;
+  scope: string;
+  desc: string;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const r = await studioPost('/api/studio/kbs', body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id };
+}
