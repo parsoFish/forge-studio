@@ -94,6 +94,10 @@ export type UnifierUserPromptInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /** Project's typed demo steps (M2). When present, appended to the demo instruction. */
+  demoProcess?: Array<{ kind: string; text: string }>;
+  /** Project's bound skill slugs (M2). When present, the unifier composes them. */
+  skills?: string[];
 };
 
 /**
@@ -113,7 +117,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
 
   const demoBlock = demoInstructionsForShape(input.demoShape);
 
-  return [
+  const base = [
     '# Developer-unifier — iteration brief',
     '',
     `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}** · Demo shape: **${input.demoShape}**`,
@@ -152,6 +156,18 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   ]
     .filter((line) => line !== '')
     .join('\n');
+
+  const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
+    ? '\n\n## Project demo process\n\nThis project defines typed demo steps. Follow them when authoring `demo.json`:\n' +
+      input.demoProcess.map((s, i) => `${i + 1}. [${s.kind.toUpperCase()}] ${s.text}`).join('\n')
+    : '';
+
+  const projectSkillsBlock = input.skills && input.skills.length > 0
+    ? '\n\n## Project skills\n\nThis project binds these skills — load them when relevant: ' +
+      input.skills.map((s) => `\`${s}\``).join(', ') + '.'
+    : '';
+
+  return base + projectDemoBlock + projectSkillsBlock;
 }
 
 /**
@@ -236,6 +252,10 @@ export type PrepareUnifierWorkspaceInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /** Project's typed demo steps (M2). Threaded into the rendered prompt. */
+  demoProcess?: Array<{ kind: string; text: string }>;
+  /** Project's bound skill slugs (M2). Threaded into the rendered prompt. */
+  skills?: string[];
 };
 
 export type PreparedUnifierWorkspace = {
@@ -282,6 +302,8 @@ export function prepareUnifierWorkspace(
       iterationBudget: input.iterationBudget,
       demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
+      demoProcess: input.demoProcess,
+      skills: input.skills,
     });
     writeFileSync(promptPath, prompt);
   }

@@ -112,12 +112,14 @@ export type Flow = {
   costCeilingUsd?: number;
 };
 
+export type DemoStep = { kind: 'capture' | 'verify' | 'present'; text: string };
+
 export type Project = {
   id: string;
   name: string;
   northStar?: string;
   instructions?: string;
-  demoProcess?: string;
+  demoProcess?: DemoStep[];
   skills: string[];
   kb?: string;
 };
@@ -293,4 +295,29 @@ export async function saveProject(
 ): Promise<{ ok: boolean; error?: string }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
   return { ok: r.ok, error: r.error };
+}
+
+export type PreflightClause = {
+  id: string;
+  title: string;
+  hard: boolean;
+  pass: boolean;
+  detail: string;
+};
+
+export type PreflightResult = {
+  clauses: PreflightClause[];
+  ready: boolean;
+};
+
+export async function fetchPreflight(projectId: string): Promise<PreflightResult | null> {
+  const base = await resolveBridgeUrl();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/studio/projects/${encodeURIComponent(projectId)}/preflight`);
+    if (!res.ok) return null;
+    return (await res.json()) as PreflightResult;
+  } catch {
+    return null;
+  }
 }

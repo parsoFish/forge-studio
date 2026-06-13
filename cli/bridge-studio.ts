@@ -23,6 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
+import { runPreflight } from './preflight.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
@@ -480,6 +481,50 @@ export async function handleStudioRoutes(
       }
       const catalog = loadCatalog(catalogPath);
       sendJson(res, 200, { catalog }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/projects/:id/preflight ---------------------------------
+  const preflightMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight$/);
+  if (preflightMatch) {
+    try {
+      const id = decodeURIComponent(preflightMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id' }, origin);
+        return true;
+      }
+      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
+      if (!existsSync(projectsYamlPath)) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      let registry: ReturnType<typeof loadProjectsRegistry>;
+      try { registry = loadProjectsRegistry(projectsYamlPath); } catch {
+        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
+        return true;
+      }
+      const projectRef = registry.projects.find((p) => p.id === id);
+      if (!projectRef) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
+        sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
+        return true;
+      }
+      const report = await runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const clauses = report.clauses.map((c) => ({
+        id: c.clause,
+        title: c.title,
+        hard: c.hard,
+        pass: c.pass,
+        detail: c.detail,
+      }));
+      sendJson(res, 200, { clauses, ready: report.ok }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

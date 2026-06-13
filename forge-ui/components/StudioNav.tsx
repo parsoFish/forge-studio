@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { kind: 'link', label: 'Library', href: '/', id: 'library' },
   { kind: 'link', label: 'Flows', href: '/flows/forge-cycle', id: 'flows' },
   { kind: 'link', label: 'Agents', href: '/agents/new', id: 'agents' },
-  { kind: 'disabled', label: 'Projects', title: 'M5', id: 'projects' },
+  { kind: 'link', label: 'Projects', href: '/projects', id: 'projects' },
   { kind: 'disabled', label: 'Knowledge', title: 'M5', id: 'knowledge' },
 ];
 
@@ -38,6 +38,7 @@ export function StudioNav() {
     if (item.href === '/') return pathname === '/';
     // Agents nav points to /agents/new but any /agents/* route should be active
     if (item.id === 'agents') return pathname.startsWith('/agents');
+    if (item.id === 'projects') return pathname.startsWith('/projects');
     return pathname.startsWith(item.href);
   }
 

@@ -25,12 +25,12 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
   const kbLabel = project.kb ? (kbs.find((k) => k.id === project.kb)?.name ?? project.kb) : null;
 
   return (
-    <div
+    <Link
+      href={`/projects/${encodeURIComponent(project.id)}`}
       className="lib-card"
       data-card-type="project"
       data-card-id={project.id}
-      style={{ animationDelay: `${index * 0.045}s`, cursor: 'default' }}
-      title="Project builder lands in M2"
+      style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{project.name}</span>
@@ -41,7 +41,7 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
         <span className="card-stat">{plural(skillCount, 'skill')}</span>
         {kbLabel && <span className="badge badge-kb">{kbLabel}</span>}
       </div>
-    </div>
+    </Link>
   );
 }
 

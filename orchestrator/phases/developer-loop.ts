@@ -1100,6 +1100,8 @@ export async function runUnifier(
       demoShape,
       qualityGateCmd,
       demoCommand: projectConfig?.demo.command,
+      demoProcess: projectConfig?.demoProcess,
+      skills: projectConfig?.skills,
     });
     writeWorkItemStatus(uwiPath, itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
@@ -1188,6 +1190,10 @@ type UnifierItemArgs = {
   demoShape: import('../project-config.ts').DemoShape;
   qualityGateCmd: string[];
   demoCommand: string[] | undefined;
+  /** Project's typed demo steps (M2). Threaded into prepareUnifierWorkspace. */
+  demoProcess?: Array<{ kind: string; text: string }>;
+  /** Project's bound skill slugs (M2). Threaded into prepareUnifierWorkspace. */
+  skills?: string[];
 };
 type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
 
@@ -1281,6 +1287,8 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     iterationBudget: itemCap,
     demoShape,
     qualityGateCmd: itemGateCmd,
+    demoProcess: args.demoProcess,
+    skills: args.skills,
   });
 
   const systemPrompt = buildUnifierSystemPrompt();

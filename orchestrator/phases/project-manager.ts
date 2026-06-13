@@ -152,6 +152,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // worktree so the PM writes a discriminating per-WI gate (e.g. Go's
   // `-tags all -run <NewPrefix> ./pkg/`) instead of the operator hand-encoding it.
   const gateRecipe = renderGateRecipeBlock(deriveGateRecipe(input.worktreePath));
+  // M2: best-effort load of project config to inject standing instructions.
+  // A separate load from the one in runUnifier (which runs later) — kept
+  // isolated here so a config-read failure doesn't abort the PM pass.
+  let projectConfigForPrompt: ProjectConfig | null = null;
+  try { projectConfigForPrompt = loadProjectConfig(input.worktreePath); } catch { /* best-effort */ }
   const prompt = renderPmUserPrompt({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
@@ -159,6 +164,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     projectName: manifest.project,
     projectContext,
     gateRecipe,
+    instructions: projectConfigForPrompt?.instructions,
   });
 
   const opts: Record<string, unknown> = {

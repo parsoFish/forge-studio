@@ -145,7 +145,16 @@ export type PmUserPromptInput = {
    * gate guidance already in the prompt.
    */
   gateRecipe?: string;
+  /**
+   * Standing project instructions (M2). When present, injected into every PM
+   * prompt so the agent respects project-specific constraints without the PM
+   * having to re-read project.json itself.
+   */
+  instructions?: string;
 };
+
+/** Header for the injected project-instructions block — exported for tests. */
+export const INSTRUCTIONS_SECTION_HEADER = '## Project instructions (injected by forge)';
 
 /**
  * Render the per-cycle user prompt the SDK sends to the PM agent.
@@ -167,6 +176,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     'Follow the project-manager skill contract in your system prompt. You are non-interactive; decompose THIS initiative\'s body and write the work items + _graph.md.',
     ...(projectContextBlock ? ['', projectContextBlock] : []),
     ...(input.gateRecipe ? ['', input.gateRecipe] : []),
+    ...(input.instructions ? ['', INSTRUCTIONS_SECTION_HEADER, '', input.instructions.trim(), ''] : []),
     '',
     `## Initiative: ${input.initiativeId}`,
     `## Project: ${input.projectName}`,
