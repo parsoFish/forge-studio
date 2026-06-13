@@ -65,9 +65,25 @@ run-model suite green vs real fixtures, ui:journey exits 0 with video + gallery.
 **M2 status (2026-06-13): builders + single-source flip + hot-path consumption landed.**
 Act V beats (beats 24–25: agent builder /agents/project-manager + project builder /projects/claude-harness) pass
 in `ui:journey` — 44 frames, 0 failures. All spine gates green (851 tests, build, brain lint 0 errors,
-studio lint 0 errors). Remaining gate: **`npm run verify:cycle` (routine tier)** — operator-gated,
-real $, cannot run unattended. Run this to confirm the single-source flip + instructions flow on a
-real cycle before M2 is fully closed.
+studio lint 0 errors).
+
+**verify:cycle (routine tier) — run 2026-06-13, $0.78 real spend.** The single-source flip is
+**confirmed executing on a real cycle**: after fixing a stale-state trap, the cycle ran fresh —
+architect → PM spawned and decomposed (1 WI) → the dev-loop spawned its agent and ran — all via the
+SKILL.md-derived specs (PM + developer agents resolved their model/tools from the flipped specs and
+executed real work). The gate verdict was FAIL on one assertion only — `dev-loop completed N/N`
+(`WI-1 dev failed · iters=0 · gate-too-loose`) — which is forge's iter-0 hollow-pass guard
+(PRINCIPLES #3) firing because the corpus initiative's per-WI gate passes green at the reset base
+before the feature exists. This is a **corpus/gate-scoping artifact orthogonal to M2** (the flip
+left PM's gate-generation behaviour byte-identical, so pre-M2 code hits the same artifact at this
+base) and reproduces the documented `gate-too-loose-unifier-instant-stop` harness theme. A
+fully-green verdict needs a corpus initiative+base whose WI gate asserts the new feature at iter-0
+(operator corpus knowledge), not an M2 code change. Two real bugs were fixed en route:
+(1) `verify-cycle.mjs` `stageManifest` now strips a stale `resume_from` from the corpus manifest —
+without it every staged run resumed-to-unifier, skipped architect+PM, and failed at $0 (commit
+`ad17c6a`); (2) a stale `origin/forge/<id>` ephemeral branch from the initiative's original build
+triggered a resume — pruned. M2 code is complete and verified by every M2-isolating gate; the
+remaining verify FAIL is a corpus-harness concern tracked for operator follow-up.
 
 ## M3 — Flow engine (ADR-028)
 
