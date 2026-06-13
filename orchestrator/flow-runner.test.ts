@@ -11,10 +11,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runFlow, forgeCycleFlowPath, type FlowRunnerDeps } from './flow-runner.ts';
+import { WedgeKillError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
 import type { CycleInput } from './cycle-context.ts';
 import type { EventLogger } from './logging.ts';
+import type { AgentBudgets } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -298,5 +300,158 @@ describe('flow-runner with real forge-cycle.yaml', () => {
 
     assert.ok(!tracker.calls.includes('runProjectManager'));
     assert.ok(tracker.calls.includes('runDeveloperLoop'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 5: Wedge-kill race — raceWithWedge integration
+// ---------------------------------------------------------------------------
+
+/** Minimal flow with just pm node — keeps wedge-kill tests focused. */
+function makePmOnlyFlow(): FlowDefinition {
+  return {
+    id: 'pm-only',
+    name: 'PM only',
+    version: 1,
+    goal: 'Run only the PM node.',
+    project: null,
+    kb: 'cycles',
+    costCeilingUsd: 0,
+    origin: 'seed',
+    disposable: undefined,
+    nodes: [{ id: 'pm', agent: 'project-manager' }],
+    edges: [],
+    triggers: [],
+    path: '/fake/pm-only.yaml',
+  };
+}
+
+describe('flow-runner wedge-kill race', () => {
+  it('rejects with WedgeKillError when executor hangs and wedge timer fires', async () => {
+    const flow = makePmOnlyFlow();
+    const input = makeInput();
+    const logger = makeLogger();
+
+    let capturedSignal: AbortSignal | undefined;
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async (_inp, nodeLogger, sig) => {
+        capturedSignal = sig;
+        // Emit a heartbeat to seed the WedgeDetector (starts the progress clock).
+        nodeLogger.emit({
+          initiative_id: input.initiativeId,
+          phase: 'project-manager',
+          skill: 'project-manager',
+          event_type: 'agent_heartbeat',
+          input_refs: [],
+          output_refs: [],
+        });
+        // Hang until the signal fires (best-effort cancel via raceWithWedge).
+        // Using signal-aware hang so the Node.js process can exit after the race.
+        return new Promise<void>((resolve) => {
+          if (sig?.aborted) { resolve(); return; }
+          sig?.addEventListener('abort', () => resolve(), { once: true });
+        });
+      },
+      // No-ops for the close-contract helpers (pm-only flow doesn't need them)
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+
+    // wedgeKillMs: 50ms — poll fires at 100ms, by which time 100ms > 50ms → kill fires.
+    const nodeBudgets = new Map<string, AgentBudgets>([
+      ['pm', { wedgeKillMs: 50 }],
+    ]);
+
+    await assert.rejects(
+      () => runFlow({ flow, input, logger, deps, nodeBudgets }),
+      (err: unknown) => {
+        assert.ok(err instanceof WedgeKillError, `expected WedgeKillError, got ${String(err)}`);
+        assert.strictEqual(err.nodeId, 'pm');
+        return true;
+      },
+    );
+
+    // The abort signal must have been fired (best-effort SDK cancel).
+    assert.ok(capturedSignal !== undefined, 'signal must be passed to executor');
+    assert.ok(capturedSignal!.aborted, 'signal must be aborted after wedge kill');
+
+    // phase.wedge-killed event must appear in the logger.
+    const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string }>;
+    assert.ok(
+      events.some((e) => e.message === 'phase.wedge-killed'),
+      'logger must contain a phase.wedge-killed event',
+    );
+  });
+
+  it('completes normally when executor makes tool progress within the window', async () => {
+    const flow = makePmOnlyFlow();
+    const input = makeInput();
+    const logger = makeLogger();
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async (_inp, nodeLogger, _sig) => {
+        // Heartbeat → tool progress → resolve after short delay.
+        nodeLogger.emit({
+          initiative_id: input.initiativeId,
+          phase: 'project-manager',
+          skill: 'project-manager',
+          event_type: 'agent_heartbeat',
+          input_refs: [],
+          output_refs: [],
+        });
+        nodeLogger.emit({
+          initiative_id: input.initiativeId,
+          phase: 'project-manager',
+          skill: 'project-manager',
+          event_type: 'tool_use',
+          input_refs: [],
+          output_refs: [],
+        });
+        // Resolve within the 50ms window — tool progress reset the clock.
+        await new Promise<void>((r) => setTimeout(r, 20));
+      },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+
+    const nodeBudgets = new Map<string, AgentBudgets>([
+      ['pm', { wedgeKillMs: 50 }],
+    ]);
+
+    // Must NOT throw — tool progress reset the clock so wedge never fires.
+    await assert.doesNotReject(
+      () => runFlow({ flow, input, logger, deps, nodeBudgets }),
+    );
+  });
+
+  it('passes undefined signal to executor when wedgeKillMs is not set', async () => {
+    const flow = makePmOnlyFlow();
+    const input = makeInput();
+    const logger = makeLogger();
+
+    let capturedSignal: AbortSignal | undefined | 'not-called' = 'not-called';
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async (_inp, _logger, sig) => {
+        capturedSignal = sig;
+      },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+
+    // No nodeBudgets → wedgeDetector.active === false → no race, signal is undefined.
+    await runFlow({ flow, input, logger, deps });
+
+    assert.strictEqual(capturedSignal, undefined, 'signal must be undefined when wedgeKillMs is not set');
   });
 });

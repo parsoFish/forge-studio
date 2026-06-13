@@ -190,6 +190,10 @@ function makeAgentWithTelemetry(
 export async function runDeveloperLoop(
   input: CycleInput,
   logger: EventLogger,
+  // best-effort wedge abort; not yet chained into per-WI Ralph instances
+  // (each Ralph creates its own abortController in claude-agent.ts — a clean
+  // chain requires ClaudeAgentOptions to accept an external signal, deferred).
+  _signal?: AbortSignal,
 ): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null; commitsAhead: number; filesChanged: number; insertions: number }> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({

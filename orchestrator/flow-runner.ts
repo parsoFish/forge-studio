@@ -24,10 +24,10 @@
  *     (resumable classification).
  *   - wedgeKillMs: per-node WedgeDetector watches the event stream; if heartbeats
  *     fire but no tool_use/file_change/test_run for wedgeKillMs ms → emits
- *     phase.wedge-killed + throws WedgeKillError (resumable). Detection runs via
- *     the logger wrapper. Abort wiring into the SDK executor is a TODO (no clean
- *     seam without invasive changes to phase functions); detection + event emission
- *     fires synchronously when the node finishes (post-execution wedge check).
+ *     phase.wedge-killed + throws WedgeKillError (resumable). Detection races the
+ *     executor via a concurrent poll timer (raceWithWedge) so a hung executor is
+ *     killed even if it never returns. An AbortSignal is threaded into PM; dev-loop
+ *     accepts the param (best-effort, not yet chained into per-WI Ralphs).
  *   - rate-limit gate: before spawning each node, awaits RateLimitGate.waitIfNeeded();
  *     when an executor throws a rate-limit error, gate.recordRateLimit() is called
  *     and the error is rethrown (scheduler auto-retry handles the actual retry).
@@ -51,10 +51,10 @@ import type { EventLogger } from './logging.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
 import type { ClosureResult } from './phases/closure.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets } from './studio/types.ts';
-import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
+import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flow-budgets.ts';
 
-import { runProjectManager } from './phases/project-manager.ts';
-import { runDeveloperLoop } from './phases/developer-loop.ts';
+import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
+import { runDeveloperLoop as realRunDeveloperLoop } from './phases/developer-loop.ts';
 import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from './pr.ts';
@@ -77,11 +77,12 @@ import {
  * touching the filesystem or spawning agents.
  */
 export type FlowRunnerDeps = {
-  runProjectManager: (input: CycleInput, logger: EventLogger) => Promise<void>;
+  runProjectManager: (input: CycleInput, logger: EventLogger, signal?: AbortSignal) => Promise<void>;
 
   runDeveloperLoop: (
     input: CycleInput,
     logger: EventLogger,
+    signal?: AbortSignal,
   ) => Promise<{
     unifierSucceeded: boolean;
     unifierFailureClass: string | null;
@@ -236,8 +237,11 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
 }
 
 const DEFAULT_DEPS: FlowRunnerDeps = {
-  runProjectManager,
-  runDeveloperLoop,
+  // Thread the optional wedge-abort signal into real phase functions.
+  runProjectManager: (input, logger, signal?) =>
+    realRunProjectManager(input, logger, { signal }),
+  runDeveloperLoop: (input, logger, signal?) =>
+    realRunDeveloperLoop(input, logger, signal),
   openPrInline,
   runClosure,
   runReflector,
@@ -307,13 +311,13 @@ function wrapLoggerForWedge(
     emit(partial) {
       const entry = logger.emit(partial);
       const t = getNow();
-      if (entry.event_type === 'agent_heartbeat') {
+      // Read event_type from the partial (the caller's input) so this wrapper
+      // works with any EventLogger implementation, including test stubs that
+      // only return { event_id } from emit().
+      const et = partial.event_type;
+      if (et === 'agent_heartbeat') {
         detector.onHeartbeat(t);
-      } else if (
-        entry.event_type === 'tool_use' ||
-        entry.event_type === 'file_change' ||
-        entry.event_type === 'test_run'
-      ) {
+      } else if (et === 'tool_use' || et === 'file_change' || et === 'test_run') {
         detector.onToolProgress(t);
       }
       return entry;
@@ -345,6 +349,51 @@ function extractResetsAt(_err: unknown): number | null {
   // TODO: when the Claude SDK surfaces resetsAt on RateLimitError, read it here.
   // For now, use a conservative 60s backoff so the gate still protects spawns.
   return Date.now() + 60_000;
+}
+
+// ---------------------------------------------------------------------------
+// Wedge-kill race helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Race an executor promise against a concurrent wedge-kill timer.
+ * Returns the executor result when it wins. Throws WedgeKillError when
+ * the wedge timer wins (even if the executor never resolves — this is the
+ * gap-closing path).
+ *
+ * The wedgeAbort signal is passed to the executor for best-effort SDK cancel.
+ * The poll interval is 100ms — accurate enough for minute-scale wedge windows,
+ * imperceptible overhead.
+ *
+ * Only called when wedgeDetector.active is true (wedgeKillMs is set).
+ * Cleans up the poll timer on BOTH outcomes.
+ */
+async function raceWithWedge<T>(
+  executorFn: (signal: AbortSignal) => Promise<T>,
+  wedgeDetector: WedgeDetector,
+  onKill: (err: WedgeKillError) => void,
+): Promise<T> {
+  const wedgeAbort = new AbortController();
+  let pollHandle: ReturnType<typeof setInterval> | undefined;
+
+  const wedgePromise = new Promise<never>((_, reject) => {
+    pollHandle = setInterval(() => {
+      if (wedgeDetector.check(Date.now())) {
+        const killErr = wedgeDetector.buildKillError(Date.now());
+        onKill(killErr);
+        // Reject BEFORE abort so the race rejects with WedgeKillError even
+        // if the executor's abort listener resolves its promise synchronously.
+        reject(killErr);
+        wedgeAbort.abort();
+      }
+    }, 100);
+  });
+
+  try {
+    return await Promise.race([executorFn(wedgeAbort.signal), wedgePromise]);
+  } finally {
+    if (pollHandle !== undefined) clearInterval(pollHandle);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -449,7 +498,26 @@ export async function runFlow({
             });
             break;
           }
-          await deps.runProjectManager(input, nodeLogger);
+          if (wedgeDetector.active) {
+            await raceWithWedge(
+              (sig) => deps.runProjectManager(input, nodeLogger, sig),
+              wedgeDetector,
+              (killErr) => {
+                costLogger.emit({
+                  initiative_id: input.initiativeId,
+                  phase: 'orchestrator',
+                  skill: 'flow-budgets',
+                  event_type: 'error',
+                  input_refs: [],
+                  output_refs: [],
+                  message: 'phase.wedge-killed',
+                  metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
+                });
+              },
+            );
+          } else {
+            await deps.runProjectManager(input, nodeLogger);
+          }
           break;
         }
 
@@ -457,7 +525,24 @@ export async function runFlow({
           // M3 coupling: runDeveloperLoop calls runUnifier internally.
           // The flow's separate unifier node is a marker (handled in 'unifier' case).
           // Items 4-8: the dev-loop close contract runs immediately after.
-          const devLoopOutcome = await deps.runDeveloperLoop(input, nodeLogger);
+          const devLoopOutcome = wedgeDetector.active
+            ? await raceWithWedge(
+                (sig) => deps.runDeveloperLoop(input, nodeLogger, sig),
+                wedgeDetector,
+                (killErr) => {
+                  costLogger.emit({
+                    initiative_id: input.initiativeId,
+                    phase: 'orchestrator',
+                    skill: 'flow-budgets',
+                    event_type: 'error',
+                    input_refs: [],
+                    output_refs: [],
+                    message: 'phase.wedge-killed',
+                    metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
+                  });
+                },
+              )
+            : await deps.runDeveloperLoop(input, nodeLogger);
 
           // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
           deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
@@ -544,34 +629,6 @@ export async function runFlow({
         if (resetsAt !== null) rateLimitGate.recordRateLimit(resetsAt);
       }
       throw err;
-    }
-
-    // M3-3: Post-node wedge check. Because phase functions don't expose an
-    // abort seam (they own their own SDK stream loops), wedge detection runs
-    // POST-EXECUTION rather than mid-stream. This catches the case where the
-    // agent ran for wedgeKillMs without tool progress and only then returned.
-    // A clean mid-stream abort (AbortController into the SDK executor) is a
-    // TODO for a future milestone once the phase function seam is clean.
-    //
-    // TODO(M4): wire AbortController into runDeveloperLoop / runProjectManager
-    // so wedge-kill aborts mid-stream rather than post-execution.
-    if (wedgeDetector.active && wedgeDetector.check(Date.now())) {
-      const killError = wedgeDetector.buildKillError(Date.now());
-      costLogger.emit({
-        initiative_id: input.initiativeId,
-        phase: 'orchestrator',
-        skill: 'flow-budgets',
-        event_type: 'error',
-        input_refs: [],
-        output_refs: [],
-        message: 'phase.wedge-killed',
-        metadata: {
-          node: nodeId,
-          wedgeKillMs: nodeBudget?.wedgeKillMs,
-          lastProgressAt: killError.lastProgressAt,
-        },
-      });
-      throw killError;
     }
 
     // M3-3: Cost-ceiling check — at every clean node boundary (after the node

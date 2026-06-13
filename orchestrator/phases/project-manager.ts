@@ -46,6 +46,13 @@ export type PmQueryFn = (params: {
 
 export type RunProjectManagerOptions = {
   queryFn?: PmQueryFn;
+  /**
+   * Optional wedge-kill abort signal threaded from flow-runner's raceWithWedge.
+   * When fired, the PM's internal abortController is chained to propagate the
+   * cancel into the SDK stream loop. Best-effort — the stream may not respond
+   * immediately, but the race has already rejected so the cycle moves on.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -102,6 +109,7 @@ export async function runProjectManager(
     manifest,
     parentEventId: start.event_id,
     queryFn,
+    signal: options.signal,
   });
 
   if (result.kind === 'success') return;
@@ -114,6 +122,7 @@ type PmPassInput = {
   manifest: InitiativeManifest;
   parentEventId: string;
   queryFn: PmQueryFn;
+  signal?: AbortSignal;
 };
 
 type PmPassOutcome =
@@ -126,7 +135,7 @@ type PmPassOutcome =
  * the outer orchestrator can decide how to handle failure.
  */
 async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
-  const { input, logger, manifest, parentEventId, queryFn } = p;
+  const { input, logger, manifest, parentEventId, queryFn, signal } = p;
 
   // F-21: wipe any stale `.forge/work-items/` inherited from the project's
   // base branch. The dev-loop's pre-review boundary snapshot historically
@@ -189,6 +198,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // throws into cycle.ts → classifier (transient) instead of hanging the queue.
   // betterado roadmap run stalled exactly here mid-PM (known-gaps 2026-06-01).
   const abortController = new AbortController();
+  // Chain the optional wedge-kill signal so a raceWithWedge abort propagates
+  // into the SDK stream loop (best-effort — race has already rejected by then).
+  if (signal) {
+    signal.addEventListener('abort', () => abortController.abort(signal.reason), { once: true });
+  }
   opts.abortController = abortController;
 
   const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0 };
