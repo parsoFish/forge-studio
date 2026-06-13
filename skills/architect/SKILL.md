@@ -2,6 +2,21 @@
 name: architect
 description: Interactive ideation session that turns ideas into a PLAN.md the operator reviews before any manifest is queued.
 phase: architect
+purpose: Turn an operator idea into a PLAN.md and queued manifest through an interactive interview and the human PLAN gate.
+composition:
+  skills: [brain-query]
+  tools: []
+  mcps: []
+  hooks: [event-log]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: mandatory
+interactivity: Operator-driven; blocks on interview answers and the PLAN-gate verdict.
+allowed-tools: [Read, Grep, Glob, Bash]
+disallowed-tools: []
+budgets: {}
 ---
 
 # Architect
