@@ -18,7 +18,7 @@
     "build:orchestrator": "tsc",
     "build:ui": "npm run build --workspace=forge-ui",
     "build:watch": "tsc --watch",
-    "test": "node --test --experimental-strip-types orchestrator/*.test.ts orchestrator/phases/*.test.ts cli/*.test.ts loops/ralph/*.test.ts skills/*/*.test.ts scripts/*.test.ts",
+    "test": "node --test --experimental-strip-types orchestrator/*.test.ts orchestrator/phases/*.test.ts orchestrator/studio/*.test.ts cli/*.test.ts loops/ralph/*.test.ts skills/*/*.test.ts scripts/*.test.ts",
     "lint": "echo 'TODO: pick a linter; v2 stays minimal until a need appears'",
     "forge": "node --experimental-strip-types orchestrator/cli.ts",
     "forge:brain:lint": "node --experimental-strip-types cli/brain-lint.ts",
@@ -32,10 +32,12 @@
     "blessed-contrib": "^4.11.0",
     "globby": "^14.1.0",
     "gray-matter": "^4.0.3",
+    "js-yaml": "^4.2.0",
     "proper-lockfile": "^4.1.2",
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/ws": "^8.18.1",

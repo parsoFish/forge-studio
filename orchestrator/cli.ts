@@ -11,6 +11,7 @@
  *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
  *   forge brain lint  [--scope <s>]         structural integrity checks on brain/
+ *   forge studio lint                       validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
  */
 
 import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, openSync } from 'node:fs';
@@ -24,6 +25,7 @@ import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
+import { runStudioLint } from '../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -93,6 +95,8 @@ process.chdir(FORGE_ROOT);
       return await cmdDemo(args.slice(1));
     case 'brain':
       return cmdBrain(args.slice(1));
+    case 'studio':
+      return cmdStudio(args.slice(1));
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'watch':
@@ -149,6 +153,7 @@ Usage:
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
+  forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
   forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
                                           Bring up the forge operator UI (foreground; Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
@@ -1023,6 +1028,43 @@ function cmdBrainLint(rest: string[]): void {
     `Summary: ${errors.length} error(s), ${flags.length} flag(s), ${fixes.length} auto-fix(es).`,
   );
   process.exit(result.exitCode);
+}
+
+// ---------------------------------------------------------------------------
+// forge studio lint
+//
+// Validates all Forge Studio definitions (agents, flows, catalog, projects, kb).
+// Mirrors brain-lint output style: errors then flags, then summary line,
+// exit 1 on errors, exit 2 on usage error.
+// ---------------------------------------------------------------------------
+
+function cmdStudio(rest: string[]): void {
+  const sub = rest[0];
+  if (sub === 'lint') return cmdStudioLint();
+  console.error('forge studio: subcommands: lint');
+  process.exit(2);
+}
+
+function cmdStudioLint(): void {
+  const result = runStudioLint(FORGE_ROOT);
+
+  const errors = result.findings.filter((f) => f.level === 'error');
+  const flags = result.findings.filter((f) => f.level === 'flag');
+
+  for (const [label, group] of [
+    ['ERRORS', errors],
+    ['FLAGS', flags],
+  ] as const) {
+    if (group.length === 0) continue;
+    console.log(`## ${label} (${group.length})`);
+    for (const f of group) {
+      console.log(`- [${f.check}] ${f.object}: ${f.message}`);
+    }
+    console.log('');
+  }
+
+  console.log(`Summary: ${result.errorCount} error(s), ${result.flagCount} flag(s).`);
+  if (result.errorCount > 0) process.exit(1);
 }
 
 // ---------------------------------------------------------------------------

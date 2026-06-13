@@ -1,0 +1,4 @@
+projects:
+  - { id: terraform-provider-betterado, path: projects/terraform-provider-betterado }
+  - { id: trafficgame, path: projects/trafficGame }
+  - { id: claude-harness, path: projects/claude-harness }

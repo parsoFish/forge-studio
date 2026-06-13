@@ -3,7 +3,21 @@ name: developer-ralph
 description: Launch the Ralph loop runner for a single work item; iterate until quality gates pass, iteration budget is exhausted, or the loop is detected as wedged.
 phase: developer-loop
 surface: unattended
-model: claude-sonnet-4-6
+purpose: Implement one work item to green gates inside its worktree, iterating until the budget is exhausted or the loop wedges.
+composition:
+  skills: []
+  tools: [git, node]
+  mcps: []
+  hooks: [event-log, cost-guard, stall-watchdog, scratch-strip]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: advisory
+interactivity: Fully autonomous; never blocks on the operator.
+allowed-tools: [Read, Write, Edit, MultiEdit, Bash, Grep, Glob]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+budgets: {}
 ---
 
 # Developer — Ralph

@@ -1,8 +1,24 @@
 ---
 name: developer-unifier
 description: Treat the initiative as one PR. Prove every acceptance criterion against branch tip. Author the demo. Author the PR body. Refactor incidentally if it unifies the change. NEVER add scope beyond what the work-item ACs require.
+phase: unifier
+surface: unattended
+purpose: Treat the initiative as one PR — prove every AC against branch tip, author the demo and PR body, never add scope.
+composition:
+  skills: [demo]
+  tools: [git, gh, node]
+  mcps: []
+  hooks: [event-log, scratch-strip]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: advisory
+interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Write, Edit, MultiEdit, Bash, Grep, Glob]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+budgets:
+  iterationCap: 15
 ---
 
 # developer-unifier skill

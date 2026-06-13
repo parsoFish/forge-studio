@@ -3,6 +3,21 @@ name: project-manager
 description: Decomposes an initiative into atomic, dependency-ordered work items with explicit acceptance criteria the developer loop can verify.
 phase: project-manager
 surface: unattended
+purpose: Decompose an approved initiative into atomic, dependency-ordered work items with verifiable acceptance criteria.
+composition:
+  skills: [brain-query]
+  tools: []
+  mcps: []
+  hooks: [event-log]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: mandatory
+interactivity: Fully autonomous; never blocks on the operator.
+allowed-tools: [Read, Grep, Glob, Write, Edit]
+disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch]
+budgets: {}
 ---
 
 # Project Manager

@@ -1,0 +1,19 @@
+sdks:
+  - { id: claude, name: Claude Agent SDK, available: true }
+  - { id: codex, name: OpenAI Codex, available: false }
+  - { id: gemini, name: Gemini, available: false }
+models:
+  - { id: claude-haiku-4-5-20251001, name: Claude Haiku 4.5, sdk: claude, tier: haiku }
+  - { id: claude-sonnet-4-6, name: Claude Sonnet 4.6, sdk: claude, tier: sonnet }
+  - { id: claude-opus-4-8, name: Claude Opus 4.8, sdk: claude, tier: opus }
+tools:
+  - { id: git, name: git, desc: "Worktrees, branches, commits." }
+  - { id: node, name: Node.js, desc: Build + test runner. }
+  - { id: gh, name: gh CLI, desc: "GitHub PRs, reviews, merges, checks." }
+mcps: []
+hooks:
+  - { id: event-log, name: JSONL event log, desc: Structured events on every invocation. }
+  - { id: cost-guard, name: Cost guard, desc: Per-cycle USD budget enforcement. }
+  - { id: stall-watchdog, name: Stall watchdog, desc: Heartbeat liveness monitoring. }
+  - { id: merge-gate, name: Merge gate, desc: Dependent WIs wait on prerequisite merge. }
+  - { id: scratch-strip, name: Scratch strip, desc: Base-guard strips scratch files pre-PR. }

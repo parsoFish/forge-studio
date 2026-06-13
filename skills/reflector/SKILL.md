@@ -1,9 +1,23 @@
 ---
 name: reflector
 description: Run a structured retrospective at the end of a merged cycle (agentic self-reflection + agent-prompted user questions + pure user feedback) and write the findings into the brain.
-phase: reflection
+phase: reflector
 surface: both
-model: claude-sonnet-4-6
+purpose: Run the end-of-cycle retrospective and write durable findings into the brain.
+composition:
+  skills: [brain-query, brain-ingest]
+  tools: []
+  mcps: []
+  hooks: [event-log]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: mandatory
+interactivity: Autonomous self-reflection with an optional operator feedback round.
+allowed-tools: [Read, Grep, Glob, Write, Edit, Bash]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+budgets: {}
 ---
 
 # Reflector
