@@ -442,6 +442,8 @@ function parseCatalogModels(raw: unknown, file: string): CatalogModel[] {
       name: reqString(e, 'name', file),
       sdk: reqString(e, 'sdk', file),
       tier: reqString(e, 'tier', file),
+      costIn: optNumber(e, 'costIn'),
+      costOut: optNumber(e, 'costOut'),
     };
   });
 }

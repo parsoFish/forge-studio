@@ -81,8 +81,21 @@ export type KbDescriptor = {
 };
 
 export type CatalogSdk = { id: string; name: string; available: boolean };
-export type CatalogModel = { id: string; name: string; sdk: string; tier: string };
+export type CatalogModel = { id: string; name: string; sdk: string; tier: string; costIn?: number; costOut?: number };
 export type CatalogEntry = { id: string; name: string; desc?: string };
+
+export type DemoStepKind = 'capture' | 'verify' | 'present';
+export type DemoStep = { kind: DemoStepKind; text: string };
+
+export type ProjectDefinition = {
+  id: string;
+  name: string;
+  northStar: string;
+  instructions: string;
+  demoProcess: DemoStep[];
+  skills: string[];
+  kb: string | null;
+};
 
 export type Catalog = {
   sdks: CatalogSdk[];

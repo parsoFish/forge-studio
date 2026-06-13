@@ -11,6 +11,7 @@ import type {
   Catalog,
   FlowDefinition,
   KbDescriptor,
+  ProjectDefinition,
   ProjectsRegistry,
 } from './types.ts';
 import {
@@ -19,6 +20,7 @@ import {
   validateCatalog,
   validateFlow,
   validateKb,
+  validateProject,
   validateProjectsRegistry,
 } from './validate.ts';
 
@@ -693,6 +695,123 @@ describe('validateProjectsRegistry — slug', () => {
       path: '/studio/projects.yaml',
     };
     const findings = validateProjectsRegistry(reg);
+    assert.deepEqual(findings, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateProject
+// ---------------------------------------------------------------------------
+
+function makeProject(overrides: Partial<ProjectDefinition> = {}): ProjectDefinition {
+  return {
+    id: 'my-project',
+    name: 'My Project',
+    northStar: 'Build something great.',
+    instructions: 'Always write tests.',
+    demoProcess: [{ kind: 'capture', text: 'Screenshot home.' }],
+    skills: ['demo'],
+    kb: null,
+    ...overrides,
+  };
+}
+
+describe('validateProject — slug', () => {
+  it('id not matching SLUG_RE → error slug', () => {
+    const findings = validateProject(makeProject({ id: 'My_Project' }));
+    const f = findings.find((x) => x.check === 'slug');
+    assert.ok(f, 'expected slug finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('My_Project'));
+  });
+
+  it('valid id → no slug finding', () => {
+    const findings = validateProject(makeProject());
+    assert.ok(!findings.some((x) => x.check === 'slug'));
+  });
+});
+
+describe('validateProject — readiness/north-star', () => {
+  it('empty northStar → flag readiness/north-star', () => {
+    const findings = validateProject(makeProject({ northStar: '' }));
+    const f = findings.find((x) => x.check === 'readiness/north-star');
+    assert.ok(f, 'expected readiness/north-star finding');
+    assert.equal(f.level, 'flag');
+    assert.ok(f.object.startsWith('project:'));
+  });
+
+  it('northStar > 140 chars → error readiness/north-star', () => {
+    const findings = validateProject(makeProject({ northStar: 'x'.repeat(141) }));
+    const f = findings.find((x) => x.check === 'readiness/north-star');
+    assert.ok(f, 'expected readiness/north-star finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('northStar exactly 140 chars → no readiness/north-star finding', () => {
+    const findings = validateProject(makeProject({ northStar: 'x'.repeat(140) }));
+    assert.ok(!findings.some((x) => x.check === 'readiness/north-star'));
+  });
+
+  it('non-empty northStar ≤ 140 → no readiness/north-star finding', () => {
+    const findings = validateProject(makeProject());
+    assert.ok(!findings.some((x) => x.check === 'readiness/north-star'));
+  });
+});
+
+describe('validateProject — demoProcess kinds', () => {
+  it('demoProcess step with invalid kind → error demoProcess/kind', () => {
+    const findings = validateProject(
+      makeProject({ demoProcess: [{ kind: 'invalid' as never, text: 'step' }] }),
+    );
+    const f = findings.find((x) => x.check === 'demoProcess/kind');
+    assert.ok(f, 'expected demoProcess/kind finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('invalid'));
+  });
+
+  it('demoProcess with all valid kinds → no demoProcess/kind finding', () => {
+    const findings = validateProject(
+      makeProject({
+        demoProcess: [
+          { kind: 'capture', text: 'a' },
+          { kind: 'verify', text: 'b' },
+          { kind: 'present', text: 'c' },
+        ],
+      }),
+    );
+    assert.ok(!findings.some((x) => x.check === 'demoProcess/kind'));
+  });
+
+  it('empty demoProcess array → no demoProcess/kind finding', () => {
+    const findings = validateProject(makeProject({ demoProcess: [] }));
+    assert.ok(!findings.some((x) => x.check === 'demoProcess/kind'));
+  });
+});
+
+describe('validateProject — skills', () => {
+  it('skills array containing a non-string entry → error skills/type', () => {
+    const findings = validateProject(
+      makeProject({ skills: [42 as unknown as string, 'demo'] }),
+    );
+    const f = findings.find((x) => x.check === 'skills/type');
+    assert.ok(f, 'expected skills/type finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('skills array of strings → no skills/type finding', () => {
+    const findings = validateProject(makeProject({ skills: ['demo', 'tdd-workflow'] }));
+    assert.ok(!findings.some((x) => x.check === 'skills/type'));
+  });
+
+  it('empty skills array → no skills/type finding', () => {
+    const findings = validateProject(makeProject({ skills: [] }));
+    assert.ok(!findings.some((x) => x.check === 'skills/type'));
+  });
+});
+
+describe('validateProject — fully valid project', () => {
+  it('fully-valid project → [] findings', () => {
+    const findings = validateProject(makeProject());
     assert.deepEqual(findings, []);
   });
 });
