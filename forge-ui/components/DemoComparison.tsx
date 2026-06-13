@@ -161,7 +161,7 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
 
       {/* Checkpoints — shape-aware heading mirrors the derived DEMO.html so the
           in-UI demo and the PR artifact present the same section structure. */}
-      {model.checkpoints.length > 0 && (
+      {(model.checkpoints?.length ?? 0) > 0 && (
         <div data-section="demo-checkpoints">
           <SectionLabel>{checkpointsHeading(model.checkpoints)}</SectionLabel>
           {model.checkpoints.map((c, i) => (

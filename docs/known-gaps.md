@@ -766,3 +766,7 @@ forge defects. Root-caused via an adversarially-verified investigation workflow.
    live-env guard infer the required vars from the acceptance test's PreCheck, or treat a precheck
    `t.Fatal`-on-missing-env signature in the gate stdout as a distinct "live-env-missing" classification
    rather than a code FAIL the agent is asked (and fails) to fix.
+
+## 2026-06-13 — flow-engine / multi-flow
+
+- **M4 flow edit-lock false-negatives for non-forge-cycle flows until run-model stamps the real flowId (`orchestrator/run-model.ts` `FLOW_ID`).** Latent — no non-forge-cycle runs exist today; the lock is fully effective for forge-cycle.

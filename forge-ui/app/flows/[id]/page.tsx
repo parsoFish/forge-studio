@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
-import { fetchRuns, fetchRun, fetchStudioFlows } from '@/lib/studio-client';
-import type { Run, Flow } from '@/lib/studio-client';
+import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, saveFlow } from '@/lib/studio-client';
+import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
 import { FlowTopology } from '@/components/studio/FlowTopology';
 import { PhaseDrawer } from '@/components/studio/PhaseDrawer';
 import { EventTail } from '@/components/studio/EventTail';
+import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
+import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
+import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -34,8 +37,13 @@ function pickDefaultRun(runs: Run[]): Run | null {
   return gated ?? active ?? complete ?? planned ?? runs[0] ?? null;
 }
 
+type PageTab = 'monitor' | 'build';
+
 export default function FlowMonitorPage({ params }: { params: { id: string } }) {
   const { id } = params;
+
+  // Tab state — monitor is the default
+  const [tab, setTab] = useState<PageTab>('monitor');
 
   const [flow,        setFlow]        = useState<Flow | null>(null);
   const [runs,        setRuns]        = useState<Run[]>([]);
@@ -43,6 +51,20 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const [ready,       setReady]       = useState(false);
   const [tailEvents,  setTailEvents]  = useState<EventLogEntry[]>([]);
   const [drawerNode,  setDrawerNode]  = useState<string | null>(null);
+
+  // BUILD tab state
+  const [buildFlow,   setBuildFlow]   = useState<Flow | null>(null);
+  const [allFlows,    setAllFlows]    = useState<Flow[]>([]);
+  const [agents,      setAgents]      = useState<Agent[]>([]);
+  const [buildVersion, setBuildVersion] = useState<number | undefined>(undefined);
+  const [headerState, setHeaderState] = useState<FlowHeaderState>({
+    name: '',
+    goal: '',
+    project: '',
+    kb: '',
+    triggers: [],
+  });
+  const canvasRef = useRef<CanvasHandle | null>(null);
 
   // ---- data loading ----
 
@@ -136,6 +158,61 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // ---- BUILD tab data loading ----
+
+  const loadBuildData = useCallback(async (signal: { cancelled: boolean }) => {
+    const [flowDef, flows, ags] = await Promise.all([
+      fetchFlow(id),
+      fetchStudioFlows(),
+      fetchStudioAgents(),
+    ]);
+    if (signal.cancelled) return;
+    setBuildFlow(flowDef);
+    setAllFlows(flows);
+    setAgents(ags);
+    if (flowDef) {
+      setHeaderState({
+        name: flowDef.name,
+        goal: flowDef.goal ?? '',
+        project: flowDef.project ?? '',
+        kb: flowDef.kb ?? '',
+        triggers: flowDef.triggers ?? [],
+      });
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (tab === 'build') {
+      const signal = { cancelled: false };
+      void loadBuildData(signal);
+      return () => { signal.cancelled = true; };
+    }
+  }, [tab, loadBuildData]);
+
+  // ---- BUILD tab save ----
+
+  const handleBuildSave = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { ok: false as const, error: 'canvas not ready' };
+    const rfNodes = canvas.getNodes();
+    const rfEdges = canvas.getEdges();
+    const nodes = rfNodesToFlow(rfNodes);
+    const edges = rfEdgesToFlow(rfEdges);
+    const result = await saveFlow(id, {
+      name: headerState.name,
+      goal: headerState.goal,
+      project: headerState.project || undefined,
+      kb: headerState.kb || undefined,
+      triggers: headerState.triggers,
+      nodes,
+      edges,
+    });
+    if (result.ok && result.version !== undefined) {
+      setBuildVersion(result.version);
+    }
+    return result;
+  }, [id, headerState]);
+
   // ---- start / resume ----
 
   const handleStartRun = useCallback(async () => {
@@ -189,67 +266,102 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       data-page-ready={ready ? 'true' : 'false'}
       data-run-count={runs.length}
       data-can-start={flow ? 'true' : 'false'}
+      data-active-tab={tab}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
 
-      {/* Flow header strip */}
-      <div
-        style={{
-          background: 'var(--panel)',
-          borderBottom: '1px solid var(--line)',
-          padding: '14px 24px 0',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
-            {flow?.name ?? id}
-          </h2>
-          {flow?.goal && (
-            <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>
-              {flow.goal}
-            </span>
-          )}
-        </div>
-
-        {/* Tabs bar — Monitor active; Build disabled (M4) */}
-        <div className="tabs">
-          <button className="tab active">MONITOR</button>
-          <button
-            className="tab"
-            disabled
-            title="M4"
-            style={{ cursor: 'not-allowed', opacity: 0.45 }}
+      {/* BUILD tab: FlowHeader replaces the static flow strip */}
+      {tab === 'build' ? (
+        <>
+          <FlowHeader
+            flowId={id}
+            state={headerState}
+            onChange={setHeaderState}
+            version={buildVersion}
+            onSave={handleBuildSave}
+            flows={allFlows}
+            onFlowSelect={(newId) => {
+              if (newId !== id) {
+                // Navigate to the selected flow
+                window.location.href = `/flows/${encodeURIComponent(newId)}`;
+              }
+            }}
+          />
+          {/* Tabs bar — BUILD active */}
+          <div className="tabs" style={{ background: 'var(--panel)', padding: '0 24px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+            <button className="tab" onClick={() => setTab('monitor')}>MONITOR</button>
+            <button className="tab active">BUILD</button>
+          </div>
+          {/* BUILD canvas */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+            <AgentPalette />
+            <FlowBuilderCanvas
+              initialNodes={buildFlow?.nodes ?? []}
+              initialEdges={buildFlow?.edges ?? []}
+              agents={agents}
+              onRef={(handle) => { canvasRef.current = handle; }}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* MONITOR tab: original flow header strip */}
+          <div
+            style={{
+              background: 'var(--panel)',
+              borderBottom: '1px solid var(--line)',
+              padding: '14px 24px 0',
+              flexShrink: 0,
+            }}
           >
-            BUILD
-          </button>
-        </div>
-      </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
+                {flow?.name ?? id}
+              </h2>
+              {flow?.goal && (
+                <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>
+                  {flow.goal}
+                </span>
+              )}
+            </div>
 
-      {/* Main body */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {flowNotFound ? (
+            {/* Tabs bar — MONITOR active */}
+            <div className="tabs">
+              <button className="tab active">MONITOR</button>
+              <button
+                className="tab"
+                onClick={() => setTab('build')}
+                title="Switch to Build tab"
+              >
+                BUILD
+              </button>
+            </div>
+          </div>
+
+          {/* Main body — MONITOR */}
           <div
             style={{
               flex: 1,
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--faint)',
-              fontSize: 14,
+              overflow: 'hidden',
+              position: 'relative',
             }}
           >
-            Flow &ldquo;{id}&rdquo; not found.
-          </div>
-        ) : (
+            {flowNotFound ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--faint)',
+                  fontSize: 14,
+                }}
+              >
+                Flow &ldquo;{id}&rdquo; not found.
+              </div>
+            ) : (
           <>
             {/* Left: Run rail */}
             <RunRail
@@ -382,14 +494,16 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         )}
       </div>
 
-      {/* Phase drawer — overlays from right */}
-      {flow && (
-        <PhaseDrawer
-          nodeId={drawerNode}
-          run={activeRun}
-          flow={flow}
-          onClose={handleDrawerClose}
-        />
+          {/* Phase drawer — overlays from right */}
+          {flow && (
+            <PhaseDrawer
+              nodeId={drawerNode}
+              run={activeRun}
+              flow={flow}
+              onClose={handleDrawerClose}
+            />
+          )}
+        </>
       )}
     </main>
   );

@@ -81,6 +81,12 @@ export type Run = {
 // Constants
 // ---------------------------------------------------------------------------
 
+// Hardcoded because today the scheduler only ever runs forge-cycle.yaml —
+// every run IS a forge-cycle run, so this constant is always correct.
+// When multi-flow scheduling lands (ADR-028 engine, M3+), derive the real
+// flow id from the manifest / the flow definition that spawned the run so
+// the M4 edit-lock predicate (bridge-studio.ts: r.flowId === id) correctly
+// locks user-authored flows too — not just forge-cycle.
 const FLOW_ID = 'forge-cycle';
 
 /** Valid origin values for a Run — anything else defaults to 'architect'. */

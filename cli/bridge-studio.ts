@@ -36,9 +36,10 @@ import {
   loadProjectsRegistry,
   loadCatalog,
   serializeAgentDefinition,
+  serializeFlowDefinition,
 } from '../orchestrator/studio/registry.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
-import { SLUG_RE, validateAgent } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig } from '../orchestrator/project-config.ts';
 
 // ---------------------------------------------------------------------------
@@ -484,6 +485,38 @@ export async function handleStudioRoutes(
     return true;
   }
 
+  // ---- /api/studio/flows/:id (single flow) --------------------------------
+  const flowGetMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
+  if (flowGetMatch) {
+    try {
+      const id = decodeURIComponent(flowGetMatch[1]);
+
+      // Slug-guard blocks path traversal before any fs path construction
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid flow id' }, origin);
+        return true;
+      }
+
+      const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
+      const flowYamlPath = resolve(flowsBase, id, 'flow.yaml');
+      if (!flowYamlPath.startsWith(flowsBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      if (!existsSync(flowYamlPath)) {
+        sendJson(res, 404, { error: 'unknown flow' }, origin);
+        return true;
+      }
+
+      const flow = loadFlowDefinition(flowYamlPath);
+      sendJson(res, 200, { flow }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- /api/studio/projects -----------------------------------------------
   if (url === '/api/studio/projects') {
     try {
@@ -824,6 +857,140 @@ export async function handleStudioWriteRoutes(
       writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
 
       sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- PUT /api/studio/flows/:id -------------------------------------------
+  const flowMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
+  if (flowMatch) {
+    try {
+      const id = decodeURIComponent(flowMatch[1]);
+
+      // 1. Slug-guard before any fs path construction (blocks path traversal)
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid flow id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+
+      // 2. Resolve and prefix-guard the flow.yaml path
+      const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
+      const flowYamlPath = resolve(flowsBase, id, 'flow.yaml');
+      if (!flowYamlPath.startsWith(flowsBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // 3. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 4. Load existing flow (or scaffold for new flow)
+      let existing: FlowDefinition | null = null;
+      if (existsSync(flowYamlPath)) {
+        try {
+          existing = loadFlowDefinition(flowYamlPath);
+        } catch (err) {
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
+          return true;
+        }
+      }
+
+      // 5. Merge UI-editable fields over existing; preserve id/origin/disposable/path
+      const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? id;
+      const goal = typeof b['goal'] === 'string' ? b['goal'] : existing?.goal ?? '';
+      const project =
+        b['project'] !== undefined
+          ? (typeof b['project'] === 'string' ? b['project'] : null)
+          : (existing?.project ?? null);
+      const kb =
+        b['kb'] !== undefined
+          ? (typeof b['kb'] === 'string' ? b['kb'] : null)
+          : (existing?.kb ?? null);
+      const costCeilingUsd =
+        typeof b['costCeilingUsd'] === 'number'
+          ? b['costCeilingUsd']
+          : existing?.costCeilingUsd ?? 2.0;
+
+      // nodes/edges/triggers: only override if provided in body
+      const nodes = Array.isArray(b['nodes']) ? b['nodes'] : (existing?.nodes ?? []);
+      const edges = Array.isArray(b['edges']) ? b['edges'] : (existing?.edges ?? []);
+      const triggers = Array.isArray(b['triggers']) ? b['triggers'] : (existing?.triggers ?? []);
+
+      // Bump version: n+1 for existing, 1 for new
+      const version = (existing?.version ?? 0) + 1;
+
+      const merged: FlowDefinition = {
+        id,
+        name,
+        version,
+        goal,
+        project,
+        kb,
+        costCeilingUsd,
+        origin: existing?.origin ?? 'studio',
+        disposable: existing?.disposable,
+        nodes: nodes as FlowDefinition['nodes'],
+        edges: edges as FlowDefinition['edges'],
+        triggers: triggers as FlowDefinition['triggers'],
+        path: flowYamlPath,
+      };
+
+      // 6. Build agents map for validateFlow
+      const skillsDir = resolve(ctx.forgeRoot, 'skills');
+      let agentsList: AgentDefinition[] = [];
+      try {
+        agentsList = listAgentDefinitions(skillsDir);
+      } catch {
+        // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
+      }
+      const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
+
+      // 7. Validate — reject on any error-level finding
+      const findings = validateFlow(merged, agentsMap);
+      const hasErrors = findings.some((f) => f.level === 'error');
+      if (hasErrors) {
+        sendJson(res, 400, { error: 'validation failed', findings }, origin);
+        return true;
+      }
+
+      // 8. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
+      // The predicate `r.flowId === id` is correct. It is fully effective today
+      // because run-model stamps every run with flowId = 'forge-cycle' (the only
+      // flow the scheduler runs). When multi-flow scheduling lands, run-model must
+      // derive the real flowId from the manifest/flow that spawned each run (see
+      // FLOW_ID note in run-model.ts) — until then, non-forge-cycle flows would
+      // not be locked (latent gap; no such flows exist today).
+      const activeRun = listRuns(ctx.forgeRoot, Date.now()).find(
+        (r) => r.flowId === id && r.status === 'active',
+      );
+      if (activeRun) {
+        sendJson(res, 423, { error: 'flow locked — a run is in flight', runId: activeRun.id }, origin);
+        return true;
+      }
+
+      // 9. Serialize and write
+      const serialized = serializeFlowDefinition(merged);
+      const flowDir = resolve(flowsBase, id);
+      if (!existsSync(flowDir)) {
+        mkdirSync(flowDir, { recursive: true });
+      }
+      writeFileSync(flowYamlPath, serialized, 'utf8');
+
+      const flagFindings = findings.filter((f) => f.level === 'flag');
+      sendJson(res, 200, { ok: true, id, version, findings: flagFindings }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

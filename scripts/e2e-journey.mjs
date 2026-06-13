@@ -7,13 +7,14 @@
  *   Three human moments are the spine (architect interview / review demo / reflect);
  *   everything else is autonomous and every phase is costed.
  *
- * STRUCTURE: 30 beats across 6 acts, grounded in real session behaviour:
+ * STRUCTURE: 32 beats across 7 acts, grounded in real session behaviour:
  *   ACT I  — Live architecting  (P1 stall cameo, P2 free-text, P3 activity panel, P4 real cost)
  *   ACT II — Autonomous build   (fast-forwarded, honest running timer, TDD gate, WI dependency)
  *   ACT III— Review + teach     (PARTIAL→MET, new AC authored in-loop, reflect)
  *   ACT IV — Studio monitor     (library page /; flow monitor /flows/forge-cycle; seeded gated run)
  *   ACT V  — Studio builders    (agent builder /agents/project-manager; project builder /projects/claude-harness)
  *   ACT VI — Flow-engine beats  (start-run CTA, cost-ceiling-warn gauge, gate control, resume button)
+ *   ACT VII— Flow builder + artifact viewer (BUILD tab authoring; unified /artifact viewer + gate surface)
  *
  * No live LLM: the architect runner's turns + autonomous cycle are emulated by seeding
  * the same files/events the real phases write, grounded in real cycle event sequences.
@@ -488,7 +489,7 @@ async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   }
 }
 
-// ── THE 27-BEAT JOURNEY ────────────────────────────────────────────────────────
+// ── THE 32-BEAT JOURNEY ────────────────────────────────────────────────────────
 
 async function main() {
   cleanProjectDir();
@@ -1842,8 +1843,244 @@ async function main() {
       }
     } catch { /* best-effort */ }
 
-    // ── BEAT 30: End card ─────────────────────────────────────────────────────
-    console.log('\n[beat 30] End card');
+    // ── ACT VII: Flow builder + artifact viewer ───────────────────────────────
+    // Two emulated beats proving the M4-2 BUILD tab and the M4-3 unified
+    // artifact viewer render correctly against live data — their first live run.
+    // All assertions are SOFT (check()/countAtLeast). No saves or gate POSTs
+    // are performed (the forge-cycle flow is the seed; we do NOT mutate it).
+
+    // ── BEAT 30: Author-a-flow — BUILD tab on /flows/forge-cycle ─────────────
+    // The BUILD tab is already enabled (M4-2 landed). Navigate to the monitor
+    // page, click BUILD, and assert the canvas + palette load with the
+    // forge-cycle nodes (6 nodes per flow.yaml: architect/pm/dev/unifier/
+    // review/reflect). We do NOT perform a real ReactFlow drag (palette DnD is
+    // finicky in headless Playwright); instead we assert the static BUILD render
+    // — canvas present with data-node-count ≥6, palette present with ≥1 chip,
+    // FlowHeader goal field with data-goal-set, and all per-node data-flow-node
+    // attributes present. This proves the BUILD tab works live without mutating
+    // the seed flow.
+    console.log('\n[beat 30] Act VII — author-a-flow (BUILD tab on /flows/forge-cycle)');
+    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'Act VII: flow-monitor page ready for forge-cycle (BUILD tab entry)');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
+      check(false, `Act VII: flow-monitor page ready (got "${pr}")`);
+    }
+
+    await caption(page, 'Flow builder — drag agents onto a canvas, draw edges, label artifacts. You author a flow without leaving the UI.');
+    await sleep(ACT);
+
+    // Click the BUILD tab
+    const buildTabBtn = page.locator('button.tab').filter({ hasText: 'BUILD' }).first();
+    if ((await buildTabBtn.count()) > 0) {
+      await buildTabBtn.click();
+      // Wait for the active-tab data-* to flip
+      try {
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
+          null, { timeout: 8000 },
+        );
+        check(true, 'Act VII: BUILD tab click flips data-active-tab="build"');
+      } catch {
+        const tabVal = await page.evaluate(() =>
+          document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') ?? '(absent)');
+        check(false, `Act VII: data-active-tab="build" after BUILD click (got "${tabVal}")`);
+      }
+    } else {
+      check(false, 'Act VII: BUILD tab button present to click');
+    }
+
+    await sleep(WORK); // ReactFlow hydrates after tab switch
+
+    await frame(page, 'beat30-build-tab-loaded', 'Act VII beat 30 — BUILD tab clicked; ReactFlow canvas hydrating with forge-cycle nodes');
+
+    // Assert the canvas wrapper is present with data-node-count ≥6
+    // (forge-cycle has 6 nodes: architect/pm/dev/unifier/review/reflect)
+    let nodeCountOk = false;
+    try {
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector('[data-node-count]');
+          return el !== null && parseInt(el.getAttribute('data-node-count') ?? '0', 10) >= 1;
+        },
+        null, { timeout: 12000 },
+      );
+      nodeCountOk = true;
+    } catch { /* fall through to assertion */ }
+    const nodeCount = await page.evaluate(() => {
+      const el = document.querySelector('[data-node-count]');
+      return el ? parseInt(el.getAttribute('data-node-count') ?? '0', 10) : -1;
+    });
+    check(nodeCount >= 6, `Act VII: BUILD canvas data-node-count ≥6 after forge-cycle load (got ${nodeCount})`);
+
+    // Edge count present (forge-cycle has 5 edges)
+    const edgeCount = await page.evaluate(() => {
+      const el = document.querySelector('[data-edge-count]');
+      return el ? parseInt(el.getAttribute('data-edge-count') ?? '0', 10) : -1;
+    });
+    check(edgeCount >= 0, `Act VII: BUILD canvas data-edge-count present (got ${edgeCount})`);
+
+    // Per-node data-flow-node attributes present (≥1 rendered node)
+    await countAtLeast(page, '[data-flow-node]', 1, 'Act VII: ≥1 [data-flow-node] rendered in BUILD canvas');
+
+    // Palette present with ≥1 agent chip
+    const palettePresent = await page.evaluate(() =>
+      document.querySelector('[data-component="agent-palette"]') !== null);
+    check(palettePresent, 'Act VII: [data-component="agent-palette"] present in BUILD tab');
+    await countAtLeast(page, '[data-palette-chip]', 1, 'Act VII: palette has ≥1 [data-palette-chip] chip');
+
+    // FlowHeader goal field: data-goal-set present
+    const goalSetPresent = await page.evaluate(() =>
+      document.querySelector('[data-goal-set]') !== null);
+    check(goalSetPresent, 'Act VII: [data-goal-set] present in FlowHeader');
+
+    // Assert no save was triggered (we do NOT click Save — the seed is immutable)
+    await sleep(READ);
+    await frame(page, 'beat30b-build-canvas-loaded', `Act VII beat 30 — BUILD canvas loaded: ${nodeCount} nodes, ${edgeCount} edges, palette + goal field present (no save — seed immutable)`);
+
+    // ── BEAT 31: Artifact viewer — demo view then verdict gate ─────────────────
+    // Use CYCLE_ID2 (seeded by Act IV): in ready-for-review, has demo.json.
+    // Navigate to /artifact?run=<CYCLE_ID2>&type=demo&mode=view, assert the
+    // page-ready, artifact-type, trail chips (6), and demo evaluation section.
+    // Then switch to type=verdict&mode=gate and assert the gate surface.
+    console.log('\n[beat 31] Act VII — artifact-viewer (demo view + verdict gate via /artifact)');
+    await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID2)}&type=demo&mode=view`, { waitUntil: 'domcontentloaded' });
+    let artifactPageReady = false;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flows"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 25000 },
+      );
+      artifactPageReady = true;
+      check(true, 'Act VII: artifact viewer [data-page="flows"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="flows"]')?.getAttribute('data-page-ready') ?? '(no data-page=flows)');
+      check(false, `Act VII: artifact viewer page-ready (got "${pr}")`);
+    }
+
+    await caption(page, 'Artifact viewer — every artifact type in one surface. Plan, work-items, PR, demo, verdict, reflection — unified trail.');
+    await sleep(ACT);
+
+    if (artifactPageReady) {
+      // data-artifact-type="demo" wired
+      const artifactType = await page.evaluate(() =>
+        document.querySelector('[data-artifact-type]')?.getAttribute('data-artifact-type') ?? '');
+      check(artifactType === 'demo', `Act VII: data-artifact-type="demo" (got "${artifactType}")`);
+
+      // data-mode="view"
+      const artifactMode = await page.evaluate(() =>
+        document.querySelector('[data-mode]')?.getAttribute('data-mode') ?? '');
+      check(artifactMode === 'view', `Act VII: data-mode="view" on demo view page (got "${artifactMode}")`);
+
+      // Artifact trail: 6 chips total (plan/workitems/pr/demo/verdict/reflection)
+      await countAtLeast(page, '[data-artifact-trail-chip]', 6, 'Act VII: artifact trail has 6 [data-artifact-trail-chip] chips');
+
+      // The current chip (demo) carries data-trail-state="current"
+      const currentChipState = await page.evaluate(() =>
+        document.querySelector('[data-artifact-trail-chip="demo"]')?.getAttribute('data-trail-state') ?? '');
+      check(currentChipState === 'current', `Act VII: demo trail chip data-trail-state="current" (got "${currentChipState}")`);
+
+      // Demo renderer: the demo.json from CYCLE_ID2 is minimal (title/project/initiativeId only)
+      // so DemoComparison renders in a degraded state. Assert data-section="demo-evaluation"
+      // presence (wrapper added by the artifact page around DemoComparison for demo type).
+      const demoEvalPresent = await page.evaluate(() =>
+        document.querySelector('[data-section="demo-evaluation"]') !== null);
+      check(demoEvalPresent, 'Act VII: [data-section="demo-evaluation"] present for type=demo');
+    } else {
+      check(false, 'Act VII: artifact viewer did not become ready — demo-mode checks skipped');
+    }
+
+    await sleep(READ);
+    await frame(page, 'beat31-artifact-demo-view', 'Act VII beat 31 — artifact viewer: demo view, 6-chip trail, demo-evaluation section rendered');
+
+    // Now navigate to type=verdict&mode=gate — the gate surface
+    await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID2)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
+    let gatePageReady = false;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="flows"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 25000 },
+      );
+      gatePageReady = true;
+      check(true, 'Act VII: artifact viewer [data-page-ready="true"] (verdict gate mode)');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="flows"]')?.getAttribute('data-page-ready') ?? '(absent)');
+      check(false, `Act VII: artifact viewer page-ready (verdict gate, got "${pr}")`);
+    }
+
+    await caption(page, 'Artifact viewer — gate mode: the verdict form surfaces directly. The harness contract is preserved.');
+    await sleep(ACT);
+
+    if (gatePageReady) {
+      // data-artifact-type="verdict"
+      const gateType = await page.evaluate(() =>
+        document.querySelector('[data-artifact-type]')?.getAttribute('data-artifact-type') ?? '');
+      check(gateType === 'verdict', `Act VII: data-artifact-type="verdict" in gate mode (got "${gateType}")`);
+
+      // data-mode="gate"
+      const gateMode = await page.evaluate(() =>
+        document.querySelector('[data-mode]')?.getAttribute('data-mode') ?? '');
+      check(gateMode === 'gate', `Act VII: data-mode="gate" for verdict gate URL (got "${gateMode}")`);
+
+      // Gate state starts idle
+      const gateState = await page.evaluate(() =>
+        document.querySelector('[data-gate-state]')?.getAttribute('data-gate-state') ?? '');
+      check(gateState === 'idle', `Act VII: data-gate-state="idle" on fresh gate page (got "${gateState}")`);
+
+      // Verdict form present — the harness-critical data-component that the
+      // fold-in (M4-4) must preserve. ReviewVerdictForm renders for type=verdict gate-mode.
+      let verdictFormPresent = false;
+      try {
+        await page.waitForSelector('[data-component="verdict-form"]', { timeout: 8000 });
+        verdictFormPresent = true;
+        check(true, 'Act VII: [data-component="verdict-form"] present in verdict gate mode');
+      } catch {
+        const vf = await page.evaluate(() =>
+          document.querySelector('[data-component="verdict-form"]') !== null);
+        check(vf, 'Act VII: [data-component="verdict-form"] present in verdict gate mode');
+      }
+
+      if (verdictFormPresent) {
+        // form-state starts at "editing"
+        const formState = await page.evaluate(() =>
+          document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-state') ?? '');
+        check(formState === 'editing', `Act VII: verdict-form data-form-state="editing" on load (got "${formState}")`);
+
+        // Approve action present (default state — kind=approve, so data-action="approve-and-merge")
+        const approvePresent = await page.evaluate(() =>
+          document.querySelector('[data-action="approve-and-merge"]') !== null);
+        check(approvePresent, 'Act VII: [data-action="approve-and-merge"] present in verdict gate form');
+
+        // Send-back radio present (the button becomes data-action="send-back" after selecting
+        // the send-back radio — assert the radio itself is present without clicking it)
+        const sendBackRadioPresent = await page.evaluate(() => {
+          const form = document.querySelector('[data-component="verdict-form"]');
+          if (!form) return false;
+          // The send-back radio is the second radio in the fieldset
+          return form.querySelectorAll('input[type="radio"]').length >= 2;
+        });
+        check(sendBackRadioPresent, 'Act VII: send-back radio present in verdict gate form (≥2 radios)');
+      }
+
+      // Trail still shows 6 chips in gate mode
+      await countAtLeast(page, '[data-artifact-trail-chip]', 6, 'Act VII: 6-chip trail present in verdict gate mode');
+    } else {
+      check(false, 'Act VII: artifact viewer did not become ready in verdict gate mode — gate checks skipped');
+    }
+
+    await sleep(READ);
+    await frame(page, 'beat31b-artifact-verdict-gate', 'Act VII beat 31 — artifact viewer: verdict gate mode, verdict-form + approve/send-back actions present (harness contract preserved)');
+
+    // ── BEAT 32: End card ─────────────────────────────────────────────────────
+    console.log('\n[beat 32] End card');
     await page.evaluate(() => {
       let card = document.getElementById('demo-end-card');
       if (!card) {
