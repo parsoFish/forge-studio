@@ -537,3 +537,97 @@ test('isNonTerminalRefused: contract-ready claim does NOT add to skip-set', () =
     clearAllPendingRefusalLogs();
   }
 });
+
+// ---------------------------------------------------------------------------
+// L. FORGE_SKIP_CONTRACT_CHECK opt-out (routine-tier harness escape hatch)
+//    Contract-ready check is bypassed when env=1; structural checks stay.
+// ---------------------------------------------------------------------------
+
+test('FORGE_SKIP_CONTRACT_CHECK=1: non-contract-ready project is NOT refused on contract grounds', () => {
+  const root = tmpDir();
+  const prevEnv = process.env.FORGE_SKIP_CONTRACT_CHECK;
+  try {
+    clearAllPendingRefusalLogs();
+    process.env.FORGE_SKIP_CONTRACT_CHECK = '1';
+
+    const { forgeRoot } = setupForgeRoot(root, VALID_FLOW_YAML);
+    // Deliberately non-contract-ready: no roadmap.md or brain/profile.md (C4 fail),
+    // AND exists on disk so preflight WOULD fire without the opt-out.
+    const projectDir = join(root, 'projects', 'c4-fail-skipped');
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(
+      join(projectDir, 'package.json'),
+      JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
+    );
+    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    // roadmap.md + brain/profile.md intentionally absent (C4 fail)
+
+    const result = validateClaimable('INIT-skip-contract', projectDir, forgeRoot);
+
+    assert.ok(
+      result.ok,
+      `expected ok (contract check skipped) but got refused: ${!result.ok ? (result as Extract<ClaimValidationResult, { ok: false }>).reason : ''}`,
+    );
+  } finally {
+    if (prevEnv === undefined) delete process.env.FORGE_SKIP_CONTRACT_CHECK;
+    else process.env.FORGE_SKIP_CONTRACT_CHECK = prevEnv;
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});
+
+test('FORGE_SKIP_CONTRACT_CHECK=1: invalid flow (structural) is STILL refused terminal', () => {
+  const root = tmpDir();
+  const prevEnv = process.env.FORGE_SKIP_CONTRACT_CHECK;
+  try {
+    clearAllPendingRefusalLogs();
+    process.env.FORGE_SKIP_CONTRACT_CHECK = '1';
+
+    const { forgeRoot, flowPath } = setupForgeRoot(root, INVALID_FLOW_YAML);
+
+    // Flow check runs first and is never skipped — structural errors always refuse.
+    const result = validateClaimable('INIT-skip-contract-bad-flow', '/nonexistent/path', forgeRoot, flowPath);
+
+    assert.ok(!result.ok, 'expected refusal: structural flow check is never bypassed');
+    if (!result.ok) {
+      assert.equal(result.terminal, true, 'invalid flow must still be terminal even with env=1');
+    }
+  } finally {
+    if (prevEnv === undefined) delete process.env.FORGE_SKIP_CONTRACT_CHECK;
+    else process.env.FORGE_SKIP_CONTRACT_CHECK = prevEnv;
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});
+
+test('FORGE_SKIP_CONTRACT_CHECK unset: contract refusal fires as before', () => {
+  const root = tmpDir();
+  const prevEnv = process.env.FORGE_SKIP_CONTRACT_CHECK;
+  try {
+    clearAllPendingRefusalLogs();
+    delete process.env.FORGE_SKIP_CONTRACT_CHECK;
+
+    const { forgeRoot } = setupForgeRoot(root, VALID_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'no-c4-normal');
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(
+      join(projectDir, 'package.json'),
+      JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
+    );
+    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    // roadmap.md absent → C4 fails → should refuse
+
+    const result = validateClaimable('INIT-normal-contract', projectDir, forgeRoot);
+
+    assert.ok(!result.ok, 'expected contract refusal when env is unset');
+    if (!result.ok) {
+      assert.equal(result.terminal, false, 'C4 fail is non-terminal in normal mode');
+      assert.ok(result.reason.includes('not contract-ready'), `reason should mention contract-ready: ${result.reason}`);
+    }
+  } finally {
+    if (prevEnv === undefined) delete process.env.FORGE_SKIP_CONTRACT_CHECK;
+    else process.env.FORGE_SKIP_CONTRACT_CHECK = prevEnv;
+    rmSync(root, { recursive: true, force: true });
+    clearAllPendingRefusalLogs();
+  }
+});

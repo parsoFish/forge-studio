@@ -163,9 +163,24 @@ export function validateClaimable(
   //    Skip entirely for non-existent paths (test fixtures, unregistered
   //    projects) — best-effort; validateClaimable must never block a
   //    legitimate claim because the test fixture isn't a real project.
+  //
+  //    Opt-out: FORGE_SKIP_CONTRACT_CHECK=1 bypasses this block for the
+  //    controlled real-capability harness (scripts/verify-cycle.mjs routine
+  //    tier) where the corpus repo is reset to a frozen SHA that deliberately
+  //    fails C2 scratch-hygiene. The harness tests ENGINE EXECUTION, not
+  //    project onboarding readiness — the contract gate is orthogonal there.
+  //    The flow-validity (check 1) and zero-gate (check 1 via validateFlow)
+  //    structural checks above are NEVER skipped — only this preflight block.
   // -------------------------------------------------------------------
+  if (process.env.FORGE_SKIP_CONTRACT_CHECK === '1') {
+    console.log(
+      `[claim-validator] claim.contract-check-skipped initiativeId=${initiativeId} ` +
+        `reason=FORGE_SKIP_CONTRACT_CHECK=1 (controlled harness execution test — not production)`,
+    );
+  }
+
   const projectDir = resolve(projectRepoPath);
-  if (existsSync(projectDir)) {
+  if (process.env.FORGE_SKIP_CONTRACT_CHECK !== '1' && existsSync(projectDir)) {
     let report;
     try {
       report = runPreflight(projectDir, { forgeRoot });
