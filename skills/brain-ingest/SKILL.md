@@ -3,7 +3,21 @@ name: brain-ingest
 description: Append raw sources to the brain and create or update theme pages. Never modifies raw in place; never deletes.
 phase: brain
 surface: unattended
-model: claude-sonnet-4-6
+purpose: Ingest operator-provided raw sources into the brain — append to brain/_raw/, create or update theme pages, update category indexes, and log to brain/forge-dev/log.md.
+composition:
+  skills: [brain-query]
+  tools: []
+  mcps: []
+  hooks: [event-log]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: mandatory
+interactivity: Unattended; operator supplies source identifier + optional category/project target; agent runs to completion without human input.
+allowed-tools: [Read, Write, Edit, Bash]
+disallowed-tools: []
+budgets: {}
 ---
 
 # Brain — Ingest

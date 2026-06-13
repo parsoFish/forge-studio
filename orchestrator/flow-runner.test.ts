@@ -9,6 +9,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { runFlow, forgeCycleFlowPath, type FlowRunnerDeps } from './flow-runner.ts';
 import { WedgeKillError } from './flow-budgets.ts';
@@ -82,6 +84,8 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     assertNonEmptyDelivery: (_outcome, _id, _wt, _logger) => { /* no-op */ },
     enforceFinalCiGate: (_input, _logger) => { /* no-op */ },
     rebaseForResume: (_input, _logger) => { tracker.calls.push('rebaseForResume'); },
+    // Trigger enqueue — no-op in tests; trigger-specific tests inject a spy
+    enqueueFlowRun: (_flowId, _opts) => { /* no-op */ },
   };
 }
 
@@ -453,5 +457,223 @@ describe('flow-runner wedge-kill race', () => {
     await runFlow({ flow, input, logger, deps });
 
     assert.strictEqual(capturedSignal, undefined, 'signal must be undefined when wedgeKillMs is not set');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 6: Trigger firing (M3-5)
+// ---------------------------------------------------------------------------
+
+describe('flow-runner trigger firing', () => {
+  /**
+   * Build a minimal single-node flow that carries a trigger.
+   * The node is an agent-only node (no gate), so the flow must be
+   * disposable:true (zero-gate rule). The trigger fires `on: complete`
+   * → enqueues the target flow.
+   */
+  function makeTriggerFlow(triggers: Array<{ on: string; flow: string }>): FlowDefinition {
+    return {
+      id: 'trigger-test',
+      name: 'Trigger Test',
+      version: 1,
+      goal: 'Test trigger firing.',
+      project: null,
+      kb: null,
+      costCeilingUsd: 0,
+      origin: 'seed',
+      disposable: true,
+      nodes: [{ id: 'pm', agent: 'project-manager' }],
+      edges: [],
+      triggers,
+      path: '/fake/trigger-test.yaml',
+    };
+  }
+
+  it('forge-cycle (triggers:[]) → enqueueFlowRun NOT called on terminal success', async () => {
+    const flow = makeForgeCycleFlow(); // triggers: []
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const enqueueCalls: string[] = [];
+    deps.enqueueFlowRun = (flowId, _opts) => { enqueueCalls.push(flowId); };
+
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await runFlow({ flow, input, logger, deps });
+
+    assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when triggers is empty');
+  });
+
+  it('flow with trigger {on:complete, flow:knowledge-ingest} → enqueueFlowRun called on terminal success', async () => {
+    const flow = makeTriggerFlow([{ on: 'complete', flow: 'knowledge-ingest' }]);
+    const enqueueCalls: Array<{ flowId: string; opts: { origin: string; triggeredBy: string } }> = [];
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async () => { /* no-op */ },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+      enqueueFlowRun: (flowId, opts) => { enqueueCalls.push({ flowId, opts }); },
+    };
+
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await runFlow({ flow, input, logger, deps });
+
+    assert.equal(enqueueCalls.length, 1, 'enqueueFlowRun must be called exactly once');
+    assert.equal(enqueueCalls[0].flowId, 'knowledge-ingest');
+    assert.equal(enqueueCalls[0].opts.origin, 'trigger');
+    assert.equal(enqueueCalls[0].opts.triggeredBy, 'trigger-test');
+  });
+
+  it('flow with trigger → enqueueFlowRun NOT called on executor failure (triggers fire only on terminal success)', async () => {
+    const flow = makeTriggerFlow([{ on: 'complete', flow: 'knowledge-ingest' }]);
+    const enqueueCalls: string[] = [];
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async () => { throw new Error('pm-failed'); },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+      enqueueFlowRun: (flowId, _opts) => { enqueueCalls.push(flowId); },
+    };
+
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await assert.rejects(
+      () => runFlow({ flow, input, logger, deps }),
+      /pm-failed/,
+    );
+
+    assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when the run fails');
+  });
+
+  it('flow with multiple triggers → enqueueFlowRun called for each complete trigger', async () => {
+    const flow = makeTriggerFlow([
+      { on: 'complete', flow: 'knowledge-ingest' },
+      { on: 'complete', flow: 'other-flow' },
+    ]);
+    const enqueueCalls: string[] = [];
+
+    const deps: Partial<FlowRunnerDeps> = {
+      runProjectManager: async () => { /* no-op */ },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+      enqueueFlowRun: (flowId, _opts) => { enqueueCalls.push(flowId); },
+    };
+
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await runFlow({ flow, input, logger, deps });
+
+    assert.deepEqual(enqueueCalls.sort(), ['knowledge-ingest', 'other-flow'].sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 7: knowledge-ingest flow — non-cycle flow walks end-to-end (M3-5)
+// ---------------------------------------------------------------------------
+
+describe('knowledge-ingest flow — non-cycle DAG walk', () => {
+  /** Load the real knowledge-ingest/flow.yaml. */
+  function knowledgeIngestFlowPath(): string {
+    // Resolved relative to this test file's location (orchestrator/) → ../studio/flows/
+    return resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      'studio',
+      'flows',
+      'knowledge-ingest',
+      'flow.yaml',
+    );
+  }
+
+  it('knowledge-ingest/flow.yaml loads with correct shape', async () => {
+    const flowPath = knowledgeIngestFlowPath();
+    const flow = loadFlowDefinition(flowPath);
+
+    assert.strictEqual(flow.id, 'knowledge-ingest');
+    assert.strictEqual(flow.disposable, true, 'knowledge-ingest must be disposable:true (zero-gate rule)');
+    assert.ok(flow.nodes.some((n) => n.agent === 'brain-ingest'), 'must have a brain-ingest node');
+    assert.strictEqual(flow.edges.length, 0, 'knowledge-ingest has no edges (single-node flow)');
+  });
+
+  it('validateFlow(knowledge-ingest, agents) returns zero errors', async () => {
+    const flowPath = knowledgeIngestFlowPath();
+    const flow = loadFlowDefinition(flowPath);
+
+    // Load agents (same pattern as seed-data.test.ts)
+    const { listAgentDefinitions } = await import('./studio/registry.ts');
+    const { validateFlow: vf } = await import('./studio/validate.ts');
+    const agents = listAgentDefinitions(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'skills'));
+    const agentMap = new Map(agents.map((a) => [a.slug, a]));
+
+    const findings = vf(flow, agentMap);
+    const errors = findings.filter((f) => f.level === 'error');
+
+    assert.deepEqual(
+      errors,
+      [],
+      `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+    );
+  });
+
+  it('runFlow(knowledge-ingest) with a mock brain-ingest executor dispatches the ingest node', async () => {
+    const flowPath = knowledgeIngestFlowPath();
+    const flow = loadFlowDefinition(flowPath);
+
+    // The knowledge-ingest flow has a single 'ingest' node with agent:'brain-ingest'.
+    // flow-runner classifyNode() falls to 'unknown' for brain-ingest (it's not one of the
+    // hardcoded forge-cycle slugs). The unknown handler logs the skip and continues —
+    // this is the correct M3 behaviour: the flow walks without error, emitting a
+    // flow-runner.unknown-node-skipped event for the ingest node.
+    //
+    // A real brain-ingest executor would be wired in M4 when the executor registry is
+    // generalised. For M3 the structural proof is: runFlow completes without throwing
+    // and the ingest node is recorded as visited.
+
+    const input = makeInput();
+    const logger = makeLogger();
+    const enqueueCalls: string[] = [];
+
+    const deps: Partial<FlowRunnerDeps> = {
+      enqueueFlowRun: (flowId, _opts) => { enqueueCalls.push(flowId); },
+      // No other deps needed — single node, no forge-cycle executors involved.
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+
+    // Must complete without throwing — the unknown-node handler is a graceful skip.
+    const result = await runFlow({ flow, input, logger, deps });
+
+    // The flow has no gate/closure → cycleOutcome stays at its initial 'ready-for-review'.
+    assert.strictEqual(result.cycleOutcome, 'ready-for-review');
+
+    // The ingest node must have been visited: a flow-runner.unknown-node-skipped event
+    // must appear in the logger (the brain-ingest slug is not a hardcoded forge-cycle slug).
+    const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string; metadata?: Record<string, unknown> }>;
+    const unknownSkipEvents = events.filter(
+      (e) => e.message === 'flow-runner.unknown-node-skipped' && e.metadata?.['node_id'] === 'ingest',
+    );
+    assert.ok(
+      unknownSkipEvents.length >= 1,
+      'flow-runner must emit a flow-runner.unknown-node-skipped event for the brain-ingest ingest node',
+    );
+
+    // No triggers on knowledge-ingest → enqueue not called.
+    assert.deepEqual(enqueueCalls, []);
   });
 });

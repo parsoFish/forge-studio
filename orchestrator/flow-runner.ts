@@ -44,8 +44,9 @@
  *   8. enforceFinalCiGate before openPrInline
  */
 
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
@@ -126,6 +127,9 @@ export type FlowRunnerDeps = {
     input: CycleInput,
     logger: EventLogger,
   ) => void;
+
+  /** M3-5: Enqueue a target flow's run (trigger firing). Injectable for tests. Default stages a minimal run-request into `_queue/pending/` (M4+ scheduler claim extension required). */
+  enqueueFlowRun: (flowId: string, opts: { origin: string; triggeredBy: string }) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +240,24 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
   }
 }
 
+/**
+ * M3-5 default: write a minimal flow-run-request into `_queue/pending/` so the
+ * scheduler can discover it. M3 limitation: the scheduler only processes full
+ * InitiativeManifests today; this file is a structural marker until M4+ extends
+ * the claim path to handle flow-run-requests.
+ */
+function defaultEnqueueFlowRun(flowId: string, opts: { origin: string; triggeredBy: string }): void {
+  const pendingDir = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), '_queue', 'pending');
+  if (!existsSync(pendingDir)) mkdirSync(pendingDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const now = new Date().toISOString();
+  writeFileSync(
+    join(pendingDir, `flow-run-${flowId}-${ts}.md`),
+    `---\nflow_id: ${flowId}\norigin: ${opts.origin}\ntriggered_by: ${opts.triggeredBy}\ncreated_at: ${now}\n---\n\n# Flow run request: ${flowId}\n\nTriggered by "${opts.triggeredBy}" on terminal completion. Scheduler claim deferred to M4+.\n`,
+    'utf8',
+  );
+}
+
 const DEFAULT_DEPS: FlowRunnerDeps = {
   // Thread the optional wedge-abort signal into real phase functions.
   runProjectManager: (input, logger, signal?) =>
@@ -250,6 +272,7 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
   assertNonEmptyDelivery,
   enforceFinalCiGate,
   rebaseForResume: defaultRebaseForResume,
+  enqueueFlowRun: defaultEnqueueFlowRun,
 };
 
 // ---------------------------------------------------------------------------
@@ -397,6 +420,64 @@ async function raceWithWedge<T>(
 }
 
 // ---------------------------------------------------------------------------
+// Edit-lock version seam (ADR-028 §6, M3-6 minimal)
+// ---------------------------------------------------------------------------
+
+/**
+ * Synchronously re-read the flow version from disk using a lightweight regex.
+ * Returns null when the path is unavailable or the version field cannot be parsed.
+ * Exported for tests.
+ */
+export function readOnDiskFlowVersion(flowPath: string): number | null {
+  try {
+    // Use the Node.js fs module that's already loaded in this process.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('node:fs') as typeof import('node:fs');
+    const content: string = fs.readFileSync(flowPath, 'utf8');
+    const m = content.match(/^version:\s*(\d+)/m);
+    if (!m) return null;
+    const v = parseInt(m[1], 10);
+    return isNaN(v) ? null : v;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check the on-disk flow version against the version the runner started with.
+ * Emits a `flow.version-changed-during-run` warning when they differ.
+ * Full edit-lock enforcement (refusing in-flight mutations) is M4.
+ * Exported for tests.
+ */
+export function checkFlowVersionSeam(
+  flow: FlowDefinition,
+  startVersion: number,
+  initiativeId: string,
+  logger: EventLogger,
+): void {
+  if (!flow.path) return; // no path — test stub or seed flow
+  const currentVersion = readOnDiskFlowVersion(flow.path);
+  if (currentVersion === null) return; // unreadable — skip
+  if (currentVersion !== startVersion) {
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-runner',
+      event_type: 'log',
+      input_refs: [flow.path],
+      output_refs: [],
+      message: 'flow.version-changed-during-run',
+      metadata: {
+        flow_id: flow.id,
+        start_version: startVersion,
+        current_version: currentVersion,
+        note: 'M3 seam: full edit-lock enforcement is M4',
+      },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // runFlow
 // ---------------------------------------------------------------------------
 
@@ -462,6 +543,11 @@ export async function runFlow({
     // M3-3: Rate-limit gate — before every node spawn, wait if a prior
     // rate-limit recorded a resetsAt. No-op when nothing is recorded.
     await rateLimitGate.waitIfNeeded();
+
+    // M3-6 edit-lock version seam: check at each node boundary whether the
+    // on-disk flow version has changed since claim time. Logs a warning;
+    // full enforcement is M4.
+    checkFlowVersionSeam(flow, flow.version, input.initiativeId, costLogger);
 
     // M3-3: Per-node wedge detector. Each node gets a fresh detector so the
     // clock starts from the first event seen within that node's execution.
@@ -638,6 +724,36 @@ export async function runFlow({
     const currentIdx = order.indexOf(nodeId);
     const nextNodeId = currentIdx >= 0 ? (order[currentIdx + 1] ?? null) : null;
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
+  }
+
+  // M3-5: Trigger firing — fire on terminal SUCCESS only (not on failure,
+  // which exits via throw before reaching here). Only `on: complete` is
+  // supported in M3; unknown `on` values are logged and skipped.
+  for (const trigger of flow.triggers) {
+    if (trigger.on === 'complete') {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-runner',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow-runner.trigger-firing',
+        metadata: { on: trigger.on, target_flow: trigger.flow, source_flow: flow.id },
+      });
+      deps.enqueueFlowRun(trigger.flow, { origin: 'trigger', triggeredBy: flow.id });
+    } else {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-runner',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow-runner.trigger-skipped-unknown-on',
+        metadata: { on: trigger.on, target_flow: trigger.flow, note: 'only "complete" is supported in M3' },
+      });
+    }
   }
 
   return { cycleOutcome, reflectionStatus, lintStatus };

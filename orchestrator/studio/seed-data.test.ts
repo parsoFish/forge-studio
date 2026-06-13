@@ -119,18 +119,18 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
 // Agent definitions
 // ---------------------------------------------------------------------------
 
-test('listAgentDefinitions returns exactly 5 studio agents', () => {
+test('listAgentDefinitions returns exactly 6 studio agents (includes brain-ingest, added M3-5)', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const slugs = agents.map((a) => a.slug).sort();
 
   assert.deepEqual(
     slugs,
-    ['architect', 'developer-ralph', 'developer-unifier', 'project-manager', 'reflector'],
-    `Expected exactly 5 studio agents; got: ${slugs.join(', ')}`,
+    ['architect', 'brain-ingest', 'developer-ralph', 'developer-unifier', 'project-manager', 'reflector'],
+    `Expected exactly 6 studio agents; got: ${slugs.join(', ')}`,
   );
 });
 
-test('all 5 studio agents validateAgent with zero ERROR-level findings', () => {
+test('all studio agents validateAgent with zero ERROR-level findings', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   for (const agent of agents) {
     const findings = validateAgent(agent);
@@ -141,4 +141,52 @@ test('all 5 studio agents validateAgent with zero ERROR-level findings', () => {
       `agent "${agent.slug}" has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// brain-ingest agent (M3-5: studio frontmatter added)
+// ---------------------------------------------------------------------------
+
+test('brain-ingest agent loads and validateAgent returns zero errors', () => {
+  const agents = listAgentDefinitions(join(ROOT, 'skills'));
+  const brainIngest = agents.find((a) => a.slug === 'brain-ingest');
+
+  assert.ok(brainIngest !== undefined, 'brain-ingest must be discoverable as a studio agent');
+  assert.strictEqual(brainIngest.brainAccess, 'mandatory', 'brain-ingest brainAccess must be mandatory');
+  assert.strictEqual(brainIngest.runtime.strategy, 'fixed', 'brain-ingest runtime strategy must be fixed');
+  assert.ok(brainIngest.composition.skills.includes('brain-query'), 'brain-ingest must compose brain-query');
+
+  const findings = validateAgent(brainIngest);
+  const errors = findings.filter((f) => f.level === 'error');
+  assert.deepEqual(
+    errors,
+    [],
+    `brain-ingest agent has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// knowledge-ingest flow (M3-5: new seed flow)
+// ---------------------------------------------------------------------------
+
+test('knowledge-ingest flow loads and validateFlow returns zero errors', () => {
+  const flowPath = join(ROOT, 'studio/flows/knowledge-ingest/flow.yaml');
+  const agents = listAgentDefinitions(join(ROOT, 'skills'));
+  const agentMap = new Map(agents.map((a) => [a.slug, a]));
+
+  const flow = loadFlowDefinition(flowPath);
+
+  assert.strictEqual(flow.id, 'knowledge-ingest');
+  assert.strictEqual(flow.disposable, true, 'knowledge-ingest must be disposable:true (zero-gate rule)');
+  assert.ok(flow.nodes.some((n) => n.agent === 'brain-ingest'), 'must have a brain-ingest node');
+  assert.strictEqual(flow.edges.length, 0, 'knowledge-ingest has no edges (single-node flow)');
+  assert.deepEqual(flow.triggers, [], 'knowledge-ingest has no triggers');
+
+  const findings = validateFlow(flow, agentMap);
+  const errors = findings.filter((f) => f.level === 'error');
+  assert.deepEqual(
+    errors,
+    [],
+    `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+  );
 });
