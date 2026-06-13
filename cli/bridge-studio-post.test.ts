@@ -222,7 +222,10 @@ test('POST /api/runs/:id/resume with path-traversal id → 4xx (no 200)', async 
 
 test('POST /api/runs/:id/gates/verdict approve → calls mergePr, 200', async () => {
   const id = 'INIT-2026-01-01-gate-approve';
-  const wt = mkdtempSync(join(tmpdir(), 'gwt-'));
+  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/) or the
+  // bounds check rejects it.
+  const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'gate-approve');
+  mkdirSync(wt, { recursive: true });
   try {
     writeFileSync(join(forgeRoot, '_queue', 'ready-for-review', `${id}.md`), makeManifest(wt, id));
     stubs.mergeCallCount = 0;
@@ -291,7 +294,9 @@ test('POST /api/runs/:id/gates/unknown-gate → 404', async () => {
 
 test('POST /api/verdict approve alias → 200 (old shape unchanged)', async () => {
   const id = 'INIT-2026-01-01-alias-approve';
-  const wt = mkdtempSync(join(tmpdir(), 'alias-'));
+  // H2: worktree must be inside projectsRoot (<forgeRoot>/projects/).
+  const wt = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'alias-approve');
+  mkdirSync(wt, { recursive: true });
   try {
     writeFileSync(join(forgeRoot, '_queue', 'ready-for-review', `${id}.md`), makeManifest(wt, id));
     stubs.mergeCallCount = 0;
@@ -306,5 +311,107 @@ test('POST /api/verdict approve alias → 200 (old shape unchanged)', async () =
     assert.equal(stubs.mergeCallCount, 1);
   } finally {
     rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Security: C1 — initiativeId path traversal blocked (applyReviewVerdict + alias)
+// ---------------------------------------------------------------------------
+
+test('C1: POST /api/verdict with path-traversal initiativeId → 400, no fs write', async () => {
+  // Ensure the traversal id does NOT land a file anywhere.
+  const { status, json } = await post(bridgeUrl, '/api/verdict', {
+    initiativeId: '../../etc/passwd',
+    kind: 'approve',
+    rationale: 'should be blocked',
+  });
+  assert.equal(status, 400, `expected 400 from C1 guard, got ${status}`);
+  const b = json as Record<string, unknown>;
+  assert.ok(typeof b.error === 'string' && b.error.length > 0, 'error message present');
+  // Confirm no file was created outside queue (traversal would land in _queue/../..)
+  assert.ok(
+    !existsSync(join(forgeRoot, '..', 'etc', 'passwd')),
+    'no traversal file created',
+  );
+});
+
+test('C1: POST /api/runs/:id/gates/verdict with path-traversal initiativeId → 400', async () => {
+  // The gate route captures [A-Za-z0-9_-]+ so `..` doesn't even reach applyReviewVerdict —
+  // but a slug-shaped traversal like `INIT-2026-01-01-x` followed by a forged id
+  // must be caught by INIT_ID_RE.  Use a plain invalid id to verify the 400.
+  const { status, json } = await post(bridgeUrl, '/api/runs/not-an-init-id/gates/verdict', {
+    verdict: 'approve',
+    rationale: 'should be blocked',
+  });
+  assert.equal(status, 400, `expected 400 from C1 guard via gate route, got ${status}`);
+  const b = json as Record<string, unknown>;
+  assert.ok(typeof b.error === 'string', 'error message present');
+});
+
+// ---------------------------------------------------------------------------
+// Security: C2 — project + sessionId path traversal blocked (applyPlanVerdict)
+// ---------------------------------------------------------------------------
+
+test('C2: POST /api/plan-verdict with path-traversal project → 400', async () => {
+  const { status, json } = await post(bridgeUrl, '/api/plan-verdict', {
+    project: '../escape',
+    sessionId: '2026-01-01T00-00-00',
+    kind: 'approve',
+  });
+  assert.equal(status, 400, `expected 400 from C2 project guard, got ${status}`);
+  const b = json as Record<string, unknown>;
+  assert.ok(typeof b.error === 'string' && b.error.length > 0);
+});
+
+test('C2: POST /api/plan-verdict with path-traversal sessionId → 400', async () => {
+  const { status, json } = await post(bridgeUrl, '/api/plan-verdict', {
+    project: 'my-project',
+    sessionId: '../../../etc/shadow',
+    kind: 'approve',
+  });
+  assert.equal(status, 400, `expected 400 from C2 sessionId guard, got ${status}`);
+  const b = json as Record<string, unknown>;
+  assert.ok(typeof b.error === 'string' && b.error.length > 0);
+});
+
+test('C2: POST /api/plan-verdict with valid slug project + real sessionId format → passes guard (404 session not found)', async () => {
+  // Verifies that the C2 guard does NOT block legitimate traffic.
+  // A real sessionId like '2026-06-13T14-30-00' must pass SAFE_ID_RE.
+  const { status } = await post(bridgeUrl, '/api/plan-verdict', {
+    project: 'my-project',
+    sessionId: '2026-06-13T14-30-00',
+    kind: 'approve',
+  });
+  // Guard passes → 404 (session dir does not exist) rather than 400.
+  assert.equal(status, 404, `expected 404 (session not found), got ${status} — guard may have blocked a valid id`);
+});
+
+// ---------------------------------------------------------------------------
+// Security: H2 — worktree_path outside projectsRoot → 409
+// ---------------------------------------------------------------------------
+
+test('H2: approve with manifest worktree_path outside projectsRoot → 409', async () => {
+  const id = 'INIT-2026-01-01-h2-outside-root';
+  // Write a manifest whose worktree_path is in /tmp — outside projectsRoot.
+  const outsideWt = mkdtempSync(join(tmpdir(), 'h2-out-'));
+  try {
+    writeFileSync(
+      join(forgeRoot, '_queue', 'ready-for-review', `${id}.md`),
+      makeManifest(outsideWt, id),
+    );
+
+    const { status, json } = await post(bridgeUrl, '/api/verdict', {
+      initiativeId: id,
+      kind: 'approve',
+      rationale: 'should be blocked by H2',
+    });
+    assert.equal(status, 409, `expected 409 from H2 guard, got ${status}: ${JSON.stringify(json)}`);
+    const b = json as Record<string, unknown>;
+    assert.ok(
+      typeof b.error === 'string' && b.error.includes('outside allowed root'),
+      `expected outside-allowed-root error, got: ${b.error}`,
+    );
+  } finally {
+    rmSync(outsideWt, { recursive: true, force: true });
   }
 });

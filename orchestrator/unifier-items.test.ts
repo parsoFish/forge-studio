@@ -234,3 +234,103 @@ test('appendReviewUnifierItems: the total-UWI cap rejects further rounds', () =>
     rmSync(wt, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Security: H1 — body-supplied qualityGateCmd shell-pipeline rejection
+// ---------------------------------------------------------------------------
+
+test('H1: appendReviewUnifierItems rejects shell-pipeline qualityGateCmd (bash -c "… | …")', () => {
+  const wt = seededWorktree();
+  try {
+    assert.throws(
+      () => appendReviewUnifierItems({
+        worktreePath: wt,
+        initiativeId: INIT,
+        concern: {
+          rationale: 'fix the output format',
+          acceptanceCriteria: [{ given: 'the command runs', when: 'output is checked', then: 'format is correct' }],
+          qualityGateCmd: ['bash', '-c', 'go test ./... | grep PASS'],
+        },
+        projectGateCmd: PROJECT_GATE,
+        estimatedIterations: 4,
+      }),
+      ReviewConcernInvalidError,
+      'shell pipeline gate must be rejected',
+    );
+    // Queue must be untouched — UWI-1 only.
+    assert.deepEqual(readUnifierItems(wt).items.map((i) => i.work_item_id), ['UWI-1']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('H1: appendReviewUnifierItems rejects shell-chain qualityGateCmd (bash -c "… && …")', () => {
+  const wt = seededWorktree();
+  try {
+    assert.throws(
+      () => appendReviewUnifierItems({
+        worktreePath: wt,
+        initiativeId: INIT,
+        concern: {
+          rationale: 'r',
+          acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+          qualityGateCmd: ['bash', '-c', 'npm test && echo done'],
+        },
+        projectGateCmd: PROJECT_GATE,
+        estimatedIterations: 4,
+      }),
+      ReviewConcernInvalidError,
+      'shell chain gate must be rejected',
+    );
+    assert.deepEqual(readUnifierItems(wt).items.map((i) => i.work_item_id), ['UWI-1']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('H1: appendReviewUnifierItems rejects empty-string entry in qualityGateCmd', () => {
+  const wt = seededWorktree();
+  try {
+    assert.throws(
+      () => appendReviewUnifierItems({
+        worktreePath: wt,
+        initiativeId: INIT,
+        concern: {
+          rationale: 'r',
+          acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }],
+          qualityGateCmd: ['go', 'test', ''],
+        },
+        projectGateCmd: PROJECT_GATE,
+        estimatedIterations: 4,
+      }),
+      ReviewConcernInvalidError,
+      'empty entry in gate cmd must be rejected',
+    );
+    assert.deepEqual(readUnifierItems(wt).items.map((i) => i.work_item_id), ['UWI-1']);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('H1: appendReviewUnifierItems accepts a safe direct qualityGateCmd (no shell wrapping)', () => {
+  const wt = seededWorktree();
+  try {
+    const sharp = ['go', 'test', '-run', 'TestOutputFormat', './pkg/...'];
+    const { appended } = appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: INIT,
+      concern: {
+        rationale: 'fix output format',
+        acceptanceCriteria: [{ given: 'the test', when: 'run', then: 'passes' }],
+        qualityGateCmd: sharp,
+      },
+      projectGateCmd: PROJECT_GATE,
+      estimatedIterations: 4,
+    });
+    assert.ok(appended.length > 0, 'safe gate accepted — UWIs appended');
+    const u2 = readUnifierItems(wt).items.find((i) => i.work_item_id === appended[0])!;
+    assert.deepEqual(u2.quality_gate_cmd, sharp);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});

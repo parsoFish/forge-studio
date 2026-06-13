@@ -96,6 +96,8 @@ function _writeStatus(dir: string, status: ArchitectStatus): void {
  *  `FORGE_ARCHITECT_NO_SPAWN=1` disables spawn for test harnesses. */
 function _spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  // M1: defence-in-depth — sessionId must be safe before it enters the log dir path.
+  if (!SAFE_ID_RE.test(sessionId)) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -138,7 +140,13 @@ export async function applyReviewVerdict(
   const { initiativeId, kind, rationale } = body;
   const acs = body.acceptanceCriteria ?? [];
 
-  if (!initiativeId || !kind || !rationale) {
+  // C1: validate initiativeId format BEFORE any path construction to block path traversal.
+  // The INIT_ID_RE enforces the manifest id convention (INIT-YYYY-MM-DD-slug).
+  if (!initiativeId || !INIT_ID_RE.test(initiativeId)) {
+    sendJson(res, 400, { error: 'initiativeId must match INIT-YYYY-MM-DD-slug format' }, origin);
+    return;
+  }
+  if (!kind || !rationale) {
     sendJson(res, 400, { error: 'initiativeId, kind, rationale required' }, origin);
     return;
   }
@@ -170,6 +178,12 @@ export async function applyReviewVerdict(
         error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
         initiativeId,
       }, origin);
+      return;
+    }
+    // H2: bounds-check manifest-supplied worktree_path against projectsRoot to
+    // prevent a tampered manifest from directing mergePr at an arbitrary path.
+    if (!resolve(approveWorktreePath).startsWith(resolve(ctx.projectsRoot) + sep)) {
+      sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
     const merged = ctx.mergePr(approveWorktreePath);
@@ -261,6 +275,19 @@ export async function applyPlanVerdict(
     sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
     return;
   }
+  // C2: validate project + sessionId BEFORE any path construction to block path
+  // traversal into _architectSessionDir(<projectsRoot>/<project>/_architect/<sessionId>).
+  // project uses SLUG_RE (lowercase slug convention, e.g. "betterado").
+  // sessionId uses SAFE_ID_RE — real ids are YYYY-MM-DDTHH-mm-ss (uppercase T,
+  // digit-leading) which SLUG_RE rejects; SAFE_ID_RE covers both formats.
+  if (!SLUG_RE.test(project)) {
+    sendJson(res, 400, { error: 'project must match slug format (e.g. my-project)' }, origin);
+    return;
+  }
+  if (!SAFE_ID_RE.test(sessionId)) {
+    sendJson(res, 400, { error: 'sessionId contains invalid characters' }, origin);
+    return;
+  }
   if (!['approve', 'revise', 'reject'].includes(kind)) {
     sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
     return;
@@ -332,8 +359,9 @@ export function sendJson(res: ServerResponse, status: number, body: unknown, ori
  * Strip absolute filesystem paths from error strings before sending them to
  * the browser. Prevents leaking the operator's directory layout.
  * Pattern: any token starting with / that looks like a path segment.
+ * Exported so alias catch-blocks in ui-bridge.ts can reuse it (M2).
  */
-function sanitizeError(err: unknown): string {
+export function sanitizeError(err: unknown): string {
   return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
 }
 
@@ -1050,8 +1078,12 @@ export async function handleStudioWriteRoutes(
 // POST routes — generalised run + gate write endpoints (M3-4)
 // ---------------------------------------------------------------------------
 
-// Regex to validate initiativeId format
-const INIT_ID_RE = /^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+/**
+ * Validates the INIT-YYYY-MM-DD-slug format used as initiativeId in manifest
+ * file paths.  Exported so callers (applyReviewVerdict, POST /api/runs) share
+ * one source of truth for path-traversal prevention (C1).
+ */
+export const INIT_ID_RE = /^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * Handle Forge Studio POST write routes (run start, run resume, gate verdicts).

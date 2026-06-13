@@ -45,6 +45,7 @@ import {
   handleStudioPostRoutes,
   applyReviewVerdict,
   applyPlanVerdict,
+  sanitizeError,
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
@@ -745,7 +746,7 @@ async function handleHttp(
         qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
       });
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
   }
@@ -969,7 +970,7 @@ async function handleArchitect(
         rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
       });
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
