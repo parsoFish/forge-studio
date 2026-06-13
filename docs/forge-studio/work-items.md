@@ -119,11 +119,20 @@ dead remnant remains (cycle.ts post-cutover: ~919 LOC of helpers, no inline phas
   gate control (gated run → "Open gate →" link to /review/<runId>); resume button (failed run →
   `data-action="resume-run"` interactive). All soft-assert; no real cycles started.
 
-**Remaining gate: operator-gated `verify:cycle` engine-path equivalence run.** The routine tier
-must confirm the flow-runner path reproduces the M2 baseline behaviour (same fresh execution —
-architect synthetic → PM spawns → dev-loop runs — same `gate-too-loose` corpus artifact at f61d186).
-Until that run completes, the behavioural equivalence proof is unit-test-only. The parent task
-(M3-7) authorised the runner to execute this; it is queued for the next operator-present session.
+**verify:cycle engine-path run — RAN 2026-06-13, GATE PASS ✓ ($4.20 real spend).** The flow-runner
+path executed a complete cycle end-to-end on claude-harness (base f61d186): claim → synthetic
+architect → PM spawned + decomposed (1 WI) → dev-loop ran WI-1 to completion (`iters=1 ·
+quality-gates-pass`) → unifier → review → pr-open → auto-approve. All four routine-tier assertions
+green: reached merge (done), dev-loop 1/1 complete 0 failed, project tests green post-merge, cost
+$4.20 / $25 ceiling. This is a **stronger result than the M2 baseline** (which hit the orthogonal
+iter-0 `gate-too-loose` artifact on that run): the engine path drove a real cycle to a fully-green
+verify gate, confirming the cutover (runCycle → flow-runner walking forge-cycle.yaml) executes
+real cycles equivalently — not just by the 932 unit tests but by a real-money green cycle. The run
+surfaced + closed two correct interactions: (1) M3-6's claim refusal fired correctly (claude-harness
+fails C2 at the frozen base), so the routine-tier harness gained a scoped `FORGE_SKIP_CONTRACT_CHECK`
+opt-out (contract-ready check only; structural flow/zero-gate checks stay enforced) — verify:cycle
+tests EXECUTION, the contract gate is orthogonal; (2) stale `origin/forge/<id>` ephemeral branches +
+the corpus manifest's `resume_from` (fixed in M2) must be cleared before a fresh run.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
