@@ -588,7 +588,7 @@ describe('loadAgentDefinition enum guards', () => {
 // ---------------------------------------------------------------------------
 
 describe('serializeAgentDefinition empty budgets round-trip', () => {
-  it('agent without budget fields survives load→serialize→load with budgets deepEqual {}', () => {
+  it('agent without budget fields survives load→serialize→load with all budget fields undefined', () => {
     const noBudgets = AGENT_FIXTURE.replace(
       /^budgets:\n  iterationCap: 15\n/m,
       '',
