@@ -35,7 +35,11 @@ exit criteria met: definitions lint clean, no-drift derivation test, zero hot-pa
 - `js-yaml` becomes an explicit dependency (today only transitive via
   gray-matter). Sanctioned by ADR-027 ("gray-matter/js-yaml").
 
-## M1 — Run model + read-only Studio UI
+## M1 — Run model + read-only Studio UI ✅ COMPLETE 2026-06-13
+
+All six WIs landed on `feat/studio-m1` (792 tests, build, brain lint 0 errors, studio lint 0 errors,
+ui:journey 40 frames 0 failures all green). Exit criteria met: monitor parity via Act IV beats,
+run-model suite green vs real fixtures, ui:journey exits 0 with video + gallery.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|

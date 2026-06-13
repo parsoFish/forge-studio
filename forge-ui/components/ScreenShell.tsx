@@ -35,7 +35,7 @@ export function ScreenShell({
       style={{ padding: '16px 24px', minHeight: '100vh', maxWidth, margin: '0 auto' }}
     >
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 18 }}>
-        <Link href="/" data-action="back-to-dashboard" style={{ color: '#58a6ff', fontSize: 13, textDecoration: 'none' }}>
+        <Link href="/dashboard" data-action="back-to-dashboard" style={{ color: '#58a6ff', fontSize: 13, textDecoration: 'none' }}>
           ← forge
         </Link>
         <h1 style={{ margin: 0, fontSize: 18, letterSpacing: 0.4 }}>{title}</h1>

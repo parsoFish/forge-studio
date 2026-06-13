@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, use } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { subscribe, type EventLogEntry } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows } from '@/lib/studio-client';
 import type { Run, Flow } from '@/lib/studio-client';
@@ -25,10 +25,6 @@ import { EventTail } from '@/components/studio/EventTail';
 //       {type:'cycle-list-changed'} → re-fetch runs
 // ---------------------------------------------------------------------------
 
-interface PageParams {
-  id: string;
-}
-
 function pickDefaultRun(runs: Run[]): Run | null {
   // Priority: gated → active → first complete → first planned
   const gated    = runs.find((r) => r.status === 'gated');
@@ -38,8 +34,8 @@ function pickDefaultRun(runs: Run[]): Run | null {
   return gated ?? active ?? complete ?? planned ?? runs[0] ?? null;
 }
 
-export default function FlowMonitorPage({ params }: { params: Promise<PageParams> }) {
-  const { id } = use(params);
+export default function FlowMonitorPage({ params }: { params: { id: string } }) {
+  const { id } = params;
 
   const [flow,        setFlow]        = useState<Flow | null>(null);
   const [runs,        setRuns]        = useState<Run[]>([]);
