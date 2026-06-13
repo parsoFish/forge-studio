@@ -1,0 +1,22 @@
+id: forge-cycle
+name: Forge Cycle
+version: 1
+goal: Take an approved initiative to a merged PR with reflection captured.
+project: null
+kb: cycles
+costCeilingUsd: 25
+origin: seed
+nodes:
+  - { id: architect, agent: architect, gate: plan }
+  - { id: pm, agent: project-manager }
+  - { id: dev, agent: developer-ralph, fanOut: work-items }
+  - { id: unifier, agent: developer-unifier, resumable: true }
+  - { id: review, gate: verdict }
+  - { id: reflect, agent: reflector }
+edges:
+  - { from: architect, to: pm, artifact: plan }
+  - { from: pm, to: dev, artifact: work-items }
+  - { from: dev, to: unifier, artifact: wi-branches }
+  - { from: unifier, to: review, artifact: pr }
+  - { from: review, to: reflect, artifact: verdict }
+triggers: []

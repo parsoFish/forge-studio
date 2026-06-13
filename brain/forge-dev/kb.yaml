@@ -1,0 +1,4 @@
+id: forge-dev
+name: Forge Engineering
+scope: agent-integration
+desc: What forge knows about building forge — engineering patterns, ADR context, antipatterns.
