@@ -20,7 +20,8 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  listAgentDefinitions,
+  isStudioAgent,
+  loadAgentDefinition,
   loadCatalog,
   loadFlowDefinition,
   loadKbDescriptor,
@@ -58,24 +59,56 @@ export function runStudioLint(root: string): StudioLintResult {
   const skillsDir = join(root, 'skills');
   const agentMap = new Map<string, AgentDefinition>();
 
-  try {
-    const defs = listAgentDefinitions(skillsDir);
-    for (const def of defs) {
-      agentMap.set(def.slug, def);
+  if (!existsSync(skillsDir)) {
+    findings.push({
+      level: 'error',
+      object: 'agents',
+      check: 'load',
+      message: `Required directory "${skillsDir}" is missing — skills/ must exist in a forge repo`,
+    });
+  } else {
+    let skillEntries: import('node:fs').Dirent[];
+    try {
+      skillEntries = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
+    } catch (err) {
+      skillEntries = [];
+      findings.push({
+        level: 'error',
+        object: 'agents',
+        check: 'load',
+        message: `Cannot read skills directory "${skillsDir}" — ${(err as Error).message}`,
+      });
+    }
+
+    for (const entry of skillEntries) {
+      const skillMdPath = join(skillsDir, entry.name, 'SKILL.md');
+      let isStudio: boolean;
       try {
+        isStudio = isStudioAgent(skillMdPath);
+      } catch (err) {
+        findings.push({
+          level: 'error',
+          object: `agent:${entry.name}`,
+          check: 'load',
+          message: `Cannot check studio agent "${skillMdPath}" — ${(err as Error).message}`,
+        });
+        continue;
+      }
+      if (!isStudio) continue; // legacy skill — fine
+
+      try {
+        const def = loadAgentDefinition(skillMdPath);
+        agentMap.set(def.slug, def);
         findings.push(...validateAgent(def));
       } catch (err) {
         findings.push({
           level: 'error',
-          object: `agent:${def.slug}`,
+          object: `agent:${entry.name}`,
           check: 'load',
-          message: `Unexpected validation error — ${(err as Error).message}`,
+          message: (err as Error).message,
         });
       }
     }
-  } catch (err) {
-    // skills/ dir missing or unreadable — not a hard error for the lint gate
-    // (agents are optional individually; the flows section will catch missing refs)
   }
 
   // ------------------------------------------------------------------

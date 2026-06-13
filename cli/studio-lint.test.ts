@@ -318,3 +318,133 @@ test('duplicate kb ids across brain/*/kb.yaml → error', () => {
 
   cleanup(root);
 });
+
+// ---------------------------------------------------------------------------
+// Test 7: one corrupt studio SKILL.md (bad brainAccess) + one valid agent
+//         → exactly one agent:<bad> load error; valid agent still resolves;
+//           flow referencing the valid agent produces no agent-ref error
+// ---------------------------------------------------------------------------
+
+test('corrupt studio SKILL.md produces per-skill error; valid sibling still lints clean', () => {
+  const root = tmpRoot();
+
+  // Good agent
+  const goodSlug = 'good-agent';
+  const goodDir = join(root, 'skills', goodSlug);
+  mkdirSync(goodDir, { recursive: true });
+  writeFileSync(join(goodDir, 'SKILL.md'), validSkillMd(goodSlug));
+
+  // Bad agent — has runtime (so isStudioAgent → true) but invalid brainAccess value
+  const badSlug = 'bad-agent';
+  const badDir = join(root, 'skills', badSlug);
+  mkdirSync(badDir, { recursive: true });
+  writeFileSync(
+    join(badDir, 'SKILL.md'),
+    `---
+name: ${badSlug}
+description: A corrupt agent.
+purpose: Does bad things.
+brainAccess: bogus
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  hooks: []
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+budgets: {}
+allowed-tools: []
+disallowed-tools: []
+---
+## Process
+
+This agent is broken.
+`,
+  );
+
+  // Flow that references only the good agent
+  const flowDir = join(root, 'studio', 'flows', 'good-flow');
+  mkdirSync(flowDir, { recursive: true });
+  writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('good-flow', goodSlug));
+
+  writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+
+  const result = runStudioLint(root);
+
+  // Exactly one agent load error, for the bad skill
+  const agentLoadErrors = result.findings.filter(
+    (f) => f.level === 'error' && f.object === `agent:${badSlug}` && f.check === 'load',
+  );
+  assert.strictEqual(
+    agentLoadErrors.length,
+    1,
+    `Expected exactly 1 agent:${badSlug} load error, got: ${JSON.stringify(result.findings)}`,
+  );
+
+  // No agent-ref errors for the good agent's flow
+  const agentRefErrors = result.findings.filter(
+    (f) => f.level === 'error' && f.check === 'agent-ref',
+  );
+  assert.strictEqual(
+    agentRefErrors.length,
+    0,
+    `Expected 0 agent-ref errors, got: ${JSON.stringify(agentRefErrors)}`,
+  );
+
+  // Total error count should be exactly 1 (just the bad agent load)
+  assert.strictEqual(
+    result.errorCount,
+    1,
+    `Expected errorCount=1, got ${result.errorCount}:\n${JSON.stringify(result.findings, null, 2)}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 8: no skills/ dir at all → error finding with object 'agents'
+// ---------------------------------------------------------------------------
+
+test('missing skills/ dir → error finding with object "agents"', () => {
+  const root = tmpRoot();
+
+  // studio dir present with minimum valid files, but no skills/ dir
+  const flowDir = join(root, 'studio', 'flows', 'any-flow');
+  mkdirSync(flowDir, { recursive: true });
+  // flow references a non-existent agent — but the error we assert is specifically the agents/load one
+  writeFileSync(
+    join(flowDir, 'flow.yaml'),
+    `id: any-flow
+name: Any Flow
+version: 1
+goal: Test.
+project: null
+kb: null
+costCeilingUsd: 10
+origin: seed
+disposable: true
+nodes:
+  - { id: step1, agent: some-agent }
+edges: []
+triggers: []
+`,
+  );
+  writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+
+  const result = runStudioLint(root);
+
+  const agentsLoadError = result.findings.find(
+    (f) => f.level === 'error' && f.object === 'agents' && f.check === 'load',
+  );
+  assert.ok(
+    agentsLoadError !== undefined,
+    `Expected an error finding with object "agents" and check "load", got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, level: f.level })))}`,
+  );
+
+  cleanup(root);
+});
