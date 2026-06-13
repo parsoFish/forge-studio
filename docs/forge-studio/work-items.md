@@ -144,15 +144,21 @@ the corpus manifest's `resume_from` (fixed in M2) must be cleared before a fresh
 | M3-6 | Flow lint joins preflight/claim | M0-5, M3-2 | claim refuses non-contract-ready project, locked/invalid flow version, zero-gate non-disposable |
 | M3-7 | Harness beats + cutover gate | M3-3..6 | e2e: start-run/gate-approve/resume/ceiling-warn; **verify:cycle release tier** before hardcoded phase order deleted |
 
-## M4 — Flow builder canvas + artifact viewer
+## M4 — Flow builder canvas (ReactFlow, ADR-030) + unified artifact viewer ✅ COMPLETE 2026-06-13 (verify:cycle operator-gated)
+
+All five WIs landed on `feat/studio-m4` (954 tests, build, brain lint 0 errors, studio lint 0 errors,
+ui:journey 52 frames 0 failures all green). Exit criteria met: BUILD tab live (6 nodes/5 edges,
+palette + FlowHeader); unified /artifact viewer live (6-chip trail, demo + verdict gate surfaces);
+DemoComparison `.checkpoints` null-guard fixed (first live run bug). Gate: operator-authorized
+`npm run verify:cycle` (gate path touched via fold-in redirects — parent task M4-5).
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
-| M4-1 | ADR-030 canvas spike (react-flow/xyflow vs hex canvas) | — | mock interaction spec = acceptance bar; decision recorded |
-| M4-2 | Flow builder (build tab) | M4-1, M3-4 | authoring against PUT flows with versioning + edit-lock UX, trigger picker, goal warning, project/kb binding |
-| M4-3 | Unified artifact viewer `/artifact` | M1-1 | all six renderers (plan, work-items, PR, demo, verdict, reflection), gate bar state machine on generalised gate endpoint, approval stamp, empty state |
-| M4-4 | Fold-in + retirement | M4-3 | `/review/[cycleId]` + PLAN-gate route through viewer; redirects; e2e migrated |
-| M4-5 | e2e: author-a-flow + gate-via-viewer | M4-2..4 | verify:cycle routine re-run (gate path touched) |
+| M4-1 | ADR-030 canvas decision + PUT/GET flows backend | — | ADR-030 records ReactFlow (already in AgentGraphCanvas); PUT /api/studio/flows/:id + version-bump + edit-lock (423 active); GET single flow; saveFlow/fetchFlow client helpers; security self-audit |
+| M4-2 | Flow builder (BUILD tab) | M4-1, M3-4 | ReactFlow canvas — custom flowNode (hex + Handles), palette drag-to-create, port→port onConnect + ArtifactPicker, NodeMiniPanel, toolbar (Clear/Layout), FlowHeader (goal/project/kb/triggers/Save); data-node-count/data-edge-count/data-flow-node/data-node-id/data-agent-ref/data-goal-set/data-active-tab; edit-lock UX |
+| M4-3 | Unified artifact viewer `/artifact` | M1-1 | all six renderers (plan, work-items, PR, demo, verdict, reflection), gate bar state machine on generalised gate endpoint, approval stamp, empty state; data-page="flows"/data-page-ready/data-run/data-artifact-type/data-mode/data-gate-state; ArtifactTrail 6 chips |
+| M4-4 | Fold-in + retirement | M4-3 | `/review/[cycleId]` + PLAN-gate route through viewer; redirects; e2e migrated; harness data-* (verdict-form/plan-gate) preserved |
+| M4-5 | e2e Act VII: author-a-flow + gate-via-viewer | M4-2..4 | beat 30: BUILD tab live (6 nodes, palette, goal field, no save — seed immutable); beat 31: /artifact demo view (6-chip trail, demo-evaluation) + verdict gate (verdict-form, approve-and-merge, send-back radio); DemoComparison crash fix (checkpoints?.length); 52 frames, 0 failures; remaining gate: operator-authorized verify:cycle |
 
 ## M5 — Knowledge Bases as objects
 
