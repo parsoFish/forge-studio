@@ -334,6 +334,29 @@ export async function saveProject(
   return { ok: r.ok, error: r.error };
 }
 
+/** Fetch a single flow definition by id. */
+export async function fetchFlow(id: string): Promise<Flow | null> {
+  const body = await studioGet<{ flow?: Flow } | null>(
+    `/api/studio/flows/${encodeURIComponent(id)}`,
+    null,
+  );
+  return body?.flow ?? null;
+}
+
+/** Save (PUT) a flow definition by id. Bumps version server-side. */
+export async function saveFlow(
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[] }> {
+  const r = await studioPut(`/api/studio/flows/${encodeURIComponent(id)}`, body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return {
+    ok: true,
+    version: typeof r.data?.version === 'number' ? (r.data.version as number) : undefined,
+    findings: Array.isArray(r.data?.findings) ? (r.data!.findings as unknown[]) : [],
+  };
+}
+
 export type PreflightClause = {
   id: string;
   title: string;
