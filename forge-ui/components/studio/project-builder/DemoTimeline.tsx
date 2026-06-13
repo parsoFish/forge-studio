@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DemoStep } from '@/lib/studio-client';
 
 const KIND_META: Record<string, { icon: string; label: string }> = {
@@ -20,32 +20,58 @@ const PRESETS: Array<{ kind: DemoStep['kind']; text: string; icon: string }> = [
   { kind: 'verify',  text: 'Project tests green in CI after merge', icon: '🟢' },
 ];
 
+let _uid = 0;
+function nextUid(): string { return `step-${++_uid}`; }
+
+type StepWithUid = DemoStep & { uid: string };
+
+function attachUids(steps: DemoStep[]): StepWithUid[] {
+  return steps.map((s) => ({ ...s, uid: nextUid() }));
+}
+
 export function DemoTimeline({ steps, onChange }: { steps: DemoStep[]; onChange: (s: DemoStep[]) => void }) {
+  const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const prevStepsRef = useRef(steps);
+
+  // Sync incoming steps → internal when the parent replaces the array
+  // (e.g. on initial data load). Don't re-sync on every render — only when
+  // the reference changes (i.e. a load replaced the array wholesale).
+  useEffect(() => {
+    if (steps !== prevStepsRef.current) {
+      prevStepsRef.current = steps;
+      setInternal(attachUids(steps));
+    }
+  }, [steps]);
+
+  function emit(next: StepWithUid[]) {
+    setInternal(next);
+    onChange(next.map(({ uid: _uid, ...s }) => s));
+  }
 
   function addStep(kind: DemoStep['kind'], text: string) {
-    onChange([...steps, { kind, text }]);
+    emit([...internal, { kind, text, uid: nextUid() }]);
   }
 
   function removeStep(i: number) {
-    onChange(steps.filter((_, idx) => idx !== i));
+    emit(internal.filter((_, idx) => idx !== i));
   }
 
   function updateStep(i: number, patch: Partial<DemoStep>) {
-    onChange(steps.map((s, idx) => idx === i ? { ...s, ...patch } : s));
+    emit(internal.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   }
 
   function handleDrop(targetIdx: number) {
     if (dragIdx === null || dragIdx === targetIdx) return;
-    const next = [...steps];
+    const next = [...internal];
     const [moved] = next.splice(dragIdx, 1);
     next.splice(targetIdx, 0, moved);
-    onChange(next);
+    emit(next);
     setDragIdx(null);
   }
 
   return (
-    <section data-step-count={steps.length}>
+    <section data-step-count={internal.length}>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Demo Process <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
       </div>
@@ -58,9 +84,9 @@ export function DemoTimeline({ steps, onChange }: { steps: DemoStep[]; onChange:
 
           {/* Timeline */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {steps.map((step, i) => (
+            {internal.map((step, i) => (
               <div
-                key={i}
+                key={step.uid}
                 style={{ display: 'flex', gap: 0, position: 'relative', opacity: dragIdx === i ? 0.4 : 1 }}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={(e) => { e.preventDefault(); handleDrop(i); }}
@@ -79,7 +105,7 @@ export function DemoTimeline({ steps, onChange }: { steps: DemoStep[]; onChange:
                   }}>
                     {i + 1}
                   </div>
-                  {i < steps.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--line)', margin: '0 auto', minHeight: 12 }} />}
+                  {i < internal.length - 1 && <div style={{ flex: 1, width: 2, background: 'var(--line)', margin: '0 auto', minHeight: 12 }} />}
                 </div>
 
                 {/* Card */}

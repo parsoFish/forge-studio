@@ -172,7 +172,6 @@ export function RuntimePicker({
         <ModelChipRow
           models={sdkModels}
           selectedIds={isRange ? runtime.range : (runtime.model ? [runtime.model] : [])}
-          isMulti={isRange}
           onToggle={toggleModel}
         />
       </div>
@@ -186,7 +185,6 @@ export function RuntimePicker({
         <ModelChipRow
           models={sdkModels}
           selectedIds={runtime.subagentModel ? [runtime.subagentModel] : []}
-          isMulti={false}
           onToggle={toggleSubagentModel}
         />
       </div>
@@ -216,11 +214,10 @@ export function RuntimePicker({
 type ModelChipRowProps = {
   models: CatalogItem[];
   selectedIds: string[];
-  isMulti: boolean;
   onToggle: (id: string) => void;
 };
 
-function ModelChipRow({ models, selectedIds, isMulti, onToggle }: ModelChipRowProps) {
+function ModelChipRow({ models, selectedIds, onToggle }: ModelChipRowProps) {
   if (models.length === 0) {
     return (
       <div className="model-chip-row" id="model-chip-row-main">

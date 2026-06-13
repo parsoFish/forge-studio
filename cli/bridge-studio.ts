@@ -236,6 +236,7 @@ function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 
 type ProjectWithMeta = {
   id: string;
+  name: string;
   path: string;
   northStar?: string;
   kb?: string;
@@ -256,10 +257,11 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 
   return registry.projects.map((ref) => {
     const projectJsonPath = join(resolve(forgeRoot), ref.path, '.forge', 'project.json');
-    const result: ProjectWithMeta = { id: ref.id, path: ref.path };
+    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
     if (existsSync(projectJsonPath)) {
       try {
         const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+        if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
         if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
         if (typeof raw.kb === 'string') result.kb = raw.kb;
         if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
@@ -765,6 +767,7 @@ export async function handleStudioWriteRoutes(
 
       // Merge: only override M2 fields from body; preserve all other fields
       const merged: Record<string, unknown> = { ...existingRaw };
+      if (typeof b['name'] === 'string') merged['name'] = b['name'];
       if (typeof b['northStar'] === 'string') merged['northStar'] = b['northStar'];
       if (typeof b['instructions'] === 'string') merged['instructions'] = b['instructions'];
       if (Array.isArray(b['demoProcess'])) merged['demoProcess'] = b['demoProcess'];

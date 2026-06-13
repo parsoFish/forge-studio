@@ -76,6 +76,8 @@ export type Agent = {
   runtime?: AgentRuntime;
   brainAccess?: string;
   phase?: string;
+  allowedTools?: string[];
+  disallowedTools?: string[];
 };
 
 export type FlowNode = {
@@ -248,10 +250,45 @@ export function parseRun(raw: unknown): Run {
   };
 }
 
+/**
+ * Map a raw AgentDefinition (server shape) to the client Agent type.
+ * Server: slug, composition.{skills,tools,mcps,hooks}, body, name, purpose,
+ *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools
+ * Client: id, skills, tools, mcps, hooks, process, name, purpose,
+ *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools
+ */
+function parseAgentDefinition(raw: unknown): Agent {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const comp = (r['composition'] ?? {}) as Record<string, unknown>;
+  const rt = (r['runtime'] ?? {}) as Partial<AgentRuntime>;
+  return {
+    id:             typeof r['slug']          === 'string' ? r['slug']          : '',
+    name:           typeof r['name']          === 'string' ? r['name']          : '',
+    purpose:        typeof r['purpose']       === 'string' ? r['purpose']       : '',
+    skills:         Array.isArray(comp['skills'])  ? (comp['skills']  as string[]) : [],
+    tools:          Array.isArray(comp['tools'])   ? (comp['tools']   as string[]) : [],
+    mcps:           Array.isArray(comp['mcps'])    ? (comp['mcps']    as string[]) : [],
+    hooks:          Array.isArray(comp['hooks'])   ? (comp['hooks']   as string[]) : [],
+    process:        typeof r['body']          === 'string' ? r['body']          : '',
+    interactivity:  typeof r['interactivity'] === 'string' ? r['interactivity'] : '',
+    brainAccess:    typeof r['brainAccess']   === 'string' ? r['brainAccess']   : 'none',
+    phase:          typeof r['phase']         === 'string' ? r['phase']         : undefined,
+    allowedTools:   Array.isArray(r['allowedTools'])    ? (r['allowedTools']    as string[]) : [],
+    disallowedTools:Array.isArray(r['disallowedTools']) ? (r['disallowedTools'] as string[]) : [],
+    runtime: {
+      sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
+      strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
+      model:         typeof rt.model         === 'string' ? rt.model         : null,
+      range:         Array.isArray(rt.range)             ? rt.range          : [],
+      subagentModel: typeof rt.subagentModel === 'string' ? rt.subagentModel : undefined,
+    },
+  };
+}
+
 /** Fetch all agent definitions. */
 export async function fetchStudioAgents(): Promise<Agent[]> {
-  const body = await studioGet<{ agents: Agent[] }>('/api/studio/agents', { agents: [] });
-  return body.agents;
+  const body = await studioGet<{ agents: unknown[] }>('/api/studio/agents', { agents: [] });
+  return (body.agents ?? []).map(parseAgentDefinition);
 }
 
 /** Fetch all flow definitions. */
@@ -274,8 +311,8 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
 
 /** Fetch the studio catalog. */
 export async function fetchStudioCatalog(): Promise<Catalog> {
-  const body = await studioGet<Catalog>('/api/studio/catalog', {});
-  return body;
+  const body = await studioGet<{ catalog?: Catalog }>('/api/studio/catalog', {});
+  return body.catalog ?? {};
 }
 
 /** Save (PUT) an agent definition by slug. */
@@ -311,13 +348,9 @@ export type PreflightResult = {
 };
 
 export async function fetchPreflight(projectId: string): Promise<PreflightResult | null> {
-  const base = await resolveBridgeUrl();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/studio/projects/${encodeURIComponent(projectId)}/preflight`);
-    if (!res.ok) return null;
-    return (await res.json()) as PreflightResult;
-  } catch {
-    return null;
-  }
+  const body = await studioGet<PreflightResult | null>(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/preflight`,
+    null,
+  );
+  return body;
 }

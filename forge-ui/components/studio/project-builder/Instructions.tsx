@@ -1,9 +1,5 @@
 'use client';
 
-function escHtml(s: string): string {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
 export function Instructions({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const parts = value.trim().length > 0
     ? value.trim().split(/[.\n]+/).map((s) => s.trim()).filter(Boolean)
@@ -30,8 +26,9 @@ export function Instructions({ value, onChange }: { value: string; onChange: (v:
               {parts.length === 0
                 ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, fontStyle: 'italic', color: 'var(--faint)' }}>— type instructions above —</span>
                 : parts.map((t, i) => (
-                    <span key={i} style={{ background: 'var(--panel-3)', border: '1px solid var(--line-2)', borderRadius: 4, padding: '3px 8px', fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}
-                      dangerouslySetInnerHTML={{ __html: escHtml(t) }} />
+                    <span key={i} style={{ background: 'var(--panel-3)', border: '1px solid var(--line-2)', borderRadius: 4, padding: '3px 8px', fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
+                      {t}
+                    </span>
                   ))
               }
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
@@ -67,28 +67,31 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     }
   }, [id]);
 
-  const loadPreflight = useCallback(async () => {
+  const loadPreflight = useCallback(async (signal: { cancelled: boolean }) => {
     const result = await fetchPreflight(id);
-    setPreflight(result);
+    if (!signal.cancelled) setPreflight(result);
   }, [id]);
 
   useEffect(() => {
     const signal = { cancelled: false };
     void loadData(signal);
-    void loadPreflight();
+    void loadPreflight(signal);
     return () => { signal.cancelled = true; };
   }, [loadData, loadPreflight]);
+
+  const handleSaveRef = useRef<() => Promise<void>>(handleSave);
+  useEffect(() => { handleSaveRef.current = handleSave; });
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        void handleSave();
+        void handleSaveRef.current();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  });
+  }, []);
 
   function markDirty() { setDirty(true); setSaveError(null); }
 
@@ -98,6 +101,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     setSaveError(null);
     try {
       const result = await saveProject(id, {
+        name: name.trim(),
         northStar: northStar.trim(),
         instructions: instructions.trim(),
         demoProcess: demoSteps,
@@ -106,7 +110,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       });
       if (result.ok) {
         setDirty(false);
-        void loadPreflight();
+        void loadPreflight({ cancelled: false });
       } else {
         setSaveError(result.error ?? 'save failed');
       }

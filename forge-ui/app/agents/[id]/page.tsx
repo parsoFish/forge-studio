@@ -15,7 +15,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { CatalogPalette } from '@/components/studio/agent-builder/CatalogPalette';
 import { DropZone } from '@/components/studio/agent-builder/DropZone';
