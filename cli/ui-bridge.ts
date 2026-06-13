@@ -42,15 +42,17 @@ import { parseManifest } from '../orchestrator/manifest.ts';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
-  handleStudioPostRoutes,
-  applyReviewVerdict,
-  applyPlanVerdict,
   sanitizeError,
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
-  type StudioPostContext,
 } from './bridge-studio.ts';
+import {
+  handleStudioPostRoutes,
+  applyReviewVerdict,
+  applyPlanVerdict,
+  type StudioPostContext,
+} from './bridge-studio-runs.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
