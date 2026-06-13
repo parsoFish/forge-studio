@@ -40,7 +40,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest, persistManifestResumeFromUnifier } from '../orchestrator/manifest.ts';
-import { handleStudioRoutes, sendJson } from './bridge-studio.ts';
+import { handleStudioRoutes, handleStudioWriteRoutes, sendJson, allowedOrigin, CSRF_HEADER } from './bridge-studio.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import {
   appendReviewUnifierItems,
@@ -461,16 +461,28 @@ async function handleHttp(
 ): Promise<void> {
   const url = req.url ?? '/';
   const method = req.method ?? 'GET';
+  const origin = allowedOrigin(req);
 
   // CORS preflight for the browser fetch with content-type JSON.
   if (method === 'OPTIONS') {
     res.writeHead(204, {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
+      'access-control-allow-origin': origin,
+      'vary': 'origin',
+      'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
+      'access-control-allow-headers': 'content-type, x-forge-csrf',
     });
     res.end();
     return;
+  }
+
+  // Anti-CSRF: every state-changing request must carry the custom header.
+  // A non-safelisted header cannot be sent cross-origin without a preflight;
+  // since we do not approve foreign-origin preflights, this blocks CSRF.
+  if (method !== 'GET' && method !== 'OPTIONS') {
+    if (!req.headers[CSRF_HEADER]) {
+      sendJson(res, 403, { error: 'missing or invalid CSRF header' }, origin);
+      return;
+    }
   }
 
   if (method === 'GET' && url === '/api/health') {
@@ -479,7 +491,7 @@ async function handleHttp(
     return;
   }
   if (method === 'GET' && url === '/api/cycles') {
-    sendJson(res, 200, ctx.scanCycles());
+    sendJson(res, 200, ctx.scanCycles(), origin);
     return;
   }
   // Feature #8 — daemon-stall liveness. The scheduler writes a `.heartbeat`
@@ -490,14 +502,14 @@ async function handleHttp(
   // OS supervisor (systemd / pm2) restarts `forge serve`; this endpoint only
   // SURFACES the stall to the operator (see docs/operations/serve-supervision.md).
   if (method === 'GET' && url === '/api/liveness') {
-    sendJson(res, 200, ctx.liveness());
+    sendJson(res, 200, ctx.liveness(), origin);
     return;
   }
   if (method === 'GET' && url.startsWith('/api/events/')) {
     const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
     const filePath = join(ctx.logsRoot, cycleId, 'events.jsonl');
     if (!existsSync(filePath)) {
-      sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId });
+      sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
       return;
     }
     try {
@@ -507,9 +519,9 @@ async function handleHttp(
         if (!line.trim()) continue;
         try { events.push(JSON.parse(line)); } catch { /* skip malformed */ }
       }
-      sendJson(res, 200, { cycleId, events });
+      sendJson(res, 200, { cycleId, events }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -524,9 +536,9 @@ async function handleHttp(
         totalUsd: m.total_cost_usd,
         perPhase: m.per_phase, // { phase: { cost_usd, iterations, duration_ms } }
         perSkill: m.per_skill, // { skill: { invocations, cost_usd, duration_ms } }
-      });
+      }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -542,14 +554,14 @@ async function handleHttp(
     const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', '_graph.md');
     const filePath = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
     if (!filePath) {
-      sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId });
+      sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId }, origin);
       return;
     }
     try {
       const raw = readFileSync(filePath, 'utf8');
-      sendJson(res, 200, { cycleId, mermaid: raw });
+      sendJson(res, 200, { cycleId, mermaid: raw }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -563,13 +575,13 @@ async function handleHttp(
     const rest = decodeURIComponent(url.slice('/api/work-item/'.length));
     const slash = rest.indexOf('/');
     if (slash < 0) {
-      sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' });
+      sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' }, origin);
       return;
     }
     const cycleId = rest.slice(0, slash);
     const wiId = rest.slice(slash + 1);
     if (!cycleId || !wiId || !/^WI-\d+$/.test(wiId)) {
-      sendJson(res, 400, { error: 'cycleId and a WI-<n> wiId are required' });
+      sendJson(res, 400, { error: 'cycleId and a WI-<n> wiId are required' }, origin);
       return;
     }
     const snapshotPath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', `${wiId}.md`);
@@ -577,7 +589,7 @@ async function handleHttp(
     const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`);
     const found = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
     if (!found) {
-      sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId });
+      sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId }, origin);
       return;
     }
     try {
@@ -588,9 +600,9 @@ async function handleHttp(
         files_in_scope: w.files_in_scope,
         quality_gate_cmd: w.quality_gate_cmd ?? [],
         body: w.body,
-      });
+      }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -604,34 +616,35 @@ async function handleHttp(
     const rest = decodeURIComponent(url.slice('/api/artifact/'.length));
     const slash = rest.indexOf('/');
     if (slash < 0) {
-      sendJson(res, 400, { error: 'expected /api/artifact/<cycleId>/<filename>' });
+      sendJson(res, 400, { error: 'expected /api/artifact/<cycleId>/<filename>' }, origin);
       return;
     }
     const cycleId = rest.slice(0, slash);
     const filename = rest.slice(slash + 1);
     if (!cycleId || !filename) {
-      sendJson(res, 400, { error: 'cycleId and filename are required' });
+      sendJson(res, 400, { error: 'cycleId and filename are required' }, origin);
       return;
     }
     const requested = join(ctx.logsRoot, cycleId, 'artifacts', filename);
     const safeBase = join(ctx.logsRoot, cycleId, 'artifacts') + sep;
     if (!requested.startsWith(safeBase)) {
-      sendJson(res, 400, { error: 'path escape rejected' });
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return;
     }
     if (!existsSync(requested)) {
-      sendJson(res, 404, { error: 'artifact not found', cycleId, filename });
+      sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return;
     }
     try {
       const body = readFileSync(requested, 'utf8');
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
-        'access-control-allow-origin': '*',
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
       });
       res.end(body);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -639,20 +652,21 @@ async function handleHttp(
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
-  // ---- Studio read routes (M1-2) ----------------------------------------
+  // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
   // Scheduler lifecycle.
   if (method === 'GET' && url === '/api/scheduler/status') {
     const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
-    sendJson(res, 200, state);
+    sendJson(res, 200, state, origin);
     return;
   }
   if (method === 'POST' && url === '/api/scheduler/start') {
     try {
       const before = daemonState(ctx.forgeRoot, ctx.queueRoot);
       if (before.running) {
-        sendJson(res, 200, { ok: true, alreadyRunning: true, state: before });
+        sendJson(res, 200, { ok: true, alreadyRunning: true, state: before }, origin);
         return;
       }
       // Spawn detached so the daemon outlives the forge-watch process.
@@ -665,9 +679,9 @@ async function handleHttp(
       // Best-effort wait for the pid file to appear.
       await sleep(800);
       const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
-      sendJson(res, 200, { ok: true, started: true, state: after });
+      sendJson(res, 200, { ok: true, started: true, state: after }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -677,9 +691,9 @@ async function handleHttp(
     try {
       const pause = url.endsWith('/pause');
       setPaused(pause, ctx.queueRoot, pause ? 'paused from UI' : '');
-      sendJson(res, 200, { ok: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
+      sendJson(res, 200, { ok: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -691,13 +705,13 @@ async function handleHttp(
       const pid = readPid(daemonPaths(ctx.forgeRoot).pidFile);
       if (pid === null || !isAlive(pid)) {
         clearPidFile(ctx.forgeRoot);
-        sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
+        sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
         return;
       }
       process.kill(pid, 'SIGTERM');
-      sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) });
+      sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -713,16 +727,16 @@ async function handleHttp(
         acceptanceCriteria?: Array<{ given: string; when: string; then: string }>;
       };
       if (!initiativeId || !kind || !rationale) {
-        sendJson(res, 400, { error: 'initiativeId, kind, rationale required' });
+        sendJson(res, 400, { error: 'initiativeId, kind, rationale required' }, origin);
         return;
       }
       if (kind !== 'approve' && kind !== 'send-back') {
-        sendJson(res, 400, { error: `unknown kind: ${kind}` });
+        sendJson(res, 400, { error: `unknown kind: ${kind}` }, origin);
         return;
       }
       const acs = (body as { acceptanceCriteria?: Array<{ given: string; when: string; then: string }> }).acceptanceCriteria ?? [];
       if (kind === 'send-back' && acs.length === 0) {
-        sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' });
+        sendJson(res, 400, { error: 'send-back requires at least one acceptanceCriteria' }, origin);
         return;
       }
       // Accept the verdict for a manifest in EITHER in-flight/ OR
@@ -734,7 +748,7 @@ async function handleHttp(
         sendJson(res, 409, {
           error: 'no manifest for initiative in in-flight/ or ready-for-review/ (already resolved?)',
           initiativeId,
-        });
+        }, origin);
         return;
       }
       const manifestPath = existsSync(inFlightPath) ? inFlightPath : readyForReviewPath;
@@ -752,7 +766,7 @@ async function handleHttp(
           sendJson(res, 409, {
             error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
             initiativeId,
-          });
+          }, origin);
           return;
         }
         const merged = ctx.mergePr(approveWorktreePath);
@@ -760,7 +774,7 @@ async function handleHttp(
           sendJson(res, 409, {
             error: 'gh pr merge failed — merge the PR manually on GitHub',
             initiativeId,
-          });
+          }, origin);
           return;
         }
         // Fire finalization in the background — must NOT throw or await here so
@@ -771,7 +785,7 @@ async function handleHttp(
           ok: true,
           kind,
           note: 'PR merged and finalization triggered',
-        });
+        }, origin);
         return;
       }
 
@@ -786,7 +800,7 @@ async function handleHttp(
       const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
       const worktreePath = manifest.worktree_path ?? '';
       if (!worktreePath || !existsSync(worktreePath)) {
-        sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId });
+        sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
         return;
       }
       let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
@@ -807,7 +821,7 @@ async function handleHttp(
       try {
         release = await lockfile.lock(manifestPath, { retries: { retries: 5, minTimeout: 50 } });
       } catch (lockErr) {
-        sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) });
+        sendJson(res, 503, { error: 'manifest is locked by another writer', detail: String(lockErr) }, origin);
         return;
       }
       try {
@@ -826,20 +840,20 @@ async function handleHttp(
           kind,
           appendedUnifierItems: appended,
           note: 'work items appended to the unifier queue; the drain re-runs them in the same cycle',
-        });
+        }, origin);
       } catch (appendErr) {
         if (appendErr instanceof UnifierItemsCapError) {
-          sendJson(res, 409, { error: appendErr.message });
+          sendJson(res, 409, { error: appendErr.message }, origin);
         } else if (appendErr instanceof ReviewConcernInvalidError) {
-          sendJson(res, 400, { error: appendErr.message });
+          sendJson(res, 400, { error: appendErr.message }, origin);
         } else {
-          sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` });
+          sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` }, origin);
         }
       } finally {
         if (release) { try { await release(); } catch { /* ignore */ } }
       }
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return;
   }
@@ -897,6 +911,8 @@ async function handleArchitect(
   url: string,
   method: string,
 ): Promise<boolean> {
+  const origin = allowedOrigin(req);
+
   // GET /api/architect/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/architect/sessions') {
     const statuses = listArchitectSessions(ctx.projectsRoot);
@@ -938,7 +954,7 @@ async function handleArchitect(
         staleMs,
       };
     });
-    sendJson(res, 200, { sessions });
+    sendJson(res, 200, { sessions }, origin);
     return true;
   }
 
@@ -949,27 +965,28 @@ async function handleArchitect(
     const [project, sessionId, ...fileParts] = rest;
     const filename = fileParts.join('/');
     if (!project || !sessionId || !filename) {
-      sendJson(res, 400, { error: 'expected /api/architect/file/<project>/<sid>/<filename>' });
+      sendJson(res, 400, { error: 'expected /api/architect/file/<project>/<sid>/<filename>' }, origin);
       return true;
     }
     const base = architectSessionDir(ctx.projectsRoot, project, sessionId) + sep;
     const requested = join(architectSessionDir(ctx.projectsRoot, project, sessionId), filename);
     if (!requested.startsWith(base)) {
-      sendJson(res, 400, { error: 'path escape rejected' });
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
     if (!existsSync(requested)) {
-      sendJson(res, 404, { error: 'file not found', project, sessionId, filename });
+      sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
       return true;
     }
     try {
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
-        'access-control-allow-origin': '*',
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
       });
       res.end(readFileSync(requested, 'utf8'));
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -980,7 +997,7 @@ async function handleArchitect(
     try {
       const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string };
       if (!body.project || !body.idea) {
-        sendJson(res, 400, { error: 'project and idea are required' });
+        sendJson(res, 400, { error: 'project and idea are required' }, origin);
         return true;
       }
       const sessionId = newArchitectSessionId();
@@ -999,9 +1016,9 @@ async function handleArchitect(
       writeStatus(dir, status);
       spawnArchitectTurn(ctx.forgeRoot, body.project, sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, sessionId });
+      sendJson(res, 200, { ok: true, sessionId }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -1016,13 +1033,13 @@ async function handleArchitect(
         answers?: { question: string; answer: string }[];
       };
       if (!body.project || !body.sessionId || !Array.isArray(body.answers)) {
-        sendJson(res, 400, { error: 'project, sessionId, answers[] are required' });
+        sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
         return true;
       }
       const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
       const status = readStatus(dir);
       if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId });
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
       const answersPath = join(dir, 'answers.json');
@@ -1032,9 +1049,9 @@ async function handleArchitect(
       writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
       spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, round });
+      sendJson(res, 200, { ok: true, round }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -1052,17 +1069,17 @@ async function handleArchitect(
         rationale?: string;
       };
       if (!body.project || !body.sessionId || !body.kind) {
-        sendJson(res, 400, { error: 'project, sessionId, kind are required' });
+        sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
         return true;
       }
       if (!['approve', 'revise', 'reject'].includes(body.kind)) {
-        sendJson(res, 400, { error: `unknown kind: ${body.kind}` });
+        sendJson(res, 400, { error: `unknown kind: ${body.kind}` }, origin);
         return true;
       }
       const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
       const status = readStatus(dir);
       if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId });
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
 
@@ -1080,9 +1097,9 @@ async function handleArchitect(
         writeStatus(dir, { ...status, phase: 'rejected' });
       }
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, kind: body.kind });
+      sendJson(res, 200, { ok: true, kind: body.kind }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -1104,13 +1121,15 @@ async function handleReflect(
   url: string,
   method: string,
 ): Promise<boolean> {
+  const origin = allowedOrigin(req);
+
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
-    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }); return true; }
+    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin); return true; }
     const dir = join(ctx.logsRoot, cycleId);
     const questions = readJsonFile<unknown[]>(join(dir, 'user-questions.json')) ?? [];
     const answered = existsSync(join(dir, 'user-feedback.md'));
-    sendJson(res, 200, { cycleId, questions, answered });
+    sendJson(res, 200, { cycleId, questions, answered }, origin);
     return true;
   }
 
@@ -1119,14 +1138,14 @@ async function handleReflect(
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
       const dir = join(ctx.logsRoot, cycleId);
-      if (!existsSync(dir)) { sendJson(res, 404, { error: 'cycle not found', cycleId }); return true; }
+      if (!existsSync(dir)) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
       const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
       for (const a of body.answers ?? []) {
         lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
       }
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
-      sendJson(res, 200, { ok: true });
+      sendJson(res, 200, { ok: true }, origin);
       // Parity with `forge reflect --rerun`: the reflector ingests the feedback
       // file on rerun. Detached (don't block the HTTP response on a full
       // reflector pass) + log-and-continue, so the UI owns reflection
@@ -1139,7 +1158,7 @@ async function handleReflect(
           console.error(`[bridge] reflect rerun failed for ${cycleId}: ${String(err)}`),
         );
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }
@@ -1147,10 +1166,21 @@ async function handleReflect(
   return false;
 }
 
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
+
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolveJson, rejectJson) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk) => chunks.push(chunk));
+    let totalBytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        rejectJson(new Error('request body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
       try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }

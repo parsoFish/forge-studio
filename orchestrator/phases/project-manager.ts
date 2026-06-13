@@ -15,6 +15,7 @@ import {
   PM_ALLOWED_TOOLS,
   PM_DISALLOWED_TOOLS,
   PM_MODEL,
+  PM_BRAIN_ACCESS,
   buildPmSystemPrompt,
   renderPmUserPrompt,
   tallyToolUse,
@@ -151,6 +152,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // worktree so the PM writes a discriminating per-WI gate (e.g. Go's
   // `-tags all -run <NewPrefix> ./pkg/`) instead of the operator hand-encoding it.
   const gateRecipe = renderGateRecipeBlock(deriveGateRecipe(input.worktreePath));
+  // M2: best-effort load of project config to inject standing instructions.
+  // A separate load from the one in runUnifier (which runs later) — kept
+  // isolated here so a config-read failure doesn't abort the PM pass.
+  let projectConfigForPrompt: ProjectConfig | null = null;
+  try { projectConfigForPrompt = loadProjectConfig(input.worktreePath); } catch { /* best-effort */ }
   const prompt = renderPmUserPrompt({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
@@ -158,6 +164,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     projectName: manifest.project,
     projectContext,
     gateRecipe,
+    instructions: projectConfigForPrompt?.instructions,
   });
 
   const opts: Record<string, unknown> = {
@@ -236,12 +243,16 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
-  // F-13 / F-19: enforce the brain-first mandate at the orchestrator. If the
-  // PM agent skipped brain-query entirely, fail fast with a distinct error
-  // (rather than continuing into validateWorkItemSet, where the
-  // brain-skip's downstream effect — incomplete frontmatter — surfaces
-  // instead, masking the real cause).
+  // F-13 / F-19: enforce the brain-first mandate at the orchestrator when the
+  // agent's brainAccess is 'mandatory'. If the PM agent skipped brain-query
+  // entirely, fail fast with a distinct error (rather than continuing into
+  // validateWorkItemSet, where the brain-skip's downstream effect — incomplete
+  // frontmatter — surfaces instead, masking the real cause).
+  // M2-3: gate is conditional on PM_BRAIN_ACCESS so a hypothetical advisory
+  // agent would not abort on 0 reads. PM IS mandatory, so behaviour is
+  // identical in production.
   if (
+    PM_BRAIN_ACCESS === 'mandatory' &&
     !recordBrainGateResult('project-manager', 'project-manager', toolUseSummary.brainReads, {
       initiativeId: input.initiativeId,
       logger,

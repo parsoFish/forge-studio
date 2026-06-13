@@ -15,7 +15,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
-import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
+import { loadAgentDefinition } from './studio/registry.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'project-manager', 'SKILL.md');
@@ -23,25 +25,26 @@ const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'project-manager', 'SKILL.md');
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
 export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-export const PM_ALLOWED_TOOLS: PmAllowedTool[] = ['Read', 'Grep', 'Glob', 'Write', 'Edit'];
-export const PM_DISALLOWED_TOOLS: PmDisallowedTool[] = ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch'];
-
 /**
- * ADR 024 seam: the project-manager as a declarative phase agent — it COMPOSES
- * the project-manager skill (the source of its intent), runs at the `sonnet`
- * tier (planning/decomposition work; Sonnet is the right tier). The orchestrator
- * resolves the model from the tier.
+ * ADR 024 / M2-3: the project-manager spec derived from SKILL.md (single
+ * source). The orchestrator resolves the model from the tier declared in the
+ * frontmatter.
  */
-export const pmAgentSpec: PhaseAgentSpec = {
-  phase: 'project-manager',
-  skill: 'skills/project-manager/SKILL.md',
-  tier: 'sonnet',
-  allowedTools: PM_ALLOWED_TOOLS,
-  disallowedTools: PM_DISALLOWED_TOOLS,
-};
+export const pmAgentSpec = deriveAgentSpec('skills/project-manager/SKILL.md');
+
+/** Tool lists derived from the spec — exported for downstream consumers. */
+export const PM_ALLOWED_TOOLS = pmAgentSpec.allowedTools as PmAllowedTool[];
+export const PM_DISALLOWED_TOOLS = pmAgentSpec.disallowedTools as PmDisallowedTool[];
 
 /** Concrete model, derived from the spec's tier (single source: the spec). */
 export const PM_MODEL = modelForSpec(pmAgentSpec);
+
+/**
+ * M2-3: brainAccess from the PM SKILL.md frontmatter — used by the phase
+ * runner to decide whether 0 brain reads should abort the cycle. When
+ * 'mandatory' the gate fires; when 'advisory' it does not.
+ */
+export const PM_BRAIN_ACCESS = loadAgentDefinition(SKILL_PATH).brainAccess;
 
 let cachedSkillText: string | null = null;
 function loadSkillText(): string {
@@ -142,7 +145,16 @@ export type PmUserPromptInput = {
    * gate guidance already in the prompt.
    */
   gateRecipe?: string;
+  /**
+   * Standing project instructions (M2). When present, injected into every PM
+   * prompt so the agent respects project-specific constraints without the PM
+   * having to re-read project.json itself.
+   */
+  instructions?: string;
 };
+
+/** Header for the injected project-instructions block — exported for tests. */
+export const INSTRUCTIONS_SECTION_HEADER = '## Project instructions (injected by forge)';
 
 /**
  * Render the per-cycle user prompt the SDK sends to the PM agent.
@@ -164,6 +176,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     'Follow the project-manager skill contract in your system prompt. You are non-interactive; decompose THIS initiative\'s body and write the work items + _graph.md.',
     ...(projectContextBlock ? ['', projectContextBlock] : []),
     ...(input.gateRecipe ? ['', input.gateRecipe] : []),
+    ...(input.instructions ? ['', INSTRUCTIONS_SECTION_HEADER, '', input.instructions.trim(), ''] : []),
     '',
     `## Initiative: ${input.initiativeId}`,
     `## Project: ${input.projectName}`,

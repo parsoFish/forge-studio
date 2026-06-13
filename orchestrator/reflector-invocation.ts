@@ -20,7 +20,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
-import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'reflector', 'SKILL.md');
@@ -28,33 +29,15 @@ const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'reflector', 'SKILL.md');
 export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';
 export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-export const REFLECTOR_ALLOWED_TOOLS: ReflectorAllowedTool[] = [
-  'Read',
-  'Grep',
-  'Glob',
-  'Write',
-  'Edit',
-  'Bash',
-];
-export const REFLECTOR_DISALLOWED_TOOLS: ReflectorDisallowedTool[] = [
-  'NotebookEdit',
-  'WebFetch',
-  'WebSearch',
-];
-
 /**
- * ADR 024 seam: the reflector as a declarative phase agent — it COMPOSES the
- * reflector skill (the single source of its intent) at the `sonnet` tier.
- * Summarisation + direct brain writes are not opus-justifying. The orchestrator
- * resolves the model from the tier; a tier re-point is a single edit here.
+ * ADR 024 / M2-3: the reflector spec derived from SKILL.md (single source).
+ * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
-export const reflectorAgentSpec: PhaseAgentSpec = {
-  phase: 'reflector',
-  skill: 'skills/reflector/SKILL.md',
-  tier: 'sonnet',
-  allowedTools: REFLECTOR_ALLOWED_TOOLS,
-  disallowedTools: REFLECTOR_DISALLOWED_TOOLS,
-};
+export const reflectorAgentSpec = deriveAgentSpec('skills/reflector/SKILL.md');
+
+/** Tool lists derived from the spec — exported for downstream consumers. */
+export const REFLECTOR_ALLOWED_TOOLS = reflectorAgentSpec.allowedTools as ReflectorAllowedTool[];
+export const REFLECTOR_DISALLOWED_TOOLS = reflectorAgentSpec.disallowedTools as ReflectorDisallowedTool[];
 
 /**
  * Concrete model, derived from the spec's tier (single source: the spec).

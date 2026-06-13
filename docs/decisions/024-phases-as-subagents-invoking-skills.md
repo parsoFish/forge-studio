@@ -172,6 +172,19 @@ phase is migrated.
 > Unit-tested in `orchestrator/dev-invocation.test.ts` (new) and extended
 > `orchestrator/unifier-invocation.test.ts`.
 
+> **Landed 2026-06-13 (architect spec derivation — M2-4, gap closed).** The
+> **architect runner** (`orchestrator/architect-runner.ts`) now exports
+> `architectAgentSpec = deriveAgentSpec('skills/architect/SKILL.md')` and
+> `ARCHITECT_MODEL = modelForSpec(architectAgentSpec)`. The previously hardcoded
+> `allowedTools: ['Read', 'Grep', 'Glob', 'Bash']` in `runStructured` is replaced
+> by `architectAgentSpec.allowedTools`; `model: ARCHITECT_MODEL` is added to the
+> same options object. The prior "ADR-024 done" landed note claimed the architect
+> was migrated — it was not; the code still carried inline hardcoded tools with no
+> model field. This commit closes that gap. Unit-tested: `architectAgentSpec`
+> shape + `ARCHITECT_MODEL` value + `runStructured` options capture (model +
+> allowedTools both equal the derived spec values) in
+> `orchestrator/architect-runner.test.ts`.
+
 ## Consequences
 
 - **Intent has one home; capabilities are shared.** A phase's intent is its agent

@@ -110,9 +110,15 @@ function stageManifest() {
   // survives, the bridge reports the OLD id and findCycleIdForInitiative locks onto it, so the
   // post-serve status query returns null and auto-approve never fires (a false gate FAIL). With it
   // removed, serve assigns + persists a fresh cycle_id the bridge reports consistently.
+  // Strip resume_from too: a corpus manifest that originally ran with an ADR-019/026 unifier
+  // resume persists `resume_from: unifier`. On a fresh re-stage the scheduler would read it
+  // (scheduler.ts → cycle resumeFrom), skip the architect+PM, and run the dev-loop against an
+  // empty `.forge/work-items` ("no work items found") — a false gate FAIL at $0. A fresh run
+  // must re-decompose from scratch, so the resume marker is cleared here.
   const body = readFileSync(done, 'utf8')
     .replace(/^phase:.*$/m, 'phase: pending')
-    .replace(/^cycle_id:.*$\n?/m, '');
+    .replace(/^cycle_id:.*$\n?/m, '')
+    .replace(/^resume_from:.*$\n?/m, '');
   writeFileSync(pending, body);
   log(`staged corpus manifest → _queue/pending/${initiativeId}.md`);
   return true;

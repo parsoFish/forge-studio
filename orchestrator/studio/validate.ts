@@ -6,11 +6,13 @@
  * validateKb intentionally checks only the slug; the scope enum is enforced at load time in registry.ts.
  */
 
+import { DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentDefinition,
   Catalog,
   FlowDefinition,
   KbDescriptor,
+  ProjectDefinition,
   ProjectsRegistry,
 } from './types.ts';
 
@@ -104,6 +106,22 @@ export function validateAgent(def: AgentDefinition): Finding[] {
           ? 'strategy:range requires a non-empty range array'
           : `unknown strategy "${rt.strategy}"`;
     findings.push(err(obj, 'readiness/runtime', `Runtime not fully configured — ${detail}`));
+  }
+
+  // composition array entries: each must match a safe identifier regex
+  const COMP_ENTRY_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+  const compArrays: [string, string[]][] = [
+    ['composition/skills', def.composition.skills],
+    ['composition/tools', def.composition.tools],
+    ['composition/mcps', def.composition.mcps],
+    ['composition/hooks', def.composition.hooks],
+  ];
+  for (const [field, entries] of compArrays) {
+    for (const entry of entries) {
+      if (typeof entry !== 'string' || !COMP_ENTRY_RE.test(entry)) {
+        findings.push(err(obj, field, `Entry "${entry}" in ${field} must match ${COMP_ENTRY_RE}`));
+      }
+    }
   }
 
   return findings;
@@ -308,6 +326,58 @@ export function validateCatalog(c: Catalog): Finding[] {
           'model-sdk',
           `Model "${model.id}" references unknown sdk "${model.sdk}" — not in catalog.sdks`,
         ),
+      );
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// validateProject
+// ---------------------------------------------------------------------------
+
+export function validateProject(def: ProjectDefinition): Finding[] {
+  const findings: Finding[] = [];
+  const obj = `project:${def.id}`;
+
+  // slug
+  if (!SLUG_RE.test(def.id)) {
+    findings.push(err(obj, 'slug', `Project id "${def.id}" does not match ${SLUG_RE}`));
+  }
+
+  // northStar: empty → flag; >140 → error
+  if (!def.northStar.trim()) {
+    findings.push(flag(obj, 'readiness/north-star', 'Project northStar is missing or blank'));
+  } else if (def.northStar.length > 140) {
+    findings.push(
+      err(
+        obj,
+        'readiness/north-star',
+        `Project northStar must be ≤ 140 characters (got ${def.northStar.length})`,
+      ),
+    );
+  }
+
+  // demoProcess: each step's kind must be in the enum
+  for (let i = 0; i < def.demoProcess.length; i++) {
+    const step = def.demoProcess[i];
+    if (!DEMO_STEP_KINDS.includes(step.kind)) {
+      findings.push(
+        err(
+          obj,
+          'demoProcess/kind',
+          `demoProcess[${i}].kind "${step.kind}" must be one of capture|verify|present`,
+        ),
+      );
+    }
+  }
+
+  // skills: all entries must be strings
+  for (let i = 0; i < def.skills.length; i++) {
+    if (typeof def.skills[i] !== 'string') {
+      findings.push(
+        err(obj, 'skills/type', `skills[${i}] must be a string (got ${typeof def.skills[i]})`),
       );
     }
   }

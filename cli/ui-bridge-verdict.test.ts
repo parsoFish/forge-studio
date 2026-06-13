@@ -78,7 +78,7 @@ async function postVerdict(
 ): Promise<{ status: number; json: unknown }> {
   const res = await fetch(`${url}/api/verdict`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
     body: JSON.stringify(body),
   });
   return { status: res.status, json: await res.json() };

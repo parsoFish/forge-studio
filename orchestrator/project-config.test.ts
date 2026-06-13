@@ -289,3 +289,165 @@ test('validateProjectConfig: acceptance_gate.required must be a boolean', () => 
     /acceptance_gate\.required/,
   );
 });
+
+// ----- M2 fields (northStar / instructions / demoProcess / skills / kb) -----
+
+test('validateProjectConfig: M2 fields all absent → valid (backward compat)', () => {
+  const cfg = validateProjectConfig({ demo: { shape: 'none' }, quality_gate_cmd: ['true'] });
+  assert.equal(cfg.northStar, undefined);
+  assert.equal(cfg.instructions, undefined);
+  assert.equal(cfg.demoProcess, undefined);
+  assert.equal(cfg.skills, undefined);
+  assert.equal(cfg.kb, undefined);
+});
+
+test('validateProjectConfig: northStar ≤ 140 chars → accepted', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    northStar: 'Build a self-sustaining autonomous agent loop.',
+  });
+  assert.equal(cfg.northStar, 'Build a self-sustaining autonomous agent loop.');
+});
+
+test('validateProjectConfig: northStar > 140 chars → throws', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        northStar: 'x'.repeat(141),
+      }),
+    /northStar/,
+  );
+});
+
+test('validateProjectConfig: northStar must be a string when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        northStar: 42,
+      }),
+    /northStar/,
+  );
+});
+
+test('validateProjectConfig: instructions string round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    instructions: 'Always write tests first.',
+  });
+  assert.equal(cfg.instructions, 'Always write tests first.');
+});
+
+test('validateProjectConfig: instructions must be a string when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        instructions: 99,
+      }),
+    /instructions/,
+  );
+});
+
+test('validateProjectConfig: demoProcess array of valid steps round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    demoProcess: [
+      { kind: 'capture', text: 'Screenshot home page.' },
+      { kind: 'verify', text: 'Check API returns 200.' },
+      { kind: 'present', text: 'Show the diff.' },
+    ],
+  });
+  assert.deepEqual(cfg.demoProcess, [
+    { kind: 'capture', text: 'Screenshot home page.' },
+    { kind: 'verify', text: 'Check API returns 200.' },
+    { kind: 'present', text: 'Show the diff.' },
+  ]);
+});
+
+test('validateProjectConfig: demoProcess step with bad kind → throws', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        demoProcess: [{ kind: 'invalid', text: 'step' }],
+      }),
+    /demoProcess/,
+  );
+});
+
+test('validateProjectConfig: demoProcess must be an array when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        demoProcess: 'capture everything',
+      }),
+    /demoProcess/,
+  );
+});
+
+test('validateProjectConfig: skills string array round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    skills: ['demo', 'tdd-workflow'],
+  });
+  assert.deepEqual(cfg.skills, ['demo', 'tdd-workflow']);
+});
+
+test('validateProjectConfig: skills must be an array of strings when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        skills: [42, 'demo'],
+      }),
+    /skills/,
+  );
+});
+
+test('validateProjectConfig: kb string round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    kb: 'cycles',
+  });
+  assert.equal(cfg.kb, 'cycles');
+});
+
+test('validateProjectConfig: kb null is accepted', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    kb: null,
+  });
+  assert.equal(cfg.kb, null);
+});
+
+test('validateProjectConfig: all M2 fields valid together → round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    northStar: 'Build a great product.',
+    instructions: 'Always write tests.',
+    demoProcess: [{ kind: 'capture', text: 'Take a screenshot.' }],
+    skills: ['demo'],
+    kb: 'cycles',
+  });
+  assert.equal(cfg.northStar, 'Build a great product.');
+  assert.equal(cfg.instructions, 'Always write tests.');
+  assert.deepEqual(cfg.demoProcess, [{ kind: 'capture', text: 'Take a screenshot.' }]);
+  assert.deepEqual(cfg.skills, ['demo']);
+  assert.equal(cfg.kb, 'cycles');
+});

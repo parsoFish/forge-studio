@@ -20,6 +20,11 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEMO_STEP_KINDS } from './studio/types.ts';
+import type { DemoStep, DemoStepKind } from './studio/types.ts';
+
+export type { DemoStep, DemoStepKind } from './studio/types.ts';
+export { DEMO_STEP_KINDS } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
@@ -144,6 +149,21 @@ export type ProjectConfig = {
   metrics?: MetricsConfig;
   sweep?: SweepConfig;
   logging?: LoggingConfig;
+  /**
+   * M2 Studio fields — all optional so existing project.json files without
+   * these fields remain valid. These flow into PM (instructions) and the
+   * unifier (demoProcess + skills).
+   */
+  /** One-liner mission statement (≤140 chars). */
+  northStar?: string;
+  /** Free-text standing instructions injected into every PM prompt. */
+  instructions?: string;
+  /** Typed demo steps: capture | verify | present. */
+  demoProcess?: DemoStep[];
+  /** Skill slugs bound to this project. */
+  skills?: string[];
+  /** KB id bound to this project, or null to explicitly leave unbound. */
+  kb?: string | null;
 };
 
 /**
@@ -237,6 +257,13 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const sweep = parseSweep(obj.sweep);
   const logging = parseLogging(obj.logging);
 
+  // M2 optional fields
+  const northStar = parseNorthStar(obj.northStar);
+  const instructions = parseInstructions(obj.instructions);
+  const demoProcess = parseDemoProcess(obj.demoProcess);
+  const skills = parseSkills(obj.skills);
+  const kb = parseKb(obj.kb);
+
   return {
     demo,
     quality_gate_cmd,
@@ -248,6 +275,11 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(metrics ? { metrics } : {}),
     ...(sweep ? { sweep } : {}),
     ...(logging ? { logging } : {}),
+    ...(northStar !== undefined ? { northStar } : {}),
+    ...(instructions !== undefined ? { instructions } : {}),
+    ...(demoProcess !== undefined ? { demoProcess } : {}),
+    ...(skills !== undefined ? { skills } : {}),
+    ...(kb !== undefined ? { kb } : {}),
   };
 }
 
@@ -343,6 +375,72 @@ function parseSweep(raw: unknown): SweepConfig | undefined {
     );
   }
   return { start_command, draw_function, measurement_extractor };
+}
+
+// empty string is allowed here; the business-level emptiness check lives in validateProject.
+function parseNorthStar(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string') {
+    throw new Error('project-config: northStar must be a string when present');
+  }
+  if (v.length > 140) {
+    throw new Error(
+      `project-config: northStar must be ≤ 140 characters (got ${v.length})`,
+    );
+  }
+  return v;
+}
+
+function parseInstructions(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string') {
+    throw new Error('project-config: instructions must be a string when present');
+  }
+  return v;
+}
+
+function parseDemoProcess(v: unknown): DemoStep[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) {
+    throw new Error('project-config: demoProcess must be an array when present');
+  }
+  return v.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`project-config: demoProcess[${i}] must be an object`);
+    }
+    const s = item as Record<string, unknown>;
+    if (typeof s.kind !== 'string' || !DEMO_STEP_KINDS.includes(s.kind as DemoStepKind)) {
+      throw new Error(
+        `project-config: demoProcess[${i}].kind must be one of capture|verify|present (got ${JSON.stringify(s.kind)})`,
+      );
+    }
+    if (typeof s.text !== 'string') {
+      throw new Error(`project-config: demoProcess[${i}].text must be a string`);
+    }
+    return { kind: s.kind as DemoStepKind, text: s.text };
+  });
+}
+
+function parseSkills(v: unknown): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) {
+    throw new Error('project-config: skills must be an array when present');
+  }
+  for (let i = 0; i < v.length; i++) {
+    if (typeof v[i] !== 'string') {
+      throw new Error(`project-config: skills[${i}] must be a string`);
+    }
+  }
+  return v as string[];
+}
+
+function parseKb(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (typeof v !== 'string') {
+    throw new Error('project-config: kb must be a string or null when present');
+  }
+  return v;
 }
 
 function optionalArgv(v: unknown, label: string): string[] | undefined {

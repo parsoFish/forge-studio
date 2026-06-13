@@ -216,3 +216,17 @@ test('renderProjectContextBlock: inlines Cargo.toml when provided', () => {
   const block = renderProjectContextBlock({ cargoToml: '[package]\nname = "x"' });
   assert.ok(block.includes('Cargo.toml'));
 });
+
+test('renderPmUserPrompt: includes instructions section when instructions provided', () => {
+  const prompt = renderPmUserPrompt({
+    ...BASE_INPUT,
+    instructions: 'TypeScript strict. No hardcoded values.',
+  });
+  assert.ok(prompt.includes('## Project instructions (injected by forge)'), 'should include instructions header');
+  assert.ok(prompt.includes('TypeScript strict'), 'should include instructions text');
+});
+
+test('renderPmUserPrompt: does NOT include instructions header when instructions absent', () => {
+  const prompt = renderPmUserPrompt(BASE_INPUT);
+  assert.ok(!prompt.includes('## Project instructions (injected by forge)'), 'should not include instructions header when absent');
+});

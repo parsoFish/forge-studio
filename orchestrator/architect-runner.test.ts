@@ -27,6 +27,8 @@ import {
   readStatus,
   listArchitectSessions,
   readArchitectSessionStats,
+  architectAgentSpec,
+  ARCHITECT_MODEL,
   type ArchitectStatus,
   type QueryFn,
 } from './architect-runner.ts';
@@ -765,4 +767,75 @@ test('P4: readArchitectSessionStats handles events without cost_usd gracefully (
   assert.ok(stats !== null);
   assert.equal(stats!.cost_usd, 0.05);
   assert.equal(stats!.duration_ms, 5000);
+});
+
+// ---------------------------------------------------------------------------
+// ADR-024 / M2-4: architectAgentSpec derives correctly from SKILL.md
+// ---------------------------------------------------------------------------
+
+test('ADR-024: architectAgentSpec derives phase, tier, and tool lists from SKILL.md', () => {
+  assert.equal(architectAgentSpec.phase, 'architect');
+  assert.equal(architectAgentSpec.tier, 'sonnet');
+  assert.deepEqual([...architectAgentSpec.allowedTools], ['Read', 'Grep', 'Glob', 'Bash']);
+  assert.deepEqual([...architectAgentSpec.disallowedTools], []);
+  assert.equal(architectAgentSpec.skill, 'skills/architect/SKILL.md');
+});
+
+test('ADR-024: ARCHITECT_MODEL resolves to the concrete sonnet model id', () => {
+  assert.equal(ARCHITECT_MODEL, 'claude-sonnet-4-6');
+});
+
+test('ADR-024: runStructured passes model + derived allowedTools to the queryFn options', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+
+  const capturedOptions: Array<Record<string, unknown>> = [];
+  const queryFn: QueryFn = ({ prompt, options }) => {
+    capturedOptions.push((options ?? {}) as Record<string, unknown>);
+    let structured: unknown = null;
+    if (prompt.includes('the interview step')) structured = { done: true };
+    else if (prompt.includes('draft the initiative')) {
+      structured = {
+        vision: 'A spec-derived model test.',
+        initiatives: [
+          {
+            slug: 'spec-test',
+            title: 'Spec test',
+            iteration_budget: 2,
+            cost_budget_usd: 1,
+            body: '## Spec\n\nGiven the spec is derived, when runStructured is called, then model + allowedTools match the spec.',
+          },
+        ],
+      };
+    }
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  // Every structured call (interview + draft) must carry model + allowedTools from the spec.
+  const structuredCalls = capturedOptions.filter((o) => 'outputFormat' in o);
+  assert.ok(structuredCalls.length >= 1, 'expected at least one runStructured call');
+  for (const o of structuredCalls) {
+    assert.equal(o.model, ARCHITECT_MODEL, 'model must be set from architectAgentSpec');
+    assert.deepEqual(
+      o.allowedTools,
+      architectAgentSpec.allowedTools,
+      'allowedTools must be set from architectAgentSpec',
+    );
+  }
 });

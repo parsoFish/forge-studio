@@ -170,3 +170,52 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('renderUnifierUserPrompt: includes project demo process when demoProcess provided', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: [],
+    iteration: 1,
+    iterationBudget: 3,
+    demoShape: 'harness',
+    qualityGateCmd: ['npm', 'test'],
+    demoProcess: [
+      { kind: 'capture', text: 'Screenshot of live resource' },
+      { kind: 'verify', text: 'Project tests green' },
+    ],
+  });
+  assert.ok(prompt.includes('## Project demo process'), 'should include demo process header');
+  assert.ok(prompt.includes('[CAPTURE] Screenshot of live resource'), 'should list capture step');
+  assert.ok(prompt.includes('[VERIFY] Project tests green'), 'should list verify step');
+});
+
+test('renderUnifierUserPrompt: includes project skills when skills provided', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: [],
+    iteration: 1,
+    iterationBudget: 3,
+    demoShape: 'harness',
+    qualityGateCmd: ['npm', 'test'],
+    skills: ['tdd-workflow', 'backend-patterns'],
+  });
+  assert.ok(prompt.includes('## Project skills'), 'should include skills header');
+  assert.ok(prompt.includes('`tdd-workflow`'), 'should include tdd-workflow skill');
+  assert.ok(prompt.includes('`backend-patterns`'), 'should include backend-patterns skill');
+});
+
+test('renderUnifierUserPrompt: no project demo/skills blocks when fields absent', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: [],
+    iteration: 1,
+    iterationBudget: 3,
+    demoShape: 'harness',
+    qualityGateCmd: ['npm', 'test'],
+  });
+  assert.ok(!prompt.includes('## Project demo process'), 'should not include demo process when absent');
+  assert.ok(!prompt.includes('## Project skills'), 'should not include skills when absent');
+});

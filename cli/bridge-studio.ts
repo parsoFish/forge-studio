@@ -20,20 +20,25 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
+import { runPreflight } from './preflight.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listAgentDefinitions,
+  loadAgentDefinition,
   loadFlowDefinition,
   loadKbDescriptor,
   loadProjectsRegistry,
   loadCatalog,
+  serializeAgentDefinition,
 } from '../orchestrator/studio/registry.ts';
-import type { FlowDefinition } from '../orchestrator/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
+import { SLUG_RE, validateAgent } from '../orchestrator/studio/validate.ts';
+import { validateProjectConfig } from '../orchestrator/project-config.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -45,13 +50,45 @@ export type StudioContext = {
 };
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Anti-CSRF + CORS helpers
 // ---------------------------------------------------------------------------
 
-export function sendJson(res: ServerResponse, status: number, body: unknown): void {
+/** Anti-CSRF sentinel. Any non-GET request must include this header.
+ *  The value is a static sentinel — security comes from it being a
+ *  non-safelisted header (requires a preflight), not from secrecy. */
+export const CSRF_HEADER = 'x-forge-csrf';
+
+/** Regex matching the forge-ui dev origin (any port on localhost/127.0.0.1). */
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/**
+ * Returns the request's Origin if it matches the forge-ui dev-origin pattern,
+ * otherwise returns 'null' (the literal string that signals "no access").
+ * Used to tighten CORS beyond the old wildcard.
+ */
+export function allowedOrigin(req: IncomingMessage, _pattern?: RegExp): string {
+  const origin = req.headers?.['origin'];
+  if (typeof origin === 'string' && LOCAL_ORIGIN_RE.test(origin)) return origin;
+  return 'null';
+}
+
+export function sendJson(res: ServerResponse, status: number, body: unknown, origin = 'null'): void {
   const payload = JSON.stringify(body);
-  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'access-control-allow-origin': origin,
+    'vary': 'origin',
+  });
   res.end(payload);
+}
+
+/**
+ * Strip absolute filesystem paths from error strings before sending them to
+ * the browser. Prevents leaking the operator's directory layout.
+ * Pattern: any token starting with / that looks like a path segment.
+ */
+function sanitizeError(err: unknown): string {
+  return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
 }
 
 /** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle'). */
@@ -199,6 +236,7 @@ function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 
 type ProjectWithMeta = {
   id: string;
+  name: string;
   path: string;
   northStar?: string;
   kb?: string;
@@ -219,10 +257,11 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 
   return registry.projects.map((ref) => {
     const projectJsonPath = join(resolve(forgeRoot), ref.path, '.forge', 'project.json');
-    const result: ProjectWithMeta = { id: ref.id, path: ref.path };
+    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
     if (existsSync(projectJsonPath)) {
       try {
         const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+        if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
         if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
         if (typeof raw.kb === 'string') result.kb = raw.kb;
         if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
@@ -277,14 +316,14 @@ function loadAllFlows(forgeRoot: string): FlowDefinition[] {
  * Returns true if the route was handled (even on error), false for unknown URLs.
  * Never throws — all errors caught, returned as JSON.
  *
- * @param _req  - Incoming request (unused for GET routes; kept for signature parity with handleArchitect)
+ * @param req    - Incoming request (used for origin check)
  * @param res   - Server response
  * @param ctx   - Minimal context: forgeRoot + logsRoot
  * @param rawUrl - Full URL including query string (e.g. '/api/runs?flow=forge-cycle')
  * @param method - HTTP method string
  */
 export async function handleStudioRoutes(
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   ctx: StudioContext,
   rawUrl: string,
@@ -293,6 +332,7 @@ export async function handleStudioRoutes(
   if (method !== 'GET') return false;
 
   const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
 
   // ---- /api/runs (list) ---------------------------------------------------
   if (url === '/api/runs') {
@@ -303,9 +343,9 @@ export async function handleStudioRoutes(
       if (flowFilter) {
         runs = runs.filter((r) => r.flowId === flowFilter);
       }
-      sendJson(res, 200, { runs });
+      sendJson(res, 200, { runs }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -317,7 +357,7 @@ export async function handleStudioRoutes(
     const nodeId = decodeURIComponent(phaseLogMatch[2]);
 
     if (!runId || !nodeId) {
-      sendJson(res, 400, { error: 'expected /api/runs/<id>/phases/<node>/log' });
+      sendJson(res, 400, { error: 'expected /api/runs/<id>/phases/<node>/log' }, origin);
       return true;
     }
 
@@ -329,11 +369,11 @@ export async function handleStudioRoutes(
       const safeLogsBase = resolve(ctx.logsRoot);
       const eventsPath = resolve(safeLogsBase, runId, 'events.jsonl');
       if (!eventsPath.startsWith(safeLogsBase + sep)) {
-        sendJson(res, 400, { error: 'invalid run id' });
+        sendJson(res, 400, { error: 'invalid run id' }, origin);
         return true;
       }
       if (!existsSync(eventsPath)) {
-        sendJson(res, 404, { error: 'no events.jsonl for run', runId });
+        sendJson(res, 404, { error: 'no events.jsonl for run', runId }, origin);
         return true;
       }
 
@@ -360,9 +400,9 @@ export async function handleStudioRoutes(
         lines = lines.slice(lines.length - 200);
       }
 
-      sendJson(res, 200, { lines });
+      sendJson(res, 200, { lines }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -372,18 +412,18 @@ export async function handleStudioRoutes(
   if (runIdMatch) {
     const runId = decodeURIComponent(runIdMatch[1]);
     if (!runId) {
-      sendJson(res, 400, { error: 'expected /api/runs/<id>' });
+      sendJson(res, 400, { error: 'expected /api/runs/<id>' }, origin);
       return true;
     }
     try {
       const run = findRun(ctx.forgeRoot, runId);
       if (!run) {
-        sendJson(res, 404, { error: 'run not found' });
+        sendJson(res, 404, { error: 'run not found' }, origin);
         return true;
       }
-      sendJson(res, 200, { run });
+      sendJson(res, 200, { run }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -393,9 +433,9 @@ export async function handleStudioRoutes(
     try {
       const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
       const agents = listAgentDefinitions(skillsDir);
-      sendJson(res, 200, { agents });
+      sendJson(res, 200, { agents }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -404,9 +444,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/flows') {
     try {
       const flows = loadAllFlows(ctx.forgeRoot);
-      sendJson(res, 200, { flows });
+      sendJson(res, 200, { flows }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -415,9 +455,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/projects') {
     try {
       const projects = loadProjectsWithMeta(ctx.forgeRoot);
-      sendJson(res, 200, { projects });
+      sendJson(res, 200, { projects }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -426,9 +466,9 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/kbs') {
     try {
       const kbs = loadKbDescriptors(ctx.forgeRoot);
-      sendJson(res, 200, { kbs });
+      sendJson(res, 200, { kbs }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
@@ -438,16 +478,352 @@ export async function handleStudioRoutes(
     try {
       const catalogPath = join(resolve(ctx.forgeRoot), 'studio', 'catalog.yaml');
       if (!existsSync(catalogPath)) {
-        sendJson(res, 404, { error: 'catalog.yaml not found' });
+        sendJson(res, 404, { error: 'catalog.yaml not found' }, origin);
         return true;
       }
       const catalog = loadCatalog(catalogPath);
-      sendJson(res, 200, { catalog });
+      sendJson(res, 200, { catalog }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) });
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/projects/:id/preflight ---------------------------------
+  const preflightMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight$/);
+  if (preflightMatch) {
+    try {
+      const id = decodeURIComponent(preflightMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id' }, origin);
+        return true;
+      }
+      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
+      if (!existsSync(projectsYamlPath)) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      let registry: ReturnType<typeof loadProjectsRegistry>;
+      try { registry = loadProjectsRegistry(projectsYamlPath); } catch {
+        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
+        return true;
+      }
+      const projectRef = registry.projects.find((p) => p.id === id);
+      if (!projectRef) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
+        sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
+        return true;
+      }
+      const report = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const clauses = report.clauses.map((c) => ({
+        id: c.clause,
+        title: c.title,
+        hard: c.hard,
+        pass: c.pass,
+        detail: c.detail,
+      }));
+      sendJson(res, 200, { clauses, ready: report.ok }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
 
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Write routes (M2-2) — PUT /api/studio/agents/:slug, PUT /api/studio/projects/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * Handle Forge Studio write (PUT) routes.
+ *
+ * Returns true iff the route was handled (even on error). Returns false for
+ * unrecognised URLs so the caller can chain to the next handler.
+ * Never throws — all errors caught, returned as 4xx/5xx JSON.
+ *
+ * Security invariants (see self-audit in implementation plan):
+ *   1. Slug/id validated against SLUG_RE BEFORE any fs path construction.
+ *   2. Resolved fs paths prefix-guarded to their containing directory.
+ *   3. Load-merge-write pattern: never clobbers preserved fields.
+ *   4. validateAgent / validateProjectConfig block writes on error-level findings.
+ */
+export async function handleStudioWriteRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioContext,
+  rawUrl: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'PUT') return false;
+
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  // ---- PUT /api/studio/agents/:slug ----------------------------------------
+  const agentMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);
+  if (agentMatch) {
+    try {
+      const slug = decodeURIComponent(agentMatch[1]);
+
+      // 1. Validate slug before any fs operation (blocks path traversal)
+      if (!SLUG_RE.test(slug)) {
+        sendJson(res, 400, { error: 'invalid slug — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+
+      // 2. Resolve and prefix-guard the SKILL.md path
+      const skillsBase = resolve(ctx.forgeRoot, 'skills');
+      const skillMdPath = resolve(skillsBase, slug, 'SKILL.md');
+      if (!skillMdPath.startsWith(skillsBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // 3. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 4. Load existing def or scaffold minimal one
+      let existing: AgentDefinition | null = null;
+      if (existsSync(skillMdPath)) {
+        try {
+          existing = loadAgentDefinition(skillMdPath);
+        } catch (err) {
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
+          return true;
+        }
+      }
+
+      // 5. Build merged definition: preserve slug/phase/surface/allowedTools/disallowedTools/budgets
+      const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? slug;
+      const purpose = typeof b['purpose'] === 'string' ? b['purpose'] : existing?.purpose ?? '';
+      // UI sends `process` for the body field
+      const body_text = typeof b['process'] === 'string' ? b['process'] : existing?.body ?? '';
+      const interactivity = typeof b['interactivity'] === 'string' ? b['interactivity'] : existing?.interactivity ?? '';
+      const brainAccess = (['mandatory', 'advisory', 'none'] as const).includes(
+        b['brainAccess'] as 'mandatory' | 'advisory' | 'none',
+      )
+        ? (b['brainAccess'] as 'mandatory' | 'advisory' | 'none')
+        : existing?.brainAccess ?? 'none';
+
+      // Composition: merge from body, fall back to existing
+      const rawComp = b['composition'];
+      const compIn: Record<string, unknown> =
+        rawComp !== null && typeof rawComp === 'object' && !Array.isArray(rawComp)
+          ? (rawComp as Record<string, unknown>)
+          : {};
+      const composition = {
+        skills: Array.isArray(compIn['skills']) ? (compIn['skills'] as string[]) : (existing?.composition.skills ?? []),
+        tools: Array.isArray(compIn['tools']) ? (compIn['tools'] as string[]) : (existing?.composition.tools ?? []),
+        mcps: Array.isArray(compIn['mcps']) ? (compIn['mcps'] as string[]) : (existing?.composition.mcps ?? []),
+        hooks: Array.isArray(compIn['hooks']) ? (compIn['hooks'] as string[]) : (existing?.composition.hooks ?? []),
+      };
+
+      // Runtime: merge from body, fall back to existing
+      const rawRt = b['runtime'];
+      const rtIn: Record<string, unknown> =
+        rawRt !== null && typeof rawRt === 'object' && !Array.isArray(rawRt)
+          ? (rawRt as Record<string, unknown>)
+          : {};
+      const runtime = {
+        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude-code'),
+        strategy: (['fixed', 'range'] as const).includes(rtIn['strategy'] as 'fixed' | 'range')
+          ? (rtIn['strategy'] as 'fixed' | 'range')
+          : (existing?.runtime.strategy ?? 'fixed'),
+        model: typeof rtIn['model'] === 'string' ? rtIn['model'] : existing?.runtime.model,
+        range: Array.isArray(rtIn['range']) ? (rtIn['range'] as string[]) : existing?.runtime.range,
+        subagentModel: typeof rtIn['subagentModel'] === 'string' ? rtIn['subagentModel'] : existing?.runtime.subagentModel,
+      };
+
+      const merged: AgentDefinition = {
+        slug,
+        name,
+        description: existing?.description ?? name,
+        phase: existing?.phase,
+        surface: existing?.surface,
+        purpose,
+        composition,
+        runtime,
+        brainAccess,
+        interactivity,
+        budgets: existing?.budgets ?? {},
+        allowedTools: existing?.allowedTools ?? [],
+        disallowedTools: existing?.disallowedTools ?? [],
+        body: body_text,
+        path: skillMdPath,
+      };
+
+      // 6. Validate — reject on any error-level finding
+      const findings = validateAgent(merged);
+      const hasErrors = findings.some((f) => f.level === 'error');
+      if (hasErrors) {
+        sendJson(res, 400, { error: 'validation failed', findings }, origin);
+        return true;
+      }
+
+      // 7. Serialize and write
+      const serialized = serializeAgentDefinition(merged);
+      const skillDir = resolve(skillsBase, slug);
+      if (!existsSync(skillDir)) {
+        mkdirSync(skillDir, { recursive: true });
+      }
+      writeFileSync(skillMdPath, serialized, 'utf8');
+
+      const flagFindings = findings.filter((f) => f.level === 'flag');
+      sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- PUT /api/studio/projects/:id ----------------------------------------
+  const projectMatch = url.match(/^\/api\/studio\/projects\/([^/]+)$/);
+  if (projectMatch) {
+    try {
+      const id = decodeURIComponent(projectMatch[1]);
+
+      // 1. Validate id before any fs operation
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+
+      // 2. Resolve the project path from studio/projects.yaml
+      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
+      if (!existsSync(projectsYamlPath)) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      let registry;
+      try {
+        // Note: projectRef.path is operator-authored config from projects.yaml.
+        // It is now guarded below against escaping the forge root.
+        registry = loadProjectsRegistry(projectsYamlPath);
+      } catch {
+        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
+        return true;
+      }
+      const projectRef = registry.projects.find((p) => p.id === id);
+      if (!projectRef) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+
+      // 3. Resolve the project.json path and prefix-guard it
+      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      // Guard: projectRef.path from projects.yaml must not escape the forge root.
+      // Stops an absolute or `..`-containing path writing outside the repo.
+      if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
+        sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
+        return true;
+      }
+      const projectJsonPath = resolve(projectRoot, '.forge', 'project.json');
+      if (!projectJsonPath.startsWith(projectRoot + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+
+      // 4. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin);
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 5. Load existing project.json (if present) and merge M2 fields over it
+      let existingRaw: Record<string, unknown> = {};
+      if (existsSync(projectJsonPath)) {
+        try {
+          existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+        } catch (err) {
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
+          return true;
+        }
+      }
+
+      // Merge: only override M2 fields from body; preserve all other fields
+      const merged: Record<string, unknown> = { ...existingRaw };
+      if (typeof b['name'] === 'string') merged['name'] = b['name'];
+      if (typeof b['northStar'] === 'string') merged['northStar'] = b['northStar'];
+      if (typeof b['instructions'] === 'string') merged['instructions'] = b['instructions'];
+      if (Array.isArray(b['demoProcess'])) merged['demoProcess'] = b['demoProcess'];
+      if (Array.isArray(b['skills'])) merged['skills'] = b['skills'];
+      // kb can be string or null
+      if (b['kb'] !== undefined) merged['kb'] = b['kb'];
+
+      // 6. Validate the merged config (throws on invalid)
+      try {
+        validateProjectConfig(merged);
+      } catch (err) {
+        sendJson(res, 400, { error: String(err) }, origin);
+        return true;
+      }
+
+      // 7. Write back (pretty, 2-space)
+      const forgeDir = resolve(projectRoot, '.forge');
+      if (!existsSync(forgeDir)) {
+        mkdirSync(forgeDir, { recursive: true });
+      }
+      writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
+
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
+
+/**
+ * Read and parse the JSON request body. Used by write routes.
+ * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
+ * Shared helper (mirrors readJson in ui-bridge.ts).
+ */
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolveJson, rejectJson) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        rejectJson(new Error('request body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
+    });
+    req.on('error', rejectJson);
+  });
 }

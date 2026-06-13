@@ -22,7 +22,8 @@ import { join, resolve } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
 import type { DemoShape } from './project-config.ts';
-import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
@@ -37,34 +38,15 @@ export type UnifierAllowedTool =
   | 'Glob';
 export type UnifierDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-export const UNIFIER_ALLOWED_TOOLS: UnifierAllowedTool[] = [
-  'Read',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'Bash',
-  'Grep',
-  'Glob',
-];
-export const UNIFIER_DISALLOWED_TOOLS: UnifierDisallowedTool[] = [
-  'NotebookEdit',
-  'WebFetch',
-  'WebSearch',
-];
 /**
- * ADR 024 seam (first concrete phase): the unifier as a declarative phase
- * agent — it COMPOSES the developer-unifier skill (the source of its intent),
- * the orchestrator spawns it clean at the `sonnet` tier (packaging/unify work,
- * not opus-justifying). Other phases adopt the same `PhaseAgentSpec` shape
- * incrementally. The orchestrator resolves the model from the tier.
+ * ADR 024 / M2-3: the unifier spec derived from SKILL.md (single source).
+ * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
-export const unifierAgentSpec: PhaseAgentSpec = {
-  phase: 'unifier',
-  skill: 'skills/developer-unifier/SKILL.md',
-  tier: 'sonnet',
-  allowedTools: UNIFIER_ALLOWED_TOOLS,
-  disallowedTools: UNIFIER_DISALLOWED_TOOLS,
-};
+export const unifierAgentSpec = deriveAgentSpec('skills/developer-unifier/SKILL.md');
+
+/** Tool lists derived from the spec — exported for downstream consumers. */
+export const UNIFIER_ALLOWED_TOOLS = unifierAgentSpec.allowedTools as UnifierAllowedTool[];
+export const UNIFIER_DISALLOWED_TOOLS = unifierAgentSpec.disallowedTools as UnifierDisallowedTool[];
 
 /** Concrete model, derived from the spec's tier (single source: the spec). */
 export const UNIFIER_MODEL = modelForSpec(unifierAgentSpec);
@@ -112,6 +94,10 @@ export type UnifierUserPromptInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /** Project's typed demo steps (M2). When present, appended to the demo instruction. */
+  demoProcess?: Array<{ kind: string; text: string }>;
+  /** Project's bound skill slugs (M2). When present, the unifier composes them. */
+  skills?: string[];
 };
 
 /**
@@ -131,7 +117,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
 
   const demoBlock = demoInstructionsForShape(input.demoShape);
 
-  return [
+  const base = [
     '# Developer-unifier — iteration brief',
     '',
     `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}** · Demo shape: **${input.demoShape}**`,
@@ -170,6 +156,18 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   ]
     .filter((line) => line !== '')
     .join('\n');
+
+  const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
+    ? '\n\n## Project demo process\n\nThis project defines typed demo steps. Follow them when authoring `demo.json`:\n' +
+      input.demoProcess.map((s, i) => `${i + 1}. [${s.kind.toUpperCase()}] ${s.text}`).join('\n')
+    : '';
+
+  const projectSkillsBlock = input.skills && input.skills.length > 0
+    ? '\n\n## Project skills\n\nThis project binds these skills — load them when relevant: ' +
+      input.skills.map((s) => `\`${s}\``).join(', ') + '.'
+    : '';
+
+  return base + projectDemoBlock + projectSkillsBlock;
 }
 
 /**
@@ -254,6 +252,10 @@ export type PrepareUnifierWorkspaceInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /** Project's typed demo steps (M2). Threaded into the rendered prompt. */
+  demoProcess?: Array<{ kind: string; text: string }>;
+  /** Project's bound skill slugs (M2). Threaded into the rendered prompt. */
+  skills?: string[];
 };
 
 export type PreparedUnifierWorkspace = {
@@ -300,6 +302,8 @@ export function prepareUnifierWorkspace(
       iterationBudget: input.iterationBudget,
       demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
+      demoProcess: input.demoProcess,
+      skills: input.skills,
     });
     writeFileSync(promptPath, prompt);
   }
