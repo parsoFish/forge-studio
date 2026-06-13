@@ -166,16 +166,33 @@ stale `origin/forge/<id>` branch first).
 | M4-4 | Fold-in + retirement | M4-3 | `/review/[cycleId]` + PLAN-gate route through viewer; redirects; e2e migrated; harness data-* (verdict-form/plan-gate) preserved |
 | M4-5 | e2e Act VII: author-a-flow + gate-via-viewer | M4-2..4 | beat 30: BUILD tab live (6 nodes, palette, goal field, no save — seed immutable); beat 31: /artifact demo view (6-chip trail, demo-evaluation) + verdict gate (verdict-form, approve-and-merge, send-back radio); DemoComparison crash fix (checkpoints?.length); 52 frames, 0 failures; remaining gate: operator-authorized verify:cycle |
 
-## M5 — Knowledge Bases as objects
+## M5 — Knowledge Bases as objects ✅ COMPLETE 2026-06-13 (verify:cycle operator-gated)
+
+All six WIs landed on `feat/studio-m5` (1027 tests, build clean, brain lint 0 errors, studio lint
+0 errors, `ui:journey` 56 frames 0 failures all green). Exit criteria met: KB read API live (real
+brain filesystem walk, gray-matter, wiki-link resolution), `/knowledge` force-graph viewer hand-rolled
+(SVG spring sim, no new dep), guidance loop (POST → `_guidance/*.md` → amber-diamond node → cleanup),
+scope guard (checkCategoryScope in brain-lint), KB create endpoint, reflection→KB links.
+
+**Act VIII (beats 32–33) confirmed live against the real brain:**
+- browse-KB: 104 nodes, 200 edges from the `cycles` brain (67 themes + index/raw nodes); all layer
+  variants present; KB health panel and selector rendered.
+- pin-guidance: POST written → `data-guidance-pinned="true"` → `[data-layer="guidance"]` amber-diamond
+  node appeared in the re-fetched graph → `finally` cleanup removed `brain/cycles/_guidance/` → brain
+  lint confirmed 0 errors post-journey.
+
+**Remaining gate:** operator-authorized `verify:cycle` (routine tier). M5 is mostly read + a guidance
+write + a lint check; the reflector change (M5-5: lessons carry `target:`) is additive with no behaviour
+change, so this is a low-risk confirmation that the reflector still closes the cycle green.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
-| M5-1 | KB read API | M0-4 | descriptors, graphify JSON + frontmatter → nodes/edges, markdown + wiki-link article rendering, lint-as-API health |
-| M5-2 | KB viewer `/knowledge/[id]` | M5-1 | d3-force/sigma.js graph, pan/zoom/hover-adjacency, article panel, scope-grouped selector, health panel + suggested-ingest |
-| M5-3 | Guidance loop | M5-1 | POST guidance → `_guidance/*.md`; brain-ingest consumes+deletes; amber-diamond render until ingested |
-| M5-4 | Mechanical scope guard + KB create | M0-2 | ingest validates category→brain routing vs kb.yaml scope (brain gap #8); project-builder KB scaffold |
-| M5-5 | Reflection → KB links | M4-3 | reflector lessons carry `target:`; viewer badges resolve |
-| M5-6 | e2e: browse-KB + pin-guidance | M5-2, M5-3 | round-trip proven |
+| M5-1 | KB read API | M0-4 | `orchestrator/kb-graph.ts` walks brain FS (gray-matter, wiki-links, `_guidance/`); `GET /api/studio/kbs/:id` returns graph+health+article; `GET /api/studio/kbs/:id/nodes/:nodeId`; traversal/bad-id guards |
+| M5-2 | KB viewer `/knowledge` | M5-1 | hand-rolled SVG spring sim (k/restLength/repulsion/damping/centerPull; off-screen ticks + rAF); nodes by layer (index hex/theme circle/raw dot/guidance amber-diamond); `data-kb-id/data-node-count/data-edge-count/data-selected-node`; pan/zoom/drag; NodeArticle (inbound/outbound chips, wiki-link body); KbHealth; KbSelector (scope-grouped); StudioNav Knowledge enabled; LibraryCard KB → `/knowledge?id=<id>` |
+| M5-3 | Guidance loop | M5-1 | `POST /api/studio/kbs/:id/guidance {text,targetNode?}` → `brain/<kb>/_guidance/<ts>.md`; buildKbGraph surfaces as guidance nodes; GuidancePanel wired; `data-guidance-pinned`; brain-ingest consume step |
+| M5-4 | Mechanical scope guard + KB create | M0-2 | `checkCategoryScope` in brain-lint (brain gap #8); `POST /api/studio/kbs` scaffold; KbBind "+ Create" enabled |
+| M5-5 | Reflection → KB links | M4-3 | reflector lessons carry `target:<kb-node-slug>`; ReflectionDoc pipeline; viewer KB badge resolves to `/knowledge?id=<target>` |
+| M5-6 | e2e Act VIII: browse-KB + pin-guidance | M5-2, M5-3 | 56 frames 0 failures; 104 nodes/200 edges live; guidance pinned + cleanup confirmed; brain lint 0 errors post-journey |
 
 ## M6 — Multi-runtime + model range (ADR-029)
 

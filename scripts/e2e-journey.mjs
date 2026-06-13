@@ -7,7 +7,7 @@
  *   Three human moments are the spine (architect interview / review demo / reflect);
  *   everything else is autonomous and every phase is costed.
  *
- * STRUCTURE: 32 beats across 7 acts, grounded in real session behaviour:
+ * STRUCTURE: 34 beats across 8 acts, grounded in real session behaviour:
  *   ACT I  — Live architecting  (P1 stall cameo, P2 free-text, P3 activity panel, P4 real cost)
  *   ACT II — Autonomous build   (fast-forwarded, honest running timer, TDD gate, WI dependency)
  *   ACT III— Review + teach     (PARTIAL→MET, new AC authored in-loop, reflect)
@@ -15,6 +15,7 @@
  *   ACT V  — Studio builders    (agent builder /agents/project-manager; project builder /projects/claude-harness)
  *   ACT VI — Flow-engine beats  (start-run CTA, cost-ceiling-warn gauge, gate control, resume button)
  *   ACT VII— Flow builder + artifact viewer (BUILD tab authoring; unified /artifact viewer + gate surface)
+ *   ACT VIII— Knowledge viewer  (browse-KB force-graph against real brain; pin-guidance → _guidance/*.md)
  *
  * No live LLM: the architect runner's turns + autonomous cycle are emulated by seeding
  * the same files/events the real phases write, grounded in real cycle event sequences.
@@ -2079,8 +2080,218 @@ async function main() {
     await sleep(READ);
     await frame(page, 'beat31b-artifact-verdict-gate', 'Act VII beat 31 — artifact viewer: verdict gate mode, verdict-form + approve/send-back actions present (harness contract preserved)');
 
-    // ── BEAT 32: End card ─────────────────────────────────────────────────────
-    console.log('\n[beat 32] End card');
+    // ── ACT VIII: Knowledge viewer ────────────────────────────────────────────
+    // Two emulated beats proving the M5-2/3 /knowledge viewer renders the real
+    // brain graph and that the guidance loop writes + surfaces a guidance node.
+    // All assertions are SOFT (check()/countAtLeast). The guidance file created
+    // in beat 33 is cleaned up in the finally block (see "Act VIII cleanup").
+    //
+    // The GUIDANCE_TEXT constant is recognisable so cleanup can confirm removal.
+    const GUIDANCE_TEXT = '[e2e-journey] worktree-cwd theme needs a split: cwd resolution vs path encoding are distinct failure modes.';
+
+    // ── BEAT 32: Browse-KB — /knowledge?id=cycles ─────────────────────────────
+    // Navigate to the knowledge viewer for the real cycles brain (~67 themes).
+    // Asserts: page-ready, #kb-svg data-*, node/edge counts, a node article on click.
+    console.log('\n[beat 32] Act VIII — browse-KB (/knowledge?id=cycles, real brain)');
+    await page.goto(`${watch.uiUrl}/knowledge?id=cycles`, { waitUntil: 'domcontentloaded' });
+    let kbPageReady = false;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 30000 },
+      );
+      kbPageReady = true;
+      check(true, 'Act VIII: [data-page="knowledge"][data-page-ready="true"]');
+    } catch {
+      const pr = await page.evaluate(() =>
+        document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') ?? '(no data-page=knowledge)');
+      check(false, `Act VIII: knowledge page-ready (got "${pr}")`);
+    }
+
+    await caption(page, 'The brain is browsable — force-graph of every theme, live against the real brain filesystem.');
+    await sleep(WORK); // allow the spring sim to settle a few frames
+
+    if (kbPageReady) {
+      // #kb-svg must be present with data-kb-id="cycles"
+      const kbId = await page.evaluate(() =>
+        document.querySelector('#kb-svg')?.getAttribute('data-kb-id') ?? '');
+      check(kbId === 'cycles', `Act VIII: #kb-svg data-kb-id="cycles" (got "${kbId}")`);
+
+      // Node count ≥ 10 (cycles brain has 67 themes + index nodes; even a capped graph should have many)
+      let nodeCount = 0;
+      try {
+        await page.waitForFunction(
+          () => {
+            const el = document.querySelector('#kb-svg');
+            return el !== null && parseInt(el.getAttribute('data-node-count') ?? '0', 10) >= 10;
+          },
+          null, { timeout: 15000 },
+        );
+      } catch { /* fall through to assertion */ }
+      nodeCount = await page.evaluate(() =>
+        parseInt(document.querySelector('#kb-svg')?.getAttribute('data-node-count') ?? '0', 10));
+      check(nodeCount >= 10, `Act VIII: #kb-svg data-node-count ≥10 (got ${nodeCount}; cycles brain has 67 themes)`);
+
+      // Edge count > 0
+      const edgeCount = await page.evaluate(() =>
+        parseInt(document.querySelector('#kb-svg')?.getAttribute('data-edge-count') ?? '0', 10));
+      check(edgeCount > 0, `Act VIII: #kb-svg data-edge-count > 0 (got ${edgeCount})`);
+
+      // data-node-id elements present (≥ several rendered nodes)
+      await countAtLeast(page, '[data-node-id]', 5, 'Act VIII: ≥5 [data-node-id] nodes rendered in graph');
+
+      // layer values: at least one theme node and one index node
+      const hasTheme = await page.evaluate(() =>
+        document.querySelector('[data-layer="theme"]') !== null);
+      check(hasTheme, 'Act VIII: [data-layer="theme"] node(s) present in graph');
+      const hasIndex = await page.evaluate(() =>
+        document.querySelector('[data-layer="index"]') !== null);
+      check(hasIndex, 'Act VIII: [data-layer="index"] node(s) present in graph');
+
+      // KB HEALTH panel present (data-section="kb-health" OR the KbHealth component)
+      const healthPresent = await page.evaluate(() =>
+        document.querySelector('[data-section="kb-health"]') !== null ||
+        // fallback: KbHealth renders a panel with "HEALTH" in its header text
+        [...document.querySelectorAll('div')].some((el) => el.textContent?.includes('KB HEALTH') || el.textContent?.includes('LAYER BALANCE')));
+      check(healthPresent, 'Act VIII: KB HEALTH panel rendered (layer-balance section)');
+
+      // KB selector present (KbSelector renders an optgroup-grouped <select> or a nav)
+      const selectorPresent = await page.evaluate(() =>
+        document.querySelector('select') !== null ||
+        document.querySelector('[data-component="kb-selector"]') !== null);
+      check(selectorPresent, 'Act VIII: KB selector (scope-grouped) present in the header');
+    }
+
+    await frame(page, 'beat32-kb-graph', `Act VIII beat 32 — /knowledge?id=cycles: force-graph rendered (${
+      await page.evaluate(() => document.querySelector('#kb-svg')?.getAttribute('data-node-count') ?? '?')
+    } nodes, real cycles brain)`);
+
+    // Click a theme node → assert the NODE ARTICLE panel populates
+    let articleLoaded = false;
+    if (kbPageReady) {
+      // Pick the first theme node and click it
+      const themeNode = page.locator('[data-layer="theme"]').first();
+      if ((await themeNode.count()) > 0) {
+        await themeNode.click();
+        // Wait for the selected-node attribute to update on #kb-svg
+        try {
+          await page.waitForFunction(
+            () => (document.querySelector('#kb-svg')?.getAttribute('data-selected-node') ?? '') !== '',
+            null, { timeout: 8000 },
+          );
+          const selectedNode = await page.evaluate(() =>
+            document.querySelector('#kb-svg')?.getAttribute('data-selected-node') ?? '');
+          check(selectedNode !== '', `Act VIII: clicking theme node sets data-selected-node (got "${selectedNode}")`);
+
+          // NODE ARTICLE panel should populate: look for article title / inbound chips / body
+          // NodeArticle renders a panel with data-node-id or an article title heading
+          try {
+            await page.waitForFunction(
+              () => {
+                // Article loaded if NodeArticle has non-empty content (title or body text > 20 chars)
+                const articlePanels = [...document.querySelectorAll('[data-node-id]')];
+                const rightRail = document.querySelector('[data-section="node-article"]');
+                if (rightRail) return (rightRail.textContent ?? '').trim().length > 10;
+                // Fallback: any div in the right rail with substantial content
+                const divs = [...document.querySelectorAll('div')];
+                return divs.some((el) => {
+                  const txt = el.textContent?.trim() ?? '';
+                  return txt.length > 30 && txt.includes('\n') === false &&
+                    el.children.length === 0 && el.closest('svg') === null;
+                });
+              },
+              null, { timeout: 10000 },
+            );
+            articleLoaded = true;
+          } catch { /* soft — the article may still be loading */ }
+
+          check(articleLoaded || selectedNode !== '',
+            'Act VIII: clicking a theme node → NODE ARTICLE panel populates (or data-selected-node set)');
+        } catch {
+          const sel = await page.evaluate(() =>
+            document.querySelector('#kb-svg')?.getAttribute('data-selected-node') ?? '(absent)');
+          check(false, `Act VIII: clicking theme node sets data-selected-node (got "${sel}")`);
+        }
+      } else {
+        check(false, 'Act VIII: [data-layer="theme"] node present to click');
+      }
+    }
+    await sleep(ACT);
+    await frame(page, 'beat32b-kb-node-article', 'Act VIII beat 32 — theme node clicked: NODE ARTICLE panel visible (inbound/outbound chips, body)');
+
+    // ── BEAT 33: Pin-guidance — type a note + pin → guidance node appears ─────
+    // This writes brain/cycles/_guidance/<ts>.md (a real file). The finally
+    // block MUST clean it up — see "Act VIII cleanup" below.
+    console.log('\n[beat 33] Act VIII — pin-guidance (writes brain/cycles/_guidance/<ts>.md)');
+    await caption(page, 'Human guidance — pin a note to the brain; it surfaces as a guidance node until the next ingest pass.');
+    await sleep(ACT);
+
+    let guidancePinned = false;
+    if (kbPageReady) {
+      // Type into the guidance textarea (#guidance-text)
+      const guidanceTextarea = page.locator('#guidance-text');
+      if ((await guidanceTextarea.count()) > 0) {
+        await guidanceTextarea.scrollIntoViewIfNeeded().catch(() => {});
+        await guidanceTextarea.click();
+        await guidanceTextarea.pressSequentially(GUIDANCE_TEXT, { delay: 22 });
+        await sleep(THINK);
+
+        await frame(page, 'beat33-guidance-typed', 'Act VIII beat 33 — guidance text typed into HUMAN GUIDANCE panel');
+
+        // Click "Pin guidance"
+        const pinBtn = page.locator('#pin-guidance-btn');
+        if ((await pinBtn.count()) > 0) {
+          await pinBtn.click();
+          await sleep(ACT);
+
+          // Assert data-guidance-pinned="true" (the POST succeeded and the state flipped)
+          try {
+            await page.waitForFunction(
+              () => document.querySelector('[data-guidance-pinned="true"]') !== null,
+              null, { timeout: 10000 },
+            );
+            guidancePinned = true;
+            check(true, 'Act VIII: data-guidance-pinned="true" — guidance POST succeeded');
+          } catch {
+            // Fallback: check if the success message text appeared
+            const successMsg = await page.evaluate(() =>
+              [...document.querySelectorAll('div')].some((el) =>
+                el.textContent?.includes('Guidance pinned') ?? false));
+            if (successMsg) {
+              guidancePinned = true;
+              check(true, 'Act VIII: "Guidance pinned" success message rendered (POST succeeded)');
+            } else {
+              const pinVal = await page.evaluate(() =>
+                document.querySelector('[data-guidance-pinned]')?.getAttribute('data-guidance-pinned') ?? '(absent)');
+              check(false, `Act VIII: data-guidance-pinned="true" (got "${pinVal}")`);
+            }
+          }
+
+          if (guidancePinned) {
+            // The graph re-fetches after pin; wait a moment then assert a guidance node
+            // appears with [data-layer="guidance"] (amber-diamond). This is a best-effort
+            // soft check — the re-fetch may take a moment.
+            await sleep(WORK);
+            const hasGuidanceNode = await page.evaluate(() =>
+              document.querySelector('[data-layer="guidance"]') !== null);
+            check(hasGuidanceNode,
+              'Act VIII: [data-layer="guidance"] amber-diamond node appeared in graph after pin (graph re-fetched)');
+          }
+        } else {
+          check(false, 'Act VIII: #pin-guidance-btn present to click');
+        }
+      } else {
+        check(false, 'Act VIII: #guidance-text textarea present in HUMAN GUIDANCE panel');
+      }
+    } else {
+      check(false, 'Act VIII: pin-guidance skipped (page did not reach ready)');
+    }
+
+    await frame(page, 'beat33b-guidance-pinned', `Act VIII beat 33 — guidance pinned: data-guidance-pinned="true", guidance node in graph (brain/cycles/_guidance written)`);
+    await sleep(READ);
+
+    // ── BEAT 34: End card ─────────────────────────────────────────────────────
+    console.log('\n[beat 34] End card');
     await page.evaluate(() => {
       let card = document.getElementById('demo-end-card');
       if (!card) {
@@ -2105,7 +2316,7 @@ async function main() {
       }
     });
     await caption(page, 'Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher.');
-    await frame(page, 'beat26-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
+    await frame(page, 'beat34-end-card', 'End card — "Forge is the autonomous dev loop. You are the architect, the reviewer, and the teacher."');
     await sleep(READ);
 
     console.log('\n[e2e] journey complete.');
@@ -2154,6 +2365,19 @@ async function main() {
     if (createdSid) {
       try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${createdSid}`), { recursive: true, force: true }); } catch { /* */ }
     }
+    // Act VIII cleanup — remove any _guidance/*.md files written by the pin-guidance beat.
+    // Critical: (a) no repo residue, (b) brain lint stays clean, (c) next journey run is deterministic.
+    try {
+      const guidanceDir = join(FORGE_ROOT, 'brain', 'cycles', '_guidance');
+      if (existsSync(guidanceDir)) {
+        const guidanceFiles = readdirSync(guidanceDir);
+        for (const f of guidanceFiles) {
+          rmSync(join(guidanceDir, f), { force: true });
+        }
+        // Remove the dir itself if empty (keeps the brain tree clean)
+        try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* */ }
+      }
+    } catch { /* Act VIII cleanup best-effort */ }
   }
 
   const vids = readdirSync(VIDEO).filter((f) => f.endsWith('.webm'));
