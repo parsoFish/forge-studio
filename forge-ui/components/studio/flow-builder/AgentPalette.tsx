@@ -131,8 +131,7 @@ export function AgentPalette(): JSX.Element {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  const load = useCallback(async () => {
-    const signal = { cancelled: false };
+  const load = useCallback(async (signal: { cancelled: boolean }) => {
     const [ags, projs] = await Promise.all([
       fetchStudioAgents(),
       fetchStudioProjects(),
@@ -141,11 +140,12 @@ export function AgentPalette(): JSX.Element {
       setAgents(ags);
       setProjects(projs);
     }
-    return () => { signal.cancelled = true; };
   }, []);
 
   useEffect(() => {
-    void load();
+    const signal = { cancelled: false };
+    void load(signal);
+    return () => { signal.cancelled = true; };
   }, [load]);
 
   return (

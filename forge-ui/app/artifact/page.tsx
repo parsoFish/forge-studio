@@ -243,7 +243,7 @@ const PHASE_FOR_TYPE: Record<ArtifactKey, string> = {
   reflection: 'Reflector',
 };
 
-function EmptyState({ type, runId, flowId }: { type: ArtifactKey; runId: string; flowId?: string }) {
+function EmptyState({ type, flowId }: { type: ArtifactKey; flowId?: string }) {
   const phase = PHASE_FOR_TYPE[type];
   const backHref = flowId ? `/flows/${encodeURIComponent(flowId)}` : '/';
   return (
@@ -538,7 +538,7 @@ function ArtifactPageInner() {
           {!ready ? (
             <div style={{ fontSize: 13, color: 'var(--faint)', padding: '40px 0' }}>Loading…</div>
           ) : !artifact || artifact.type === 'empty' ? (
-            <EmptyState type={type} runId={runId} flowId={flowId} />
+            <EmptyState type={type} flowId={flowId} />
           ) : (
             <>
               {/* View-mode approval stamp (skip for verdict — it IS the verdict) */}

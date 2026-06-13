@@ -160,8 +160,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   // ---- BUILD tab data loading ----
 
-  const loadBuildData = useCallback(async () => {
-    const signal = { cancelled: false };
+  const loadBuildData = useCallback(async (signal: { cancelled: boolean }) => {
     const [flowDef, flows, ags] = await Promise.all([
       fetchFlow(id),
       fetchStudioFlows(),
@@ -180,12 +179,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         triggers: flowDef.triggers ?? [],
       });
     }
-    return () => { signal.cancelled = true; };
   }, [id]);
 
   useEffect(() => {
     if (tab === 'build') {
-      void loadBuildData();
+      const signal = { cancelled: false };
+      void loadBuildData(signal);
+      return () => { signal.cancelled = true; };
     }
   }, [tab, loadBuildData]);
 

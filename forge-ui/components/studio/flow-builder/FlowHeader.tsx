@@ -357,15 +357,15 @@ export function FlowHeader({
             >
               <span style={{ color: 'var(--faint)', fontSize: 11 }}>on complete →</span>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 12 }}>{flowName(tr.flow)}</span>
-              <span
-                role="button"
+              <button
                 onClick={() => removeTrigger(i)}
-                style={{ color: 'rgba(183,140,255,0.6)', cursor: 'pointer', fontSize: 13 }}
+                aria-label={`Remove trigger to ${flowName(tr.flow)}`}
+                style={{ color: 'rgba(183,140,255,0.6)', cursor: 'pointer', fontSize: 13, background: 'none', border: 'none', padding: 0, lineHeight: 1 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(183,140,255,0.6)'; }}
               >
                 ✕
-              </span>
+              </button>
             </span>
           ))}
 

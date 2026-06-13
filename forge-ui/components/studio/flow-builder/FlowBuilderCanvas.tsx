@@ -291,9 +291,9 @@ function flowNodesToRF(
       data: {
         agentRef: fn.agent ?? fn.id,
         agentName: agent?.name ?? fn.agent ?? fn.id,
-        gate: fn.kind === 'gate' ? fn.id : undefined,
+        gate: fn.gate,
         fanOut: fn.fanOut,
-        resumable: false,
+        resumable: fn.resumable,
         selected: false,
       },
       width: 96,
@@ -340,6 +340,9 @@ export function rfNodesToFlow(rfNodes: Node<FlowNodeData>[]): FlowNode[] {
   return rfNodes.map((n) => ({
     id: n.id,
     agent: n.data.agentRef,
+    ...(n.data.gate      ? { gate: n.data.gate }           : {}),
+    ...(n.data.fanOut    ? { fanOut: n.data.fanOut }       : {}),
+    ...(n.data.resumable ? { resumable: n.data.resumable } : {}),
   }));
 }
 
@@ -456,9 +459,13 @@ export function FlowBuilderCanvas({
     setRfEdges((eds) => applyEdgeChanges(changes, eds));
   }, []);
 
+  // pendingConnectionRef tracks a connection that was just made but whose
+  // picker position will be set by onConnectEnd (which receives the real cursor).
+  const pendingConnectionRef = useRef<Connection | null>(null);
+
   const onConnect = useCallback(
-    (connection: Connection, event?: MouseEvent | TouchEvent) => {
-      // First add the edge without an artifact
+    (connection: Connection) => {
+      // Add the edge immediately (no artifact yet)
       setRfEdges((eds) => addEdge({
         ...connection,
         sourceHandle: 'out',
@@ -468,11 +475,8 @@ export function FlowBuilderCanvas({
         style: { stroke: 'var(--line-2, #39455f)', strokeWidth: 2 },
         data: { artifact: undefined },
       }, eds));
-
-      // Then open the artifact picker near the mouse position
-      const x = event instanceof MouseEvent ? event.clientX : 400;
-      const y = event instanceof MouseEvent ? event.clientY : 300;
-      setPickerState({ x, y, connection });
+      // Stash the connection; onConnectEnd will open the picker at the real cursor position
+      pendingConnectionRef.current = connection;
     },
     [],
   );
@@ -699,15 +703,16 @@ export function FlowBuilderCanvas({
         nodeTypes={NODE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={(conn) => {
-          onConnect(conn);
-        }}
+        onConnect={onConnect}
         onConnectEnd={(event) => {
-          // Called after connection attempt; if pickerState was just set, update its position
-          if (event instanceof MouseEvent) {
-            setPickerState((prev) =>
-              prev ? { ...prev, x: event.clientX, y: event.clientY } : prev,
-            );
+          // onConnectEnd fires after onConnect with the real cursor position.
+          // Open the artifact picker here so it appears at the cursor, not at (400,300).
+          const conn = pendingConnectionRef.current;
+          if (conn && event instanceof MouseEvent) {
+            pendingConnectionRef.current = null;
+            setPickerState({ x: event.clientX, y: event.clientY, connection: conn });
+          } else {
+            pendingConnectionRef.current = null;
           }
         }}
         onNodeClick={handleNodeClick}

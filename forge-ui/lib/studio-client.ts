@@ -87,7 +87,9 @@ export type FlowNode = {
   y?: number;
   lane?: string;
   kind?: string;
-  fanOut?: string; // upstream artifact name driving runtime multiplicity (mirrors server type)
+  gate?: string;    // gate id (e.g. 'plan', 'verdict') — node blocks until approved
+  fanOut?: string;  // upstream artifact name driving runtime multiplicity (mirrors server type)
+  resumable?: boolean; // node can be resumed after a crash/ceiling
 };
 
 export type FlowEdge = {
