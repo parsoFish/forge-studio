@@ -504,6 +504,119 @@ describe('error handling', () => {
 });
 
 // ---------------------------------------------------------------------------
+// loadAgentDefinition — legacy SKILL.md guard
+// ---------------------------------------------------------------------------
+
+describe('loadAgentDefinition legacy guard', () => {
+  it('throws with "not a studio SKILL.md" message when frontmatter has no runtime block', () => {
+    const p = writeAgentFixture('legacy-throw-agent', LEGACY_AGENT_FIXTURE);
+    assert.throws(
+      () => loadAgentDefinition(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes('not a studio SKILL.md'),
+          `Expected "not a studio SKILL.md" in error: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+
+  it('isStudioAgent still returns false for legacy SKILL.md without throwing', () => {
+    const p = writeAgentFixture('legacy-is-studio-agent', LEGACY_AGENT_FIXTURE);
+    assert.equal(isStudioAgent(p), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadAgentDefinition — enum field guards
+// ---------------------------------------------------------------------------
+
+describe('loadAgentDefinition enum guards', () => {
+  it('throws on invalid brainAccess value with descriptive message', () => {
+    const bad = AGENT_FIXTURE.replace('brainAccess: none', 'brainAccess: invalid-value');
+    const p = writeAgentFixture('bad-brain-access-agent', bad);
+    assert.throws(
+      () => loadAgentDefinition(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes('brainAccess') && err.message.includes('mandatory|advisory|none'),
+          `Expected enum message for brainAccess: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+
+  it('throws on invalid runtime.strategy value with descriptive message', () => {
+    const bad = AGENT_FIXTURE.replace('  strategy: fixed', '  strategy: unknown-strategy');
+    const p = writeAgentFixture('bad-strategy-agent', bad);
+    assert.throws(
+      () => loadAgentDefinition(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes('strategy') && err.message.includes('fixed|range'),
+          `Expected enum message for strategy: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+
+  it('throws on invalid kb scope value with descriptive message', () => {
+    const bad = KB_FIXTURE.replace('scope: flow', 'scope: bad-scope');
+    const p = writeFixture('bad-scope-kb.yaml', bad);
+    assert.throws(
+      () => loadKbDescriptor(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes('scope') && err.message.includes('project|flow|agent-integration'),
+          `Expected enum message for scope: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeAgentDefinition — empty budgets round-trip
+// ---------------------------------------------------------------------------
+
+describe('serializeAgentDefinition empty budgets round-trip', () => {
+  it('agent without budget fields survives load→serialize→load with budgets deepEqual {}', () => {
+    const noBudgets = AGENT_FIXTURE.replace(
+      /^budgets:\n  iterationCap: 15\n/m,
+      '',
+    );
+    const p = writeAgentFixture('no-budgets-agent', noBudgets);
+    const original = loadAgentDefinition(p);
+
+    // All budget fields should be undefined → deepEqual {}
+    assert.deepEqual(original.budgets, {
+      iterationFloor: undefined,
+      iterationCap: undefined,
+      maxTurnsPerIteration: undefined,
+      wedgeKillMs: undefined,
+    });
+
+    const serialized = serializeAgentDefinition(original);
+
+    const rtDir = join(tmpDir, 'no-budgets-agent-rt');
+    mkdirSync(rtDir, { recursive: true });
+    const rtPath = join(rtDir, 'SKILL.md');
+    writeFileSync(rtPath, serialized, 'utf8');
+
+    const reloaded = loadAgentDefinition(rtPath);
+    assert.deepEqual(reloaded.budgets, original.budgets);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // listAgentDefinitions
 // ---------------------------------------------------------------------------
 

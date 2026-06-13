@@ -14,7 +14,6 @@ import type {
   AgentComposition,
   AgentDefinition,
   AgentRuntime,
-  BrainAccess,
   Catalog,
   CatalogEntry,
   CatalogModel,
@@ -85,6 +84,25 @@ function reqObject(data: Record<string, unknown>, key: string, file: string): Re
   return v as Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Sentinel error class — used inside loadYaml to avoid double-wrapping
+// ---------------------------------------------------------------------------
+
+class RegistryError extends Error {}
+
+// ---------------------------------------------------------------------------
+// Union-field guard helper
+// ---------------------------------------------------------------------------
+
+const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
+const MODEL_STRATEGIES = ['fixed', 'range'] as const;
+const KB_SCOPES = ['project', 'flow', 'agent-integration'] as const;
+
+function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
+  if ((allowed as readonly string[]).includes(value)) return value as T;
+  throw new RegistryError(`${file}: field "${key}" must be one of ${allowed.join('|')}, got "${value}"`);
+}
+
 function loadYaml(file: string): Record<string, unknown> {
   let raw: string;
   try {
@@ -95,11 +113,11 @@ function loadYaml(file: string): Record<string, unknown> {
   try {
     const parsed = yaml.load(raw);
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`${file}: YAML root must be a mapping`);
+      throw new RegistryError(`${file}: YAML root must be a mapping`);
     }
     return parsed as Record<string, unknown>;
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith(file)) throw err;
+    if (err instanceof RegistryError) throw err;
     throw new Error(`${file}: YAML parse error — ${(err as Error).message}`);
   }
 }
@@ -129,12 +147,16 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const { data, content } = matter(raw);
   const d = data as Record<string, unknown>;
 
+  if (!('runtime' in d)) {
+    throw new Error(`${skillMdPath}: not a studio SKILL.md — frontmatter has no "runtime" block`);
+  }
+
   const name = reqString(d, 'name', skillMdPath);
   const description = reqString(d, 'description', skillMdPath);
   const phase = optString(d, 'phase');
   const surface = optString(d, 'surface');
   const purpose = reqString(d, 'purpose', skillMdPath);
-  const brainAccess = reqString(d, 'brainAccess', skillMdPath) as BrainAccess;
+  const brainAccess = oneOf(reqString(d, 'brainAccess', skillMdPath), BRAIN_ACCESS, skillMdPath, 'brainAccess');
   const interactivity = reqString(d, 'interactivity', skillMdPath);
 
   const rawComposition = d['composition'];
@@ -152,7 +174,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const rawRuntime = reqObject(d, 'runtime', skillMdPath);
   const runtime: AgentRuntime = {
     sdk: reqString(rawRuntime, 'sdk', skillMdPath),
-    strategy: reqString(rawRuntime, 'strategy', skillMdPath) as AgentRuntime['strategy'],
+    strategy: oneOf(reqString(rawRuntime, 'strategy', skillMdPath), MODEL_STRATEGIES, skillMdPath, 'strategy'),
     model: optString(rawRuntime, 'model'),
     range: rawRuntime['range'] !== undefined ? stringArray(rawRuntime, 'range', skillMdPath) : undefined,
     subagentModel: optString(rawRuntime, 'subagentModel'),
@@ -263,7 +285,7 @@ function parseFlowNode(raw: unknown, file: string, index: number): FlowNode {
   const id = reqString(n, 'id', file);
   const agent = optString(n, 'agent');
   const gate = optString(n, 'gate');
-  const fanOut = optString(n, 'fanOut') ?? optString(n, 'fan-out');
+  const fanOut = optString(n, 'fanOut');
   const resumable = optBool(n, 'resumable');
   return { id, agent, gate, fanOut, resumable };
 }
@@ -375,12 +397,13 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
 // KB descriptor
 // ---------------------------------------------------------------------------
 
+// kb.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
 export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
   const d = loadYaml(kbYamlPath);
   return {
     id: reqString(d, 'id', kbYamlPath),
     name: reqString(d, 'name', kbYamlPath),
-    scope: reqString(d, 'scope', kbYamlPath) as KbDescriptor['scope'],
+    scope: oneOf(reqString(d, 'scope', kbYamlPath), KB_SCOPES, kbYamlPath, 'scope'),
     desc: reqString(d, 'desc', kbYamlPath),
     path: kbYamlPath,
   };
@@ -436,6 +459,7 @@ function parseCatalogEntries(raw: unknown, file: string, key: string): CatalogEn
   });
 }
 
+// catalog.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
 export function loadCatalog(catalogYamlPath: string): Catalog {
   const d = loadYaml(catalogYamlPath);
   return {
