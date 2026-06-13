@@ -20,7 +20,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
@@ -28,12 +28,16 @@ import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listAgentDefinitions,
+  loadAgentDefinition,
   loadFlowDefinition,
   loadKbDescriptor,
   loadProjectsRegistry,
   loadCatalog,
+  serializeAgentDefinition,
 } from '../orchestrator/studio/registry.ts';
-import type { FlowDefinition } from '../orchestrator/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
+import { SLUG_RE, validateAgent } from '../orchestrator/studio/validate.ts';
+import { validateProjectConfig } from '../orchestrator/project-config.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -450,4 +454,274 @@ export async function handleStudioRoutes(
   }
 
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Write routes (M2-2) — PUT /api/studio/agents/:slug, PUT /api/studio/projects/:id
+// ---------------------------------------------------------------------------
+
+/**
+ * Handle Forge Studio write (PUT) routes.
+ *
+ * Returns true iff the route was handled (even on error). Returns false for
+ * unrecognised URLs so the caller can chain to the next handler.
+ * Never throws — all errors caught, returned as 4xx/5xx JSON.
+ *
+ * Security invariants (see self-audit in implementation plan):
+ *   1. Slug/id validated against SLUG_RE BEFORE any fs path construction.
+ *   2. Resolved fs paths prefix-guarded to their containing directory.
+ *   3. Load-merge-write pattern: never clobbers preserved fields.
+ *   4. validateAgent / validateProjectConfig block writes on error-level findings.
+ */
+export async function handleStudioWriteRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioContext,
+  rawUrl: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'PUT') return false;
+
+  const url = pathOnly(rawUrl);
+
+  // ---- PUT /api/studio/agents/:slug ----------------------------------------
+  const agentMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);
+  if (agentMatch) {
+    try {
+      const slug = decodeURIComponent(agentMatch[1]);
+
+      // 1. Validate slug before any fs operation (blocks path traversal)
+      if (!SLUG_RE.test(slug)) {
+        sendJson(res, 400, { error: 'invalid slug — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' });
+        return true;
+      }
+
+      // 2. Resolve and prefix-guard the SKILL.md path
+      const skillsBase = resolve(ctx.forgeRoot, 'skills');
+      const skillMdPath = resolve(skillsBase, slug, 'SKILL.md');
+      if (!skillMdPath.startsWith(skillsBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' });
+        return true;
+      }
+
+      // 3. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' });
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 4. Load existing def or scaffold minimal one
+      let existing: AgentDefinition | null = null;
+      if (existsSync(skillMdPath)) {
+        try {
+          existing = loadAgentDefinition(skillMdPath);
+        } catch (err) {
+          sendJson(res, 500, { error: `failed to load existing SKILL.md: ${String(err)}` });
+          return true;
+        }
+      }
+
+      // 5. Build merged definition: preserve slug/phase/surface/allowedTools/disallowedTools/budgets
+      const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? slug;
+      const purpose = typeof b['purpose'] === 'string' ? b['purpose'] : existing?.purpose ?? '';
+      // UI sends `process` for the body field
+      const body_text = typeof b['process'] === 'string' ? b['process'] : existing?.body ?? '';
+      const interactivity = typeof b['interactivity'] === 'string' ? b['interactivity'] : existing?.interactivity ?? '';
+      const brainAccess = (['mandatory', 'advisory', 'none'] as const).includes(
+        b['brainAccess'] as 'mandatory' | 'advisory' | 'none',
+      )
+        ? (b['brainAccess'] as 'mandatory' | 'advisory' | 'none')
+        : existing?.brainAccess ?? 'none';
+
+      // Composition: merge from body, fall back to existing
+      const rawComp = b['composition'];
+      const compIn: Record<string, unknown> =
+        rawComp !== null && typeof rawComp === 'object' && !Array.isArray(rawComp)
+          ? (rawComp as Record<string, unknown>)
+          : {};
+      const composition = {
+        skills: Array.isArray(compIn['skills']) ? (compIn['skills'] as string[]) : (existing?.composition.skills ?? []),
+        tools: Array.isArray(compIn['tools']) ? (compIn['tools'] as string[]) : (existing?.composition.tools ?? []),
+        mcps: Array.isArray(compIn['mcps']) ? (compIn['mcps'] as string[]) : (existing?.composition.mcps ?? []),
+        hooks: Array.isArray(compIn['hooks']) ? (compIn['hooks'] as string[]) : (existing?.composition.hooks ?? []),
+      };
+
+      // Runtime: merge from body, fall back to existing
+      const rawRt = b['runtime'];
+      const rtIn: Record<string, unknown> =
+        rawRt !== null && typeof rawRt === 'object' && !Array.isArray(rawRt)
+          ? (rawRt as Record<string, unknown>)
+          : {};
+      const runtime = {
+        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude-code'),
+        strategy: (['fixed', 'range'] as const).includes(rtIn['strategy'] as 'fixed' | 'range')
+          ? (rtIn['strategy'] as 'fixed' | 'range')
+          : (existing?.runtime.strategy ?? 'fixed'),
+        model: typeof rtIn['model'] === 'string' ? rtIn['model'] : existing?.runtime.model,
+        range: Array.isArray(rtIn['range']) ? (rtIn['range'] as string[]) : existing?.runtime.range,
+        subagentModel: typeof rtIn['subagentModel'] === 'string' ? rtIn['subagentModel'] : existing?.runtime.subagentModel,
+      };
+
+      const merged: AgentDefinition = {
+        slug,
+        name,
+        description: existing?.description ?? name,
+        phase: existing?.phase,
+        surface: existing?.surface,
+        purpose,
+        composition,
+        runtime,
+        brainAccess,
+        interactivity,
+        budgets: existing?.budgets ?? {},
+        allowedTools: existing?.allowedTools ?? [],
+        disallowedTools: existing?.disallowedTools ?? [],
+        body: body_text,
+        path: skillMdPath,
+      };
+
+      // 6. Validate — reject on any error-level finding
+      const findings = validateAgent(merged);
+      const hasErrors = findings.some((f) => f.level === 'error');
+      if (hasErrors) {
+        sendJson(res, 400, { error: 'validation failed', findings });
+        return true;
+      }
+
+      // 7. Serialize and write
+      const serialized = serializeAgentDefinition(merged);
+      const skillDir = resolve(skillsBase, slug);
+      if (!existsSync(skillDir)) {
+        mkdirSync(skillDir, { recursive: true });
+      }
+      writeFileSync(skillMdPath, serialized, 'utf8');
+
+      const flagFindings = findings.filter((f) => f.level === 'flag');
+      sendJson(res, 200, { ok: true, slug, findings: flagFindings });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return true;
+  }
+
+  // ---- PUT /api/studio/projects/:id ----------------------------------------
+  const projectMatch = url.match(/^\/api\/studio\/projects\/([^/]+)$/);
+  if (projectMatch) {
+    try {
+      const id = decodeURIComponent(projectMatch[1]);
+
+      // 1. Validate id before any fs operation
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' });
+        return true;
+      }
+
+      // 2. Resolve the project path from studio/projects.yaml
+      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
+      if (!existsSync(projectsYamlPath)) {
+        sendJson(res, 404, { error: 'unknown project' });
+        return true;
+      }
+      let registry;
+      try {
+        registry = loadProjectsRegistry(projectsYamlPath);
+      } catch {
+        sendJson(res, 500, { error: 'failed to load projects registry' });
+        return true;
+      }
+      const projectRef = registry.projects.find((p) => p.id === id);
+      if (!projectRef) {
+        sendJson(res, 404, { error: 'unknown project' });
+        return true;
+      }
+
+      // 3. Resolve the project.json path and prefix-guard it
+      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      const projectJsonPath = resolve(projectRoot, '.forge', 'project.json');
+      if (!projectJsonPath.startsWith(projectRoot + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' });
+        return true;
+      }
+
+      // 4. Parse request body
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return true;
+      }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' });
+        return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      // 5. Load existing project.json (if present) and merge M2 fields over it
+      let existingRaw: Record<string, unknown> = {};
+      if (existsSync(projectJsonPath)) {
+        try {
+          existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+        } catch (err) {
+          sendJson(res, 500, { error: `failed to read existing project.json: ${String(err)}` });
+          return true;
+        }
+      }
+
+      // Merge: only override M2 fields from body; preserve all other fields
+      const merged: Record<string, unknown> = { ...existingRaw };
+      if (typeof b['northStar'] === 'string') merged['northStar'] = b['northStar'];
+      if (typeof b['instructions'] === 'string') merged['instructions'] = b['instructions'];
+      if (Array.isArray(b['demoProcess'])) merged['demoProcess'] = b['demoProcess'];
+      if (Array.isArray(b['skills'])) merged['skills'] = b['skills'];
+      // kb can be string or null
+      if (b['kb'] !== undefined) merged['kb'] = b['kb'];
+
+      // 6. Validate the merged config (throws on invalid)
+      try {
+        validateProjectConfig(merged);
+      } catch (err) {
+        sendJson(res, 400, { error: String(err) });
+        return true;
+      }
+
+      // 7. Write back (pretty, 2-space)
+      const forgeDir = resolve(projectRoot, '.forge');
+      if (!existsSync(forgeDir)) {
+        mkdirSync(forgeDir, { recursive: true });
+      }
+      writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
+
+      sendJson(res, 200, { ok: true, id });
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) });
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Read and parse the JSON request body. Used by write routes.
+ * Shared helper (mirrors readJson in ui-bridge.ts).
+ */
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolveJson, rejectJson) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
+    });
+    req.on('error', rejectJson);
+  });
 }
