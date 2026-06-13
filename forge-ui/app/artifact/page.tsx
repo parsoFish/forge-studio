@@ -602,9 +602,28 @@ function ArtifactPageInner() {
               )}
 
               {/* All other types: show empty state when artifact is absent.
+                  In gate mode, show a compact placeholder instead of the full empty
+                  state so the gate bar (rendered unconditionally below) remains
+                  reachable. In view mode, show the full empty state.
                   Exception: plan type with an archSession falls through to PlanGate. */}
               {type !== 'verdict' && (!artifact || artifact.type === 'empty') && !(type === 'plan' && archSession) && (
-                <EmptyState type={type} flowId={flowId} />
+                isGateMode ? (
+                  <div style={{
+                    border: '1px solid var(--line)',
+                    borderRadius: 8,
+                    padding: '14px 18px',
+                    background: 'var(--panel)',
+                    fontSize: 13,
+                    color: 'var(--dim)',
+                    marginBottom: 16,
+                  }}>
+                    Artifact evidence not available — the {PHASE_FOR_TYPE[type]} phase has not
+                    produced the <strong>{type}</strong> artifact yet. You can still approve or
+                    send back below.
+                  </div>
+                ) : (
+                  <EmptyState type={type} flowId={flowId} />
+                )
               )}
 
               {/* Type-specific renderers for non-verdict types */}
@@ -657,8 +676,11 @@ function ArtifactPageInner() {
         </div>
       </div>
 
-      {/* Gate bar — plan + demo only (verdict uses ReviewVerdictForm above) */}
-      {showGateBar && ready && artifact && artifact.type !== 'empty' && (
+      {/* Gate bar — plan + demo only (verdict uses ReviewVerdictForm above).
+          Renders unconditionally in gate mode so the operator can always
+          approve/send-back even when the artifact body is absent (e.g. demo.json
+          missing at a demo gate). */}
+      {showGateBar && ready && (
         <GateBar
           runId={runId}
           gateId={gateId}
