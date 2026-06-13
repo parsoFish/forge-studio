@@ -85,6 +85,7 @@ export type FlowNode = {
   y?: number;
   lane?: string;
   kind?: string;
+  fanOut?: string; // upstream artifact name driving runtime multiplicity (mirrors server type)
 };
 
 export type FlowEdge = {

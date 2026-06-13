@@ -12,6 +12,7 @@ interface MonitorSummaryProps {
   flow: Flow;
 }
 
+// Snapshot elapsed time — refreshed on run-update events, not on a timer.
 function elapsed(startedAt: string | undefined): string {
   if (!startedAt) return '—';
   const ms = Date.now() - new Date(startedAt).getTime();

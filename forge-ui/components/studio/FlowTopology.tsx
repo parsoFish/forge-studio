@@ -73,8 +73,8 @@ export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
         width={canvasW}
         height={canvasH}
       >
-        {edges.map((e, i) => (
-          <EdgePath key={i} edge={e} hexes={hexes} run={run} flow={flow} />
+        {edges.map((e) => (
+          <EdgePath key={`${e.from}-${e.to}`} edge={e} hexes={hexes} run={run} />
         ))}
       </svg>
 
@@ -107,18 +107,17 @@ function buildLayout(
   const depsOf = (n: FlowNode): string[] =>
     edgesRaw.filter((e) => e.to === n.id).map((e) => e.from);
 
-  const { levelById, byLevel, maxLevel } = topoLevels(
+  const { byLevel, maxLevel } = topoLevels(
     nodes,
     (n) => n.id,
     depsOf,
   );
 
   // Identify fanOut node
-  const fanOutNodeId = nodes.find((n) => (n as FlowNode & { fanOut?: string }).fanOut)?.id ?? null;
+  const fanOutNodeId = nodes.find((n) => n.fanOut)?.id ?? null;
 
   // Assign positions
   const hexes: HexPos[] = [];
-  const posMap = new Map<string, { x: number; y: number }>(); // nodeId → center
 
   const gateNodeId = run?.gate ?? null;
   const failNodeId = run?.failedAt ?? null;
@@ -137,7 +136,6 @@ function buildLayout(
       }
     }
 
-    const totalH = (expandedCount - 1) * ROW_GAP;
     let rowIndex = 0;
 
     for (const n of levelNodes) {
@@ -151,7 +149,6 @@ function buildLayout(
         const wiCount = run.workItems.length;
         for (let wi = 0; wi < wiCount; wi++) {
           const wiItem = run.workItems[wi];
-          const cy = PAD_Y + rowIndex * ROW_GAP - totalH / 2 + (totalH / 2);
           const adjustedCy = PAD_Y + rowIndex * ROW_GAP + (expandedCount > 1 ? (-(expandedCount - 1) * ROW_GAP / 2) : 0);
           hexes.push({
             nodeId: n.id,
@@ -163,8 +160,6 @@ function buildLayout(
             isFailed: false,
             wiId: wiItem.id,
           });
-          // Store the first WI's position as the node's canonical position
-          if (wi === 0) posMap.set(n.id, { x: cx, y: adjustedCy });
           rowIndex++;
         }
       } else {
@@ -178,7 +173,6 @@ function buildLayout(
           isGated,
           isFailed,
         });
-        posMap.set(n.id, { x: cx, y: adjustedCy });
         rowIndex++;
       }
     }
@@ -201,12 +195,10 @@ function EdgePath({
   edge,
   hexes,
   run,
-  flow,
 }: {
   edge: { from: string; to: string; artifact?: string };
   hexes: HexPos[];
   run: Run | null;
-  flow: Flow;
 }) {
   // Use the first hex for each node (fanOut uses first WI)
   const fromHex = hexes.find((h) => h.nodeId === edge.from);

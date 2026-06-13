@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 
@@ -203,12 +203,14 @@ function DrawerBody({
     const signal = { cancelled: false };
     setLogLoading(true);
     setLogLines([]);
-    void fetchPhaseLog(cycleId, nodeId, stderrOnly).then((lines) => {
-      if (!signal.cancelled) {
-        setLogLines(lines);
-        setLogLoading(false);
+    void (async () => {
+      try {
+        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly);
+        if (!signal.cancelled) setLogLines(lines);
+      } finally {
+        if (!signal.cancelled) setLogLoading(false);
       }
-    });
+    })();
     return () => { signal.cancelled = true; };
   }, [cycleId, nodeId, stderrOnly]);
 
