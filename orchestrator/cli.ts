@@ -80,8 +80,6 @@ process.chdir(FORGE_ROOT);
     // operator turn (spawnArchitectTurn in cli/ui-bridge.ts). Do NOT delete.
     case 'architect':
       return await cmdArchitect(args.slice(1));
-    case 'watch':
-      return await cmdWatch(args.slice(1));
     case 'requeue':
       return cmdRequeue(args.slice(1));
     case '--help':
@@ -134,7 +132,6 @@ Usage:
                                           any previous forge process so a pinned browser tab auto-reconnects).
                                           Health-probes the bridge then the UI before opening the browser, then
                                           emits a deterministic 'forge-studio-ready {json}' line (or --ready-file).
-  forge watch [...]                       DEPRECATED alias of 'forge studio' (retires after one milestone).
   forge requeue <init-or-handle> [--reset-retries]
                                           Recover a stuck initiative: move manifest back to pending/,
                                           remove stranded verdict files + worktree, append a marker to
@@ -880,14 +877,6 @@ async function cmdArchitect(rest: string[]): Promise<void> {
   console.error('  forge architect run <session-id> [--project <name>]');
   console.error('  (the architect runs in the forge UI — see ADR 020/023; the bridge spawns this per turn)');
   process.exit(2);
-}
-
-// DEPRECATED ALIAS (M7-6, retire after one milestone): `forge watch` now
-// delegates to the canonical `forge studio` launcher. It prints a one-line
-// deprecation notice and otherwise behaves identically.
-async function cmdWatch(rest: string[]): Promise<void> {
-  console.warn('[deprecated] `forge watch` is now `forge studio` — please update your invocation.');
-  await cmdStudioLauncher(rest, '[forge watch]');
 }
 
 function cmdRequeue(rest: string[]): void {
