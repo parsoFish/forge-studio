@@ -21,7 +21,7 @@ source_dates:
 
 ## The problem
 
-If `forge watch` picks an OS-assigned port (port=0) every run, the
+If `forge studio` picks an OS-assigned port (port=0) every run, the
 operator has to:
 
 1. Read the chosen URL from stdout
@@ -53,7 +53,7 @@ The risk: killing some unrelated process that happens to be on 4123 or
 1. The default ports are deliberately outside common dev-server
    defaults so collisions are rare.
 2. The operator gets a clear log line:
-   `[forge watch] bridge: taking over port 4123 from 2 existing process(es)`.
+   `[forge studio] bridge: taking over port 4123 from 2 existing process(es)`.
 3. The override flags `--bridge-port` / `--ui-port` route around any
    conflict the operator wants to preserve.
 

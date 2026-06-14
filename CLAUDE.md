@@ -81,9 +81,9 @@ forge/
 ├── brain/              # the wiki (Karpathy three-layer)
 ├── skills/             # Claude Code skills (the agent surface)
 ├── loops/              # agentic loop runtimes (default: Ralph)
-├── orchestrator/       # scheduler, cycle runner, logging (hot path)
+├── orchestrator/       # scheduler, cycle runner, flow engine, KB backends, logging (hot path)
 ├── cli/                # operator utilities + forge subcommand handlers (post-2026-05-24 Move 1)
-├── forge-ui/           # Next.js operator UI; launched by `forge watch` (M2-A/B/C; see CWC DOM convention below)
+├── forge-ui/           # Next.js operator UI; launched by `forge studio` (see CWC DOM convention below)
 ├── _queue/             # initiative queue (gitignored)
 ├── _logs/              # JSONL event logs (gitignored)
 └── projects/           # managed projects (gitignored)
@@ -121,7 +121,7 @@ Where to look for as-built detail:
 - Cycle archives: [`brain/_raw/cycles/`](./brain/_raw/cycles/).
 - Forge-level patterns: [`brain/cycles/themes/`](./brain/cycles/themes/).
 - Per-project patterns: [`brain/projects/<project>/themes/`](./brain/projects/).
-- Operator UI: [`forge-ui/`](./forge-ui/) (launched by `forge watch`).
+- Operator UI: [`forge-ui/`](./forge-ui/) (launched by `forge studio`).
 
 ## forge-ui DOM-as-metrics convention
 

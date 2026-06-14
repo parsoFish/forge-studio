@@ -88,6 +88,10 @@ a structured ready signal (a `forge-studio-ready {bridgeUrl,uiUrl}` line / a
 port-takeover (`lsof`/`ss`/`fuser`) is retained. `forge watch` stays as a
 deprecated alias for one milestone.
 
+> **Amended (M8-E):** that one-milestone grace is over — the `forge watch`
+> alias was removed. `forge studio` is the sole launcher; the bridge is the
+> operator API.
+
 ## Consequences
 
 - **One product to reason about, operate, and secure.** A single run view, a

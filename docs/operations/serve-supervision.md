@@ -26,11 +26,11 @@ So the supervision contract is split cleanly:
 
 ## The liveness surface (Feature #8)
 
-The bridge (started by `forge watch`) exposes `GET /api/liveness`, which reports
+The bridge (started by `forge studio`) exposes `GET /api/liveness`, which reports
 the **max heartbeat age across in-flight cycles** (read from the
 `_queue/in-flight/<id>.md.heartbeat` mtimes the scheduler writes). When that age
 exceeds a **generous** multiple of `staleHeartbeatMs` (6× the 5-minute default =
-30 minutes), the dashboard:
+30 minutes), the Studio UI:
 
 - flips the page-level `data-conn-state` to `daemon-stalled` (the bridge is
   still reachable — this is distinct from `reconnecting` / `no-bridge`), and
@@ -38,7 +38,7 @@ exceeds a **generous** multiple of `staleHeartbeatMs` (6× the 5-minute default 
   check the supervisor.
 
 This is a *surface*, not a *fix*. forge-ui never tries to restart the daemon —
-it tells the human (or whatever is watching the dashboard) that the supervisor
+it tells the human (or whatever is watching the Studio UI) that the supervisor
 should.
 
 ## Recommended supervisor configs

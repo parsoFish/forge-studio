@@ -42,11 +42,12 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
     and **reflection fires**.
   - **Not merged / send-back-cap-exhausted** → manifest moves
     `in-flight/ → ready-for-review/`, flagged; reflection is skipped.
-- **Send-back:** the operator works the **`/review/<cycleId>`** UI screen
-  (the sole review human-moment, [ADR 023](../decisions/023-ui-sole-operator-surface.md))
-  and either approves or sends back ACs; send-back writes a
-  `verdict-response.md` that review-Ralph reads into `fix_plan.md` the next
-  iteration and re-prepares. Cap: 2 rounds.
+- **Send-back:** the operator works the **`/artifact?...&mode=review`** Studio
+  surface (the sole review human-moment — ADR 031 folds `/review` + `/reflect`
+  into the unified `/artifact` viewer; the old `/review/<cycleId>` route
+  redirects there). The operator either approves or sends back ACs; send-back
+  writes a `verdict-response.md` that review-Ralph reads into `fix_plan.md`
+  the next iteration and re-prepares. Cap: 2 rounds.
 
 ## Skills
 
@@ -104,7 +105,4 @@ merged cycles.
   back into the loop WITHOUT consuming a human verdict round
   (`detectFalselyCompleteWorkItems`). Surfaced as
   `reviewer.integrity-autosendback` events.
-- Operability: the scheduler now runs as a managed daemon
-  (`forge start/stop/status/pause/resume`, `orchestrator/daemon.ts`) — a
-  closed shell no longer kills it (root cause of the strand that
-  motivated this pass).
+- Operability: the scheduler runs as a managed daemon (`orchestrator/daemon.ts`). The lifecycle commands (`start/stop/status/pause/resume`) were retired from the CLI in M7 (ADR 031); the bridge `/api/scheduler/*` routes are the operator API. `forge studio` is the canonical launcher; `forge watch` was removed in M8-E.

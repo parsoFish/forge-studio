@@ -1,7 +1,8 @@
 # Phase: Architect
 
-> *Human-in-the-loop.* Turns ideas into initiatives via the in-UI architect
-> runner (ADR 020).
+> *Human-in-the-loop.* Turns ideas into initiatives natively inside Forge
+> Studio — the architect interview and PLAN gate are Studio surfaces, not
+> standalone moment-screens (ADR 031, ADR 020).
 
 > **Intentionally out-of-cycle — a designed property, not a gap.** The
 > architect is **not** wired into `runCycle` and is never auto-invoked.
@@ -16,7 +17,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 ## Inputs
 
-- The operator's free-form idea / brief / pain point (entered via the forge UI).
+- The operator's free-form idea / brief / pain point (entered via the Studio library "new run / drop an idea" entry).
 - Brain 2 (cycles) — `brain/cycles/themes/` patterns + antipatterns (read at turn start).
 - Brain 3 (project) — `projects/<name>/brain/profile.md` + `projects/<name>/brain/themes/` (read at turn start).
 - If continuing a prior `revise` round: `<projectRoot>/_architect/<session-id>/feedback.md`.
@@ -24,8 +25,9 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 ## Outputs
 
 - **`<projectRoot>/_architect/<session-id>/PLAN.md`** + sibling **`PLAN.html`** —
-  the operator's review artefact. PLAN.html is the rich viewer; PLAN.md is the
-  parse target for the runner.
+  the operator's review artefact. PLAN.html is rendered through the unified
+  `/artifact` viewer (via `PlanRenderer` + `PlanGate`); PLAN.md is the parse
+  target for the runner.
 - **`<projectRoot>/_architect/<session-id>/manifests/INIT-*.md`** — draft
   manifests, NOT yet in `_queue/pending/`. Promoted only on operator approve.
 - On approve: one or more **`_queue/pending/<initiative-id>.md`** manifests
@@ -74,11 +76,13 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 ## Status
 
-All phase infrastructure is live as of 2026-06-02:
+All phase infrastructure is live:
 - [x] In-UI architect runner (`orchestrator/architect-runner.ts`) — ADR 020.
+- [x] Architect interview + PLAN gate rebuilt natively inside Studio (ADR 031): interview panel → PLAN gate via the unified `/artifact` viewer. The `/architect/[sessionId]` standalone route was replaced; `/review` and `/reflect` also redirect to `/artifact`.
 - [x] LLM Council critic chain — `skills/architect-llm-council/council.ts`.
-- [x] Rich PLAN.html viewer — `cli/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels).
+- [x] Rich PLAN.html viewer — `cli/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels), embedded via `PlanRenderer` + `PlanGate` in the artifact viewer.
 - [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
 - [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.
 - [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.
 - [x] Feature list removed from manifests — ARCH-3 resolved: architect emits initiatives with GWT ACs in the body; PM decomposes ACs directly into WIs (2026-06-04).
+- [x] `forge studio` is the canonical launcher (`forge watch` alias was removed in M8-E — ADR 031).

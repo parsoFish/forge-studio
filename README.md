@@ -1,123 +1,40 @@
-# Forge
+# Forge Studio
 
-> Idea machine for one human across many side projects.
+> The steerable composition layer for autonomous software delivery — for one operator running a portfolio of projects.
 
-Forge is an autonomous multi-agent system designed around a single insight: **most of the time spent on a side project is implementation, not ideation.** The human supplies direction (roadmap, review, feedback). Agents do the rest, unattended, between the human's interactions.
+Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served.
 
-This is **forge v2** — a fresh implementation that learns from v1 (at `~/sideProjects/`) and explicitly delegates to battle-tested community tooling rather than re-inventing it.
+Three things make it one product rather than three:
+
+- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → unifier → review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
+- **Code-enforced gates.** The three human moments (architect, review, reflect) are structural, not advisory. There is **no auto-approve code path anywhere** — forge cannot accidentally skip you, because the gate lives in the code, not in a prompt. These are gates you can *read*, not just trust.
+- **A compounding engineering brain.** Every cycle's reflection is distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planners query *before* designing the next initiative. Memory tools cache for runtime recall; the brain compounds — it tunes *how the next plan is designed*, across every project.
+
+Full competitive analysis and the strategic frame: [`docs/forge-studio-market-and-differentiation.md`](./docs/forge-studio-market-and-differentiation.md).
 
 ## See it run
 
-The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + plan gate → PM decomposes the initiative's acceptance criteria into work items → developer loop (respecting dependencies) → unifier → an *interactive* review demo → reflection — driven entirely through the operator UI under [`forge-ui/`](./forge-ui). It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`forge-ui/.demo-shots/e2e/index.html`](./forge-ui/.demo-shots/e2e)).
+The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → unifier → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`forge-ui/.demo-shots/e2e/index.html`](./forge-ui/.demo-shots/e2e)).
 
-https://github.com/parsoFish/forge-v2/releases/download/v0.1.0/cycle.mp4
+## The moat
 
-(An early **v0.1.0** recording of one full cycle, auto-embedded inline by GitHub. The operator journey above is the current, continuously-regenerated demonstration and reflects the refined pipeline — initiatives decomposed straight into work items, with the interactive review surface.)
+There are two layers to the differentiation, and keeping them distinct matters.
 
-## The six phases
+**Today — the intersection (§1).** Forge is the only system that combines a *visually editable* autonomous-SWE pipeline, *structurally code-enforced* human gates, and a *compounding, human-navigable engineering knowledge graph wired into planning*, for a single operator running a portfolio. Each capability has a competitor; the combination has none — and Forge is **the only open product at that intersection.** Open matters here for a specific reason: when the gate is in the code and the code is yours to read, "won't skip the human" is a property you can *verify*, not a vendor promise.
 
-```
-Brain ──► Architect ──► Project Manager ──► Developer Loop ──► Review Loop ──► Reflection
-                                                                                      │
-                                                                                      ▼
-                                                                                    Brain (ingest)
-```
+**Over time — modularity-as-subsumption (§3).** Forge's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. M8 made three seams real and used in production, each with a second implementation behind it:
 
-- **Brain** — Karpathy-style three-layer LLM wiki, queryable as a Claude skill, rendered in Obsidian.
-- **Architect** *(human-in-the-loop)* — Claude skill that turns ideas + roadmaps into initiatives.
-- **Project Manager** *(unattended)* — breaks initiatives into spec-driven work items.
-- **Developer Loop** *(unattended)* — Ralph loop pattern over the Claude Agent SDK; runs until quality gates pass.
-- **Review Loop** *(human-in-the-loop)* — agent prepares a working demo + PR; human approves or sends back.
-- **Reflection** *(human-in-the-loop)* — agent + user retrospect; outputs go into the brain.
+| Seam | Live | Second implementation (seam-proven) | ADR |
+|---|---|---|---|
+| Runtime / model | Claude Agent SDK | Gemini, Aider adapters | [029](./docs/decisions/029-runtime-adapters.md) |
+| Flow engine | node-executor registry (the old `classifyNode` switch is gone) | any node type as a data-table entry | [028](./docs/decisions/028-flow-engine.md) |
+| Knowledge backend | filesystem brain | Zep `KbBackend` | [027](./docs/decisions/027-studio-object-model.md) |
 
-The architecture is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md). The non-negotiable principles are in [`PRINCIPLES.md`](./PRINCIPLES.md). Every load-bearing decision has an ADR in [`docs/decisions/`](./docs/decisions/).
+A standing test (`orchestrator/subsumption-proof.test.ts`) asserts every seam resolves a second implementation simultaneously — "competitors → components" made mechanically true, not just asserted.
 
-## The three human moments — how *you* drive a cycle
-
-Forge runs unattended **between** exactly three deliberate human
-interaction points. Everything else (PM → developer-loop → unifier)
-is autonomous. Each human moment is a **UI screen** in the forge UI
-([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md)) — the
-UI is the sole operator surface; slash commands are thin invokers at most.
-
-This is the exact back-and-forth. A full cycle is: **you architect → forge
-runs → you review → forge merges-closes → you reflect.**
-
-### 1. Architect — forge UI dashboard → `/architect/<sid>`  (you start here)
-
-- **When:** any time you have a new direction for a project. This is
-  *out-of-cycle* — it is not part of `runCycle`; you initiate it.
-- **You do:** open the forge UI dashboard, enter a new idea, and work
-  through the interview + PLAN gate on the `/architect/<sid>` screen.
-  The skill brain-queries first, then proposes one or more right-sized
-  initiative manifests. Iterate until the scope/sizing is right, then confirm.
-- **Forge produces:** `_queue/pending/INIT-<date>-<slug>.md`. Then
-  **stop** — you do not run a cycle; the scheduler picks the pending
-  manifest up on its own.
-- **Then forge runs unattended:** scheduler claims it → Project Manager →
-  Developer Loop → unifier prepares a demo + PR draft → opens a
-  GitHub PR with the **demo committed and embedded in the PR itself** →
-  **stops** and notifies you (`review-ready`). It never auto-merges.
-
-### 2. Review — `/review/<cycleId>` UI screen
-
-The cycle has paused with an open PR (manifest in
-`_queue/ready-for-review/`). Open the **`/review/<cycleId>`** screen in
-the forge UI — the structured demo and PR are surfaced there. Pick **one**:
-
-- **Approve → merge in GitHub (the normal path).** Click *Merge* on the
-  PR. That is the *only* merge path — forge never merges for you. On the
-  next cycle trigger, **closure** confirms `gh pr view == MERGED`,
-  fast-forwards local `main`, prunes the branch, and **fires
-  reflection**. Nothing else to do for approval.
-- **Send back for changes.** Write a send-back verdict via the UI (or
-  directly into `_queue/in-flight/<id>.verdict-response.md` with
-  `verdict: send-back` and `- GIVEN … WHEN … THEN …` acceptance
-  criteria). The unifier reads send-back ACs from `fix_plan.md` on the
-  next iteration. Cap: **2 send-back rounds** (1 prep + ≤2).
-- **Approve without merging (rare).** `verdict: approve` only releases
-  the review gate; it does **not** merge. You still merge in GitHub.
-
-> **Iterating via PR comments** is a fully supported, low-overhead loop
-> when you are engaged: review → comment → agent addresses → push →
-> re-review, all on the PR. It works *because the demo lives in the PR*.
-> Pattern of record:
-> [`brain/cycles/themes/pr-as-sole-review-window.md`](./brain/cycles/themes/pr-as-sole-review-window.md).
-
-### 3. Reflect — `/reflect/<cycleId>` UI screen  (after the merge)
-
-- **When:** after the merge is confirmed, the reflector runs and may
-  write `_logs/<id>/user-questions.md` (≤4 questions).
-- **You do:** open the **`/reflect/<cycleId>`** screen, skim
-  `_logs/<id>/retro.md` and the questions, then write
-  `_logs/<id>/user-feedback.md` — answer each question plus any
-  free-form notes. The reflector distils it into the brain (themes +
-  retro + cycle archive + `brain/log.md`).
-- **If you skip it:** reflection still runs and records *"no feedback
-  this cycle"* — so writing the file is how your voice enters the brain.
-  Write it *before* the reflector runs to land in that cycle.
-
-| Moment | UI screen | File handoff |
-|---|---|---|
-| Architect | `/architect/<sid>` | writes `_queue/pending/INIT-*.md` |
-| Review | `/review/<cycleId>` | `…verdict-response.md` (send-back/approve), or GitHub merge |
-| Reflect | `/reflect/<cycleId>` | writes `_logs/<id>/user-feedback.md` |
-
-The **authoritative contract** for each moment is its skill:
-architect → [`skills/architect/SKILL.md`](./skills/architect/SKILL.md);
-review → [`skills/developer-unifier/SKILL.md`](./skills/developer-unifier/SKILL.md)
-(the reviewer folded into the unifier + `cycle.ts`), with the demo contract in
-[`skills/demo/SKILL.md`](./skills/demo/SKILL.md);
-reflect → [`skills/reflector/SKILL.md`](./skills/reflector/SKILL.md).
-Design of record: [`brain/cycles/themes/human-interaction-via-own-session.md`](./brain/cycles/themes/human-interaction-via-own-session.md);
-review/closure mechanics in [`docs/phases/review-loop.md`](./docs/phases/review-loop.md).
+**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under a **steerable, gated, knowledge-compounding** pipeline for a **portfolio** operator. The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
 
 ## Quickstart
-
-> **Status:** all six phases implemented, benchmarked, and closed; the
-> brain is seeded; the full cycle runs end-to-end (architect → PM →
-> developer-loop → review-Ralph → operator merge → closure → reflection).
-> See `docs/phases/` and [`CLAUDE.md`](./CLAUDE.md) for per-phase status.
 
 ```bash
 # Prerequisites
@@ -125,62 +42,59 @@ node --version           # Node 20+
 gh --version             # GitHub CLI
 git --version            # 2.20+ (for git worktree)
 
-# Install
-cd ~/forge
+# Install + build + test
 npm install
 npm run build
-npm link                 # puts the `forge` command on PATH
-                         # (declared in package.json `bin` → bin/forge.mjs;
-                         #  TS runs directly, no build needed for the CLI)
+npm test                 # ~1172 tests
+npm link                 # puts the `forge` command on PATH (bin/forge.mjs)
 
-# CLI surface (see `forge --help` for the full list)
-forge --help
-forge serve [--once]              # run the unattended scheduler
-forge cycle <initiative-id>       # run one initiative end-to-end (foreground)
-forge enqueue <project> <spec>    # add an initiative to the queue
-forge status [--watch]            # queue counts + in-flight initiatives
-forge preflight <project>         # check the C1–C6 (+BRAIN) project contract
-forge review <id>                 # print the open verdict prompt / recovery
-forge report <cycle-id>           # human-facing cycle report
-forge metrics [<cycle-id>]        # cost / iterations / duration
-forge brain index [--scope <p>]   # emit brain navigation indexes
+# Launch Forge Studio — the operator UI is the whole product
+forge studio             # health-probes the bridge + UI, then opens the browser
+                         # (--bridge-only, --no-open, --bridge-port, --ui-port, --ready-file)
 
-# The brain is queried via the `brain-query` Claude skill, not a CLI verb.
+# Runtime spine (the bridge/UI is the operator API; the CLI is recovery + CI)
+forge serve [--once]     # run the unattended scheduler in the foreground
+forge cycle <init-id>    # run one initiative end-to-end (foreground)
+forge enqueue <project> <spec>   # drop an initiative into the queue
+forge preflight <project>        # check the forge↔project contract
+forge studio lint        # validate studio definitions (agents/flows/catalog/kb)
+forge brain lint         # structural integrity checks on the brain
+forge --help             # full surface
+
+# Verification gates
+npm run ui:journey       # end-to-end operator journey (UI regression + demo video)
+npm run verify:cycle     # real cycle against a managed project (real-money; operator-gated)
 ```
+
+## The three human moments
+
+Forge runs unattended **between** exactly three deliberate human interaction points; everything else is autonomous. All three render natively in Forge Studio ([ADR 031](./docs/decisions/031-studio-consolidation.md)): the architect interview + PLAN gate, and the review/reflect moments through the unified `/artifact` viewer ([ADR 020](./docs/decisions/020-architect-in-ui.md), [ADR 021](./docs/decisions/021-local-review-and-unified-demo.md)).
+
+| Moment | What you do | Forge produces |
+|---|---|---|
+| **Architect** | drop an idea → interview → approve the PLAN | a queued initiative; the scheduler picks it up |
+| **Review** | inspect the demo-embedded PR → approve (merge in GitHub) or send back | a self-contained PR; closure fires reflection on merge |
+| **Reflect** | answer the reflector's questions | brain themes + retro + cycle archive |
 
 ## Repository layout
 
 | Path | What lives here |
 |---|---|
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Narrative architecture extracted from the forge2.0 diagram |
-| [`PRINCIPLES.md`](./PRINCIPLES.md) | The five user-stated principles that gate every decision |
-| [`CLAUDE.md`](./CLAUDE.md) | Project instructions for Claude Code sessions |
-| [`docs/`](./docs/) | Decisions (ADRs), phase docs, seeding plan, architecture diagram |
-| [`brain/`](./brain/) | The wiki — seeded (forge-level themes + per-project sub-wikis); category-indexed, `brain-query`-able |
-| [`skills/`](./skills/) | Claude Code skills (one per agent role); the agent surface |
-| [`loops/`](./loops/) | Agentic loop runtimes (default: Ralph over Claude Agent SDK) |
-| [`orchestrator/`](./orchestrator/) | Minimal coordination — scheduler, cycle runner, logging |
-| [`_queue/`](./_queue/) | File-based initiative queue (gitignored) |
-| [`_logs/`](./_logs/) | JSONL event logs (gitignored) |
-| [`projects/`](./projects/) | Managed projects auto-discovered (gitignored) |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Narrative architecture |
+| [`PRINCIPLES.md`](./PRINCIPLES.md) | The five principles that gate every decision |
+| [`docs/decisions/`](./docs/decisions/) | ADRs for every load-bearing choice |
+| [`studio/`](./studio/) | Studio definitions as data — flows, agents, catalog, KBs |
+| [`forge-ui/`](./forge-ui/) | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
+| [`loops/`](./loops/) | Agentic loop runtimes + the runtime-adapter seam (`loops/_adapters/`) |
+| [`orchestrator/`](./orchestrator/) | Scheduler, cycle runner, flow engine, KB backends, logging |
+| [`skills/`](./skills/) | Claude Code skills — the agent surface |
+| [`brain/`](./brain/) | The compounding engineering wiki (three scoped graphs) |
+| [`cli/`](./cli/) | The runtime spine + the operator bridge |
 
-## Why a fresh repo (not a refactor of v1)
+## Extending Forge
 
-V1 grew rich infrastructure: a job queue, a worker pool, a resource controller, adaptive concurrency, process isolation. Each was a reasonable response to a real problem at the time. Together they made it onerous to change the *shape* of the system. V2 keeps v1's mental models (TDD, dependency-ordered work items, orchestrator-verified quality gates, the wiki-as-brain) and replaces v1's infrastructure with battle-tested community tools (Claude Agent SDK, Ralph loop pattern, gh CLI, git worktrees, Claude Code skills).
-
-## Status
-
-- ✅ Scaffold + all six phases implemented, benchmarked, and closed
-- ✅ Brain seeded (Pass A general best-practice + Pass B v1 wiki / project
-  state) and kept current by the reflection phase
-- ✅ Full cycle runs end-to-end: architect → PM → developer-loop →
-  review-Ralph (demo-embedded PR) → operator merge → closure → reflection
-- ✅ Operator-review reliability hardened (the PR is the self-contained review window)
-- ▶ Ongoing: real project arcs (e.g. trafficGame) drive further hardening;
-  per-phase status in [`CLAUDE.md`](./CLAUDE.md) and `docs/phases/`
+Forge grows by plugging components into its seams, not by forking the core. To add a runtime/model, implement `RuntimeAdapter` in `loops/_adapters/<sdk>/index.ts`, pass the conformance suite (`loops/_adapters/conformance.ts`), register it in `loops/_adapters/registry.ts`, and add it to `studio/catalog.yaml`. KB backends ([ADR 027](./docs/decisions/027-studio-object-model.md)) and flow node executors ([ADR 028](./docs/decisions/028-flow-engine.md)) follow the same implement-the-interface-then-register pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and the per-seam extension recipes.
 
 ## License
 
-[GNU Affero General Public License v3.0 or later](./LICENSE) (AGPL-3.0-or-later).
-Network use is distribution: anyone who runs a modified forge as a service must
-make the modified source available to its users.
+[GNU Affero General Public License v3.0 or later](./LICENSE) (AGPL-3.0-or-later). Network use is distribution: anyone who runs a modified Forge as a service must make the modified source available to its users.

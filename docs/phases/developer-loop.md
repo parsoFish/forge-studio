@@ -28,7 +28,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 - [`loops/ralph/runner.ts`](../../loops/ralph/runner.ts) — driver.
 - [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) — quality-gates-pass | iteration-budget. (Wedged-detection was removed in Tier 2, 2026-05-25; the iteration budget is now the only no-progress backstop.)
-- [`loops/_adapters/`](../../loops/_adapters/) — placeholders for hermes/aider/openhands as alternative loop runtimes.
+- [`loops/_adapters/`](../../loops/_adapters/) — RuntimeAdapter registry (ADR 029). The Claude adapter (`loops/_adapters/claude/`) is the reference implementation; Gemini and Aider adapters shipped in M8 as the second implementations (both `available: false` until provisioned). The flow engine's dev node calls `getAdapter(sdkId).createAgent(...)` — never `createClaudeAgent` directly. Adding a new runtime is one file + registry row, no orchestrator edit.
 
 ## Success signals
 
@@ -58,7 +58,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## TODO (post-scaffold)
 
-- [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent.
+- [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent. The flow engine drives the dev loop via the RuntimeAdapter registry (`getAdapter(sdkId)`) — M8, ADR 029.
 - [ ] ~~Implement wedged-detector (no-progress heuristic).~~ Removed in Tier 2 (2026-05-25) — the iteration budget is the only no-progress backstop; no dedicated wedged-detector exists.
 - [x] Implement quality-gates-pass stop condition with per-fixture commands — done. `LoopInput.qualityGate` is now injectable; the (since-removed) bench harness wired per-fixture commands (pytest / bats / node:test / grep). Live cycle still defaults to `npm test --silent` until per-project quality-gate config lands.
 - [x] Per-iteration commit discipline + JSONL event emission — done. `orchestrator/cycle.ts:runDeveloperLoop` walks WIs in topological order, emits `ralph.start` / `ralph.end` per WI plus a phase-level summary.
@@ -116,10 +116,19 @@ install the appropriate one and edit the project-specific commands.
 | `dev-loop-unifier-demo-failed` | `demo_runs_clean` fails OR `pr_self_contained` fails | Check `.forge/project.json` `demo.command`; verify `preview_command` for `shape: "browser"` |
 | `dev-loop-unifier-branch-divergence` | `assertLocalRemoteSynced` throws at unifier close | Resolve manually; remote moved during the cycle |
 
-### Unifier sub-phase (S4)
+### Unifier node (independently-dispatchable, M8-0)
 
-After the last per-WI Ralph completes, the developer-loop invokes one more
-Ralph — the **unifier** — with a distinct brief:
+The unifier is now a **real, independently-dispatchable flow node** — not a
+tail inside `runDeveloperLoop` (ADR-028 M8-0 amendment). `runDeveloperLoop`
+is per-WI only; the unifier tail was extracted into `runUnifierPhase`
+(`orchestrator/phases/developer-loop.ts`) and is executed by
+`flow-runner.ts:execUnifier`. The unifier node has its own wedge detector,
+its own `unifier-phase.start` boundary event (which lights the unifier hex in
+the UI), and is the resume target for `resumeFrom: 'unifier'` (the per-WI dev
+node self-no-ops when resuming from unifier, but still emits its
+phase-boundary events so the dev hex is not stuck `active`).
+
+The unifier Ralph is invoked with a distinct brief:
 
 > Treat the initiative as one PR. Prove every AC against branch tip.
 > Author the demo. Author the PR body. Refactor incidentally if it unifies

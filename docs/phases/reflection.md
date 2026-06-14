@@ -25,7 +25,7 @@ All four feed the brain by direct file writes, which is what makes forge improve
 
 - `_logs/<cycle-id>/retro.md` — three sections: `## Self-reflection`, `## User questions`, `## User feedback`.
 - `_logs/<cycle-id>/user-questions.md` — structured stage-2 questions (agent-written; always written unless zero deliverables).
-- `_logs/<cycle-id>/user-questions.json` — AskUserQuestion-shaped array (derived by the orchestrator post-exit from `user-questions.md`); consumed by the in-UI `/reflect` screen.
+- `_logs/<cycle-id>/user-questions.json` — AskUserQuestion-shaped array (derived by the orchestrator post-exit from `user-questions.md`); consumed by the Studio `/artifact` viewer (the old `/reflect` route redirects there — ADR 031).
 - New theme pages in `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md` — one per significant pattern, each with required frontmatter and a `## Sources` section listing ≥ 1 evidence path.
 - New forge-machinery theme pages in `brain/cycles/themes/<YYYY-MM-DD>-<slug>.md` — for forge-wide lessons (orchestrator, gates, cycle mechanics).
 - `brain/cycles/_raw/<cycle-id>.md` — cycle log archived with full provenance frontmatter.
@@ -53,7 +53,7 @@ The reflector does NOT move the manifest to `_queue/done/`. The reviewer already
 - **Reflection bypass** — cycle marked done without retro. Detected via `reflection_status` in `CycleResult` telemetry; not gated (log-and-continue).
 - **Brain growth without curation** — `forge brain lint` enforces a subset of `brain/LINT.md` rules (frontmatter present, valid `category`, at least one resolvable evidence link).
 - **Themes labelled `pattern` despite send-backs** — the skill contract requires ≥ 1 `category: antipattern` theme when the events.jsonl contains any wedge or send-back signal.
-- **Missing user questions** — the UI `/reflect` screen shows nothing if `user-questions.json` is absent. The orchestrator now derives it post-exit from `user-questions.md`.
+- **Missing user questions** — the Studio `/artifact` viewer (formerly `/reflect`) shows nothing if `user-questions.json` is absent. The orchestrator now derives it post-exit from `user-questions.md`.
 
 ## TODO (post-scaffold)
 
