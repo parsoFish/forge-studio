@@ -207,14 +207,33 @@ change, so this is a low-risk confirmation that the reflector still closes the c
 | M5-5 | Reflection → KB links | M4-3 | reflector lessons carry `target:<kb-node-slug>`; ReflectionDoc pipeline; viewer KB badge resolves to `/knowledge?id=<target>` |
 | M5-6 | e2e Act VIII: browse-KB + pin-guidance | M5-2, M5-3 | 56 frames 0 failures; 104 nodes/200 edges live; guidance pinned + cleanup confirmed; brain lint 0 errors post-journey |
 
-## M6 — Multi-runtime + model range (ADR-029)
+## M6 — Multi-runtime + model range (ADR-029) ✅ COMPLETE 2026-06-14 (verify:cycle operator-gated)
+
+All five WIs landed on `feat/studio-m6` (1084 tests, build clean, brain lint 0 errors, studio lint 0 errors,
+`ui:journey` 35 beats 0 failures all green). Exit criteria met: RuntimeAdapter interface defined +
+Claude reference adapter extracted (behaviour-identical); adapter registry + dependency-free example
+adapter proves the conformance contract without a new dep; `strategy: range` routing live across
+Claude tiers (haiku→sonnet→opus, cheapest-first, escalate on gate failure); registry-driven SDK
+picker (codex/gemini disabled — no adapter registered; claude selectable); Act IX e2e beat proves
+range mode authors `strategy: range` in the YAML preview without saving (seed SKILL.md immutable).
+
+**M6 adapter framework scope (operator-directed 2026-06-14):** The deliverable is the **framework**,
+not a second runtime. A real Codex/Gemini/local adapter is the documented later drop-in:
+implement `RuntimeAdapter` in `loops/_adapters/<sdk>/`, register it, install the dep — this is an
+**ask-first event** at that time. No new npm dep was added; the example adapter is an in-repo mock.
+
+**Remaining gate:** operator-authorized `verify:cycle` (routine tier). The adapter extraction
+(M6-1) is behaviour-identical — `createClaudeAgent` is wrapped, not changed; the Claude path is
+unchanged behind the new adapter seam. The full unit suite guards the wrap; verify:cycle confirms
+a real cycle still runs through the Claude adapter as before.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
-| M6-1 | Adapter seam extraction | M3-2 | interface from `createClaudeAgent`; `loops/_adapters/claude/` behaviour-identical (verify:cycle routine guards) |
-| M6-2 | Second adapter | M6-1 | operator-chosen SDK; conformance suite gates; **ask-first dep** |
-| M6-3 | `strategy: range` router | M6-1 | cheapest-capable-first, escalate on gate failure; cost attribution unchanged |
-| M6-4 | UI enablement | M6-2, M6-3 | SDK picker unlocks per installed adapter |
+| M6-1 | Adapter seam extraction | M3-2 | `RuntimeAdapter` interface in `loops/_adapters/types.ts`; `loops/_adapters/claude/index.ts` thin wrapper around `createClaudeAgent`; behaviour-identical (existing suite unchanged); full spine green |
+| M6-2 | Registry + conformance + example adapter | M6-1 | `loops/_adapters/registry.ts` (getAdapter/listAdapters/registeredSdkIds); `loops/_adapters/example/index.ts` dependency-free mock adapter; `loops/_adapters/conformance.ts` contract suite proven against both claude (mock queryFn) + example; TDD green; no new dep |
+| M6-3 | `strategy: range` router | M6-1 | `resolveRangeModel` in `orchestrator/model-range.ts` (cheapest-capable-first by costIn+costOut, escalate on gate failure); `deriveAgentSpec` range-gating throw removed; range spec resolves to cheapest tier; fixed unchanged; TDD green |
+| M6-4 | Registry-driven SDK picker | M6-2, M6-3 | `GET /api/studio/adapters` exposes `registeredSdkIds`; RuntimePicker `sdkAvailable` driven by registered adapters; codex/gemini disabled; range strategy toggle + chips functional (stored + routed M6-3); Next.js build green |
+| M6-5 | e2e Act IX + work-items tick | M6-2..4 | Act IX beat 34 (range strategy): /agents/project-manager → SDK picker shows claude selectable/codex+gemini disabled; range toggle → `data-strategy="range"` flips; ≥1 chip selected → `data-model-count ≥1`; YAML preview contains `strategy: range`; 35 beats 0 failures; work-items.md ticked; **remaining gate: operator-authorized verify:cycle** |
 
 ---
 
@@ -222,4 +241,4 @@ change, so this is a low-risk confirmation that the reflector still closes the c
 
 - M2-7 / M3-7 / M4-5 / M6: `npm run verify:cycle` (real $) — queued for the
   operator at each milestone close.
-- M6-2: new external dependency — ask-first.
+- M6 next real SDK: new external dependency — ask-first.
