@@ -3,6 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-05-29
 - **Supersedes / amends:** amends ADR 003 (all agents are skills) and ADR 011 (unattended scheduler); supersedes the architect half of the brain decision theme [`human-interaction-via-own-session`](../../brain/forge-dev/themes/human-interaction-via-own-session.md) and the S2A "out-of-cycle, hand-run architect" position. Builds on the Phase A–C UI work on branch `feat/ui-live-telemetry`.
+- **Update 2026-06-14 ([ADR 031](./031-studio-consolidation.md)):** the dedicated `/architect/[sessionId]` moment-screen is retired — the interview + PLAN gate are rebuilt as native Forge Studio surfaces (the PLAN gate renders through the unified `/artifact` viewer). The file-checkpointed runner + bridge endpoints here are unchanged; only the screen they drive moves into Studio.
 
 ## Context
 

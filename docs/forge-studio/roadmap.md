@@ -262,6 +262,48 @@ evidence); verify:cycle both tiers green.
 
 ---
 
+## M7 — Consolidation + productionisation ([ADR 031](../decisions/031-studio-consolidation.md))
+
+**Goal:** make Forge Studio the **one product**. M0–M6 landed the new surfaces
+alongside the ones they replace (strangler); M7 rips out the legacy and
+productionises the launch. Not a feature build except the architect rebuild
+(operator-chosen).
+
+Workstreams (dependency-ordered):
+
+1. **ADR-031 (gate)** — Studio sole surface; `/dashboard` deleted; architect
+   rebuilt in Studio; CLI full removal; `forge studio` launcher. Amends 023,
+   notes 020/021.
+2. **Harness → Studio selectors (precedes deletion)** — e2e-journey beats 0–21
+   re-homed from `/dashboard` to the `/flows/forge-cycle` monitor; green on
+   unmodified `main` proves the Studio monitor has parity before anything is cut.
+   Cross-project `[data-project-group]` assertion dropped (decision 2).
+3. **Delete `/dashboard` + the dashboard-exclusive component/lib cluster** —
+   `AgentGraphCanvas`/`HexDetailDrawer`/`ActivityPanel`/`FileHeatmap`/
+   `ArchitectLauncher`/`SchedulerBanner` + cycles-tab + dead lib; sever the
+   `hex-detail`→`bridge-client` type first. Keep `phases`/`dep-layout`/
+   `status-colors` (Studio-shared).
+4. **Fold `/review` + `/reflect` into `/artifact`** — repoint the live Studio
+   "Open gate →" links; redirect/delete the wrappers.
+5. **Rebuild the architect interview + PLAN gate inside Studio** — native
+   surfaces replacing `/architect/[sessionId]`; preserve the P1–P4
+   architect-observability assertions; bridge unchanged.
+6. **CLI full removal** — migrate `verify:cycle` onto the bridge verdict POST;
+   bridge calls daemon helpers directly (stop spawning `forge start`); delete
+   `start`/`stop`/`pause`/`resume`/`status`/`review --approve`, internalise
+   `architect run`. Keep the runtime spine.
+7. **`forge studio` canonical launcher** — deterministic health-probe readiness +
+   structured ready signal; `forge watch` a one-milestone deprecated alias; the
+   harness `startWatch` reads the signal instead of scraping stdout.
+
+**Exit criteria:** `/dashboard` + the dual CLI gone; Studio is the only run view +
+operator API; `forge studio` brings up a ready UI deterministically; full spine
+green (`npm test` + build + `forge brain lint` + `forge studio lint` +
+`npm run ui:journey`) and `verify:cycle` re-run (the approve/execution path is
+touched in M7-5).
+
+---
+
 ## Cross-cutting tracks (run alongside every milestone)
 
 - **Harness evolution:** e2e-journey gains acts the same PR that lands a

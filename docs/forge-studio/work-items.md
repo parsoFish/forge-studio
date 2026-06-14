@@ -242,8 +242,29 @@ is the documented corpus non-determinism, orthogonal to the adapter wrapper. The
 
 ---
 
+## M7 — Consolidation + productionisation (ADR-031) — IN PROGRESS 2026-06-14
+
+Make Forge Studio the one product: rip out the pre-Studio `/dashboard` + the
+moment-screens, remove the bridge-duplicating CLI, replace `forge watch` with a
+deterministic `forge studio` launcher. Operator decisions (2026-06-14): architect
+**rebuilt** in Studio; CLI **full removal**; cross-project roadmap **dropped**;
+launcher → new **`forge studio`** command.
+
+| WI | Title | Depends | AC (summary) |
+|---|---|---|---|
+| M7-0 | ADR gate | — | ADR-031 written; 023 amended + 020/021 noted; roadmap/work-items rows; `forge brain lint` 0 err |
+| M7-1 | Harness → Studio selectors | M7-0 | e2e-journey beats 0–21 assert against `/flows/forge-cycle` monitor (`data-mon-node`, `#phase-drawer`, `data-run-id`); `data-project-group` dropped; **green on unmodified `main`** before any deletion |
+| M7-2 | Delete `/dashboard` + dead cluster | M7-1 | sever `hex-detail`→`bridge-client` type; delete dashboard page + exclusive components + dead lib; keep `phases`/`dep-layout`/`status-colors`; build + test + ui:journey + studio lint green |
+| M7-3 | Fold `/review`+`/reflect` into `/artifact` | M7-0 | repoint `RunRail`/`PhaseDrawer` gate links to `/artifact?…&mode=review`; wrappers redirect/deleted; harness beats 16–21 migrated; ui:journey green |
+| M7-4 | Rebuild architect in Studio | M7-0 | native interview + PLAN gate (via `/artifact`); P1–P4 observability assertions preserved; bridge unchanged; ui:journey beats 0–9 green |
+| M7-5 | CLI full removal | M7-0 | 5a `verify:cycle`→bridge verdict POST; 5b bridge→daemon helpers (no `forge start` spawn); 5c delete `start`/`stop`/`pause`/`resume`/`status`/`review --approve`, internalise `architect run`; runtime spine kept; test green; verify:cycle re-run |
+| M7-6 | `forge studio` launcher | M7-0 | new `cli/forge-studio.ts`; health-probe readiness + structured ready signal; WSL2 port-takeover kept; `forge watch` deprecated alias; manual launch clean |
+| M7-7 | Harness `startWatch` off stdout-scraping | M7-6 | `startWatch` spawns `forge studio --no-open` + reads ready signal; ui:journey boots + completes |
+
+---
+
 ## Operator-gated checkpoints (cannot run unattended)
 
-- M2-7 / M3-7 / M4-5 / M6: `npm run verify:cycle` (real $) — queued for the
+- M2-7 / M3-7 / M4-5 / M6 / M7-5: `npm run verify:cycle` (real $) — queued for the
   operator at each milestone close.
 - M6 next real SDK: new external dependency — ask-first.

@@ -7,6 +7,11 @@
   and the review row of [`human-interaction-via-own-session`](../../brain/forge-dev/themes/human-interaction-via-own-session.md);
   builds on [ADR 020](./020-architect-in-ui.md) (the in-UI architect + dedicated
   screens) and the existing demo model (`cli/demo-html.ts:DemoComparisonModel`).
+- **Update 2026-06-14 ([ADR 031](./031-studio-consolidation.md)):** the dedicated
+  `/review/[cycleId]` + `/reflect/[cycleId]` screens fully fold into the unified
+  Studio `/artifact` viewer (the wrappers redirect; Studio "Open gate →" links
+  repoint to `/artifact?…&mode=review`). The verdict/demo model + bridge
+  `POST /api/verdict` are unchanged.
 
 ## Context
 

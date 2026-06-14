@@ -3,8 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **030** — reserved at roadmap M4 for the flow-canvas
-library decision).
+number (next free: **032**).
 
 ## Active
 
@@ -29,13 +28,15 @@ library decision).
 | [020](./020-architect-in-ui.md) | Architect in the UI (file-checkpointed runner) | Gate of the seed flow; spec from definition |
 | [021](./021-local-review-and-unified-demo.md) | In-UI review + structured demo | Folds into unified artifact viewer (M4) |
 | [022](./022-real-capability-harness.md) | Real-capability regression harness | Cutover oracle for ADR 028 |
-| [023](./023-ui-sole-operator-surface.md) | UI is the sole operator surface | Extends to Studio builder pages |
+| [023](./023-ui-sole-operator-surface.md) | UI is the sole operator surface | Extends to Studio builder pages; completed by ADR 031 |
 | [024](./024-phases-as-subagents-invoking-skills.md) | Phases are agents composing skills | Foundation of ADR 027/028 |
 | [025](./025-live-observability.md) | Live cost/tokens via SDK stream | Adapter-uniform under ADR 029 |
 | [026](./026-review-unifier-wi-list.md) | Review feedback as unifier WIs (one cycle) | First instance of general gate send-back |
 | [027](./027-studio-object-model.md) | **Studio object model: definitions as data** | New (2026-06-13) |
 | [028](./028-flow-engine.md) | **Definition-driven flow engine** | New (2026-06-13) |
 | [029](./029-runtime-adapters.md) | **Runtime adapter seam (multi-SDK)** | New (2026-06-13) |
+| [030](./030-canvas-tech.md) | Flow-canvas library choice | New (2026-06-13) |
+| [031](./031-studio-consolidation.md) | **Studio is the one product (rip-out + productionise)** | New (2026-06-14) |
 
 ## Retired (files deleted 2026-06-13; numbers stay reserved)
 

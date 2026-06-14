@@ -120,6 +120,16 @@ parallel screen/handler/codec stacks into one.
 > files) were merged into one config-driven `components/MomentHex.tsx`.
 > Still deferred: `forge review --approve` (load-bearing — `verify-cycle.mjs`
 > auto-approves through it).
+>
+> **Update 2026-06-14 (M7 consolidation — superseded by [ADR 031](./031-studio-consolidation.md)).**
+> ADR 031 carries this arc to its conclusion: the pre-Studio `/dashboard` is
+> deleted, the architect/review/reflect moment-screens fold into Studio (architect
+> rebuilt natively; review/reflect into the unified `/artifact` viewer), and the
+> remaining deferred CLI fallbacks are removed. In particular the `forge review
+> --approve` deferral above is **closed** — `verify-cycle.mjs` migrates onto the
+> bridge `POST /api/verdict 'approve'` first, then the command is removed. See
+> ADR 031 for the full decision set (Studio sole surface, CLI full removal,
+> `forge studio` canonical launcher).
 
 ## Consequences
 
