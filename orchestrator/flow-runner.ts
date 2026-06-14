@@ -5,12 +5,10 @@
  * executor function. Phase functions are UNCHANGED — they are invoked as node
  * executors and receive the same CycleInput they always have.
  *
- * M3 coupling note: `runDeveloperLoop` internally calls `runUnifier` at the
- * end of every dev pass (developer-loop.ts). The flow's separate `unifier`
- * node is therefore a MARKER only — the flow-runner records it in the visit
- * log but does NOT call a separate executor for it. A clean split (separate
- * executor invocation per node) is deferred to a later milestone once the DAG
- * engine is battle-tested.
+ * Unifier node (M8-0): the unifier is its own independently-dispatchable node.
+ * execDev runs the per-WI loop only; execUnifier runs runUnifierPhase + the
+ * close-contract gates (items 4-8). On a `resumeFrom: 'unifier'` run the dev
+ * node is skipped and the unifier node is the resume target.
  *
  * Architect node: the PLAN gate is satisfied before the queue picks up the
  * run (the architect ran out-of-cycle via the UI). When flow-runner encounters
@@ -37,9 +35,9 @@
  *      runFlow receives the already-resolved inputWithGate)
  *   2. emitSyntheticArchitect — real manifest-read + architect.start/end events
  *   3. Resume rebase (preservingForgeScratch + rebasePreservedBranchOntoMain)
- *   4. commitDevLoopBoundary after runDeveloperLoop
+ *   4. commitDevLoopBoundary in execUnifier (after runUnifierPhase)
  *   5. enforceDevLoopCloseInvariant after boundary commit
- *   6. Unifier delivery gate (!devLoopOutcome.unifierSucceeded → throw)
+ *   6. Unifier delivery gate (!unifierOutcome.unifierSucceeded → throw)
  *   7. assertNonEmptyDelivery after unifier gate
  *   8. enforceFinalCiGate before openPrInline
  */
@@ -55,7 +53,7 @@ import type { FlowDefinition, FlowNode, AgentBudgets } from './studio/types.ts';
 import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flow-budgets.ts';
 
 import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
-import { runDeveloperLoop as realRunDeveloperLoop } from './phases/developer-loop.ts';
+import { runDeveloperLoop as realRunDeveloperLoop, runUnifierPhase as realRunUnifierPhase } from './phases/developer-loop.ts';
 import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from './pr.ts';
@@ -81,6 +79,12 @@ export type FlowRunnerDeps = {
   runProjectManager: (input: CycleInput, logger: EventLogger, signal?: AbortSignal) => Promise<void>;
 
   runDeveloperLoop: (
+    input: CycleInput,
+    logger: EventLogger,
+    signal?: AbortSignal,
+  ) => Promise<void>;
+
+  runUnifier: (
     input: CycleInput,
     logger: EventLogger,
     signal?: AbortSignal,
@@ -186,7 +190,7 @@ export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
   | 'pm'          // agent:'project-manager'
   | 'dev'         // agent:'developer-ralph' with fanOut:'work-items'
-  | 'unifier'     // agent:'developer-unifier' (marker until extracted as a real node)
+  | 'unifier'     // agent:'developer-unifier' — real executor (runUnifierPhase + close-contract gates)
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
   | 'reflect'     // agent:'reflector'
   | 'unknown';    // defensive fallback
@@ -279,6 +283,8 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
     realRunProjectManager(input, logger, { signal }),
   runDeveloperLoop: (input, logger, signal?) =>
     realRunDeveloperLoop(input, logger, signal),
+  runUnifier: (input, logger, signal?) =>
+    realRunUnifierPhase(input, logger, signal),
   openPrInline,
   runClosure,
   runReflector,
@@ -579,45 +585,44 @@ const execPm: NodeExecutor = async (ctx) => {
   await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, sig));
 };
 
-/** dev: run the dev-loop, then items 4-8 of the close contract. */
+/**
+ * dev: the per-WI developer loop. The unifier is its own node (execUnifier).
+ * On a `resumeFrom: 'unifier'` run, runDeveloperLoop self-no-ops the per-WI work
+ * (toRun=[]) and STILL emits the dev-loop start/end{resumed:true} events — so the
+ * dev hex resolves to complete and the unifier node is the resume target. We do
+ * NOT short-circuit here: skipping the call would drop those phase-boundary
+ * events and leave the dev hex stuck active on a resume cycle.
+ */
 const execDev: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps } = ctx;
-  // M3 coupling: runDeveloperLoop calls runUnifier internally; the unifier node
-  // is a marker (handled by execUnifier).
-  const devLoopOutcome = await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, sig));
+  await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, sig));
+};
 
-  // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
+/**
+ * unifier: the unifier sub-phase (runUnifierPhase), then items 4-8 of the close
+ * contract. A real executor (M8-0) — no longer a marker. Gets its own wedge
+ * detector. The delivery gate (6-8) lives here so it runs against the unified
+ * branch, in the same order as the former in-dev-loop sequence.
+ */
+const execUnifier: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps } = ctx;
+  const unifierOutcome = await runWithWedge(ctx, (sig) => deps.runUnifier(input, nodeLogger, sig));
+
+  // Item 4: commit any uncommitted work before the reviewer starts.
   deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
   // Item 5: push once more + assert local↔remote invariant.
   deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId);
   // Item 6: delivery gate — unifier must have passed.
-  if (!devLoopOutcome.unifierSucceeded) {
+  if (!unifierOutcome.unifierSucceeded) {
     throw new Error(
-      `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
+      `delivery gate: unifier did not pass (${unifierOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
         `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
     );
   }
   // Item 7: empty-branch guard.
-  deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, nodeLogger);
+  deps.assertNonEmptyDelivery(unifierOutcome, input.initiativeId, input.worktreePath, nodeLogger);
   // Item 8: final CI delivery gate (before openPrInline in the review node).
   deps.enforceFinalCiGate(input, nodeLogger);
-};
-
-/** unifier: marker only — runUnifier is still called inside runDeveloperLoop. */
-const execUnifier: NodeExecutor = async (ctx) => {
-  ctx.nodeLogger.emit({
-    initiative_id: ctx.input.initiativeId,
-    phase: 'orchestrator',
-    skill: 'flow-runner',
-    event_type: 'log',
-    input_refs: [],
-    output_refs: [],
-    message: 'flow-runner.unifier-marker',
-    metadata: {
-      node_id: ctx.nodeId,
-      note: 'M3 coupling: runUnifier was called inside runDeveloperLoop; this node is a DAG marker only',
-    },
-  });
 };
 
 /** review: open the PR, then run closure. */
@@ -681,10 +686,11 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
  * The caller (runCycle) must have already resolved resolveQualityGateCmd and
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * resumeFrom: when `input.resumeFrom === 'unifier'`, the pm node is skipped
- * and a rebase is performed before the dev-loop (item 3). The dev-loop runs
- * without per-WI Ralphs (runDeveloperLoop handles this internally; the unifier
- * node is still a marker-only skip).
+ * resumeFrom: when `input.resumeFrom === 'unifier'`, the pm node rebases + skips
+ * (item 3), the dev node runs but self-no-ops the per-WI work (toRun=[], still
+ * emitting its start/end{resumed:true} events so the dev hex resolves complete),
+ * and the unifier node (execUnifier → runUnifierPhase) is the resume target —
+ * it publishes the preserved branch, runs the unifier, then the close gates.
  *
  * Returns enough for runCycle to build the full CycleResult.
  */

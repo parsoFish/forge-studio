@@ -104,3 +104,28 @@ instead of loop-scoped `let`s. Behaviour is unchanged — 43 existing
 flow-runner/conformance tests stay green and 2 new seam tests were added. The
 `unifier` node remains a DAG marker (runUnifier still runs inside the dev-loop);
 extracting it into an independently-dispatchable executor is the next M8-0 step.
+
+## Amendment (M8-0, 2026-06-14): unifier is a real node
+
+The node-executor registry (above) left one node a marker: the `unifier` ran
+*inside* `runDeveloperLoop` and `execUnifier` only logged. This amendment makes
+it a real, independently-dispatchable executor — completing ADR-028's promise
+that every flow node is its own dispatch.
+
+- **`runDeveloperLoop` → per-WI only** (returns `void`). The unifier tail
+  (resume branch-push → `runUnifier` → `assertDevLoopCloseSync` →
+  `emitDeliverySummary`) moved into a new exported `runUnifierPhase` in
+  developer-loop.ts. `runUnifierPhase` emits its own `unifier-phase.start`
+  boundary event (parent for the unifier's child events; lights the unifier hex).
+- **`execUnifier`** runs `runUnifierPhase` (its own wedge detector) then the
+  close-contract gates (items 4-8: commit boundary, close invariant, unifier
+  delivery gate, non-empty guard, final CI). The combined order is byte-for-byte
+  the pre-refactor sequence.
+- **Resume** (`resumeFrom: 'unifier'`): the dev node still runs but self-no-ops
+  the per-WI work (`toRun=[]`) and emits its start/end{resumed:true} events; the
+  unifier node is the resume target. `execDev` does NOT short-circuit — doing so
+  dropped the dev-loop phase-boundary events and left the dev hex stuck `active`
+  on a resume cycle (caught by adversarial review before merge).
+
+Verified by a 4-lens adversarial review (order / resume / blast-radius / events)
+which found and fixed the resume event-emission regression. Full suite 1122 green.

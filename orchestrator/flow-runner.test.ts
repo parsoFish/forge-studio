@@ -64,6 +64,9 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     },
     runDeveloperLoop: async (_input, _logger) => {
       tracker.calls.push('runDeveloperLoop');
+    },
+    runUnifier: async (_input, _logger) => {
+      tracker.calls.push('runUnifier');
       return { unifierSucceeded: true, unifierFailureClass: null, commitsAhead: 1, filesChanged: 1, insertions: 10 };
     },
     openPrInline: async (_input, _logger) => {
@@ -154,10 +157,11 @@ describe('flow-runner full run', () => {
     await runFlow({ flow, input, logger, deps });
 
     // Correct sequence: architect node is a silent marker — no dep call.
-    // Unifier is also a marker (called inside runDeveloperLoop). Neither appears here.
+    // Unifier is now a real node (M8-0): runUnifier appears between dev and review.
     assert.deepEqual(tracker.calls, [
       'runProjectManager',
       'runDeveloperLoop',
+      'runUnifier',
       'openPrInline',
       'runClosure',
       'runReflector',
@@ -190,7 +194,7 @@ describe('flow-runner full run', () => {
 // ---------------------------------------------------------------------------
 
 describe('flow-runner resumeFrom=unifier', () => {
-  it('skips runProjectManager but still calls runDeveloperLoop, rebase runs before dev-loop', async () => {
+  it('skips runProjectManager; runs the dev node (self-no-ops per-WI) then the unifier; rebase before the dev node', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
     const input = makeInput({ resumeFrom: 'unifier' });
@@ -200,13 +204,14 @@ describe('flow-runner resumeFrom=unifier', () => {
     await runFlow({ flow, input, logger, deps });
 
     assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on unifier resume');
-    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'runDeveloperLoop must still be called on unifier resume');
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs on resume (self-no-ops per-WI, emits start/end{resumed:true})');
+    assert.ok(tracker.calls.includes('runUnifier'), 'runUnifier must be called on unifier resume');
 
-    // Highest-risk resume step: rebase must have been called AND must precede the dev-loop.
+    // Highest-risk resume step: rebase must have been called AND must precede the dev node.
     assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on unifier resume');
     assert.ok(
       tracker.calls.indexOf('rebaseForResume') < tracker.calls.indexOf('runDeveloperLoop'),
-      'rebaseForResume must execute before runDeveloperLoop',
+      'rebaseForResume must execute before the dev node',
     );
 
     // The pm node emits the skip event into the logger.
@@ -226,6 +231,7 @@ describe('flow-runner resumeFrom=unifier', () => {
 
     await runFlow({ flow, input, logger, deps });
 
+    assert.ok(tracker.calls.includes('runUnifier'));
     assert.ok(tracker.calls.includes('openPrInline'));
     assert.ok(tracker.calls.includes('runClosure'));
     assert.ok(tracker.calls.includes('runReflector'));
@@ -284,6 +290,7 @@ describe('flow-runner with real forge-cycle.yaml', () => {
     assert.deepEqual(tracker.calls, [
       'runProjectManager',
       'runDeveloperLoop',
+      'runUnifier',
       'openPrInline',
       'runClosure',
       'runReflector',
@@ -304,6 +311,7 @@ describe('flow-runner with real forge-cycle.yaml', () => {
 
     assert.ok(!tracker.calls.includes('runProjectManager'));
     assert.ok(tracker.calls.includes('runDeveloperLoop'));
+    assert.ok(tracker.calls.includes('runUnifier'));
   });
 });
 
@@ -712,6 +720,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     assert.ok(!tracker.calls.includes('runProjectManager'), 'default pm executor must be bypassed by the override');
     // The rest of the pipeline still runs through the defaults.
     assert.ok(tracker.calls.includes('runDeveloperLoop'));
+    assert.ok(tracker.calls.includes('runUnifier'), 'default unifier executor must run (real node, not a marker)');
     assert.ok(tracker.calls.includes('runReflector'));
     assert.strictEqual(result.cycleOutcome, 'merged');
   });

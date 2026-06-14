@@ -202,7 +202,7 @@ export async function runDeveloperLoop(
   // (each Ralph creates its own abortController in claude-agent.ts — a clean
   // chain requires ClaudeAgentOptions to accept an external signal, deferred).
   _signal?: AbortSignal,
-): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null; commitsAhead: number; filesChanged: number; insertions: number }> {
+): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
     initiative_id: input.initiativeId,
@@ -619,12 +619,50 @@ export async function runDeveloperLoop(
     );
   }
 
+  // The unifier is no longer run here — it is its own independently-dispatchable
+  // flow node (runUnifierPhase, executed by flow-runner's execUnifier). On a
+  // unifier resume the flow-runner skips this dev node entirely (M8-0). The
+  // dev-loop phase ends here, with only the per-WI work on the branch.
+}
+
+/**
+ * runUnifierPhase — the unifier as an independently-dispatchable flow node
+ * (M8-0; ADR-028/019). Extracted from the former tail of runDeveloperLoop so
+ * the flow DAG's `unifier` node is a real executor, not a marker. Runs once per
+ * dev-loop (initial-prep) or once per send-back round (the drain), and is the
+ * resume target for `resumeFrom: 'unifier'` (the per-WI dev node is skipped).
+ *
+ * Order is preserved exactly vs the old runDeveloperLoop tail: (resume-only
+ * branch publish) → runUnifier → assertDevLoopCloseSync → emitDeliverySummary.
+ * The flow-runner runs the close-contract gates (commit boundary, close
+ * invariant, delivery gate, non-empty guard, final CI) immediately after this
+ * returns — the same sequence as before, just lifted into execUnifier.
+ */
+export async function runUnifierPhase(
+  input: CycleInput,
+  logger: EventLogger,
+  // best-effort wedge abort; the unifier node gets its own wedge detector in
+  // flow-runner. Accepted (not yet chained into the unifier's Ralph instances).
+  _signal?: AbortSignal,
+): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null; commitsAhead: number; filesChanged: number; insertions: number }> {
+  const resumeFromUnifier = input.resumeFrom === 'unifier';
+
+  // Phase-boundary event: anchors the unifier's child events (parent_event_id)
+  // and lights the unifier hex in the UI — the node is now a real executor.
+  const start = logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'unifier',
+    skill: 'developer-unifier',
+    event_type: 'start',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: 'unifier-phase.start',
+    metadata: { resumed: resumeFromUnifier },
+  });
+
   // S4: run the unifier sub-phase. The unifier owns the initiative-level
-  // ACs, the tracked demo bundle, and the PR description. It runs once per
-  // dev-loop (initial-prep mode) or once per send-back round
-  // (`--feedback-ref` mode triggered by the review router). The Ralph
-  // runner is reused with a different system prompt + iteration cap +
-  // composed quality gates. Failures are classified per council 04 F7:
+  // ACs, the tracked demo bundle, and the PR description. Failures are
+  // classified per council 04 F7:
   //   - dev-loop-unifier-gate-failed
   //   - dev-loop-unifier-demo-failed
   //   - dev-loop-unifier-branch-divergence
@@ -657,12 +695,12 @@ export async function runDeveloperLoop(
   // `dev-loop.branch-divergence` event and re-throw — the cycle's
   // try/catch + failure classifier handle the rest.
   //
-  // Note: `cycle.ts:enforceDevLoopCloseInvariant` ALSO asserts this same
-  // invariant immediately after `runDeveloperLoop` returns. The two calls
-  // are deliberately additive (not duplicative): this one is the
-  // dev-loop-PHASE'S own boundary check (phase-scoped event), the
-  // cycle-level one runs AFTER `commitDevLoopBoundary` may have added
-  // one more commit + push. Both are idempotent reads against git state.
+  // Note: `cycle-helpers.ts:enforceDevLoopCloseInvariant` ALSO asserts this
+  // same invariant after this phase returns (run by execUnifier). The two
+  // calls are deliberately additive (not duplicative): this one is the
+  // unifier-PHASE'S own boundary check (phase-scoped event), the cycle-level
+  // one runs AFTER `commitDevLoopBoundary` may have added one more commit +
+  // push. Both are idempotent reads against git state.
   assertDevLoopCloseSync(input.worktreePath, logger, input.initiativeId);
 
   // cascade-v4 #1: emit the authoritative DELIVERY ground truth (git
@@ -672,9 +710,8 @@ export async function runDeveloperLoop(
   // though the branch carries merged, tested code (the cascade-v4 wrong-theme).
   const deliveryStat = emitDeliverySummary(input, logger, start.event_id);
 
-  // cascade-v4 #3: surface the unifier outcome so cycle.ts can gate PR
-  // creation — a unifier that did not pass its composed gate must NOT yield a
-  // reviewable (mergeable) PR.
+  // cascade-v4 #3: surface the unifier outcome so the flow's delivery gate can
+  // refuse a PR when the unifier did not pass its composed gate.
   return {
     unifierSucceeded: unifierOutcome.succeeded,
     unifierFailureClass: unifierOutcome.failureClass,
@@ -696,7 +733,7 @@ export async function runDeveloperLoop(
  *
  * Exported for unit testing (real tmp git repos — see
  * `developer-loop-close-sync.test.ts`). Production callers should reach
- * this only via `runDeveloperLoop`'s close path.
+ * this only via `runUnifierPhase`'s close path (M8-0).
  */
 /**
  * cascade-v4 #1: emit `dev-loop.delivered` — the git-derived net contribution
