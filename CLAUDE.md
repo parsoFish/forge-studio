@@ -196,29 +196,40 @@ only — sibling units stay in their own state independently. See
 [`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts).
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change. After a sprawl of
-ad-hoc demo/capture scripts, the harness surface is **two scripts only**
-(2026-05-30 consolidation):
+`data-*` attribute** alongside any visual change. The harness surface is
+**two scripts only** (2026-05-30 consolidation), sharing one extracted
+assertion module — [`scripts/lib/journey-assertions.mjs`](./scripts/lib/journey-assertions.mjs)
+(the soft `check()` + the `data-*` DOM-as-metrics helpers) — so the demo
+video and the regression layer stop entangling:
 
 1. **UI-emulation harness** — [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs)
-   (`npm run ui:journey`) is the **canonical end-to-end operator journey**
-   through the centralised UI (ADR 020 + 021): dashboard new-idea →
-   `/architect/<sid>` interview → PLAN gate approve → autonomous cycle on the
-   grouped initiative pane → `/review/<cycleId>` structured demo → approve →
-   reflection. It emulates the architect runner's turns + the autonomous cycle
-   by seeding the same files/events the real phases write
-   (`FORGE_ARCHITECT_NO_SPAWN=1`), grounded in the real cycle event sequence.
-   It is BOTH the watchable demo (records a **video** + frame gallery +
+   (`npm run ui:journey`) is the **canonical Studio walkthrough**, organised
+   platform-first (post-M8) around the three things Studio does, not one linear
+   cycle: **AUTHOR** (library; build the forge-cycle flow from scratch as data —
+   `forge studio lint` validates it + structural parity vs the seed; agent +
+   project builders) → **RUN** (idea → architect interview → PLAN gate →
+   autonomous build on `/flows/forge-cycle` → verdict gate send-back/payoff →
+   approve+merge → reflect) → **SWAP** (the seams: flow-engine controls, the
+   runtime-adapter registry SDK picker, the KB-backend knowledge graph). It is
+   grounded on a **real betterado** release-definition feature (so the seeded
+   artifacts read true), emulates the architect turns + autonomous cycle by
+   seeding the same files/events the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`),
+   and is BOTH the watchable demo (records a **video** + frame gallery +
    `index.html` under `forge-ui/.demo-shots/e2e/`) AND the **UI regression
-   harness**: the old `forge-ui-harness.mjs` S1–S4 `data-*` assertions (status
-   transitions, ≥5 phase hexes, materialised WI hexes, the per-phase cost
-   rollup) were merged in as a soft-collecting layer — the video always
-   finishes, and a non-zero exit flags any DOM-as-metrics regression. Cleans up
-   its synthetic project/cycle/queue state afterwards.
+   harness** (≥5 phase hexes, materialised WI hexes, per-phase cost rollup,
+   unifier own-node, gate surfaces, the author-from-scratch parity + lint proof,
+   etc.) — the video always finishes; a non-zero exit flags any DOM-as-metrics
+   regression. Cleans up all seeded state (architect session, cycle logs, queue
+   manifests, the `forge-cycle-scratch` flow, any `_guidance/*.md`) afterwards.
 
 2. **Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
    (`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
    project (auto-approve + closure + reflection capture). This is the standing
-   regression harness for forge's actual capabilities (ADR 022): it runs
-   claude-harness initiatives and asserts real-cycle *outcomes*, tiered
-   (frozen-SHA routine / full-greenfield release), as a manual gate.
+   regression harness for forge's actual capabilities (ADR 022): it asserts
+   real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
+   gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
+   **claude-harness** (default — the deterministic frozen-SHA corpus) and the
+   **betterado terraform provider** (`--project terraform-provider-betterado` —
+   the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
+   **live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /
+   greenfield release).

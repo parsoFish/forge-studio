@@ -1,54 +1,86 @@
 # The forge operator journey (vision + intent)
 
-> **Status:** operator's canonical vision for the end-to-end journey, 2026-05-30.
-> This defines the intent and the **target high-level behaviour forge moves
+> **Status:** operator's canonical vision for the end-to-end journey. Rewritten
+> 2026-06-14 for the post-M8 Studio (ADR-031 "Studio is the one product" +
+> M8 seams). It defines the intent and the **target behaviour forge moves
 > towards** — not only the as-built. The video-recorded
-> [`scripts/e2e-journey.mjs`](../scripts/e2e-journey.mjs) is its executable
-> spec: it walks these exact 13 steps, at a watchable pace, through the
-> centralised forge UI (ADR 020 + 021). Where a step is partly aspirational the
-> harness still demonstrates the *target*, and this doc names the gap so the
-> journey doubles as a roadmap.
+> [`scripts/e2e-journey.mjs`](../scripts/e2e-journey.mjs) (`npm run ui:journey`)
+> is its executable spec: it walks these beats at a watchable pace, entirely
+> through Forge Studio, and doubles as the DOM-as-metrics regression harness.
 
-The whole journey is centralised on the forge UI. The operator never leaves it.
+The journey is centralised on Forge Studio. The operator never leaves it.
 
-## The 13 steps
+## The reframe: the platform is the hero
 
-1. **New idea provided.** The operator types an idea on the dashboard.
-2. **Architect flow begins with the architect's review of the project** — it
-   reads the project + brain and **explores edge cases** before asking anything.
-3. **Through that exploration + review + the idea, the architect returns with
-   any questions** to be clarified.
-4. **The operator answers; the next architect planning stage rolls in those
-   answers.**
-5. **The processed draft goes to the review council; based on the council's
-   output the architect presents the plan options** (the design decisions) shaped
-   by that feedback.
-6. **On operator feedback, the architect reruns the last step** (re-council /
-   re-plan) and re-presents.
-7. **On operator approval, the journey moves to the PM.**
-8. **The PM plans the work items** for the initiative.
-9. **The developer loop picks up work items and progresses them, respecting
-   dependencies.**
-10. **Once all work items are complete, the unifier reviews and loops to clean
-    the output.**
-11. **The unifier then wraps up by running the demo skill to produce the demo
-    page** for operator review, themed to match the forge UI.
-12. **The operator reviews the demo; Ralph dev-loops run continuously with
-    operator input after each cycle until the operator approves.**
-13. **Once the operator approves, the journey moves to the reflect phase.**
+Pre-M8 the journey's hero was one linear cycle (idea → merged PR). Post-M8 the
+forge cycle is **just one flow definition** (`studio/flows/forge-cycle/flow.yaml`)
+interpreted by the node-executor registry (ADR-028), with swappable runtime
+adapters (ADR-029) and KB backends (ADR-027 §4). So the journey is organised
+around the three things the platform now does — **author a flow, run it, swap its
+engine** — with the cycle as the proof case inside RUN.
+
+## ACT 1 — AUTHOR (everything in Studio is data)
+
+1. **The library** (`/`) lists flows, agents, projects and KBs as cards, with the
+   operator pulse (what needs you). All of it is editable definitions.
+2. **Build the forge cycle from scratch.** Author the cycle as a flow definition —
+   six agents, five artifact edges, two human gates (`plan`, `verdict`). The
+   platform validates it (`forge studio lint`), it is structurally identical to
+   the production seed (subsumption), and the flow builder renders it live. The
+   hardcoded cycle is subsumed by data.
+3. **The agent builder** (`/agents/<id>`) edits an agent's composition (skills /
+   tools / MCPs / hooks), runtime SDK + budgets, and brain access.
+4. **The project builder** (`/projects/<id>`) edits a project's north star, its
+   demo timeline (for betterado: apply → live REST GET → portal → destroy),
+   bound skills + KB, and contract readiness.
+
+## ACT 2 — RUN (the cycle as the proof case)
+
+5. **New idea** (`/architect/new`) — the operator types an idea for a managed
+   project.
+6. **Architect interview** (`/architect/<sid>/interview`) — the architect reads
+   the project + brain (live activity panel), returns clarifying questions, takes
+   free-text or option answers, and drafts a Given/When/Then plan; every phase is
+   costed, stalls/crashes surface inline.
+7. **PLAN gate** (`/artifact?…type=plan&mode=gate`) — the operator reviews the
+   rich plan, sends back for revision, then approves (human decision #1).
+8. **Autonomous build on `/flows/forge-cycle`** — the PM decomposes the ACs into
+   dependency-ordered work items, the dev-loop runs TDD (red → grind → gate.pass)
+   per WI fanned off the dev hex, then the **unifier** (its own hex) reviews the
+   branch and authors the demo.
+9. **Verdict gate** (`/artifact?…type=verdict&mode=gate`) — the operator reviews
+   the per-AC evaluated demo (for live projects: real REST evidence), authors a
+   new acceptance criterion on send-back, the dev-loop reruns, and on re-review
+   the gap closes (PARTIAL → MET); approve + merge (human decision #2).
+10. **Reflect** (`/artifact?…type=reflection&mode=gate`) — the operator tunes the
+    brain (human decision #3); the reflector folds the feedback in.
+
+## ACT 3 — SWAP (the seams — the platform is modular)
+
+11. **Flow-engine controls** — the engine runs any flow with guardrails:
+    start-run CTA, cost-ceiling gauge, gate parking, resume.
+12. **Runtime-adapter seam** (ADR-029) — the SDK picker is registry-driven
+    (claude live; gemini / aider / codex disabled until their adapter ships) and
+    the range strategy routes to the cheapest capable tier first.
+13. **KB-backend seam** (ADR-027 §4) — the brain is a browsable force-graph
+    (FilesystemKbBackend by default, swappable to Zep via a descriptor); the
+    operator pins guidance that surfaces as a node until the next ingest pass.
 
 ## As-built vs target (honest gap)
 
-| Step | As-built today | Gap to the vision |
-|---|---|---|
-| 1, 3, 4, 7, 8, 9, 13 | Wired — dashboard new-idea, file-handoff interview, plan approve→PM, PM WIs, dependency-ordered dev-loop, reflect-on-merge. | — |
-| 2 — architect reviews project + explores edge cases | The runner brain-queries + reads the project before drafting. | Surface "exploring / edge cases" as an explicit architect stage (label + bursts), and prompt the architect to enumerate edge cases. |
-| 5 — council → plan options from feedback | `runCouncil` runs in the draft turn; its escalations become the PLAN gate's design decisions. | Surface the **council** as its own visible stage between drafting and the plan gate. |
-| 6 — plan send-back reruns the last step | Plan gate "Send back" → a revise turn regenerates. | Make the rerun visibly re-run council + re-present, not just regenerate. |
-| 10 — unifier reviews + loops to clean | Unifier sub-phase iterates against the gates. | Surface the unifier's clean-up loop distinctly from the per-WI dev-loop. |
-| 11 — unifier runs the demo skill → themed demo page | Unifier authors `demo.json`; forge renders the themed DEMO; `demo-capture` skill is optional. | Make the demo-skill run a first-class unifier wrap-up step (always produce the page; capture media when visual). |
-| 12 — review loops with dev-loop reruns until approve | Review screen verdict; send-back writes a verdict the reviewer reacts to. | Make send-back on the review screen visibly spawn a dev-loop, re-demo, and re-present — a continuous review↔dev loop gated only by operator approval. |
+Most beats are wired. The standing gaps are the same intent-surfacing items the
+backlog already tracks, now framed against the Studio surface:
 
-The harness emulates the **target** for every step (seeding the files/events the
-real phases write, or will write) so the recording is a faithful picture of
-where forge is going, and the table above is the backlog to close the gap.
+| Beat | As-built today | Gap to the vision |
+|---|---|---|
+| A2 — build a flow from scratch | The flow builder authors flows as data; `forge studio lint` validates; the engine runs the authored def. | Make the builder's drag-author → save → run loop a fully first-class no-code path (headless DnD is still finicky; the harness authors the def + proves lint/parity/render). |
+| 6 — architect explores edge cases | The runner brain-queries + reads the project before drafting. | Surface "exploring / edge cases" as an explicit architect stage and prompt it to enumerate them. |
+| 8 — unifier clean-up loop + demo skill | The unifier sub-phase iterates against the gates and authors `demo.json`. | Surface the clean-up loop distinctly from the per-WI dev-loop, and make the demo-skill a first-class wrap-up (always produce the page; capture live evidence when the project stands up real resources). |
+| 9 — review↔dev loop until approve | The verdict gate writes a send-back the dev-loop reacts to. | Make send-back visibly spawn a dev-loop, re-demo, and re-present as a continuous loop gated only by operator approval. |
+| 12 — adapter seam | claude is live; the registry disables unprovisioned SDKs. | Ship a second adapter end-to-end (gemini/aider) to prove the seam beyond the registry. |
+
+The UI-emulation harness emulates the **target** for every beat (seeding the
+files/events the real phases write) so the recording is a faithful picture of
+where forge is going. The **real** proof is the separate
+[`scripts/verify-cycle.mjs`](../scripts/verify-cycle.mjs) gate — run it against
+betterado (`--project terraform-provider-betterado`) for the live-ADO tier.

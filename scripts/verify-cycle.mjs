@@ -2,13 +2,25 @@
 /**
  * verify-cycle — forge's REAL-CAPABILITY regression harness (ADR 022).
  *
- * Runs a real forge cycle end-to-end against the claude-harness corpus and
- * asserts real-cycle OUTCOMES — not synthetic rubrics — then records the run
- * and writes a pass/fail verdict. The four gate assertions (ADR 022 §1):
+ * Runs a real forge cycle end-to-end against a managed project and asserts
+ * real-cycle OUTCOMES — not synthetic rubrics — then records the run and writes a
+ * pass/fail verdict. Two grounds:
+ *   - claude-harness (default): the deterministic frozen-SHA corpus — cheap,
+ *     repeatable engine regression.
+ *   - the betterado terraform provider (--project terraform-provider-betterado):
+ *     the LIVE-ADO tier — a real release-definition feature stood up against a
+ *     real Azure DevOps org, the richest proof of forge's actual capability.
+ *
+ * The four gate assertions (ADR 022 §1):
  *   1. the cycle reached merge (finalStatus `done`);
  *   2. the dev-loop completed N/N work items (no complete:0 / failed);
- *   3. the project's own tests are green post-merge (npm test in the repo);
+ *   3. the project's own tests are green post-merge (its .forge quality gate, else
+ *      npm test);
  *   4. total cycle cost is under the declared ceiling.
+ * Plus, for live-resource projects (and any run with --require-live-evidence):
+ *   5. the merged cycle's demo carries LIVE evidence — a real REST GET checkpoint
+ *      (liveEvidence.url + expectedFields), not a test-name table (the
+ *      demos-are-visual-evidence policy).
  *
  * Usage:
  *   node scripts/verify-cycle.mjs <initiative-id> [options]
@@ -23,7 +35,10 @@
  *   --cost-ceiling <usd>    fail the gate above this total cost (default 25;
  *                           default 40 when --send-back is set, to accommodate
  *                           the extra unifier pass).
- *   --project <name>        managed project to run against (default claude-harness).
+ *   --project <name>        managed project to run against (default claude-harness;
+ *                           terraform-provider-betterado for the live-ADO tier).
+ *   --require-live-evidence force the live-demo-evidence gate on (default: on for
+ *                           known live-resource projects). --no-live-evidence opts out.
  *   --force-reset           allow resetting a repo with uncommitted changes.
  *   --send-back             after the cycle first reaches ready-for-review, POST a
  *                           real send-back verdict to /api/verdict, re-run forge
@@ -46,13 +61,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync,
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { sleep } from './lib/journey-assertions.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const argv = process.argv.slice(2);
 const initiativeId = argv.find((a) => !a.startsWith('--'));
 if (!initiativeId) {
-  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--force-reset] [--send-back]');
+  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--require-live-evidence|--no-live-evidence] [--force-reset] [--send-back]');
   process.exit(1);
 }
 function flag(name, def) {
@@ -62,11 +78,19 @@ function flag(name, def) {
 const TIER = flag('tier', 'routine');
 const BASE_SHA = flag('base-sha', null);
 const SEND_BACK = argv.includes('--send-back');
-// When --send-back is set the effective default ceiling is $40 to accommodate
-// the extra unifier pass; still overridable by an explicit --cost-ceiling.
-const _ceilingDefault = SEND_BACK ? '40' : '25';
-const COST_CEILING = parseFloat(flag('cost-ceiling', _ceilingDefault)) || (SEND_BACK ? 40 : 25);
 const PROJECT = flag('project', 'claude-harness');
+// Live-resource projects (e.g. the betterado terraform provider stands up real
+// Azure DevOps resources) run longer + cost more than the deterministic
+// claude-harness corpus, so they get a higher default ceiling — still overridable.
+const LIVE_PROJECTS = new Set(['terraform-provider-betterado']);
+const IS_LIVE_PROJECT = LIVE_PROJECTS.has(PROJECT);
+// --send-back adds an extra unifier pass; live projects add live-infra cost.
+const _ceilingDefault = IS_LIVE_PROJECT ? (SEND_BACK ? 80 : 60) : (SEND_BACK ? 40 : 25);
+const COST_CEILING = parseFloat(flag('cost-ceiling', String(_ceilingDefault))) || _ceilingDefault;
+// The live-demo-evidence gate: on by default for live-resource projects; force
+// with --require-live-evidence, opt out with --no-live-evidence.
+const REQUIRE_LIVE_EVIDENCE =
+  argv.includes('--require-live-evidence') || (IS_LIVE_PROJECT && !argv.includes('--no-live-evidence'));
 const FORCE_RESET = argv.includes('--force-reset');
 
 const OUT_DIR = join(FORGE_ROOT, 'forge-ui/.demo-shots/verify', initiativeId);
@@ -74,7 +98,6 @@ const VIDEO_DIR = join(OUT_DIR, 'video');
 const FRAMES_DIR = join(OUT_DIR, 'frames');
 
 function log(msg) { console.log(`[verify ${new Date().toISOString().slice(11, 19)}] ${msg}`); }
-async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 // ---- ADR 022 runner: corpus staging, repo reset, outcome assertions --------
 
@@ -193,15 +216,52 @@ function wiOutcomes(cycleId) {
   return { total, complete, failed };
 }
 
-/** Run the project's own test suite (the golden-file assertion, for claude-trail). */
+/** Run the project's own test suite post-merge. Prefer the project's declared
+ *  quality gate (.forge/project.json quality_gate_cmd) so the gate mirrors what
+ *  forge's own dev-loop runs (Go, etc.); fall back to `npm test`. */
 function runProjectTests(repoPath) {
-  if (!existsSync(join(repoPath, 'package.json'))) return { ran: false, ok: true };
-  log(`running project tests in ${repoPath} (npm test)…`);
-  const r = spawnSync('npm', ['test'], { cwd: repoPath, encoding: 'utf8', timeout: 5 * 60_000 });
-  return { ran: true, ok: r.status === 0 };
+  const cfgPath = join(repoPath, '.forge', 'project.json');
+  if (existsSync(cfgPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+      const cmd = cfg.quality_gate_cmd;
+      if (Array.isArray(cmd) && cmd.length > 0) {
+        const label = cmd.join(' ').length > 60 ? `${cmd.slice(0, 4).join(' ')}…` : cmd.join(' ');
+        log(`running project quality gate in ${repoPath} (${label})…`);
+        const r = spawnSync(cmd[0], cmd.slice(1), { cwd: repoPath, encoding: 'utf8', timeout: 15 * 60_000 });
+        return { ran: true, ok: r.status === 0, label };
+      }
+    } catch (e) { log(`.forge/project.json quality_gate_cmd unreadable: ${e.message}`); }
+  }
+  if (existsSync(join(repoPath, 'package.json'))) {
+    log(`running project tests in ${repoPath} (npm test)…`);
+    const r = spawnSync('npm', ['test'], { cwd: repoPath, encoding: 'utf8', timeout: 5 * 60_000 });
+    return { ran: true, ok: r.status === 0, label: 'npm test' };
+  }
+  return { ran: false, ok: true, label: '' };
 }
 
-/** The ADR 022 gate: four binary, outcome-only assertions. */
+/** Live demo evidence (the demos-are-visual-evidence policy): the merged cycle's
+ *  demo.json must carry a checkpoint with a real REST GET (liveEvidence.url +
+ *  expectedFields) — not just a test-name table. The unifier writes demo.json into
+ *  the cycle log artifacts. */
+function liveEvidenceFromDemo(cycleId) {
+  const demoPath = join(FORGE_ROOT, '_logs', cycleId, 'artifacts', 'demo.json');
+  if (!existsSync(demoPath)) return { present: false, reason: 'no demo.json in cycle artifacts' };
+  try {
+    const demo = JSON.parse(readFileSync(demoPath, 'utf8'));
+    const cps = Array.isArray(demo.checkpoints) ? demo.checkpoints : [];
+    const live = cps.find((c) => c && c.liveEvidence && c.liveEvidence.url);
+    if (live) {
+      const m = live.liveEvidence.method ?? 'GET';
+      return { present: true, reason: `live_api checkpoint → ${m} ${String(live.liveEvidence.url).slice(0, 64)}…` };
+    }
+    return { present: false, reason: 'demo.json has no checkpoint with liveEvidence.url' };
+  } catch (e) { return { present: false, reason: `demo.json unreadable: ${e.message}` }; }
+}
+
+/** The ADR 022 gate: four binary, outcome-only assertions (plus a live-evidence
+ *  check for live-resource projects). */
 function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
@@ -211,9 +271,15 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
     // returned null even on cleanly-merged cycles). Accept either signal.
     { name: 'cycle reached merge (done)', pass: finalStatus === 'done' || existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)), detail: finalStatus === 'done' ? 'finalStatus=done' : (existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)) ? 'manifest in _queue/done/ (merged; bridge status unread post-merge)' : `finalStatus=${finalStatus}, manifest not in done/`) },
     { name: 'dev-loop completed N/N work items', pass: wi.total > 0 && wi.complete === wi.total && wi.failed === 0, detail: `${wi.complete}/${wi.total} complete, ${wi.failed} failed` },
-    { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? 'npm test passed' : 'npm test FAILED') : 'no package.json — skipped' },
+    { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? `${tests.label} passed` : `${tests.label} FAILED`) : 'no test command — skipped' },
     { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
   ];
+  // Live-resource projects: assert the demo carries real REST evidence, so a
+  // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
+  if (REQUIRE_LIVE_EVIDENCE) {
+    const le = liveEvidenceFromDemo(cycleId);
+    checks.push({ name: 'live demo evidence present (REST GET)', pass: le.present, detail: le.reason });
+  }
   return { checks, wi };
 }
 
@@ -551,7 +617,7 @@ async function main() {
   mkdirSync(FRAMES_DIR, { recursive: true });
 
   // ADR 022 pre-run: stage the corpus manifest + reset the repo per tier.
-  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}`);
+  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
   const repoPath = projectRepoPath();
   cleanPriorRunState(initiativeId, repoPath);
   if (!stageManifest()) process.exit(1);
@@ -559,7 +625,10 @@ async function main() {
     if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
     else { log('routine tier without --base-sha: running against the current repo state'); }
   } else if (TIER === 'release') {
-    log('release tier: greenfield rebuild — drive the 5-initiative ROADMAP by invoking the runner per initiative in order (docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md).');
+    const roadmap = IS_LIVE_PROJECT
+      ? 'docs/planning/2026-06-03-betterado-release-roadmap.md'
+      : 'docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md';
+    log(`release tier: greenfield rebuild — drive the roadmap by invoking the runner per initiative in order (${roadmap}).`);
   }
 
   log('starting forge watch…');
