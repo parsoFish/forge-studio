@@ -37,6 +37,7 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -473,7 +474,15 @@ export async function handleStudioRoutes(
         return true;
       }
       const catalog = loadCatalog(catalogPath);
-      sendJson(res, 200, { catalog }, origin);
+      // Reconcile the static yaml `available` flag with the live adapter registry.
+      // An SDK is selectable iff a registered adapter reports available — this is
+      // the source of truth. When a real Codex/Gemini adapter is registered later,
+      // isSdkAvailable flips its flag to true automatically.
+      const reconciledSdks = catalog.sdks.map((sdk) => ({
+        ...sdk,
+        available: isSdkAvailable(sdk.id),
+      }));
+      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
