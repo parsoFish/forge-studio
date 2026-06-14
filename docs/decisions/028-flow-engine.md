@@ -80,3 +80,27 @@ self-modifies while running, and resume never discards work.
   and is the only authority for deleting the hardcoded path.
 - Exploration-type flows stay deferred (schema reserves `type:`); zero-gate
   autonomy stays rejected absent new evidence (v1 review-spin incident).
+
+## Amendment (M8-0, 2026-06-14): node-executor registry
+
+Consequence #1 ("new flows are data; no orchestrator change") was *stated but
+not yet true*: `flow-runner.ts` dispatched nodes via a hardcoded `classifyNode`
+switch, so a genuinely new node kind required editing the runner. M8-0 closes
+the gap between the stated consequence and the implementation:
+
+- **Classification is data, not control flow.** Node→kind resolution is two
+  tables (`GATE_KIND`, `AGENT_KIND`) read by `resolveNodeKind()`; a gate always
+  wins over the agent field. Adding an agent that reuses an existing executor
+  kind is a one-line row.
+- **Dispatch is a registry.** `DEFAULT_NODE_EXECUTORS: Record<NodeKind,
+  NodeExecutor>` is looked up by kind — the `switch` is gone. The per-node loop
+  builds a `NodeExecContext` and calls `executors[kind] ?? execUnknown`.
+- **The seam is injectable.** `FlowRunArgs.nodeExecutors` merges over the
+  defaults, so a flow or test registers/overrides node behaviour without
+  touching the runner.
+
+Cross-node outcome state is threaded through a single `NodeRunState` object
+instead of loop-scoped `let`s. Behaviour is unchanged — 43 existing
+flow-runner/conformance tests stay green and 2 new seam tests were added. The
+`unifier` node remains a DAG marker (runUnifier still runs inside the dev-loop);
+extracting it into an independently-dispatchable executor is the next M8-0 step.

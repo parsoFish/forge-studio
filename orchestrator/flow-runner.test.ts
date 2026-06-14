@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runFlow, forgeCycleFlowPath, type FlowRunnerDeps } from './flow-runner.ts';
+import { runFlow, forgeCycleFlowPath, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
 import { WedgeKillError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
@@ -675,5 +675,44 @@ describe('knowledge-ingest flow — non-cycle DAG walk', () => {
 
     // No triggers on knowledge-ingest → enqueue not called.
     assert.deepEqual(enqueueCalls, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 8: Node-executor registry seam (ADR-028 — "new flow = no orchestrator edit")
+// ---------------------------------------------------------------------------
+
+describe('flow-runner node-executor registry seam (ADR-028)', () => {
+  it('resolveNodeKind maps gate/agent fields to kinds (gate wins over agent)', () => {
+    assert.equal(resolveNodeKind({ id: 'a', agent: 'architect', gate: 'plan' }), 'architect');
+    assert.equal(resolveNodeKind({ id: 'r', gate: 'verdict' }), 'review');
+    assert.equal(resolveNodeKind({ id: 'pm', agent: 'project-manager' }), 'pm');
+    assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }), 'dev');
+    assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }), 'unifier');
+    assert.equal(resolveNodeKind({ id: 'rf', agent: 'reflector' }), 'reflect');
+    assert.equal(resolveNodeKind({ id: 'x', agent: 'brain-ingest' }), 'unknown');
+  });
+
+  it('FlowRunArgs.nodeExecutors overrides the default executor for a kind (no orchestrator edit)', async () => {
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const input = makeInput();
+    const logger = makeLogger();
+    const flow = makeForgeCycleFlow();
+
+    // Override the pm executor with a custom spy — the default deps.runProjectManager
+    // must NOT be called; the injected executor runs instead. This proves a flow can
+    // register custom node behaviour without touching flow-runner's dispatch loop.
+    const customCalls: string[] = [];
+    const customPm: NodeExecutor = async () => { customCalls.push('custom-pm'); };
+
+    const result = await runFlow({ flow, input, logger, deps, nodeExecutors: { pm: customPm } });
+
+    assert.deepEqual(customCalls, ['custom-pm'], 'injected pm executor must run');
+    assert.ok(!tracker.calls.includes('runProjectManager'), 'default pm executor must be bypassed by the override');
+    // The rest of the pipeline still runs through the defaults.
+    assert.ok(tracker.calls.includes('runDeveloperLoop'));
+    assert.ok(tracker.calls.includes('runReflector'));
+    assert.strictEqual(result.cycleOutcome, 'merged');
   });
 });

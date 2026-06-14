@@ -179,31 +179,46 @@ function topoSort(flow: FlowDefinition): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Node kind classification
+// Node kind classification (data tables, not control flow)
 // ---------------------------------------------------------------------------
 
-type NodeKind =
+export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
   | 'pm'          // agent:'project-manager'
   | 'dev'         // agent:'developer-ralph' with fanOut:'work-items'
-  | 'unifier'     // agent:'developer-unifier' — marker only (called inside dev)
+  | 'unifier'     // agent:'developer-unifier' (marker until extracted as a real node)
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
   | 'reflect'     // agent:'reflector'
   | 'unknown';    // defensive fallback
 
-function classifyNode(node: FlowNode): NodeKind {
-  // Architect: has the 'plan' gate (regardless of whether it also has an agent)
-  if (node.gate === 'plan') return 'architect';
+/**
+ * Gate id → node kind. A gate ALWAYS wins over the agent field (the architect
+ * node carries both agent:'architect' and gate:'plan' and must classify as
+ * 'architect'). Extend by adding a row — no control-flow edit.
+ */
+const GATE_KIND: Readonly<Record<string, NodeKind>> = {
+  plan: 'architect',
+  verdict: 'review',
+};
 
-  // Review gate node: has the 'verdict' gate (gate-only, no agent)
-  if (node.gate === 'verdict') return 'review';
+/**
+ * Agent slug → node kind. Adding a new agent that reuses an existing executor
+ * kind is a one-line row here; a brand-new kind also registers an executor in
+ * DEFAULT_NODE_EXECUTORS (or is injected via FlowRunArgs.nodeExecutors). Either
+ * way the dispatch loop below is never touched — this closes the ADR-028
+ * "new flow = no orchestrator change" promise for the common cases.
+ */
+const AGENT_KIND: Readonly<Record<string, NodeKind>> = {
+  'project-manager': 'pm',
+  'developer-ralph': 'dev',
+  'developer-unifier': 'unifier',
+  reflector: 'reflect',
+};
 
-  // Agent-driven nodes
-  if (node.agent === 'project-manager') return 'pm';
-  if (node.agent === 'developer-ralph') return 'dev';
-  if (node.agent === 'developer-unifier') return 'unifier';
-  if (node.agent === 'reflector') return 'reflect';
-
+/** Resolve a node's executor kind from its gate/agent fields via the data tables. */
+export function resolveNodeKind(node: FlowNode): NodeKind {
+  if (node.gate && GATE_KIND[node.gate]) return GATE_KIND[node.gate];
+  if (node.agent && AGENT_KIND[node.agent]) return AGENT_KIND[node.agent];
   return 'unknown';
 }
 
@@ -296,6 +311,13 @@ export type FlowRunArgs = {
    * Inject a shared gate across calls to preserve recorded resetsAt across retries.
    */
   rateLimitGate?: RateLimitGate;
+  /**
+   * Optional node-executor overrides keyed by node kind, merged over the
+   * defaults. The extension seam (ADR-028): register or replace an executor
+   * without editing the dispatch loop. Used by tests and by flows that supply
+   * custom node behaviour.
+   */
+  nodeExecutors?: Partial<Record<NodeKind, NodeExecutor>>;
 };
 
 // ---------------------------------------------------------------------------
@@ -475,6 +497,178 @@ export function checkFlowVersionSeam(
 }
 
 // ---------------------------------------------------------------------------
+// Node executors (registry dispatch — ADR-028)
+// ---------------------------------------------------------------------------
+
+/** Mutable cross-node outcome state, threaded through every executor. */
+type NodeRunState = {
+  cycleOutcome: CycleOutcome;
+  reflectionStatus: string;
+  lintStatus: string;
+  reviewerOutcome: ReviewerOutcome;
+  closure: ClosureResult | null;
+};
+
+/** Everything a node executor needs. Built fresh per node by runFlow. */
+type NodeExecContext = {
+  node: FlowNode;
+  nodeId: string;
+  input: CycleInput;
+  /** Per-node logger (cost + wedge wrapped). Executors emit here. */
+  nodeLogger: EventLogger;
+  /** Cost-only logger — used for out-of-band events (e.g. wedge-kill). */
+  costLogger: EventLogger;
+  deps: FlowRunnerDeps;
+  wedgeDetector: WedgeDetector;
+  nodeBudget: AgentBudgets | undefined;
+  state: NodeRunState;
+};
+
+export type NodeExecutor = (ctx: NodeExecContext) => Promise<void>;
+
+/**
+ * Run a phase fn under optional wedge detection. When wedgeKillMs is set
+ * (wedgeDetector.active), races the fn against the wedge timer and emits
+ * phase.wedge-killed on kill; otherwise calls it with an undefined signal.
+ */
+async function runWithWedge<T>(
+  ctx: NodeExecContext,
+  fn: (signal: AbortSignal | undefined) => Promise<T>,
+): Promise<T> {
+  const { wedgeDetector, costLogger, input, nodeId, nodeBudget } = ctx;
+  if (!wedgeDetector.active) return fn(undefined);
+  return raceWithWedge(
+    (sig) => fn(sig),
+    wedgeDetector,
+    (killErr) => {
+      costLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'phase.wedge-killed',
+        metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
+      });
+    },
+  );
+}
+
+/** architect: silent DAG marker — runCycle already emitted the synthetic events. */
+const execArchitect: NodeExecutor = async () => { /* marker only */ };
+
+/** pm: skip + rebase on unifier-resume; otherwise run the project manager. */
+const execPm: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps, nodeId } = ctx;
+  if (input.resumeFrom === 'unifier') {
+    // Item 3: rebase the preserved branch onto main before running the dev-loop.
+    deps.rebaseForResume(input, nodeLogger);
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'flow-runner.pm-skipped-resume',
+      metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+    });
+    return;
+  }
+  await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, sig));
+};
+
+/** dev: run the dev-loop, then items 4-8 of the close contract. */
+const execDev: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps } = ctx;
+  // M3 coupling: runDeveloperLoop calls runUnifier internally; the unifier node
+  // is a marker (handled by execUnifier).
+  const devLoopOutcome = await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, sig));
+
+  // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
+  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
+  // Item 5: push once more + assert local↔remote invariant.
+  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId);
+  // Item 6: delivery gate — unifier must have passed.
+  if (!devLoopOutcome.unifierSucceeded) {
+    throw new Error(
+      `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
+        `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
+    );
+  }
+  // Item 7: empty-branch guard.
+  deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, nodeLogger);
+  // Item 8: final CI delivery gate (before openPrInline in the review node).
+  deps.enforceFinalCiGate(input, nodeLogger);
+};
+
+/** unifier: marker only — runUnifier is still called inside runDeveloperLoop. */
+const execUnifier: NodeExecutor = async (ctx) => {
+  ctx.nodeLogger.emit({
+    initiative_id: ctx.input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'flow-runner',
+    event_type: 'log',
+    input_refs: [],
+    output_refs: [],
+    message: 'flow-runner.unifier-marker',
+    metadata: {
+      node_id: ctx.nodeId,
+      note: 'M3 coupling: runUnifier was called inside runDeveloperLoop; this node is a DAG marker only',
+    },
+  });
+};
+
+/** review: open the PR, then run closure. */
+const execReview: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps, state } = ctx;
+  state.reviewerOutcome = await deps.openPrInline(input, nodeLogger);
+  state.closure = await deps.runClosure(input, nodeLogger, state.reviewerOutcome);
+  state.cycleOutcome = state.closure.outcome as CycleOutcome;
+};
+
+/** reflect: only when the closure confirmed a merge (G10). */
+const execReflect: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps, state } = ctx;
+  if (state.closure?.merged) {
+    const reflectorResult = await deps.runReflector(input, nodeLogger);
+    state.reflectionStatus = reflectorResult.reflection_status;
+    state.lintStatus = reflectorResult.lint_status;
+  }
+};
+
+/** unknown: graceful skip — record the node as visited and continue. */
+const execUnknown: NodeExecutor = async (ctx) => {
+  ctx.nodeLogger.emit({
+    initiative_id: ctx.input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'flow-runner',
+    event_type: 'log',
+    input_refs: [],
+    output_refs: [],
+    message: 'flow-runner.unknown-node-skipped',
+    metadata: { node_id: ctx.nodeId, agent: ctx.node.agent, gate: ctx.node.gate },
+  });
+};
+
+/**
+ * Default executor per node kind. The dispatch loop resolves a node's kind via
+ * resolveNodeKind() and looks it up here — no switch. Inject overrides/additions
+ * through FlowRunArgs.nodeExecutors to register a custom executor without
+ * touching this file.
+ */
+const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
+  architect: execArchitect,
+  pm: execPm,
+  dev: execDev,
+  unifier: execUnifier,
+  review: execReview,
+  reflect: execReflect,
+  unknown: execUnknown,
+};
+
+// ---------------------------------------------------------------------------
 // runFlow
 // ---------------------------------------------------------------------------
 
@@ -501,6 +695,7 @@ export async function runFlow({
   deps: depOverrides,
   nodeBudgets,
   rateLimitGate: injectedGate,
+  nodeExecutors: executorOverrides,
 }: FlowRunArgs): Promise<{
   cycleOutcome: CycleOutcome;
   reflectionStatus: string;
@@ -525,17 +720,25 @@ export async function runFlow({
 
   // Track outcome state — mirrors cycle.ts. 'failed' never appears here:
   // failures throw and are caught by runCycle's outer try/catch.
-  let cycleOutcome: CycleOutcome = 'ready-for-review';
-  let reflectionStatus = 'skipped';
-  let lintStatus = 'skipped';
-  let reviewerOutcome: ReviewerOutcome = 'ready-for-review';
-  let closure: ClosureResult | null = null;
+  const state: NodeRunState = {
+    cycleOutcome: 'ready-for-review',
+    reflectionStatus: 'skipped',
+    lintStatus: 'skipped',
+    reviewerOutcome: 'ready-for-review',
+    closure: null,
+  };
+
+  // Registry dispatch: defaults + any caller-injected overrides (ADR-028 seam).
+  const executors: Record<NodeKind, NodeExecutor> = {
+    ...DEFAULT_NODE_EXECUTORS,
+    ...(executorOverrides ?? {}),
+  };
 
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
     if (!node) continue; // defensive
 
-    const kind = classifyNode(node);
+    const kind = resolveNodeKind(node);
 
     // M3-3: Rate-limit gate — before every node spawn, wait if a prior
     // rate-limit recorded a resetsAt. No-op when nothing is recorded.
@@ -556,153 +759,23 @@ export async function runFlow({
     // Wrap costLogger with wedge tracking for this node's execution.
     const nodeLogger = wrapLoggerForWedge(costLogger, wedgeDetector, () => Date.now());
 
+    const ctx: NodeExecContext = {
+      node,
+      nodeId,
+      input,
+      nodeLogger,
+      costLogger,
+      deps,
+      wedgeDetector,
+      nodeBudget,
+      state,
+    };
+
     try {
-      switch (kind) {
-        case 'architect': {
-          // Item 2: pure marker — runCycle emitted the real synthetic architect
-          // events (emitSyntheticArchitectEvents) before calling runFlow. The DAG
-          // walk records this node as visited but performs no emission itself.
-          break;
-        }
-
-        case 'pm': {
-          if (input.resumeFrom === 'unifier') {
-            // Item 3: rebase the preserved branch onto main before running the dev-loop
-            deps.rebaseForResume(input, nodeLogger);
-            nodeLogger.emit({
-              initiative_id: input.initiativeId,
-              phase: 'orchestrator',
-              skill: 'flow-runner',
-              event_type: 'log',
-              input_refs: [],
-              output_refs: [],
-              message: 'flow-runner.pm-skipped-resume',
-              metadata: { node_id: nodeId, resume_from: input.resumeFrom },
-            });
-            break;
-          }
-          if (wedgeDetector.active) {
-            await raceWithWedge(
-              (sig) => deps.runProjectManager(input, nodeLogger, sig),
-              wedgeDetector,
-              (killErr) => {
-                costLogger.emit({
-                  initiative_id: input.initiativeId,
-                  phase: 'orchestrator',
-                  skill: 'flow-budgets',
-                  event_type: 'error',
-                  input_refs: [],
-                  output_refs: [],
-                  message: 'phase.wedge-killed',
-                  metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
-                });
-              },
-            );
-          } else {
-            await deps.runProjectManager(input, nodeLogger);
-          }
-          break;
-        }
-
-        case 'dev': {
-          // M3 coupling: runDeveloperLoop calls runUnifier internally.
-          // The flow's separate unifier node is a marker (handled in 'unifier' case).
-          // Items 4-8: the dev-loop close contract runs immediately after.
-          const devLoopOutcome = wedgeDetector.active
-            ? await raceWithWedge(
-                (sig) => deps.runDeveloperLoop(input, nodeLogger, sig),
-                wedgeDetector,
-                (killErr) => {
-                  costLogger.emit({
-                    initiative_id: input.initiativeId,
-                    phase: 'orchestrator',
-                    skill: 'flow-budgets',
-                    event_type: 'error',
-                    input_refs: [],
-                    output_refs: [],
-                    message: 'phase.wedge-killed',
-                    metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
-                  });
-                },
-              )
-            : await deps.runDeveloperLoop(input, nodeLogger);
-
-          // Item 4: commit any uncommitted dev-loop work before the reviewer starts.
-          deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
-
-          // Item 5: push once more + assert local↔remote invariant.
-          deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId);
-
-          // Item 6: delivery gate — unifier must have passed.
-          if (!devLoopOutcome.unifierSucceeded) {
-            throw new Error(
-              `delivery gate: unifier did not pass (${devLoopOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
-                `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
-            );
-          }
-
-          // Item 7: empty-branch guard.
-          deps.assertNonEmptyDelivery(devLoopOutcome, input.initiativeId, input.worktreePath, nodeLogger);
-
-          // Item 8: final CI delivery gate (before openPrInline in review node).
-          deps.enforceFinalCiGate(input, nodeLogger);
-
-          break;
-        }
-
-        case 'unifier': {
-          // MARKER ONLY — runDeveloperLoop already called runUnifier internally.
-          // Document: M3 coupling. A clean per-node split is deferred.
-          nodeLogger.emit({
-            initiative_id: input.initiativeId,
-            phase: 'orchestrator',
-            skill: 'flow-runner',
-            event_type: 'log',
-            input_refs: [],
-            output_refs: [],
-            message: 'flow-runner.unifier-marker',
-            metadata: {
-              node_id: nodeId,
-              note: 'M3 coupling: runUnifier was called inside runDeveloperLoop; this node is a DAG marker only',
-            },
-          });
-          break;
-        }
-
-        case 'review': {
-          // Gate node: open the PR, then run closure.
-          // Item 8 (enforceFinalCiGate) already ran in the 'dev' node so the
-          // branch is CI-clean before we open the PR.
-          reviewerOutcome = await deps.openPrInline(input, nodeLogger);
-          closure = await deps.runClosure(input, nodeLogger, reviewerOutcome);
-          cycleOutcome = closure.outcome as CycleOutcome;
-          break;
-        }
-
-        case 'reflect': {
-          // Only run if the closure confirmed a merge (G10)
-          if (closure?.merged) {
-            const reflectorResult = await deps.runReflector(input, nodeLogger);
-            reflectionStatus = reflectorResult.reflection_status;
-            lintStatus = reflectorResult.lint_status;
-          }
-          break;
-        }
-
-        default: {
-          nodeLogger.emit({
-            initiative_id: input.initiativeId,
-            phase: 'orchestrator',
-            skill: 'flow-runner',
-            event_type: 'log',
-            input_refs: [],
-            output_refs: [],
-            message: 'flow-runner.unknown-node-skipped',
-            metadata: { node_id: nodeId, agent: node.agent, gate: node.gate },
-          });
-          break;
-        }
-      }
+      // Registry dispatch — no switch. Resolve the kind's executor (or the
+      // graceful unknown-node skip) and run it. Adding a node kind never edits
+      // this loop (see DEFAULT_NODE_EXECUTORS / FlowRunArgs.nodeExecutors).
+      await (executors[kind] ?? execUnknown)(ctx);
     } catch (err) {
       // M3-3: Rate-limit recording — if the executor threw a rate-limit error,
       // record the resetsAt so the next spawn will wait. Then rethrow so the
@@ -753,7 +826,11 @@ export async function runFlow({
     }
   }
 
-  return { cycleOutcome, reflectionStatus, lintStatus };
+  return {
+    cycleOutcome: state.cycleOutcome,
+    reflectionStatus: state.reflectionStatus,
+    lintStatus: state.lintStatus,
+  };
 }
 
 // ---------------------------------------------------------------------------
