@@ -7,10 +7,11 @@
  * deep-equal assertion on every in-cycle agent.
  */
 
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
-import { loadAgentDefinition } from './registry.ts';
+import { rangeTiers } from '../model-range.ts';
+import { loadAgentDefinition, loadCatalog } from './registry.ts';
 
 const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
   (Object.entries(MODEL_BY_TIER) as [ModelTier, string][]).map(([t, m]) => [m, t]),
@@ -27,17 +28,35 @@ const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
 export function deriveAgentSpec(skillPathFromRoot: string, root = process.cwd()): PhaseAgentSpec {
   const def = loadAgentDefinition(resolve(root, skillPathFromRoot));
   if (!def.phase) throw new Error(`${def.path}: cannot derive spec — no phase field`);
-  if (def.runtime.strategy !== 'fixed' || !def.runtime.model) {
-    throw new Error(
-      `${def.path}: cannot derive spec — runtime must be strategy:fixed with a model (range routing lands M6)`,
-    );
+
+  let tier: ModelTier;
+
+  if (def.runtime.strategy === 'fixed') {
+    if (!def.runtime.model) {
+      throw new Error(
+        `${def.path}: cannot derive spec — strategy:fixed requires a model field`,
+      );
+    }
+    const resolved = TIER_BY_MODEL[def.runtime.model];
+    if (!resolved) {
+      throw new Error(
+        `${def.path}: unknown model ${def.runtime.model} — not in MODEL_BY_TIER`,
+      );
+    }
+    tier = resolved;
+  } else {
+    // strategy:range — pick cheapest tier in the range as the spawn default
+    if (!def.runtime.range || def.runtime.range.length === 0) {
+      throw new Error(
+        `${def.path}: cannot derive spec — strategy:range requires a non-empty range field`,
+      );
+    }
+    const catalogPath = join(root, 'studio', 'catalog.yaml');
+    const catalog = loadCatalog(catalogPath);
+    const tiers = rangeTiers(def.runtime.range, catalog);
+    tier = tiers[0]; // cheapest-first; escalation is applied at spawn time
   }
-  const tier = TIER_BY_MODEL[def.runtime.model];
-  if (!tier) {
-    throw new Error(
-      `${def.path}: unknown model ${def.runtime.model} — not in MODEL_BY_TIER`,
-    );
-  }
+
   return {
     phase: def.phase,
     skill: skillPathFromRoot,

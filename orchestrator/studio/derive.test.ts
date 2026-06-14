@@ -104,16 +104,46 @@ test('deriveAgentSpec throws when frontmatter has no phase field', () => {
   }
 });
 
-test('deriveAgentSpec throws when runtime strategy is range', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'derive-neg-'));
+test('deriveAgentSpec: strategy:range derives spec at cheapest tier (haiku < sonnet)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
   try {
     const fm = VALID_BASE
       .replace('strategy: fixed', 'strategy: range')
-      .replace('model: claude-sonnet-4-6', 'range: [claude-sonnet-4-6, claude-haiku-4-5-20251001]');
+      .replace('model: claude-sonnet-4-6', 'range:\n  - claude-haiku-4-5-20251001\n  - claude-sonnet-4-6');
+    const skillPath = writeTmpSkill(dir, fm);
+    // Must NOT throw; spec.tier = cheapest in range = haiku
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.equal(spec.tier, 'haiku');
+    assert.equal(spec.phase, 'test');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('deriveAgentSpec: strategy:range with opus+haiku derives at haiku (cheapest)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
+  try {
+    const fm = VALID_BASE
+      .replace('strategy: fixed', 'strategy: range')
+      .replace('model: claude-sonnet-4-6', 'range:\n  - claude-opus-4-8\n  - claude-haiku-4-5-20251001');
+    const skillPath = writeTmpSkill(dir, fm);
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.equal(spec.tier, 'haiku');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('deriveAgentSpec throws when strategy:range has no range field', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
+  try {
+    const fm = VALID_BASE
+      .replace('strategy: fixed', 'strategy: range');
+    // model key is kept — should still fail because range is missing
     const skillPath = writeTmpSkill(dir, fm);
     assert.throws(
-      () => deriveAgentSpec(skillPath, '/'),
-      /runtime must be strategy:fixed with a model/,
+      () => deriveAgentSpec(skillPath, process.cwd()),
+      /strategy:range requires a non-empty range field/,
     );
   } finally {
     rmSync(dir, { recursive: true });
