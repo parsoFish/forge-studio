@@ -27,10 +27,18 @@ interface PhaseDrawerProps {
   run: Run | null;
   flow: Flow;
   onClose: () => void;
+  /**
+   * Which kind of hex was clicked. 'wi' = a fanOut-expanded work-item hex
+   * (drawer renders in WI-scoped mode); 'phase' (default) = a phase hex.
+   */
+  hexKind?: 'phase' | 'wi';
+  /** The work-item id when hexKind='wi' (the clicked WI hex's identity). */
+  wiId?: string;
 }
 
-export function PhaseDrawer({ nodeId, run, flow, onClose }: PhaseDrawerProps) {
+export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiId }: PhaseDrawerProps) {
   const isOpen = nodeId !== null && run !== null;
+  const isWi = hexKind === 'wi';
 
   // Close on Escape
   useEffect(() => {
@@ -41,11 +49,16 @@ export function PhaseDrawer({ nodeId, run, flow, onClose }: PhaseDrawerProps) {
   }, [isOpen, onClose]);
 
   const node = nodeId ? flow.nodes.find((n) => n.id === nodeId) : null;
-  const agentLabel = node?.agent ?? nodeId ?? '—';
+  // WI-scoped mode (M3 deferred for full per-WI detail): the drawer reuses the
+  // phase-scoped body (phase log / liveness / artifacts) but labels itself with
+  // the work-item identity so the operator + harness can tell which hex opened it.
+  const wiItem = isWi && wiId && run ? run.workItems?.find((w) => w.id === wiId) ?? null : null;
+  const agentLabel = isWi ? (wiId ?? 'work item') : (node?.agent ?? nodeId ?? '—');
   const meta: import('@/lib/studio-client').RunPhaseMeta | null =
     nodeId && run ? (run.phaseMeta[nodeId] ?? null) : null;
-  const status: string =
-    nodeId && run ? (run.phases[nodeId] ?? 'pending') : 'pending';
+  const status: string = isWi
+    ? (wiItem?.status ?? 'pending')
+    : nodeId && run ? (run.phases[nodeId] ?? 'pending') : 'pending';
   const cycleId = run?.id ?? '';
 
   return (
@@ -68,6 +81,8 @@ export function PhaseDrawer({ nodeId, run, flow, onClose }: PhaseDrawerProps) {
         data-drawer-open={isOpen ? 'true' : 'false'}
         data-drawer-run={run?.id ?? ''}
         data-drawer-node={nodeId ?? ''}
+        data-hex-kind={hexKind}
+        data-wi-id={isWi ? (wiId ?? '') : ''}
         style={{
           position: 'fixed',
           top: 0,
@@ -114,7 +129,7 @@ export function PhaseDrawer({ nodeId, run, flow, onClose }: PhaseDrawerProps) {
                 color: 'var(--faint)',
               }}
             >
-              {nodeId ?? '—'}
+              {isWi ? `${nodeId ?? '—'} · work item` : (nodeId ?? '—')}
             </div>
           </div>
           <button

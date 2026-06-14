@@ -23,9 +23,13 @@
  *
  * REGRESSION HARNESS: all assertions are SOFT (failures[]; non-zero exit at end).
  * Regression guards preserved from the previous harness:
- *   ≥5 phase hexes, ≥2 WI hexes, hex-detail drawer opens (phase + wi), per-phase cost rollup,
- *   cross-project pane data-project-group, unifier own-hex complete, per-AC demo-evaluation,
+ *   ≥5 phase hexes, ≥2 WI hexes, drawer opens (phase + wi), per-phase cost rollup,
+ *   unifier own-node complete, per-AC demo-evaluation,
  *   partial-count==0 on re-review, reflection hex complete.
+ *   (M7-1, ADR-031: the cycle-monitor invariants — ≥5 phase / ≥2 WI / drawer /
+ *   per-phase cost / unifier-own-node / status — are asserted against the Studio
+ *   flow monitor [data-mon-node] selectors, not the legacy /dashboard. The
+ *   cross-project [data-project-group] pane assertion is DROPPED per ADR-031.)
  *
  * NEW assertions (the four architect observability surfaces):
  *   P1: [data-architect-stale="true"] renders when staleMs>120s; clears after refresh.
@@ -446,22 +450,50 @@ async function expectCycleStatus(page, status) {
     check(false, `cycle status → ${status} (got "${got}")`);
   }
 }
+// Per-phase cost is asserted on the Studio monitor hexes (M7-1, ADR-031):
+// each phase HexNode carries [data-mon-node][data-phase-cost-usd]. The dashboard
+// [data-phase-hex] selector is queried too so the still-extant /dashboard
+// close-out beats (16-21, re-homed later in M7-3/M7-4) keep passing — when
+// /dashboard is deleted that selector simply matches nothing.
+const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd], [data-phase-hex][data-phase-cost-usd]';
 async function maxPhaseCost(page) {
-  return page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('[data-phase-hex]')]
-    .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)));
+  return page.evaluate((sel) => Math.max(0, ...[...document.querySelectorAll(sel)]
+    .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)), PHASE_COST_SEL);
 }
 async function expectPhaseCost(page, msg) {
   try {
     await page.waitForFunction(
-      () => [...document.querySelectorAll('[data-phase-hex]')].some((e) =>
+      (sel) => [...document.querySelectorAll(sel)].some((e) =>
         (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
-      null, { timeout: 15000 },
+      PHASE_COST_SEL, { timeout: 15000 },
     );
   } catch { /* report real value below */ }
   check(await maxPhaseCost(page) > 0, msg);
 }
-/** Click the first hex matching hexSelector and assert the HexDetailDrawer opens.
- *  Guards the regression where phase-hex wrappers had pointer-events:none. */
+
+/** Navigate to the Studio flow monitor and wait until it is ready with the
+ *  in-flight cycle selected as the active run. The monitor refetches the run
+ *  model from the bridge on load (reads the event log), so it reflects every
+ *  event seeded so far without depending on a live subscription. */
+async function openStudioMonitor(page, watch) {
+  await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+    null, { timeout: 20000 },
+  ).catch(() => {});
+  // Select the run for this cycle if its rail card is present (pickDefaultRun
+  // already prefers gated→active, but select explicitly to be deterministic).
+  const card = page.locator(`[data-run-id="${CYCLE_ID}"]`).first();
+  if ((await card.count()) > 0) {
+    await card.click().catch(() => {});
+    await sleep(ACT);
+  }
+}
+
+/** Click the first Studio-monitor hex matching hexSelector and assert the
+ *  PhaseDrawer (#phase-drawer) opens with the expected data-hex-kind.
+ *  Guards the regression where hex wrappers had pointer-events:none, and the
+ *  new M7-1 requirement that a WI hex opens a WI-scoped drawer. */
 async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   const el = page.locator(hexSelector).first();
   if ((await el.count()) === 0) { check(false, `${label}: no ${hexSelector} present to click`); return; }
@@ -470,25 +502,33 @@ async function expectHexOpensDrawer(page, hexSelector, kind, label) {
   await el.click();
   let opened = false;
   try {
-    await page.waitForSelector(`[data-section="hex-detail"][data-hex-kind="${kind}"]`, { timeout: 5000 });
+    await page.waitForFunction(
+      (k) => {
+        const d = document.querySelector('#phase-drawer');
+        return d?.getAttribute('data-drawer-open') === 'true' && d?.getAttribute('data-hex-kind') === k;
+      },
+      kind, { timeout: 5000 },
+    );
     opened = true;
-    check(true, `${label}: clicking a ${kind} hex opens the detail drawer`);
+    check(true, `${label}: clicking a ${kind} hex opens the drawer (data-hex-kind="${kind}")`);
   } catch {
-    const got = await page.evaluate(() =>
-      document.querySelector('[data-section="hex-detail"]')?.getAttribute('data-hex-kind') ?? '(no drawer)');
-    check(false, `${label}: clicking a ${kind} hex opens the detail drawer (got kind="${got}")`);
+    const got = await page.evaluate(() => {
+      const d = document.querySelector('#phase-drawer');
+      return `open=${d?.getAttribute('data-drawer-open') ?? '(absent)'} kind=${d?.getAttribute('data-hex-kind') ?? '(absent)'}`;
+    });
+    check(false, `${label}: clicking a ${kind} hex opens the drawer (got ${got})`);
   }
   if (opened) {
     await sleep(READ);
-    await frame(page, `hex-detail-${kind}`, `Hex detail — ${kind} hex opens the detail drawer (held open)`);
+    await frame(page, `hex-detail-${kind}`, `Phase drawer — ${kind} hex opens the detail drawer (held open)`);
   }
-  const close = page.locator('[data-action="close-hex-detail"]');
-  if ((await close.count()) > 0) {
-    await sleep(ACT);
-    await close.click();
-    await page.waitForSelector('[data-section="hex-detail"]', { state: 'detached', timeout: 3000 }).catch(() => {});
-    await sleep(ACT);
-  }
+  // Close the drawer (Escape) so the next click starts clean.
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.waitForFunction(
+    () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'false',
+    null, { timeout: 3000 },
+  ).catch(() => {});
+  await sleep(ACT);
 }
 
 // ── THE 32-BEAT JOURNEY ────────────────────────────────────────────────────────
@@ -829,19 +869,23 @@ async function main() {
     await sleep(ACT);
     await frame(page, 'beat09b-dashboard-live', 'Beat 9 — "Watch it build →" lands on dashboard, cycle live');
     await expectCycleStatus(page, 'in-flight');
-    await countAtLeast(page, '[data-phase-hex]', 5, 'pipeline spine shows ≥5 phase hexes');
-    await countAtLeast(page, '[data-project-group]', 1, 'cross-project pane groups cycles by project');
-    // P4: the architect hex (first in the pipeline) carries the REAL cost seeded at beat 6
+    // Monitor invariants re-homed onto the Studio flow monitor (M7-1, ADR-031):
+    // the cycle-monitoring guards now live on /flows/forge-cycle, not /dashboard.
+    // (ADR-031: the [data-project-group] cross-project pane assertion is DROPPED.)
+    await openStudioMonitor(page, watch);
+    await frame(page, 'beat09c-studio-monitor-live', 'Beat 9 — Studio flow monitor shows the cycle live (run rail + topology)');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: pipeline spine shows ≥5 phase hexes');
+    // P4: the architect hex carries the REAL cost seeded at beat 6.
     try {
       await page.waitForFunction(
-        () => (parseFloat(document.querySelector('[data-phase-hex][data-phase="architect"]')
+        () => (parseFloat(document.querySelector('[data-mon-node][data-node-id="architect"]')
           ?.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0,
         null, { timeout: 12000 },
       );
       check(true, 'P4: architect hex carries real cost (data-phase-cost-usd > 0)');
     } catch {
       const costVal = await page.evaluate(() =>
-        document.querySelector('[data-phase-hex][data-phase="architect"]')?.getAttribute('data-phase-cost-usd') ?? '(absent)');
+        document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-phase-cost-usd') ?? '(absent)');
       check(false, `P4: architect hex carries real cost (got "${costVal}")`);
     }
 
@@ -859,10 +903,15 @@ async function main() {
     cycleEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.31, duration_ms: 28000, metadata: { work_item_count: 2 } });
     await sleep(WORK);
     await frame(page, 'beat10b-pm-settled', 'Beat 10 — PM decomposed ACs into 2 dependency-ordered work items (WI hexes materialised)');
-    await countAtLeast(page, '[data-wi-hex]', 2, 'PM materialised ≥2 WI hexes');
-    // Hex detail drawer — regression guard (pointer-events:none bug)
-    await expectHexOpensDrawer(page, '[data-phase-hex]', 'phase', 'hex-detail');
-    await expectHexOpensDrawer(page, '[data-wi-hex]', 'wi', 'hex-detail');
+    // Re-open the monitor so the run model picks up the freshly-seeded WI events
+    // deterministically (the monitor refetches from the bridge on load).
+    await openStudioMonitor(page, watch);
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'monitor: PM materialised ≥2 WI hexes');
+    // Drawer open/close regression guards — re-homed onto the Studio PhaseDrawer
+    // (#phase-drawer). A phase hex opens a phase-scoped drawer; a WI hex opens a
+    // WI-scoped drawer (data-hex-kind="wi").
+    await expectHexOpensDrawer(page, '[data-mon-node][data-hex-kind="phase"]', 'phase', 'monitor phase drawer');
+    await expectHexOpensDrawer(page, '[data-mon-node][data-hex-kind="wi"]', 'wi', 'monitor WI drawer');
 
     // ── BEAT 11: Dev-loop TDD red — gate.expected-fail ────────────────────────
     console.log('\n[beat 11] Dev-loop TDD red — gate.expected-fail');
@@ -938,31 +987,54 @@ async function main() {
     await sleep(THINK);
     writeDemoJson(1);
     unifierEvent('end', 'unifier.end — demo authored, branch clean', { cost_usd: 0.18, duration_ms: 46000 });
-    // Regression guard: unifier hex must reach complete on its OWN hex
+    // Regression guard (re-homed onto the Studio monitor): the unifier reaches
+    // complete on its OWN node ([data-mon-node][data-node-id="unifier"]), not
+    // folded into the dev-loop node. Re-open the monitor so the run model
+    // reflects the unifier.end event deterministically.
+    await openStudioMonitor(page, watch);
     try {
       await page.waitForFunction(
-        () => document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') === 'complete',
+        () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
         null, { timeout: 10000 },
       );
-      check(true, 'unifier hex lit its own status (blue→green), not folded into dev-loop');
+      check(true, 'monitor: unifier node lit its own status complete (not folded into dev-loop)');
     } catch {
       const got = await page.evaluate(() =>
-        document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') ?? '(absent)');
-      check(false, `unifier hex should reach complete (got "${got}")`);
+        document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') ?? '(absent)');
+      check(false, `monitor: unifier node should reach complete (got "${got}")`);
     }
-    await frame(page, 'beat14b-unifier-green', 'Beat 14 — unifier (own hex) greens after authoring the demo');
+    await frame(page, 'beat14b-unifier-green', 'Beat 14 — unifier (own node) greens after authoring the demo');
 
     // ── BEAT 15: Cost rollup across the spine ─────────────────────────────────
     console.log('\n[beat 15] Cost rollup');
     cycleEvent('review-loop', 'start', 'review-loop start');
     cycleEvent('review-loop', 'log', 'reviewer.pr-opened');
     moveManifest('in-flight', 'ready-for-review');
-    await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
     await caption(page, 'Every phase is costed.');
+    // Per-phase cost rollup re-homed onto the Studio monitor (M7-1, ADR-031):
+    // the page is on /flows/forge-cycle here; assert against [data-mon-node].
+    await openStudioMonitor(page, watch);
     await sleep(READ);
-    await frame(page, 'beat15-cost-rollup', 'Beat 15 — cost rollup: architect $0.46 / PM $0.31 / dev-loop $0.92 / unifier $0.18');
+    await frame(page, 'beat15-cost-rollup', 'Beat 15 — cost rollup: architect $0.46 / PM $0.31 / dev-loop $0.92 / unifier $0.18 (Studio monitor)');
+    await expectPhaseCost(page, 'monitor: cost rollup — a phase hex shows cost > 0');
+    // Run-rail status invariant: the seeded gated cycle shows status "gated"
+    // (the Studio vocab for ready-for-review). Navigation to the review screen
+    // still goes through the dashboard open-review link (out of scope: M7-3).
+    try {
+      await page.waitForFunction(
+        (id) => document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') === 'gated',
+        CYCLE_ID, { timeout: 12000 },
+      );
+      check(true, 'monitor: run rail shows the cycle as gated (ready-for-review)');
+    } catch {
+      const got = await page.evaluate((id) =>
+        document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
+      check(false, `monitor: run rail shows the cycle gated (got "${got}")`);
+    }
+    // Return to the dashboard for the review-navigation link (M7-3 keeps this).
+    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
     await expectCycleStatus(page, 'ready-for-review');
-    await expectPhaseCost(page, 'cost rollup: a phase hex shows cost > 0');
 
     // ── BEAT 16: Review — per-AC evaluated demo (PARTIAL) ─────────────────────
     console.log('\n[beat 16] Review — per-AC demo (PARTIAL)');
@@ -1300,10 +1372,14 @@ async function main() {
     await sleep(ACT);
     // Run rail has ≥1 data-run-id card (the seeded gated run should be visible)
     await countAtLeast(page, '[data-run-id]', 1, 'monitor: run rail shows ≥1 [data-run-id]');
-    // Topology has ≥6 data-mon-node hexes (forge-cycle flow has 6 nodes)
+    // Topology renders ≥6 total hexes. With the dev node fanned out to its work
+    // items, the deterministic per-PHASE node set is 5 (architect/pm/unifier/
+    // review/reflect) plus ≥2 WI hexes — so assert both the per-phase floor and
+    // the total floor (M7-1, ADR-031).
     await countAtLeast(page, '[data-mon-node]', 6, 'monitor: topology renders ≥6 [data-mon-node] hexes');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: ≥5 deterministic per-phase hexes');
     await sleep(READ);
-    await frame(page, 'beat23-monitor', 'Beat 23 — flow monitor: run rail + topology with ≥6 phase hexes');
+    await frame(page, 'beat23-monitor', 'Beat 23 — flow monitor: run rail + topology (≥5 phase hexes + WI hexes)');
 
     // Click the unifier hex → drawer opens
     const unifierHex = page.locator('[data-node-id="unifier"]').first();

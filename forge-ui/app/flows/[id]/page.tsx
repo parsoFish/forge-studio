@@ -50,7 +50,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const [activeRun,   setActiveRun]   = useState<Run | null>(null);
   const [ready,       setReady]       = useState(false);
   const [tailEvents,  setTailEvents]  = useState<EventLogEntry[]>([]);
-  const [drawerNode,  setDrawerNode]  = useState<string | null>(null);
+  // Drawer selection is a single state object so the toggle updater reads its
+  // own fresh `prev` (no cross-state read of a closed-over value).
+  const [drawer, setDrawer] = useState<{
+    node: string | null;
+    hexKind: 'phase' | 'wi';
+    wiId?: string;
+  }>({ node: null, hexKind: 'phase' });
 
   // BUILD tab state
   const [buildFlow,   setBuildFlow]   = useState<Flow | null>(null);
@@ -239,19 +245,38 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       const run = runs.find((r) => r.id === runId) ?? null;
       setActiveRun(run);
       setTailEvents([]); // clear tail on run switch
-      setDrawerNode(null);
+      setDrawer({ node: null, hexKind: 'phase' });
     },
     [runs],
   );
 
   // ---- drawer ----
 
-  const handleNodeClick = useCallback((nodeId: string) => {
-    setDrawerNode((prev) => (prev === nodeId ? null : nodeId));
-  }, []);
+  const handleNodeClick = useCallback(
+    (nodeId: string, hexKind: 'phase' | 'wi' = 'phase', wiId?: string) => {
+      // Toggle key combines nodeId + wiId because every fanOut WI hex shares the
+      // same nodeId (the dev node) — clicking a different WI must reopen, not close.
+      // Single functional updater: `prev` is always fresh, so the toggle key
+      // comparison never reads a stale closed-over wiId.
+      const key = wiId ? `${nodeId}::${wiId}` : nodeId;
+      setDrawer((prev) => {
+        const prevKey =
+          prev.node && prev.wiId ? `${prev.node}::${prev.wiId}` : prev.node;
+        if (prevKey === key) {
+          return { node: null, hexKind: 'phase' };
+        }
+        return {
+          node: nodeId,
+          hexKind,
+          wiId: hexKind === 'wi' ? wiId : undefined,
+        };
+      });
+    },
+    [],
+  );
 
   const handleDrawerClose = useCallback(() => {
-    setDrawerNode(null);
+    setDrawer({ node: null, hexKind: 'phase' });
   }, []);
 
   // ---- empty states ----
@@ -497,10 +522,12 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           {/* Phase drawer — overlays from right */}
           {flow && (
             <PhaseDrawer
-              nodeId={drawerNode}
+              nodeId={drawer.node}
               run={activeRun}
               flow={flow}
               onClose={handleDrawerClose}
+              hexKind={drawer.hexKind}
+              wiId={drawer.wiId}
             />
           )}
         </>

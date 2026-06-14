@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { topoLevels } from '@/lib/dep-layout';
-import type { Flow, FlowNode, Run } from '@/lib/studio-client';
+import { buildMonitorLayout, HEX_W, HEX_H, type HexPos, type HexKind } from '@/lib/monitor-layout';
+import type { Flow, Run } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
 // FlowTopology — static positioned hex layout for the monitor tab.
@@ -17,34 +17,19 @@ import type { Flow, FlowNode, Run } from '@/lib/studio-client';
 //  - complete→active edge gets ember-flow dashed animation
 // ---------------------------------------------------------------------------
 
-const HEX_W = 88;
-const HEX_H = 80;
-const COL_GAP = 180;   // horizontal gap between level columns (center-to-center)
-const ROW_GAP = 110;   // vertical gap between sibling nodes (center-to-center)
-const PAD_X  = 80;
-const PAD_Y  = 80;
-
 interface FlowTopologyProps {
   flow: Flow;
   run: Run | null;
-  onNodeClick: (nodeId: string) => void;
-}
-
-// Position record for a rendered hex
-interface HexPos {
-  nodeId: string;
-  label: string;
-  x: number;  // center x in canvas-px
-  y: number;  // center y in canvas-px
-  status: string;
-  isGated: boolean;
-  isFailed: boolean;
-  wiId?: string; // set for fanOut expanded WI hexes
+  onNodeClick: (nodeId: string, hexKind: HexKind, wiId?: string) => void;
 }
 
 export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
-  const { hexes, edges, canvasW, canvasH } = useMemo(
-    () => buildLayout(flow, run),
+  // buildMonitorLayout is the pure run-model → topology mapping (unit-tested in
+  // lib/monitor-layout.test.ts). `hexes` is the full set (edges resolve by
+  // nodeId); `topologyHexes` is the deduplicated render set (one phase hex per
+  // nodeId + every WI hex) so the per-PHASE node count is deterministic.
+  const { hexes, topologyHexes, fanOutAggregate, edges, canvasW, canvasH } = useMemo(
+    () => buildMonitorLayout(flow, run),
     [flow, run],
   );
 
@@ -78,113 +63,30 @@ export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
         ))}
       </svg>
 
-      {/* Hex nodes */}
-      {hexes.map((hex) => (
+      {/* Hex nodes — deduplicated render set (one phase hex per nodeId + every WI hex) */}
+      {topologyHexes.map((hex) => (
         <HexNode key={hex.nodeId + (hex.wiId ?? '')} hex={hex} onNodeClick={onNodeClick} />
       ))}
+
+      {/*
+        FanOut aggregate sentinel — when the fanOut (dev-loop) node expands into
+        per-WI hexes, no 'phase' hex for it appears above. This hidden node keeps
+        the aggregate dev-loop status + cost assertable (run.phases[dev] /
+        phaseMeta[dev].costUsd) without inflating the deterministic per-PHASE
+        count: it carries data-fanout-phase (NOT data-hex-kind="phase").
+      */}
+      {fanOutAggregate && (
+        <div
+          data-fanout-phase=""
+          data-node-id={fanOutAggregate.nodeId}
+          data-status={fanOutAggregate.status}
+          data-phase-cost-usd={fanOutAggregate.costUsd.toFixed(2)}
+          aria-hidden="true"
+          style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}
+        />
+      )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Layout builder
-// ---------------------------------------------------------------------------
-
-function buildLayout(
-  flow: Flow,
-  run: Run | null,
-): {
-  hexes: HexPos[];
-  edges: Array<{ from: string; to: string; artifact?: string }>;
-  canvasW: number;
-  canvasH: number;
-} {
-  // topoLevels expects items with id + deps extracted via callbacks
-  const nodes = flow.nodes;
-  const edgesRaw = flow.edges;
-
-  // Build dep map from edges (edge.to depends on edge.from)
-  const depsOf = (n: FlowNode): string[] =>
-    edgesRaw.filter((e) => e.to === n.id).map((e) => e.from);
-
-  const { byLevel, maxLevel } = topoLevels(
-    nodes,
-    (n) => n.id,
-    depsOf,
-  );
-
-  // Identify fanOut node
-  const fanOutNodeId = nodes.find((n) => n.fanOut)?.id ?? null;
-
-  // Assign positions
-  const hexes: HexPos[] = [];
-
-  const gateNodeId = run?.gate ?? null;
-  const failNodeId = run?.failedAt ?? null;
-
-  for (let level = 0; level <= maxLevel; level++) {
-    const levelNodes = byLevel.get(level) ?? [];
-    const cx = PAD_X + level * COL_GAP;
-
-    // Expand fanOut node if WIs are present
-    let expandedCount = 0;
-    for (const n of levelNodes) {
-      if (n.id === fanOutNodeId && run?.workItems && run.workItems.length > 0) {
-        expandedCount += run.workItems.length;
-      } else {
-        expandedCount += 1;
-      }
-    }
-
-    let rowIndex = 0;
-
-    for (const n of levelNodes) {
-      const status = run?.phases[n.id] ?? 'pending';
-      const isGated = n.id === gateNodeId;
-      const isFailed = n.id === failNodeId;
-      const agentLabel = n.agent ?? n.id;
-
-      if (n.id === fanOutNodeId && run?.workItems && run.workItems.length > 0) {
-        // Expand to one hex per WI
-        const wiCount = run.workItems.length;
-        for (let wi = 0; wi < wiCount; wi++) {
-          const wiItem = run.workItems[wi];
-          const adjustedCy = PAD_Y + rowIndex * ROW_GAP + (expandedCount > 1 ? (-(expandedCount - 1) * ROW_GAP / 2) : 0);
-          hexes.push({
-            nodeId: n.id,
-            label: wiItem.id,
-            x: cx,
-            y: adjustedCy,
-            status: wiItem.status,
-            isGated: false,
-            isFailed: false,
-            wiId: wiItem.id,
-          });
-          rowIndex++;
-        }
-      } else {
-        const adjustedCy = PAD_Y + rowIndex * ROW_GAP + (expandedCount > 1 ? (-(expandedCount - 1) * ROW_GAP / 2) : 0);
-        hexes.push({
-          nodeId: n.id,
-          label: agentLabel,
-          x: cx,
-          y: adjustedCy,
-          status,
-          isGated,
-          isFailed,
-        });
-        rowIndex++;
-      }
-    }
-  }
-
-  // Canvas dimensions
-  const allX = hexes.map((h) => h.x);
-  const allY = hexes.map((h) => h.y);
-  const canvasW = (allX.length ? Math.max(...allX) : 0) + PAD_X + HEX_W;
-  const canvasH = (allY.length ? Math.max(...allY) : 0) + PAD_Y + HEX_H;
-
-  return { hexes, edges: edgesRaw, canvasW, canvasH };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +181,7 @@ function HexNode({
   onNodeClick,
 }: {
   hex: HexPos;
-  onNodeClick: (nodeId: string) => void;
+  onNodeClick: (nodeId: string, hexKind: HexKind, wiId?: string) => void;
 }) {
   const gatedStyle: React.CSSProperties = hex.isGated
     ? {
@@ -308,7 +210,10 @@ function HexNode({
       data-mon-node=""
       data-node-id={hex.nodeId}
       data-status={hex.status}
-      onClick={() => onNodeClick(hex.nodeId)}
+      data-hex-kind={hex.hexKind}
+      {...(hex.wiId ? { 'data-wi-id': hex.wiId } : {})}
+      data-phase-cost-usd={(hex.costUsd ?? 0).toFixed(2)}
+      onClick={() => onNodeClick(hex.nodeId, hex.hexKind, hex.wiId)}
       style={{
         position: 'absolute',
         display: 'flex',
