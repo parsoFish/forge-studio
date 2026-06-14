@@ -228,27 +228,40 @@ async function startWatch() {
       return res.ok;
     } catch { return false; }
   };
-  if ((await probe('http://127.0.0.1:4123/api/cycles')) && (await probe('http://localhost:4124/'))) {
-    log('reusing existing forge watch on 4124/4123');
+  // Reuse-existing-watch optimization (PRESERVED, M7-7): probe the bridge
+  // health endpoint + the UI homepage; only spawn fresh if either is absent.
+  if ((await probe('http://127.0.0.1:4123/api/health')) && (await probe('http://localhost:4124/'))) {
+    log('reusing existing forge studio on 4124/4123');
     return { proc: null, uiUrl: 'http://localhost:4124', bridgeUrl: 'http://127.0.0.1:4123' };
   }
+  // M7-7: spawn the canonical `forge studio` launcher; detect readiness via its
+  // deterministic 'forge-studio-ready {json}' stdout line (no log-scraping).
   return new Promise((res, rej) => {
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'watch', '--no-open'],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
       { cwd: FORGE_ROOT, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
     );
-    let uiUrl = null, bridgeUrl = null;
+    let buf = '';
+    let settled = false;
     const onData = (chunk) => {
-      const t = chunk.toString();
-      const m1 = t.match(/http:\/\/localhost:\d+/); if (m1 && !uiUrl) uiUrl = m1[0];
-      const m2 = t.match(/bridge at (http:\/\/127\.0\.0\.1:\d+)/); if (m2 && !bridgeUrl) bridgeUrl = m2[1];
-      if (t.includes('Ready in') && uiUrl && bridgeUrl) res({ proc, uiUrl, bridgeUrl });
+      if (settled) return;
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        const m = line.match(/^forge-studio-ready (.+)$/);
+        if (!m) continue;
+        try {
+          const { bridgeUrl, uiUrl } = JSON.parse(m[1]);
+          if (bridgeUrl && uiUrl) { settled = true; res({ proc, uiUrl, bridgeUrl }); return; }
+        } catch { /* not the signal line */ }
+      }
     };
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    setTimeout(() => { if (!uiUrl || !bridgeUrl) rej(new Error('forge watch not ready within 30s')); }, 30000);
+    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready within 30s')); }, 30000);
   });
 }
 

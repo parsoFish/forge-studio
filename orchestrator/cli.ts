@@ -96,7 +96,7 @@ process.chdir(FORGE_ROOT);
     case 'brain':
       return cmdBrain(args.slice(1));
     case 'studio':
-      return cmdStudio(args.slice(1));
+      return await cmdStudio(args.slice(1));
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'watch':
@@ -154,11 +154,13 @@ Usage:
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
-  forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
+  forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
                                           Bring up the forge operator UI (foreground; Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over
                                           any previous forge process so a pinned browser tab auto-reconnects).
-                                          Open http://localhost:4124 in your browser.
+                                          Health-probes the bridge then the UI before opening the browser, then
+                                          emits a deterministic 'forge-studio-ready {json}' line (or --ready-file).
+  forge watch [...]                       DEPRECATED alias of 'forge studio' (retires after one milestone).
   forge requeue <init-or-handle> [--reset-retries]
                                           Recover a stuck initiative: move manifest back to pending/,
                                           remove stranded verdict files + worktree, append a marker to
@@ -1038,11 +1040,62 @@ function cmdBrainLint(rest: string[]): void {
 // exit 1 on errors, exit 2 on usage error.
 // ---------------------------------------------------------------------------
 
-function cmdStudio(rest: string[]): void {
+// `forge studio` is a dual-mode dispatcher (M7-6, ADR-031):
+//   - `forge studio lint`           → validate studio definitions (preserved)
+//   - `forge studio [launcher flags]` → launch the operator UI (NEW canonical)
+// The bare form (no subcommand) and any leading `--flag` mean "launch"; only
+// the explicit `lint` subcommand routes to the validator.
+async function cmdStudio(rest: string[]): Promise<void> {
   const sub = rest[0];
   if (sub === 'lint') return cmdStudioLint();
-  console.error('forge studio: subcommands: lint');
+  if (!sub || sub.startsWith('-')) return await cmdStudioLauncher(rest);
+  console.error('forge studio: subcommands: lint | [launcher flags]');
+  console.error('  forge studio                 Launch the operator UI (bridge + Next.js dev)');
+  console.error('  forge studio lint            Validate studio definitions');
   process.exit(2);
+}
+
+/** Parse the shared launcher flags and bring up the operator UI. Used by the
+ *  canonical `forge studio` and the deprecated `forge watch` alias. */
+async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): Promise<void> {
+  const { runWatch, isValidPort } = await import('../cli/forge-watch.ts');
+  const parsePortFlag = (raw: string | undefined, flag: string): number => {
+    if (!isValidPort(raw)) {
+      console.error(`forge studio: ${flag} requires a valid port number (1-65535)`);
+      process.exit(2);
+    }
+    return Number(raw);
+  };
+  const opts: {
+    bridgeOnly?: boolean; bridgePort?: number; uiPort?: number;
+    noOpen?: boolean; readyFile?: string;
+  } = {};
+  for (let i = 0; i < rest.length; i += 1) {
+    const a = rest[i];
+    if (a === '--bridge-only') opts.bridgeOnly = true;
+    else if (a === '--no-open') opts.noOpen = true;
+    else if (a === '--bridge-port') opts.bridgePort = parsePortFlag(rest[++i], '--bridge-port');
+    else if (a === '--ui-port') opts.uiPort = parsePortFlag(rest[++i], '--ui-port');
+    else if (a === '--ready-file') opts.readyFile = rest[++i];
+    else if (a === '--help' || a === '-h') {
+      console.log(`forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+  Bring up the forge operator UI at http://localhost:4124 (foreground; Ctrl-C quits).
+  Awaits a health probe on the bridge then the UI before opening the browser,
+  then emits a deterministic 'forge-studio-ready {json}' line on stdout.
+  Re-runs take over any prior forge process on the fixed ports so a pinned
+  browser tab auto-reconnects via WebSocket backoff.
+    --bridge-only  Run only the WebSocket bridge (no Next.js dev server).
+    --no-open      Skip launching the browser.
+    --bridge-port  HTTP/WS port for the bridge (default: 4123).
+    --ui-port      Port for the Next.js dev server (default: 4124).
+    --ready-file   Atomically write the ready-info JSON to this path on readiness.`);
+      return;
+    } else {
+      console.error(`forge studio: unknown option ${a}`);
+      process.exit(2);
+    }
+  }
+  await runWatch({ forgeRoot: FORGE_ROOT, logLabel, ...opts });
 }
 
 function cmdStudioLint(): void {
@@ -1086,31 +1139,12 @@ async function cmdArchitect(rest: string[]): Promise<void> {
   process.exit(2);
 }
 
+// DEPRECATED ALIAS (M7-6, retire after one milestone): `forge watch` now
+// delegates to the canonical `forge studio` launcher. It prints a one-line
+// deprecation notice and otherwise behaves identically.
 async function cmdWatch(rest: string[]): Promise<void> {
-  const { runWatch } = await import('../cli/forge-watch.ts');
-  const opts: { bridgeOnly?: boolean; bridgePort?: number; uiPort?: number; noOpen?: boolean } = {};
-  for (let i = 0; i < rest.length; i += 1) {
-    const a = rest[i];
-    if (a === '--bridge-only') opts.bridgeOnly = true;
-    else if (a === '--no-open') opts.noOpen = true;
-    else if (a === '--bridge-port') opts.bridgePort = Number(rest[++i]);
-    else if (a === '--ui-port') opts.uiPort = Number(rest[++i]);
-    else if (a === '--help' || a === '-h') {
-      console.log(`forge watch [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>]
-  Bring up the forge operator UI at http://localhost:4124.
-  Re-runs take over any prior forge process on the fixed ports so a
-  pinned browser tab auto-reconnects via WebSocket backoff.
-    --bridge-only  Run only the WebSocket bridge (no Next.js dev server).
-    --no-open      Skip launching the browser.
-    --bridge-port  HTTP/WS port for the bridge (default: 4123).
-    --ui-port      Port for the Next.js dev server (default: 4124).`);
-      return;
-    } else {
-      console.error(`forge watch: unknown option ${a}`);
-      process.exit(2);
-    }
-  }
-  await runWatch({ forgeRoot: FORGE_ROOT, ...opts });
+  console.warn('[deprecated] `forge watch` is now `forge studio` — please update your invocation.');
+  await cmdStudioLauncher(rest, '[forge watch]');
 }
 
 function cmdRequeue(rest: string[]): void {

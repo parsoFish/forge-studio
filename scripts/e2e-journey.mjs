@@ -372,26 +372,39 @@ function writeReflectionQuestions() {
 // ── BOOT + FRAMES ─────────────────────────────────────────────────────────────
 
 async function startWatch() {
-  try { execSync('fuser -k 4123/tcp 4124/tcp', { stdio: 'ignore' }); } catch { /* none */ }
-  await sleep(800);
+  // No pre-flight port kill here: `forge studio` performs its own deterministic
+  // multi-tool (lsof→ss→fuser) SIGTERM→SIGKILL takeover on the fixed ports and
+  // only emits its ready signal after the health probe passes. Duplicating a
+  // hard-coded `fuser -k 4123/4124` + blind sleep here would silently diverge
+  // if the launcher's defaults ever change — we rely on the ready signal alone.
+  // M7-7: spawn the canonical `forge studio` launcher and detect readiness via
+  // its deterministic 'forge-studio-ready {json}' stdout line — no Next.js
+  // log-wording scraping. (stdio still piped so the operator can watch logs.)
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'watch', '--no-open'],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
       { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-    let uiUrl = null, bridgeUrl = null;
+    let buf = '';
+    let settled = false;
     const onData = (chunk) => {
-      const t = chunk.toString();
-      const u = t.match(/http:\/\/localhost:\d+/);
-      const b = t.match(/bridge at (http:\/\/127\.0\.0\.1:\d+)/);
-      if (b && !bridgeUrl) bridgeUrl = b[1];
-      if (u && !uiUrl) uiUrl = u[0];
-      if (t.includes('Ready in') && uiUrl && bridgeUrl) res({ proc, uiUrl, bridgeUrl });
+      if (settled) return;
+      buf += chunk.toString();
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        const m = line.match(/^forge-studio-ready (.+)$/);
+        if (!m) continue;
+        try {
+          const { bridgeUrl, uiUrl } = JSON.parse(m[1]);
+          if (bridgeUrl && uiUrl) { settled = true; res({ proc, uiUrl, bridgeUrl }); return; }
+        } catch { /* not the signal line */ }
+      }
     };
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    setTimeout(() => { if (!uiUrl || !bridgeUrl) rej(new Error('watch not ready in 90s')); }, 90000);
+    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready in 90s')); }, 90000);
   });
 }
 

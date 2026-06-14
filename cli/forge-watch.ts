@@ -1,22 +1,128 @@
 /**
- * `forge watch` — foreground subcommand that brings up the operator UI.
+ * `forge studio` (canonical) / `forge watch` (deprecated alias) — the
+ * foreground launcher that brings up the operator UI (ADR-031, M7-6).
  *
  * Spawns two children:
  *   1. The forge-ui bridge (cli/ui-bridge.ts) — WebSocket + HTTP API.
  *   2. The forge-ui Next.js dev server (forge-ui workspace) — the browser.
  *
- * Opens the operator's default browser at the Next.js URL once the dev
- * server reports ready. On SIGINT (Ctrl-C) it tears both children down
- * and exits 0.
+ * Readiness is DETERMINISTIC, not stdout-scraped: the launcher awaits the
+ * bridge's bound-port promise, then polls the bridge `GET /api/health` until
+ * 200, then polls the UI port `GET http://localhost:<uiPort>/` until it
+ * responds, and ONLY THEN opens the browser and emits a single machine-
+ * readable ready signal — both a `forge-studio-ready {json}` stdout line and
+ * (when `--ready-file <path>` is passed) an atomically-written JSON file. No
+ * dependency on Next.js's "Ready in" log wording.
  *
- * Stage M2-A scope: read-only viewing. Verdict POST handlers come in M2-C.
+ * On SIGINT (Ctrl-C) it tears both children down and exits 0.
  */
 
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { startBridge } from './ui-bridge.ts';
+
+/** The deterministic ready signal forge studio emits on stdout once both the
+ *  bridge and the UI have answered a health probe. Consumers grep for this
+ *  prefix instead of scraping Next.js log wording. */
+export const READY_SIGNAL_PREFIX = 'forge-studio-ready';
+
+export type ReadyInfo = { bridgeUrl: string; uiUrl: string };
+
+/** Format the single-line stdout ready signal. Pure — unit-tested. */
+export function formatReadySignal(info: ReadyInfo): string {
+  return `${READY_SIGNAL_PREFIX} ${JSON.stringify(info)}`;
+}
+
+/** Parse a stdout line into the ready info, or null if it is not the signal.
+ *  Pure — unit-tested. Tolerant of leading/trailing whitespace so a line
+ *  arriving mid-chunk still matches once isolated. */
+export function parseReadySignal(line: string): ReadyInfo | null {
+  const m = line.trim().match(new RegExp(`^${READY_SIGNAL_PREFIX} (.+)$`));
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]) as Partial<ReadyInfo>;
+    if (typeof parsed.bridgeUrl === 'string' && typeof parsed.uiUrl === 'string') {
+      return { bridgeUrl: parsed.bridgeUrl, uiUrl: parsed.uiUrl };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Atomically write the ready info to a file (write to `.tmp`, then rename) so
+ *  a file-watching consumer never observes partial JSON. */
+export function writeReadyFile(path: string, info: ReadyInfo): void {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(info));
+  renameSync(tmp, path);
+}
+
+/** True when `raw` parses to a valid TCP port (integer 1-65535). Pure — used
+ *  by the CLI's `--bridge-port`/`--ui-port` flag guard so a missing value
+ *  (`--bridge-port --no-open` → `Number('--no-open')` = NaN) or out-of-range
+ *  number is rejected before it ever reaches a bind/takeover. Unit-tested. */
+export function isValidPort(raw: string | undefined): raw is string {
+  if (raw === undefined || raw.startsWith('-')) return false;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 65535;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** A fetch-like probe: returns true when the URL answers (status considered
+ *  ready), false on any error/timeout. Injectable for tests. */
+export type ProbeFetch = (url: string) => Promise<boolean>;
+
+/** Default HTTP probe used by the launcher: a short-timeout GET that treats
+ *  ANY HTTP response (even a non-2xx) as "the server is up and answering".
+ *  Next.js dev can return a redirect/HTML before it is fully warm — what we
+ *  need is proof the port is bound and the process responds. */
+async function defaultProbe(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    // Drain the body so the socket frees promptly.
+    try { await res.arrayBuffer(); } catch { /* ignore */ }
+    return res.status > 0;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Poll a URL until {@link probe} reports ready, or the timeout elapses.
+ * Pure control-flow with an injectable probe + clock so the loop is unit-
+ * tested without a real server. Resolves true when ready, false on timeout.
+ */
+export async function pollUntilReady(
+  url: string,
+  opts: {
+    probe?: ProbeFetch;
+    timeoutMs?: number;
+    intervalMs?: number;
+    now?: () => number;
+    wait?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<boolean> {
+  const probe = opts.probe ?? defaultProbe;
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const intervalMs = opts.intervalMs ?? 100;
+  const now = opts.now ?? Date.now;
+  const wait = opts.wait ?? sleep;
+  const deadline = now() + timeoutMs;
+  // First attempt fires immediately; subsequent attempts back off by interval.
+  for (;;) {
+    if (await probe(url)) return true;
+    if (now() >= deadline) return false;
+    await wait(intervalMs);
+  }
+}
 
 /**
  * Fixed default ports so the operator can pin one browser tab open at
@@ -41,31 +147,41 @@ export type WatchOptions = {
   /** Skip launching the UI dev server (bridge only). Lets the operator
    *  point a pre-built static export at the bridge by hand. */
   bridgeOnly?: boolean;
+  /** When set, atomically write the ready info JSON to this path once both
+   *  the bridge and UI answer a health probe (M7-6). A consumer can wait on
+   *  the file appearing instead of parsing stdout. */
+  readyFile?: string;
+  /** Log prefix — `[forge studio]` (canonical) or `[forge watch]`
+   *  (deprecated alias). Defaults to `[forge studio]`. */
+  logLabel?: string;
 };
 
 export async function runWatch(opts: WatchOptions): Promise<void> {
   const { forgeRoot } = opts;
+  const label = opts.logLabel ?? '[forge studio]';
   const uiDir = resolve(forgeRoot, 'forge-ui');
   const bridgePort = opts.bridgePort ?? DEFAULT_BRIDGE_PORT;
   const uiPort = opts.uiPort ?? DEFAULT_UI_PORT;
+  const uiUrl = `http://localhost:${uiPort}`;
 
   // 1. Take over the bridge port (kills any previous forge process on
   //    it) and start. Fixed ports + takeover let the operator keep a
   //    browser tab pinned at http://localhost:4124 across re-runs and
   //    have it auto-reconnect via the bridge-client backoff.
-  takeoverPort(bridgePort, 'bridge');
+  takeoverPort(bridgePort, 'bridge', label);
   const bridge = await startBridge({ forgeRoot, port: bridgePort });
-  console.log(`[forge watch] bridge at ${bridge.url}`);
+  console.log(`${label} bridge at ${bridge.url}`);
 
   // 2. Start Next.js dev (unless --bridge-only or forge-ui not installed).
   let uiProc: ChildProcess | null = null;
+  let uiLaunched = false;
   if (!opts.bridgeOnly) {
     if (!existsSync(resolve(uiDir, 'package.json'))) {
-      console.log('[forge watch] forge-ui workspace not present yet (forge-ui/package.json missing).');
-      console.log('[forge watch] running bridge-only — install the workspace then re-run.');
+      console.log(`${label} forge-ui workspace not present yet (forge-ui/package.json missing).`);
+      console.log(`${label} running bridge-only — install the workspace then re-run.`);
     } else {
-      takeoverPort(uiPort, 'ui');
-      console.log(`[forge watch] ui at http://localhost:${uiPort} (starting next dev…)`);
+      takeoverPort(uiPort, 'ui', label);
+      console.log(`${label} ui at ${uiUrl} (starting next dev…)`);
 
       uiProc = spawn(
         'npm',
@@ -79,31 +195,43 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
           stdio: 'inherit',
         },
       );
+      uiLaunched = true;
       uiProc.on('error', (err) => {
-        console.error(`[forge watch] forge-ui dev server failed to start: ${err.message}`);
+        console.error(`${label} forge-ui dev server failed to start: ${err.message}`);
+      });
+      // If Next.js dies after startup (OOM, build error, port conflict) we must
+      // surface it and tear the bridge down — otherwise the launcher blocks
+      // forever in the never-resolving Promise below with an orphaned bridge.
+      uiProc.on('exit', (code, signal) => {
+        if (!shuttingDown) {
+          console.error(`${label} forge-ui dev server exited unexpectedly (code=${code ?? signal})`);
+          void shutdown();
+        }
       });
     }
   }
 
-  // 3. Wait briefly, then open the browser.
-  if (uiProc && !opts.noOpen) {
-    setTimeout(() => {
-      const url = `http://localhost:${uiPort}`;
-      openBrowser(url).catch((err) => {
-        console.error(`[forge watch] could not open browser: ${err.message}`);
-        console.log(`[forge watch] open ${url} manually.`);
-      });
-    }, 2000); // give Next.js a couple of seconds to bind the port
-  }
-
-  // 4. Clean up on Ctrl-C.
+  // 3. Clean up on Ctrl-C. Wired BEFORE the (awaited) readiness poll so
+  //    Ctrl-C during a slow Next.js build still tears the children down.
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log('\n[forge watch] shutting down...');
-    if (uiProc && !uiProc.killed) {
+    console.log(`\n${label} shutting down...`);
+    if (uiProc && uiProc.exitCode === null && !uiProc.killed) {
+      // SIGTERM first (Node traps it and exits cleanly, releasing the port).
       try { uiProc.kill('SIGTERM'); } catch { /* already dead */ }
+      // Await the actual exit (up to a 2.5s grace), then escalate to SIGKILL if
+      // the sub-shell ignored SIGTERM — the same pattern takeoverPort relies on
+      // to reliably free the fixed UI port on WSL2.
+      await new Promise<void>((r) => {
+        const done = () => r();
+        uiProc?.once('exit', done);
+        setTimeout(done, 2500);
+      });
+      if (uiProc.exitCode === null) {
+        try { uiProc.kill('SIGKILL'); } catch { /* already dead */ }
+      }
     }
     try { await bridge.close(); } catch { /* ignore */ }
     process.exit(0);
@@ -111,7 +239,37 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   process.on('SIGINT', () => { void shutdown(); });
   process.on('SIGTERM', () => { void shutdown(); });
 
-  // 5. Block forever (children own the foreground).
+  // 4. Deterministic readiness: poll the bridge /api/health, then (when the
+  //    UI was launched) the UI port — ONLY THEN open the browser and emit the
+  //    ready signal. No dependency on Next.js's "Ready in" log wording.
+  const bridgeReady = await pollUntilReady(`${bridge.url}/api/health`, { timeoutMs: 30_000 });
+  if (!bridgeReady) {
+    console.warn(`${label} bridge did not answer /api/health within 30s — emitting ready signal anyway`);
+  }
+  if (uiLaunched) {
+    const uiReady = await pollUntilReady(`${uiUrl}/`, { timeoutMs: 60_000 });
+    if (!uiReady) {
+      console.warn(`${label} UI did not answer at ${uiUrl} within 60s — emitting ready signal anyway`);
+    }
+  }
+
+  const info: ReadyInfo = { bridgeUrl: bridge.url, uiUrl };
+  if (opts.readyFile) {
+    try { writeReadyFile(opts.readyFile, info); }
+    catch (err) { console.error(`${label} could not write ready file ${opts.readyFile}: ${(err as Error).message}`); }
+  }
+  // The single deterministic, greppable ready line (emitted exactly once).
+  console.log(formatReadySignal(info));
+
+  // 5. Open the browser AFTER verified readiness (no blind 2s sleep).
+  if (uiLaunched && !opts.noOpen) {
+    openBrowser(uiUrl).catch((err) => {
+      console.error(`${label} could not open browser: ${err.message}`);
+      console.log(`${label} open ${uiUrl} manually.`);
+    });
+  }
+
+  // 6. Block forever (children own the foreground).
   await new Promise<void>(() => {
     // intentionally never resolves; SIGINT path handles exit.
   });
@@ -170,10 +328,10 @@ export function findListenerPids(port: number): string[] {
  * If no available tool can see a listener (port free), this is a no-op — the
  * later bind surfaces any unexpected conflict via EADDRINUSE.
  */
-export function takeoverPort(port: number, label: string): void {
+export function takeoverPort(port: number, label: string, logLabel = '[forge studio]'): void {
   const pids = findListenerPids(port);
   if (pids.length === 0) return;
-  console.log(`[forge watch] ${label}: taking over port ${port} from ${pids.length} existing process(es)`);
+  console.log(`${logLabel} ${label}: taking over port ${port} from ${pids.length} existing process(es)`);
 
   // SIGTERM all listeners. Node servers trap SIGTERM and exit cleanly,
   // releasing the socket.
@@ -197,7 +355,7 @@ export function takeoverPort(port: number, label: string): void {
     }
     try { execSync('sleep 0.1'); } catch { /* */ }
   }
-  console.warn(`[forge watch] ${label}: port ${port} still occupied after 3s; the bind below may EADDRINUSE`);
+  console.warn(`${logLabel} ${label}: port ${port} still occupied after 3s; the bind below may EADDRINUSE`);
 }
 
 async function openBrowser(url: string): Promise<void> {
