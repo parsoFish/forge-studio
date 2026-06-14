@@ -1,121 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-
-import {
-  fetchCycles,
-  fetchDemoModel,
-  type Cycle,
-  type DemoModel,
-} from '@/lib/bridge-client';
-import { ReviewStageHex } from '@/components/MomentHex';
-import { DemoComparison } from '@/components/DemoComparison';
-import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
-import { ScreenShell } from '@/components/ScreenShell';
-import { useNowTicker } from '@/lib/use-now-ticker';
-import { useCycleEvents } from '@/lib/use-cycle-events';
-
 /**
- * ADR 021 — the standalone review screen (thin wrapper, M4-4).
- *
- * This page is the legacy harness-compatible surface that preserves
- * data-page="review-cycle" (asserted by e2e-journey) while reusing the exact
- * same components as the unified artifact viewer (/artifact?type=verdict&mode=gate):
- *   - DemoComparison  → data-section="demo-comparison" / "demo-evaluation"
- *   - ReviewVerdictForm → data-component="verdict-form" / data-action="approve-and-merge"|"send-back"
- *
- * The artifact viewer is the canonical single implementation; this route is the
- * thin wrapper that keeps the harness green without a redirect.
- *
- * Deep link: /artifact?run=<cycleId>&type=verdict&mode=gate serves the same
- * content for the new direct-link path (ADR 023 / M4-4).
+ * Legacy redirect (M7-3, ADR-031). The review human moment is now served by the
+ * unified artifact viewer at /artifact?run=<id>&type=verdict&mode=gate. This thin
+ * client-side redirect preserves any bookmarks / deep-links to the old route.
  */
-export default function ReviewCyclePage({ params }: { params: { cycleId: string } }): JSX.Element {
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function ReviewCycleRedirect({ params }: { params: { cycleId: string } }): JSX.Element {
+  const router = useRouter();
   const cycleId = decodeURIComponent(params.cycleId);
-  const [cycle, setCycle] = useState<Cycle | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [demo, setDemo] = useState<DemoModel | null>(null);
-  const [approved, setApproved] = useState(false);
-  const nowMs = useNowTicker();
 
-  const loadData = useCallback(() => {
-    fetchCycles()
-      .then((snap) => {
-        const all = [...snap.live, ...snap.recent];
-        setCycle(all.find((c) => c.cycleId === cycleId) ?? null);
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-    // Re-fetch the demo too — a send-back → dev-loop rerun re-renders demo.json
-    // (ADR 021 step 12); the screen updates live without a reload.
-    fetchDemoModel(cycleId).then((d) => setDemo(d)).catch(() => {});
-  }, [cycleId]);
-  useEffect(() => { loadData(); }, [loadData]);
-  const events = useCycleEvents(cycleId, (msg) => {
-    if (msg.type === 'cycle-list-changed' || msg.type === 'snapshot') loadData();
-  });
-
-  const ready = cycle?.status === 'ready-for-review';
+  useEffect(() => {
+    router.replace(`/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`);
+  }, [router, cycleId]);
 
   return (
-    <ScreenShell
-      dataPage="review-cycle"
-      ready={loaded}
-      title="review"
-      idLabel={cycle?.initiativeId ?? cycleId}
-      maxWidth={1100}
-      mainData={{ 'data-cycle-id': cycleId, 'data-cycle-status': cycle?.status ?? '' }}
+    <main
+      data-page="review-redirect"
+      data-page-ready="true"
+      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 13 }}
     >
-      {!loaded ? (
-        <div style={{ color: '#8b949e', fontSize: 13 }}>Loading cycle…</div>
-      ) : !cycle ? (
-        <div style={{ color: '#8b949e', fontSize: 13 }}>
-          Cycle not found. <Link href="/dashboard" style={{ color: '#58a6ff' }}>Back to dashboard</Link>.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
-          <ReviewStageHex status={cycle.status} events={events} nowMs={nowMs} />
-
-          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ fontSize: 12, color: '#8b949e' }}>{cycle.project ?? '(no project)'}</div>
-              <Link
-                href={`/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`}
-                style={{ fontSize: 11, color: '#8b949e', textDecoration: 'none', fontFamily: 'ui-monospace, Menlo, monospace' }}
-              >
-                artifact viewer →
-              </Link>
-            </div>
-
-            {demo ? (
-              <DemoComparison model={demo} cycleId={cycleId} />
-            ) : (
-              <div style={{ border: '1px solid #21262d', borderRadius: 8, padding: '14px 18px', background: '#0b0f14', fontSize: 13, color: '#8b949e' }}>
-                No structured demo (<code>demo.json</code>) filed for this cycle yet.
-              </div>
-            )}
-
-            {ready ? (
-              <ReviewVerdictForm initiativeId={cycle.initiativeId} onSubmitted={(kind) => { if (kind === 'approve') setApproved(true); }} />
-            ) : (
-              <div style={{ border: '1px solid #30363d', borderRadius: 10, padding: '14px 18px', background: '#0d1117', fontSize: 13, color: '#8b949e' }}>
-                This cycle is <strong style={{ color: '#e6edf3' }}>{cycle.status}</strong> — a verdict is only needed once it reaches <code>ready-for-review</code>.
-              </div>
-            )}
-
-            {approved && (
-              <div style={{ border: '1px solid #2ea04366', borderRadius: 10, padding: '14px 18px', background: '#07140d', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ fontSize: 13, color: '#3fb950' }}>Approved — merged. One last step: reflect on the cycle.</span>
-                <Link href={`/reflect/${encodeURIComponent(cycleId)}`} data-action="open-reflect"
-                  style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 600, color: '#fff', background: '#8957e5', border: '1px solid #30363d', borderRadius: 6, padding: '6px 14px', textDecoration: 'none' }}>
-                  Reflect on this cycle →
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </ScreenShell>
+      Redirecting to the artifact viewer…
+    </main>
   );
 }

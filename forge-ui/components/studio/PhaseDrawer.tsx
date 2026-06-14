@@ -616,9 +616,9 @@ function ArtifactChip({
   const isGate = mode === 'gate';
   const filename = ARTIFACT_FILENAME[type] ?? '';
 
-  // gate chips link to the review screen; view chips link to the artifact file
+  // gate chips link to the unified artifact review gate; view chips link to the artifact file
   const href = isGate
-    ? `/review/${cycleId}`
+    ? `/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`
     : filename
     ? `/api/artifact/${encodeURIComponent(cycleId)}/${filename}`
     : null;

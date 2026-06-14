@@ -199,7 +199,7 @@ function RunCard({
 
       {isGated && (
         <a
-          href={`/review/${run.id}`}
+          href={`/artifact?run=${encodeURIComponent(run.id)}&type=verdict&mode=gate`}
           onClick={(e) => e.stopPropagation()}
           style={{
             marginTop: 5,

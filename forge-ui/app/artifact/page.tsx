@@ -22,11 +22,13 @@
  *   data-section="demo-comparison" data-section="demo-evaluation" data-ac-verdict (DemoComparison)
  *   data-component="verdict-form" data-form-state data-action="approve-and-merge"|"send-back" (ReviewVerdictForm)
  *
- * Fold-in (M4-4):
- *   type=verdict&mode=gate is the canonical review gate surface — it renders
- *   DemoComparison (evidence) + ReviewVerdictForm (the gate). Both /artifact and
- *   /review/[cycleId] render these same components; /review is the thin legacy
- *   wrapper that preserves data-page="review-cycle" for the harness.
+ * Fold-in (M4-4 → M7-3):
+ *   type=verdict&mode=gate is the SOLE review gate surface — DemoComparison
+ *   (evidence) + ReviewVerdictForm (the gate) + the post-approval open-reflect link.
+ *   type=reflection is the SOLE reflection surface — the interactive ReflectionGate
+ *   (questions + freeform + submit) above the read-only ReflectionRenderer.
+ *   The legacy /review/[cycleId] + /reflect/[cycleId] routes now redirect here
+ *   (M7-3, ADR-031); the harness drives these moments on /artifact directly.
  */
 
 import { useEffect, useState, useCallback, Suspense } from 'react';
@@ -41,6 +43,7 @@ import { WorkItemsRenderer, type WorkItemEntry } from '@/components/studio/artif
 import { PrRenderer, type PrDoc } from '@/components/studio/artifact/PrRenderer';
 import { VerdictRenderer, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
 import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/artifact/ReflectionRenderer';
+import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { PlanGate } from '@/components/PlanGate';
@@ -76,6 +79,21 @@ const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
 
 function isValidType(t: string): t is ArtifactKey {
   return ['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'].includes(t);
+}
+
+// Resolve the effective gate/view mode from the explicit ?mode= param and the
+// run's artifactsReady state. Pure (no React state) so it can be called both in
+// render and inside the load callback without capturing derived render values.
+function resolveMode(
+  modeParam: string | null,
+  type: ArtifactKey,
+  run: Run | null,
+): 'gate' | 'view' {
+  if (modeParam === 'gate' || modeParam === 'view') return modeParam;
+  if (!run) return 'view';
+  const readyKey = type === 'workitems' ? 'work-items' : type;
+  const ready = run.artifactsReady[readyKey as keyof typeof run.artifactsReady];
+  return ready === 'gate' ? 'gate' : 'view';
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +337,8 @@ function ArtifactPageInner() {
   const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
   // For plan gate-mode via an architect session (runId = '_architect-<sessionId>')
   const [archSession, setArchSession] = useState<ArchitectSessionSummary | null>(null);
+  // For reflection: the live Stage-2 questions (user-questions.json) the operator answers.
+  const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
   const [ready,      setReady]      = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
   // For plan gate-mode: track whether all decisions are resolved
@@ -326,15 +346,8 @@ function ArtifactPageInner() {
 
   const meta = TYPE_META[type];
 
-  // Derive mode: auto-infer when not specified
-  const mode = (modeParam === 'gate' || modeParam === 'view')
-    ? modeParam
-    : (() => {
-        if (!run) return 'view';
-        const ready = run.artifactsReady[type === 'workitems' ? 'work-items' : type as keyof typeof run.artifactsReady];
-        if (ready === 'gate') return 'gate';
-        return 'view';
-      })();
+  // Derive mode: auto-infer when not specified (pure helper, shared with load)
+  const mode = resolveMode(modeParam, type, run);
 
   const isGateMode = mode === 'gate';
 
@@ -356,13 +369,18 @@ function ArtifactPageInner() {
       if (signal.cancelled) return;
       setRun(fetchedRun);
 
+      // Resolve the effective mode from the explicit param + the freshly
+      // fetched run (NOT the derived `mode` render value, which is stale on the
+      // initial cold-navigate render where `run` is still null).
+      const effectiveMode = resolveMode(modeParam, type, fetchedRun);
+
       const artifactDoc = await fetchArtifactDoc(runId, type, fetchedRun);
       if (signal.cancelled) return;
       setArtifact(artifactDoc);
 
       // For verdict gate-mode: also fetch the demo evidence to show above the form.
       // (DemoComparison handles missing demo gracefully.)
-      if (type === 'verdict' && mode === 'gate') {
+      if (type === 'verdict' && effectiveMode === 'gate') {
         const dm = await fetchDemoModel(runId);
         if (!signal.cancelled) setDemoModel(dm);
       }
@@ -377,8 +395,16 @@ function ArtifactPageInner() {
         if (!signal.cancelled) setArchSession(match);
       }
 
+      // For reflection: fetch the live Stage-2 questions (user-questions.json)
+      // so the operator can answer them in-place. The read-only reflection.json
+      // artifact is fetched separately above for the renderer.
+      if (type === 'reflection') {
+        const refl = await fetchReflection(runId).catch(() => null);
+        if (!signal.cancelled) setReflectionData(refl);
+      }
+
       // Also fetch verdict doc for view-mode stamp (when type != verdict)
-      if (type !== 'verdict' && mode !== 'gate') {
+      if (type !== 'verdict' && effectiveMode !== 'gate') {
         const vd = await fetchJsonArtifact<VerdictDoc>(runId, 'verdict.json');
         if (!signal.cancelled) setVerdictDoc(vd);
       }
@@ -387,7 +413,7 @@ function ArtifactPageInner() {
     } finally {
       if (!signal.cancelled) setReady(true);
     }
-  }, [runId, type, mode]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runId, type, modeParam]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -598,6 +624,43 @@ function ArtifactPageInner() {
                       setGateState(kind === 'approve' ? 'approved' : 'sent-back');
                     }}
                   />
+
+                  {/* Approval payoff — surface the final human moment (reflect).
+                      Re-homed from the retired /review screen; points at the
+                      unified reflection artifact. Harness asserts data-action="open-reflect". */}
+                  {gateState === 'approved' && (
+                    <div style={{
+                      border: '1px solid rgba(74,222,128,.4)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '14px 18px',
+                      background: 'rgba(74,222,128,.07)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}>
+                      <span style={{ fontSize: 13, color: 'var(--green)' }}>
+                        Approved — merged. One last step: reflect on the cycle.
+                      </span>
+                      <Link
+                        href={`/artifact?run=${encodeURIComponent(runId)}&type=reflection&mode=view`}
+                        data-action="open-reflect"
+                        style={{
+                          flex: '0 0 auto',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: '#fff',
+                          background: '#8957e5',
+                          border: '1px solid var(--line)',
+                          borderRadius: 6,
+                          padding: '6px 14px',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        Reflect on this cycle →
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -606,7 +669,7 @@ function ArtifactPageInner() {
                   state so the gate bar (rendered unconditionally below) remains
                   reachable. In view mode, show the full empty state.
                   Exception: plan type with an archSession falls through to PlanGate. */}
-              {type !== 'verdict' && (!artifact || artifact.type === 'empty') && !(type === 'plan' && archSession) && (
+              {type !== 'verdict' && type !== 'reflection' && (!artifact || artifact.type === 'empty') && !(type === 'plan' && archSession) && (
                 isGateMode ? (
                   <div style={{
                     border: '1px solid var(--line)',
@@ -666,6 +729,16 @@ function ArtifactPageInner() {
 
               {artifact && artifact.type === 'verdict' && !isGateMode && (
                 <VerdictRenderer doc={artifact.doc} />
+              )}
+
+              {/* Reflection: the interactive question gate (the third human
+                  moment) sits above the read-only reflection summary. The gate
+                  carries data-section="reflect-questions" / "reflect-done" +
+                  data-field="freeform" + data-action="submit-reflection". */}
+              {type === 'reflection' && (
+                <div style={{ marginBottom: 24 }}>
+                  <ReflectionGate cycleId={runId} data={reflectionData} />
+                </div>
               )}
 
               {artifact && artifact.type === 'reflection' && (

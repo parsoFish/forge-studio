@@ -402,15 +402,16 @@ async function captureDecisionCostAndTokens(page) {
 }
 
 /**
- * captureDecisionReviewEvaluation — navigate to /review/<cycleId>, wait for
- * the demo-comparison and demo-evaluation sections, then frame.
+ * captureDecisionReviewEvaluation — navigate to the unified review gate
+ * (/artifact?run=<cycleId>&type=verdict&mode=gate, M7-3/ADR-031), wait for the
+ * demo-comparison and demo-evaluation sections, then frame.
  * Returns to the dashboard URL after the frame so subsequent navigation
  * isn't broken. Defensive: if the selectors don't appear, captures anyway
  * and logs — never throws.
  */
 async function captureDecisionReviewEvaluation(page, uiUrl, cycleId) {
   try {
-    await page.goto(`${uiUrl}/review/${cycleId}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${uiUrl}/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
       .catch(() => log('decision-review-evaluation: [data-section="demo-comparison"] not found within 15 s'));
     await page.waitForSelector('[data-section="demo-evaluation"]', { timeout: 5_000 })
@@ -710,10 +711,10 @@ async function main() {
       await serve2PhasePoll;
       log('send-back serve --once exited');
 
-      // Navigate to /review/<cycleId> again to capture the unifier's re-run output.
+      // Navigate to the unified review gate again to capture the unifier's re-run output.
       await sleep(2000);
       try {
-        await page.goto(`${watch.uiUrl}/review/${cycleId}`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
           .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
       } catch (err) {

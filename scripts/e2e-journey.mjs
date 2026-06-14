@@ -1031,16 +1031,24 @@ async function main() {
         document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
       check(false, `monitor: run rail shows the cycle gated (got "${got}")`);
     }
-    // Return to the dashboard for the review-navigation link (M7-3 keeps this).
+    // The dashboard still hosts the open-review CTA (out of scope until M7-2);
+    // confirm it's present, then drive the review moment on the unified /artifact
+    // viewer directly (M7-3, ADR-031 — /review now redirects there).
     await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
     await expectCycleStatus(page, 'ready-for-review');
 
+    // The unified review-gate URL (M7-3): /artifact?run=<id>&type=verdict&mode=gate.
+    const REVIEW_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=gate`;
+    const REFLECT_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=reflection&mode=view`;
+
     // ── BEAT 16: Review — per-AC evaluated demo (PARTIAL) ─────────────────────
     console.log('\n[beat 16] Review — per-AC demo (PARTIAL)');
     await sleep(ACT);
-    await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click();
-    await page.waitForSelector('main[data-page="review-cycle"][data-page-ready="true"]', { timeout: 30000 });
+    // /artifact renders data-page="flows" for all types — assert page-ready, not page name.
+    await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
+    // /artifact renders its root as a <div data-page-ready>, not <main> — assert the attr, not the tag.
+    await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await caption(page, 'Approve on evidence — AC-2 is only PARTIAL.');
     // Slow-scroll AC cards
@@ -1091,7 +1099,8 @@ async function main() {
     await frame(page, 'beat17-send-back', 'Beat 17 — operator sends back with a new G/W/T criterion (every field pressSequentially)');
     await page.locator('[data-action="send-back"]').click();
     await sleep(ACT);
-    await page.locator('[data-action="back-to-dashboard"]').click();
+    // /artifact has no back-to-dashboard chrome — return to the dashboard directly.
+    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
     await sleep(ACT);
 
@@ -1118,8 +1127,8 @@ async function main() {
     // ── BEAT 19: Re-review — PARTIAL→MET (payoff) ────────────────────────────
     console.log('\n[beat 19] Re-review — PARTIAL→MET');
     await sleep(ACT);
-    await page.locator(`[data-action="open-review"][href*="${INIT}"]`).click();
-    await page.waitForSelector('main[data-page="review-cycle"][data-page-ready="true"]', { timeout: 30000 }).catch(() => {});
+    await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 }).catch(() => {});
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
     await caption(page, 'Partial → corrected → met. The loop closed on your criterion.');
     // Slow-scroll to the AC-2 card (the payoff)
@@ -1161,7 +1170,9 @@ async function main() {
     await page.waitForSelector('[data-action="open-reflect"]', { timeout: 15000 }).catch(() => {});
     await sleep(ACT);
     await frame(page, 'beat20b-reflect-link', 'Beat 20 — merged; "Reflect on this cycle →" surfaces the final human moment');
-    await page.locator('[data-action="back-to-dashboard"]').click().catch(() => {});
+    // /artifact has no back-to-dashboard chrome — return to the dashboard directly
+    // for the completed-spine checks (still hosted on /dashboard until M7-2).
+    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
     await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
     await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"][data-cycle-status="done"]`, { timeout: 15000 }).catch(() => {});
@@ -1186,11 +1197,12 @@ async function main() {
     // ── BEAT 21: Reflect — operator tunes the brain ───────────────────────────
     console.log('\n[beat 21] Reflect');
     await caption(page, "Forge improves. You're the teacher.");
-    // Navigate directly to the reflect screen — the open-reflect CTA is a per-card
-    // dashboard poll that can lag; page.goto is deterministic (the verify harness uses
-    // the same pattern for /review). user-questions.json was seeded in beat 20.
-    await page.goto(`${watch.uiUrl}/reflect/${encodeURIComponent(CYCLE_ID)}`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await page.waitForSelector('main[data-page="reflect-cycle"][data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
+    // Navigate directly to the unified reflection artifact (M7-3) — the open-reflect
+    // CTA is a per-card dashboard poll that can lag; page.goto is deterministic.
+    // /artifact renders data-page="flows" for all types — assert page-ready, not name.
+    // user-questions.json was seeded in beat 20.
+    await page.goto(REFLECT_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
     await page.waitForSelector('[data-section="reflect-questions"]', { timeout: 15000 }).catch(() => {});
     await sleep(READ);
     await frame(page, 'beat21-reflect-page', 'Beat 21 — reflection screen: WI-sizing question + freeform observation');
@@ -1808,14 +1820,15 @@ async function main() {
       check(false, 'Act VI: [data-run-status="gated"] run card present in run rail');
     }
     if (gateControlPresent) {
-      // The gated card has an "Open gate →" anchor routing to /review/<runId>
+      // The gated card has an "Open gate →" anchor routing to the unified review
+      // gate /artifact?run=<runId>&type=verdict&mode=gate (M7-3, ADR-031).
       const gateLink = await page.evaluate(() => {
         const gatedCard = document.querySelector('[data-run-status="gated"]');
         if (!gatedCard) return null;
-        const link = gatedCard.querySelector('a[href*="/review/"]');
+        const link = gatedCard.querySelector('a[href*="/artifact"][href*="type=verdict"]');
         return link ? link.href : null;
       });
-      check(gateLink !== null, `Act VI: gated run card has "Open gate →" link to /review/<runId> (got ${gateLink})`);
+      check(gateLink !== null, `Act VI: gated run card has "Open gate →" link to /artifact verdict gate (got ${gateLink})`);
     }
     await frame(page, 'beat28-gate-control', 'Act VI beat 28 — gate control: gated run shows "Open gate →" link; routes through postGate endpoint');
     await sleep(READ);
