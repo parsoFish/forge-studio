@@ -46,9 +46,10 @@ import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/arti
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
-import { PlanGate } from '@/components/PlanGate';
+import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
 import { fetchRun, type Run } from '@/lib/studio-client';
+import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
@@ -423,6 +424,12 @@ function ArtifactPageInner() {
     return () => { signal.cancelled = true; };
   }, [load]);
 
+  // Architect PLAN gate: poll the session so the gate reflects phase
+  // transitions live (send-back → drafting unmounts the gate; the revised plan
+  // → awaiting-verdict remounts it). Drives the harness's beat-8 detach→reattach
+  // lifecycle without a page reload, and resets the gate's submitted state.
+  useArchitectSessionPoll(runId, type === 'plan', setArchSession);
+
   // For plan gate-mode, decisions start as unresolved only if doc has
   // unresolved decisions. demo gate-mode is always resolved.
   useEffect(() => {
@@ -700,16 +707,14 @@ function ArtifactPageInner() {
                 />
               )}
 
-              {/* Plan gate fallback: use PlanGate iframe when running via an
-                  architect session (runId='_architect-<id>') and no plan.json.
-                  Preserves data-section="plan-gate" + data-decisions-resolved (M4-4). */}
+              {/* Plan gate fallback: render the native architect PLAN gate when
+                  running via an architect session (runId='_architect-<id>') and no
+                  structured plan.json. Preserves data-section="plan-gate" +
+                  data-decisions-resolved + the beat-9 watch-it-build payoff. */}
               {type === 'plan' && (!artifact || artifact.type === 'empty') && archSession && (
-                <PlanGate
-                  fullPage
-                  project={archSession.project}
-                  sessionId={archSession.sessionId}
-                  planUrl={archSession.planUrl}
-                  idea={archSession.idea}
+                <ArchitectPlanGate
+                  session={archSession}
+                  onGateState={(s) => setGateState(s)}
                 />
               )}
 

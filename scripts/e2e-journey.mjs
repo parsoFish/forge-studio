@@ -557,9 +557,11 @@ async function main() {
   try {
 
     // ── BEAT 0: Title card ─────────────────────────────────────────────────────
+    // M7-4 (ADR-031): the architect entry is now a native Studio surface
+    // (/architect/new), NOT /dashboard. Beats 0-9 run entirely inside Studio.
     console.log('\n[beat 0] Title card');
-    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 30000 });
+    await page.goto(watch.uiUrl + '/architect/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('main[data-page="architect-new"][data-page-ready="true"]', { timeout: 30000 });
     await caption(page, 'Idea to merged PR — three human decisions.');
     await page.evaluate(() => {
       let card = document.getElementById('demo-title-card');
@@ -602,21 +604,25 @@ async function main() {
     await page.locator('[data-section="new-idea"] [data-field="idea"]').pressSequentially(IDEA, { delay: 28 });
     await sleep(THINK);
     await frame(page, 'beat01-idea-typed', 'Beat 1 — operator types the idea (pressSequentially, 28ms/char)');
-    check(await page.locator('[data-section="new-idea"]').count() > 0, '[data-section="new-idea"] present on dashboard');
+    check(await page.locator('[data-section="new-idea"]').count() > 0, '[data-section="new-idea"] present on Studio /architect/new');
     await page.locator('[data-action="start-architect"]').hover();
     await sleep(ACT);
     await frame(page, 'beat01b-start-hover', 'Beat 1 — operator hovers "Start architect" (deliberate click incoming)');
     await page.locator('[data-action="start-architect"]').click();
-    await page.waitForURL(/\/architect\//, { timeout: 15000 });
-    const sid = decodeURIComponent(page.url().split('/architect/')[1]);
+    // M7-4: the Studio entry navigates to the native interview surface
+    // /architect/<sid>/interview (NOT the retired standalone /architect/<sid>).
+    await page.waitForURL(/\/architect\/[^/]+\/interview/, { timeout: 15000 });
+    const sid = decodeURIComponent(page.url().split('/architect/')[1].split('/')[0]);
     createdSid = sid;
     console.log(`[e2e] architect session: ${sid}`);
-    check(!!sid, '[data-action="start-architect"] navigates to /architect/<sid>');
+    check(!!sid, '[data-action="start-architect"] navigates to /architect/<sid>/interview');
 
     // ── BEAT 2: Architect grounds itself — P3 live activity panel ─────────────
     console.log('\n[beat 2] Architect grounds itself — P3 activity panel streams');
     writeStatus(sid, { phase: 'interviewing', round: 1, idea: IDEA });
     archEvent(sid, 'start', 'architect turn (phase=interviewing, round=1)');
+    // M7-4: the interview is a native Studio surface (StudioNav + data-page).
+    await page.waitForSelector('main[data-page="architect-interview"]', { timeout: 15000 });
     await page.waitForSelector('[data-component="architect-hex"]', { timeout: 15000 });
     await caption(page, 'Forge reads the code and the brain before it asks anything. You watch it think — every tool call, every line of reasoning.');
     await sleep(ACT);
@@ -803,13 +809,23 @@ async function main() {
       const archDur = durMatch ? parseInt(durMatch[1], 10) : EMULATED_ARCHITECT_DURATION_MS;
       cycleEvent('architect', 'end', 'architect.end', { cost_usd: archCost, duration_ms: archDur });
     }
-    // P4 cost is seeded into the CYCLE log here (cycleEvent architect.end above),
-    // but the architect PIPELINE hex (with data-phase-cost-usd) only exists on the
-    // dashboard — so the P4 assertion runs at beat 9, once the cycle is selected there.
+    // P4 cost is seeded into the CYCLE log here (cycleEvent architect.end above);
+    // the architect PIPELINE hex (with data-phase-cost-usd) lives on the Studio
+    // flow monitor (M7-1) — so the P4 assertion runs at beat 9, once the cycle is
+    // selected on /flows/forge-cycle.
     await frame(page, 'beat06-architect-cost', 'Beat 6 — P4: architect hex greens with real cost pill ($0.46, 95s)');
 
     // ── BEAT 7: Rich PLAN.html presented ──────────────────────────────────────
+    // M7-4: the PLAN gate is the native /artifact surface, not the old architect
+    // screen. The interview surface offers an "open-plan" link at awaiting-verdict;
+    // the operator follows it (here we navigate directly to the gate URL).
     console.log('\n[beat 7] Rich PLAN.html');
+    await page.goto(
+      watch.uiUrl + `/artifact?run=_architect-${encodeURIComponent(sid)}&type=plan&mode=gate`,
+      { waitUntil: 'domcontentloaded' },
+    );
+    // /artifact root is a <div data-page-ready> (not <main>) — assert the attr (M7-3 lesson).
+    await page.waitForSelector('[data-page="flows"][data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
     await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
     await caption(page, 'The plan is Given/When/Then — the PM uses it verbatim.');
     check(await page.locator('[data-plan-iframe]').count() > 0,
@@ -859,19 +875,22 @@ async function main() {
     writeStatus(sid, { phase: 'committed', round: 3, idea: IDEA });
     cycleEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
     moveManifest('pending', 'in-flight');
+    // M7-4: the approval payoff "Watch it build →" link now lives on the
+    // /artifact PLAN gate (post-approve) and lands on the Studio flow monitor —
+    // NO /dashboard hop. The cycle-spine + P4 guards run on /flows/forge-cycle.
     await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 15000 });
     await sleep(ACT);
     await page.locator('[data-action="watch-it-build"]').click();
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
-    await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"]`, { timeout: 15000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 20000 },
+    ).catch(() => {});
     await sleep(ACT);
-    await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
-    await sleep(ACT);
-    await frame(page, 'beat09b-dashboard-live', 'Beat 9 — "Watch it build →" lands on dashboard, cycle live');
-    await expectCycleStatus(page, 'in-flight');
+    await frame(page, 'beat09b-studio-monitor-landing', 'Beat 9 — "Watch it build →" lands on the Studio flow monitor');
     // Monitor invariants re-homed onto the Studio flow monitor (M7-1, ADR-031):
     // the cycle-monitoring guards now live on /flows/forge-cycle, not /dashboard.
     // (ADR-031: the [data-project-group] cross-project pane assertion is DROPPED.)
+    // openStudioMonitor selects this cycle's run deterministically.
     await openStudioMonitor(page, watch);
     await frame(page, 'beat09c-studio-monitor-live', 'Beat 9 — Studio flow monitor shows the cycle live (run rail + topology)');
     await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: pipeline spine shows ≥5 phase hexes');

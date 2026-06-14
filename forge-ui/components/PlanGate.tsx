@@ -18,6 +18,7 @@ export function PlanGate({
   planUrl,
   idea,
   fullPage = false,
+  onVerdict,
 }: {
   project: string;
   sessionId: string;
@@ -25,6 +26,9 @@ export function PlanGate({
   idea: string;
   /** Dedicated plan screen — render the PLAN.html iframe tall (its own page). */
   fullPage?: boolean;
+  /** Fired after a verdict POST succeeds — lets the host surface a follow-on
+   *  affordance (e.g. the /artifact gate's "Watch it build →" link on approve). */
+  onVerdict?: (kind: 'approve' | 'revise' | 'reject') => void;
 }) {
   const [iframeSrc, setIframeSrc] = useState('');
   const [rationale, setRationale] = useState('');
@@ -51,6 +55,7 @@ export function PlanGate({
       });
       if (!res.ok) { setError(res.error ?? 'verdict failed'); return; }
       setDone(kind);
+      onVerdict?.(kind);
     } finally {
       setSubmitting(false);
     }

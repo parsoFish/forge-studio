@@ -145,6 +145,7 @@ function ActivityRow({ row }: { row: ActivityRow }): JSX.Element {
   const isReasoning = row.kind === 'reasoning';
   return (
     <div
+      data-activity-kind={row.kind}
       style={{
         display: 'flex',
         alignItems: 'baseline',
