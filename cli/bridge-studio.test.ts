@@ -518,6 +518,58 @@ test('GET /api/studio/catalog returns catalog object with sdks + models', async 
 });
 
 // ---------------------------------------------------------------------------
+// /api/studio/catalog — registry-driven availability (M6-4)
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/catalog reconciles sdk availability with the adapter registry', async () => {
+  // Spin up a second bridge against a fresh tmp root with the real SDK ids
+  // (claude / codex / gemini — matching studio/catalog.yaml in production).
+  const registryRoot = mkdtempSync(join(tmpdir(), 'bridge-catalog-registry-'));
+  try {
+    mkdirSync(join(registryRoot, 'studio'), { recursive: true });
+    writeFileSync(join(registryRoot, 'studio', 'catalog.yaml'), [
+      'sdks:',
+      // claude: yaml says available:true — registry should keep it true (registered + available)
+      '  - { id: claude, name: Claude Agent SDK, available: true }',
+      // codex: yaml says available:false — registry must keep it false (not registered)
+      '  - { id: codex, name: OpenAI Codex, available: false }',
+      // gemini: yaml says available:false — registry must keep it false (not registered)
+      '  - { id: gemini, name: Gemini, available: false }',
+      'models: []',
+      'tools: []',
+      'mcps: []',
+      'hooks: []',
+    ].join('\n'));
+
+    const bridgeResult = await startBridge({ forgeRoot: registryRoot, port: 0 });
+    try {
+      const res = await fetch(`${bridgeResult.url}/api/studio/catalog`);
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as {
+        catalog: { sdks: Array<{ id: string; available: boolean }> };
+      };
+      const sdks = body.catalog.sdks;
+
+      const claudeSdk = sdks.find((s) => s.id === 'claude');
+      assert.ok(claudeSdk, 'claude sdk must appear');
+      assert.equal(claudeSdk!.available, true, 'claude must be available (registered + available in registry)');
+
+      const codexSdk = sdks.find((s) => s.id === 'codex');
+      assert.ok(codexSdk, 'codex sdk must appear');
+      assert.equal(codexSdk!.available, false, 'codex must be unavailable (not registered)');
+
+      const geminiSdk = sdks.find((s) => s.id === 'gemini');
+      assert.ok(geminiSdk, 'gemini sdk must appear');
+      assert.equal(geminiSdk!.available, false, 'gemini must be unavailable (not registered)');
+    } finally {
+      await bridgeResult.close();
+    }
+  } finally {
+    rmSync(registryRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Non-studio URL → returns false (handler passes through)
 // ---------------------------------------------------------------------------
 

@@ -53,7 +53,7 @@ export function RuntimePicker({
     if (runtime.sdk === sdkId) return;
     const sdk = sdks.find((s) => s.id === sdkId);
     if (!sdk || !sdkAvailable(sdk)) {
-      onToast(`${sdk ? String(sdk.name) : sdkId} is not installed — only Claude SDK available in M2.`);
+      onToast(`${sdk ? String(sdk.name) : sdkId} is not installed — register an adapter to enable it.`);
       return;
     }
     const newModels = modelsForSdk(catalog, sdkId).map((m) => m.id);
