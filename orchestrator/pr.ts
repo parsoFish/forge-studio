@@ -15,11 +15,12 @@
  *   - `alignLocalToRemote` — on confirmed merge, ff local `main` and
  *      prune the initiative branch (closure aligns local↔remote).
  *
- * `mergePullRequest` IS now called by the approve paths (superseding G9):
+ * `mergePullRequest` IS now called by the approve path (superseding G9):
  *   - `POST /api/verdict` 'approve' in `cli/ui-bridge.ts` — the UI approve
  *     merges the remote PR immediately and fires `finalizeMergedReadyForReview`.
- *   - `forge review --approve` in `orchestrator/cli.ts` — merges the remote PR
- *     before the local fast-forward so `confirmPrMerged` sees state == MERGED.
+ *     M7-5 (ADR-031) removed the old `forge review --approve` CLI merge; the
+ *     bridge verdict route is the sole approve surface (its merge is a strict
+ *     superset of the deleted CLI path).
  * The operator's approve IS the merge gate (ADR-023 + ADR-021 supersede G9).
  * It remains unreachable from `runReviewer` / `runCycle` / the scheduler.
  *

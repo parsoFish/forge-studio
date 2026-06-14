@@ -6,7 +6,6 @@
  *   forge enqueue <project> <spec>          drop a manifest into _queue/pending/
  *   forge enqueue --from-manifest <path>    validate + drop a pre-formed manifest
  *   forge enqueue --fixture                 drop a smoke-test fixture
- *   forge status [--watch]                  print queue + in-flight snapshot
  *   forge metrics [<cycle-id>]              print per-cycle aggregates (or all)
  *   forge preflight <project>               check the C1–C6 forge↔project contract
  *   forge brain index [--scope <project>]   emit the brain navigation indexes (cache-friendly prefix)
@@ -14,12 +13,12 @@
  *   forge studio lint                       validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
  */
 
-import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, openSync } from 'node:fs';
-import { execSync, spawn } from 'node:child_process';
+import { writeFileSync, appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path';
 import { runCycle } from './cycle.ts';
-import { serve, status as schedulerStatus } from './scheduler.ts';
-import { snapshot, render, findLatestLogDir } from '../cli/visualise.ts';
+import { serve } from './scheduler.ts';
+import { findLatestLogDir } from '../cli/visualise.ts';
 import { summariseCycle, summariseAll } from '../cli/metrics.ts';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
@@ -29,21 +28,10 @@ import { runStudioLint } from '../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { mergePullRequest } from './pr.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import {
   runArchitectTurn,
 } from './architect-runner.ts';
-import {
-  daemonPaths,
-  daemonState,
-  reapStalePidFile,
-  writePidFile,
-  clearPidFile,
-  readPid,
-  isAlive,
-  setPaused,
-} from './daemon.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -65,22 +53,12 @@ process.chdir(FORGE_ROOT);
   if (cmd && sdkVerbs.has(cmd)) assertEnv('warn');
 
   switch (cmd) {
-    case 'start':
-      return cmdStart(args.slice(1));
-    case 'stop':
-      return await cmdStop(args.slice(1));
-    case 'pause':
-      return cmdPause(args.slice(1));
-    case 'resume':
-      return cmdResume();
     case 'serve':
       return await cmdServe(args.slice(1));
     case 'cycle':
       return await cmdCycle(args.slice(1));
     case 'enqueue':
       return cmdEnqueue(args.slice(1));
-    case 'status':
-      return cmdStatus(args.slice(1));
     case 'metrics':
       return cmdMetrics(args.slice(1));
     case 'preflight':
@@ -97,6 +75,9 @@ process.chdir(FORGE_ROOT);
       return cmdBrain(args.slice(1));
     case 'studio':
       return await cmdStudio(args.slice(1));
+    // M7-5 (ADR-031): `architect` is INTERNAL — hidden from `forge --help` but
+    // kept dispatchable because the UI bridge spawns `architect run <sid>` per
+    // operator turn (spawnArchitectTurn in cli/ui-bridge.ts). Do NOT delete.
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'watch':
@@ -122,34 +103,27 @@ function cmdHelp(): void {
     `forge — autonomous multi-agent orchestrator
 
 Usage:
-  forge start                             Start the scheduler as a detached background daemon
-  forge stop                              Stop the background daemon (drains in-flight cycles)
-  forge pause [reason]                    Stop claiming new work (in-flight cycles continue)
-  forge resume                            Resume claiming new work
-  forge serve [--once]                    Run the scheduler in the foreground (use 'start' for unattended)
+  forge serve [--once]                    Run the scheduler in the foreground (or 'forge studio' to manage it from the UI)
   forge cycle <initiative-id>             Run one initiative end-to-end (foreground)
   forge enqueue <project> <spec>          Drop an initiative manifest into _queue/pending/
   forge enqueue --from-manifest <path>    Validate + drop a pre-formed manifest
   forge enqueue --fixture                 Drop a smoke-test fixture into _queue/pending/
-  forge status [--watch]                  Print queue + in-flight snapshot (now also prints
-                                          each in-flight cycle's latest log dir to defeat stale-log mix-ups)
   forge log <initiative> [--events|--tail N]
                                           Print the latest _logs/<timestamp>_<id>/ dir for an
                                           initiative. --events prints the events.jsonl path;
                                           --tail [N=20] prints the last N event lines.
   forge metrics [<cycle-id>]              Per-cycle aggregates (or all cycles)
   forge preflight <project>               Check the C1–C6 forge↔project contract (declines, naming the failing clause)
-  forge review <initiative-id-or-handle>  Print the open verdict prompt and the response file's path
-                                          Accepts canonical INIT-…, handle proj#N, name alias, or unique substring.
+  forge review <init-id-or-handle> [--inspect | --abandon]
+                                          Recovery for a stuck cycle in ready-for-review/. The verdict surface
+                                          itself is the forge UI review screen (approve / send-back).
+                                          --inspect shows the worktree/branch/PR state; --abandon moves it to
+                                          failed/ and cleans up. Accepts INIT-…, handle proj#N, alias, or substring.
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
   forge demo render <initiative-id> [--dir <demoDir>]
                                           Render DEMO.md/DEMO.html from demo.json (unifier-authored)
   forge demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]
                                           Capture before/after screenshots and back-fill demo.json
-  forge architect run <session-id> [--project <name>]
-                                          ADR 020: the architect runs in the forge UI. Advances ONE turn of the
-                                          file-checkpointed runner (interview → draft → finalize). Spawned by the
-                                          UI bridge on each operator action; not normally invoked by hand.
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
   forge brain index --write               Regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
   forge brain lint [--scope <s>] [--fix]  Structural integrity checks on brain/ (8 checks, scopes: full|forge-only|project-only|single-file|cycle-touched-themes|cleanup-dry-run)
@@ -190,97 +164,11 @@ async function cmdServe(rest: string[]): Promise<void> {
   }
 }
 
-/**
- * `forge start` — spawn `forge serve` (forever) as a detached process so it
- * survives the launching shell. Root cause of a real strand: the operator
- * closed the terminal running a foreground `forge serve`, killing the cycle
- * mid-review. Detached + pid-file makes the scheduler a managed daemon.
- */
-function cmdStart(rest: string[]): void {
-  reapStalePidFile(FORGE_ROOT);
-  const queueRoot = getPaths().root;
-  const st = daemonState(FORGE_ROOT, queueRoot);
-  if (st.running) {
-    console.log(`forge already running (pid ${st.pid}, since ${st.startedAt}).`);
-    console.log(`  logs:   ${daemonPaths(FORGE_ROOT).logFile}`);
-    console.log('  stop:   forge stop');
-    return;
-  }
-  const { dir, logFile } = daemonPaths(FORGE_ROOT);
-  mkdirSync(dir, { recursive: true });
-  const logFd = openSync(logFile, 'a');
-  const cliPath = resolve(import.meta.dirname, 'cli.ts');
-  const serveArgs = ['--experimental-strip-types', cliPath, 'serve', ...rest];
-  const child = spawn(process.execPath, serveArgs, {
-    cwd: FORGE_ROOT,
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-  });
-  child.unref();
-  if (typeof child.pid !== 'number') {
-    console.error('forge start: failed to spawn the scheduler process');
-    process.exit(1);
-  }
-  writePidFile(FORGE_ROOT, child.pid);
-  console.log(`forge started (pid ${child.pid}) — detached; safe to close this terminal.`);
-  console.log(`  logs:    tail -f ${logFile}`);
-  console.log('  status:  forge status');
-  console.log('  pause:   forge pause   (stop claiming new work)');
-  console.log('  stop:    forge stop    (drain in-flight + exit)');
-}
-
-/**
- * `forge stop` — SIGTERM the daemon. The scheduler's existing signal handler
- * drains in-flight cycles cleanly (a second signal would force-quit, but we
- * only send one; the operator can re-run stop). Best-effort wait so the
- * common (idle) case reports a clean exit synchronously.
- */
-async function cmdStop(_rest: string[]): Promise<void> {
-  const { pidFile } = daemonPaths(FORGE_ROOT);
-  const pid = readPid(pidFile);
-  if (pid === null || !isAlive(pid)) {
-    console.log('forge is not running (no live daemon).');
-    clearPidFile(FORGE_ROOT);
-    return;
-  }
-  try {
-    process.kill(pid, 'SIGTERM');
-  } catch (err) {
-    console.error(`forge stop: failed to signal pid ${pid}: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  }
-  console.log(`forge stop: sent SIGTERM to pid ${pid} — draining in-flight cycle(s)…`);
-  for (let i = 0; i < 20 && isAlive(pid); i++) {
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  if (isAlive(pid)) {
-    console.log('  still draining (in-flight cycles finishing). It will exit on its own;');
-    console.log('  re-run `forge stop` to force-quit if it hangs.');
-  } else {
-    clearPidFile(FORGE_ROOT);
-    console.log('  stopped cleanly.');
-  }
-}
-
-/** `forge pause [reason]` — stop claiming new work; in-flight cycles continue. */
-function cmdPause(rest: string[]): void {
-  const reason = rest.join(' ').trim();
-  const queueRoot = getPaths().root;
-  setPaused(true, queueRoot, reason);
-  const st = daemonState(FORGE_ROOT, queueRoot);
-  console.log(`forge paused — scheduler will not claim new initiatives${reason ? ` (${reason})` : ''}.`);
-  console.log(st.running
-    ? '  the running daemon picks this up within one poll interval; in-flight cycles keep going.'
-    : '  (no daemon running — this takes effect when one is started.)');
-  console.log('  resume: forge resume');
-}
-
-/** `forge resume` — clear the pause flag so claiming restarts. */
-function cmdResume(): void {
-  const queueRoot = getPaths().root;
-  setPaused(false, queueRoot);
-  console.log('forge resumed — scheduler will claim pending work again within one poll interval.');
-}
+// M7-5 (ADR-031): `forge start` / `stop` / `pause` / `resume` / `status` were
+// removed — the Studio UI bridge is the operator API now. The daemon-spawn
+// logic moved to `spawnServeDetached` in orchestrator/daemon.ts (called by the
+// bridge's POST /api/scheduler/start); pause/resume/stop/status are bridge
+// routes that call the shared daemon helpers directly.
 
 function printLatestReportHint(): void {
   const logsRoot = resolve('_logs');
@@ -419,27 +307,6 @@ ${body}`;
   console.log(`enqueued: ${out}`);
 }
 
-function cmdStatus(rest: string[]): void {
-  const watch = rest.includes('--watch');
-  const queueRoot = getPaths().root;
-  const print = (): void => {
-    const snap = snapshot();
-    if (watch) console.clear();
-    const d = daemonState(FORGE_ROOT, queueRoot);
-    const daemonLine = d.running
-      ? `daemon: RUNNING (pid ${d.pid}, since ${d.startedAt})${d.paused ? ' · PAUSED (not claiming new work)' : ''}`
-      : `daemon: stopped${d.paused ? ' · paused flag set (forge resume to clear)' : ''} — start with: forge start`;
-    console.log(daemonLine);
-    console.log(render(snap));
-    if (!watch) {
-      const c = schedulerStatus().counts;
-      console.log(`\n(totals: ${JSON.stringify(c)})`);
-    }
-  };
-  print();
-  if (watch) setInterval(print, 2000);
-}
-
 /**
  * S1.1 helper: take any operator-typed `<id>` (canonical | handle | name |
  * unique substring) and produce the canonical id. On ambiguity print all
@@ -466,29 +333,27 @@ async function cmdReview(rest: string[]): Promise<void> {
   const rawId = rest[0];
   if (!rawId) {
     console.error('forge review: missing <initiative-id-or-handle>');
-    console.error('Usage: forge review <initiative-id-or-handle> [--inspect | --approve | --abandon]');
+    console.error('Usage: forge review <initiative-id-or-handle> [--inspect | --abandon]');
     process.exit(2);
   }
   const initiativeId = resolveOrExit(rawId, 'review');
-  // F-31: recovery sub-commands. The default behaviour (print verdict prompt)
-  // is preserved; the new flags target the case where a cycle landed in
-  // ready-for-review/ and the human needs to
-  // (a) see what was committed without reading events.jsonl,
-  // (b) force-merge a worktree the reviewer-Ralph couldn't approve itself,
-  // (c) abandon a stuck initiative cleanly (move to failed/, drop worktree).
+  // F-31 recovery sub-commands. The APPROVE path was removed in M7-5
+  // (ADR-031): approval is the Studio UI review screen's job (bridge POST
+  // /api/verdict, whose approve is a strict superset of the old CLI merge).
+  // What stays here is read-only/recovery — the operator needs to
+  // (a) see what was committed without reading events.jsonl (--inspect),
+  // (b) abandon a stuck initiative cleanly — move to failed/, drop worktree (--abandon).
   if (rest.includes('--inspect')) return cmdReviewInspect(initiativeId);
-  if (rest.includes('--approve')) return await cmdReviewApprove(initiativeId);
   if (rest.includes('--abandon')) return cmdReviewAbandon(initiativeId);
 
   // Default: the file-verdict transport has been removed. Direct the operator
   // to the UI review screen, which is the sole verdict surface.
   console.error(`forge review: the file-verdict transport is no longer supported.`);
-  console.error(`Use the forge UI review screen to submit a verdict:`);
+  console.error(`Use the forge UI review screen to submit a verdict (approve / send-back):`);
   console.error(`  http://localhost:4124/review/${initiativeId}`);
   console.error('');
   console.error('Recovery commands for stuck initiatives:');
   console.error(`  forge review ${initiativeId} --inspect    show worktree state, branch, PR draft`);
-  console.error(`  forge review ${initiativeId} --approve    force-merge the branch as-is`);
   console.error(`  forge review ${initiativeId} --abandon    move to failed/ and clean up worktree`);
   return;
 }
@@ -549,136 +414,14 @@ function cmdReviewInspect(initiativeId: string): void {
   }
 }
 
-/**
- * F-31: force-merge the branch into main as-is. Used when reviewer-Ralph
- * couldn't approve itself but the human has inspected and is satisfied.
- * Performs a fast-forward merge and triggers the same cleanup the normal
- * merge path uses.
- */
-async function cmdReviewApprove(initiativeId: string): Promise<void> {
-  const queuePaths = getPaths();
-  const located = locateInitiative(initiativeId, queuePaths);
-  if (!located) {
-    console.error(`forge review --approve: no manifest found for ${initiativeId}`);
-    process.exit(2);
-  }
-  if (located.state !== 'ready-for-review') {
-    console.error(`forge review --approve: manifest is in '${located.state}', not 'ready-for-review'`);
-    console.error('Approve only operates on initiatives whose work has been committed and is awaiting verdict.');
-    process.exit(2);
-  }
-  const m = parseManifest(readFileSync(located.path, 'utf8'));
-  const wt = (m as { worktree_path?: string }).worktree_path;
-  if (!wt || !existsSync(wt)) {
-    console.error(`forge review --approve: worktree missing at ${wt ?? '(unannotated)'} — cannot merge`);
-    console.error('The branch was cleaned up before the human could approve. Use --abandon to clear the queue state.');
-    process.exit(2);
-  }
-  const projectRepoPath = m.project_repo_path;
-  const branch = `forge/${initiativeId}`;
-  try {
-    // Merge the remote GitHub PR first so confirmPrMerged sees state == MERGED.
-    // This is consistent with the UI approve path (both must close the remote PR).
-    console.log(`Merging remote PR for ${branch}…`);
-    const remoteMerged = mergePullRequest(wt);
-    if (!remoteMerged) {
-      console.error('forge review --approve: gh pr merge failed — merge the PR manually on GitHub before approving here.');
-      process.exit(1);
-    }
-    console.log(`Merging ${branch} → main in ${projectRepoPath}…`);
-    execSync(`git -C "${projectRepoPath}" checkout main`, { stdio: 'inherit' });
-    execSync(`git -C "${projectRepoPath}" merge --ff-only "${branch}"`, { stdio: 'inherit' });
-    console.log('Merged. Cleaning up worktree + branch…');
-    execSync(`git -C "${projectRepoPath}" worktree remove --force "${wt}"`, { stdio: 'pipe' });
-    execSync(`git -C "${projectRepoPath}" branch -D "${branch}"`, { stdio: 'pipe' });
-  } catch (err) {
-    console.error(`forge review --approve: merge failed: ${err instanceof Error ? err.message : String(err)}`);
-    console.error('Try running the merge manually, or use --abandon if the work is no longer wanted.');
-    process.exit(1);
-  }
-  // Move manifest to done/.
-  const doneTarget = join(queuePaths.done, basename(located.path));
-  execSync(`mv "${located.path}" "${doneTarget}"`);
-  // Best-effort: drop any legacy file-verdict prompt + response (pre-removal residue).
-  const queueRoot = getPaths().root;
-  const inFlight = resolve(queueRoot, 'in-flight');
-  for (const suffix of ['.verdict-prompt.md', '.verdict-response.md']) {
-    const p = resolve(inFlight, `${initiativeId}${suffix}`);
-    if (existsSync(p)) {
-      try { execSync(`rm "${p}"`); } catch { /* ignore */ }
-    }
-  }
-  console.log(`Done. Manifest moved to ${doneTarget}.`);
-
-  // 2026-05-25: trigger reflection now that the merge is confirmed. In
-  // the unattended cycle path, runReflector fires inside runCycle when
-  // closure.merged === true; in the operator-driven path (this
-  // function), the cycle exited at `pr-open` and never re-entered the
-  // cycle process, so reflection has to be kicked here. Log-and-continue
-  // failure mode — a broken reflector should not roll back the merge.
-  try {
-    await invokeReflectorPostApprove(initiativeId, doneTarget, projectRepoPath);
-  } catch (err) {
-    console.error(`forge review --approve: reflection failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-/**
- * Find the cycle log dir for this initiative, build a logger that
- * appends to its events.jsonl, and call runReflector. The cycle log
- * dir name is `<timestamp>_<initiativeId>` per newCycleId in cycle.ts;
- * if multiple cycles exist for one initiative (retries), pick the most
- * recent by mtime. Falls back to a bare-initiativeId dir for legacy
- * cycles.
- */
-async function invokeReflectorPostApprove(
-  initiativeId: string,
-  manifestPath: string,
-  projectRepoPath: string,
-): Promise<void> {
-  const { readdirSync, statSync } = await import('node:fs');
-  const { resolve: nodeResolve } = await import('node:path');
-  const { createLogger } = await import('./logging.ts');
-  const { runReflector } = await import('./phases/reflector.ts');
-
-  const forgeRoot = nodeResolve(import.meta.dirname, '..');
-  const logsRoot = nodeResolve(forgeRoot, '_logs');
-
-  let cycleId: string;
-  try {
-    const entries = readdirSync(logsRoot);
-    const matches = entries
-      .filter((name) => name === initiativeId || name.endsWith(`_${initiativeId}`))
-      .map((name) => ({ name, mtimeMs: statSync(nodeResolve(logsRoot, name)).mtimeMs }))
-      .sort((a, b) => b.mtimeMs - a.mtimeMs);
-    if (matches.length === 0) {
-      console.error(`forge review --approve: no cycle log found for ${initiativeId}; skipping reflection`);
-      return;
-    }
-    cycleId = matches[0].name;
-  } catch (err) {
-    console.error(`forge review --approve: could not scan _logs/ (${err instanceof Error ? err.message : String(err)}); skipping reflection`);
-    return;
-  }
-
-  console.log(`Reflecting on cycle ${cycleId}…`);
-  const logger = createLogger(cycleId, logsRoot);
-  await runReflector(
-    {
-      initiativeId,
-      manifestPath,
-      projectRepoPath,
-      // Reflection runs against the merged project tree (the worktree
-      // was just torn down). Reflector reads files relative to
-      // worktreePath; pointing at projectRepoPath gives it the
-      // post-merge state.
-      worktreePath: projectRepoPath,
-      cycleId,
-    },
-    logger,
-  );
-  console.log('Reflection complete.');
-}
+// M7-5 (ADR-031): `forge review --approve` (cmdReviewApprove) +
+// invokeReflectorPostApprove were removed. Approval — merge the PR + finalize
+// + reflect — now lives behind the Studio UI review screen's bridge POST
+// /api/verdict (applyReviewVerdict in cli/bridge-studio-runs.ts), whose
+// approve path is a strict superset of the deleted CLI merge (ADR-021/023).
+// The no-auto-approve invariant (ADR-023) is unchanged: approval still
+// requires an explicit operator UI click (or the verify-cycle harness's
+// deliberate POST /api/verdict approve).
 
 /**
  * F-31: move a stuck initiative to failed/ and clean up worktree + branch.
@@ -1199,7 +942,9 @@ function cmdRequeue(rest: string[]): void {
 // ADR 020: the architect runs in the forge UI as an operator-driven,
 // file-checkpointed runner. `forge architect run <sid>` advances ONE turn — it's
 // what the UI bridge spawns on each operator action (start / answer / verdict).
-// Not normally invoked by hand.
+// M7-5 (ADR-031): INTERNAL command — hidden from `forge --help`, never invoked
+// by hand, but kept dispatchable for the bridge's spawnArchitectTurn. Do NOT
+// delete the function or its dispatch case.
 async function cmdArchitectRun(rest: string[]): Promise<void> {
   const sessionId = rest[0];
   if (!sessionId) {

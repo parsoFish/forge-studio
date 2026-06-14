@@ -21,11 +21,13 @@
 import {
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
 export type DaemonPaths = {
@@ -114,6 +116,54 @@ export function clearPidFile(forgeRoot: string): void {
       /* best-effort */
     }
   }
+}
+
+// ---------- detached daemon spawn ----------
+
+/**
+ * Spawn `forge serve` (forever) as a detached process and record its pid.
+ *
+ * M7-5 (ADR-031): extracted from the (now-deleted) `cmdStart` in
+ * orchestrator/cli.ts so the UI bridge's POST /api/scheduler/start can start
+ * the daemon DIRECTLY — the bridge is the operator API now, and no longer
+ * shells out to a `forge start` CLI command. Behaviour is identical to the
+ * old cmdStart spawn: stdout/stderr land in `_logs/daemon/serve.log`, the
+ * child is detached + unref'd so it outlives the caller, and its pid is
+ * persisted to `_logs/daemon/forge.pid`.
+ *
+ * Returns `{ pid, logFile }` on a fresh spawn, or `null` if a live daemon is
+ * already running (caller reports `alreadyRunning`). Throws if the spawn
+ * itself fails to produce a pid.
+ *
+ * Keep this dependency-free of the scheduler/queue: daemon.ts is imported BY
+ * the scheduler (one-way edge), so it must not import back.
+ */
+export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: string } | null {
+  reapStalePidFile(forgeRoot);
+  // Liveness check is pid-file based (queueRoot only feeds the `paused`
+  // flag, which is irrelevant to "is a daemon process running").
+  const pid = readPid(daemonPaths(forgeRoot).pidFile);
+  if (pid !== null && isAlive(pid)) return null;
+
+  const { dir, logFile } = daemonPaths(forgeRoot);
+  mkdirSync(dir, { recursive: true });
+  const logFd = openSync(logFile, 'a');
+  const cliPath = resolve(forgeRoot, 'orchestrator', 'cli.ts');
+  const child = spawn(
+    process.execPath,
+    ['--experimental-strip-types', cliPath, 'serve'],
+    {
+      cwd: forgeRoot,
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    },
+  );
+  child.unref();
+  if (typeof child.pid !== 'number') {
+    throw new Error('spawnServeDetached: failed to spawn the scheduler process');
+  }
+  writePidFile(forgeRoot, child.pid);
+  return { pid: child.pid, logFile };
 }
 
 // ---------- poll toggle (pause/resume) ----------

@@ -55,7 +55,7 @@ import {
   type StudioPostContext,
 } from './bridge-studio-runs.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths } from '../orchestrator/daemon.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
@@ -682,19 +682,17 @@ async function handleHttp(
   }
   if (method === 'POST' && url === '/api/scheduler/start') {
     try {
-      const before = daemonState(ctx.forgeRoot, ctx.queueRoot);
-      if (before.running) {
-        sendJson(res, 200, { ok: true, alreadyRunning: true, state: before }, origin);
+      // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
+      // the shared helper — the bridge no longer shells out to a `forge start`
+      // CLI command (it's been deleted). Behaviour is identical: detached
+      // child, stdout/stderr → _logs/daemon/serve.log, pid → forge.pid.
+      const result = spawnServeDetached(ctx.forgeRoot);
+      if (result === null) {
+        const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
+        sendJson(res, 200, { ok: true, alreadyRunning: true, state }, origin);
         return;
       }
-      // Spawn detached so the daemon outlives the forge-watch process.
-      const proc = spawn(process.execPath, ['--experimental-strip-types', 'orchestrator/cli.ts', 'start'], {
-        cwd: ctx.forgeRoot,
-        detached: true,
-        stdio: 'ignore',
-      });
-      proc.unref();
-      // Best-effort wait for the pid file to appear.
+      // Best-effort wait for the daemon to come up before reporting state.
       await sleep(800);
       const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
       sendJson(res, 200, { ok: true, started: true, state: after }, origin);

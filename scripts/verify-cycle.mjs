@@ -355,26 +355,51 @@ async function cycleStatusFromBridge(bridgeUrl, cycleId) {
   } catch { return null; }
 }
 
-function autoApprove(initiativeId) {
-  log(`auto-approving cycle (forge review ${initiativeId} --approve)…`);
-  const res = spawnSync(
-    process.execPath,
-    [
-      '--experimental-strip-types',
-      'orchestrator/cli.ts',
-      'review',
-      initiativeId,
-      '--approve',
+/**
+ * autoApprove — the harness's deliberate, explicit approve. POSTs an
+ * 'approve' verdict to the bridge's /api/verdict (the SAME surface the
+ * operator clicks in the Studio UI). M7-5 (ADR-031): replaces the old
+ * `forge review --approve` CLI shell-out — the bridge is the operator API
+ * now, and its approve path (mergePullRequest + finalizeMergedReadyForReview)
+ * is a strict superset of the deleted cmdReviewApprove (ADR-021/023).
+ *
+ * NO-AUTO-APPROVE INVARIANT (ADR-023) intact: approval is still NOT automatic
+ * — it requires either an operator UI click or this explicit harness call.
+ * Only the transport changed (CLI → bridge POST); the outcome is identical.
+ *
+ * POST shape: bridge base url + 'content-type' + the required 'x-forge-csrf'
+ * anti-CSRF header (the bridge rejects any non-GET lacking it with a 403 —
+ * see ui-bridge.ts). This call carried the header from the start; M7-5 also
+ * corrected postSendBack, which had been omitting it (and thus 403-ing).
+ */
+async function autoApprove(bridgeUrl, initiativeId) {
+  log(`auto-approving cycle (POST ${bridgeUrl}/api/verdict approve)…`);
+  const payload = {
+    initiativeId,
+    kind: 'approve',
+    rationale:
       'auto-approved by scripts/verify-cycle.mjs (verification cycle — see initiative manifest)',
-    ],
-    { cwd: FORGE_ROOT, stdio: 'inherit' },
-  );
-  if (res.status !== 0) {
-    log(`auto-approve failed: exit ${res.status}`);
+  };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/verdict`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forge-csrf': '1',
+      },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text().catch(() => '');
+    if (res.ok) {
+      log(`auto-approve verdict accepted (${res.status}): ${text.slice(0, 120)}`);
+      return true;
+    }
+    log(`auto-approve verdict rejected (${res.status}): ${text.slice(0, 200)}`);
+    return false;
+  } catch (err) {
+    log(`auto-approve POST failed: ${err.message}`);
     return false;
   }
-  log('auto-approve succeeded');
-  return true;
 }
 
 /**
@@ -440,6 +465,8 @@ async function captureDecisionReviewEvaluation(page, uiUrl, cycleId) {
  * Returns true on HTTP 2xx, false (+ logs) on any error.
  * The payload conforms exactly to the /api/verdict handler:
  *   { initiativeId, kind: 'send-back', rationale, acceptanceCriteria: [{given,when,then}] }
+ * Carries the required 'x-forge-csrf' header (same as autoApprove) — without
+ * it the bridge's CSRF guard 403s every non-GET request (ui-bridge.ts).
  */
 async function postSendBack(bridgeUrl, initiativeId) {
   const payload = {
@@ -457,7 +484,10 @@ async function postSendBack(bridgeUrl, initiativeId) {
   try {
     const res = await fetch(`${bridgeUrl}/api/verdict`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-forge-csrf': '1',
+      },
       body: JSON.stringify(payload),
     });
     const text = await res.text().catch(() => '');
@@ -751,7 +781,7 @@ async function main() {
   // ---- auto-approve path: if ready-for-review, kick the approve + capture
   // closure + reflection.
   if (status === 'ready-for-review') {
-    const ok = autoApprove(initiativeId);
+    const ok = await autoApprove(watch.bridgeUrl, initiativeId);
     if (ok) {
       log('waiting for closure + reflection to complete…');
       const deadline = Date.now() + 10 * 60_000; // 10 min cap
