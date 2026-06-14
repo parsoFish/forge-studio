@@ -24,7 +24,7 @@ import yaml from 'js-yaml';
 
 import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { buildKbGraph, getKbNodeArticle } from '../orchestrator/kb-graph.ts';
+import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { runBrainLint } from './brain-lint.ts';
 import {
   sendJson,
@@ -237,7 +237,7 @@ export async function handleStudioKbRoutes(
       let foundKbId: string | null = null;
       for (const kb of kbs) {
         try {
-          const graph = buildKbGraph(ctx.forgeRoot, kb.id);
+          const graph = getKbBackend(ctx.forgeRoot, kb.id).buildGraph();
           if (graph.nodes.some((n) => n.id === nodeId)) {
             foundKbId = kb.id;
             break;
@@ -288,7 +288,7 @@ export async function handleStudioKbRoutes(
 
       let article;
       try {
-        article = getKbNodeArticle(ctx.forgeRoot, kbId, nodeId);
+        article = getKbBackend(ctx.forgeRoot, kbId).getNodeArticle(nodeId);
       } catch (err) {
         // Unknown kbId → 404
         const msg = String(err);
@@ -342,7 +342,7 @@ export async function handleStudioKbRoutes(
       // Build the per-kb graph from the brain filesystem
       let graph;
       try {
-        graph = buildKbGraph(ctx.forgeRoot, kbId);
+        graph = getKbBackend(ctx.forgeRoot, kbId).buildGraph();
       } catch (err) {
         const msg = String(err);
         if (msg.includes('Unknown kbId')) {

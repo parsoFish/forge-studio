@@ -67,3 +67,32 @@ written only through one canonical serializer module
   `annotateManifest` incident) cannot recur for Studio definitions.
 - Anything that wants a second representation of an agent, flow, project, or
   KB must amend this ADR first.
+
+## Amendment (M8-0, 2026-06-14): KbBackend seam
+
+ADR-027 §4 made the KB a `kb.yaml` *descriptor*, but every read still went
+straight to `brain/<kbId>/` on disk (`kb-graph.ts`), so the descriptor was a
+label, not a swap point. M8-0 introduces the backend seam (`orchestrator/
+kb-backend.ts`):
+
+- **`KbBackend` interface** — bound to one kbId; `buildGraph`, `getNodeArticle`,
+  `listPendingGuidance`, `deleteGuidanceFile`, plus `search(query)` (a graph-
+  memory backend's native strength).
+- **`FilesystemKbBackend`** — the default, a pure delegation to the existing
+  `kb-graph.ts` functions (zero behaviour change). `search` is title-substring
+  ranking (the honest filesystem floor).
+- **`getKbBackend(forgeRoot, kbId)`** — resolves the backend from the `kb.yaml`
+  descriptor. The descriptor is the selection seam: a future `backend:` field
+  routes to a registered non-FS backend. `kb-backend.test.ts` is the contract
+  test (the KB analogue of the RuntimeAdapter conformance suite, ADR-029).
+
+This realises the modularity-as-subsumption thesis for memory: a Zep/Mem0/Cognee
+backend (M8-C) implements `KbBackend` and registers in `getKbBackend`, and the
+brain's store becomes swappable. The bridge KB routes (`cli/bridge-studio-kbs.ts`)
+now read through `getKbBackend` rather than calling `kb-graph.ts` directly.
+
+Next surface (not in this commit): the **planning-context** read — PM/reflector
+load the brain navigation index via `loadBrainIndex` (a separate module,
+duplicated as `loadBrainNavigation`). Routing that through `KbBackend` is the
+higher-value but riskier reroot; it gets its own change so the brain's
+*planning* influence is also backend-swappable.
