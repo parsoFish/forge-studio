@@ -66,7 +66,7 @@ import {
   enforceDevLoopCloseInvariant,
   enforceFinalCiGate,
   preservingForgeScratch,
-} from './cycle.ts';
+} from './cycle-helpers.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
