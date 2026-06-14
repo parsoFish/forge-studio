@@ -12,7 +12,6 @@ import { usePathname } from 'next/navigation';
  *   Agents   → disabled (M2)
  *   Projects → disabled (M5)
  *   Knowledge → disabled (M5)
- *   Dashboard → /dashboard (the old dashboard, always available)
  *
  * Active link detected from usePathname(). Non-existent builder pages
  * render as disabled <span> chips with title "M2" or "M5".
@@ -79,23 +78,6 @@ export function StudioNav() {
           );
         })}
       </div>
-
-      <Link
-        href="/dashboard"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 13,
-          fontWeight: 500,
-          color: 'var(--dim)',
-          padding: '6px 14px',
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--line)',
-          textDecoration: 'none',
-        }}
-        data-nav="dashboard"
-      >
-        Dashboard
-      </Link>
     </nav>
   );
 }

@@ -437,25 +437,11 @@ async function countAtLeast(page, selector, n, msg) {
   const got = await page.evaluate((s) => document.querySelectorAll(s).length, selector);
   check(got >= n, `${msg} (found ${got}, want ≥${n})`);
 }
-async function expectCycleStatus(page, status) {
-  try {
-    await page.waitForFunction(
-      ({ id, s }) => document.querySelector(`[data-cycle-id="${id}"]`)?.getAttribute('data-cycle-status') === s,
-      { id: CYCLE_ID, s: status }, { timeout: 8000 },
-    );
-    check(true, `cycle status → ${status}`);
-  } catch {
-    const got = await page.evaluate((id) =>
-      document.querySelector(`[data-cycle-id="${id}"]`)?.getAttribute('data-cycle-status') ?? '(absent)', CYCLE_ID);
-    check(false, `cycle status → ${status} (got "${got}")`);
-  }
-}
-// Per-phase cost is asserted on the Studio monitor hexes (M7-1, ADR-031):
-// each phase HexNode carries [data-mon-node][data-phase-cost-usd]. The dashboard
-// [data-phase-hex] selector is queried too so the still-extant /dashboard
-// close-out beats (16-21, re-homed later in M7-3/M7-4) keep passing — when
-// /dashboard is deleted that selector simply matches nothing.
-const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd], [data-phase-hex][data-phase-cost-usd]';
+// Per-phase cost is asserted on the Studio monitor hexes (M7-1/M7-2, ADR-031):
+// each phase HexNode carries [data-mon-node][data-phase-cost-usd]. /dashboard
+// (and its legacy [data-phase-hex] cost pills) was deleted in M7-2; the cycle
+// run-status invariant now lives on the run rail's [data-run-status].
+const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd]';
 async function maxPhaseCost(page) {
   return page.evaluate((sel) => Math.max(0, ...[...document.querySelectorAll(sel)]
     .map((e) => parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0)), PHASE_COST_SEL);
@@ -1050,12 +1036,10 @@ async function main() {
         document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
       check(false, `monitor: run rail shows the cycle gated (got "${got}")`);
     }
-    // The dashboard still hosts the open-review CTA (out of scope until M7-2);
-    // confirm it's present, then drive the review moment on the unified /artifact
-    // viewer directly (M7-3, ADR-031 — /review now redirects there).
-    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-action="open-review"][href*="${INIT}"]`, { timeout: 15000 });
-    await expectCycleStatus(page, 'ready-for-review');
+    // M7-2 (ADR-031): /dashboard is gone — the gated-cycle invariant is the
+    // run rail's data-run-status="gated" asserted just above. Drive the review
+    // moment on the unified /artifact viewer directly (M7-3 — /review redirects
+    // there). No /dashboard open-review hop.
 
     // The unified review-gate URL (M7-3): /artifact?run=<id>&type=verdict&mode=gate.
     const REVIEW_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=gate`;
@@ -1118,9 +1102,8 @@ async function main() {
     await frame(page, 'beat17-send-back', 'Beat 17 — operator sends back with a new G/W/T criterion (every field pressSequentially)');
     await page.locator('[data-action="send-back"]').click();
     await sleep(ACT);
-    // /artifact has no back-to-dashboard chrome — return to the dashboard directly.
-    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
+    // M7-2: no /dashboard hop after send-back — beat 18 fast-forwards the
+    // dev-loop on the new criterion, then beat 19 re-opens REVIEW_URL directly.
     await sleep(ACT);
 
     // ── BEAT 18: Dev-loop reruns on feedback (fast-forward) ───────────────────
@@ -1189,28 +1172,41 @@ async function main() {
     await page.waitForSelector('[data-action="open-reflect"]', { timeout: 15000 }).catch(() => {});
     await sleep(ACT);
     await frame(page, 'beat20b-reflect-link', 'Beat 20 — merged; "Reflect on this cycle →" surfaces the final human moment');
-    // /artifact has no back-to-dashboard chrome — return to the dashboard directly
-    // for the completed-spine checks (still hosted on /dashboard until M7-2).
-    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 });
-    await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
-    await page.waitForSelector(`[data-cycle-id="${CYCLE_ID}"][data-cycle-status="done"]`, { timeout: 15000 }).catch(() => {});
+    // M7-2 (ADR-031): the completed-spine checks re-home onto the Studio monitor
+    // (/flows/forge-cycle), NOT /dashboard. openStudioMonitor selects the cycle's
+    // run rail card; the run model refetches from the event log so it reflects the
+    // closure/reflection events seeded above.
+    await openStudioMonitor(page, watch);
+    await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
+    await page.waitForSelector(`[data-run-id="${CYCLE_ID}"][data-run-status="complete"]`, { timeout: 15000 }).catch(() => {});
     await sleep(READ);
-    await frame(page, 'beat20c-spine-complete', 'Beat 20 — completed spine: every phase green with its cost pill');
-    await expectCycleStatus(page, 'done');
-    await countAtLeast(page, '[data-phase-hex]', 5, 'completed cycle still shows ≥5 phase hexes');
-    await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
-    // Regression guard: unifier hex complete on its own hex
+    await frame(page, 'beat20c-spine-complete', 'Beat 20 — completed spine: every phase green with its cost pill (Studio monitor)');
+    // Run-rail status invariant: the merged cycle reads "complete" (Studio vocab for done).
     try {
       await page.waitForFunction(
-        () => document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') === 'complete',
+        (id) => document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') === 'complete',
+        CYCLE_ID, { timeout: 12000 },
+      );
+      check(true, 'monitor: run rail shows the cycle complete (merged + reflected)');
+    } catch {
+      const got = await page.evaluate((id) =>
+        document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
+      check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
+    }
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'completed cycle still shows ≥5 phase hexes (Studio monitor)');
+    await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
+    // Regression guard: unifier reaches complete on its OWN monitor node
+    // ([data-mon-node][data-node-id="unifier"]), not folded into the dev-loop node.
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
         null, { timeout: 8000 },
       );
-      check(true, 'unifier hex complete on its own phase slot (not folded into dev-loop)');
+      check(true, 'unifier node complete on its own monitor slot (not folded into dev-loop)');
     } catch {
       const got = await page.evaluate(() =>
-        document.querySelector('[data-phase-hex][data-phase="unifier"]')?.getAttribute('data-phase-status') ?? '(absent)');
-      check(false, `unifier hex should reach complete (got "${got}")`);
+        document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') ?? '(absent)');
+      check(false, `unifier node should reach complete (got "${got}")`);
     }
 
     // ── BEAT 21: Reflect — operator tunes the brain ───────────────────────────
@@ -1246,23 +1242,24 @@ async function main() {
     ], WORK);
     await sleep(ACT);
     await frame(page, 'beat21b-reflected', 'Beat 21 — feedback captured; reflector folds it into the brain');
-    // Regression guard: reflection hex greens after tuning
-    await page.goto(watch.uiUrl + '/dashboard', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await page.waitForSelector('main[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
-    await page.locator(`[data-cycle-id="${CYCLE_ID}"]`).click().catch(() => {});
+    // Regression guard (re-homed onto the Studio monitor, M7-2): the reflection
+    // node greens after tuning. The flow node-id is "reflect" (events say
+    // 'reflection'; run-model maps reflection → reflect, run-model.ts:113).
+    // openStudioMonitor selects the cycle's run; the run model refetches the
+    // event log so it reflects the reflection.end seeded above.
+    await openStudioMonitor(page, watch);
+    await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
     await sleep(ACT);
-    // Poll: the reflection.end emitted on the reflect page needs a moment to
-    // propagate to the dashboard's cycle view before the hex greens.
     try {
       await page.waitForFunction(
-        () => document.querySelector('[data-phase-hex][data-phase="reflection"]')?.getAttribute('data-phase-status') === 'complete',
+        () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
         null, { timeout: 12000 },
       );
-      check(true, 'reflection hex greened after tuning feedback');
+      check(true, 'reflection node greened after tuning feedback (Studio monitor)');
     } catch {
       const reflStatus = await page.evaluate(() =>
-        document.querySelector('[data-phase-hex][data-phase="reflection"]')?.getAttribute('data-phase-status') ?? '(absent)');
-      check(false, `reflection hex greened after tuning feedback (got "${reflStatus}")`);
+        document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') ?? '(absent)');
+      check(false, `reflection node greened after tuning feedback (got "${reflStatus}")`);
     }
 
     // ── ACT IV: Studio ────────────────────────────────────────────────────────

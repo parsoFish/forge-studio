@@ -10,7 +10,12 @@
  * a colour change happens in exactly one place.
  */
 
-import type { WiStatus } from './wi-status';
+/**
+ * The pipeline / WI 5-state vocabulary. Inlined here (rather than imported from
+ * the now-deleted dashboard `wi-status.ts`) so this palette module owns the one
+ * type its `WI_STATUS_GLOW` map keys on.
+ */
+type WiStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';
 
 /** The semantic tones. Domains that aren't the 5-state vocab reference these. */
 export const STATUS_COLOR = {

@@ -157,7 +157,7 @@ export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
   return body.events;
 }
 
-// ---- Work-item definition (Feature #9 — hex-detail drawer) ---------------
+// ---- Work-item definition (WI detail — /artifact viewer) -----------------
 
 export type WorkItemAcceptanceCriterion = { given: string; when: string; then: string };
 
@@ -171,7 +171,7 @@ export type WorkItemDetail = {
 
 /**
  * Fetch a single work item's on-disk definition (acceptance criteria,
- * files_in_scope, quality_gate_cmd, body) for the hex-detail drawer. Reads the
+ * files_in_scope, quality_gate_cmd, body) for the /artifact viewer. Reads the
  * immutable cycle snapshot if present, else the live worktree spec. Returns
  * null when the bridge is offline or the WI isn't found yet (pre-PM emission).
  */
