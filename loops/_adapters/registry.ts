@@ -15,6 +15,8 @@
 
 import { claudeAdapter } from './claude/index.ts';
 import { exampleAdapter } from './example/index.ts';
+import { geminiAdapter } from './gemini/index.ts';
+import { aiderAdapter } from './aider/index.ts';
 import type { RuntimeAdapter } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +26,12 @@ import type { RuntimeAdapter } from './types.ts';
 const ADAPTERS: Record<string, RuntimeAdapter> = {
   claude: claudeAdapter,
   example: exampleAdapter,
+  // M8-A flywheel drop-ins: registered but available:false until their dep +
+  // creds are provisioned (geminiAdapter: @google/genai + GEMINI_API_KEY;
+  // aiderAdapter: the aider CLI + its model key). Registering an unavailable
+  // adapter is harmless — getAdapter resolves it, isSdkAvailable stays false.
+  gemini: geminiAdapter,
+  aider: aiderAdapter,
 };
 
 // ---------------------------------------------------------------------------

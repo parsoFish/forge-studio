@@ -2,6 +2,7 @@ sdks:
   - { id: claude, name: Claude Agent SDK, available: true }
   - { id: codex, name: OpenAI Codex, available: false }
   - { id: gemini, name: Gemini, available: false }
+  - { id: aider, name: Aider (dev-loop), available: false }
 models:
   - { id: claude-haiku-4-5-20251001, name: Claude Haiku 4.5, sdk: claude, tier: haiku, costIn: 1, costOut: 5 }
   - { id: claude-sonnet-4-6, name: Claude Sonnet 4.6, sdk: claude, tier: sonnet, costIn: 3, costOut: 15 }

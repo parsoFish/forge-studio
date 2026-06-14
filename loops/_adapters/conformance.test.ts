@@ -158,9 +158,11 @@ describe('adapter registry', () => {
     assert.ok(ids.includes('example'), 'list includes example');
   });
 
-  test('registeredSdkIds() returns ["claude", "example"]', () => {
+  test('registeredSdkIds() returns the live + flywheel adapters', () => {
     const ids = registeredSdkIds();
-    assert.deepEqual(ids.sort(), ['claude', 'example'].sort());
+    // claude (live) + example (mock) + the M8-A flywheel drop-ins (gemini, aider),
+    // which are registered but available:false until dep + creds are provisioned.
+    assert.deepEqual(ids.sort(), ['aider', 'claude', 'example', 'gemini'].sort());
   });
 
   test('isSdkAvailable("claude") is true', () => {
@@ -175,7 +177,7 @@ describe('adapter registry', () => {
     assert.equal(isSdkAvailable('codex'), false);
   });
 
-  test('isSdkAvailable("gemini") is false (not registered)', () => {
+  test('isSdkAvailable("gemini") is false (registered but dep/creds absent)', () => {
     assert.equal(isSdkAvailable('gemini'), false);
   });
 
