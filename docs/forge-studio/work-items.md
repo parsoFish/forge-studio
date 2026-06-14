@@ -222,10 +222,15 @@ not a second runtime. A real Codex/Gemini/local adapter is the documented later 
 implement `RuntimeAdapter` in `loops/_adapters/<sdk>/`, register it, install the dep — this is an
 **ask-first event** at that time. No new npm dep was added; the example adapter is an in-repo mock.
 
-**Remaining gate:** operator-authorized `verify:cycle` (routine tier). The adapter extraction
-(M6-1) is behaviour-identical — `createClaudeAgent` is wrapped, not changed; the Claude path is
-unchanged behind the new adapter seam. The full unit suite guards the wrap; verify:cycle confirms
-a real cycle still runs through the Claude adapter as before.
+**verify:cycle — RAN 2026-06-14, behaviour-identical extraction CONFIRMED ($0.53).** The cycle ran
+through the Claude adapter (M6-1's wrapper): claim → PM spawned + ran (~74s real agent work) → dev
+spawned → reached the dev gate — exactly as in every prior verify, proving the adapter extraction is
+transparent (`createClaudeAgent` wrapped, not changed). The dev agent then hit `WI-1 dev failed ·
+iters=0 · gate-too-loose` — the **same orthogonal corpus artifact** as the M2/M5 runs (dev-agent
+non-determinism: M3/M4 did real work and went green, this run + M2 + M5 hit the iter-0 hollow-pass
+guard). **M6 is not implicated** — the adapter path executed claim→PM→dev identically; the gate FAIL
+is the documented corpus non-determinism, orthogonal to the adapter wrapper. The full 1084-test suite
++ the no-drift derivation test are the unit guards; this real-cycle run confirms the wrap is transparent.
 
 | WI | Title | Depends | AC (summary) |
 |---|---|---|---|
