@@ -30,7 +30,9 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '../work-item.ts';
-import { createClaudeAgent, type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
+import { type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
+import { getAdapter } from '../../loops/_adapters/registry.ts';
+import type { AgentInvocation } from '../../loops/_adapters/types.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
@@ -116,7 +118,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  *
  * Both the per-WI dev-loop and the unifier follow the identical pattern:
  *   1. build a `makeToolEventSink` for live telemetry
- *   2. call `createClaudeAgent` with `onToolUse` + `onHeartbeat` wired in
+ *   2. build the agent via the runtime adapter (`getAdapter(sdkId).createAgent`)
+ *      with `onToolUse` + `onHeartbeat` wired in
  *
  * This helper collapses that duplication. The caller supplies the logger +
  * context (phase/skill/workItemId) for the sink and the agent-specific
@@ -142,7 +145,12 @@ function makeAgentWithTelemetry(
     workItemId?: string;
   },
   agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta'>,
-): { agent: ReturnType<typeof createClaudeAgent>; toolSink: ReturnType<typeof makeToolEventSink> } {
+  // Runtime selection (ADR-029). Defaults to 'claude' — the only registered
+  // available adapter today. M8-A threads the agent definition's runtime.sdk
+  // here so a flow node can run on a second runtime; the conformance suite is
+  // the admission gate for any such adapter.
+  sdkId = 'claude',
+): { agent: AgentInvocation; toolSink: ReturnType<typeof makeToolEventSink> } {
   const toolSink = makeToolEventSink(logger, {
     initiativeId: sinkCtx.initiativeId,
     parentEventId: sinkCtx.parentEventId,
@@ -151,7 +159,7 @@ function makeAgentWithTelemetry(
     workItemId: sinkCtx.workItemId,
   });
 
-  const agent = createClaudeAgent({
+  const agent = getAdapter(sdkId).createAgent({
     ...agentOpts,
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
