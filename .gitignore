@@ -71,6 +71,13 @@ _review/
 # Forge's own runtime config (per-machine)
 forge.config.json
 
+# Secrets — never commit. zep.env holds the Zep Cloud API key (KB backend);
+# the catch-all guards any other local credential files.
+zep.env
+secrets.env
+*.env
+!*.env.example
+
 # Editor / OS noise
 .DS_Store
 .vscode/
