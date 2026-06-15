@@ -123,10 +123,13 @@ export interface ZepGraphClient {
   search(req: ZepGraphSearchQuery): Promise<ZepGraphSearchResults>;
   node: {
     get(uuid: string): Promise<ZepEntityNode>;
-    getByGraphId(graphId: string, req?: Record<string, unknown>): Promise<ZepEntityNode[]>;
+    // The real SDK requires a (graphId, request) pair — `request` is NOT optional
+    // (it carries paging: limit/uuidCursor). Verified live: omitting it throws
+    // "Expected object. Received undefined".
+    getByGraphId(graphId: string, req: Record<string, unknown>): Promise<ZepEntityNode[]>;
   };
   edge: {
-    getByGraphId(graphId: string, req?: Record<string, unknown>): Promise<ZepEntityEdge[]>;
+    getByGraphId(graphId: string, req: Record<string, unknown>): Promise<ZepEntityEdge[]>;
   };
 }
 
@@ -275,8 +278,8 @@ export class ZepKbBackend implements KbBackend {
   async prime(): Promise<void> {
     if (!this.client) return;
     const [zepNodes, zepEdges] = await Promise.all([
-      this.client.node.getByGraphId(this.zepGraphId),
-      this.client.edge.getByGraphId(this.zepGraphId),
+      this.client.node.getByGraphId(this.zepGraphId, {}),
+      this.client.edge.getByGraphId(this.zepGraphId, {}),
     ]);
 
     const nodes: KbNode[] = [];

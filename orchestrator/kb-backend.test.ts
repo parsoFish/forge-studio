@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 
 import { getKbBackend, FilesystemKbBackend, type KbBackend } from './kb-backend.ts';
 import { buildKbGraph } from './kb-graph.ts';
+import { ZepKbBackend } from './kb-backends/zep.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORGE_ROOT = resolve(__dirname, '..');
@@ -83,4 +84,71 @@ test('search() returns ranked title hits and is empty for a blank query', () => 
     assert.ok(h.title.toLowerCase().includes('index'), `hit "${h.title}" must match the query`);
     assert.equal(typeof h.score, 'number');
   }
+});
+
+// ---------------------------------------------------------------------------
+// Contract §6: ZepKbBackend (M8-C) satisfies the same contract with an injected
+// fake graph client — the admission gate (no dep/creds needed). The (graphId, {})
+// node/edge call shape was verified live against Zep Cloud (2026-06-15).
+// ---------------------------------------------------------------------------
+
+function fakeZepClient() {
+  const nodes = [
+    { uuid: 'n1', name: 'Worktrees', createdAt: '2026-01-01', summary: 'parallel work isolation' },
+    { uuid: 'n2', name: 'Merge gate', createdAt: '2026-01-01' },
+  ];
+  const edges = [
+    { sourceNodeUuid: 'n1', targetNodeUuid: 'n2', fact: 'worktrees feed the merge gate', createdAt: '2026-01-01', score: 0.9 },
+  ];
+  return {
+    async search() {
+      return { edges, nodes: [] };
+    },
+    node: {
+      async get(uuid: string) {
+        return nodes.find((n) => n.uuid === uuid);
+      },
+      async getByGraphId() {
+        return nodes;
+      },
+    },
+    edge: {
+      async getByGraphId() {
+        return edges;
+      },
+    },
+  };
+}
+
+test('ZepKbBackend satisfies the KbBackend contract (fake client): prime → buildGraph/getNodeArticle/search', async () => {
+  const backend = new ZepKbBackend({ kbId: 'cycles', forgeRoot: FORGE_ROOT, client: fakeZepClient() as never });
+  assert.equal(backend.kbId, 'cycles');
+
+  // cold before prime
+  assert.deepEqual(backend.buildGraph(), { nodes: [], edges: [] });
+
+  await backend.prime();
+  const graph = backend.buildGraph();
+  assert.equal(graph.nodes.length, 2, 'two nodes after prime');
+  assert.equal(graph.edges.length, 1, 'one edge after prime');
+
+  const article = backend.getNodeArticle('n1');
+  assert.ok(article, 'n1 resolves');
+  assert.ok(article.outbound.some((o) => o.id === 'n2'), 'n1 → n2 outbound edge');
+  assert.equal(backend.getNodeArticle('missing'), null);
+
+  // search is empty until primeSearch warms the query, then returns the fact
+  assert.deepEqual(backend.search('worktrees'), []);
+  await backend.primeSearch('worktrees');
+  const hits = backend.search('worktrees');
+  assert.ok(hits.length >= 1, 'primed search returns a hit');
+  assert.equal(hits[0].title, 'worktrees feed the merge gate');
+});
+
+test('ZepKbBackend with no client is cold-safe (empty graph, no throw)', async () => {
+  const backend = new ZepKbBackend({ kbId: 'cycles', forgeRoot: FORGE_ROOT });
+  await backend.prime();
+  assert.deepEqual(backend.buildGraph(), { nodes: [], edges: [] });
+  assert.deepEqual(backend.search('anything'), []);
+  assert.ok(Array.isArray(backend.listPendingGuidance()));
 });

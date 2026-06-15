@@ -31,6 +31,7 @@ import {
   type PendingGuidance,
 } from './kb-graph.ts';
 import { loadKbDescriptor } from './studio/registry.ts';
+import { createZepKbBackend, isZepAvailable } from './kb-backends/zep.ts';
 
 /** A single search hit over KB nodes. `score` is backend-defined (higher = better). */
 export type KbSearchHit = {
@@ -127,8 +128,36 @@ export function getKbBackend(forgeRoot: string, kbId: string): KbBackend {
   if (!existsSync(kbYamlPath)) {
     throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
   }
-  // Round-trips the descriptor (validates it parses) and is the hook point where
-  // a `backend:` field would select a non-FS implementation (M8-C).
-  loadKbDescriptor(kbYamlPath);
+  // The `zep` backend is async (dep import + live prime) — the sync path cannot
+  // build it. Callers of a zep-backed kb must use getKbBackendAsync().
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  if (descriptor.backend === 'zep') {
+    throw new Error(`kb "${kbId}" uses the zep backend — call getKbBackendAsync() instead`);
+  }
+  return new FilesystemKbBackend(forgeRoot, kbId);
+}
+
+/**
+ * Async backend resolution — the production entry point that can route to a
+ * graph-memory backend. Reads the descriptor's `backend:` field; `zep` resolves
+ * to a primed ZepKbBackend when the dep + `ZEP_API_KEY` are available, else falls
+ * back to the filesystem backend (graceful: a missing key never breaks the brain
+ * view). For filesystem kbs this is behaviour-identical to getKbBackend().
+ */
+export async function getKbBackendAsync(
+  forgeRoot: string,
+  kbId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<KbBackend> {
+  const kbYamlPath = join(resolve(forgeRoot, 'brain', kbId), 'kb.yaml');
+  if (!existsSync(kbYamlPath)) {
+    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
+  }
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  if (descriptor.backend === 'zep' && (await isZepAvailable(env))) {
+    const backend = await createZepKbBackend({ forgeRoot, kbId, env });
+    await backend.prime(); // warm the snapshot so the sync interface reads work
+    return backend;
+  }
   return new FilesystemKbBackend(forgeRoot, kbId);
 }

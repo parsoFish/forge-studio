@@ -7,6 +7,7 @@
  */
 
 import { DEMO_STEP_KINDS } from './types.ts';
+import { KB_BACKENDS } from './types.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -348,6 +349,14 @@ export function validateKb(kb: KbDescriptor): Finding[] {
 
   if (!SLUG_RE.test(kb.id)) {
     findings.push(err(obj, 'slug', `KB id "${kb.id}" does not match ${SLUG_RE}`));
+  }
+
+  // backend (optional) must be a known storage backend. Loader parses it leniently
+  // so a typo is a lint error here, not a load crash.
+  if (kb.backend !== undefined && !(KB_BACKENDS as readonly string[]).includes(kb.backend)) {
+    findings.push(
+      err(obj, 'backend', `KB backend "${kb.backend}" must be one of ${KB_BACKENDS.join('|')}`),
+    );
   }
 
   // Note: scope enum is already load-guarded in registry (oneOf check);

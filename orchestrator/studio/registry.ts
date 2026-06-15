@@ -452,6 +452,7 @@ export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
     name: reqString(d, 'name', kbYamlPath),
     scope: oneOf(reqString(d, 'scope', kbYamlPath), KB_SCOPES, kbYamlPath, 'scope'),
     desc: reqString(d, 'desc', kbYamlPath),
+    backend: optString(d, 'backend'),
     path: kbYamlPath,
   };
 }
