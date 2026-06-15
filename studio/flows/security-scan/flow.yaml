@@ -1,0 +1,13 @@
+id: security-scan
+name: Security Scan
+version: 1
+goal: Run a standalone security audit over a change and emit a ranked findings report.
+project: null
+kb: null
+costCeilingUsd: 3
+origin: ootb-library
+disposable: true
+nodes:
+  - { id: scan, agent: security-auditor }
+edges: []
+triggers: []
