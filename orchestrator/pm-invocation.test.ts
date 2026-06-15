@@ -230,3 +230,17 @@ test('renderPmUserPrompt: does NOT include instructions header when instructions
   const prompt = renderPmUserPrompt(BASE_INPUT);
   assert.ok(!prompt.includes('## Project instructions (injected by forge)'), 'should not include instructions header when absent');
 });
+
+test('renderPmUserPrompt: includes north-star section when northStar provided', () => {
+  const prompt = renderPmUserPrompt({
+    ...BASE_INPUT,
+    northStar: 'Add classic ADO release-pipeline support Microsoft never shipped.',
+  });
+  assert.ok(prompt.includes('## Project north star (injected by forge)'), 'should include north-star header');
+  assert.ok(prompt.includes('classic ADO release-pipeline'), 'should include north-star text');
+});
+
+test('renderPmUserPrompt: does NOT include north-star header when northStar absent', () => {
+  const prompt = renderPmUserPrompt(BASE_INPUT);
+  assert.ok(!prompt.includes('## Project north star (injected by forge)'), 'should not include north-star header when absent');
+});

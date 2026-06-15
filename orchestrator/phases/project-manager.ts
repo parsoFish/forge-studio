@@ -174,6 +174,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     projectContext,
     gateRecipe,
     instructions: projectConfigForPrompt?.instructions,
+    northStar: projectConfigForPrompt?.northStar,
   });
 
   const opts: Record<string, unknown> = {

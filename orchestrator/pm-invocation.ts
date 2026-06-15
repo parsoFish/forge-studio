@@ -151,10 +151,19 @@ export type PmUserPromptInput = {
    * having to re-read project.json itself.
    */
   instructions?: string;
+  /**
+   * The project's north star (M2) — its ≤140-char mission statement. Injected
+   * near the top of every PM prompt so decomposition stays aligned with the
+   * project's purpose without the PM re-reading project.json.
+   */
+  northStar?: string;
 };
 
 /** Header for the injected project-instructions block — exported for tests. */
 export const INSTRUCTIONS_SECTION_HEADER = '## Project instructions (injected by forge)';
+
+/** Header for the injected project-north-star block — exported for tests. */
+export const NORTH_STAR_SECTION_HEADER = '## Project north star (injected by forge)';
 
 /**
  * Render the per-cycle user prompt the SDK sends to the PM agent.
@@ -174,6 +183,7 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     '# Project-manager invocation',
     '',
     'Follow the project-manager skill contract in your system prompt. You are non-interactive; decompose THIS initiative\'s body and write the work items + _graph.md.',
+    ...(input.northStar ? ['', NORTH_STAR_SECTION_HEADER, '', input.northStar.trim()] : []),
     ...(projectContextBlock ? ['', projectContextBlock] : []),
     ...(input.gateRecipe ? ['', input.gateRecipe] : []),
     ...(input.instructions ? ['', INSTRUCTIONS_SECTION_HEADER, '', input.instructions.trim(), ''] : []),
