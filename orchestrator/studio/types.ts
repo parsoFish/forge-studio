@@ -72,6 +72,33 @@ export type FlowDefinition = {
   path: string;
 };
 
+/** Artifact template kinds (ADR-027 amendment 2026-06-15). */
+export const ARTIFACT_KINDS = ['file', 'git-state'] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+/** The contract an inter-node artifact must satisfy. All fields optional. */
+export type ArtifactTemplateSchema = {
+  requiredFiles?: string[]; // files the producing node must write
+  requiredFields?: string[]; // frontmatter fields each item must carry
+  gitInvariants?: string[]; // for kind: git-state (e.g. commitsAhead>0)
+};
+
+/**
+ * A typed contract for an inter-node artifact (the label on FlowEdge.artifact),
+ * stored as studio/artifact-templates/<id>.md. Reference data — the flow engine
+ * may assert it at a node boundary; lint checks every edge label resolves to one.
+ */
+export type ArtifactTemplate = {
+  id: string; // matches the edge artifact label
+  name: string;
+  kind: ArtifactKind;
+  producer?: string; // agent/node slug that produces it
+  consumer?: string; // agent/node slug that consumes it
+  schema: ArtifactTemplateSchema;
+  body: string; // prose contract
+  path: string;
+};
+
 export type KbDescriptor = {
   id: string;
   name: string;

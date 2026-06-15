@@ -9,6 +9,7 @@
 import { DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentDefinition,
+  ArtifactTemplate,
   Catalog,
   FlowDefinition,
   KbDescriptor,
@@ -299,6 +300,47 @@ export function validateFlow(
 // ---------------------------------------------------------------------------
 // validateKb
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// validateArtifactTemplate / validateArtifactRef (ADR-027 amendment)
+// ---------------------------------------------------------------------------
+
+export function validateArtifactTemplate(t: ArtifactTemplate): Finding[] {
+  const findings: Finding[] = [];
+  const obj = `artifact-template:${t.id}`;
+  if (!SLUG_RE.test(t.id)) {
+    findings.push(err(obj, 'slug', `Artifact template id "${t.id}" does not match ${SLUG_RE}`));
+  }
+  for (const [field, slug] of [
+    ['producer', t.producer],
+    ['consumer', t.consumer],
+  ] as const) {
+    if (slug !== undefined && !SLUG_RE.test(slug)) {
+      findings.push(err(obj, `${field}/slug`, `${field} "${slug}" does not match ${SLUG_RE}`));
+    }
+  }
+  return findings;
+}
+
+/**
+ * Every FlowEdge.artifact label SHOULD resolve to a registered artifact template.
+ * Advisory (flag) — promotable to error once all seed flows ship templates.
+ */
+export function validateArtifactRef(flow: FlowDefinition, templateIds: ReadonlySet<string>): Finding[] {
+  const findings: Finding[] = [];
+  for (const edge of flow.edges) {
+    if (!templateIds.has(edge.artifact)) {
+      findings.push(
+        flag(
+          `flow:${flow.id}`,
+          'artifact/no-template',
+          `Edge ${edge.from}→${edge.to} artifact "${edge.artifact}" has no registered template in studio/artifact-templates/`,
+        ),
+      );
+    }
+  }
+  return findings;
+}
 
 export function validateKb(kb: KbDescriptor): Finding[] {
   const findings: Finding[] = [];

@@ -9,11 +9,13 @@ import { join, dirname, basename } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
+import { ARTIFACT_KINDS } from './types.ts';
 import type {
   AgentBudgets,
   AgentComposition,
   AgentDefinition,
   AgentRuntime,
+  ArtifactTemplate,
   Catalog,
   CommunitySkill,
   CatalogEntry,
@@ -402,6 +404,47 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
 // ---------------------------------------------------------------------------
 
 // kb.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
+// Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).
+export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {
+  let raw: string;
+  try {
+    raw = readFileSync(mdPath, 'utf8');
+  } catch (err) {
+    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
+  }
+  const { data, content } = matter(raw);
+  const d = data as Record<string, unknown>;
+  const schemaRaw =
+    d['schema'] && typeof d['schema'] === 'object' && !Array.isArray(d['schema'])
+      ? (d['schema'] as Record<string, unknown>)
+      : {};
+  return {
+    id: reqString(d, 'id', mdPath),
+    name: reqString(d, 'name', mdPath),
+    kind: oneOf(reqString(d, 'kind', mdPath), ARTIFACT_KINDS, mdPath, 'kind'),
+    producer: optString(d, 'producer'),
+    consumer: optString(d, 'consumer'),
+    schema: {
+      requiredFiles: stringArray(schemaRaw, 'requiredFiles', mdPath),
+      requiredFields: stringArray(schemaRaw, 'requiredFields', mdPath),
+      gitInvariants: stringArray(schemaRaw, 'gitInvariants', mdPath),
+    },
+    body: content.trim(),
+    path: mdPath,
+  };
+}
+
+export function listArtifactTemplates(studioRoot: string): ArtifactTemplate[] {
+  const dir = join(studioRoot, 'studio', 'artifact-templates');
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return []; // absent dir → no templates (tolerated)
+  }
+  return files.map((f) => loadArtifactTemplate(join(dir, f)));
+}
+
 export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
   const d = loadYaml(kbYamlPath);
   return {

@@ -96,3 +96,33 @@ load the brain navigation index via `loadBrainIndex` (a separate module,
 duplicated as `loadBrainNavigation`). Routing that through `KbBackend` is the
 higher-value but riskier reroot; it gets its own change so the brain's
 *planning* influence is also backend-swappable.
+
+## Amendment (2026-06-15): Artifact as a typed contract
+
+ADR-027 §2 made the inter-node artifact a **bare string label** on `FlowEdge.artifact`
+(`plan`, `work-items`, `wi-branches`, `pr`, `verdict`). The label is an implicit
+filesystem convention: nothing declares what the artifact must contain, and a node that
+fails to produce it surfaces as downstream *agent confusion* rather than a clean
+orchestration error. The community converged on typed artifacts (GitHub Spec-Kit's
+artifact trail, Google A2A's typed `Artifact`, AWS Kiro's requirements/design/tasks
+files).
+
+The Artifact object type gains an **optional declarative template** (one canonical writer,
+same as every other Studio object):
+
+- **`ArtifactTemplate` = `studio/artifact-templates/<id>.md`** — gray-matter frontmatter
+  (`id` matching the edge label, `name`, `kind` ∈ `file | git-state`, optional `producer`/
+  `consumer`, a `schema` block of `requiredFiles` / `requiredFields` / `gitInvariants`) plus
+  a prose contract body. Loaded by `registry.loadArtifactTemplate` /
+  `listArtifactTemplates`; validated by `validateArtifactTemplate`.
+- **`validateArtifactRef(flow, templateIds)`** — every `FlowEdge.artifact` SHOULD resolve
+  to a registered template. Advisory (flag) for now so existing flows are not broken;
+  promotable to an error once all seed flows ship templates. Joins `forge studio lint`.
+- **Runtime (separate follow-up, ADR-028 surface):** a `flow-runner` `assertArtifactPresent`
+  pre-node guard turns a missing/empty inbound artifact into a clean orchestration error at
+  the boundary, and the human `verdict` is persisted as
+  `_logs/<cycleId>/artifacts/verdict.json` so the reflector has a durable record.
+
+The five seed templates (`plan`, `work-items`, `wi-branches`, `pr`, `verdict`) document the
+contracts the current cycle already relies on. `wi-branches` is `kind: git-state` (the
+artifact is commits on a branch, not a file).

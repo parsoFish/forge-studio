@@ -21,6 +21,7 @@ import { join } from 'node:path';
 
 import {
   isStudioAgent,
+  listArtifactTemplates,
   loadAgentDefinition,
   loadCatalog,
   loadFlowDefinition,
@@ -29,6 +30,8 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import {
   validateAgent,
+  validateArtifactRef,
+  validateArtifactTemplate,
   validateCatalog,
   validateFlow,
   validateKb,
@@ -65,6 +68,31 @@ export function runStudioLint(root: string): StudioLintResult {
         validModelIds = undefined; // section 3 surfaces the load error
       }
     }
+  }
+
+  // Pre-load artifact templates (advisory typed contracts for inter-node edges).
+  const artifactTemplateIds = new Set<string>();
+  try {
+    for (const t of listArtifactTemplates(root)) {
+      findings.push(...validateArtifactTemplate(t));
+      if (artifactTemplateIds.has(t.id)) {
+        findings.push({
+          level: 'error',
+          object: `artifact-template:${t.id}`,
+          check: 'unique-ids',
+          message: `Duplicate artifact template id "${t.id}"`,
+        });
+      } else {
+        artifactTemplateIds.add(t.id);
+      }
+    }
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'studio:artifact-templates',
+      check: 'load',
+      message: `Cannot load artifact templates — ${(err as Error).message}`,
+    });
   }
 
   // ------------------------------------------------------------------
@@ -177,6 +205,7 @@ export function runStudioLint(root: string): StudioLintResult {
           });
         }
         findings.push(...validateFlow(flow, agentMap));
+        findings.push(...validateArtifactRef(flow, artifactTemplateIds));
       } catch (err) {
         findings.push({
           level: 'error',

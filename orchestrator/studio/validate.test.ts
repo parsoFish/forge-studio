@@ -17,6 +17,8 @@ import type {
 import {
   SLUG_RE,
   validateAgent,
+  validateArtifactRef,
+  validateArtifactTemplate,
   validateCatalog,
   validateFlow,
   validateKb,
@@ -646,6 +648,51 @@ describe('validateKb — slug', () => {
 // ---------------------------------------------------------------------------
 // validateCatalog
 // ---------------------------------------------------------------------------
+
+describe('validateArtifactTemplate', () => {
+  const base = { id: 'plan', name: 'Plan', kind: 'file' as const, schema: {}, body: '', path: '/x/plan.md' };
+
+  it('bad slug id → error slug', () => {
+    assert.ok(validateArtifactTemplate({ ...base, id: 'Bad Id' }).some((f) => f.check === 'slug'));
+  });
+
+  it('bad producer slug → error producer/slug', () => {
+    assert.ok(validateArtifactTemplate({ ...base, producer: 'Bad Slug' }).some((f) => f.check === 'producer/slug'));
+  });
+
+  it('valid template → no findings', () => {
+    assert.deepEqual(
+      validateArtifactTemplate({ ...base, producer: 'architect', consumer: 'project-manager' }),
+      [],
+    );
+  });
+});
+
+describe('validateArtifactRef', () => {
+  it('edge artifact with no template → advisory artifact/no-template', () => {
+    const flow = makeFlow({
+      nodes: [
+        { id: 'a', agent: 'x' },
+        { id: 'b', agent: 'y' },
+      ],
+      edges: [{ from: 'a', to: 'b', artifact: 'ghost' }],
+    });
+    const f = validateArtifactRef(flow, new Set(['plan'])).find((x) => x.check === 'artifact/no-template');
+    assert.ok(f, 'expected artifact/no-template finding');
+    assert.equal(f.level, 'flag');
+  });
+
+  it('edge artifact with a registered template → no findings', () => {
+    const flow = makeFlow({
+      nodes: [
+        { id: 'a', agent: 'x' },
+        { id: 'b', agent: 'y' },
+      ],
+      edges: [{ from: 'a', to: 'b', artifact: 'plan' }],
+    });
+    assert.deepEqual(validateArtifactRef(flow, new Set(['plan'])), []);
+  });
+});
 
 describe('validateCatalog — model-sdk', () => {
   it('model with sdk not among declared sdk ids → error model-sdk', () => {
