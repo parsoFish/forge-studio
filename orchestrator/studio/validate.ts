@@ -55,7 +55,10 @@ function findDuplicates(ids: string[]): string[] {
 // validateAgent
 // ---------------------------------------------------------------------------
 
-export function validateAgent(def: AgentDefinition): Finding[] {
+export function validateAgent(
+  def: AgentDefinition,
+  validModelIds?: ReadonlySet<string>,
+): Finding[] {
   const findings: Finding[] = [];
   const obj = `agent:${def.slug}`;
 
@@ -106,6 +109,28 @@ export function validateAgent(def: AgentDefinition): Finding[] {
           ? 'strategy:range requires a non-empty range array'
           : `unknown strategy "${rt.strategy}"`;
     findings.push(err(obj, 'readiness/runtime', `Runtime not fully configured — ${detail}`));
+  }
+
+  // runtime model-catalog — error (only when the caller supplies the catalog
+  // model-id set). Every referenced model id (fixed model, range entries,
+  // subagentModel) must exist in catalog.models, so a mistyped tier is caught at
+  // lint time rather than at spawn.
+  if (validModelIds) {
+    if (rt.strategy === 'fixed' && rt.model && !validModelIds.has(rt.model)) {
+      findings.push(err(obj, 'runtime/model-catalog', `Runtime model "${rt.model}" is not in catalog.models`));
+    }
+    if (rt.strategy === 'range' && Array.isArray(rt.range)) {
+      for (const id of rt.range) {
+        if (!validModelIds.has(id)) {
+          findings.push(err(obj, 'runtime/range-catalog', `Range model "${id}" is not in catalog.models`));
+        }
+      }
+    }
+    if (rt.subagentModel && !validModelIds.has(rt.subagentModel)) {
+      findings.push(
+        err(obj, 'runtime/subagent-model-catalog', `subagentModel "${rt.subagentModel}" is not in catalog.models`),
+      );
+    }
   }
 
   // composition array entries: each must match a safe identifier regex

@@ -238,6 +238,77 @@ describe('validateAgent — readiness/runtime', () => {
   });
 });
 
+describe('validateAgent — runtime model-catalog (when validModelIds provided)', () => {
+  const valid = new Set(['claude-sonnet-4-6', 'claude-haiku-4-5-20251001']);
+
+  it('fixed model not in catalog → error runtime/model-catalog', () => {
+    const findings = validateAgent(
+      makeAgent({ runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-ghost-9' } }),
+      valid,
+    );
+    const f = findings.find((x) => x.check === 'runtime/model-catalog');
+    assert.ok(f, 'expected runtime/model-catalog finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('claude-ghost-9'));
+  });
+
+  it('range entry not in catalog → error runtime/range-catalog', () => {
+    const findings = validateAgent(
+      makeAgent({
+        runtime: {
+          sdk: 'claude',
+          strategy: 'range',
+          range: ['claude-haiku-4-5-20251001', 'claude-ghost-9'],
+        },
+      }),
+      valid,
+    );
+    const f = findings.find((x) => x.check === 'runtime/range-catalog');
+    assert.ok(f, 'expected runtime/range-catalog finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('claude-ghost-9'));
+  });
+
+  it('subagentModel not in catalog → error runtime/subagent-model-catalog', () => {
+    const findings = validateAgent(
+      makeAgent({
+        runtime: {
+          sdk: 'claude',
+          strategy: 'fixed',
+          model: 'claude-sonnet-4-6',
+          subagentModel: 'claude-ghost-9',
+        },
+      }),
+      valid,
+    );
+    const f = findings.find((x) => x.check === 'runtime/subagent-model-catalog');
+    assert.ok(f, 'expected runtime/subagent-model-catalog finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('all referenced model ids valid → no *-catalog findings', () => {
+    const findings = validateAgent(
+      makeAgent({
+        runtime: {
+          sdk: 'claude',
+          strategy: 'range',
+          range: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'],
+          subagentModel: 'claude-haiku-4-5-20251001',
+        },
+      }),
+      valid,
+    );
+    assert.ok(!findings.some((x) => x.check.endsWith('-catalog')));
+  });
+
+  it('validModelIds omitted → no model-catalog check (backward compatible)', () => {
+    const findings = validateAgent(
+      makeAgent({ runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-ghost-9' } }),
+    );
+    assert.ok(!findings.some((x) => x.check.endsWith('-catalog')));
+  });
+});
+
 describe('validateAgent — slug', () => {
   it('slug not matching SLUG_RE → error slug', () => {
     const findings = validateAgent(makeAgent({ slug: 'My_Agent' }));

@@ -52,6 +52,21 @@ export type StudioLintResult = {
 export function runStudioLint(root: string): StudioLintResult {
   const findings: Finding[] = [];
 
+  // Pre-load catalog model ids for the agent model-catalog check below. Section
+  // 3 still loads + validates the catalog itself (and reports a missing file);
+  // here we only need the model-id set, tolerating absence silently.
+  let validModelIds: ReadonlySet<string> | undefined;
+  {
+    const catalogPathEarly = join(root, 'studio', 'catalog.yaml');
+    if (existsSync(catalogPathEarly)) {
+      try {
+        validModelIds = new Set(loadCatalog(catalogPathEarly).models.map((m) => m.id));
+      } catch {
+        validModelIds = undefined; // section 3 surfaces the load error
+      }
+    }
+  }
+
   // ------------------------------------------------------------------
   // 1. Agent definitions (skills/)
   // ------------------------------------------------------------------
@@ -99,7 +114,7 @@ export function runStudioLint(root: string): StudioLintResult {
       try {
         const def = loadAgentDefinition(skillMdPath);
         agentMap.set(def.slug, def);
-        findings.push(...validateAgent(def));
+        findings.push(...validateAgent(def, validModelIds));
       } catch (err) {
         findings.push({
           level: 'error',
