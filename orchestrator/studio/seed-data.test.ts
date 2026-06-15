@@ -119,14 +119,24 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
 // Agent definitions
 // ---------------------------------------------------------------------------
 
-test('listAgentDefinitions returns exactly 6 studio agents (includes brain-ingest, added M3-5)', () => {
+test('listAgentDefinitions returns the studio agent roster (6 seed + 3 OOTB library agents)', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const slugs = agents.map((a) => a.slug).sort();
 
   assert.deepEqual(
     slugs,
-    ['architect', 'brain-ingest', 'developer-ralph', 'developer-unifier', 'project-manager', 'reflector'],
-    `Expected exactly 6 studio agents; got: ${slugs.join(', ')}`,
+    [
+      'architect',
+      'brain-ingest',
+      'code-reviewer',
+      'developer-ralph',
+      'developer-unifier',
+      'project-manager',
+      'reflector',
+      'security-auditor',
+      'web-scraper',
+    ],
+    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 
