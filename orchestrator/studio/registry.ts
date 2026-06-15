@@ -15,6 +15,7 @@ import type {
   AgentDefinition,
   AgentRuntime,
   Catalog,
+  CommunitySkill,
   CatalogEntry,
   CatalogModel,
   CatalogSdk,
@@ -464,6 +465,30 @@ function parseCatalogEntries(raw: unknown, file: string, key: string): CatalogEn
   });
 }
 
+function parseCommunitySkills(raw: unknown, file: string): CommunitySkill[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${file}: "community-skills" must be an array`);
+  }
+  return raw.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${file}: community-skills[${i}] must be a mapping`);
+    }
+    const e = item as Record<string, unknown>;
+    return {
+      id: reqString(e, 'id', file),
+      name: reqString(e, 'name', file),
+      provenance: reqString(e, 'provenance', file),
+      source: reqString(e, 'source', file),
+      category: reqString(e, 'category', file),
+      tier: optString(e, 'tier'),
+      composedBy: stringArray(e, 'composedBy', file),
+      stars: optString(e, 'stars'),
+      desc: optString(e, 'desc'),
+    };
+  });
+}
+
 // catalog.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
 export function loadCatalog(catalogYamlPath: string): Catalog {
   const d = loadYaml(catalogYamlPath);
@@ -473,6 +498,7 @@ export function loadCatalog(catalogYamlPath: string): Catalog {
     tools: parseCatalogEntries(d['tools'], catalogYamlPath, 'tools'),
     mcps: parseCatalogEntries(d['mcps'], catalogYamlPath, 'mcps'),
     hooks: parseCatalogEntries(d['hooks'], catalogYamlPath, 'hooks'),
+    communitySkills: parseCommunitySkills(d['community-skills'], catalogYamlPath),
     path: catalogYamlPath,
   };
 }

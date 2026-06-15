@@ -355,6 +355,31 @@ export function validateCatalog(c: Catalog): Finding[] {
     }
   }
 
+  // community-skills: curated OOTB showcase entries. Unique slug ids; recommended
+  // tier (if present) must be a real model tier; composedBy entries are slugs.
+  const TIERS = new Set(['haiku', 'sonnet', 'opus']);
+  const communitySkills = c.communitySkills ?? [];
+  for (const dup of findDuplicates(communitySkills.map((s) => s.id))) {
+    findings.push(err(obj, 'unique-ids', `Duplicate id "${dup}" in catalog.communitySkills`));
+  }
+  for (const s of communitySkills) {
+    if (!SLUG_RE.test(s.id)) {
+      findings.push(err(obj, 'community-skill/slug', `Community skill id "${s.id}" does not match ${SLUG_RE}`));
+    }
+    if (s.tier !== undefined && !TIERS.has(s.tier)) {
+      findings.push(
+        err(obj, 'community-skill/tier', `Community skill "${s.id}" tier "${s.tier}" must be one of haiku|sonnet|opus`),
+      );
+    }
+    for (const slug of s.composedBy ?? []) {
+      if (!SLUG_RE.test(slug)) {
+        findings.push(
+          err(obj, 'community-skill/composed-by', `Community skill "${s.id}" composedBy "${slug}" does not match ${SLUG_RE}`),
+        );
+      }
+    }
+  }
+
   return findings;
 }
 

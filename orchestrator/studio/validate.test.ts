@@ -718,6 +718,63 @@ describe('validateCatalog — unique-ids', () => {
 // validateProjectsRegistry
 // ---------------------------------------------------------------------------
 
+describe('validateCatalog — community-skills', () => {
+  it('duplicate community-skill id → error unique-ids', () => {
+    const findings = validateCatalog(
+      makeCatalog({
+        communitySkills: [
+          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory' },
+          { id: 'handoff', name: 'Handoff 2', provenance: 'b', source: 'u', category: 'memory' },
+        ],
+      }),
+    );
+    assert.ok(findings.some((f) => f.check === 'unique-ids' && f.message.includes('communitySkills')));
+  });
+
+  it('invalid tier → error community-skill/tier', () => {
+    const findings = validateCatalog(
+      makeCatalog({
+        communitySkills: [
+          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory', tier: 'turbo' },
+        ],
+      }),
+    );
+    const f = findings.find((x) => x.check === 'community-skill/tier');
+    assert.ok(f, 'expected community-skill/tier finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('composedBy with bad slug → error community-skill/composed-by', () => {
+    const findings = validateCatalog(
+      makeCatalog({
+        communitySkills: [
+          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory', composedBy: ['Bad Slug'] },
+        ],
+      }),
+    );
+    assert.ok(findings.some((f) => f.check === 'community-skill/composed-by'));
+  });
+
+  it('valid community skills → no community-skill findings', () => {
+    const findings = validateCatalog(
+      makeCatalog({
+        communitySkills: [
+          {
+            id: 'handoff',
+            name: 'Handoff',
+            provenance: 'obra/superpowers',
+            source: 'https://example',
+            category: 'memory',
+            tier: 'haiku',
+            composedBy: ['developer-ralph'],
+          },
+        ],
+      }),
+    );
+    assert.ok(!findings.some((f) => f.check.startsWith('community-skill')));
+  });
+});
+
 describe('validateProjectsRegistry — unique-ids', () => {
   it('duplicate project id → error unique-ids', () => {
     const reg: ProjectsRegistry = {

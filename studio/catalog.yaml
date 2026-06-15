@@ -18,3 +18,93 @@ hooks:
   - { id: stall-watchdog, name: Stall watchdog, desc: Heartbeat liveness monitoring. }
   - { id: merge-gate, name: Merge gate, desc: Dependent WIs wait on prerequisite merge. }
   - { id: scratch-strip, name: Scratch strip, desc: Base-guard strips scratch files pre-PR. }
+# Curated showcase of proven community skills forge ships in its OOTB library
+# (reference metadata only — `source` is upstream; `composedBy` names forge agents).
+community-skills:
+  - id: handoff
+    name: Handoff
+    provenance: obra/superpowers + Matt Pocock
+    source: https://github.com/obra/superpowers
+    category: memory
+    tier: haiku
+    composedBy: [developer-ralph, developer-unifier]
+    stars: "228k"
+    desc: Compress the current session into a markdown transfer doc (open threads, decisions) for delegation.
+  - id: pre-impl-interview
+    name: Pre-implementation Interview
+    provenance: Matt Pocock (Grill Me)
+    source: https://www.firecrawl.dev/blog/best-claude-code-skills
+    category: planning
+    tier: haiku
+    composedBy: [developer-ralph]
+    stars: "156k installs"
+    desc: Interview the developer on a WI spec before any code — surfaces gaps and false assumptions early.
+  - id: superpowers-tdd
+    name: Test-Driven Development
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: testing
+    tier: sonnet
+    composedBy: [developer-ralph]
+    stars: "228k"
+    desc: Strict red-green-refactor loop with an explicit failing-test-first gate.
+  - id: systematic-debugging
+    name: Systematic Debugging
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: debugging
+    tier: sonnet
+    composedBy: [developer-ralph]
+    stars: "228k"
+    desc: Hypothesis-list approach to bugs; never brute-force.
+  - id: webapp-testing
+    name: Webapp Testing
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: testing
+    tier: sonnet
+    composedBy: [developer-ralph, developer-unifier]
+    stars: "151k"
+    desc: Playwright-based browser testing of a local app — spec to test to run to report.
+  - id: security-review
+    name: Security Review
+    provenance: Trail of Bits
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: review
+    tier: sonnet
+    composedBy: [security-auditor, developer-unifier]
+    desc: Static-analysis security audit (CodeQL/Semgrep patterns).
+  - id: skill-creator
+    name: Skill Creator
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: meta
+    tier: sonnet
+    composedBy: [architect]
+    stars: "151k"
+    desc: Q&A that produces a new SKILL.md with full frontmatter.
+  - id: graphify
+    name: Graphify Code Graph
+    provenance: safishamsi/graphify
+    source: https://github.com/safishamsi/graphify
+    category: research
+    tier: haiku
+    composedBy: [project-manager, developer-ralph]
+    stars: "66.8k"
+    desc: Turn a codebase into a queryable knowledge graph (~70% token reduction on context packs).
+  - id: agent-browser
+    name: Agent Browser
+    provenance: vercel-labs
+    source: https://github.com/vercel-labs/agent-browser
+    category: browser
+    tier: sonnet
+    composedBy: [developer-unifier]
+    stars: "14k"
+    desc: Headless browser CLI with ref-based element targeting and parallel sessions.
+  - id: output-compress
+    name: Output Compression
+    provenance: Julius Brussee (Caveman)
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: meta
+    tier: haiku
+    desc: Encode a terse output contract — cuts output tokens (median ~65%); works for SDK-spawned agents.

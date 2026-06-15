@@ -84,6 +84,24 @@ export type CatalogSdk = { id: string; name: string; available: boolean };
 export type CatalogModel = { id: string; name: string; sdk: string; tier: string; costIn?: number; costOut?: number };
 export type CatalogEntry = { id: string; name: string; desc?: string };
 
+/**
+ * A curated, proven community skill forge showcases in its OOTB library (like the
+ * community skill-directory sites). Reference metadata only — `source` points at the
+ * upstream; `composedBy` names the forge agent slugs that compose it; `tier` is the
+ * recommended model tier. Hand-edited in studio/catalog.yaml (ADR-027 §5).
+ */
+export type CommunitySkill = {
+  id: string; // slug
+  name: string;
+  provenance: string; // upstream owner/repo, e.g. "obra/superpowers"
+  source: string; // upstream URL
+  category: string; // coding | review | testing | research | planning | memory | docs | git
+  tier?: string; // recommended model tier (haiku | sonnet | opus)
+  composedBy?: string[]; // forge agent slugs that compose this skill
+  stars?: string; // adoption signal, free-form (e.g. "228k")
+  desc?: string;
+};
+
 export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
 export type DemoStepKind = (typeof DEMO_STEP_KINDS)[number];
 export type DemoStep = { kind: DemoStepKind; text: string };
@@ -104,6 +122,7 @@ export type Catalog = {
   tools: CatalogEntry[];
   mcps: CatalogEntry[];
   hooks: CatalogEntry[];
+  communitySkills?: CommunitySkill[];
   path: string;
 };
 
