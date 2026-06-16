@@ -18,6 +18,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import yaml from 'js-yaml';
 
 import {
   listAgentDefinitions,
@@ -190,6 +191,80 @@ export async function handleStudioWriteRoutes(
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
       sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/projects (create / onboard) ------------------------
+  // Register a new project: append to studio/projects.yaml + scaffold a minimal
+  // .forge/project.json with the hard contract fields (C1 quality gate + DEMO).
+  if (url === '/api/studio/projects' && method === 'POST') {
+    try {
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
+      }
+      const b = body as Record<string, unknown>;
+
+      const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
+      if (!name) { sendJson(res, 400, { error: 'name is required' }, origin); return true; }
+
+      // Derive a slug id from an explicit id or the name.
+      const rawId = typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name;
+      const id = rawId.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (!SLUG_RE.test(id)) { sendJson(res, 400, { error: 'could not derive a valid slug id from the name' }, origin); return true; }
+
+      // quality_gate_cmd: accept argv array or a whitespace-split string.
+      const toArgv = (v: unknown): string[] | null =>
+        Array.isArray(v) ? v.map(String).filter(Boolean)
+          : typeof v === 'string' && v.trim() ? v.trim().split(/\s+/) : null;
+      const qualityGate = toArgv(b['qualityGateCmd']);
+      if (!qualityGate) { sendJson(res, 400, { error: 'qualityGateCmd is required (the project quality-gate command)' }, origin); return true; }
+
+      const demoShape = typeof b['demoShape'] === 'string' && b['demoShape'] ? b['demoShape'] : 'harness';
+      const demoCommand = toArgv(b['demoCommand']) ?? qualityGate;
+
+      // Registry: reject a duplicate id; resolve + guard the repo path.
+      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
+      const registry = existsSync(projectsYamlPath) ? loadProjectsRegistry(projectsYamlPath) : { projects: [], path: projectsYamlPath };
+      if (registry.projects.some((p) => p.id === id)) {
+        sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
+      }
+      const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
+      const projectRoot = resolve(ctx.forgeRoot, repoPathRel);
+      if (!projectRoot.startsWith(resolve(ctx.forgeRoot) + sep)) {
+        sendJson(res, 400, { error: 'repo path escapes the forge root' }, origin); return true;
+      }
+
+      // Scaffold the .forge/project.json (validated before write).
+      const cfg: Record<string, unknown> = {
+        name,
+        northStar: typeof b['northStar'] === 'string' ? b['northStar'].trim() : '',
+        instructions: typeof b['instructions'] === 'string' && b['instructions'].trim()
+          ? b['instructions'].trim()
+          : 'Managed by forge. See AGENTS.md for project-specific rules.',
+        demoProcess: [
+          { kind: 'capture', text: 'Capture the before state of the change.' },
+          { kind: 'verify', text: 'Run the quality gate to verify the change.' },
+        ],
+        quality_gate_cmd: qualityGate,
+        demo: demoShape === 'none' ? { shape: 'none' } : { shape: demoShape, command: demoCommand },
+      };
+      try { validateProjectConfig(cfg); }
+      catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
+
+      const forgeDir = resolve(projectRoot, '.forge');
+      if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
+      writeFileSync(resolve(forgeDir, 'project.json'), JSON.stringify(cfg, null, 2), 'utf8');
+
+      // Append to the registry (flow-style entries to match the seed file).
+      const nextRegistry = { projects: [...registry.projects.map((p) => ({ id: p.id, path: p.path })), { id, path: repoPathRel }] };
+      writeFileSync(projectsYamlPath, yaml.dump(nextRegistry, { flowLevel: 2 }), 'utf8');
+
+      sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

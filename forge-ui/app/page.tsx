@@ -234,14 +234,14 @@ export default function LibraryPage() {
               {projects.length}
             </span>
             <span style={{ flex: 1 }} />
-            <button
+            <a
               className="btn"
-              disabled
-              title="M2"
-              style={{ cursor: 'not-allowed', opacity: 0.45 }}
+              href="/projects/new"
+              data-action="new-project"
+              style={{ textDecoration: 'none' }}
             >
               + New Project
-            </button>
+            </a>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {projects.map((p, i) => (

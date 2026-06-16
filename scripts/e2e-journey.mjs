@@ -180,6 +180,19 @@ const J3_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', J3_FLOW);
 function cleanFirstFlow() {
   try { rmSync(J3_FLOW_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
+
+// J4: the project the operator onboards via the UI. Onboarding rewrites the
+// tracked studio/projects.yaml, so we snapshot it at startup and restore it
+// verbatim on cleanup (zero working-tree diff).
+const J4_PROJECT = 'journey-demo-project';
+const PROJECTS_YAML = join(FORGE_ROOT, 'studio', 'projects.yaml');
+const PROJECTS_YAML_SNAPSHOT = existsSync(PROJECTS_YAML) ? readFileSync(PROJECTS_YAML, 'utf8') : null;
+function cleanFirstProject() {
+  try { rmSync(join(FORGE_ROOT, 'projects', J4_PROJECT), { recursive: true, force: true }); } catch { /* */ }
+  if (PROJECTS_YAML_SNAPSHOT !== null) {
+    try { writeFileSync(PROJECTS_YAML, PROJECTS_YAML_SNAPSHOT); } catch { /* */ }
+  }
+}
 /** Parse the saved flow.yaml → { version, nodes } (nodes carry persisted x/y). */
 function readSavedFlow(slug) {
   try {
@@ -596,6 +609,7 @@ async function main() {
   cleanScratchFlow();
   cleanStarterAgents();
   cleanFirstFlow();
+  cleanFirstProject();
   writeScratchFlow();
 
   console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
@@ -899,6 +913,101 @@ async function main() {
     const xReload = readSavedFlow(J3_FLOW).nodes.find((n) => n.id === dragId)?.x ?? -9999;
     check(Math.abs(xReload - xDrag) < 30, `J3: node position PERSISTS across reload (x ${xDrag} → ${xReload})`);
     await frame(page, 'j3-2-flow-persisted', 'J3 — node positions persist across reload (authored flow is durable)');
+
+    // ── J4: ONBOARD A PROJECT (in the UI) ─────────────────────────────────────
+    // The library "+ New Project" CTA opens a minimal onboarding form (name +
+    // quality gate + north star); submitting registers the project + scaffolds
+    // .forge/project.json. Proves: registry + config on disk, readiness renders,
+    // the project appears in the library, lint stays green.
+    console.log('\n[J4] Onboard a project from the UI');
+    cleanFirstProject();
+    await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const newProjCta = await page.evaluate(() => {
+      const el = document.querySelector('[data-action="new-project"]');
+      return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
+    });
+    check(newProjCta !== null && !newProjCta.disabled && (newProjCta.href ?? '').includes('/projects/new'),
+      'J4: library "+ New Project" CTA is enabled and routes to onboarding');
+
+    await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-section="project-onboard"]') !== null,
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const onboardForm = await page.evaluate(() => document.querySelector('[data-section="project-onboard"]') !== null);
+    check(onboardForm, 'J4: new-project shows the onboarding form ([data-section="project-onboard"])');
+    const onbAdvCollapsed = await page.evaluate(() => {
+      const d = document.querySelector('[data-section="onboard-advanced"]');
+      return d ? !d.open : false;
+    });
+    check(onbAdvCollapsed, 'J4: advanced contract clauses collapsed by default (only required fields shown)');
+    await frame(page, 'j4-0-onboard-form', 'J4 — onboard a project: required fields only (quality gate, north star)');
+
+    // Fill the minimal required fields + onboard. (quality-gate defaults to npm test)
+    await page.locator('[data-field="project-name"]').fill('Journey Demo Project');
+    await page.locator('[data-field="north-star"]').fill('A scratch project onboarded by the e2e journey to prove UI onboarding.');
+    await page.locator('[data-action="onboard-project"]').click();
+
+    const projectJsonPath = join(FORGE_ROOT, 'projects', J4_PROJECT, '.forge', 'project.json');
+    const projLanded = await waitForFile(projectJsonPath, 12000);
+    check(projLanded, `J4: onboarding writes projects/${J4_PROJECT}/.forge/project.json`);
+
+    // The hard contract fields are on disk.
+    let projCfg = {};
+    try { projCfg = JSON.parse(readFileSync(projectJsonPath, 'utf8')); } catch { /* */ }
+    check(Array.isArray(projCfg.quality_gate_cmd) && projCfg.quality_gate_cmd.length > 0,
+      'J4: project.json carries the C1 quality_gate_cmd');
+    check(projCfg.demo && typeof projCfg.demo.shape === 'string',
+      'J4: project.json carries the DEMO block (demo.shape)');
+    check(typeof projCfg.northStar === 'string' && projCfg.northStar.length > 0,
+      'J4: project.json carries the north star');
+    // Registry entry exists.
+    const registered = (() => {
+      try {
+        const doc = yaml.load(readFileSync(PROJECTS_YAML, 'utf8'));
+        return Array.isArray(doc?.projects) && doc.projects.some((p) => p.id === J4_PROJECT);
+      } catch { return false; }
+    })();
+    check(registered, 'J4: the project is registered in studio/projects.yaml');
+
+    // Onboarding redirected to the editor — readiness renders + reflects the onboarded fields.
+    await page.waitForURL(new RegExp(`/projects/${J4_PROJECT}`), { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const readyCount = await page.evaluate(() => {
+      const el = document.querySelector('[data-ready-count]');
+      return el ? parseInt(el.getAttribute('data-ready-count') ?? '0', 10) : -1;
+    });
+    check(readyCount >= 3, `J4: onboarded project passes ≥3 contract-readiness checks (got ${readyCount})`);
+    await frame(page, 'j4-1-project-readiness', 'J4 — onboarded project: contract readiness reflects the hard fields');
+
+    // The project now appears in the library.
+    await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const projCount = await page.evaluate(() =>
+      parseInt(document.querySelector('[data-section="projects"]')?.getAttribute('data-count') ?? '0', 10));
+    check(projCount >= 4, `J4: onboarded project appears in the library (project count ${projCount})`);
+
+    // lint stays green with the new project registered.
+    let j4LintOk = false;
+    try {
+      execFileSync(process.execPath,
+        ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+        { cwd: FORGE_ROOT, stdio: 'pipe' });
+      j4LintOk = true;
+    } catch (e) {
+      console.error(`  [studio lint J4] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
+    }
+    check(j4LintOk, 'J4: `forge studio lint` stays green with the onboarded project (exit 0)');
 
     // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
     // The headline new beat. We authored forge-cycle-scratch as a flow definition
@@ -2131,6 +2240,7 @@ async function main() {
     cleanScratchFlow();
     cleanStarterAgents();
     cleanFirstFlow();
+    cleanFirstProject();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
@@ -2184,4 +2294,4 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); cleanFirstFlow(); process.exit(1); });
+main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); cleanFirstFlow(); cleanFirstProject(); process.exit(1); });

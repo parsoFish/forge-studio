@@ -429,6 +429,14 @@ export async function saveProject(
   return { ok: r.ok, error: r.error };
 }
 
+/** Onboard (create) a new project: registers it + scaffolds .forge/project.json. */
+export async function createProject(
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const r = await studioPost('/api/studio/projects', body);
+  return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
+}
+
 /** Fetch a single flow definition by id. */
 export async function fetchFlow(id: string): Promise<Flow | null> {
   const body = await studioGet<{ flow?: Flow } | null>(

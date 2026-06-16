@@ -217,6 +217,7 @@ type ProjectWithMeta = {
   kb?: string;
   instructions?: string;
   skills?: string[];
+  demoProcess?: Array<{ kind: string; text: string }>;
 };
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
@@ -242,6 +243,13 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
         if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
         if (Array.isArray(raw.skills) && raw.skills.every((s) => typeof s === 'string')) {
           result.skills = raw.skills as string[];
+        }
+        // Surface the typed demo steps so the editor + ContractReadiness reflect
+        // a persisted demo (capture/verify/present) rather than showing none.
+        if (Array.isArray(raw.demoProcess)) {
+          result.demoProcess = (raw.demoProcess as Array<Record<string, unknown>>)
+            .filter((s) => s && typeof s.kind === 'string' && typeof s.text === 'string')
+            .map((s) => ({ kind: s.kind as string, text: s.text as string }));
         }
       } catch {
         // ignore unreadable project.json

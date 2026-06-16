@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, fetchPreflight,
+  saveProject, createProject, fetchPreflight,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
 } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
@@ -19,6 +19,8 @@ import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
+  // A new project is onboarded via a focused minimal form, not the editor.
+  const isNew = id === 'new';
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
@@ -126,6 +128,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const usedByFlows = flows.filter((f) => f.project === id);
   const skillItems = (catalog.skills ?? []) as Array<{ id: string; name: string; desc?: string }>;
 
+  // New-project onboarding: a minimal required-only form (UX spec §6).
+  if (isNew) return <ProjectOnboardForm />;
+
   return (
     <main
       data-page="projects"
@@ -223,6 +228,140 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
           <UsedByFlows flows={usedByFlows} />
         </aside>
+      </div>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProjectOnboardForm — minimal "register a project" form (UX spec §6).
+// Required: name, quality-gate command, north star. Everything else (repo path,
+// demo shape/command, instructions) has a working default behind Advanced.
+// ---------------------------------------------------------------------------
+
+function ProjectOnboardForm() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [qualityGate, setQualityGate] = useState('npm test');
+  const [northStar, setNorthStar] = useState('');
+  const [repoPath, setRepoPath] = useState('');
+  const [demoShape, setDemoShape] = useState('harness');
+  const [demoCommand, setDemoCommand] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const canSubmit = name.trim().length > 0 && qualityGate.trim().length > 0 && northStar.trim().length > 0;
+
+  async function onSubmit() {
+    if (!canSubmit || saving) return;
+    setSaving(true);
+    setError(null);
+    const result = await createProject({
+      name: name.trim(),
+      qualityGateCmd: qualityGate.trim(),
+      northStar: northStar.trim(),
+      repoPath: repoPath.trim() || undefined,
+      demoShape,
+      demoCommand: demoCommand.trim() || undefined,
+      instructions: instructions.trim() || undefined,
+    });
+    if (result.ok && result.id) {
+      router.push(`/projects/${encodeURIComponent(result.id)}`);
+    } else {
+      setError(result.error ?? 'onboarding failed');
+      setSaving(false);
+    }
+  }
+
+  const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--dim)', display: 'block', marginBottom: 5 };
+  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <main
+      data-page="projects"
+      data-project-id="new"
+      data-page-ready="true"
+      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    >
+      <StudioNav />
+      <div data-section="project-onboard" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
+          Onboard a project
+        </h1>
+        <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
+          Register a code project so a flow can build it. You only need a name, the command that
+          proves a change is good (the quality gate), and a one-line north star. Everything else has
+          a sensible default.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <label style={labelStyle} htmlFor="onb-name">Project name</label>
+            <input id="onb-name" data-field="project-name" style={inputStyle} value={name} placeholder="My project"
+              onChange={(e) => setName(e.target.value)} />
+            {slug && <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>id: {slug}</div>}
+          </div>
+
+          <div>
+            <label style={labelStyle} htmlFor="onb-gate">Quality-gate command</label>
+            <input id="onb-gate" data-field="quality-gate" style={inputStyle} value={qualityGate}
+              placeholder="npm test" onChange={(e) => setQualityGate(e.target.value)} />
+            <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>One command, green at HEAD, that proves a change is good.</div>
+          </div>
+
+          <div>
+            <label style={labelStyle} htmlFor="onb-northstar">North star</label>
+            <input id="onb-northstar" data-field="north-star" style={inputStyle} value={northStar}
+              placeholder="What this project is for, in one line (≤ 140 chars)" maxLength={140}
+              onChange={(e) => setNorthStar(e.target.value)} />
+          </div>
+
+          <details data-section="onboard-advanced" data-advanced-open={advancedOpen ? 'true' : 'false'} open={advancedOpen}
+            onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}
+            style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
+            <summary data-action="toggle-onboard-advanced" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--dim)' }}>
+              Advanced — repo path, demo &amp; instructions
+            </summary>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+              <div>
+                <label style={labelStyle} htmlFor="onb-repo">Repo path</label>
+                <input id="onb-repo" data-field="repo-path" style={inputStyle} value={repoPath}
+                  placeholder={`projects/${slug || '<id>'}`} onChange={(e) => setRepoPath(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle} htmlFor="onb-demo-shape">Demo shape</label>
+                <select id="onb-demo-shape" data-field="demo-shape" style={inputStyle} value={demoShape}
+                  onChange={(e) => setDemoShape(e.target.value)}>
+                  {['harness', 'cli-diff', 'artifact', 'browser', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle} htmlFor="onb-demo-cmd">Demo command</label>
+                <input id="onb-demo-cmd" data-field="demo-command" style={inputStyle} value={demoCommand}
+                  placeholder="defaults to the quality-gate command" onChange={(e) => setDemoCommand(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle} htmlFor="onb-instr">Instructions</label>
+                <textarea id="onb-instr" data-field="instructions" rows={3} style={inputStyle} value={instructions}
+                  placeholder="Anything a developer agent must know (defaults to a reference to AGENTS.md)"
+                  onChange={(e) => setInstructions(e.target.value)} />
+              </div>
+            </div>
+          </details>
+
+          {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn btn-primary" data-action="onboard-project" onClick={() => void onSubmit()}
+              disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+              {saving ? 'Onboarding…' : 'Onboard project →'}
+            </button>
+            {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, quality gate, and north star are required.</span>}
+          </div>
+        </div>
       </div>
     </main>
   );
