@@ -770,3 +770,31 @@ forge defects. Root-caused via an adversarially-verified investigation workflow.
 ## 2026-06-13 — flow-engine / multi-flow
 
 - **M4 flow edit-lock false-negatives for non-forge-cycle flows until run-model stamps the real flowId (`orchestrator/run-model.ts` `FLOW_ID`).** Latent — no non-forge-cycle runs exist today; the lock is fully effective for forge-cycle.
+
+## 2026-06-16 — Studio pipeline observability (operator-observed during a live betterado cycle)
+
+The hex pipeline is clickable but per-node detail is shallow and the fan-out graph
+is wrong. Four gaps to fix together (all in `forge-ui/` hex pipeline +
+`orchestrator/run-model.ts` + the event log):
+
+1. **Hex detail shows no agent input/task.** Clicking a phase/WI hex opens the
+   detail drawer but does not surface the agent's *input* (the WI spec / inbound
+   artifact) or its *task/purpose*. Direction: the drawer renders the node's bound
+   input (work-item body for a WI hex; inbound artifact for a phase) + the agent's
+   task line; `run-model` `phaseMeta` should carry an input ref + task.
+2. **Per-hex log stream omits the thinking process.** A clicked hex shows a tail of
+   tool_use/heartbeat but **not the agent's reasoning/thinking**. Direction:
+   capture the SDK's thinking/assistant-delta stream into the event log (or a
+   per-node side-channel) and render it — the thinking is the most useful thing to
+   see when a hex is selected.
+3. **All developer agents share one log.** The per-WI dev agents render the **same**
+   pooled log; each fan-out WI dev agent must have an **independent** log scoped by
+   `work_item_id`. Events already carry `work_item_id`; the bridge log route + UI
+   pool all dev-loop events into one stream instead of filtering per WI hex.
+4. **PM→WI graph: pulse only to WI-1, no deps, stale in-progress edge.** The PM
+   pulse flows only into WI-1; **inter-WI dependency edges are not rendered**; and
+   an "in progress" edge stays pinned to WI-1 **even after it completes**.
+   Direction: render the WI dependency DAG from `.forge/work-items/_graph.md` as
+   edges between WI hexes; drive each WI hex's active/complete state + incoming
+   pulse from that WI's own status (not a static edge to WI-1); clear the
+   in-progress edge when a WI completes.
