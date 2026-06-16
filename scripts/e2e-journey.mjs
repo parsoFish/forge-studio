@@ -645,6 +645,31 @@ async function main() {
       (document.querySelector('[data-section="flows"]')?.textContent ?? '').includes(id),
       SCRATCH_FLOW);
     check(scratchCardPresent, `library: the authored "${SCRATCH_FLOW}" flow appears as a card (registered as data)`);
+
+    // ── J1: first-run orientation + discoverable creation ─────────────────────
+    // Creation must be discoverable from the library (not URL-only): the
+    // "+ New Agent" CTA is a real, enabled link to the builder.
+    const newAgentCta = await page.evaluate(() => {
+      const el = document.querySelector('[data-action="new-agent"]');
+      if (!el) return { present: false };
+      return {
+        present: true,
+        disabled: el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
+        href: el.getAttribute('href') ?? '',
+        tag: el.tagName.toLowerCase(),
+      };
+    });
+    check(newAgentCta.present, 'J1: library "+ New Agent" creation CTA ([data-action="new-agent"]) is present');
+    check(newAgentCta.present && !newAgentCta.disabled, 'J1: "+ New Agent" CTA is enabled (creation is discoverable, not a dead greyed button)');
+    check(newAgentCta.href?.includes('/agents/new'), `J1: "+ New Agent" routes to the agent builder (got "${newAgentCta.href}")`);
+    // No false welcome: with a populated library the orientation panel is absent
+    // and data-first-run reflects it.
+    const firstRunAttr = await page.evaluate(() =>
+      document.querySelector('[data-page="library"]')?.getAttribute('data-first-run'));
+    check(firstRunAttr === 'false', `J1: populated library reports data-first-run="false" (got "${firstRunAttr}")`);
+    const orientationAbsent = await page.evaluate(() => document.querySelector('[data-section="orientation"]') === null);
+    check(orientationAbsent, 'J1: orientation panel correctly hidden when the library is populated (shown only on a fresh install)');
+
     await sleep(READ);
     await frame(page, 'a1-1-library', 'A1 — Studio library: flows/agents/projects/KBs as data + operator pulse');
 

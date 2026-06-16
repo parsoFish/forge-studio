@@ -90,10 +90,17 @@ export default function LibraryPage() {
   const gatedCount = runs.filter((r) => r.status === 'gated').length;
   const activeCount = runs.filter((r) => r.status === 'active').length;
 
+  // First-run: a brand-new install has no agents, flows, or projects yet.
+  // Show an orientation panel with a single primary action instead of four
+  // empty card grids (UX spec §1 — empty states orient; one primary CTA).
+  const isFirstRun =
+    ready && agents.length === 0 && flows.length === 0 && projects.length === 0;
+
   return (
     <main
       data-page="library"
       data-page-ready={ready ? 'true' : 'false'}
+      data-first-run={isFirstRun ? 'true' : 'false'}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >
       <StudioNav />
@@ -165,6 +172,54 @@ export default function LibraryPage() {
           </div>
         </section>
 
+        {/* ===== FIRST-RUN ORIENTATION ===== */}
+        {isFirstRun && (
+          <section
+            data-section="orientation"
+            aria-label="Getting started"
+            style={{
+              marginBottom: 40,
+              padding: '28px 30px',
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
+          >
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+              Welcome to Forge Studio
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--dim)', maxWidth: 600, lineHeight: 1.6, margin: 0 }}>
+              Nothing here yet. Build the most basic flow in four steps: create a <strong>plan</strong>,
+              a <strong>dev</strong>, and a <strong>review</strong> agent, string them into a flow,
+              onboard a project, then give the flow work. Start by creating your first agent from a
+              ready-made starter.
+            </p>
+            <ol
+              data-orientation-steps
+              style={{ margin: 0, paddingLeft: 18, color: 'var(--faint)', fontSize: 12.5, lineHeight: 1.9 }}
+            >
+              <li>Create three agents (plan, dev, review)</li>
+              <li>String them into a flow</li>
+              <li>Onboard a project</li>
+              <li>Give the flow work to complete</li>
+            </ol>
+            <div>
+              <a
+                href="/agents/new"
+                className="btn btn-primary"
+                data-action="start-here"
+                data-orientation-cta
+                style={{ textDecoration: 'none', display: 'inline-block' }}
+              >
+                Create your first agent →
+              </a>
+            </div>
+          </section>
+        )}
+
         {/* ===== PROJECTS ===== */}
         <section
           className="lib-section"
@@ -211,14 +266,14 @@ export default function LibraryPage() {
               {agents.length}
             </span>
             <span style={{ flex: 1 }} />
-            <button
+            <a
               className="btn"
-              disabled
-              title="M2"
-              style={{ cursor: 'not-allowed', opacity: 0.45 }}
+              href="/agents/new"
+              data-action="new-agent"
+              style={{ textDecoration: 'none' }}
             >
               + New Agent
-            </button>
+            </a>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {agents.map((a, i) => (

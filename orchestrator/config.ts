@@ -50,19 +50,29 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
 export type EnvAssertionMode = 'warn' | 'throw';
 
 /**
- * Verify the environment is set up enough to run a cycle. Currently checks
- * `ANTHROPIC_API_KEY` (the Claude Agent SDK reads this; some setups —
- * notably Claude Code itself — provide alternative auth, so we default to
- * warn-only). Returns the list of issues found so callers can decide what to
- * surface. With `mode: 'throw'`, throws on the first issue.
+ * Gather environment-setup issues without any side effect (no stderr, no
+ * throw). The single source of which env vars matter; `assertEnv` and
+ * `forge init` both read from here. Currently only `ANTHROPIC_API_KEY`.
  */
-export function assertEnv(mode: EnvAssertionMode = 'warn'): string[] {
+export function collectEnvIssues(): string[] {
   const issues: string[] = [];
   if (!process.env.ANTHROPIC_API_KEY) {
     issues.push(
       'ANTHROPIC_API_KEY is not set. The Claude Agent SDK may fall back to Claude Code credentials, but production setups should export ANTHROPIC_API_KEY explicitly. See `.env.example`.',
     );
   }
+  return issues;
+}
+
+/**
+ * Verify the environment is set up enough to run a cycle. Returns the list of
+ * issues found so callers can decide what to surface. With `mode: 'warn'`
+ * (default) it also writes each issue to stderr; with `mode: 'throw'` it throws
+ * on the first issue. Some setups — notably Claude Code itself — provide
+ * alternative auth, so the default is warn-only.
+ */
+export function assertEnv(mode: EnvAssertionMode = 'warn'): string[] {
+  const issues = collectEnvIssues();
   if (mode === 'throw' && issues.length > 0) {
     throw new Error(`forge env check failed:\n  - ${issues.join('\n  - ')}`);
   }

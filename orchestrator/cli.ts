@@ -27,6 +27,7 @@ import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts
 import { runStudioLint } from '../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
+import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import {
@@ -53,6 +54,8 @@ process.chdir(FORGE_ROOT);
   if (cmd && sdkVerbs.has(cmd)) assertEnv('warn');
 
   switch (cmd) {
+    case 'init':
+      return cmdInit();
     case 'serve':
       return await cmdServe(args.slice(1));
     case 'cycle':
@@ -101,6 +104,7 @@ function cmdHelp(): void {
     `forge — autonomous multi-agent orchestrator
 
 Usage:
+  forge init                              Scaffold a runnable install (forge.config.json + _queue/ layout) and check the environment
   forge serve [--once]                    Run the scheduler in the foreground (or 'forge studio' to manage it from the UI)
   forge cycle <initiative-id>             Run one initiative end-to-end (foreground)
   forge enqueue <project> <spec>          Drop an initiative manifest into _queue/pending/
@@ -139,6 +143,26 @@ Usage:
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
+}
+
+function cmdInit(): void {
+  console.log('forge init: scaffolding a runnable forge install…\n');
+  const report: InitReport = runInit(FORGE_ROOT);
+
+  if (report.created.length > 0) {
+    console.log('Created:');
+    for (const p of report.created) console.log(`  + ${p}`);
+  } else {
+    console.log('Layout + config already present — nothing to create.');
+  }
+
+  if (report.envIssues.length > 0) {
+    console.log('\nEnvironment:');
+    for (const i of report.envIssues) console.log(`  ! ${i}`);
+  }
+
+  console.log('\nNext steps:');
+  for (const h of report.hints) console.log(`  → ${h}`);
 }
 
 async function cmdServe(rest: string[]): Promise<void> {
@@ -800,6 +824,16 @@ async function cmdStudio(rest: string[]): Promise<void> {
 /** Parse the shared launcher flags and bring up the operator UI. Used by the
  *  canonical `forge studio` and the deprecated `forge watch` alias. */
 async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): Promise<void> {
+  // Preflight (J1): surface a missing API key (the SDK-verbs warning didn't
+  // cover `studio`) and ensure the queue/log layout exists so the bridge's
+  // architect-start has somewhere to write — idempotent, never throws.
+  assertEnv('warn');
+  try {
+    ensureLayout(FORGE_ROOT);
+  } catch (err) {
+    console.warn(`${logLabel} preflight layout check skipped: ${(err as Error).message}`);
+  }
+
   const { runWatch, isValidPort } = await import('../cli/forge-watch.ts');
   const parsePortFlag = (raw: string | undefined, flag: string): number => {
     if (!isValidPort(raw)) {
