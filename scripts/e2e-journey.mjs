@@ -726,6 +726,21 @@ async function main() {
     const palettePresent = await page.evaluate(() => document.querySelector('[data-component="agent-palette"]') !== null);
     check(palettePresent, 'author-from-scratch: [data-component="agent-palette"] present (drag more agents in)');
     await countAtLeast(page, '[data-palette-chip]', 1, 'author-from-scratch: palette has ≥1 [data-palette-chip]');
+    // The new OOTB agent library (L1-A) is draggable from the palette (#10) — the
+    // author can compose the freshly-seeded agents into a flow from scratch.
+    const ootbChips = await page.evaluate(() => {
+      const want = ['code-reviewer', 'security-auditor', 'web-scraper'];
+      const present = new Set(
+        Array.from(document.querySelectorAll('[data-palette-chip="agent"]')).map((el) =>
+          el.getAttribute('data-chip-ref'),
+        ),
+      );
+      return want.filter((w) => present.has(w));
+    });
+    check(
+      ootbChips.length === 3,
+      `author-from-scratch: new OOTB agents appear in the palette (${ootbChips.join(',') || 'none'})`,
+    );
     const goalSetPresent = await page.evaluate(() => document.querySelector('[data-goal-set]') !== null);
     check(goalSetPresent, 'author-from-scratch: [data-goal-set] present in FlowHeader');
     await sleep(READ);
