@@ -162,9 +162,16 @@ export async function applyReviewVerdict(
       }, origin);
       return;
     }
-    // H2: bounds-check manifest-supplied worktree_path against projectsRoot to
-    // prevent a tampered manifest from directing mergePr at an arbitrary path.
-    if (!resolve(approveWorktreePath).startsWith(resolve(ctx.projectsRoot) + sep)) {
+    // H2: bounds-check manifest-supplied worktree_path to prevent a tampered
+    // manifest from directing mergePr at an arbitrary path. Two legitimate roots:
+    // in-place worktrees under projectsRoot, AND forge-managed worktrees under
+    // <forgeRoot>/_worktrees/ (forgeRoot is projectsRoot's parent). The original
+    // check only allowed projectsRoot, so it 409'd every forge-managed worktree
+    // (the default) — blocking the harness auto-approve (2026-06-16).
+    const resolvedWt = resolve(approveWorktreePath);
+    const projectsRoot = resolve(ctx.projectsRoot);
+    const worktreesRoot = resolve(projectsRoot, '..', '_worktrees');
+    if (!resolvedWt.startsWith(projectsRoot + sep) && !resolvedWt.startsWith(worktreesRoot + sep)) {
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
