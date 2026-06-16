@@ -107,7 +107,6 @@ function buildYaml(props: Props): string {
       );
     }
   }
-  lines.push(`  ${kv('subagent', modelName(catalog, runtime.subagentModel))}`);
   lines.push('');
   lines.push(kv('brain_access', brainAccess));
 

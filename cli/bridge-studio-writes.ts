@@ -152,7 +152,6 @@ export async function handleStudioWriteRoutes(
           : (existing?.runtime.strategy ?? 'fixed'),
         model: typeof rtIn['model'] === 'string' ? rtIn['model'] : existing?.runtime.model,
         range: Array.isArray(rtIn['range']) ? (rtIn['range'] as string[]) : existing?.runtime.range,
-        subagentModel: typeof rtIn['subagentModel'] === 'string' ? rtIn['subagentModel'] : existing?.runtime.subagentModel,
       };
 
       const merged: AgentDefinition = {

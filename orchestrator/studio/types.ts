@@ -16,7 +16,9 @@ export type AgentRuntime = {
   strategy: ModelStrategy;
   model?: string;
   range?: string[];
-  subagentModel?: string;
+  // NOTE: a `subagentModel` lever was removed (ADR-027) — it had no spawn-site
+  // consumer (forge does not yet spawn SDK subagents). Reintroduce it together
+  // with the first flow whose agent actually sub-spawns.
 };
 
 export type AgentBudgets = {

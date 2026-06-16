@@ -114,9 +114,9 @@ export function validateAgent(
   }
 
   // runtime model-catalog — error (only when the caller supplies the catalog
-  // model-id set). Every referenced model id (fixed model, range entries,
-  // subagentModel) must exist in catalog.models, so a mistyped tier is caught at
-  // lint time rather than at spawn.
+  // model-id set). Every referenced model id (fixed model, range entries) must
+  // exist in catalog.models, so a mistyped tier is caught at lint time rather
+  // than at spawn.
   if (validModelIds) {
     if (rt.strategy === 'fixed' && rt.model && !validModelIds.has(rt.model)) {
       findings.push(err(obj, 'runtime/model-catalog', `Runtime model "${rt.model}" is not in catalog.models`));
@@ -127,11 +127,6 @@ export function validateAgent(
           findings.push(err(obj, 'runtime/range-catalog', `Range model "${id}" is not in catalog.models`));
         }
       }
-    }
-    if (rt.subagentModel && !validModelIds.has(rt.subagentModel)) {
-      findings.push(
-        err(obj, 'runtime/subagent-model-catalog', `subagentModel "${rt.subagentModel}" is not in catalog.models`),
-      );
     }
   }
 

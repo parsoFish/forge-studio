@@ -13,7 +13,6 @@ runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
-  subagentModel: claude-haiku-4-5-20251001
 brainAccess: none
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Grep, Glob, Bash, Write]

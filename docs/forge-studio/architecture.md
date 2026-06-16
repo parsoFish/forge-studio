@@ -31,7 +31,6 @@ runtime:
   sdk: claude                  # adapter id; only `claude` until ADR-029 lands
   strategy: fixed              # fixed | range
   model: claude-sonnet-4-6     # or range: [...] when strategy=range
-  subagentModel: claude-haiku-4-5-20251001
 brainAccess: none              # mandatory | advisory | none  (ADR-010 promoted)
 interactivity: >-
   Fully autonomous; never blocks on the operator.

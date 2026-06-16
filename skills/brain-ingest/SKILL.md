@@ -12,7 +12,7 @@ composition:
 runtime:
   sdk: claude
   strategy: fixed
-  model: claude-sonnet-4-6
+  model: claude-haiku-4-5-20251001
 brainAccess: mandatory
 interactivity: Unattended; operator supplies source identifier + optional category/project target; agent runs to completion without human input.
 allowed-tools: [Read, Write, Edit, Bash]

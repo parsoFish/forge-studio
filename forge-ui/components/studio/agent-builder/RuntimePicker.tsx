@@ -61,15 +61,13 @@ export function RuntimePicker({
 
     let model = runtime.model;
     let range = runtime.range;
-    let subagentModel = runtime.subagentModel ?? null;
 
     if (model && !newModels.includes(model)) { model = null; cleared.push('primary model'); }
     const filteredRange = range.filter((id) => newModels.includes(id));
     if (filteredRange.length !== range.length) { range = filteredRange; cleared.push('model range'); }
-    if (subagentModel && !newModels.includes(subagentModel)) { subagentModel = null; cleared.push('sub-agent model'); }
 
     if (cleared.length > 0) onToast(`SDK changed — cleared: ${cleared.join(', ')}.`);
-    onRuntimeChange({ ...runtime, sdk: sdkId, model, range, subagentModel: subagentModel ?? undefined });
+    onRuntimeChange({ ...runtime, sdk: sdkId, model, range });
   }
 
   function setStrategy(strategy: 'fixed' | 'range') {
@@ -87,11 +85,6 @@ export function RuntimePicker({
       const model = runtime.model === modelId ? null : modelId;
       onRuntimeChange({ ...runtime, model });
     }
-  }
-
-  function toggleSubagentModel(modelId: string) {
-    const subagentModel = runtime.subagentModel === modelId ? undefined : modelId;
-    onRuntimeChange({ ...runtime, subagentModel });
   }
 
   return (
@@ -173,19 +166,6 @@ export function RuntimePicker({
           models={sdkModels}
           selectedIds={isRange ? runtime.range : (runtime.model ? [runtime.model] : [])}
           onToggle={toggleModel}
-        />
-      </div>
-
-      {/* Sub-agent model */}
-      <div style={{ marginBottom: 14 }}>
-        <div className="field-label" style={{ marginBottom: 4 }}>Sub-agent Model</div>
-        <div style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 6 }}>
-          model for delegated sub-agent work (research, lookups) — token-economy fast tier preferred
-        </div>
-        <ModelChipRow
-          models={sdkModels}
-          selectedIds={runtime.subagentModel ? [runtime.subagentModel] : []}
-          onToggle={toggleSubagentModel}
         />
       </div>
 

@@ -62,7 +62,6 @@ const DEFAULT_RUNTIME: AgentRuntime = {
   strategy: 'fixed',
   model: null,
   range: [],
-  subagentModel: undefined,
 };
 
 const EMPTY_STATE: AgentState = {
@@ -105,7 +104,6 @@ function parseAgent(raw: Agent): AgentState {
       strategy:      rt.strategy      ?? 'fixed',
       model:         rt.model         ?? null,
       range:         (rt.range        ?? []).slice(),
-      subagentModel: rt.subagentModel ?? undefined,
     },
     brainAccess:    raw.brainAccess   ?? 'none',
     allowedTools:   ((raw as Record<string, unknown>).allowedTools  as string[] | undefined) ?? [],
@@ -132,7 +130,6 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
       strategy:     state.runtime.strategy,
       model:        state.runtime.model ?? undefined,
       range:        state.runtime.range,
-      subagentModel: state.runtime.subagentModel ?? undefined,
     },
   };
 }

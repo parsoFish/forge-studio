@@ -59,7 +59,6 @@ export type AgentRuntime = {
   strategy: string;
   model: string | null;
   range: string[];
-  subagentModel?: string;
   label?: string;
 };
 
@@ -342,7 +341,6 @@ function parseAgentDefinition(raw: unknown): Agent {
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
       model:         typeof rt.model         === 'string' ? rt.model         : null,
       range:         Array.isArray(rt.range)             ? rt.range          : [],
-      subagentModel: typeof rt.subagentModel === 'string' ? rt.subagentModel : undefined,
     },
   };
 }

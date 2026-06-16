@@ -52,7 +52,7 @@ Source inventories: full-page feature extraction of all 6 mock pages +
 | SDK picker (Claude/Codex/OpenLlama/Gemini) | Claude Agent SDK only (`createClaudeAgent`) | **NEW** | Runtime adapter seam `loops/_adapters/` (ADR-029, M6); UI ships earlier with only Claude selectable |
 | Model strategy: fixed | `MODEL_BY_TIER` via `tier` field | **MODIFY** | `runtime.model` explicit per agent (M2) |
 | Model strategy: range (route to cheapest capable) | Not implemented (tier is fixed per phase) | **NEW** | Router in adapter layer (M6) |
-| Sub-agent model picker | Convention only (CLAUDE.md guidance) | **NEW** | `runtime.subagentModel` honoured by adapter (M2 field, M3 enforcement) |
+| Sub-agent model picker | Convention only (CLAUDE.md guidance) | **DEFERRED** | `runtime.subagentModel` de-cargoed 2026-06-16 (ADR-027) — no SDK sub-spawn consumer exists yet; reintroduce with the first sub-spawning flow |
 | Knowledge access (mandatory/advisory/none) | Exactly ADR-010 brain-read policy, enforced for PM (0-reads abort) | **MODIFY** | Promote to `brainAccess` frontmatter field; orchestrator enforcement keyed off it (M2) |
 | Live YAML definition preview | n/a | **NEW** | Render from frontmatter (M2) |
 | Readiness checklist (6 checks) + ready badge | Preflight exists for projects only | **NEW** | Agent-level validation (M2) |

@@ -271,23 +271,6 @@ describe('validateAgent — runtime model-catalog (when validModelIds provided)'
     assert.ok(f.message.includes('claude-ghost-9'));
   });
 
-  it('subagentModel not in catalog → error runtime/subagent-model-catalog', () => {
-    const findings = validateAgent(
-      makeAgent({
-        runtime: {
-          sdk: 'claude',
-          strategy: 'fixed',
-          model: 'claude-sonnet-4-6',
-          subagentModel: 'claude-ghost-9',
-        },
-      }),
-      valid,
-    );
-    const f = findings.find((x) => x.check === 'runtime/subagent-model-catalog');
-    assert.ok(f, 'expected runtime/subagent-model-catalog finding');
-    assert.equal(f.level, 'error');
-  });
-
   it('all referenced model ids valid → no *-catalog findings', () => {
     const findings = validateAgent(
       makeAgent({
@@ -295,7 +278,6 @@ describe('validateAgent — runtime model-catalog (when validModelIds provided)'
           sdk: 'claude',
           strategy: 'range',
           range: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'],
-          subagentModel: 'claude-haiku-4-5-20251001',
         },
       }),
       valid,
