@@ -6,34 +6,31 @@ import { usePathname } from 'next/navigation';
 /**
  * Sticky top nav mirroring mockups/agent-flow-builder/shared/shell.js.
  *
- * Nav items:
- *   Library  → /           (M1 — live)
- *   Flows    → /flows/forge-cycle  (M1-5 — live after task 5)
- *   Agents   → disabled (M2)
- *   Projects → disabled (M5)
- *   Knowledge → disabled (M5)
+ * Every nav item is a live link (the builders all ship — ADR-033):
+ *   Library   → /
+ *   Flows     → /flows/forge-cycle  (the always-present seed flow; the library
+ *               flows section is the full browser)
+ *   Agents    → /agents/new
+ *   Projects  → /projects
+ *   Knowledge → /knowledge
  *
- * Active link detected from usePathname(). Non-existent builder pages
- * render as disabled <span> chips with title "M2" or "M5".
+ * Active link detected from usePathname().
  */
 
-type NavItem =
-  | { kind: 'link'; label: string; href: string; id: string }
-  | { kind: 'disabled'; label: string; title: string; id: string };
+type NavItem = { label: string; href: string; id: string };
 
 const NAV_ITEMS: NavItem[] = [
-  { kind: 'link', label: 'Library', href: '/', id: 'library' },
-  { kind: 'link', label: 'Flows', href: '/flows/forge-cycle', id: 'flows' },
-  { kind: 'link', label: 'Agents', href: '/agents/new', id: 'agents' },
-  { kind: 'link', label: 'Projects', href: '/projects', id: 'projects' },
-  { kind: 'link', label: 'Knowledge', href: '/knowledge', id: 'knowledge' },
+  { label: 'Library', href: '/', id: 'library' },
+  { label: 'Flows', href: '/flows/forge-cycle', id: 'flows' },
+  { label: 'Agents', href: '/agents/new', id: 'agents' },
+  { label: 'Projects', href: '/projects', id: 'projects' },
+  { label: 'Knowledge', href: '/knowledge', id: 'knowledge' },
 ];
 
 export function StudioNav() {
   const pathname = usePathname();
 
   function isActive(item: NavItem): boolean {
-    if (item.kind !== 'link') return false;
     if (item.href === '/') return pathname === '/';
     // Agents nav points to /agents/new but any /agents/* route should be active
     if (item.id === 'agents')    return pathname.startsWith('/agents');
@@ -50,33 +47,16 @@ export function StudioNav() {
       </Link>
 
       <div className="afb-nav-links">
-        {NAV_ITEMS.map((item) => {
-          if (item.kind === 'disabled') {
-            return (
-              <span
-                key={item.id}
-                className="nav-disabled"
-                data-nav={item.id}
-                title={item.title}
-                role="link"
-                aria-disabled="true"
-                aria-label={`${item.label} — coming in milestone ${item.title}`}
-              >
-                {item.label}
-              </span>
-            );
-          }
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              className={isActive(item) ? 'active' : undefined}
-              data-nav={item.id}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+        {NAV_ITEMS.map((item) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            className={isActive(item) ? 'active' : undefined}
+            data-nav={item.id}
+          >
+            {item.label}
+          </Link>
+        ))}
       </div>
     </nav>
   );

@@ -1166,7 +1166,12 @@ async function main() {
     } else {
       check(false, 'author-from-scratch: BUILD tab button present');
     }
-    await sleep(WORK); // ReactFlow hydrates after tab switch
+    // ReactFlow hydrates after the tab switch — poll for the node count rather
+    // than a fixed sleep (the canvas can render a tick late under load).
+    await page.waitForFunction(
+      () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 6,
+      null, { timeout: 15000 },
+    ).catch(() => {});
     const nodeCount = await page.evaluate(() => {
       const el = document.querySelector('[data-node-count]');
       return el ? parseInt(el.getAttribute('data-node-count') ?? '0', 10) : -1;

@@ -464,25 +464,8 @@ function DrawerBody({
         </DrawerSection>
       )}
 
-      {/* ---- RESUME / START BUTTONS (M3 placeholder) ---- */}
-      <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 8 }}>
-        <button
-          className="btn"
-          disabled
-          title="M3"
-          style={{ cursor: 'not-allowed', opacity: 0.45 }}
-        >
-          ↩ Resume from this phase
-        </button>
-        <button
-          className="btn"
-          disabled
-          title="M3"
-          style={{ cursor: 'not-allowed', opacity: 0.45 }}
-        >
-          ▶ Start
-        </button>
-      </div>
+      {/* Resume / Start live on the monitor itself (data-action="start-run" /
+          "resume-run") — no duplicate placeholder controls in the drawer. */}
 
       {/* ---- PHASE LOG ---- */}
       <DrawerSection title="Phase log" flex>

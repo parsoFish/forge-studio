@@ -330,14 +330,14 @@ export default function LibraryPage() {
               {kbs.length}
             </span>
             <span style={{ flex: 1 }} />
-            <button
+            <a
               className="btn"
-              disabled
-              title="M5"
-              style={{ cursor: 'not-allowed', opacity: 0.45 }}
+              href="/knowledge/new"
+              data-action="new-kb"
+              style={{ textDecoration: 'none' }}
             >
               + New KB
-            </button>
+            </a>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {kbs.map((k, i) => (
