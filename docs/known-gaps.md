@@ -771,7 +771,19 @@ forge defects. Root-caused via an adversarially-verified investigation workflow.
 
 - **M4 flow edit-lock false-negatives for non-forge-cycle flows until run-model stamps the real flowId (`orchestrator/run-model.ts` `FLOW_ID`).** Latent — no non-forge-cycle runs exist today; the lock is fully effective for forge-cycle.
 
-## 2026-06-16 — Studio pipeline observability (operator-observed during a live betterado cycle)
+## 2026-06-16 — Studio pipeline observability (operator-observed during a live betterado cycle) — ✅ RESOLVED 2026-06-16
+
+**Resolved** (`feat(studio): pipeline observability …`): (1) the hex-detail drawer now
+surfaces the node's input + task — a WI hex shows its task line + dependencies, a phase
+hex its inbound artifact + agent (PM enriches `pm.work-item-emitted` with task/deps;
+`deriveWorkItems` carries them); (2) the dev-loop agent's reasoning is captured to the
+event log as `kind:reasoning` scoped by `work_item_id` and rendered as a distinct THINKING
+line; (3) the bridge log route accepts `?wiId=` and filters by `work_item_id`, so each
+fanOut dev agent reads its own stream; (4) the dev pulse follows the dependency DAG
+(PM→root WIs, leaf WIs→unifier) with each WI hex's edge state driven by its own status
+(stale in-progress edge clears on completion), and WI deps ride on the hex as
+`data-wi-deps` rather than monitor-destabilising cross-stack edges between same-column WI
+hexes. Original finding below for the record.
 
 The hex pipeline is clickable but per-node detail is shallow and the fan-out graph
 is wrong. Four gaps to fix together (all in `forge-ui/` hex pipeline +
@@ -799,7 +811,13 @@ is wrong. Four gaps to fix together (all in `forge-ui/` hex pipeline +
    pulse from that WI's own status (not a static edge to WI-1); clear the
    in-progress edge when a WI completes.
 
-## 2026-06-16 — live-cycle blockers (betterado task-group run, both real forge bugs)
+## 2026-06-16 — live-cycle blockers (betterado task-group run, both real forge bugs) — ✅ RESOLVED 2026-06-16
+
+**Both resolved on `feat/studio-object-type-refinement`:** (1) the bridge approve guard now
+also allows worktrees under `<forgeRoot>/_worktrees/` (`f74e8ce`); (2) the demo model captures
+live REST evidence into `demo.json` checkpoints (`collectLiveEvidence`/`mergeLiveEvidence`,
+`dde1ae2`) + the betterado `ado-demo` skill writes the real API GET to
+`.forge/live-evidence/*.json`, which `forge demo render` back-fills. Original finding below.
 
 The betterado task-group verify:cycle (INIT-2026-06-16-task-group-acceptance-and-data-source)
 ran clean — 4/4 WIs, a real `betterado_task_group` data source + live acceptance
@@ -830,3 +848,28 @@ bugs blocked a clean PASS:
    capture a real `vsrm/dev.azure.com …/taskgroups/<id>` GET response (and/or portal
    screenshot) into a checkpoint's `liveEvidence.url`, not just record that the test
    passed.
+
+## 2026-06-16 — Studio object-type-refinement deferred items closed out (this branch)
+
+Closed the four roadmap-deferred items (open tasks #6/#9/#10/#11) on
+`feat/studio-object-type-refinement`. All cheap gates green (test 1207, build, `forge brain
+lint`/`forge studio lint` 0 errors, `npm run ui:journey`). Per operator scope, `verify:cycle`
+was **not** run as part of this closeout (operator-gated separately).
+
+- **#6 — model-tier economy.** `runtime.subagentModel` was **de-cargoed** (no SDK sub-spawn
+  consumer exists — reintroduce with the first sub-spawning flow; ADR-027 amended).
+  `brain-ingest` flipped sonnet→haiku.
+- **#9 — flow-runner artifact guard + verdict.json** (ADR-027 runtime half, `orchestrator/flow-artifacts.ts`).
+- **#10 — forge-cycle-scratch AUTHOR act** (palette now asserts the new OOTB agents).
+- **#11 — Studio pipeline observability** (per-WI input/task, thinking stream, per-WI log,
+  dependency-DAG pulse + `data-wi-deps`).
+
+**Two follow-ups left open (deliberately):**
+1. **brain-ingest haiku R1 gate.** The sonnet→haiku flip is shipped but its theme-quality
+   regression check (R1) is unrun — validate via a **standalone** brain-ingest A/B (sonnet vs
+   haiku on one archived cycle under `brain/_raw/cycles/`, theme diff + opus/operator sign-off)
+   the next time brain-ingest is invoked manually. NOT a `verify:cycle`.
+2. **Architect hex shows `$0.00` in the `ui:journey` (`P4`).** Pre-existing — fails on the
+   pre-#11 baseline too; the seeded architect events carry no cost rollup to the hex. A real
+   architect-observability gap (see the architect-observability operator notes), independent of
+   this branch's roadmap. The only remaining `ui:journey` DOM-as-metrics failure.
