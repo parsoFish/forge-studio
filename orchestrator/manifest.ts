@@ -121,6 +121,13 @@ export type InitiativeManifest = {
    */
   cycle_id?: string;
   /**
+   * The Studio flow this initiative runs under (ADR-028 / J5). When present, the
+   * run-model associates the run with this flow so it surfaces under
+   * `/flows/<flow_id>` in the monitor. Absent ⇒ the historical default
+   * `forge-cycle` (every legacy manifest), so existing behaviour is unchanged.
+   */
+  flow_id?: string;
+  /**
    * P4: architect session id from the in-UI architect runner that produced this
    * manifest. Stamped during `runFinalizeStep` so the cycle's event log can emit
    * real architect start/end events (grounding the architect hex in actual data
@@ -178,6 +185,7 @@ export function parseManifest(content: string): InitiativeManifest {
   if (typeof data.claimed_by === 'string') manifest.claimed_by = data.claimed_by;
   if (typeof data.worktree_path === 'string') manifest.worktree_path = data.worktree_path;
   if (typeof data.cycle_id === 'string' && data.cycle_id.length > 0) manifest.cycle_id = data.cycle_id;
+  if (typeof data.flow_id === 'string' && data.flow_id.length > 0) manifest.flow_id = data.flow_id;
   if (typeof data.architect_session_id === 'string' && data.architect_session_id.length > 0) {
     manifest.architect_session_id = data.architect_session_id;
   }
@@ -225,6 +233,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.claimed_by) data.claimed_by = m.claimed_by;
   if (m.worktree_path) data.worktree_path = m.worktree_path;
   if (m.cycle_id) data.cycle_id = m.cycle_id;
+  if (m.flow_id) data.flow_id = m.flow_id;
   if (m.architect_session_id) data.architect_session_id = m.architect_session_id;
   if (typeof m.architect_cost_usd === 'number') data.architect_cost_usd = m.architect_cost_usd;
   if (typeof m.architect_duration_ms === 'number') data.architect_duration_ms = m.architect_duration_ms;

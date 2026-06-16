@@ -739,3 +739,44 @@ test('buildNodeMapping: missing studio/ falls back to hardcoded table; aggregate
     cleanup(root);
   }
 });
+
+test('ADR 028 / J5: a run carries the flow_id from its manifest (else forge-cycle)', () => {
+  const root = makeTmp();
+  try {
+    // Legacy manifest (no flow_id) → forge-cycle default.
+    const legacyPath = writeManifest(root, 'pending', 'INIT-2026-01-01-legacy');
+    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: legacyPath, nowMs: Date.now() }).flowId, 'forge-cycle');
+
+    // Manifest with flow_id → the run surfaces under that flow.
+    const authoredPath = writeManifest(root, 'pending', 'INIT-2026-01-01-authored', { flow_id: 'my-first-flow' });
+    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: authoredPath, nowMs: Date.now() }).flowId, 'my-first-flow');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named nodes', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-authored-run';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-authored-run';
+    const manifestPath = writeManifest(root, 'ready-for-review', initId, { cycle_id: cycleId, flow_id: 'my-first-flow' });
+    // Authored flow phases (plan/dev/review) aren't in the forge-cycle mapping —
+    // eventToNodeId falls back to the phase as its own node id.
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('plan', 'start'), ev('plan', 'end', undefined, undefined, { cost_usd: 0.1 }),
+      ev('dev', 'start'), ev('dev', 'end', undefined, undefined, { cost_usd: 0.2 }),
+      ev('review', 'start'),
+    ]);
+    const run = aggregateRun({ root, queueState: 'ready-for-review', manifestPath, nowMs: Date.now() });
+    assert.equal(run.flowId, 'my-first-flow');
+    assert.equal(run.phases['plan'], 'complete');
+    assert.equal(run.phases['dev'], 'complete');
+    assert.equal(run.phases['review'], 'active');
+    assert.equal(run.status, 'gated');
+    assert.equal(run.gate, 'review');
+  } finally {
+    cleanup(root);
+  }
+});

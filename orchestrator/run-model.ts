@@ -335,7 +335,10 @@ function buildRun(args: {
 
   return {
     id: cycleId,
-    flowId: FLOW_ID,
+    // ADR-028 / J5: associate the run with the flow its manifest names, so a
+    // user-authored flow's run surfaces under /flows/<flow_id>. Legacy manifests
+    // carry no flow_id → the historical forge-cycle default (behaviour unchanged).
+    flowId: manifest.flow_id ?? FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative,
     status: runStatus,
@@ -423,7 +426,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
   const origin: Run['origin'] = VALID_ORIGINS.has(manifest.origin) ? (manifest.origin as Run['origin']) : 'architect';
   return {
     id: manifest.initiative_id,
-    flowId: FLOW_ID,
+    flowId: manifest.flow_id ?? FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative: extractTitle(manifest.body, manifest.initiative_id),
     status: 'planned',

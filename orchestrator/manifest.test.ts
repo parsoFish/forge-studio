@@ -235,6 +235,18 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   assert.equal(parseManifest(legacy).resume_from, undefined);
 });
 
+test('ADR 028 / J5: flow_id round-trips and is omitted when absent', () => {
+  // Absent → not serialised, parses to undefined (legacy manifests).
+  const plain = serializeManifest(fixture());
+  assert.ok(!/flow_id:/.test(plain), 'flow_id should be absent by default');
+  assert.equal(parseManifest(plain).flow_id, undefined);
+
+  // Present → serialised + parsed back.
+  const withFlow = serializeManifest({ ...fixture(), flow_id: 'my-first-flow' });
+  assert.match(withFlow, /flow_id: my-first-flow/);
+  assert.equal(parseManifest(withFlow).flow_id, 'my-first-flow');
+});
+
 test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-origin-'));
   try {

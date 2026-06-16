@@ -193,6 +193,30 @@ function cleanFirstProject() {
     try { writeFileSync(PROJECTS_YAML, PROJECTS_YAML_SNAPSHOT); } catch { /* */ }
   }
 }
+
+// J5: a seeded run of the AUTHORED flow (my-first-flow) given work against the
+// onboarded project — proves the monitor renders a user-authored flow's run.
+const J5_INIT = `INIT-${DATE}-authored-flow-run`;
+const J5_STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+const J5_CYCLE_ID = `${J5_STAMP}_${J5_INIT}`;
+const J5_CYCLE_LOG = join(FORGE_ROOT, '_logs', J5_CYCLE_ID);
+function cleanFirstFlowRun() {
+  for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+    try { rmSync(join(FORGE_ROOT, '_queue', q, `${J5_INIT}.md`), { force: true }); } catch { /* */ }
+  }
+  try { rmSync(J5_CYCLE_LOG, { recursive: true, force: true }); } catch { /* */ }
+}
+/** Append one event to the J5 run's events.jsonl (phase = node id for the authored flow). */
+let j5Seq = 0;
+function j5Event(phase, eventType, message, metadata = {}, extras = {}) {
+  mkdirSync(J5_CYCLE_LOG, { recursive: true });
+  j5Seq += 1;
+  appendFileSync(join(J5_CYCLE_LOG, 'events.jsonl'), JSON.stringify({
+    event_id: `EV_j5_${j5Seq}`, cycle_id: J5_CYCLE_ID, initiative_id: J5_INIT,
+    started_at: new Date().toISOString(), phase, skill: phase, event_type: eventType,
+    input_refs: [], output_refs: [], message, metadata, ...extras,
+  }) + '\n');
+}
 /** Parse the saved flow.yaml → { version, nodes } (nodes carry persisted x/y). */
 function readSavedFlow(slug) {
   try {
@@ -610,6 +634,7 @@ async function main() {
   cleanStarterAgents();
   cleanFirstFlow();
   cleanFirstProject();
+  cleanFirstFlowRun();
   writeScratchFlow();
 
   console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
@@ -1008,6 +1033,70 @@ async function main() {
       console.error(`  [studio lint J4] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
     }
     check(j4LintOk, 'J4: `forge studio lint` stays green with the onboarded project (exit 0)');
+
+    // ── J5: GIVE THE AUTHORED FLOW WORK (seeded run) ──────────────────────────
+    // The user's authored flow (my-first-flow) is given work against the
+    // onboarded project. Seeded (no real agents), this proves the monitor
+    // surfaces a USER-AUTHORED flow's run — its plan→dev→review hexes progress
+    // and the run parks at the verdict gate. (The full betterado idea→reflect
+    // path is proven separately by the RUN act below.)
+    console.log('\n[J5] Give the authored flow work (seeded run on my-first-flow)');
+    cleanFirstFlowRun();
+    // Seed a gated run: manifest (flow_id binds it to the authored flow) + events.
+    mkdirSync(QDIR('ready-for-review'), { recursive: true });
+    writeFileSync(join(QDIR('ready-for-review'), `${J5_INIT}.md`), [
+      '---',
+      `initiative_id: ${J5_INIT}`,
+      `project: ${J4_PROJECT}`,
+      `project_repo_path: ${join(FORGE_ROOT, 'projects', J4_PROJECT)}`,
+      `created_at: '${new Date().toISOString()}'`,
+      'iteration_budget: 3',
+      'cost_budget_usd: 5',
+      'phase: ready-for-review',
+      'origin: human-directed',
+      `cycle_id: ${J5_CYCLE_ID}`,
+      `flow_id: ${J3_FLOW}`,
+      '---',
+      '',
+      '# Give the authored flow work',
+      '',
+      'A seeded run proving the authored plan → dev → review flow renders in the monitor.',
+      '',
+    ].join('\n'));
+    j5Event('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' });
+    j5Event('plan', 'start', 'plan.start');
+    j5Event('plan', 'end', 'plan.end', {}, { cost_usd: 0.12, duration_ms: 24000 });
+    j5Event('dev', 'start', 'dev.start');
+    j5Event('dev', 'log', 'gate.pass', {});
+    j5Event('dev', 'end', 'dev.end', {}, { cost_usd: 0.28, duration_ms: 41000 });
+    j5Event('review', 'start', 'review.start');
+
+    await page.goto(watch.uiUrl + `/flows/${J3_FLOW}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    // The run is discovered + associated with the authored flow (flow_id).
+    const j5RunCount = await page.evaluate(() =>
+      parseInt(document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-run-count') ?? '0', 10));
+    check(j5RunCount >= 1, `J5: the authored flow shows the seeded run (run-count ${j5RunCount})`);
+    // The monitor renders the authored flow's own nodes (plan/dev/review).
+    for (const nodeId of ['plan', 'dev', 'review']) {
+      await page.waitForSelector(`[data-mon-node][data-node-id="${nodeId}"]`, { timeout: 10000 }).catch(() => {});
+      const present = await page.evaluate((n) => document.querySelector(`[data-mon-node][data-node-id="${n}"]`) !== null, nodeId);
+      check(present, `J5: monitor renders the "${nodeId}" hex of the authored flow`);
+    }
+    // Phase statuses progressed (plan + dev complete) and the run parked at the gate.
+    const planStatus = await page.evaluate(() =>
+      document.querySelector('[data-mon-node][data-node-id="plan"]')?.getAttribute('data-status'));
+    check(planStatus === 'complete', `J5: plan phase shows complete (got "${planStatus}")`);
+    const reviewStatus = await page.evaluate(() =>
+      document.querySelector('[data-mon-node][data-node-id="review"]')?.getAttribute('data-status'));
+    check(reviewStatus === 'gated' || reviewStatus === 'active', `J5: review phase awaits the human verdict (got "${reviewStatus}")`);
+    await expectPhaseCost(page, 'J5: the authored run shows accrued per-phase cost');
+    await frame(page, 'j5-0-authored-run', 'J5 — the authored flow, given work, runs plan → dev → review to the verdict gate');
+    // Clean the seeded run now so it does not bleed into the betterado RUN act.
+    cleanFirstFlowRun();
 
     // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
     // The headline new beat. We authored forge-cycle-scratch as a flow definition
@@ -2241,6 +2330,7 @@ async function main() {
     cleanStarterAgents();
     cleanFirstFlow();
     cleanFirstProject();
+    cleanFirstFlowRun();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
@@ -2294,4 +2384,4 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); cleanFirstFlow(); cleanFirstProject(); process.exit(1); });
+main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); cleanFirstFlow(); cleanFirstProject(); cleanFirstFlowRun(); process.exit(1); });
