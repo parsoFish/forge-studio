@@ -1,0 +1,16 @@
+id: basic
+name: Basic Flow
+version: 1
+goal: Plan a change, implement it, and review the result before it merges.
+project: null
+kb: null
+costCeilingUsd: 5
+origin: starter
+nodes:
+  - { id: plan, agent: plan }
+  - { id: dev, agent: dev }
+  - { id: review, agent: review, gate: verdict }
+edges:
+  - { from: plan, to: dev, artifact: plan }
+  - { from: dev, to: review, artifact: pr }
+triggers: []
