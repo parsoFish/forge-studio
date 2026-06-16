@@ -138,6 +138,15 @@ export type ClaudeAgentOptions = {
     clearInterval: (handle: unknown) => void;
     now: () => number;
   };
+  /**
+   * Studio observability sub-gap #2 — fired once per non-empty assistant text
+   * block observed in the SDK stream, trimmed and capped at ~400 chars. Lets
+   * the orchestrator emit per-WI reasoning events so the UI can show "the
+   * thinking" per hex node. Best-effort: never lets a throwing consumer break
+   * the agent loop (wrapped in try/catch). If unset, no reasoning events fire
+   * — backward compatible.
+   */
+  onReasoning?: (text: string) => void;
 };
 
 /**
@@ -171,6 +180,8 @@ export type ToolUseLiveDetail = {
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 const DEFAULT_HEARTBEAT_IDLE_TAIL_MS = 30_000;
+/** Studio observability sub-gap #2 — cap reasoning text blocks at this length. */
+const MAX_REASONING_TEXT = 400;
 
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash', 'Grep', 'Glob'];
 export const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -268,6 +279,22 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
             if (b.type === 'text' && typeof b.text === 'string') {
               // Last text block wins — typically the agent's final reasoning.
               lastAssistantText = b.text;
+              // Studio observability sub-gap #2 — fire onReasoning for each
+              // non-empty text block so the orchestrator can emit per-WI log
+              // events showing live agent reasoning. Skip pure-whitespace.
+              if (opts.onReasoning) {
+                const trimmed = b.text.trim();
+                if (trimmed.length > 0) {
+                  const capped = trimmed.length > MAX_REASONING_TEXT
+                    ? `${trimmed.slice(0, MAX_REASONING_TEXT)}…`
+                    : trimmed;
+                  try {
+                    opts.onReasoning(capped);
+                  } catch {
+                    /* never let a throwing reasoning consumer break the agent loop */
+                  }
+                }
+              }
               continue;
             }
             if (b.type !== 'tool_use' || !b.name) continue;

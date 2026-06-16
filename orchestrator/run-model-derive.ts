@@ -313,7 +313,7 @@ export function findGateChecks(
 export function deriveWorkItems(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
-): { id: string; status: RunPhaseStatus }[] {
+): { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[] }[] {
   // Collect WI ids in order of first appearance
   const wiOrder: string[] = [];
   const wiIdSet = new Set<string>();
@@ -327,6 +327,21 @@ export function deriveWorkItems(
   }
 
   if (wiOrder.length === 0) return [];
+
+  // Per-WI spec (#11 observability) — task line + dependency edges, captured from
+  // the PM's `pm.work-item-emitted` events (the only place the WI's deps/ACs exist
+  // in the event stream). Feeds the hex-detail drawer + the WI dependency graph.
+  const wiSpec = new Map<string, { task?: string; dependsOn?: string[] }>();
+  for (const e of events) {
+    if (e.message !== 'pm.work-item-emitted') continue;
+    const id = e.metadata?.work_item_id;
+    if (typeof id !== 'string') continue;
+    const m = e.metadata ?? {};
+    const deps = Array.isArray(m.depends_on)
+      ? (m.depends_on as unknown[]).filter((x): x is string => typeof x === 'string')
+      : undefined;
+    wiSpec.set(id, { task: typeof m.task === 'string' ? m.task : undefined, dependsOn: deps });
+  }
 
   // Only dev-phase events are relevant for per-WI status
   const devEvents = events.filter((e) => eventToNodeId(e.phase, nodeMapping) === 'dev');
@@ -347,6 +362,7 @@ export function deriveWorkItems(
   return wiOrder.map((id) => ({
     id,
     status: wiStatusFor(buckets.get(id) ?? []),
+    ...wiSpec.get(id),
   }));
 }
 

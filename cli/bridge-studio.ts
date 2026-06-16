@@ -138,7 +138,7 @@ export function readJson(req: IncomingMessage): Promise<unknown> {
 // Phase log line derivation (design §7)
 // ---------------------------------------------------------------------------
 
-type LogLineKind = 'info' | 'tool' | 'cost' | 'stderr' | 'retry';
+type LogLineKind = 'info' | 'tool' | 'cost' | 'stderr' | 'retry' | 'reasoning';
 
 type LogLine = { at: string; kind: LogLineKind; text: string };
 
@@ -161,6 +161,8 @@ function classifyEvent(e: EventLogEntry): LogLine {
     kind = 'stderr';
   } else if (e.event_type === 'tool_use') {
     kind = 'tool';
+  } else if (e.event_type === 'log' && e.metadata?.kind === 'reasoning') {
+    kind = 'reasoning'; // the agent's thinking stream (#11)
   } else if (
     e.message === 'usage_delta' ||
     e.event_type === 'agent_heartbeat' ||
@@ -335,6 +337,7 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const stderrOnly = qs.get('stderr') === '1';
+      const wiId = qs.get('wiId') ?? '';
 
       // Guard against path traversal via a crafted runId.
       const safeLogsBase = resolve(ctx.logsRoot);
@@ -359,7 +362,13 @@ export async function handleStudioRoutes(
         try { events.push(JSON.parse(line) as EventLogEntry); } catch { /* skip malformed */ }
       }
 
-      const nodeEvents = events.filter((e) => nodeMapping.get(e.phase) === nodeId);
+      let nodeEvents = events.filter((e) => nodeMapping.get(e.phase) === nodeId);
+      // Per-WI scoping (#11): when a WI hex is clicked, show ONLY that WI's own
+      // events — each fanOut dev agent has an independent stream, not the pooled
+      // dev-loop log. Events already carry metadata.work_item_id.
+      if (wiId) {
+        nodeEvents = nodeEvents.filter((e) => e.metadata?.work_item_id === wiId);
+      }
 
       let lines = nodeEvents.map(classifyEvent);
       if (stderrOnly) {

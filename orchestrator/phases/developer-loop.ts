@@ -144,12 +144,15 @@ function makeAgentWithTelemetry(
     skill: string;
     workItemId?: string;
   },
-  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta'>,
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
   // Runtime selection (ADR-029). Defaults to 'claude' — the only registered
   // available adapter today. M8-A threads the agent definition's runtime.sdk
   // here so a flow node can run on a second runtime; the conformance suite is
   // the admission gate for any such adapter.
   sdkId = 'claude',
+  // Studio observability sub-gap #2 — when provided, fired for each non-empty
+  // assistant text block. Only wired for dev-loop per-WI agents (not unifier).
+  onReasoning?: (text: string) => void,
 ): { agent: AgentInvocation; toolSink: ReturnType<typeof makeToolEventSink> } {
   const toolSink = makeToolEventSink(logger, {
     initiativeId: sinkCtx.initiativeId,
@@ -163,6 +166,7 @@ function makeAgentWithTelemetry(
     ...agentOpts,
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
+    ...(onReasoning !== undefined ? { onReasoning } : {}),
     onUsageDelta: (u) => {
       // Change B: emit per-turn token deltas as a lightweight log event so
       // the operator UI and future tooling can track mid-iteration usage.
@@ -359,6 +363,26 @@ export async function runDeveloperLoop(
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
         // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,
+      },
+      'claude',
+      // Studio observability sub-gap #2: emit each assistant reasoning block
+      // as a log event so the operator UI can show live "thinking" per WI hex.
+      (text) => {
+        try {
+          logger.emit({
+            initiative_id: input.initiativeId,
+            parent_event_id: wiStart.event_id,
+            phase: 'developer-loop',
+            skill: 'developer-ralph',
+            event_type: 'log',
+            input_refs: [],
+            output_refs: [],
+            message: text,
+            metadata: { kind: 'reasoning', work_item_id: wi.work_item_id },
+          });
+        } catch {
+          /* never let a failing emit break the outer agent loop */
+        }
       },
     );
 

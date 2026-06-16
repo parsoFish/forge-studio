@@ -296,7 +296,17 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       input_refs: [input.manifestPath],
       output_refs: [resolve(workItemsDir, `${item.work_item_id}.md`)],
       message: 'pm.work-item-emitted',
-      metadata: { work_item_id: item.work_item_id },
+      metadata: {
+        work_item_id: item.work_item_id,
+        // Carried for the Studio hex-detail drawer + the WI dependency graph
+        // (observability #11): the WI's deps, scope size, and a one-line task.
+        depends_on: item.depends_on,
+        files_in_scope: item.files_in_scope.length,
+        ac_count: item.acceptance_criteria.length,
+        task: item.acceptance_criteria[0]
+          ? `Given ${item.acceptance_criteria[0].given} — Then ${item.acceptance_criteria[0].then}`
+          : item.files_in_scope.join(', '),
+      },
     });
   }
 

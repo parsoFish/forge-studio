@@ -51,7 +51,7 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;
   failNote?: string;
-  workItems?: { id: string; status: RunPhaseStatus }[];
+  workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[] }[];
 };
 
 export type AgentRuntime = {
@@ -194,7 +194,7 @@ export type Catalog = {
 
 export type PhaseLogLine = {
   at: string;
-  kind: 'info' | 'tool' | 'cost' | 'stderr' | 'retry';
+  kind: 'info' | 'tool' | 'cost' | 'stderr' | 'retry' | 'reasoning';
   text: string;
 };
 
@@ -276,8 +276,12 @@ export async function fetchPhaseLog(
   runId: string,
   nodeId: string,
   stderr?: boolean,
+  wiId?: string,
 ): Promise<PhaseLogLine[]> {
-  const qs = stderr ? '?stderr=1' : '';
+  const params = new URLSearchParams();
+  if (stderr) params.set('stderr', '1');
+  if (wiId) params.set('wiId', wiId); // per-WI scoping (#11)
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const body = await studioGet<{ lines: PhaseLogLine[] }>(
     `/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(nodeId)}/log${qs}`,
     { lines: [] },

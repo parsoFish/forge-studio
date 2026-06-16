@@ -168,7 +168,7 @@ export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
           height={canvasH}
         >
           {edges.map((e) => (
-            <EdgePath key={`${e.from}-${e.to}`} edge={e} hexes={hexes} run={run} />
+            <EdgePath key={`${e.from}-${e.to}`} edge={e} hexes={hexes} />
           ))}
         </svg>
 
@@ -248,15 +248,16 @@ function ZoomButton({
 function EdgePath({
   edge,
   hexes,
-  run,
 }: {
   edge: { from: string; to: string; artifact?: string };
   hexes: HexPos[];
-  run: Run | null;
 }) {
-  // Use the first hex for each node (fanOut uses first WI)
-  const fromHex = hexes.find((h) => h.nodeId === edge.from);
-  const toHex   = hexes.find((h) => h.nodeId === edge.to);
+  // Resolve endpoints by WI id first (inter-WI dependency edges + the rerouted
+  // upstream/downstream pulse), then node id (phase edges). WI hexes share their
+  // fanOut nodeId, so they are addressable only by wiId — this is what lets the
+  // dependency DAG + the PM→root-WI pulse render instead of pinning to WI-1 (#11).
+  const fromHex = hexes.find((h) => h.wiId === edge.from) ?? hexes.find((h) => h.nodeId === edge.from);
+  const toHex   = hexes.find((h) => h.wiId === edge.to)   ?? hexes.find((h) => h.nodeId === edge.to);
   if (!fromHex || !toHex) return null;
 
   const x1 = fromHex.x + HEX_W / 2 - 2;
@@ -266,8 +267,11 @@ function EdgePath({
   const cx = (x1 + x2) / 2;
   const d = `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`;
 
-  const fromStatus = run?.phases[edge.from] ?? 'pending';
-  const toStatus   = run?.phases[edge.to]   ?? 'pending';
+  // Edge flow follows each endpoint hex's OWN status (a WI hex carries its WI's
+  // status), so an in-progress edge clears the moment its source WI completes —
+  // no more stale pulse pinned to WI-1 after it finishes (#11).
+  const fromStatus = fromHex.status;
+  const toStatus   = toHex.status;
   const flowing = fromStatus === 'complete' && (toStatus === 'active' || toStatus === 'retrying');
 
   const midX = (x1 + x2) / 2;
@@ -275,7 +279,7 @@ function EdgePath({
   const artifactName = edge.artifact;
 
   return (
-    <g>
+    <g data-flow-edge="" data-edge-from={edge.from} data-edge-to={edge.to}>
       {/* Base stroke */}
       <path
         d={d}
@@ -364,6 +368,7 @@ function HexNode({
       data-status={hex.status}
       data-hex-kind={hex.hexKind}
       {...(hex.wiId ? { 'data-wi-id': hex.wiId } : {})}
+      {...(hex.dependsOn && hex.dependsOn.length > 0 ? { 'data-wi-deps': hex.dependsOn.join(',') } : {})}
       data-phase-cost-usd={(hex.costUsd ?? 0).toFixed(2)}
       onClick={() => onNodeClick(hex.nodeId, hex.hexKind, hex.wiId)}
       style={{

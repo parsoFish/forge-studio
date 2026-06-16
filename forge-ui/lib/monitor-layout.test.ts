@@ -10,7 +10,9 @@
  *  - per-WI identity (hexKind='wi' + wiId) on fanOut-expanded hexes
  *  - a deterministic per-PHASE node set (hexKind='phase', deduplicated by nodeId)
  *  - per-phase cost carried from run.phaseMeta[nodeId].costUsd (0 when absent)
- *  - edges unaffected by fanOut expansion (resolve by nodeId)
+ *  - fanOut reroutes the dev pulse onto the WI hexes following the dependency
+ *    DAG: PM→root WIs, leaf WIs→unifier (resolve by wiId, then nodeId); the deps
+ *    themselves ride on the WI hex as data-wi-deps, not cross-stack edges (#11)
  */
 
 import { test, expect } from 'vitest';
@@ -216,18 +218,55 @@ test('buildMonitorLayout: fanOutAggregate cost defaults to 0 when phaseMeta miss
 });
 
 // ---------------------------------------------------------------------------
-// edges unaffected by fanOut expansion
+// edges — fanOut reroutes the dev pulse onto the WI hexes (#11)
 // ---------------------------------------------------------------------------
 
-test('buildMonitorLayout: edges pass through unchanged and resolve by nodeId', () => {
+test('buildMonitorLayout: no fanOut WIs → flow edges pass through unchanged, resolve by nodeId', () => {
   const flow = makeFlow();
-  const layout = buildMonitorLayout(flow, makeRun());
+  const layout = buildMonitorLayout(flow, makeRun({ workItems: [] }));
   expect(layout.edges).toEqual(flow.edges);
-  // every edge endpoint resolves to at least one hex (fanOut expands to multiple)
   for (const e of layout.edges) {
     expect(layout.hexes.some((h) => h.nodeId === e.from)).toBeTruthy();
     expect(layout.hexes.some((h) => h.nodeId === e.to)).toBeTruthy();
   }
+});
+
+test('buildMonitorLayout: independent WIs → PM pulse fans to each WI; each WI feeds the unifier (#11)', () => {
+  const layout = buildMonitorLayout(makeFlow(), makeRun()); // WI-1, WI-2, no deps
+  // no edge points at the collapsed fanOut node …
+  expect(layout.edges.some((e) => e.from === 'dev' || e.to === 'dev')).toBeFalsy();
+  // … the PM pulse fans into each root WI …
+  expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-1')).toBeTruthy();
+  expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-2')).toBeTruthy();
+  // … and each leaf WI feeds the unifier.
+  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'unifier')).toBeTruthy();
+  expect(layout.edges.some((e) => e.from === 'WI-2' && e.to === 'unifier')).toBeTruthy();
+  // every edge endpoint resolves to a hex by wiId or nodeId
+  for (const e of layout.edges) {
+    expect(layout.hexes.some((h) => h.wiId === e.from || h.nodeId === e.from)).toBeTruthy();
+    expect(layout.hexes.some((h) => h.wiId === e.to || h.nodeId === e.to)).toBeTruthy();
+  }
+});
+
+test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps); pulse follows the DAG (#11)', () => {
+  const run = makeRun({
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'active', dependsOn: ['WI-1'] },
+    ],
+  });
+  const layout = buildMonitorLayout(makeFlow(), run);
+  // dependency is surfaced on the WI hex (rendered as data-wi-deps), not as a
+  // cross-stack edge between the same-column WI hexes
+  const wi2 = layout.hexes.find((h) => h.wiId === 'WI-2');
+  expect(wi2?.dependsOn).toEqual(['WI-1']);
+  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'WI-2')).toBeFalsy();
+  // pulse follows the DAG: root WI-1 takes the PM pulse; WI-2 (has a dep) does NOT
+  expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-1')).toBeTruthy();
+  expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-2')).toBeFalsy();
+  // leaf WI-2 feeds the unifier; WI-1 (has a dependent) does NOT
+  expect(layout.edges.some((e) => e.from === 'WI-2' && e.to === 'unifier')).toBeTruthy();
+  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'unifier')).toBeFalsy();
 });
 
 // ---------------------------------------------------------------------------

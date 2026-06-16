@@ -44,6 +44,7 @@ export interface HexPos {
   isFailed: boolean;
   hexKind: HexKind;
   wiId?: string; // set for fanOut-expanded WI hexes
+  dependsOn?: string[]; // WI dependency ids (fanOut WI hexes) — surfaced as data-wi-deps (#11)
   costUsd: number; // per-phase cost (0 for WI hexes)
 }
 
@@ -137,6 +138,7 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
             isFailed: false,
             hexKind: 'wi',
             wiId: wiItem.id,
+            dependsOn: wiItem.dependsOn,
             costUsd: 0,
           });
           rowIndex++;
@@ -191,11 +193,46 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
       }
     : null;
 
+  // Render edge set (#11): when the fanOut node expanded into WI hexes, reroute
+  // its inbound/outbound flow edges onto the WI hexes — the upstream pulse fans
+  // into the ROOT WIs (those with no in-run deps) and the LEAF WIs feed the
+  // downstream node, so the pulse follows the dependency DAG instead of pinning
+  // to WI-1. The inter-WI dependencies themselves are surfaced as `data-wi-deps`
+  // on each WI hex (not as cross-stack edges — WI hexes share a column). Without
+  // a fanOut expansion, the flow edges pass through unchanged.
+  let edges: Array<{ from: string; to: string; artifact?: string }> = edgesRaw.map((e) => ({
+    from: e.from,
+    to: e.to,
+    artifact: e.artifact,
+  }));
+  if (fannedOut && fanOutNodeId) {
+    const wis = run?.workItems ?? [];
+    const present = new Set(wis.map((w) => w.id));
+    const depsWithin = (w: { dependsOn?: string[] }): string[] =>
+      (w.dependsOn ?? []).filter((d) => present.has(d));
+    const roots = wis.filter((w) => depsWithin(w).length === 0).map((w) => w.id);
+    const dependedOn = new Set<string>();
+    for (const w of wis) for (const d of depsWithin(w)) dependedOn.add(d);
+    const leaves = wis.filter((w) => !dependedOn.has(w.id)).map((w) => w.id);
+
+    const rerouted: typeof edges = [];
+    for (const e of edges) {
+      if (e.to === fanOutNodeId) {
+        for (const r of roots) rerouted.push({ from: e.from, to: r, artifact: e.artifact });
+      } else if (e.from === fanOutNodeId) {
+        for (const l of leaves) rerouted.push({ from: l, to: e.to, artifact: e.artifact });
+      } else {
+        rerouted.push(e);
+      }
+    }
+    edges = rerouted;
+  }
+
   // Canvas dimensions (computed over the full hex set)
   const allX = hexes.map((h) => h.x);
   const allY = hexes.map((h) => h.y);
   const canvasW = (allX.length ? Math.max(...allX) : 0) + PAD_X + HEX_W;
   const canvasH = (allY.length ? Math.max(...allY) : 0) + PAD_Y + HEX_H;
 
-  return { hexes, topologyHexes, fanOutAggregate, edges: edgesRaw, canvasW, canvasH };
+  return { hexes, topologyHexes, fanOutAggregate, edges, canvasW, canvasH };
 }

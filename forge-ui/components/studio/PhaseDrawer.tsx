@@ -49,9 +49,9 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
   }, [isOpen, onClose]);
 
   const node = nodeId ? flow.nodes.find((n) => n.id === nodeId) : null;
-  // WI-scoped mode (M3 deferred for full per-WI detail): the drawer reuses the
-  // phase-scoped body (phase log / liveness / artifacts) but labels itself with
-  // the work-item identity so the operator + harness can tell which hex opened it.
+  // WI-scoped mode (#11): the drawer surfaces the WI's own task + dependencies
+  // and a per-WI log stream (filtered by work_item_id), so each fanOut dev agent
+  // reads independently instead of sharing the pooled dev-loop log.
   const wiItem = isWi && wiId && run ? run.workItems?.find((w) => w.id === wiId) ?? null : null;
   const agentLabel = isWi ? (wiId ?? 'work item') : (node?.agent ?? nodeId ?? '—');
   const meta: import('@/lib/studio-client').RunPhaseMeta | null =
@@ -182,9 +182,14 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
           <DrawerBody
             nodeId={nodeId}
             run={run}
+            flow={flow}
+            node={node ?? null}
             meta={meta}
             status={status}
             cycleId={cycleId}
+            isWi={isWi}
+            wiId={wiId}
+            wiItem={wiItem}
           />
         )}
       </div>
@@ -199,15 +204,25 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
 function DrawerBody({
   nodeId,
   run,
+  flow,
+  node,
   meta,
   status,
   cycleId,
+  isWi,
+  wiId,
+  wiItem,
 }: {
   nodeId: string;
   run: Run;
+  flow: Flow;
+  node: { agent?: string; gate?: string } | null;
   meta: NonNullable<Run['phaseMeta'][string]> | null;
   status: string;
   cycleId: string;
+  isWi: boolean;
+  wiId?: string;
+  wiItem: NonNullable<Run['workItems']>[number] | null;
 }) {
   const [logLines, setLogLines] = useState<PhaseLogLine[]>([]);
   const [stderrOnly, setStderrOnly] = useState(false);
@@ -220,14 +235,14 @@ function DrawerBody({
     setLogLines([]);
     void (async () => {
       try {
-        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly);
+        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly, isWi ? wiId : undefined);
         if (!signal.cancelled) setLogLines(lines);
       } finally {
         if (!signal.cancelled) setLogLoading(false);
       }
     })();
     return () => { signal.cancelled = true; };
-  }, [cycleId, nodeId, stderrOnly]);
+  }, [cycleId, nodeId, stderrOnly, isWi, wiId]);
 
   const lastProgressAt = meta?.lastProgressAt;
   const livenessColor = useLivenessColor(lastProgressAt, status);
@@ -236,6 +251,9 @@ function DrawerBody({
   // Artifact chips
   const artifactsReady = run.artifactsReady;
   const artifactEntries = Object.entries(artifactsReady) as Array<[string, 'view' | 'gate']>;
+
+  // The inbound artifact this node was handed (the edge feeding it) — its input.
+  const inboundArtifact = flow.edges.find((e) => e.to === nodeId)?.artifact;
 
   return (
     <div
@@ -247,6 +265,34 @@ function DrawerBody({
         gap: 0,
       }}
     >
+      {/* ---- INPUT / TASK (#11 — the node's bound input + its job) ---- */}
+      <DrawerSection title={isWi ? 'Work item' : 'Input'}>
+        <div
+          data-section="hex-input"
+          style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}
+        >
+          {isWi ? (
+            <>
+              <KvRow label="id" value={wiId ?? '—'} />
+              {wiItem?.task && (
+                <div data-hex-task style={{ color: 'var(--dim)', lineHeight: 1.55 }}>
+                  {wiItem.task}
+                </div>
+              )}
+              {wiItem?.dependsOn && wiItem.dependsOn.length > 0 && (
+                <KvRow label="depends on" value={wiItem.dependsOn.join(', ')} />
+              )}
+            </>
+          ) : (
+            <>
+              {node?.agent && <KvRow label="agent" value={node.agent} />}
+              {inboundArtifact && <KvRow label="input artifact" value={inboundArtifact} />}
+              {node?.gate && <KvRow label="gate" value={node.gate} />}
+            </>
+          )}
+        </div>
+      </DrawerSection>
+
       {/* ---- LIVENESS ---- */}
       {meta?.lastProgressAt != null && (
         <DrawerSection title="Liveness">
@@ -688,17 +734,19 @@ function ArtifactChip({
 
 function LogRow({ line }: { line: PhaseLogLine }) {
   const colorMap: Record<string, string> = {
-    info:   'var(--dim)',
-    tool:   'var(--steel)',
-    cost:   'var(--amber)',
-    stderr: 'var(--red)',
-    retry:  'var(--amber)',
+    info:      'var(--dim)',
+    tool:      'var(--steel)',
+    cost:      'var(--amber)',
+    stderr:    'var(--red)',
+    retry:     'var(--amber)',
+    reasoning: 'var(--dim)',
   };
 
   const ts = new Date(line.at).toTimeString().slice(0, 8);
+  const isReasoning = line.kind === 'reasoning';
 
   return (
-    <div style={{ display: 'flex', gap: 10, minHeight: '1.65em' }}>
+    <div style={{ display: 'flex', gap: 10, minHeight: '1.65em' }} data-log-kind={line.kind}>
       <span style={{ color: 'var(--faint)', flexShrink: 0, minWidth: 60 }}>
         {ts}
       </span>
@@ -706,11 +754,30 @@ function LogRow({ line }: { line: PhaseLogLine }) {
         style={{
           flex: 1,
           color: colorMap[line.kind] ?? 'var(--dim)',
+          ...(isReasoning ? { fontStyle: 'italic' } : {}),
           ...(line.kind === 'stderr'
             ? { background: 'rgba(248,113,113,0.07)', padding: '0 4px', borderRadius: 3 }
             : {}),
         }}
       >
+        {isReasoning && (
+          <span
+            style={{
+              display: 'inline-block',
+              marginRight: 6,
+              padding: '0 5px',
+              borderRadius: 3,
+              background: 'rgba(129,140,248,0.15)',
+              border: '1px solid rgba(129,140,248,0.4)',
+              fontSize: 9.5,
+              letterSpacing: '0.06em',
+              verticalAlign: 'middle',
+              fontStyle: 'normal',
+            }}
+          >
+            THINKING
+          </span>
+        )}
         {line.text}
         {line.kind === 'retry' && (
           <span
@@ -729,6 +796,19 @@ function LogRow({ line }: { line: PhaseLogLine }) {
             TRANSIENT
           </span>
         )}
+      </span>
+    </div>
+  );
+}
+
+function KvRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <span style={{ color: 'var(--faint)', minWidth: 92, flexShrink: 0 }} data-kv-label={label}>
+        {label}
+      </span>
+      <span style={{ color: 'var(--dim)', wordBreak: 'break-word' }} data-kv-value="">
+        {value}
       </span>
     </div>
   );
