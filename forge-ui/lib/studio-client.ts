@@ -355,6 +355,12 @@ export async function fetchStudioAgents(): Promise<Agent[]> {
   return (body.agents ?? []).map(parseAgentDefinition);
 }
 
+/** Fetch the curated OOTB starter agents (ADR-033) for the New-Agent picker. */
+export async function fetchStarters(): Promise<Agent[]> {
+  const body = await studioGet<{ starters: unknown[] }>('/api/studio/starters', { starters: [] });
+  return (body.starters ?? []).map(parseAgentDefinition);
+}
+
 /** Fetch all flow definitions. */
 export async function fetchStudioFlows(): Promise<Flow[]> {
   const body = await studioGet<{ flows: Flow[] }>('/api/studio/flows', { flows: [] });

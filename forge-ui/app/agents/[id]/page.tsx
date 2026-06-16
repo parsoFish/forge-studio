@@ -26,6 +26,7 @@ import {
   fetchStudioAgents,
   fetchStudioCatalog,
   fetchStudioFlows,
+  fetchStarters,
   saveAgent,
   type Agent,
   type AgentRuntime,
@@ -79,6 +80,16 @@ const EMPTY_STATE: AgentState = {
   allowedTools: [],
   disallowedTools: [],
   phase: '',
+};
+
+// A "Blank" agent still ships sensible defaults so it is creatable with near-zero
+// input (UX spec §2 — defaults over choices): a default model + the event-log
+// hook means a blank agent passes validation without opening Advanced.
+const BLANK_STATE: AgentState = {
+  ...EMPTY_STATE,
+  hooks: ['event-log'],
+  runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', range: [] },
+  brainAccess: 'none',
 };
 
 // ---------------------------------------------------------------------------
@@ -159,11 +170,18 @@ export default function AgentBuilderPage() {
   const [agents,  setAgents]  = useState<Agent[]>([]);
   const [catalog, setCatalog] = useState<Catalog>({});
   const [flows,   setFlows]   = useState<Flow[]>([]);
+  const [starters, setStarters] = useState<Agent[]>([]);
   const [state,   setState]   = useState<AgentState>({ ...EMPTY_STATE });
   const [dirty,   setDirty]   = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [ready,   setReady]   = useState(false);
   const [toasts,  setToasts]  = useState<Toast[]>([]);
+  // For a new agent: the user first picks a starter (or "blank"); only then is
+  // the builder revealed. Existing agents skip the picker (chosen = true).
+  const [starterChosen, setStarterChosen] = useState(false);
+  // Advanced config (capabilities, runtime, read-only) is collapsed by default
+  // (UX spec §2 — progressive disclosure). Pre-filled from the chosen starter.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // track the last loaded slug so we know when slugParam changes
   const loadedSlug = useRef<string>('');
@@ -180,6 +198,24 @@ export default function AgentBuilderPage() {
   function patchState(patch: Partial<AgentState>) {
     setState((s) => ({ ...s, ...patch }));
     markDirty();
+  }
+
+  // ---- starter picker ----
+  function applyStarter(starter: Agent) {
+    // Pre-fill the builder from a curated starter; the operator only needs to
+    // tweak the name/process before saving. Slug clears so save derives a fresh
+    // one from the (editable) name rather than colliding with the template id.
+    setState({ ...parseAgent(starter), slug: '' });
+    setStarterChosen(true);
+    setAdvancedOpen(false);
+    setDirty(true);
+  }
+
+  function applyBlank() {
+    setState({ ...BLANK_STATE });
+    setStarterChosen(true);
+    setAdvancedOpen(false);
+    setDirty(true);
   }
 
   // ---- composition helpers ----
@@ -205,21 +241,24 @@ export default function AgentBuilderPage() {
 
     async function load() {
       try {
-        const [a, c, f] = await Promise.all([
+        const [a, c, f, s] = await Promise.all([
           fetchStudioAgents(),
           fetchStudioCatalog(),
           fetchStudioFlows(),
+          fetchStarters(),
         ]);
         if (signal.cancelled) return;
         setAgents(a);
         setCatalog(c);
         setFlows(f);
+        setStarters(s);
 
         // load the agent for this slug
         if (!isNew) {
           const found = a.find((ag) => ag.id === slugParam);
           if (found) {
             setState(parseAgent(found));
+            setStarterChosen(true); // existing agent → skip the picker
             loadedSlug.current = slugParam;
           } else {
             // unknown slug → redirect to /agents/new
@@ -227,6 +266,8 @@ export default function AgentBuilderPage() {
           }
         } else {
           setState({ ...EMPTY_STATE });
+          setStarterChosen(false); // new agent → show the starter picker first
+          setAdvancedOpen(false);
           loadedSlug.current = 'new';
         }
         setDirty(false);
@@ -361,17 +402,22 @@ export default function AgentBuilderPage() {
             </div>
           </div>
 
-          {/* New agent banner */}
+          {/* New agent → pick a starter first (or start blank) */}
+          {isNew && !starterChosen ? (
+            <StarterPicker starters={starters} onPick={applyStarter} onBlank={applyBlank} />
+          ) : (
+          <>
           {isNew && (
             <div className="new-agent-banner visible">
-              You are defining a new agent. Fill in the fields below, then click{' '}
-              <strong>Save agent</strong> to add it to your library.
+              Starter applied. Fill in the essentials below — name, purpose, process — then click{' '}
+              <strong>Save agent</strong>. Everything else has a working default under{' '}
+              <strong>Advanced</strong>.
             </div>
           )}
 
           <div className="agent-body">
 
-            {/* Purpose */}
+            {/* Purpose (required) */}
             <div className="field-group">
               <label className="field-label" htmlFor="purpose-input">Purpose</label>
               <input
@@ -384,38 +430,7 @@ export default function AgentBuilderPage() {
               />
             </div>
 
-            {/* Drop zones 2×2 */}
-            <div>
-              <label className="field-label" style={{ marginBottom: 10 }}>
-                Capabilities &amp; Constraints
-              </label>
-              <div className="zones-grid">
-                {(['skill', 'tool', 'mcp', 'hook'] as Kind[]).map((kind) => (
-                  <ZoneWrap key={kind} kind={kind}>
-                    <DropZone
-                      kind={kind}
-                      ids={kind === 'mcp' ? state.mcps : state[`${kind}s` as keyof AgentState] as string[]}
-                      catalog={catalog}
-                      onAdd={(id) => addToZone(kind, id)}
-                      onRemove={(id) => removeFromZone(kind, id)}
-                      onReject={(msg) => pushToast(msg, 'err')}
-                    />
-                  </ZoneWrap>
-                ))}
-              </div>
-            </div>
-
-            {/* Runtime (SDK + strategy + models + brain access) */}
-            <RuntimePicker
-              runtime={state.runtime}
-              brainAccess={state.brainAccess}
-              catalog={catalog}
-              onRuntimeChange={(rt) => patchState({ runtime: rt })}
-              onBrainAccessChange={(v) => patchState({ brainAccess: v })}
-              onToast={(msg) => pushToast(msg)}
-            />
-
-            {/* Process */}
+            {/* Process (required) */}
             <div className="field-group">
               <label className="field-label" htmlFor="process-input">Process</label>
               <textarea
@@ -428,30 +443,72 @@ export default function AgentBuilderPage() {
               />
             </div>
 
-            {/* Interactivity */}
+            {/* Interactivity (required) */}
             <div className="field-group">
               <label className="field-label" htmlFor="interactivity-input">Human Interactivity</label>
-              <p style={{ margin: '0 0 6px', fontSize: 12.5, color: 'var(--dim)' }}>
-                When and how does this agent involve a human? Cover: gates that block on human input,
-                interview rounds, escalation conditions, and anything the agent deliberately cannot
-                decide autonomously.
-              </p>
               <textarea
                 id="interactivity-input"
                 className="input"
-                rows={3}
-                placeholder={`e.g. "Blocks on operator PLAN-gate verdict. All other steps autonomous."`}
+                rows={2}
+                placeholder={`e.g. "Autonomous; a human verdict gate decides approve or send-back."`}
                 value={state.interactivity}
                 onChange={(e) => patchState({ interactivity: e.target.value })}
               />
             </div>
 
-            {/* Read-only fields (SKILL.md-authored) */}
-            <ReadOnlyFields
-              phase={state.phase}
-              allowedTools={state.allowedTools}
-              disallowedTools={state.disallowedTools}
-            />
+            {/* ── Advanced (progressive disclosure) ── */}
+            <details
+              data-section="advanced"
+              data-advanced-open={advancedOpen ? 'true' : 'false'}
+              open={advancedOpen}
+              onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}
+              className="field-group"
+              style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px' }}
+            >
+              <summary data-action="toggle-advanced" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--dim)' }}>
+                Advanced — capabilities, runtime &amp; model
+              </summary>
+
+              <div style={{ marginTop: 14 }}>
+                {/* Drop zones 2×2 */}
+                <div>
+                  <label className="field-label" style={{ marginBottom: 10 }}>
+                    Capabilities &amp; Constraints
+                  </label>
+                  <div className="zones-grid">
+                    {(['skill', 'tool', 'mcp', 'hook'] as Kind[]).map((kind) => (
+                      <ZoneWrap key={kind} kind={kind}>
+                        <DropZone
+                          kind={kind}
+                          ids={kind === 'mcp' ? state.mcps : state[`${kind}s` as keyof AgentState] as string[]}
+                          catalog={catalog}
+                          onAdd={(id) => addToZone(kind, id)}
+                          onRemove={(id) => removeFromZone(kind, id)}
+                          onReject={(msg) => pushToast(msg, 'err')}
+                        />
+                      </ZoneWrap>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Runtime (SDK + strategy + models + brain access) */}
+                <RuntimePicker
+                  runtime={state.runtime}
+                  brainAccess={state.brainAccess}
+                  catalog={catalog}
+                  onRuntimeChange={(rt) => patchState({ runtime: rt })}
+                  onBrainAccessChange={(v) => patchState({ brainAccess: v })}
+                  onToast={(msg) => pushToast(msg)}
+                />
+
+                {/* Read-only fields (SKILL.md-authored) */}
+                <ReadOnlyFields
+                  phase={state.phase}
+                  allowedTools={state.allowedTools}
+                  disallowedTools={state.disallowedTools}
+                />
+              </div>
+            </details>
 
           </div>{/* /.agent-body */}
 
@@ -460,6 +517,7 @@ export default function AgentBuilderPage() {
             <button
               className="btn btn-primary"
               id="btn-save"
+              data-action="save-agent"
               onClick={() => void handleSave()}
               disabled={saving}
             >
@@ -474,6 +532,8 @@ export default function AgentBuilderPage() {
               : <span className="save-hint muted">All changes saved</span>
             }
           </div>
+          </>
+          )}
 
         </main>{/* /#col-center */}
 
@@ -504,6 +564,83 @@ export default function AgentBuilderPage() {
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StarterPicker — choose a curated starter (or start blank) for a new agent
+// ---------------------------------------------------------------------------
+
+function StarterPicker({
+  starters,
+  onPick,
+  onBlank,
+}: {
+  starters: Agent[];
+  onPick: (s: Agent) => void;
+  onBlank: () => void;
+}) {
+  return (
+    <div data-section="starter-picker" style={{ padding: '8px 2px' }}>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
+        Start from a starter
+      </h2>
+      <p style={{ fontSize: 13, color: 'var(--dim)', maxWidth: 520, lineHeight: 1.6, margin: '0 0 18px' }}>
+        Pick a ready-made agent to begin. You can edit everything after — these just give you a
+        clean, minimal starting point.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        {starters.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            data-starter-option={s.id}
+            onClick={() => onPick(s)}
+            style={{
+              textAlign: 'left',
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius)',
+              padding: '16px 16px 14px',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {s.name}
+            </span>
+            <span style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+              {s.purpose}
+            </span>
+          </button>
+        ))}
+        <button
+          type="button"
+          data-starter-option="blank"
+          onClick={onBlank}
+          style={{
+            textAlign: 'left',
+            background: 'transparent',
+            border: '1px dashed var(--line)',
+            borderRadius: 'var(--radius)',
+            padding: '16px 16px 14px',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+            Blank agent
+          </span>
+          <span style={{ fontSize: 12.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+            Start from scratch with sensible defaults.
+          </span>
+        </button>
       </div>
     </div>
   );

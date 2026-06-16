@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import type { AgentDefinition } from './types.ts';
-import { loadAgentDefinition, loadFlowDefinition, loadCatalog } from './registry.ts';
+import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents } from './registry.ts';
 import { validateAgent, validateFlow } from './validate.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -43,6 +43,15 @@ describe('studio starter library', () => {
       assert.deepEqual(def.composition.skills, [], `${slug} must not compose forge phase skills`);
     });
   }
+
+  it('listStarterAgents returns the curated set (consumed by the New-Agent picker)', () => {
+    const found = listStarterAgents(ROOT).map((a) => a.slug).sort();
+    assert.deepEqual(found, [...AGENT_SLUGS].sort());
+  });
+
+  it('listStarterAgents degrades to [] when the starters dir is absent', () => {
+    assert.deepEqual(listStarterAgents('/nonexistent/forge/root'), []);
+  });
 
   it('basic flow is a valid plan → dev → review flow with a human gate', () => {
     // ensure the agent map is populated (load directly so test order doesn't matter)

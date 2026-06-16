@@ -153,6 +153,25 @@ function writeScratchFlow() {
 function cleanScratchFlow() {
   try { rmSync(SCRATCH_FLOW_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
+
+// J2: the three agents the operator authors from the curated starter library.
+// Created live under skills/<slug>/ via the UI; removed in the finally block.
+const STARTER_AGENT_SLUGS = ['plan', 'dev', 'review'];
+function cleanStarterAgents() {
+  for (const slug of STARTER_AGENT_SLUGS) {
+    try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
+  }
+}
+
+/** Poll until a file exists (deterministic save confirmation), up to ms. */
+async function waitForFile(path, ms = 12000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return true;
+    await sleep(120);
+  }
+  return existsSync(path);
+}
 /** Parse node ids, gate placements + edge count out of a flow.yaml text (the
  *  inline-map style) — enough for a structural parity assertion without a YAML dep. */
 function parseFlowStructure(text) {
@@ -550,6 +569,7 @@ async function main() {
   // Author the from-scratch flow BEFORE booting the bridge so the UI + lint can
   // load it. (Cleaned up in finally.) This is the data the ACT-1 build beat shows.
   cleanScratchFlow();
+  cleanStarterAgents();
   writeScratchFlow();
 
   console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
@@ -673,6 +693,62 @@ async function main() {
     await sleep(READ);
     await frame(page, 'a1-1-library', 'A1 — Studio library: flows/agents/projects/KBs as data + operator pulse');
 
+    // ── J2: BUILD THE THREE AGENTS FROM THE CURATED STARTER LIBRARY ───────────
+    // A brand-new user creates plan/dev/review agents from starters — required
+    // fields only, advanced config collapsed (UX spec §2). Proves the agents
+    // land on disk as SKILL.md + pass the platform's own lint gate.
+    console.log('\n[J2] Author plan/dev/review agents from the starter library');
+    cleanStarterAgents(); // clear any prior-run residue first
+    await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const pickerPresent = await page.evaluate(() => document.querySelector('[data-section="starter-picker"]') !== null);
+    check(pickerPresent, 'J2: new-agent shows the curated starter picker ([data-section="starter-picker"])');
+    const advHiddenOnPicker = await page.evaluate(() => document.querySelector('[data-section="advanced"]') === null);
+    check(advHiddenOnPicker, 'J2: advanced config is not dumped on the picker (progressive disclosure)');
+    const starterOptionCount = await page.evaluate(() => document.querySelectorAll('[data-starter-option]').length);
+    check(starterOptionCount >= 4, `J2: picker offers ≥3 starters + blank (got ${starterOptionCount} options)`);
+    await frame(page, 'j2-0-starter-picker', 'J2 — new agent: pick a curated starter (plan/dev/review) or blank');
+
+    for (const role of STARTER_AGENT_SLUGS) {
+      await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector(`[data-starter-option="${role}"]`, { timeout: 15000 });
+      await page.locator(`[data-starter-option="${role}"]`).click();
+      await page.waitForSelector('[data-action="save-agent"]', { timeout: 10000 });
+      if (role === STARTER_AGENT_SLUGS[0]) {
+        const advClosed = await page.evaluate(() =>
+          document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open'));
+        check(advClosed === 'false', `J2: advanced config collapsed by default after picking a starter (got "${advClosed}")`);
+        const requiredVisible = await page.evaluate(() =>
+          document.querySelector('#purpose-input') !== null && document.querySelector('#process-input') !== null);
+        check(requiredVisible, 'J2: required fields (purpose, process) visible without opening Advanced');
+        const dirtyAfterPick = await page.evaluate(() =>
+          document.querySelector('[data-page="agents"] [data-dirty]')?.getAttribute('data-dirty')
+          ?? document.querySelector('#col-center')?.getAttribute('data-dirty'));
+        check(dirtyAfterPick === 'true', `J2: picking a starter pre-fills + marks the form dirty (got "${dirtyAfterPick}")`);
+        await frame(page, 'j2-1-builder-prefilled', 'J2 — starter pre-fills required fields; advanced collapsed');
+      }
+      await page.locator('[data-action="save-agent"]').click();
+      const skillPath = join(FORGE_ROOT, 'skills', role, 'SKILL.md');
+      const landed = await waitForFile(skillPath, 12000);
+      check(landed, `J2: saving the "${role}" starter writes skills/${role}/SKILL.md`);
+    }
+
+    // The three authored agents are now LIVE studio objects — they must pass lint.
+    let j2LintOk = false;
+    try {
+      execFileSync(process.execPath,
+        ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+        { cwd: FORGE_ROOT, stdio: 'pipe' });
+      j2LintOk = true;
+    } catch (e) {
+      console.error(`  [studio lint J2] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
+    }
+    check(j2LintOk, 'J2: `forge studio lint` validates the three authored agents (exit 0)');
+    await frame(page, 'j2-2-agents-authored', 'J2 — plan/dev/review agents authored from starters, lint-green');
+
     // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
     // The headline new beat. We authored forge-cycle-scratch as a flow definition
     // (6 agents, 5 edges, 2 gates). Prove: (1) `forge studio lint` validates it,
@@ -791,6 +867,13 @@ async function main() {
     await sleep(ACT);
     if (agentPageReady) {
       await countAtLeast(page, '[data-id]', 1, 'agent-builder: catalog palette renders ≥1 chip');
+      // Open the collapsed Advanced section (J2 progressive disclosure) so the
+      // capabilities zones + runtime render for both the checks and the frame.
+      await page.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
+      await page.waitForFunction(
+        () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
+        null, { timeout: 5000 },
+      ).catch(() => {});
       for (const kind of ['skill', 'tool', 'mcp', 'hook']) {
         check(
           await page.evaluate((k) => document.querySelector(`[data-accepts="${k}"]`) !== null, kind),
@@ -1130,7 +1213,10 @@ async function main() {
     writeStatus(sid, { phase: 'committed', round: 3, idea: IDEA });
     cycleEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
     moveManifest('pending', 'in-flight');
-    await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 15000 });
+    // 30s (not 15s): the button renders only after the seeded 'committed' status
+    // + in-flight run propagate through the UI's ~3s poll; first-navigation
+    // next-dev compile jitter can push this past 15s (observed flake).
+    await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 30000 });
     await sleep(ACT);
     await page.locator('[data-action="watch-it-build"]').click();
     await page.waitForFunction(
@@ -1642,6 +1728,13 @@ async function main() {
     await caption(page, 'The runtime is a seam — the SDK picker is registry-driven. claude is live; gemini/aider/codex are disabled until their adapter ships (ADR-029).');
     await sleep(ACT);
     if (rangePageReady) {
+      // The RuntimePicker now lives under the collapsed "Advanced" section (J2
+      // progressive disclosure). Open it to drive the runtime-adapter seam.
+      await page.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
+      await page.waitForFunction(
+        () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
+        null, { timeout: 5000 },
+      ).catch(() => {});
       const claudeCardAvailable = await page.evaluate(() => {
         const card = document.querySelector('[data-sdk-id="claude"]');
         return card !== null && !card.classList.contains('disabled');
@@ -1881,6 +1974,7 @@ async function main() {
     cleanProjectDir();
     cleanSeededSession(createdSid);
     cleanScratchFlow();
+  cleanStarterAgents();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
@@ -1934,4 +2028,4 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); process.exit(1); });
+main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); process.exit(1); });

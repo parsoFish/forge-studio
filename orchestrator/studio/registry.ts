@@ -5,7 +5,7 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname, basename, resolve } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
@@ -274,6 +274,21 @@ export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
   }
 
   return defs.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * The curated "out of the box" starter agents (ADR-033) under
+ * `studio/starters/agents/`. These are templates the New-Agent picker offers —
+ * not live agents (lint does not scan them). Returns [] if the dir is absent so
+ * a checkout without starters degrades gracefully rather than throwing.
+ */
+export function listStarterAgents(forgeRoot: string): AgentDefinition[] {
+  const dir = join(resolve(forgeRoot), 'studio', 'starters', 'agents');
+  try {
+    return listAgentDefinitions(dir);
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@ import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listAgentDefinitions,
+  listStarterAgents,
   loadFlowDefinition,
   loadProjectsRegistry,
   loadCatalog,
@@ -414,6 +415,18 @@ export async function handleStudioRoutes(
       const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
       const agents = listAgentDefinitions(skillsDir);
       sendJson(res, 200, { agents }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/starters -----------------------------------------------
+  // The curated OOTB starter agents (ADR-033) the New-Agent picker offers.
+  if (url === '/api/studio/starters') {
+    try {
+      const starters = listStarterAgents(ctx.forgeRoot);
+      sendJson(res, 200, { starters }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
