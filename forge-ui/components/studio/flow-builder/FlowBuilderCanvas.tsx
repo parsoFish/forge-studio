@@ -14,10 +14,10 @@
  *   - data-*: data-flow-node/data-node-id/data-agent-ref per node,
  *             canvas wrapper data-node-count/data-edge-count
  *
- * Position handling: autolayout-on-load (Kahn sort, COL_W=200, ROW_H=120).
- * Positions are NOT persisted to the flow YAML schema (M0 FlowNode has no x/y);
- * they are recomputed each time. On save, nodes are mapped back to {id, agent}
- * without x/y.
+ * Position handling (ADR-033 / J3): a node's persisted {x,y} is honoured on
+ * load; nodes without a saved position are autolaid-out (Kahn sort, COL_W=200,
+ * ROW_H=120). On save, the current canvas positions are written back so a
+ * hand-arranged flow survives a reload.
  */
 
 import {
@@ -283,7 +283,11 @@ function flowNodesToRF(
 ): Node<FlowNodeData>[] {
   return flowNodes.map((fn) => {
     const agent = agents.find((a) => a.id === fn.agent);
-    const pos = positions.get(fn.id) ?? { x: 80, y: 80 };
+    // Honour a persisted position; fall back to the computed autolayout.
+    const pos =
+      typeof fn.x === 'number' && typeof fn.y === 'number'
+        ? { x: fn.x, y: fn.y }
+        : positions.get(fn.id) ?? { x: 80, y: 80 };
     return {
       id: fn.id,
       type: 'flowNode',
@@ -343,6 +347,9 @@ export function rfNodesToFlow(rfNodes: Node<FlowNodeData>[]): FlowNode[] {
     ...(n.data.gate      ? { gate: n.data.gate }           : {}),
     ...(n.data.fanOut    ? { fanOut: n.data.fanOut }       : {}),
     ...(n.data.resumable ? { resumable: n.data.resumable } : {}),
+    // Persist the canvas position so a hand-arranged layout survives reload (J3).
+    x: Math.round(n.position.x),
+    y: Math.round(n.position.y),
   }));
 }
 

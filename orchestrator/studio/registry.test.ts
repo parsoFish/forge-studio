@@ -357,6 +357,19 @@ describe('serializeFlowDefinition', () => {
     const { path: _rp, ...reloadedRest } = reloaded;
     assert.deepEqual(reloadedRest, origRest);
   });
+
+  it('persists node x/y positions across serialize → load (J3 / ADR-033)', () => {
+    const src = loadFlowDefinition(writeFixture('flow-xy-src.yaml', FLOW_FIXTURE));
+    const positioned = {
+      ...src,
+      nodes: src.nodes.map((n, i) => ({ ...n, x: 100 + i * 50, y: 200 + i * 30 })),
+    };
+    const reloaded = loadFlowDefinition(writeFixture('flow-xy-dst.yaml', serializeFlowDefinition(positioned)));
+    for (let i = 0; i < positioned.nodes.length; i++) {
+      assert.equal(reloaded.nodes[i].x, 100 + i * 50, `node[${i}].x must round-trip`);
+      assert.equal(reloaded.nodes[i].y, 200 + i * 30, `node[${i}].y must round-trip`);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

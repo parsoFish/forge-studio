@@ -55,6 +55,7 @@ import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import yaml from 'js-yaml';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 
@@ -171,6 +172,30 @@ async function waitForFile(path, ms = 12000) {
     await sleep(120);
   }
   return existsSync(path);
+}
+
+// J3: the flow the operator authors from the basic starter (new-flow builder).
+const J3_FLOW = 'my-first-flow';
+const J3_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', J3_FLOW);
+function cleanFirstFlow() {
+  try { rmSync(J3_FLOW_DIR, { recursive: true, force: true }); } catch { /* */ }
+}
+/** Parse the saved flow.yaml → { version, nodes } (nodes carry persisted x/y). */
+function readSavedFlow(slug) {
+  try {
+    const doc = yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'flows', slug, 'flow.yaml'), 'utf8'));
+    return { version: typeof doc?.version === 'number' ? doc.version : 0, nodes: Array.isArray(doc?.nodes) ? doc.nodes : [] };
+  } catch { return { version: 0, nodes: [] }; }
+}
+function readSavedFlowNodes(slug) { return readSavedFlow(slug).nodes; }
+/** Wait until the saved flow's version reaches at least minVersion (save landed). */
+async function waitForFlowVersion(slug, minVersion, ms = 15000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (readSavedFlow(slug).version >= minVersion) return true;
+    await sleep(150);
+  }
+  return readSavedFlow(slug).version >= minVersion;
 }
 /** Parse node ids, gate placements + edge count out of a flow.yaml text (the
  *  inline-map style) — enough for a structural parity assertion without a YAML dep. */
@@ -570,6 +595,7 @@ async function main() {
   // load it. (Cleaned up in finally.) This is the data the ACT-1 build beat shows.
   cleanScratchFlow();
   cleanStarterAgents();
+  cleanFirstFlow();
   writeScratchFlow();
 
   console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
@@ -749,6 +775,131 @@ async function main() {
     check(j2LintOk, 'J2: `forge studio lint` validates the three authored agents (exit 0)');
     await frame(page, 'j2-2-agents-authored', 'J2 — plan/dev/review agents authored from starters, lint-green');
 
+    // ── J3: STRING THE THREE AGENTS INTO A FLOW (new-flow builder) ────────────
+    // From the library "+ New Flow" → canvas seeded from the basic starter
+    // (plan → dev → review + verdict gate). Name it, save (slug derived), and
+    // prove: lint-green, runnable, and node positions PERSIST across reload.
+    console.log('\n[J3] String plan/dev/review into a flow (new-flow builder)');
+    cleanFirstFlow();
+    // discoverable creation: the library "+ New Flow" CTA is a real enabled link
+    await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const newFlowCta = await page.evaluate(() => {
+      const el = document.querySelector('[data-action="new-flow"]');
+      return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
+    });
+    check(newFlowCta !== null && !newFlowCta.disabled && (newFlowCta.href ?? '').includes('/flows/new'),
+      'J3: library "+ New Flow" CTA is enabled and routes to the flow builder');
+
+    await page.goto(watch.uiUrl + '/flows/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    // Seeded from the basic starter: ≥3 nodes on the canvas.
+    await page.waitForFunction(
+      () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const seededNodeCount = await page.evaluate(() =>
+      parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10));
+    check(seededNodeCount >= 3, `J3: new-flow canvas seeded from the basic starter (≥3 nodes, got ${seededNodeCount})`);
+    const flowAdvCollapsed = await page.evaluate(() => {
+      const d = document.querySelector('[data-section="flow-advanced"]');
+      return d ? !(d).open : false;
+    });
+    check(flowAdvCollapsed, 'J3: project/KB/triggers collapsed under Advanced by default (progressive disclosure)');
+    await frame(page, 'j3-0-new-flow-seeded', 'J3 — new flow seeded from the basic starter (plan → dev → review)');
+
+    // Name the flow + save (slug derived from name → /flows/my-first-flow).
+    await page.locator('[data-field="flow-name"]').fill('My First Flow');
+    await page.locator('[data-action="save-flow"]').click();
+    const flowYamlPath = join(J3_FLOW_DIR, 'flow.yaml');
+    const flowLanded = await waitForFile(flowYamlPath, 12000);
+    check(flowLanded, `J3: saving the new flow writes studio/flows/${J3_FLOW}/flow.yaml`);
+
+    // Persistence: every node carries a numeric x/y (the J3 schema addition).
+    const nodesV1 = readSavedFlowNodes(J3_FLOW);
+    const allHaveXY = nodesV1.length >= 3 && nodesV1.every((n) => typeof n.x === 'number' && typeof n.y === 'number');
+    check(allHaveXY, `J3: saved flow persists node positions (every node has numeric x/y; ${nodesV1.length} nodes)`);
+    const gatePresent = nodesV1.some((n) => typeof n.gate === 'string');
+    check(gatePresent, 'J3: authored flow keeps the human verdict gate (zero-gate flows are rejected)');
+
+    // lint validates the authored flow; it is runnable.
+    let j3LintOk = false;
+    try {
+      execFileSync(process.execPath,
+        ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+        { cwd: FORGE_ROOT, stdio: 'pipe' });
+      j3LintOk = true;
+    } catch (e) {
+      console.error(`  [studio lint J3] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
+    }
+    check(j3LintOk, 'J3: `forge studio lint` validates the authored flow (exit 0)');
+
+    // Saving a new flow auto-redirects to its real route — wait for that
+    // navigation rather than racing it with our own goto.
+    await page.waitForURL(new RegExp(`/flows/${J3_FLOW}`), { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const j3CanStart = await page.evaluate(() =>
+      document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start'));
+    check(j3CanStart === 'true', `J3: authored flow is runnable (data-can-start="true", got "${j3CanStart}")`);
+
+    // Position round-trip: drag a node, save, reload, save again — the dragged
+    // position must survive (proves x/y are honoured on load, not recomputed).
+    await page.locator('[data-page="flow-monitor"] .tab', { hasText: 'BUILD' }).first().click().catch(() => {});
+    await page.waitForFunction(
+      () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    const dragId = nodesV1[0]?.id ?? 'plan';
+    const x0 = nodesV1.find((n) => n.id === dragId)?.x ?? 0;
+    const vBeforeDrag = readSavedFlow(J3_FLOW).version;
+    let dragged = false;
+    try {
+      const nodeEl = page.locator(`.react-flow__node:has([data-node-id="${dragId}"])`).first();
+      const box = await nodeEl.boundingBox();
+      if (box) {
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width / 2 + 230, box.y + box.height / 2 + 150, { steps: 12 });
+        await page.mouse.up();
+        dragged = true;
+      }
+    } catch { /* drag unavailable */ }
+    await sleep(THINK);
+    await page.locator('[data-action="save-flow"]').click();
+    // Wait for the async save to land (version bumps) — not a fixed sleep.
+    await waitForFlowVersion(J3_FLOW, vBeforeDrag + 1, 15000);
+    const xDrag = readSavedFlow(J3_FLOW).nodes.find((n) => n.id === dragId)?.x ?? x0;
+    check(dragged && Math.abs(xDrag - x0) > 40, `J3: dragging node "${dragId}" moved + saved its position (x ${x0}→${xDrag})`);
+    await frame(page, 'j3-1-flow-arranged', 'J3 — authored flow, node hand-arranged on the canvas');
+
+    // Reload + save again (no move): the dragged position survives the reload
+    // (proves persisted x/y are honoured on load, not recomputed by autolayout).
+    const vBeforeReload = readSavedFlow(J3_FLOW).version;
+    await page.goto(watch.uiUrl + `/flows/${J3_FLOW}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    await page.locator('[data-page="flow-monitor"] .tab', { hasText: 'BUILD' }).first().click().catch(() => {});
+    await page.waitForFunction(
+      () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
+      null, { timeout: 15000 },
+    ).catch(() => {});
+    await page.locator('[data-action="save-flow"]').click();
+    await waitForFlowVersion(J3_FLOW, vBeforeReload + 1, 15000);
+    const xReload = readSavedFlow(J3_FLOW).nodes.find((n) => n.id === dragId)?.x ?? -9999;
+    check(Math.abs(xReload - xDrag) < 30, `J3: node position PERSISTS across reload (x ${xDrag} → ${xReload})`);
+    await frame(page, 'j3-2-flow-persisted', 'J3 — node positions persist across reload (authored flow is durable)');
+
     // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
     // The headline new beat. We authored forge-cycle-scratch as a flow definition
     // (6 agents, 5 edges, 2 gates). Prove: (1) `forge studio lint` validates it,
@@ -827,6 +978,10 @@ async function main() {
     const palettePresent = await page.evaluate(() => document.querySelector('[data-component="agent-palette"]') !== null);
     check(palettePresent, 'author-from-scratch: [data-component="agent-palette"] present (drag more agents in)');
     await countAtLeast(page, '[data-palette-chip]', 1, 'author-from-scratch: palette has ≥1 [data-palette-chip]');
+    // Agent chips load async (the Agents section shows "Loading…" first while the
+    // fixed Artifact chips render instantly) — wait for the agent chips before
+    // asserting, else we race the fetch.
+    await countAtLeast(page, '[data-palette-chip="agent"]', 3, 'author-from-scratch: palette agent chips loaded');
     // The new OOTB agent library (L1-A) is draggable from the palette (#10) — the
     // author can compose the freshly-seeded agents into a flow from scratch.
     const ootbChips = await page.evaluate(() => {
@@ -1974,7 +2129,8 @@ async function main() {
     cleanProjectDir();
     cleanSeededSession(createdSid);
     cleanScratchFlow();
-  cleanStarterAgents();
+    cleanStarterAgents();
+    cleanFirstFlow();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
@@ -2028,4 +2184,4 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); process.exit(1); });
+main().catch((err) => { console.error(err); cleanProjectDir(); cleanScratchFlow(); cleanStarterAgents(); cleanFirstFlow(); process.exit(1); });

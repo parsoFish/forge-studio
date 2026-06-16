@@ -361,6 +361,12 @@ export async function fetchStarters(): Promise<Agent[]> {
   return (body.starters ?? []).map(parseAgentDefinition);
 }
 
+/** Fetch the curated starter flow (plan → dev → review) the New-Flow canvas seeds from. */
+export async function fetchStarterFlow(): Promise<Flow | null> {
+  const body = await studioGet<{ flow?: Flow | null }>('/api/studio/starters', { flow: null });
+  return body.flow ?? null;
+}
+
 /** Fetch all flow definitions. */
 export async function fetchStudioFlows(): Promise<Flow[]> {
   const body = await studioGet<{ flows: Flow[] }>('/api/studio/flows', { flows: [] });

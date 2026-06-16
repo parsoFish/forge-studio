@@ -43,6 +43,8 @@ type Props = {
   flows: Flow[];
   /** Called when the user selects a different flow from the dropdown */
   onFlowSelect: (id: string) => void;
+  /** True when authoring a brand-new (unsaved) flow */
+  isNew?: boolean;
 };
 
 export function FlowHeader({
@@ -53,6 +55,7 @@ export function FlowHeader({
   onSave,
   flows,
   onFlowSelect,
+  isNew = false,
 }: Props): JSX.Element {
   const [projects, setProjects] = useState<Project[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
@@ -170,6 +173,7 @@ export function FlowHeader({
           }}
           data-field="flow-selector"
         >
+          {isNew && <option value="new">— new flow —</option>}
           {flows.map((f) => (
             <option key={f.id} value={f.id}>{f.name}</option>
           ))}
@@ -306,8 +310,13 @@ export function FlowHeader({
         />
       </div>
 
-      {/* Meta row: project, kb, triggers */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', paddingBottom: 4 }}>
+      {/* Meta row: project, kb, triggers — advanced, collapsed by default
+          (UX spec §2). A basic flow needs none of these. */}
+      <details data-section="flow-advanced" style={{ paddingBottom: 4 }}>
+        <summary data-action="toggle-flow-advanced" style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: 'var(--faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Advanced — project, knowledge base &amp; triggers
+        </summary>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', paddingTop: 12 }}>
         {/* Project */}
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)' }}>Project</span>
         <select
@@ -390,7 +399,8 @@ export function FlowHeader({
             + trigger
           </button>
         </div>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

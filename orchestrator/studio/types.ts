@@ -53,6 +53,11 @@ export type FlowNode = {
   gate?: string; // human gate id
   fanOut?: string; // upstream artifact name driving runtime multiplicity
   resumable?: boolean;
+  // Canvas layout (ADR-033 / J3). Persisted so a hand-arranged flow survives a
+  // reload; absent ⇒ the builder autolayouts (Kahn). Pure presentation — the
+  // flow engine ignores them.
+  x?: number;
+  y?: number;
 };
 
 export type FlowEdge = { from: string; to: string; artifact: string };

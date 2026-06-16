@@ -291,6 +291,20 @@ export function listStarterAgents(forgeRoot: string): AgentDefinition[] {
   }
 }
 
+/**
+ * The curated starter flow (plan → dev → review + verdict gate) the New-Flow
+ * canvas seeds from (ADR-033). Returns null if absent so the builder falls back
+ * to a blank canvas.
+ */
+export function loadStarterFlow(forgeRoot: string): FlowDefinition | null {
+  const flowPath = join(resolve(forgeRoot), 'studio', 'starters', 'flows', 'basic.yaml');
+  try {
+    return loadFlowDefinition(flowPath);
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Flow
 // ---------------------------------------------------------------------------
@@ -305,7 +319,9 @@ function parseFlowNode(raw: unknown, file: string, index: number): FlowNode {
   const gate = optString(n, 'gate');
   const fanOut = optString(n, 'fanOut');
   const resumable = optBool(n, 'resumable');
-  return { id, agent, gate, fanOut, resumable };
+  const x = optNumber(n, 'x');
+  const y = optNumber(n, 'y');
+  return { id, agent, gate, fanOut, resumable, x, y };
 }
 
 function parseFlowEdge(raw: unknown, file: string, index: number): FlowEdge {
@@ -398,12 +414,14 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
   out['costCeilingUsd'] = rest.costCeilingUsd;
   out['origin'] = rest.origin;
   if (rest.disposable !== undefined) out['disposable'] = rest.disposable;
-  out['nodes'] = rest.nodes.map(({ id, agent, gate, fanOut, resumable }) => {
+  out['nodes'] = rest.nodes.map(({ id, agent, gate, fanOut, resumable, x, y }) => {
     const n: Record<string, unknown> = { id };
     if (agent !== undefined) n['agent'] = agent;
     if (gate !== undefined) n['gate'] = gate;
     if (fanOut !== undefined) n['fanOut'] = fanOut;
     if (resumable !== undefined) n['resumable'] = resumable;
+    if (typeof x === 'number') n['x'] = Math.round(x);
+    if (typeof y === 'number') n['y'] = Math.round(y);
     return n;
   });
   out['edges'] = rest.edges;

@@ -298,14 +298,14 @@ export default function LibraryPage() {
               {flows.length}
             </span>
             <span style={{ flex: 1 }} />
-            <button
+            <a
               className="btn"
-              disabled
-              title="M2"
-              style={{ cursor: 'not-allowed', opacity: 0.45 }}
+              href="/flows/new"
+              data-action="new-flow"
+              style={{ textDecoration: 'none' }}
             >
               + New Flow
-            </button>
+            </a>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {flows.map((f, i) => (

@@ -32,6 +32,7 @@ import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listAgentDefinitions,
   listStarterAgents,
+  loadStarterFlow,
   loadFlowDefinition,
   loadProjectsRegistry,
   loadCatalog,
@@ -426,7 +427,8 @@ export async function handleStudioRoutes(
   if (url === '/api/studio/starters') {
     try {
       const starters = listStarterAgents(ctx.forgeRoot);
-      sendJson(res, 200, { starters }, origin);
+      const flow = loadStarterFlow(ctx.forgeRoot);
+      sendJson(res, 200, { starters, flow }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

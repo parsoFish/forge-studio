@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import type { AgentDefinition } from './types.ts';
-import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents } from './registry.ts';
+import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from './registry.ts';
 import { validateAgent, validateFlow } from './validate.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -51,6 +51,17 @@ describe('studio starter library', () => {
 
   it('listStarterAgents degrades to [] when the starters dir is absent', () => {
     assert.deepEqual(listStarterAgents('/nonexistent/forge/root'), []);
+  });
+
+  it('loadStarterFlow returns the basic plan→dev→review flow (New-Flow canvas seed)', () => {
+    const flow = loadStarterFlow(ROOT);
+    assert.ok(flow, 'expected a basic starter flow');
+    assert.deepEqual(flow!.nodes.map((n) => n.id), ['plan', 'dev', 'review']);
+    assert.ok(flow!.nodes.some((n) => n.gate), 'basic flow must carry a human gate');
+  });
+
+  it('loadStarterFlow degrades to null when absent', () => {
+    assert.equal(loadStarterFlow('/nonexistent/forge/root'), null);
   });
 
   it('basic flow is a valid plan → dev → review flow with a human gate', () => {

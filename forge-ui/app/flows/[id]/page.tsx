@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
-import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, saveFlow } from '@/lib/studio-client';
+import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
@@ -41,9 +41,12 @@ type PageTab = 'monitor' | 'build';
 
 export default function FlowMonitorPage({ params }: { params: { id: string } }) {
   const { id } = params;
+  // A brand-new flow: start in BUILD, seed the canvas from the basic starter,
+  // and on save derive a slug from the name + redirect to the real flow.
+  const isNew = id === 'new';
 
-  // Tab state — monitor is the default
-  const [tab, setTab] = useState<PageTab>('monitor');
+  // Tab state — monitor is the default; a new flow opens straight into BUILD.
+  const [tab, setTab] = useState<PageTab>(isNew ? 'build' : 'monitor');
 
   const [flow,        setFlow]        = useState<Flow | null>(null);
   const [runs,        setRuns]        = useState<Run[]>([]);
@@ -168,7 +171,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   const loadBuildData = useCallback(async (signal: { cancelled: boolean }) => {
     const [flowDef, flows, ags] = await Promise.all([
-      fetchFlow(id),
+      // A new flow seeds its canvas from the basic starter (plan → dev → review).
+      isNew ? fetchStarterFlow() : fetchFlow(id),
       fetchStudioFlows(),
       fetchStudioAgents(),
     ]);
@@ -178,14 +182,16 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     setAgents(ags);
     if (flowDef) {
       setHeaderState({
-        name: flowDef.name,
+        // The operator names their own flow; the starter only seeds the canvas
+        // + goal so a basic flow is creatable with near-zero input.
+        name: isNew ? '' : flowDef.name,
         goal: flowDef.goal ?? '',
         project: flowDef.project ?? '',
         kb: flowDef.kb ?? '',
-        triggers: flowDef.triggers ?? [],
+        triggers: isNew ? [] : (flowDef.triggers ?? []),
       });
     }
-  }, [id]);
+  }, [id, isNew]);
 
   useEffect(() => {
     if (tab === 'build') {
@@ -200,11 +206,18 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const handleBuildSave = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return { ok: false as const, error: 'canvas not ready' };
+    // A new flow has no id yet — derive a slug from the (required) name.
+    const saveId = isNew
+      ? headerState.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      : id;
+    if (isNew && !saveId) {
+      return { ok: false as const, error: 'Name your flow before saving.' };
+    }
     const rfNodes = canvas.getNodes();
     const rfEdges = canvas.getEdges();
     const nodes = rfNodesToFlow(rfNodes);
     const edges = rfEdgesToFlow(rfEdges);
-    const result = await saveFlow(id, {
+    const result = await saveFlow(saveId, {
       name: headerState.name,
       goal: headerState.goal,
       project: headerState.project || undefined,
@@ -216,8 +229,12 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     if (result.ok && result.version !== undefined) {
       setBuildVersion(result.version);
     }
+    // New flow saved → navigate to its real route so subsequent edits target it.
+    if (result.ok && isNew) {
+      window.location.href = `/flows/${encodeURIComponent(saveId)}`;
+    }
     return result;
-  }, [id, headerState]);
+  }, [id, isNew, headerState]);
 
   // ---- start / resume ----
 
@@ -301,6 +318,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         <>
           <FlowHeader
             flowId={id}
+            isNew={isNew}
             state={headerState}
             onChange={setHeaderState}
             version={buildVersion}
