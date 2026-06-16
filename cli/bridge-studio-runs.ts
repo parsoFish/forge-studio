@@ -28,6 +28,7 @@ import {
   ReviewConcernInvalidError,
 } from '../orchestrator/unifier-items.ts';
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
+import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
@@ -183,6 +184,20 @@ export async function applyReviewVerdict(
       }, origin);
       return;
     }
+    // ADR-027: persist the operator's approve as the durable verdict artifact
+    // before finalize/reflection runs (overwrite a prior merge-path fallback).
+    writeVerdictJson(
+      ctx.logsRoot,
+      {
+        kind: 'approve',
+        initiative_id: initiativeId,
+        cycleId: approveManifest.cycle_id ?? initiativeId,
+        decidedBy: 'operator',
+        rationale,
+        at: new Date().toISOString(),
+      },
+      { overwrite: true },
+    );
     void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
     sendJson(res, 200, { ok: true, kind, note: 'PR merged and finalization triggered' }, origin);
     return;
@@ -222,6 +237,21 @@ export async function applyReviewVerdict(
       estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
     });
     persistManifestResumeFromUnifier(manifestPath);
+    // ADR-027: persist the operator's send-back (rationale + the UWI acceptance
+    // criteria) as the durable verdict artifact for the reflector.
+    writeVerdictJson(
+      ctx.logsRoot,
+      {
+        kind: 'send-back',
+        initiative_id: initiativeId,
+        cycleId: manifest.cycle_id ?? initiativeId,
+        decidedBy: 'operator',
+        rationale,
+        acceptanceCriteria: acs,
+        at: new Date().toISOString(),
+      },
+      { overwrite: true },
+    );
     sendJson(res, 200, {
       ok: true,
       kind,

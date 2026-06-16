@@ -25,9 +25,12 @@ written only through one canonical serializer module
 
 1. **Agent = extended SKILL.md.** The agent definition IS the skill
    directory; frontmatter gains machine fields (`purpose`, `composition`
-   {skills/tools/mcps/hooks}, `runtime` {sdk/strategy/model/range/
-   subagentModel}, `brainAccess`, `interactivity`, `budgets` {iterationFloor,
+   {skills/tools/mcps/hooks}, `runtime` {sdk/strategy/model/range},
+   `brainAccess`, `interactivity`, `budgets` {iterationFloor,
    maxTurnsPerIteration, wedgeKillMs}); the body keeps process intent.
+   *(Amendment 2026-06-16: a `runtime.subagentModel` lever was de-cargoed — it
+   had no spawn-site consumer, since forge does not yet spawn SDK subagents.
+   Reintroduce it together with the first flow whose agent actually sub-spawns.)*
    `PhaseAgentSpec` becomes a derived view of this file. `hooks` name
    existing orchestrator behaviours (event-log, cost-guard, stall-watchdog,
    merge-gate, scratch-strip) — they toggle, they do not spawn.
@@ -118,10 +121,15 @@ same as every other Studio object):
 - **`validateArtifactRef(flow, templateIds)`** — every `FlowEdge.artifact` SHOULD resolve
   to a registered template. Advisory (flag) for now so existing flows are not broken;
   promotable to an error once all seed flows ship templates. Joins `forge studio lint`.
-- **Runtime (separate follow-up, ADR-028 surface):** a `flow-runner` `assertArtifactPresent`
-  pre-node guard turns a missing/empty inbound artifact into a clean orchestration error at
-  the boundary, and the human `verdict` is persisted as
-  `_logs/<cycleId>/artifacts/verdict.json` so the reflector has a durable record.
+- **Runtime guard (implemented 2026-06-16, `orchestrator/flow-artifacts.ts`):**
+  `assertInboundArtifacts` runs before each node in `flow-runner.runFlow` and turns a
+  missing/empty inbound artifact into a clean `flow-runner.artifact-missing` error at the
+  boundary (`git-state` artifacts are skipped — their invariants live in the unifier's
+  close-contract gates; the `reflect` node is exempt — its inbound `verdict` is produced by
+  the async human gate). The human `verdict` is persisted as
+  `_logs/<cycleId>/artifacts/verdict.json` (`writeVerdictJson`) at the decision point — the
+  bridge `applyReviewVerdict` on an operator approve/send-back, and `finalize-merged` on a
+  silent GitHub merge — so the reflector has a durable record.
 
 The five seed templates (`plan`, `work-items`, `wi-branches`, `pr`, `verdict`) document the
 contracts the current cycle already relies on. `wi-branches` is `kind: git-state` (the

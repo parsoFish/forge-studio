@@ -65,6 +65,11 @@ import {
   enforceFinalCiGate,
   preservingForgeScratch,
 } from './cycle-helpers.ts';
+import { listArtifactTemplates } from './studio/registry.ts';
+import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
+
+/** Forge repo root — `<root>/orchestrator/flow-runner.ts` resolves to `<root>`. */
+const FLOW_RUNNER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -740,6 +745,12 @@ export async function runFlow({
     ...(executorOverrides ?? {}),
   };
 
+  // ADR-027 runtime artifact contracts — built once per run (7 small files; an
+  // absent template dir → empty map → the guard no-ops).
+  const artifactTemplates = new Map<string, ArtifactContract>(
+    listArtifactTemplates(FLOW_RUNNER_ROOT).map((t) => [t.id, { id: t.id, kind: t.kind, schema: t.schema }]),
+  );
+
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
     if (!node) continue; // defensive
@@ -776,6 +787,32 @@ export async function runFlow({
       nodeBudget,
       state,
     };
+
+    // ADR-027: assert the node's inbound artifacts exist before it runs. The
+    // reflect node is exempt — its inbound `verdict` is produced by the human
+    // review gate (async in unattended mode); verdict.json is persisted at the
+    // decision point, not by a producing node. A dry run produces no real
+    // artifacts, so enforcement is skipped there.
+    if (kind !== 'reflect' && !input.dryRun) {
+      assertInboundArtifacts({
+        flow,
+        nodeId,
+        input,
+        forgeRoot: FLOW_RUNNER_ROOT,
+        templates: artifactTemplates,
+        onMissing: (detail) =>
+          nodeLogger.emit({
+            initiative_id: input.initiativeId,
+            phase: 'orchestrator',
+            skill: 'flow-runner',
+            event_type: 'error',
+            input_refs: [],
+            output_refs: [],
+            message: 'flow-runner.artifact-missing',
+            metadata: detail,
+          }),
+      });
+    }
 
     try {
       // Registry dispatch — no switch. Resolve the kind's executor (or the

@@ -31,7 +31,11 @@ function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
     manifestPath: '/tmp/test/manifest.md',
     projectRepoPath: '/tmp/test/project',
     worktreePath: '/tmp/test/worktree',
-    dryRun: false,
+    // These tests mock the node executors and use synthetic paths — no real
+    // artifacts land on disk, so they run as dry runs (which skips the ADR-027
+    // inbound-artifact guard). Artifact enforcement is covered in
+    // flow-artifacts.test.ts against real on-disk layouts.
+    dryRun: true,
     ...overrides,
   };
 }

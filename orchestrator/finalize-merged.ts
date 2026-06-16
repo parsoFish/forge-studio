@@ -28,6 +28,7 @@ import { runClosure } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { writeVerdictJson } from './flow-artifacts.ts';
 import type { CycleInput } from './cycle-context.ts';
 
 export type FinalizeStatus = 'finalized' | 'still-open' | 'no-worktree' | 'error';
@@ -135,6 +136,16 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
       const logger = createLogger(cycleId, logsRoot);
       const input: CycleInput = { initiativeId, manifestPath: inFlightPath, projectRepoPath, worktreePath, cycleId };
+
+      // ADR-027: a confirmed GitHub merge is an implicit approve — persist the
+      // verdict artifact (the operator merged silently, no UI verdict) so the
+      // reflector that runs inside finalizeOne has a durable record. overwrite:
+      // false keeps an explicit UI approve/send-back, if one was already written.
+      writeVerdictJson(
+        logsRoot,
+        { kind: 'approve', initiative_id: initiativeId, cycleId, decidedBy: 'merge', at: new Date().toISOString() },
+        { overwrite: false },
+      );
 
       const merged = await finalizeOne(input, logger);
       if (merged) {
