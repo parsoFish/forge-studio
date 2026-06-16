@@ -99,6 +99,29 @@ const FRAMES_DIR = join(OUT_DIR, 'frames');
 
 function log(msg) { console.log(`[verify ${new Date().toISOString().slice(11, 19)}] ${msg}`); }
 
+/**
+ * Spawn env for forge subprocesses, with the headroom compression proxy stripped.
+ * headroom (a global ~/.bashrc wrap of `claude`) exports
+ * ANTHROPIC_BASE_URL=http://127.0.0.1:8787 + an X-Headroom custom header into the
+ * shell, which forge then inherits. The proxy buffers the SDK's streaming SSE, so
+ * forge's stream-deadline watchdog fires ("SDK stream produced no message for
+ * 360s") and the dev-loop crashes at iterations:0 (observed: betterado WI-1,
+ * 2026-06-16). forge must stream directly from Anthropic. Detected narrowly by the
+ * headroom header or the :8787 base url so unrelated proxies are left untouched.
+ */
+function forgeSpawnEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  const base = env.ANTHROPIC_BASE_URL ?? '';
+  const headers = env.ANTHROPIC_CUSTOM_HEADERS ?? '';
+  const isHeadroom = /headroom/i.test(headers) || /\/\/(127\.0\.0\.1|localhost):8787\b/.test(base);
+  if (isHeadroom) {
+    delete env.ANTHROPIC_BASE_URL;
+    delete env.ANTHROPIC_CUSTOM_HEADERS;
+    log('headroom proxy detected on ANTHROPIC_BASE_URL — stripped it so forge streams direct (proxy buffering breaks the dev-loop stream-deadline)');
+  }
+  return env;
+}
+
 // ---- ADR 022 runner: corpus staging, repo reset, outcome assertions --------
 
 function git(repoPath, args) {
@@ -306,7 +329,7 @@ async function startWatch() {
     const proc = spawn(
       process.execPath,
       ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
-      { cwd: FORGE_ROOT, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
+      { cwd: FORGE_ROOT, env: forgeSpawnEnv(), stdio: ['ignore', 'pipe', 'pipe'], detached: true },
     );
     let buf = '';
     let settled = false;
@@ -355,7 +378,7 @@ function startServe() {
     ['--experimental-strip-types', 'orchestrator/cli.ts', 'serve', '--once'],
     {
       cwd: FORGE_ROOT,
-      env: { ...process.env, FORGE_SKIP_CONTRACT_CHECK: '1' },
+      env: forgeSpawnEnv({ FORGE_SKIP_CONTRACT_CHECK: '1' }),
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     },
