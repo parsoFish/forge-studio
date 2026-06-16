@@ -17,6 +17,8 @@ import {
   renderDemoHtml,
   renderDemoBundle,
   mergeCapturedMedia,
+  collectLiveEvidence,
+  mergeLiveEvidence,
   toComparisonModel,
   type DemoModel,
 } from './demo-model.ts';
@@ -478,4 +480,44 @@ test('renderDemoMarkdown: renders acEvaluations section when present', () => {
   assert.match(md, /✓ met/);
   assert.match(md, /✗ missed/);
   assert.match(md, /All tests pass\./);
+});
+
+// ── live evidence (the "show the real resource" gate) ───────────────────────
+test('mergeLiveEvidence: matching label attaches liveEvidence; unmatched appends a harness checkpoint', () => {
+  const model = { title: 't', essence: 'e', checkpoints: [{ label: 'acceptance-resource', caption: 'c' }] } as unknown as Parameters<typeof mergeLiveEvidence>[0];
+  const merged = mergeLiveEvidence(model, [
+    { label: 'acceptance-resource', url: 'https://vsrm.dev.azure.com/o/p/_apis/release/taskgroups/123', response: '{"id":"123"}' },
+    { label: 'extra', url: 'https://dev.azure.com/o/_apis/x' },
+  ]);
+  const matched = merged.checkpoints.find((c) => c.label === 'acceptance-resource');
+  assert.ok(matched?.liveEvidence);
+  assert.equal(matched.liveEvidence.url, 'https://vsrm.dev.azure.com/o/p/_apis/release/taskgroups/123');
+  const appended = merged.checkpoints.find((c) => c.label === 'extra');
+  assert.ok(appended, 'unmatched evidence appended as its own checkpoint');
+  assert.equal(appended.kind, 'harness');
+  assert.equal(appended.liveEvidence?.url, 'https://dev.azure.com/o/_apis/x');
+});
+
+test('mergeLiveEvidence: empty evidence → model unchanged', () => {
+  const model = { title: 't', essence: 'e', checkpoints: [{ label: 'a', caption: 'c' }] } as unknown as Parameters<typeof mergeLiveEvidence>[0];
+  assert.equal(mergeLiveEvidence(model, []), model);
+});
+
+test('collectLiveEvidence: reads .forge/live-evidence/*.json, skips malformed/urlless/non-json', () => {
+  const wt = mkdtempSync(join(tmpdir(), 'le-'));
+  const dir = join(wt, '.forge', 'live-evidence');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'task-group.json'), JSON.stringify({ url: 'https://vsrm/_apis/release/taskgroups/9', capturedAt: '2026-06-16', response: { id: 9 } }));
+  writeFileSync(join(dir, 'no-url.json'), JSON.stringify({ foo: 'bar' }));
+  writeFileSync(join(dir, 'bad.json'), '{not json');
+  writeFileSync(join(dir, 'ignore.txt'), 'nope');
+  const ev = collectLiveEvidence(wt);
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].url, 'https://vsrm/_apis/release/taskgroups/9');
+  assert.equal(ev[0].label, 'task-group');
+  assert.equal(typeof ev[0].response, 'string'); // object response stringified
+});
+
+test('collectLiveEvidence: missing dir → []', () => {
+  assert.deepEqual(collectLiveEvidence(mkdtempSync(join(tmpdir(), 'le2-'))), []);
 });

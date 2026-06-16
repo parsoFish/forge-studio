@@ -48,6 +48,14 @@ export type DemoModelCheckpoint = {
   /** Optional video — relative sibling path only (never a scheme-bearing URL). */
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
+  /**
+   * Captured live external evidence — a REAL API GET of the resource under test
+   * (the endpoint url + the response body), persisted by the acceptance test
+   * before it destroys the resource and back-filled here by forge. The presence
+   * of `url` is what the live-evidence gate checks: the demo must SHOW the actual
+   * resource, not merely name the tests that touched it.
+   */
+  liveEvidence?: { url: string; capturedAt?: string; response?: string } | null;
 };
 
 /** Per-acceptance-criterion evaluated output — one entry per AC the unifier proved. */
@@ -353,7 +361,71 @@ export type RenderDemoBundleResult = {
  * commits. Never throws — returns the validation errors so the caller can
  * surface them.
  */
-export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDemoBundleResult {
+/** A real API GET of a live resource, persisted by an acceptance test. */
+export type LiveEvidence = { label?: string; url: string; capturedAt?: string; response?: string };
+
+/**
+ * Read persisted live-evidence files the acceptance test wrote under
+ * `<worktree>/.forge/live-evidence/*.json` (its real API GET response, captured
+ * before the resource is destroyed). Each file: `{ url, capturedAt?, response?,
+ * label? }`. Best-effort — never throws; skips malformed / urlless files.
+ */
+export function collectLiveEvidence(worktreePath: string): LiveEvidence[] {
+  const dir = join(worktreePath, '.forge', 'live-evidence');
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return []; }
+  const out: LiveEvidence[] = [];
+  for (const name of names) {
+    if (!name.toLowerCase().endsWith('.json')) continue;
+    try {
+      const p = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, unknown>;
+      if (typeof p.url !== 'string' || p.url.trim() === '') continue;
+      out.push({
+        label: typeof p.label === 'string' ? p.label : name.replace(/\.json$/i, ''),
+        url: p.url,
+        capturedAt: typeof p.capturedAt === 'string' ? p.capturedAt : undefined,
+        response: typeof p.response === 'string'
+          ? p.response
+          : p.response != null ? JSON.stringify(p.response, null, 2) : undefined,
+      });
+    } catch { /* skip malformed */ }
+  }
+  return out;
+}
+
+/**
+ * Merge live evidence into a DemoModel (pure + immutable). Evidence whose label
+ * matches a checkpoint label attaches there; the rest is appended as `harness`
+ * checkpoints so the live proof always surfaces (and the live-evidence gate can
+ * see `checkpoint.liveEvidence.url`).
+ */
+export function mergeLiveEvidence(model: DemoModel, evidence: LiveEvidence[]): DemoModel {
+  if (evidence.length === 0) return model;
+  const byLabel = new Map(evidence.map((e) => [e.label ?? e.url, e]));
+  const matched = new Set<string>();
+  const checkpoints = model.checkpoints.map((cp) => {
+    const ev = byLabel.get(cp.label);
+    if (!ev) return cp;
+    matched.add(cp.label);
+    return { ...cp, liveEvidence: { url: ev.url, capturedAt: ev.capturedAt, response: ev.response } };
+  });
+  const appended: DemoModelCheckpoint[] = evidence
+    .filter((e) => !matched.has(e.label ?? e.url))
+    .map((e) => ({
+      label: e.label ?? 'live-evidence',
+      kind: 'harness',
+      caption: `Live evidence — ${e.label ?? 'API GET'}`,
+      afterNote: `Real API GET against the live system: ${e.url}`,
+      liveEvidence: { url: e.url, capturedAt: e.capturedAt, response: e.response },
+    }));
+  return { ...model, checkpoints: [...checkpoints, ...appended] };
+}
+
+export function renderDemoBundle(
+  demoDir: string,
+  generatedAt: string,
+  worktreePath?: string,
+): RenderDemoBundleResult {
   const jsonPath = join(demoDir, 'demo.json');
   if (!existsSync(jsonPath)) {
     return { ok: false, errors: [`demo.json not found at ${jsonPath}`], wrote: [] };
@@ -363,6 +435,16 @@ export function renderDemoBundle(demoDir: string, generatedAt: string): RenderDe
     parsed = JSON.parse(readFileSync(jsonPath, 'utf8'));
   } catch (err) {
     return { ok: false, errors: [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`], wrote: [] };
+  }
+  // Back-fill captured live evidence (the acceptance test persisted it under
+  // .forge/live-evidence/) into demo.json BEFORE validation/render, so the demo
+  // SHOWS the real resource and the live-evidence gate sees checkpoint.liveEvidence.
+  if (worktreePath) {
+    const evidence = collectLiveEvidence(worktreePath);
+    if (evidence.length > 0 && parsed != null && typeof parsed === 'object') {
+      parsed = mergeLiveEvidence(parsed as DemoModel, evidence);
+      try { writeFileSync(jsonPath, JSON.stringify(parsed, null, 2) + '\n'); } catch { /* best-effort */ }
+    }
   }
   const errors = validateDemoModel(parsed);
   if (errors.length > 0) return { ok: false, errors, wrote: [] };
@@ -438,6 +520,15 @@ export function renderDemoMarkdown(model: DemoModel): string {
     lines.push('');
     if (c.beforeNote) lines.push(`- **Before:** ${c.beforeNote}`);
     if (c.afterNote) lines.push(`- **After:** ${c.afterNote}`);
+    if (c.liveEvidence?.url) {
+      lines.push(`- **Live evidence (real API GET):** \`${c.liveEvidence.url}\`${c.liveEvidence.capturedAt ? ` _(captured ${c.liveEvidence.capturedAt})_` : ''}`);
+      if (c.liveEvidence.response) {
+        lines.push('');
+        lines.push('```json');
+        lines.push(c.liveEvidence.response.length > 4000 ? c.liveEvidence.response.slice(0, 4000) + '\n… (truncated)' : c.liveEvidence.response);
+        lines.push('```');
+      }
+    }
     if (c.beforeImage || c.beforeVideoSrc) lines.push(`- Before media: \`${c.label}\` (before)`);
     if (c.afterImage || c.afterVideoSrc) lines.push(`- After media: \`${c.label}\` (after)`);
     if (c.metrics && c.metrics.length > 0) {

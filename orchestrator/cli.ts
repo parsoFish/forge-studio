@@ -587,7 +587,9 @@ async function cmdDemo(rest: string[]): Promise<void> {
     }
     const demoDir = flagValue(rest, '--dir') ?? join('demo', initiativeId);
     const { renderDemoBundle } = await import('../cli/demo-model.ts');
-    const res = renderDemoBundle(demoDir, new Date().toISOString());
+    // worktree root = demoDir/../.. — lets the bundle back-fill any live evidence
+    // the acceptance test persisted under <worktree>/.forge/live-evidence/.
+    const res = renderDemoBundle(demoDir, new Date().toISOString(), resolve(demoDir, '..', '..'));
     if (!res.ok) {
       console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
       for (const e of res.errors) console.error(`  - ${e}`);
@@ -628,7 +630,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
-      const r = renderDemoBundle(demoDir, new Date().toISOString());
+      const r = renderDemoBundle(demoDir, new Date().toISOString(), resolve(demoDir, '..', '..'));
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md/DEMO.html' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
       console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
