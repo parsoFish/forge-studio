@@ -798,3 +798,35 @@ is wrong. Four gaps to fix together (all in `forge-ui/` hex pipeline +
    edges between WI hexes; drive each WI hex's active/complete state + incoming
    pulse from that WI's own status (not a static edge to WI-1); clear the
    in-progress edge when a WI completes.
+
+## 2026-06-16 — live-cycle blockers (betterado task-group run, both real forge bugs)
+
+The betterado task-group verify:cycle (INIT-2026-06-16-task-group-acceptance-and-data-source)
+ran clean — 4/4 WIs, a real `betterado_task_group` data source + live acceptance
+tests that **ran against live ADO and passed** (`ok …acceptancetests 23.5s`
+each), GitHub CI all green (depscheck/go-lint/terrafmt/test), $7.80. But two forge
+bugs blocked a clean PASS:
+
+1. **Bridge auto-approve rejects forge's own worktrees (`cli/bridge-studio-runs.ts:167`).**
+   The approve path bounds-checks `worktree_path` with
+   `resolve(worktreePath).startsWith(resolve(ctx.projectsRoot) + sep)` — but forge
+   worktrees live under `forge_root/_worktrees/`, NOT under `projectsRoot`
+   (`projects/`). So a legitimate forge-managed worktree is rejected `409
+   worktree_path outside allowed root`, and the harness auto-approve fails. Fix:
+   allow worktrees under `forgeRoot/_worktrees/` (the real worktree root) as well as
+   `projectsRoot` — pass/derive the worktree root and bounds-check against it (still
+   reject arbitrary/`..` paths). Until fixed, merge the PR on GitHub (C6 path); the
+   sweep finalises in ≤5 min.
+
+2. **Demo skill emits a test-name table, not captured live REST evidence — fails the
+   betterado live-evidence gate.** The demo ran the live acceptance tests but
+   `demo.json` has 4 checkpoints all with `liveEvidence: null`; `testEvidence` is a
+   list of `{name,result,delta}` (test names + timings). The betterado-tier gate
+   requires `checkpoint.liveEvidence.url` (an actual API GET response / portal
+   capture of the created resource), so it FAILs even though the tests genuinely hit
+   live ADO. This is the standing "show the actual resource, not a test-name table"
+   requirement + the open `demo.skill` schema gap (contract DEMO clause). Fix: for a
+   live-capable project, after the acceptance test creates the resource the demo must
+   capture a real `vsrm/dev.azure.com …/taskgroups/<id>` GET response (and/or portal
+   screenshot) into a checkpoint's `liveEvidence.url`, not just record that the test
+   passed.
