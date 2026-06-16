@@ -1,0 +1,12 @@
+id: terraform-provider
+name: Terraform Provider (Go)
+scope: project
+appliesTo: terraform-provider
+desc: >-
+  Seed knowledge for Go-based Terraform provider projects — CRUD resource
+  lifecycle, live acceptance-test discipline, and REST/SDK gotchas. Distilled
+  from the betterado (Azure DevOps) provider cycles.
+themes:
+  - two-gate-model
+  - hermetic-live-fixtures
+  - rest-provider-gotchas

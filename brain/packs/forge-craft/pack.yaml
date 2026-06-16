@@ -1,0 +1,12 @@
+id: forge-craft
+name: Forge Craft
+scope: flow
+appliesTo: any
+desc: >-
+  How to run forge well — project-agnostic operating wisdom for planners and
+  operators. Initiative sizing, work-item dependency ordering, the two-gate
+  model, and resume-don't-discard. Distilled from cross-cycle experience.
+themes:
+  - initiative-sizing-is-a-bundle
+  - wi-dependency-ordering
+  - resume-dont-discard
