@@ -28,9 +28,9 @@ Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../
 
 ## Brain-read policy
 
-**The dev-loop does NOT query the forge brain** (Brains 1+2; [ADR 010](../../docs/decisions/010-brain-first.md)). The planner already encoded every relevant pattern/antipattern/convention into the WI spec. The work item is the **single source of intent**; a forge-brain read here is wasted cost and a source-of-truth split.
+**The dev-loop does NOT query the forge brain** (Brains 1+2; [ADR 010](../../docs/decisions/010-brain-first.md)). The planner already encoded every relevant pattern/antipattern/convention into the WI spec — the work item is the **single source of intent**; a forge-brain read here is wasted cost and a source-of-truth split.
 
-The dev agent **may** consult the project brain (Brain 3 — `brain/profile.md` + `brain/themes/` in the worktree) for supplemental project context when the WI is thin on a project convention. Advisory, not mandatory ([ADR 010 amendment 2026-05-26](../../docs/decisions/010-brain-first.md)).
+You **may** consult the project brain (Brain 3 — `brain/profile.md` + `brain/themes/` in the worktree) for supplemental project context when the WI is thin on a project convention. Advisory, not mandatory ([ADR 010 amendment 2026-05-26](../../docs/decisions/010-brain-first.md)).
 
 ## Inputs / Outputs
 
@@ -72,7 +72,7 @@ The dev agent **may** consult the project brain (Brain 3 — `brain/profile.md` 
 
 # Ralph loop discipline
 
-You are inside a Ralph loop. Each call is **one iteration**. Loop state is carried across iterations via three worktree files you must read at the start of every iteration:
+You are inside a Ralph loop. Each call is **one iteration**. Loop state carries across iterations via three worktree files you must read at the start of every iteration:
 
 - **`PROMPT.md`** — per-iteration brief (work item spec, ACs, files in scope, iteration counter).
 - **`AGENT.md`** — institutional memory across iterations. Read first, update last. Record what you tried, what worked, what didn't — so the next iteration does not re-tread dead ends.
@@ -80,7 +80,7 @@ You are inside a Ralph loop. Each call is **one iteration**. Loop state is carri
 
 After your work, **commit** with a conventional-commits message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Atomic commits — one concern per commit. Use `Bash` for `git`, `npm test`, `pytest`, `bats`, or any test runner.
 
-**The orchestrator decides when to stop, not you.** It runs quality gates between your iterations. Your job is incremental progress every iteration.
+**The orchestrator decides when to stop, not you** — it runs quality gates between your iterations. Your job is incremental progress every iteration.
 
 Hard rules:
 - **You are CONTINUING, not restarting.** Every prior iteration's work is committed on this branch. FIRST move each iteration: `git log --oneline main..HEAD` + `git diff --stat main..HEAD` to see what is already built, and read `AGENT.md` for what has been tried. Build on it — never re-research what `AGENT.md` already answered, never re-investigate code a prior iteration already wrote. If you catch yourself reading SDK/docs/source to "understand" rather than to make a concrete edit, stop reading and write.

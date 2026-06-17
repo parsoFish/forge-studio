@@ -28,19 +28,15 @@ Close the learning loop. After an initiative is merged, run the four-stage retro
 
 ## Operator handoff (the reflection human moment)
 
-The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. (The `/forge-reflect` slash command + `forge-reflect-cli` were retired 2026-05-30.)
+The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. Always supplied by a human in production — forge never simulates it.
 
-> Human moment — always supplied by a human in production. Forge never simulates it.
+**Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if none written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 
-**Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if no questions written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
-
-**Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question, then add free-form feedback. Stage 3 distils this into `retro.md` Section 2 (answers) + Section 3 (free-form). Contract: `orchestrator/reflector-invocation.ts`, `orchestrator/phases/reflector.ts`.
-
-If the file is absent when the reflector runs, it records `_(no feedback supplied this cycle)_` and continues.
+**Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question, then add free-form feedback. Stage 3 distils this into `retro.md` Section 2 (answers) + Section 3 (free-form). Contract: `orchestrator/reflector-invocation.ts`, `orchestrator/phases/reflector.ts`. If the file is absent when the reflector runs, record `_(no feedback supplied this cycle)_` and continue.
 
 ## Required first action
 
-Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded**. Production gates on this signal (`brain_consulted`). This is unconditional, not "when unsure".
+Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
 
 ## Inputs
 
@@ -91,15 +87,15 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 1. **Brain query first.**
 2. Read the full event log. Compute: iterations per WI/feature/initiative; cost by phase/skill/model; wedge events, recovery events, brain-gap counts, send-back rounds.
-3. Identify notable patterns — things that worked unusually well, things that wedged or burnt token, antipatterns observed.
-   - **Delivery truth = the `dev-loop.delivered` event (git diff-stat) + the merged tree, NOT per-WI status counts.** Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
+3. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
+   - **Delivery truth = the `dev-loop.delivered` event (git diff-stat) + the merged tree, NOT per-WI status counts.** Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
 4. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving.
 
 ### Stage 2 — Agent-prompted user questions (file-based handoff)
 
-**Do NOT call `AskUserQuestion`.** File-based handoff only: write questions to `user-questions.md`; the orchestrator derives `user-questions.json` post-exit. You only ever write the `.md`.
+**Do NOT call `AskUserQuestion`.** Write questions to `user-questions.md` only; the orchestrator derives `user-questions.json` post-exit.
 
-5. From Stage 1, identify items the agent cannot resolve from established principles + brain knowledge. These become user questions.
+5. From Stage 1, identify items you cannot resolve from established principles + brain knowledge. These become user questions.
 6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md` (`## N. <header>` per question).
 
    **Guaranteed seed questions** — always include these three unless literally zero deliverables:
@@ -107,7 +103,7 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
    2. "Did the implementation match the design intent?" (exact match, minor, or significant divergence?)
    3. "Did the cycle stay aligned with the initiative's original goals?" (yes, partial drift, or scope creep?)
 
-   Add project-grounded follow-up questions beyond these (cap at 4 total).
+   Add project-grounded follow-ups beyond these (cap at 4 total).
 
 7. Capture user answers (from `user-feedback.md` in stage 3) as Section 2 of `retro.md`.
 
@@ -118,14 +114,14 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable observation from Stage 1, write a theme file **scoped to the right brain**:
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**:
     - Lesson about **this project** (code, conventions, domain, a bug) → `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`.
     - Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → `brain/cycles/themes/<YYYY-MM-DD>-<slug>.md`. Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge lesson, NOT Brain 3.
     - Required frontmatter + `## Sources` listing ≥1 path resolving to the cycle log or archive.
 11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full provenance frontmatter.
 12. Validate: every theme file has valid frontmatter + valid `category` + ≥1 resolvable evidence path. Fix before exiting.
 
-> **Direct-write brain.** The reflector writes theme files directly. `brain-ingest` is NOT invoked. The orchestrator calls `regenerateBrainIndex` after you exit — do not update `brain/INDEX.md` yourself.
+> **Direct-write brain.** The reflector writes theme files directly; `brain-ingest` is NOT invoked. The orchestrator calls `regenerateBrainIndex` after you exit — do not update `brain/INDEX.md` yourself.
 
 ## Constraints
 

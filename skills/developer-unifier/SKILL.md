@@ -27,24 +27,24 @@ budgets:
 
 ## Mission (initial-prep mode)
 
-Once all per-WI Ralphs have run, take the **whole initiative branch** and prove it cohesive:
+Once all per-WI Ralphs have run, take the **whole initiative branch** and prove it cohesive. Your role is **integrate, not develop** — every per-WI dev-loop has ALREADY written code, run tests, and committed (verify with `git log --oneline main...HEAD`). Read WI specs only to understand SCOPE, never to "figure out what to implement".
 
 1. **Read** the initiative manifest (`.forge/manifest.md` or `.forge/manifest.yml`) for cross-WI ACs; read each WI under `.forge/work-items/` (their `acceptance_criteria` arrays are your checklist).
-2. **Run** the project's `quality_gate_cmd` (from PROMPT.md). If red, fix within the union of all WIs' `files_in_scope`. Do NOT add new files outside that union.
+2. **Run** the project's `quality_gate_cmd` (from PROMPT.md) to verify per-WI commits still pass together. If red, fix within the union of all WIs' `files_in_scope` — do NOT add files outside that union.
 3. **Author the structured demo** at `demo/<initiative-id>/demo.json` (ADR 021):
    - This directory must be **tracked** (committed on the branch). The unifier is the only sub-phase that writes to a tracked path.
    - `demo.json` is the **single source of truth** — schema-validated by the `pr_self_contained` gate (`validateDemoModel`). Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 `checkpoints[]` entry (`label` + `caption`, plus `beforeNote`/`afterNote` describing before-vs-after **behaviour**, never "what is broken").
-   - **MUST populate `acEvaluations[]`** — one entry per acceptance criterion (from each WI's `acceptance_criteria` array) with `verdict` (`met`/`partial`/`missed`) and concrete `evidence` (a test name + result, an API response, a measured value — never "see code"). This powers the foregrounded "Intent & Outcome" section at the top of the review demo. Do not write "tests pass" without naming the specific test. Example: `{ "criterion": "GIVEN X WHEN Y THEN Z", "verdict": "met", "evidence": "test 'X WHEN Y THEN Z' → pass (node:test 42/42 green)" }`.
+   - **MUST populate `acEvaluations[]`** — one entry per acceptance criterion (from each WI's `acceptance_criteria` array) with `verdict` (`met`/`partial`/`missed`) and concrete `evidence` (a test name + result, an API response, a measured value — never "see code"). Powers the foregrounded "Intent & Outcome" section at the top of the review demo. Never write "tests pass" without naming the specific test. Example: `{ "criterion": "GIVEN X WHEN Y THEN Z", "verdict": "met", "evidence": "test 'X WHEN Y THEN Z' → pass (node:test 42/42 green)" }`.
    - Run `forge demo render <initiative-id>` to derive `DEMO.md` + `DEMO.html` from `demo.json`, then commit all three. **Never hand-write DEMO.md** — derived, so PR artifact and in-UI render never drift.
    - **Check for a `demo.skill` in `.forge/project.json`** before authoring `demo.json`. If present, `Read` that skill file — it specifies the project-specific evidence hierarchy (e.g. betterado's `ado-demo` skill: `terraform apply` → API GET → portal screenshot → `terraform destroy`). For new/changed resources, **attempt live-capability evidence first**; fall back to harness-only if credentials absent, documenting the fallback in `essence`.
    - The project's `demo.shape` in `.forge/project.json` decides HOW you fill checkpoints:
      - **browser** — fill checkpoints + invoke `forge demo capture <initiative-id>` for before/after images.
-     - **harness** — `kind: 'harness'` checkpoint with `metrics[]` (before/after + parity). Parity vocabulary: `match | within | diverged | incomplete`. Author `testEvidence[]` table. Do NOT author screenshots — no UI. For new-capability initiatives, also author `usage_example` (fenced HCL/CLI/API block) and `impact` (string[] bullets).
+     - **harness** — `kind: 'harness'` checkpoint with `metrics[]` (before/after + parity; vocabulary: `match | within | diverged | incomplete`). Author `testEvidence[]` table. No screenshots (no UI). For new-capability initiatives, also author `usage_example` (fenced HCL/CLI/API block) and `impact` (string[] bullets).
      - **cli-diff** / **artifact** — before/after notes (no media required).
      - **none** — single rationale checkpoint (caption + afterNote).
 4. **Write the PR body** at `.forge/pr-description.md`:
    - Sections: `## Why` (non-empty), `## What`, `## How`.
-   - **Do NOT add a `## Demo` section.** The orchestrator appends the canonical demo block at PR-open. A hand-authored `## Demo` heading will be stripped.
+   - **Do NOT add a `## Demo` section.** The orchestrator appends the canonical demo block at PR-open; a hand-authored `## Demo` heading will be stripped.
    - Anchor on `git diff --name-only main...HEAD` — list ONLY files that ACTUALLY appear in the diff.
 5. **Commit** as `feat(<initiative-id>): unify and demo`. Skip commit if no changes (demo exists, PR body present) — gates run against per-WI tip.
 6. **Push** so `origin/<branch>` == local HEAD before the review phase opens the PR.
@@ -110,7 +110,7 @@ After your work, **commit** as `feat(<initiative-id>): unify and demo` (a `packa
 
 ## Write the demo + PR description first (draft within 2 tool calls)
 
-**Iteration 1, tool call #1 or #2: `Write` a SKELETON of `demo/<initiative-id>/demo.json` AND `.forge/pr-description.md`.** A minimal valid demo.json is fine. Placeholder prose is fine. The point is to have something on disk for the gate; refine in subsequent iterations (then re-run `forge demo render`).
+**Iteration 1, tool call #1 or #2: `Write` a SKELETON of `demo/<initiative-id>/demo.json` AND `.forge/pr-description.md`.** A minimal valid demo.json + placeholder prose is fine — the point is to have something on disk for the gate; refine in subsequent iterations (then re-run `forge demo render`).
 
 Minimal valid iter-1 skeleton:
 
@@ -142,19 +142,6 @@ and
 <placeholder>
 ```
 
-Then `Bash git add . && git commit -m "wip: unifier skeleton"` and continue in iter 2+. **DO NOT spend iteration 1 reading files. The skeleton goes in FIRST.** This is the consistent failure mode (observed 5+ cycles): 10+ iters of `ls` + `git log` + `cat` with zero writes, terminal-fail at iteration-budget.
+Then `Bash git add . && git commit -m "wip: unifier skeleton"` and continue in iter 2+. **DO NOT spend iteration 1 reading files. The skeleton goes in FIRST.** This is the consistent failure mode (observed 5+ cycles): 10+ iters of `ls` + `git log` + `cat` with zero writes, terminal-fail at iteration-budget. If you catch yourself reading WI specs to "figure out what to implement", STOP — that work is done; read them only for SCOPE.
 
-Your role is **integrate, not develop**. Every per-WI dev-loop has ALREADY COMPLETED — code written, tests run, committed. Verify with `git log --oneline main...HEAD`. Your job:
-1. Confirm the initiative was met (run the gate to verify per-WI commits still pass together).
-2. Author the structured demo at `demo/<initiative-id>/demo.json`, then run `forge demo render <initiative-id>`.
-3. Write the PR description at `.forge/pr-description.md` (substantive `## Why` / `## What` / `## How`; do NOT add `## Demo`).
-4. Commit + push.
-
-If you find yourself reading WI specs to "figure out what to implement", STOP — that work is done. Read them only to understand SCOPE so your demo + description cover it.
-
-Hard rules (same as Mission above):
-- **Scope discipline.** Files: union of all WIs' `files_in_scope` + `demo/<initiative-id>/**` + `.forge/pr-description.md`. Violations go in `AGENT.md`.
-- **No `gh pr create`, no `gh pr merge`.**
-- **No queue mutation.**
-- **No shortcuts.** No `--no-verify`, no disabled lint rules.
-- **No hallucinated test passes.** Prove it via `Bash`.
+Hard rules: same as the [Hard rules](#hard-rules) section above (scope discipline; no `gh pr create`/`gh pr merge`; no queue mutation; no shortcuts; no hallucinated test passes).

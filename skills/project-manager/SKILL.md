@@ -24,15 +24,15 @@ budgets: {}
 
 ## Single responsibility
 
-The PM is the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria. The PM decomposes those ACs **directly** into atomic outcome-sized work items — the initiative body is the single source of intent. The PM owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
+The PM is the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria; the PM decomposes those ACs **directly** into atomic outcome-sized work items. The initiative body is the single source of intent. The PM owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
 
-Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project's current state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
+Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 
-Format and validation rules are locked in [`docs/decisions/015-work-item-format.md`](../../docs/decisions/015-work-item-format.md). The orchestrator validates every work item via [`orchestrator/work-item.ts:validateWorkItem`](../../orchestrator/work-item.ts) before dispatching to the developer loop — invalid work items fail the cycle.
+Format and validation rules are locked in [`docs/decisions/015-work-item-format.md`](../../docs/decisions/015-work-item-format.md). The orchestrator validates every work item via [`orchestrator/work-item.ts:validateWorkItem`](../../orchestrator/work-item.ts) before dispatching — invalid work items fail the cycle.
 
 ## Operating mode
 
-You are running **non-interactively** in an unattended cycle. Do not ask clarifying questions. If something is genuinely under-specified, infer the most reasonable choice, note it in the work-item body, and proceed. **You MUST write at least one work-item file before stopping; finishing without writing any files is a failed run.**
+Running **non-interactively** in an unattended cycle. Do not ask clarifying questions; if something is genuinely under-specified, infer the most reasonable choice, note it in the work-item body, and proceed. **You MUST write at least one work-item file before stopping; finishing without writing any files is a failed run.**
 
 ## Step 0 — Brain queries (REQUIRED, before any other action)
 
@@ -53,11 +53,11 @@ The "Brain themes consulted" footer in each WI body must list paths you actually
 
 ## Step 0.5 — Project structure enumeration (REQUIRED, before any WI emission)
 
-**You are running with `cwd` set to the project worktree.** All relative paths resolve against the worktree — not forge's root. Use relative paths everywhere.
+**Your `cwd` is the project worktree** — all relative paths resolve against it, not forge's root. Use relative paths everywhere.
 
-**You MUST `Glob` the actual project tree before drafting any WI.** Hallucinated `files_in_scope` paths cause dev-loop failures. Required:
+**You MUST `Glob` the actual project tree before drafting any WI** — hallucinated `files_in_scope` paths cause dev-loop failures. Required:
 - `Glob({ pattern: "src/**" })` — entire source tree
-- `Glob({ pattern: "tests/**" })` (or `spec/**`, `__tests__/**` — try the project's actual convention)
+- `Glob({ pattern: "tests/**" })` (or `spec/**`, `__tests__/**` — the project's actual convention)
 - `Read({ file_path: "package.json" })` (or `pyproject.toml`, `Cargo.toml`) — confirm scripts, deps, project type
 - `Read({ file_path: "README.md" })` and `CLAUDE.md` if present
 
@@ -135,11 +135,11 @@ graph TD
 ## Process
 
 1. **Brain query first.** Always-relevant themes plus project-specific.
-2. Read the initiative manifest. Read the worktree's README and source layout.
-3. **Decompose the initiative body's GWT ACs directly into atomic outcome-sized work items.** The body is your single source of intent — no `features[]` list. **The initiative TITLE is a filing label, NOT the spec — if title and body disagree, the body wins** (a past cycle hallucinated off a "release-folder" title and built unrelated release-NOTES markdown — this rule prevents that). **Before drafting any WI, restate the target in one line:** the concrete resource/file/module the body asks for and where it lives in this project's source tree. Put that line in the first WI body. Every WI's `files_in_scope` must sit under that source tree. Each GWT block in the body MUST be exercised by ≥1 WI's `quality_gate_cmd`. Do not invent work outside the body's ACs. For each WI:
-   - At least one **GWT** acceptance criterion: `given`, `when`, `then` strings. **Always wrap values in double quotes** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators; unquoted strings starting with these fail to parse.
-   - Declares `depends_on` and `files_in_scope` (worktree-relative, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files**. **Exception — hotspot files (listed in two or more WIs with no `depends_on` edge):** enforced by `detectHiddenCoupling()` at PM close. A shared file with no ordering edge is a guaranteed merge conflict and hard-fails the cycle.
-   - **`creates:` is OPTIONAL — omit unless needed.** If set, every entry MUST also appear in this WI's own `files_in_scope` and lists ONLY files THIS WI creates from scratch. The validator hard-fails on `creates entry <path> must appear in files_in_scope`.
+2. Read the initiative manifest, the worktree's README, and source layout.
+3. **Decompose the initiative body's GWT ACs directly into atomic outcome-sized work items.** The body is your single source of intent — no `features[]` list. **The initiative TITLE is a filing label, NOT the spec — if title and body disagree, the body wins** (a past cycle hallucinated off a "release-folder" title and built unrelated release-NOTES markdown). **Before drafting any WI, restate the target in one line** — the concrete resource/file/module the body asks for and where it lives in this project's source tree. Put that line in the first WI body. Every WI's `files_in_scope` must sit under that source tree. Each GWT block in the body MUST be exercised by ≥1 WI's `quality_gate_cmd`. Do not invent work outside the body's ACs. For each WI:
+   - At least one **GWT** acceptance criterion: `given`/`when`/`then` strings. **Always double-quote values** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators; unquoted strings starting with these fail to parse.
+   - Declares `depends_on` and `files_in_scope` (worktree-relative, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files**. **Exception — hotspot files** (listed in ≥2 WIs with no `depends_on` edge): a shared file with no ordering edge is a guaranteed merge conflict, hard-failed by `detectHiddenCoupling()` at PM close.
+   - **`creates:` is OPTIONAL — omit unless needed.** If set, every entry MUST also appear in this WI's own `files_in_scope` and list ONLY files THIS WI creates from scratch. The validator hard-fails on `creates entry <path> must appear in files_in_scope`.
    - **`quality_gate_cmd` MUST fail on a clean tree before the agent does any work** (post-2026-05-24 audit). The orchestrator runs the gate at iter 0; if it passes, the WI is HARD-FAILED with `gate-too-loose: passed before agent invocation`. Sharp gates: `['node', '--test', '--experimental-strip-types', 'tests/<NEW-FILE>.test.ts']` where `<NEW-FILE>.test.ts` doesn't exist yet. **NEVER wrap in a shell pipeline or chain: no `bash -c "… | grep/awk/jq/…"`, no `… && …`, no `… ; …`. The orchestrator HARD-REJECTS shell-wrapped pipeline/chain gates** (inspects `bash -c`/`sh -c` for `|`, `&&`, `;`): a pipe surfaces the wrong exit code, and `grep '--- PASS:…'` starts with `-` (parsed as grep options), always erroring — this exact bug cost a whole release_folder cycle. Scope with the runner's own `-run`/path flags, never a post-filter.
 
    **Sharp-gate patterns (mirror these):**
@@ -151,12 +151,10 @@ graph TD
    - Estimates `estimated_iterations` (calibrate from `brain/cycles/themes/work-item-completion-by-domain.md`).
    - `non_goals`, `verification_artifact`, `creates` are **optional** — omit if undefined.
    - **`demo_hook` is NOT a WI field** — initiative-level only.
-4. **Prefer independence.** Emit WIs with empty `depends_on` where possible. The dev-loop parallelises every DAG level. Serialise only for true prerequisites.
-5. **File-scope discipline.** If two WIs edit the same file: (a) split the file by concern, (b) merge WIs, or (c) add a `depends_on` edge. Two WIs sharing a file with no edge is a guaranteed merge conflict; `detectHiddenCoupling()` REJECTS the cycle (the 2026-05-23 betterado dogfood failed exactly this way: WI-1 + WI-5 shared a schema file with no edge → cycle failed at PM phase, $1.54 wasted).
+4. **Prefer independence.** Emit WIs with empty `depends_on` where possible — the dev-loop parallelises every DAG level. Serialise only for true prerequisites.
+5. **File-scope discipline.** If two WIs edit the same file: (a) split the file by concern, (b) merge WIs, or (c) add a `depends_on` edge. Two WIs sharing a file with no edge is a guaranteed merge conflict; `detectHiddenCoupling()` REJECTS the cycle (the 2026-05-23 betterado dogfood failed this way: WI-1 + WI-5 shared a schema file with no edge → cycle failed at PM phase, $1.54 wasted).
 6. Write the dependency graph as `_graph.md` (mermaid `graph TD`; edges must agree exactly with the union of all `depends_on` lists).
-7. **Self-check — MANDATORY before writing files.**
-
-   Walk this checklist:
+7. **Self-check — MANDATORY before writing files.** Walk this checklist:
 
    **Per work item — frontmatter completeness:**
    - `work_item_id` (matches `WI-<n>` and filename), `initiative_id`, `status: pending`
@@ -174,9 +172,9 @@ graph TD
 
 ## Constraints
 
-- **Self-sufficient specs.** A WI must contain everything the developer loop needs. The dev-loop never asks the PM for clarification.
+- **Self-sufficient specs.** A WI must contain everything the developer loop needs; the dev-loop never asks the PM for clarification.
 - **Atomic scope.** If a WI spec runs over a page, decompose further.
-- **One-WI-per-AC sizing rule (gate-overlap anti-pattern).** If WI-B's `quality_gate_cmd` filter is a superset of WI-A's AND they share a `files_in_scope` entry, WI-A's work will satisfy WI-B's gate before WI-B runs → runner classifies WI-B as `gate-too-loose` and skips its dependents. **Merge them into one WI.** This destroyed WI-3 in the INIT-2 release_folder cycle: WI-1 wrote the whole resource, WI-2's gate was already green at iter 0 → `gate-too-loose` → WI-3 skipped entirely, yet a PR was opened. Fix: one WI covering implementation + tests + docs, gated by a single sharp command.
+- **One-WI-per-AC sizing rule (gate-overlap anti-pattern).** If WI-B's `quality_gate_cmd` filter is a superset of WI-A's AND they share a `files_in_scope` entry, WI-A's work satisfies WI-B's gate before WI-B runs → runner classifies WI-B as `gate-too-loose` and skips its dependents. **Merge them into one WI.** This destroyed WI-3 in the INIT-2 release_folder cycle: WI-1 wrote the whole resource, WI-2's gate was green at iter 0 → `gate-too-loose` → WI-3 skipped entirely, yet a PR was opened. Fix: one WI covering implementation + tests + docs, gated by a single sharp command.
 - **Explicit dependencies.** Every `depends_on` edge must be a real prerequisite.
 - **No code in specs.** ACs define done; the dev-loop writes the code.
 - **Don't update the manifest frontmatter or status.** That's the orchestrator's job.
