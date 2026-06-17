@@ -1,0 +1,46 @@
+{
+  "initiativeId": "INIT-2026-06-16-task-group-acceptance-and-data-source",
+  "cycleId": "2026-06-16T10-06-57_INIT-2026-06-16-task-group-acceptance-and-data-source",
+  "project": "terraform-provider-betterado",
+  "tier": "routine",
+  "baseSha": null,
+  "finalStatus": null,
+  "totalEvents": 517,
+  "costUsd": 7.8027,
+  "costCeilingUsd": 60,
+  "workItems": {
+    "total": 4,
+    "complete": 4,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "manifest in _queue/done/ (merged; bridge status unread post-merge)"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "4/4 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "go test -tags all… passed"
+    },
+    {
+      "name": "cost under ceiling ($60)",
+      "pass": true,
+      "detail": "$7.80 / $60"
+    },
+    {
+      "name": "live demo evidence present (REST GET)",
+      "pass": false,
+      "detail": "demo.json has no checkpoint with liveEvidence.url"
+    }
+  ],
+  "gate": "fail",
+  "framesCaptured": 3,
+  "completedAt": "2026-06-16T10:38:34.504Z"
+}
