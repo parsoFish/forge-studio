@@ -472,9 +472,13 @@ export function FlowBuilderCanvas({
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      // Add the edge immediately (no artifact yet)
+      // Add the edge immediately (no artifact yet). Force the id to the same
+      // `${source}__${target}` scheme flowEdgesToRF uses on load, so
+      // handleArtifactPick (which looks the edge up by that id) actually lands —
+      // ReactFlow's auto-generated id would not match (B1).
       setRfEdges((eds) => addEdge({
         ...connection,
+        id: `${connection.source ?? ''}__${connection.target ?? ''}`,
         sourceHandle: 'out',
         targetHandle: 'in',
         type: 'smoothstep',

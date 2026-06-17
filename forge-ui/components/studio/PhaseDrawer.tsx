@@ -13,13 +13,16 @@ import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 //   Disabled Resume/Start buttons (M3 placeholder)
 // ---------------------------------------------------------------------------
 
-const ARTIFACT_FILENAME: Partial<Record<string, string>> = {
-  plan:         'PLAN.html',
-  'work-items': '_graph.md',
-  pr:           'pr-description.md',
-  demo:         'DEMO.html',
-  verdict:      '', // no direct link
-  reflection:   '', // no direct link
+// Map a run-model artifact key → the /artifact page's `type` param. The only
+// shape difference is the work-items hyphenation. (M2: chips route to the
+// in-UI artifact viewer, never the raw file route which 404s for the operator.)
+const ARTIFACT_PAGE_TYPE: Record<string, string> = {
+  plan: 'plan',
+  'work-items': 'workitems',
+  pr: 'pr',
+  demo: 'demo',
+  verdict: 'verdict',
+  reflection: 'reflection',
 };
 
 interface PhaseDrawerProps {
@@ -643,14 +646,13 @@ function ArtifactChip({
   cycleId: string;
 }) {
   const isGate = mode === 'gate';
-  const filename = ARTIFACT_FILENAME[type] ?? '';
+  const pageType = ARTIFACT_PAGE_TYPE[type] ?? type;
 
-  // gate chips link to the unified artifact review gate; view chips link to the artifact file
+  // Both gate + view chips open the in-UI artifact viewer (a gate chip lands on
+  // the verdict gate; a view chip renders the artifact). Never the raw file route.
   const href = isGate
     ? `/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`
-    : filename
-    ? `/api/artifact/${encodeURIComponent(cycleId)}/${filename}`
-    : null;
+    : `/artifact?run=${encodeURIComponent(cycleId)}&type=${pageType}&mode=view`;
 
   const sharedStyle: React.CSSProperties = {
     display: 'inline-flex',
