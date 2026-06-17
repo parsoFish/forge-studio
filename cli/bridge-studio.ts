@@ -142,7 +142,35 @@ export function readJson(req: IncomingMessage): Promise<unknown> {
 
 type LogLineKind = 'info' | 'tool' | 'cost' | 'stderr' | 'retry' | 'reasoning';
 
-type LogLine = { at: string; kind: LogLineKind; text: string };
+type LogLine = { at: string; kind: LogLineKind; text: string; detail?: string };
+
+/**
+ * The expandable detail behind a one-line log entry (M3): the agent's actual
+ * reasoning text, a tool's inputs, an error reason, and any remaining metadata —
+ * so the operator can dig into what an agent actually did, not just a summary.
+ */
+function eventDetail(e: EventLogEntry): string | undefined {
+  const m = (e.metadata ?? {}) as Record<string, unknown>;
+  const lines: string[] = [];
+  // Reasoning / free text: the agent's thinking stream.
+  for (const key of ['text', 'reasoning', 'message'] as const) {
+    const v = m[key];
+    if (typeof v === 'string' && v.trim() && v.trim() !== e.message) { lines.push(v.trim()); break; }
+  }
+  if (e.event_type === 'tool_use') {
+    if (typeof m.tool_name === 'string') lines.push(`tool: ${m.tool_name}`);
+    if (m.input_summary !== undefined) {
+      lines.push(`input: ${typeof m.input_summary === 'string' ? m.input_summary : JSON.stringify(m.input_summary)}`);
+    }
+  }
+  if (typeof m.reason === 'string') lines.push(`reason: ${m.reason}`);
+  if (typeof m.runner_error === 'string' && m.runner_error) lines.push(`error: ${m.runner_error}`);
+  // Any remaining metadata, compactly, for full transparency.
+  const shown = new Set(['text', 'reasoning', 'message', 'tool_name', 'input_summary', 'reason', 'runner_error', 'kind', 'work_item_id']);
+  const rest = Object.fromEntries(Object.entries(m).filter(([k]) => !shown.has(k)));
+  if (Object.keys(rest).length > 0) lines.push(JSON.stringify(rest));
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
 
 /**
  * Classify a single EventLogEntry into a log line for the phase log route.
@@ -192,7 +220,7 @@ function classifyEvent(e: EventLogEntry): LogLine {
     parts.push(e.event_type);
   }
 
-  return { at: e.started_at, kind, text: parts.join(' ') };
+  return { at: e.started_at, kind, text: parts.join(' '), detail: eventDetail(e) };
 }
 
 // ---------------------------------------------------------------------------

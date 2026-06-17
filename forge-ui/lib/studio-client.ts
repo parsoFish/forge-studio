@@ -196,6 +196,8 @@ export type PhaseLogLine = {
   at: string;
   kind: 'info' | 'tool' | 'cost' | 'stderr' | 'retry' | 'reasoning';
   text: string;
+  /** Expandable detail (M3): reasoning text, tool inputs, error reason, raw metadata. */
+  detail?: string;
 };
 
 // ---------------------------------------------------------------------------

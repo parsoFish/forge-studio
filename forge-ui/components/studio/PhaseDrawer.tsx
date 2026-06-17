@@ -733,11 +733,20 @@ function LogRow({ line }: { line: PhaseLogLine }) {
 
   const ts = new Date(line.at).toTimeString().slice(0, 8);
   const isReasoning = line.kind === 'reasoning';
+  // M3: rows with detail (reasoning text, tool inputs, raw metadata) expand so
+  // the operator can dig into what the agent actually did.
+  const [open, setOpen] = useState(false);
+  const hasDetail = Boolean(line.detail && line.detail.trim());
 
   return (
-    <div style={{ display: 'flex', gap: 10, minHeight: '1.65em' }} data-log-kind={line.kind}>
+    <div data-log-kind={line.kind} {...(hasDetail ? { 'data-has-detail': 'true' } : {})}>
+    <div
+      style={{ display: 'flex', gap: 10, minHeight: '1.65em', cursor: hasDetail ? 'pointer' : 'default' }}
+      onClick={hasDetail ? () => setOpen((o) => !o) : undefined}
+      data-action={hasDetail ? 'toggle-log-detail' : undefined}
+    >
       <span style={{ color: 'var(--faint)', flexShrink: 0, minWidth: 60 }}>
-        {ts}
+        {hasDetail ? (open ? '▾ ' : '▸ ') : ''}{ts}
       </span>
       <span
         style={{
@@ -786,6 +795,19 @@ function LogRow({ line }: { line: PhaseLogLine }) {
           </span>
         )}
       </span>
+    </div>
+    {hasDetail && open && (
+      <pre
+        data-log-detail=""
+        style={{
+          margin: '2px 0 6px 70px', padding: '8px 10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 5,
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--dim)', maxHeight: 320, overflow: 'auto',
+        }}
+      >
+        {line.detail}
+      </pre>
+    )}
     </div>
   );
 }
