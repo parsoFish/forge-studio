@@ -22,9 +22,14 @@ type Props = {
   onClose: () => void;
   /** Called when "Remove from flow" is clicked */
   onRemove: (nodeId: string) => void;
+  /** B4: current node modifiers + setters (mark as gate / fan-out). */
+  gate?: string;
+  fanOut?: string;
+  onSetGate: (nodeId: string, gate: string | undefined) => void;
+  onSetFanOut: (nodeId: string, fanOut: string | undefined) => void;
 };
 
-export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemove }: Props): JSX.Element {
+export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemove, gate, fanOut, onSetGate, onSetFanOut }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
   // Close on outside click or Escape
@@ -113,6 +118,28 @@ export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemo
             {agent.purpose}
           </p>
         )}
+
+        {/* B4: node modifiers — set on the canvas, round-trip through save. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--line)' }}>
+          <label data-modifier="gate" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--dim)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              data-action="toggle-gate"
+              checked={Boolean(gate)}
+              onChange={(e) => onSetGate(nodeId, e.target.checked ? 'verdict' : undefined)}
+            />
+            Human gate (verdict)
+          </label>
+          <label data-modifier="fanout" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--dim)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              data-action="toggle-fanout"
+              checked={Boolean(fanOut)}
+              onChange={(e) => onSetFanOut(nodeId, e.target.checked ? 'work-items' : undefined)}
+            />
+            Fan out (one run per work item)
+          </label>
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {/* Open in Agent Builder */}

@@ -549,6 +549,13 @@ export function FlowBuilderCanvas({
     setMiniPanel(null);
   }, []);
 
+  // B4: set node modifiers (gate / fanOut) — round-trips via rfNodesToFlow on save.
+  const setNodeData = useCallback((nodeId: string, patch: Partial<FlowNodeData>) => {
+    setRfNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)));
+  }, []);
+  const handleSetGate = useCallback((nodeId: string, gate: string | undefined) => setNodeData(nodeId, { gate }), [setNodeData]);
+  const handleSetFanOut = useCallback((nodeId: string, fanOut: string | undefined) => setNodeData(nodeId, { fanOut }), [setNodeData]);
+
   // ---------------------------------------------------------------------------
   // Drag-to-create node from palette
   // ---------------------------------------------------------------------------
@@ -767,8 +774,12 @@ export function FlowBuilderCanvas({
           agent={miniPanelAgent}
           anchorX={miniPanel.x}
           anchorY={miniPanel.y}
+          gate={rfNodes.find((n) => n.id === miniPanel.nodeId)?.data.gate}
+          fanOut={rfNodes.find((n) => n.id === miniPanel.nodeId)?.data.fanOut}
           onClose={() => setMiniPanel(null)}
           onRemove={handleRemoveNode}
+          onSetGate={handleSetGate}
+          onSetFanOut={handleSetFanOut}
         />
       )}
     </div>
