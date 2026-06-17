@@ -11,14 +11,14 @@ export function Instructions({ value, onChange }: { value: string; onChange: (v:
         Standing Instructions <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
       </div>
       <div className="panel">
-        <div className="panel-head"><span>Constraints injected into every agent working this project</span></div>
+        <div className="panel-head"><span>How agents should work this project — injected into every agent</span></div>
         <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <textarea
             className="input instructions-textarea"
             style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, minHeight: 80, resize: 'vertical' }}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="TypeScript strict. Live calls behind env guard. Conventional commits…"
+            placeholder="Write positive directives — what TO do. e.g. 'Use targeted package builds. Run tests with -tags all. Keep commits conventional.'"
           />
           <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 6 }}>What agents will actually see</div>
