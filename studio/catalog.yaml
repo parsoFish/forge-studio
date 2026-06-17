@@ -11,7 +11,15 @@ tools:
   - { id: git, name: git, desc: "Worktrees, branches, commits." }
   - { id: node, name: Node.js, desc: Build + test runner. }
   - { id: gh, name: gh CLI, desc: "GitHub PRs, reviews, merges, checks." }
-mcps: []
+# Curated OOTB MCP servers an agent can be given (drag from the agent-builder
+# library). Reference metadata only — operators wire real servers in their env.
+mcps:
+  - { id: filesystem, name: Filesystem, desc: "Scoped read/write access to a directory tree." }
+  - { id: github, name: GitHub, desc: "Issues, PRs, code search + review over the GitHub API." }
+  - { id: playwright, name: Playwright, desc: "Drive a real browser — navigate, click, screenshot, assert." }
+  - { id: fetch, name: Fetch, desc: "Fetch + extract content from a URL as clean markdown." }
+  - { id: memory, name: Memory, desc: "A persistent knowledge graph the agent can read + write across turns." }
+  - { id: sqlite, name: SQLite, desc: "Query + mutate a local SQLite database." }
 hooks:
   - { id: event-log, name: JSONL event log, desc: Structured events on every invocation. }
   - { id: cost-guard, name: Cost guard, desc: Per-cycle USD budget enforcement. }

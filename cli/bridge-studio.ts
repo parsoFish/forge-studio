@@ -542,7 +542,10 @@ export async function handleStudioRoutes(
         ...sdk,
         available: isSdkAvailable(sdk.id),
       }));
-      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks } }, origin);
+      // A1: surface the curated community skills as the agent-builder Skills
+      // library (the palette reads catalog.skills) so skills are draggable too.
+      const skills = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

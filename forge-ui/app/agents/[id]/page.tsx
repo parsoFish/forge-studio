@@ -500,7 +500,6 @@ export default function AgentBuilderPage() {
                 <ReadOnlyFields
                   phase={state.phase}
                   allowedTools={state.allowedTools}
-                  disallowedTools={state.disallowedTools}
                 />
               </div>
             </details>
@@ -674,13 +673,13 @@ function ZoneWrap({ kind, children }: { kind: string; children: React.ReactNode 
 function ReadOnlyFields({
   phase,
   allowedTools,
-  disallowedTools,
 }: {
   phase: string;
   allowedTools: string[];
-  disallowedTools: string[];
+  // A4: disallowed-tools are no longer surfaced — anything not allowed is
+  // implicitly disallowed, so a separate list only added confusion.
 }) {
-  if (!phase && allowedTools.length === 0 && disallowedTools.length === 0) return null;
+  if (!phase && allowedTools.length === 0) return null;
   return (
     <div className="field-group" style={{ opacity: 0.6 }}>
       <div className="field-label" style={{ marginBottom: 8 }}>
@@ -696,17 +695,9 @@ function ReadOnlyFields({
       )}
       {allowedTools.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          <span className="field-label" style={{ fontSize: 10 }}>Allowed Tools</span>
+          <span className="field-label" style={{ fontSize: 10 }}>Tool permissions (Claude Code tools this agent may call)</span>
           <div className="readonly-field">
             {allowedTools.map((t) => <span key={t} className="readonly-token">{t}</span>)}
-          </div>
-        </div>
-      )}
-      {disallowedTools.length > 0 && (
-        <div>
-          <span className="field-label" style={{ fontSize: 10 }}>Disallowed Tools</span>
-          <div className="readonly-field">
-            {disallowedTools.map((t) => <span key={t} className="readonly-token">{t}</span>)}
           </div>
         </div>
       )}
