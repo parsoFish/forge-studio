@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **032**).
+number (next free: **035**).
 
 ## Active
 
@@ -37,6 +37,9 @@ number (next free: **032**).
 | [029](./029-runtime-adapters.md) | **Runtime adapter seam (multi-SDK)** | New (2026-06-13) |
 | [030](./030-canvas-tech.md) | Flow-canvas library choice | New (2026-06-13) |
 | [031](./031-studio-consolidation.md) | **Studio is the one product (rip-out + productionise)** | New (2026-06-14) |
+| [032](./032-subsumption-proof.md) | Subsumption proof | New (2026-06-14) |
+| [033](./033-studio-first-flow-ux.md) | **Studio first-flow UX (install → first flow)** | New (2026-06-16) |
+| [034](./034-studio-aligned-contract.md) | **Studio-aligned project contract (unified readiness + artifactRoot)** | New (2026-06-17) |
 
 ## Retired (files deleted 2026-06-13; numbers stay reserved)
 

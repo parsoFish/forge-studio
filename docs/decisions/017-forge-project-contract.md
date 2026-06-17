@@ -3,6 +3,12 @@
 **Status:** Accepted
 **Date:** 2026-05-17
 
+> **Amended by [ADR-034](./034-studio-aligned-contract.md) (2026-06-17)** — Studio-aligned
+> unification: the contract gains a Face A (five Studio object fields: `northStar`,
+> `instructions`, `demoProcess`, `skills`, `kb`), `artifactRoot` as a first-class element,
+> the development-history convention, and a unified readiness convergence point
+> (`data-flow-ready`). ADR-017 remains the authority for the C1–C6 derivation.
+
 > **Amended 2026-05-31.** Two changes recorded after the betterado run, both in
 > [`docs/forge-project-contract.md`](../forge-project-contract.md): (a) a
 > conditional **C7 — external-resource model** clause (two-layer verification:
