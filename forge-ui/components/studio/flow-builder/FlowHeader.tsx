@@ -14,11 +14,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  fetchStudioProjects,
-  fetchStudioKbs,
-} from '@/lib/studio-client';
-import type { Flow, Project, Kb, FlowTrigger } from '@/lib/studio-client';
+import { fetchStudioKbs } from '@/lib/studio-client';
+import type { Flow, Kb, FlowTrigger } from '@/lib/studio-client';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 
@@ -59,15 +56,14 @@ export function FlowHeader({
   onFlowSelect,
   isNew = false,
 }: Props): JSX.Element {
-  const [projects, setProjects] = useState<Project[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
 
-  // Load projects + KBs
+  // Load KBs (the flow's optional knowledge base). Projects bind at run-launch (B2).
   useEffect(() => {
     const signal = { cancelled: false };
     void (async () => {
-      const [projs, ks] = await Promise.all([fetchStudioProjects(), fetchStudioKbs()]);
-      if (!signal.cancelled) { setProjects(projs); setKbs(ks); }
+      const ks = await fetchStudioKbs();
+      if (!signal.cancelled) setKbs(ks);
     })();
     return () => { signal.cancelled = true; };
   }, []);
@@ -77,18 +73,13 @@ export function FlowHeader({
   // Unified save feedback (X1) — the hook maps a 423/in-flight error to `locked`.
   const { saving, save: handleSave, ...saveFb } = useSaveState(onSave);
 
-  const addTrigger = useCallback(() => {
-    const otherFlows = flows.filter((f) => f.id !== flowId);
-    if (otherFlows.length === 0) return;
-    // Pick first flow not already in triggers
-    const existing = new Set(state.triggers.map((t) => t.flow));
-    const target = otherFlows.find((f) => !existing.has(f.id));
-    if (!target) return;
-    onChange({
-      ...state,
-      triggers: [...state.triggers, { on: 'complete', flow: target.id }],
-    });
-  }, [flows, flowId, state, onChange]);
+  // B3: the operator chooses the target flow (no longer auto-pick the first).
+  const [triggerTarget, setTriggerTarget] = useState('');
+  const addTrigger = useCallback((targetId: string) => {
+    if (!targetId || targetId === flowId) return;
+    if (state.triggers.some((t) => t.flow === targetId)) return;
+    onChange({ ...state, triggers: [...state.triggers, { on: 'complete', flow: targetId }] });
+  }, [flowId, state, onChange]);
 
   const removeTrigger = useCallback((i: number) => {
     onChange({
@@ -266,20 +257,8 @@ export function FlowHeader({
           Advanced — project, knowledge base &amp; triggers
         </summary>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', paddingTop: 12 }}>
-        {/* Project */}
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)' }}>Project</span>
-        <select
-          value={state.project}
-          onChange={(e) => onChange({ ...state, project: e.target.value })}
-          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12.5, padding: '4px 8px', outline: 'none', cursor: 'pointer' }}
-          data-field="project-select"
-        >
-          <option value="">— none —</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-
+        {/* B2: a flow is generic — it binds to a project at run-launch (from the
+            project tab's "Run a flow"), not here. The project picker was removed. */}
         {/* KB */}
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)', marginLeft: 8 }}>Knowledge Base</span>
         <select
@@ -327,25 +306,35 @@ export function FlowHeader({
             </span>
           ))}
 
+          {/* B3: choose WHICH flow to trigger (no longer hardcoded to the first). */}
+          <select
+            value={triggerTarget}
+            onChange={(e) => setTriggerTarget(e.target.value)}
+            data-field="trigger-target"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="">trigger a flow…</option>
+            {flows.filter((f) => f.id !== flowId && !state.triggers.some((t) => t.flow === f.id)).map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
           <button
-            onClick={addTrigger}
+            onClick={() => { addTrigger(triggerTarget); setTriggerTarget(''); }}
+            disabled={!triggerTarget}
             style={{
               background: 'transparent',
               border: '1px solid transparent',
-              color: 'var(--dim)',
+              color: triggerTarget ? 'var(--dim)' : 'var(--faint)',
               fontFamily: 'var(--font-display)',
               fontSize: 12,
               fontWeight: 600,
               padding: '3px 10px',
               borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              transition: 'color 0.12s, background 0.12s',
+              cursor: triggerTarget ? 'pointer' : 'not-allowed',
             }}
-            onMouseEnter={(e) => { const el = e.currentTarget as HTMLButtonElement; el.style.color = 'var(--text)'; el.style.background = 'var(--panel-2)'; }}
-            onMouseLeave={(e) => { const el = e.currentTarget as HTMLButtonElement; el.style.color = 'var(--dim)'; el.style.background = 'transparent'; }}
             data-action="add-trigger"
           >
-            + trigger
+            + add
           </button>
         </div>
         </div>

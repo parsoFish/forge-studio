@@ -119,7 +119,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     router.push(`/projects/${encodeURIComponent(newId)}`);
   }
 
-  const usedByFlows = flows.filter((f) => f.project === id);
   const skillItems = (catalog.skills ?? []) as Array<{ id: string; name: string; desc?: string }>;
 
   // New-project onboarding: a minimal required-only form (UX spec §6).
@@ -221,7 +220,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             preflight={preflight}
           />
 
-          <UsedByFlows flows={usedByFlows} />
+          <UsedByFlows flows={flows} projectId={id} />
         </aside>
       </div>
     </main>

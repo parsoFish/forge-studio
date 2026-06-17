@@ -20,6 +20,13 @@ export default function ArchitectNewPage(): JSX.Element {
   const router = useRouter();
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  // P4: a project can pre-scope this entry (?project=<id>) when the operator
+  // clicks "Give this project work" from the project tab.
+  const [initialProject, setInitialProject] = useState('');
+
+  useEffect(() => {
+    setInitialProject(new URLSearchParams(window.location.search).get('project') ?? '');
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +58,8 @@ export default function ArchitectNewPage(): JSX.Element {
       </p>
       <div style={{ maxWidth: 560 }}>
         <NewIdeaBox
+          key={initialProject}
+          initialProject={initialProject}
           knownProjects={knownProjects}
           onStarted={(sessionId) =>
             router.push(`/architect/${encodeURIComponent(sessionId)}/interview`)

@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchStudioAgents, fetchStudioProjects } from '@/lib/studio-client';
-import type { Agent, Project } from '@/lib/studio-client';
+import { fetchStudioAgents } from '@/lib/studio-client';
+import type { Agent } from '@/lib/studio-client';
 import { ARTIFACTS } from './ArtifactPicker';
 
 // Encode drag payload as JSON string in data-transfer
@@ -129,17 +129,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function AgentPalette(): JSX.Element {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
 
+  // B2: projects are NOT part of the build tab — a flow binds to a project at
+  // run-launch (from the project tab's "Run a flow"), not on the canvas.
   const load = useCallback(async (signal: { cancelled: boolean }) => {
-    const [ags, projs] = await Promise.all([
-      fetchStudioAgents(),
-      fetchStudioProjects(),
-    ]);
-    if (!signal.cancelled) {
-      setAgents(ags);
-      setProjects(projs);
-    }
+    const ags = await fetchStudioAgents();
+    if (!signal.cancelled) setAgents(ags);
   }, []);
 
   useEffect(() => {
@@ -191,23 +186,6 @@ export function AgentPalette(): JSX.Element {
               ref_={ag.id}
               label={ag.name}
               sublabel={ag.purpose}
-            />
-          ))
-        )}
-      </Section>
-
-      {/* Projects section */}
-      <Section title="Projects">
-        {projects.length === 0 ? (
-          <span style={{ fontSize: 11, color: 'var(--faint)', fontStyle: 'italic' }}>Loading…</span>
-        ) : (
-          projects.map((pj) => (
-            <DraggableChip
-              key={pj.id}
-              kind="project"
-              ref_={pj.id}
-              label={pj.name}
-              sublabel={pj.northStar}
             />
           ))
         )}

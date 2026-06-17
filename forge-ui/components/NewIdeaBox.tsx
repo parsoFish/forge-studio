@@ -14,11 +14,13 @@ import { startArchitect } from '@/lib/bridge-client';
 export function NewIdeaBox({
   knownProjects = [],
   onStarted,
+  initialProject = '',
 }: {
   knownProjects?: string[];
   onStarted?: (sessionId: string) => void;
+  initialProject?: string;
 }) {
-  const [project, setProject] = useState('');
+  const [project, setProject] = useState(initialProject);
   const [idea, setIdea] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
