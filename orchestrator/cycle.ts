@@ -19,7 +19,7 @@ import type { EventLogger } from './logging.ts';
 import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { readManifestOrigin, readManifestCycleId, persistManifestCycleId, parseManifest } from './manifest.ts';
+import { readManifestOrigin, readManifestCycleId, readManifestFlowId, persistManifestCycleId, parseManifest } from './manifest.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
 // phase runners import them from there, never from this module — keeps the
@@ -64,7 +64,7 @@ export {
 } from './cycle-helpers.ts';
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
-import { runFlow, forgeCycleFlowPath } from './flow-runner.ts';
+import { runFlow, forgeCycleFlowPath, flowPathForId } from './flow-runner.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
@@ -200,10 +200,31 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   try {
     if (!input.dryRun) {
       // ADR-028 M3-2: delegate the phase sequence to flow-runner.
-      // Load the forge-cycle flow definition and run the DAG walk.
-      // The outer scaffolding (cycleId, logger, cycle.start/end, failure
-      // classification, snapshot, report) stays here in runCycle.
-      const flow = loadFlowDefinition(forgeCycleFlowPath());
+      // Route to the flow the initiative manifest names (`flow_id`); default to
+      // forge-cycle. A named-but-missing flow file falls back to forge-cycle with
+      // a logged warning so a bad id can't strand a cycle. The outer scaffolding
+      // (cycleId, logger, cycle.start/end, failure classification, snapshot,
+      // report) stays here in runCycle.
+      const flowId = readManifestFlowId(input.manifestPath);
+      let flowPath = forgeCycleFlowPath();
+      if (flowId && flowId !== 'forge-cycle') {
+        const candidate = flowPathForId(flowId);
+        if (existsSync(candidate)) {
+          flowPath = candidate;
+        } else {
+          logger.emit({
+            initiative_id: input.initiativeId,
+            phase: 'orchestrator',
+            skill: 'cycle',
+            event_type: 'log',
+            input_refs: [input.manifestPath],
+            output_refs: [],
+            message: 'cycle.flow-id-missing-fallback',
+            metadata: { flow_id: flowId, fallback: 'forge-cycle' },
+          });
+        }
+      }
+      const flow = loadFlowDefinition(flowPath);
       const flowResult = await runFlow({ flow, input: inputWithGate, logger });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;

@@ -17,6 +17,7 @@ import {
   writeManifest,
   readManifestOrigin,
   readManifestCycleId,
+  readManifestFlowId,
   persistManifestCycleId,
   persistManifestResumeFromUnifier,
   type InitiativeManifest,
@@ -256,6 +257,23 @@ test('readManifestOrigin: reads the tag from a file, defaults on missing/unparse
     assert.equal(readManifestOrigin(hd), 'human-directed');
     // Missing file → default (telemetry must never throw).
     assert.equal(readManifestOrigin(join(dir, 'nope.md')), 'architect');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readManifestFlowId: reads flow_id from a file, null on missing/absent/unparseable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-flowid-'));
+  try {
+    const withFlow = join(dir, 'rr.md');
+    writeFileSync(withFlow, serializeManifest({ ...fixture(), flow_id: 'release-refine' }));
+    assert.equal(readManifestFlowId(withFlow), 'release-refine');
+    // Absent flow_id → null (caller defaults to forge-cycle).
+    const noFlow = join(dir, 'plain.md');
+    writeFileSync(noFlow, serializeManifest(fixture()));
+    assert.equal(readManifestFlowId(noFlow), null);
+    // Missing file → null (never throws).
+    assert.equal(readManifestFlowId(join(dir, 'nope.md')), null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

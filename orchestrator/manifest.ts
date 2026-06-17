@@ -350,6 +350,20 @@ export function readManifestCycleId(manifestPath: string): string | null {
 }
 
 /**
+ * ADR 028 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
+ * the cycle should run. Returns `null` when absent/unparseable so the caller
+ * defaults to `forge-cycle`. Never throws — flow selection must not break a cycle.
+ */
+export function readManifestFlowId(manifestPath: string): string | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return m.flow_id && m.flow_id.length > 0 ? m.flow_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * ADR 026: persist `cycle_id` onto the manifest's frontmatter the first time an
  * initiative is claimed, so every later re-entry reuses the same `_logs` dir.
  * Idempotent + best-effort: if the manifest already carries a `cycle_id` (or is
