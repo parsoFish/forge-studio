@@ -16,6 +16,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
+import { SaveStatus } from '@/components/SaveStatus';
+import { useSaveState } from '@/lib/useSaveState';
 import { CatalogPalette } from '@/components/studio/agent-builder/CatalogPalette';
 import { DropZone } from '@/components/studio/agent-builder/DropZone';
 import { RuntimePicker } from '@/components/studio/agent-builder/RuntimePicker';
@@ -173,7 +175,6 @@ export default function AgentBuilderPage() {
   const [starters, setStarters] = useState<Agent[]>([]);
   const [state,   setState]   = useState<AgentState>({ ...EMPTY_STATE });
   const [dirty,   setDirty]   = useState(false);
-  const [saving,  setSaving]  = useState(false);
   const [ready,   setReady]   = useState(false);
   const [toasts,  setToasts]  = useState<Toast[]>([]);
   // For a new agent: the user first picks a starter (or "blank"); only then is
@@ -288,35 +289,27 @@ export default function AgentBuilderPage() {
     router.push(`/agents/${encodeURIComponent(newSlug)}`);
   }
 
-  // ---- save ----
-  async function handleSave() {
-    if (!state.name.trim()) {
-      pushToast('Agent name is required.', 'err');
-      return;
-    }
-    setSaving(true);
-    try {
-      const slug = isNew
-        ? state.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-        : state.slug;
-      const result = await saveAgent(slug, buildPutBody(state));
-      if (!result.ok) {
-        pushToast(result.error ?? 'Save failed.', 'err');
-        if (result.findings && (result.findings as unknown[]).length > 0) {
-          (result.findings as Array<{ message?: string }>).forEach((f) => {
-            if (f.message) pushToast(f.message, 'err');
-          });
-        }
-        return;
+  // ---- save (unified feedback via useSaveState / SaveStatus) ----
+  const { saving, save: handleSave, ...saveFb } = useSaveState(async () => {
+    if (!state.name.trim()) return { ok: false, error: 'Agent name is required.' };
+    const slug = isNew
+      ? state.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      : state.slug;
+    const result = await saveAgent(slug, buildPutBody(state));
+    if (!result.ok) {
+      // Surface detailed validation findings as toasts; the inline SaveStatus
+      // shows the top-level error.
+      if (result.findings && (result.findings as unknown[]).length > 0) {
+        (result.findings as Array<{ message?: string }>).forEach((f) => {
+          if (f.message) pushToast(f.message, 'err');
+        });
       }
-      setDirty(false);
-      pushToast(`Agent "${state.name}" saved.`, 'ok');
-      // if new, redirect to the real slug
-      if (isNew) router.replace(`/agents/${encodeURIComponent(slug)}`);
-    } finally {
-      setSaving(false);
+      return { ok: false, error: result.error ?? 'Save failed.' };
     }
-  }
+    setDirty(false);
+    if (isNew) router.replace(`/agents/${encodeURIComponent(slug)}`);
+    return { ok: true };
+  });
 
   // ---- discard ----
   function handleDiscard() {
@@ -526,6 +519,7 @@ export default function AgentBuilderPage() {
             <button className="btn btn-ghost" id="btn-discard" onClick={handleDiscard}>
               Discard
             </button>
+            <SaveStatus {...saveFb} saving={saving} />
             <span className="spacer" />
             {dirty
               ? <span className="save-hint save-hint-dirty">Unsaved changes</span>

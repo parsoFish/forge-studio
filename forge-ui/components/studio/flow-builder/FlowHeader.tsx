@@ -19,6 +19,8 @@ import {
   fetchStudioKbs,
 } from '@/lib/studio-client';
 import type { Flow, Project, Kb, FlowTrigger } from '@/lib/studio-client';
+import { SaveStatus } from '@/components/SaveStatus';
+import { useSaveState } from '@/lib/useSaveState';
 
 export type FlowHeaderState = {
   name: string;
@@ -59,9 +61,6 @@ export function FlowHeader({
 }: Props): JSX.Element {
   const [projects, setProjects] = useState<Project[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [lockBanner, setLockBanner] = useState<string | null>(null);
 
   // Load projects + KBs
   useEffect(() => {
@@ -75,27 +74,8 @@ export function FlowHeader({
 
   const goalSet = state.goal.trim().length > 0;
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    setSaveMsg(null);
-    setLockBanner(null);
-    try {
-      const result = await onSave();
-      if (!result.ok) {
-        // 423 edit-lock: the error string includes "locked" or "423"
-        if (result.error?.toLowerCase().includes('locked') || result.error?.includes('423') || result.error?.toLowerCase().includes('in flight')) {
-          setLockBanner('Flow locked — a run is in flight; cannot save while running.');
-        } else {
-          setSaveMsg({ ok: false, text: result.error ?? 'Save failed.' });
-        }
-      } else {
-        setSaveMsg({ ok: true, text: `Saved${result.version ? ` (v${result.version})` : ''}.` });
-        setTimeout(() => setSaveMsg(null), 3000);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }, [onSave]);
+  // Unified save feedback (X1) — the hook maps a 423/in-flight error to `locked`.
+  const { saving, save: handleSave, ...saveFb } = useSaveState(onSave);
 
   const addTrigger = useCallback(() => {
     const otherFlows = flows.filter((f) => f.id !== flowId);
@@ -130,29 +110,6 @@ export function FlowHeader({
         flexShrink: 0,
       }}
     >
-      {/* Edit-lock banner */}
-      {lockBanner && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px 12px',
-          marginBottom: 10,
-          background: 'rgba(248,113,113,0.08)',
-          border: '1px solid rgba(248,113,113,0.3)',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: 12,
-          color: 'var(--red)',
-        }}
-        data-banner="edit-lock">
-          <span>⚠ {lockBanner}</span>
-          <button
-            onClick={() => setLockBanner(null)}
-            style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 13 }}
-          >✕</button>
-        </div>
-      )}
-
       {/* Top row: flow selector + name + goal warning + save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
         {/* Flow selector */}
@@ -225,16 +182,8 @@ export function FlowHeader({
           </span>
         )}
 
-        {/* Save status */}
-        {saveMsg && (
-          <span style={{
-            fontSize: 11.5,
-            color: saveMsg.ok ? 'var(--green)' : 'var(--red)',
-            fontFamily: 'var(--font-mono)',
-          }}>
-            {saveMsg.text}
-          </span>
-        )}
+        {/* Save status (unified) */}
+        <SaveStatus saving={saving} {...saveFb} />
 
         {version !== undefined && (
           <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>

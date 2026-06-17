@@ -8,6 +8,8 @@ import {
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
 } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
+import { SaveStatus } from '@/components/SaveStatus';
+import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { Instructions } from '@/components/studio/project-builder/Instructions';
 import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
@@ -30,8 +32,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [demoSteps, setDemoSteps] = useState<DemoStep[]>([]);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   const [northStar, setNorthStar] = useState('');
@@ -81,7 +81,25 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     return () => { signal.cancelled = true; };
   }, [loadData, loadPreflight]);
 
-  const handleSaveRef = useRef<() => Promise<void>>(handleSave);
+  // Unified save feedback (X1). The hook owns saving/saved/error state.
+  const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
+    if (!project) return { ok: false, error: 'project not loaded' };
+    const result = await saveProject(id, {
+      name: name.trim(),
+      northStar: northStar.trim(),
+      instructions: instructions.trim(),
+      demoProcess: demoSteps,
+      skills,
+      kb,
+    });
+    if (result.ok) {
+      setDirty(false);
+      void loadPreflight({ cancelled: false });
+    }
+    return result;
+  });
+
+  const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
 
   useEffect(() => {
@@ -95,31 +113,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  function markDirty() { setDirty(true); setSaveError(null); }
-
-  async function handleSave() {
-    if (saving || !project) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const result = await saveProject(id, {
-        name: name.trim(),
-        northStar: northStar.trim(),
-        instructions: instructions.trim(),
-        demoProcess: demoSteps,
-        skills,
-        kb,
-      });
-      if (result.ok) {
-        setDirty(false);
-        void loadPreflight({ cancelled: false });
-      } else {
-        setSaveError(result.error ?? 'save failed');
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
+  function markDirty() { setDirty(true); }
 
   function handleProjectSelect(newId: string) {
     router.push(`/projects/${encodeURIComponent(newId)}`);
@@ -179,9 +173,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           />
         </div>
 
-        {saveError && <span style={{ fontSize: 12, color: 'var(--red)' }}>{saveError}</span>}
+        <SaveStatus saving={saving} error={saveError} {...saveFb} />
         <button
           className="btn btn-primary"
+          data-action="save-project"
           onClick={() => void handleSave()}
           disabled={saving || !dirty}
         >
