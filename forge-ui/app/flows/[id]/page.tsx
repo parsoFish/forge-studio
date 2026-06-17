@@ -64,6 +64,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // BUILD tab state
   const [buildFlow,   setBuildFlow]   = useState<Flow | null>(null);
   const [allFlows,    setAllFlows]    = useState<Flow[]>([]);
+  // M1: which flow ids currently have runs (for the monitor flow filter).
+  const [flowsWithRuns, setFlowsWithRuns] = useState<Set<string>>(new Set());
   const [agents,      setAgents]      = useState<Agent[]>([]);
   const [buildVersion, setBuildVersion] = useState<number | undefined>(undefined);
   const [headerState, setHeaderState] = useState<FlowHeaderState>({
@@ -80,14 +82,17 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const loadData = useCallback(
     async (signal: { cancelled: boolean }, preserveRunId?: string) => {
       try {
-        const [flows, allRuns] = await Promise.all([
+        const [flows, everyRun] = await Promise.all([
           fetchStudioFlows(),
-          fetchRuns(id),
+          fetchRuns(), // unfiltered — derive this flow's runs + the set of flows that have runs (M1)
         ]);
         if (signal.cancelled) return;
 
         const found = flows.find((f) => f.id === id) ?? null;
         setFlow(found);
+        setAllFlows(flows);
+        setFlowsWithRuns(new Set(everyRun.map((r) => r.flowId)));
+        const allRuns = everyRun.filter((r) => r.flowId === id);
         setRuns(allRuns);
 
         // If preserving a run selection pick by id, else pick the default
@@ -359,9 +364,29 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
-                {flow?.name ?? id}
-              </h2>
+              {/* M1: filter to flows that have runs (current flow always included). */}
+              {(() => {
+                const candidates = allFlows.filter((f) => flowsWithRuns.has(f.id) || f.id === id);
+                if (candidates.length <= 1) {
+                  return (
+                    <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
+                      {flow?.name ?? id}
+                    </h2>
+                  );
+                }
+                return (
+                  <select
+                    data-field="monitor-flow-selector"
+                    value={id}
+                    onChange={(e) => { if (e.target.value !== id) window.location.href = `/flows/${encodeURIComponent(e.target.value)}`; }}
+                    style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', outline: 'none' }}
+                  >
+                    {candidates.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}{flowsWithRuns.has(f.id) ? '' : ' (no runs)'}</option>
+                    ))}
+                  </select>
+                );
+              })()}
               {flow?.goal && (
                 <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>
                   {flow.goal}
@@ -444,6 +469,28 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Gated banner */}
               {runs.some((r) => r.status === 'gated') && (
                 <GatedBanner runs={runs} onSelect={handleSelectRun} />
+              )}
+
+              {/* M6: reflection ready — surface the feedback CTA on the monitor so
+                  the operator isn't left hunting for the reflection screen. */}
+              {activeRun?.artifactsReady?.reflection && (
+                <div
+                  data-banner="reflection-ready"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px',
+                    background: 'rgba(183,140,255,0.08)', borderBottom: '1px solid rgba(183,140,255,0.3)',
+                    fontSize: 12, color: 'var(--violet)', flexShrink: 0,
+                  }}
+                >
+                  <strong>Reflection ready</strong> — review the retro &amp; answer the agent&apos;s questions.
+                  <a
+                    data-action="review-reflection"
+                    href={`/artifact?run=${encodeURIComponent(activeRun.id)}&type=reflection&mode=view`}
+                    style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 12px', background: 'var(--violet)', color: '#fff', borderRadius: 4, textDecoration: 'none' }}
+                  >
+                    Review reflection →
+                  </a>
+                </div>
               )}
 
               {/* Start Run CTA — shown when the flow is known but no runs exist yet */}
