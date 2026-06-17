@@ -26,6 +26,7 @@ import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { runBrainLint } from './brain-lint.ts';
+import { regenerateBrainIndex } from './brain-index.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -552,6 +553,35 @@ export async function handleStudioKbRoutes(
       writeFileSync(filePath, frontmatterLines.join('\n'), 'utf8');
 
       sendJson(res, 200, { ok: true, file: `brain/${kbId}/_guidance/${filename}` }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/kbs/:id/maintenance (K3) — manual brain maintenance --
+  const maintMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/maintenance$/);
+  if (maintMatch && method === 'POST') {
+    try {
+      const kbId = decodeURIComponent(maintMatch[1]);
+      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      const op = (body as Record<string, unknown>)?.['op'];
+
+      if (op === 'lint') {
+        const brainDir = `brain/${kbId}`;
+        const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
+        const scoped = findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
+        sendJson(res, 200, { op: 'lint', findings: scoped, total: findings.length }, origin);
+        return true;
+      }
+      if (op === 'index') {
+        const result = regenerateBrainIndex({ cwd: ctx.forgeRoot });
+        sendJson(res, 200, { op: 'index', ok: true, result }, origin);
+        return true;
+      }
+      sendJson(res, 400, { error: 'op must be one of: lint | index' }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

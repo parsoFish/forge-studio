@@ -431,6 +431,15 @@ export async function saveProject(
   return { ok: r.ok, error: r.error };
 }
 
+/** Run a manual brain-maintenance op on a KB (K3): 'lint' or 'index'. */
+export async function runKbMaintenance(
+  id: string,
+  op: 'lint' | 'index',
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op });
+  return { ok: r.ok, error: r.error, data: r.data };
+}
+
 /** Onboard (create) a new project: registers it + scaffolds .forge/project.json. */
 export async function createProject(
   body: Record<string, unknown>,

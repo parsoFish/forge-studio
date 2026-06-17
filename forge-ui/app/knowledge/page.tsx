@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode } from '@/lib/studio-client';
+import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
@@ -213,6 +213,9 @@ function KnowledgePageInner() {
 
         <div style={{ flexGrow: 1 }} />
 
+        {/* K3: manual brain maintenance */}
+        {currentId && <KbMaintenance kbId={currentId} />}
+
         {/* "maintained by agents" pill */}
         <div
           aria-label="Agent managed knowledge base"
@@ -268,5 +271,46 @@ function KnowledgePageInner() {
         </div>
       </div>
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KbMaintenance (K3) — manual brain lint / index-refresh from the knowledge tab.
+// (Ingest + agentic review run during cycle reflection; these are the
+// deterministic, operator-triggerable ops.)
+// ---------------------------------------------------------------------------
+function KbMaintenance({ kbId }: { kbId: string }) {
+  const [busy, setBusy] = useState<'lint' | 'index' | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run(op: 'lint' | 'index') {
+    setBusy(op);
+    setResult(null);
+    const r = await runKbMaintenance(kbId, op);
+    setBusy(null);
+    if (!r.ok) { setResult(r.error ?? 'failed'); return; }
+    if (op === 'lint') {
+      const findings = (r.data?.findings as unknown[] | undefined) ?? [];
+      setResult(findings.length === 0 ? 'lint: clean ✓' : `lint: ${findings.length} finding(s)`);
+    } else {
+      setResult('index refreshed ✓');
+    }
+    setTimeout(() => setResult(null), 6000);
+  }
+
+  const btn: React.CSSProperties = {
+    fontSize: 11.5, padding: '4px 10px', background: 'var(--panel-2)', color: 'var(--text)',
+    border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
+  };
+  return (
+    <div data-component="kb-maintenance" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <button data-action="kb-lint" style={btn} disabled={busy !== null} onClick={() => void run('lint')}>
+        {busy === 'lint' ? 'Linting…' : 'Lint'}
+      </button>
+      <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
+        {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
+      </button>
+      {result && <span data-component="kb-maintenance-result" style={{ fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>{result}</span>}
+    </div>
   );
 }
