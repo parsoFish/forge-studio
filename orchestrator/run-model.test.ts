@@ -755,6 +755,40 @@ test('ADR 028 / J5: a run carries the flow_id from its manifest (else forge-cycl
   }
 });
 
+test('M5: per-WI delivered stats are distinct (not the cycle aggregate on every WI)', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-perwi';
+    const cycleId = '2026-01-01T03-00-00_INIT-2026-01-01-perwi';
+    const manifestPath = writeManifest(root, 'ready-for-review', initId, { cycle_id: cycleId });
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('project-manager', 'log', 'pm.work-item-emitted', { work_item_id: 'WI-1' }),
+      ev('project-manager', 'log', 'pm.work-item-emitted', { work_item_id: 'WI-2' }),
+      ev('developer-loop', 'start'),
+      ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-1' }),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1', status: 'complete' }),
+      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-1', files_changed: 2, insertions: 30, commits: 1 }),
+      ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-2' }),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-2', status: 'complete' }),
+      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-2', files_changed: 5, insertions: 90, commits: 3 }),
+      // cycle-level aggregate (no work_item_id)
+      ev('developer-loop', 'log', 'dev-loop.delivered', { files_changed: 7, insertions: 120, commits: 4 }),
+      ev('developer-loop', 'end'),
+      ev('review-loop', 'start'),
+    ]);
+    const run = aggregateRun({ root, queueState: 'ready-for-review', manifestPath, nowMs: Date.now() });
+    const wi1 = run.workItems?.find((w) => w.id === 'WI-1');
+    const wi2 = run.workItems?.find((w) => w.id === 'WI-2');
+    assert.deepEqual(wi1?.delivered, { files: 2, insertions: 30, commits: 1 }, 'WI-1 shows its own delta');
+    assert.deepEqual(wi2?.delivered, { files: 5, insertions: 90, commits: 3 }, 'WI-2 shows its own delta');
+    // the dev phase keeps the cycle aggregate (the no-work_item_id event)
+    assert.deepEqual(run.phaseMeta['dev']?.delivered, { files: 7, insertions: 120, commits: 4 });
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named nodes', () => {
   const root = makeTmp();
   try {

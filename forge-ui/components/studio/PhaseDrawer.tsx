@@ -386,8 +386,11 @@ function DrawerBody({
         </DrawerSection>
       )}
 
-      {/* ---- DELIVERED ---- */}
-      {meta?.delivered && (
+      {/* ---- DELIVERED ---- M5: a WI hex shows its OWN delta, not the aggregate */}
+      {(() => {
+        const delivered = isWi ? wiItem?.delivered : meta?.delivered;
+        if (!delivered) return null;
+        return (
         <DrawerSection title="Delivered">
           <div
             style={{
@@ -401,14 +404,15 @@ function DrawerBody({
               marginTop: 4,
             }}
           >
-            <DeliveredStat value={meta.delivered.files} label="files" />
+            <DeliveredStat value={delivered.files} label="files" />
             <div style={{ width: 1, height: 28, background: 'rgba(74,222,128,0.2)' }} />
-            <DeliveredStat value={`+${meta.delivered.insertions}`} label="lines" />
+            <DeliveredStat value={`+${delivered.insertions}`} label="lines" />
             <div style={{ width: 1, height: 28, background: 'rgba(74,222,128,0.2)' }} />
-            <DeliveredStat value={meta.delivered.commits} label="commits" />
+            <DeliveredStat value={delivered.commits} label="commits" />
           </div>
         </DrawerSection>
-      )}
+        );
+      })()}
 
       {/* ---- GATE SUB-CHECKS ---- */}
       {meta?.gateChecks && meta.gateChecks.length > 0 && (

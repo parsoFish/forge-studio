@@ -287,6 +287,9 @@ export async function runDeveloperLoop(
       message: 'ralph.start',
       metadata: { work_item_id: wi.work_item_id },
     });
+    // M5: bracket this WI's net git contribution so we can emit a PER-WI
+    // delivered summary at its end (vs the one cycle-level aggregate).
+    const wiBaseSha = gitHeadSha(input.worktreePath);
 
     if (prerequisiteFailed(wi, wiOutcomes)) {
       writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
@@ -550,6 +553,27 @@ export async function runDeveloperLoop(
       },
     });
 
+    // M5: per-WI delivered — this WI's net git delta (carries work_item_id so the
+    // monitor shows real per-WI stats, not the cycle aggregate on every hex).
+    const wiDelta = gitNetDelta(input.worktreePath, wiBaseSha);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: wiStart.event_id,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'log',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'dev-loop.delivered',
+      metadata: {
+        work_item_id: wi.work_item_id,
+        files_changed: wiDelta.files,
+        insertions: wiDelta.insertions,
+        deletions: wiDelta.deletions,
+        commits: wiDelta.commits,
+      },
+    });
+
     // G8: push the initiative branch to origin after every WI so local ==
     // remote throughout the dev-loop (no divergence → no stacked-PR merge
     // conflict at the review boundary). The agent's per-iteration commit
@@ -768,6 +792,32 @@ export async function runUnifierPhase(
  * even when the branch carries real merged code. Best-effort (git failures →
  * zeros); never throws. Exported for unit testing.
  */
+/** Current HEAD sha of a worktree, or '' on any failure. Used to bracket a WI's
+ *  net contribution (M5: per-WI delivered stats). */
+function gitHeadSha(wt: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: wt, stdio: 'pipe', encoding: 'utf8' }).toString().trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Net diff stats from `fromRef..HEAD` in a worktree (M5). Best-effort → zeros. */
+function gitNetDelta(wt: string, fromRef: string): { files: number; insertions: number; deletions: number; commits: number } {
+  const git = (args: string[]): string => {
+    try { return execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' }).toString().trim(); }
+    catch { return ''; }
+  };
+  if (!fromRef) return { files: 0, insertions: 0, deletions: 0, commits: 0 };
+  const ss = git(['diff', '--shortstat', `${fromRef}..HEAD`]);
+  return {
+    files: Number(ss.match(/(\d+) files? changed/)?.[1] ?? 0),
+    insertions: Number(ss.match(/(\d+) insertions?/)?.[1] ?? 0),
+    deletions: Number(ss.match(/(\d+) deletions?/)?.[1] ?? 0),
+    commits: Number(git(['rev-list', '--count', `${fromRef}..HEAD`]) || '0') || 0,
+  };
+}
+
 export function emitDeliverySummary(
   input: CycleInput,
   logger: EventLogger,

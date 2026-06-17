@@ -74,7 +74,7 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;                 // node id
   failNote?: string;
-  workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[] }[];
+  workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
 };
 
 // ---------------------------------------------------------------------------

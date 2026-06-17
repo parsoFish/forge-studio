@@ -265,11 +265,19 @@ export function computeIterations(
 
 export function findDelivered(
   events: readonly EventLogEntry[],
+  wiId?: string,
 ): { files: number; insertions: number; commits: number } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.message === 'dev-loop.delivered' && e.metadata) {
       const m = e.metadata;
+      // M5: a wiId selects that WI's per-WI delivered event; the phase aggregate
+      // (no wiId) selects the cycle-level summary (the one without work_item_id).
+      if (wiId !== undefined) {
+        if (m.work_item_id !== wiId) continue;
+      } else if (typeof m.work_item_id === 'string') {
+        continue;
+      }
       // Accept both files_changed and files
       const files =
         typeof m.files_changed === 'number' ? m.files_changed :
@@ -313,7 +321,7 @@ export function findGateChecks(
 export function deriveWorkItems(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
-): { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[] }[] {
+): { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[] {
   // Collect WI ids in order of first appearance
   const wiOrder: string[] = [];
   const wiIdSet = new Set<string>();
@@ -363,6 +371,7 @@ export function deriveWorkItems(
     id,
     status: wiStatusFor(buckets.get(id) ?? []),
     ...wiSpec.get(id),
+    delivered: findDelivered(events, id), // M5: this WI's own net delta (undefined if absent)
   }));
 }
 
