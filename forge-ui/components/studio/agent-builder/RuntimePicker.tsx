@@ -169,6 +169,32 @@ export function RuntimePicker({
         />
       </div>
 
+      {/* Dev-loop strategy (A7) — how the agent iterates. */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="field-label" style={{ margin: 0 }}>Loop strategy</div>
+          <div className="seg-control" data-component="loop-strategy">
+            {([['ralph', 'Ralph loop'], ['one-shot', 'One-shot']] as const).map(([id, label]) => {
+              const active = (runtime.loopStrategy ?? 'ralph') === id;
+              return (
+                <button
+                  key={id}
+                  className={`seg-btn${active ? ' active' : ''}`}
+                  data-loop-strategy={id}
+                  {...(active ? { 'data-active': 'true' } : {})}
+                  onClick={() => onRuntimeChange({ ...runtime, loopStrategy: id })}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>
+          Ralph = iterate write→test→review until green. One-shot = a single pass.
+        </div>
+      </div>
+
       {/* Brain / Knowledge access */}
       <div>
         <div className="field-label" style={{ marginBottom: 8 }}>Knowledge Access</div>

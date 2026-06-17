@@ -145,6 +145,7 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
       strategy:     state.runtime.strategy,
       model:        state.runtime.model ?? undefined,
       range:        state.runtime.range,
+      loopStrategy: state.runtime.loopStrategy,
     },
   };
 }

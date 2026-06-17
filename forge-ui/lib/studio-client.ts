@@ -60,6 +60,7 @@ export type AgentRuntime = {
   model: string | null;
   range: string[];
   label?: string;
+  loopStrategy?: string; // A7: 'ralph' | 'one-shot' (dev-loop strategy)
 };
 
 export type Agent = {
@@ -347,6 +348,7 @@ function parseAgentDefinition(raw: unknown): Agent {
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
       model:         typeof rt.model         === 'string' ? rt.model         : null,
       range:         Array.isArray(rt.range)             ? rt.range          : [],
+      loopStrategy:  typeof rt.loopStrategy  === 'string' ? rt.loopStrategy  : undefined,
     },
   };
 }

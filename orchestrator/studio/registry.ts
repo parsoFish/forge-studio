@@ -180,6 +180,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     strategy: oneOf(reqString(rawRuntime, 'strategy', skillMdPath), MODEL_STRATEGIES, skillMdPath, 'strategy'),
     model: optString(rawRuntime, 'model'),
     range: rawRuntime['range'] !== undefined ? stringArray(rawRuntime, 'range', skillMdPath) : undefined,
+    loopStrategy: optString(rawRuntime, 'loopStrategy'),
   };
 
   const rawBudgets = d['budgets'];
@@ -236,6 +237,7 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
   };
   if (def.runtime.model !== undefined) runtime['model'] = def.runtime.model;
   if (def.runtime.range !== undefined) runtime['range'] = def.runtime.range;
+  if (def.runtime.loopStrategy !== undefined) runtime['loopStrategy'] = def.runtime.loopStrategy;
   data['runtime'] = runtime;
 
   data['brainAccess'] = def.brainAccess;

@@ -16,6 +16,13 @@ export type AgentRuntime = {
   strategy: ModelStrategy;
   model?: string;
   range?: string[];
+  /**
+   * Dev-loop strategy (A7) — how the agent iterates: 'ralph' (the default
+   * write→test→review loop) or 'one-shot' (a single pass). Authored here as the
+   * single source; the orchestrator honours it at spawn (one-shot caps to a
+   * single iteration). Absent ⇒ 'ralph' (unchanged behaviour).
+   */
+  loopStrategy?: string;
   // NOTE: a `subagentModel` lever was removed (ADR-027) — it had no spawn-site
   // consumer (forge does not yet spawn SDK subagents). Reintroduce it together
   // with the first flow whose agent actually sub-spawns.
