@@ -32,6 +32,8 @@ export function SkillsBind({
     <section>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Relevant Skills <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+        {/* P2: author a new skill in-platform. */}
+        <a href="/skills/new" data-action="author-skill" style={{ fontSize: 10.5, color: 'var(--ember)', textDecoration: 'none', whiteSpace: 'nowrap' }}>+ author a skill</a>
       </div>
       <div className="panel">
         <div className="panel-head"><span>Skills agents should load when working this project</span></div>

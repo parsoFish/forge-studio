@@ -19,6 +19,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import yaml from 'js-yaml';
+import matter from 'gray-matter';
 
 import {
   listAgentDefinitions,
@@ -503,6 +504,44 @@ export async function handleStudioWriteRoutes(
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
       sendJson(res, 200, { ok: true, id, version, findings: flagFindings }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/skills (P2) — author a plain composable skill ---------
+  // A "skill" here is a plain SKILL.md (name + description + body, no runtime
+  // block) — composable into agents. Distinct from a studio agent (which has a
+  // runtime block); `forge studio lint` skips non-studio skills, so this is safe.
+  if (url === '/api/studio/skills' && method === 'POST') {
+    try {
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
+      const description = typeof b['description'] === 'string' ? b['description'].trim() : '';
+      const skillBody = typeof b['body'] === 'string' ? b['body'] : '';
+      if (!name) { sendJson(res, 400, { error: 'name is required' }, origin); return true; }
+      if (!description) { sendJson(res, 400, { error: 'description is required' }, origin); return true; }
+
+      const slug = (typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name)
+        .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
+
+      const skillsBase = resolve(ctx.forgeRoot, 'skills');
+      const skillDir = resolve(skillsBase, slug);
+      if (!skillDir.startsWith(skillsBase + sep)) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
+      const skillMdPath = resolve(skillDir, 'SKILL.md');
+      if (existsSync(skillMdPath)) { sendJson(res, 409, { error: `skill "${slug}" already exists` }, origin); return true; }
+
+      const md = matter.stringify(
+        '\n' + (skillBody.trim() || `# ${name}\n\n${description}\n`) + '\n',
+        { name, description },
+      );
+      if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
+      writeFileSync(skillMdPath, md, 'utf8');
+      sendJson(res, 200, { ok: true, id: slug }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

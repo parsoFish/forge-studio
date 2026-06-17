@@ -431,6 +431,14 @@ export async function saveProject(
   return { ok: r.ok, error: r.error };
 }
 
+/** Author a plain composable skill (P2): writes skills/<slug>/SKILL.md. */
+export async function createSkill(
+  body: { name: string; description: string; body?: string },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const r = await studioPost('/api/studio/skills', body);
+  return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
+}
+
 /** Bootstrap a freshly-created KB with real content (P3): seed profile + index. */
 export async function bootstrapKb(
   id: string,

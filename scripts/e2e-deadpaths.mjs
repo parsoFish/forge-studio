@@ -31,6 +31,7 @@ const ROUTES = [
   { path: '/flows/new', name: 'flow builder (new)' },
   { path: '/knowledge', name: 'knowledge' },
   { path: '/knowledge/new', name: 'knowledge base (new)' },
+  { path: '/skills/new', name: 'skill builder (new)' },
   { path: '/architect/new', name: 'architect launcher' },
 ];
 
