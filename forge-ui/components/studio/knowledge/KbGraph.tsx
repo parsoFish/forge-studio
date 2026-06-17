@@ -2,13 +2,30 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import type { KbGraph as KbGraphData } from '@/lib/studio-client';
-import { buildSimState, useForceSim, hexPoints, type SimNode, type SimEdge } from './useForceSim';
+import {
+  buildSimState, useForceSim, hexPoints,
+  LAYOUT_PRESETS, type LayoutPreset, type SimNode, type SimEdge,
+} from './useForceSim';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const LAYER_RADIUS: Record<string, number> = { index: 28, theme: 18, guidance: 12, raw: 8 };
 
 function nodeRadius(layer: string): number { return LAYER_RADIUS[layer] ?? 8; }
+
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 4;
+const LAYOUT_STORAGE_PREFIX = 'kb-layout:';
+const PRESET_LABELS: Record<LayoutPreset, string> = { compact: 'Compact', balanced: 'Balanced', spread: 'Spread' };
+
+function readStoredPreset(kbId: string): LayoutPreset {
+  if (typeof window === 'undefined') return 'balanced';
+  try {
+    const raw = window.localStorage.getItem(LAYOUT_STORAGE_PREFIX + kbId);
+    if (raw === 'compact' || raw === 'balanced' || raw === 'spread') return raw;
+  } catch { /* localStorage unavailable — fall through to default */ }
+  return 'balanced';
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,23 +49,32 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
   const vpRef  = useRef({ x: 0, y: 0, scale: 1 });
   const panRef = useRef<{ startX: number; startY: number } | null>(null);
 
+  // layout density preset (persisted per-KB in localStorage)
+  const [layoutPreset, setLayoutPreset] = useState<LayoutPreset>('balanced');
+
   // tooltip
   const tooltipRef = useRef<HTMLDivElement | null>(null);
 
-  // ── On graph data change: rebuild sim ─────────────────────────────────────
+  // ── On KB change: load the persisted density preset ───────────────────────
+  useEffect(() => {
+    setLayoutPreset(readStoredPreset(kbId));
+  }, [kbId]);
+
+  // ── On graph data / preset change: rebuild sim ────────────────────────────
   useEffect(() => {
     const svg = svgRef.current;
     const W   = svg?.clientWidth  ?? 700;
     const H   = svg?.clientHeight ?? 500;
-    const { simNodes, simEdges } = buildSimState(graph.nodes, graph.edges, W, H);
+    const forces = LAYOUT_PRESETS[layoutPreset];
+    const { simNodes, simEdges } = buildSimState(graph.nodes, graph.edges, W, H, forces);
     nodesRef.current = simNodes;
     edgesRef.current = simEdges;
     vpRef.current    = { x: 0, y: 0, scale: 1 };
     hoveredRef.current = null;
     forceRender((n) => n + 1);
-    simStart(simNodes, simEdges, W / 2, H / 2);
+    simStart(simNodes, simEdges, W / 2, H / 2, forces);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kbId, graph]);
+  }, [kbId, graph, layoutPreset]);
 
   // ── rAF settle animation ───────────────────────────────────────────────────
   const onFrame = useCallback((nodes: SimNode[], edges: SimEdge[]) => {
@@ -161,6 +187,38 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
+  // ── Zoom controls — reuse the same vpRef + applyViewport seam as wheel/pan ──
+  // Buttons zoom about the SVG centre (the wheel zooms about the cursor).
+  const zoomBy = useCallback((factor: number) => {
+    const svg = svgRef.current;
+    const rect = svg?.getBoundingClientRect();
+    const cx = rect ? rect.width  / 2 : 0;
+    const cy = rect ? rect.height / 2 : 0;
+    const v = vpRef.current;
+    const newScale = Math.min(Math.max(v.scale * factor, ZOOM_MIN), ZOOM_MAX);
+    vpRef.current = {
+      x: cx - (cx - v.x) * (newScale / v.scale),
+      y: cy - (cy - v.y) * (newScale / v.scale),
+      scale: newScale,
+    };
+    forceRender((n) => n + 1);
+  }, []);
+
+  // Reset/fit — recentre to the identity viewport (sim already normalises to fit).
+  const fitView = useCallback(() => {
+    vpRef.current = { x: 0, y: 0, scale: 1 };
+    forceRender((n) => n + 1);
+  }, []);
+
+  // ── Layout density — change preset, persist per-KB, sim rebuilds via effect ──
+  const changePreset = useCallback((preset: LayoutPreset) => {
+    setLayoutPreset(preset);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(LAYOUT_STORAGE_PREFIX + kbId, preset); }
+      catch { /* localStorage unavailable — preset still applies for this session */ }
+    }
+  }, [kbId]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   const simNodes = nodesRef.current;
   const simEdges = edgesRef.current;
@@ -251,6 +309,65 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         </g>
       </svg>
 
+      {/* Zoom / fit controls (top-right) */}
+      <div
+        data-component="topology-controls"
+        style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
+      >
+        <CtrlButton label="+" title="Zoom in"     onClick={() => zoomBy(1.2)}     dataAction="kb-zoom-in" />
+        <CtrlButton label="−" title="Zoom out"    onClick={() => zoomBy(1 / 1.2)} dataAction="kb-zoom-out" />
+        <CtrlButton label="⤢" title="Reset / fit" onClick={fitView}               dataAction="kb-fit" />
+      </div>
+
+      {/* Layout density presets (below the zoom controls) */}
+      <div
+        data-component="kb-layout-controls"
+        data-layout-preset={layoutPreset}
+        style={{ position: 'absolute', top: 10, left: 10, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', marginRight: 2 }}>
+          layout
+        </span>
+        {(['compact', 'balanced', 'spread'] as LayoutPreset[]).map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            title={`${PRESET_LABELS[preset]} layout`}
+            aria-label={`${PRESET_LABELS[preset]} layout`}
+            aria-pressed={layoutPreset === preset}
+            data-preset={preset}
+            {...(layoutPreset === preset ? { 'data-active': 'true' } : {})}
+            onClick={() => changePreset(preset)}
+            style={{
+              background: layoutPreset === preset ? 'rgba(74,222,128,.12)' : 'var(--panel)',
+              color: layoutPreset === preset ? 'var(--c-kb)' : 'var(--dim)',
+              border: `1px solid ${layoutPreset === preset ? 'rgba(74,222,128,.4)' : 'var(--line)'}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-display)',
+              fontSize: 10.5,
+              fontWeight: 600,
+              padding: '3px 8px',
+              lineHeight: 1,
+            }}
+          >
+            {PRESET_LABELS[preset]}
+          </button>
+        ))}
+      </div>
+
+      {/* Affordance hint — surfaces the hidden wheel/drag/pin interactions */}
+      <div
+        data-component="kb-affordance-hint"
+        style={{
+          position: 'absolute', bottom: 8, left: 12, zIndex: 4,
+          fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)',
+          pointerEvents: 'none', userSelect: 'none',
+        }}
+      >
+        scroll to zoom · drag to pan · drag a node to pin
+      </div>
+
       {/* Tooltip for raw/guidance nodes */}
       {hoveredNode && (() => {
         const n = simNodes.find((s) => s.id === hoveredNode);
@@ -301,6 +418,46 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Control button (matches FlowTopology's ZoomButton style) ──────────────────
+
+function CtrlButton({
+  label,
+  title,
+  onClick,
+  dataAction,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+  dataAction: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      data-action={dataAction}
+      onClick={onClick}
+      style={{
+        width: 26,
+        height: 26,
+        background: 'var(--panel)',
+        color: 'var(--text)',
+        border: '1px solid var(--line)',
+        borderRadius: 4,
+        cursor: 'pointer',
+        fontSize: 14,
+        lineHeight: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

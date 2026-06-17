@@ -11,6 +11,22 @@ const DAMPING    = 0.82;
 const CENTER_F   = 0.012;
 const SETTLE_TICKS = 180;
 
+// Layout density — the two constants the operator can tune (REST_LEN / REPULSION).
+// Defaults equal the constants above, so callers that pass nothing are unaffected.
+export type LayoutForces = { restLen: number; repulsion: number };
+
+export const DEFAULT_FORCES: LayoutForces = { restLen: REST_LEN, repulsion: REPULSION };
+
+// Operator-selectable density presets. 'balanced' is the default (current values),
+// so the graph looks unchanged until the operator picks compact/spread.
+export type LayoutPreset = 'compact' | 'balanced' | 'spread';
+
+export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutForces> = {
+  compact:  { restLen: REST_LEN * 0.6, repulsion: REPULSION * 0.6 },
+  balanced: { restLen: REST_LEN,       repulsion: REPULSION },
+  spread:   { restLen: REST_LEN * 1.6, repulsion: REPULSION * 1.8 },
+};
+
 export type SimNode = {
   id: string;
   title: string;
@@ -33,7 +49,7 @@ function hexPoints(cx: number, cy: number, r: number): string {
   return pts.join(' ');
 }
 
-function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number): void {
+function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number, forces: LayoutForces = DEFAULT_FORCES): void {
   // reset velocities for unpinned
   for (const n of nodes) {
     if (!n.pinned) { n.vx = 0; n.vy = 0; }
@@ -47,7 +63,7 @@ function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number): void 
       const dy = (b.y - a.y) || 0.1;
       const dist2 = dx * dx + dy * dy;
       const dist  = Math.sqrt(dist2) || 1;
-      const force = REPULSION / dist2;
+      const force = forces.repulsion / dist2;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       if (!a.pinned) { a.vx -= fx; a.vy -= fy; }
@@ -61,7 +77,7 @@ function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number): void 
     if (!a || !b) continue;
     const dx = b.x - a.x; const dy = b.y - a.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const delta = (dist - REST_LEN) * K_SPRING;
+    const delta = (dist - forces.restLen) * K_SPRING;
     const fx = (dx / dist) * delta;
     const fy = (dy / dist) * delta;
     if (!a.pinned) { a.vx += fx; a.vy += fy; }
@@ -104,6 +120,7 @@ export function buildSimState(
   edges: KbEdge[],
   W: number,
   H: number,
+  forces: LayoutForces = DEFAULT_FORCES,
 ): { simNodes: SimNode[]; simEdges: SimEdge[] } {
   const cx = W / 2; const cy = H / 2;
   const themes = nodes.filter((n) => n.layer === 'theme');
@@ -139,7 +156,7 @@ export function buildSimState(
     .filter((e): e is SimEdge => e !== null);
 
   // run settle ticks off-screen
-  for (let i = 0; i < SETTLE_TICKS; i++) tick(simNodes, simEdges, cx, cy);
+  for (let i = 0; i < SETTLE_TICKS; i++) tick(simNodes, simEdges, cx, cy, forces);
   normalise(simNodes, W, H);
 
   return { simNodes, simEdges };
@@ -151,7 +168,7 @@ export function useForceSim(
   onFrame: (nodes: SimNode[], edges: SimEdge[]) => void,
 ) {
   const rafRef  = useRef<number | null>(null);
-  const stateRef = useRef<{ nodes: SimNode[]; edges: SimEdge[]; cx: number; cy: number } | null>(null);
+  const stateRef = useRef<{ nodes: SimNode[]; edges: SimEdge[]; cx: number; cy: number; forces: LayoutForces } | null>(null);
   const tickRef  = useRef(0);
 
   const stop = useCallback(() => {
@@ -162,15 +179,15 @@ export function useForceSim(
   }, []);
 
   const start = useCallback(
-    (nodes: SimNode[], edges: SimEdge[], cx: number, cy: number) => {
+    (nodes: SimNode[], edges: SimEdge[], cx: number, cy: number, forces: LayoutForces = DEFAULT_FORCES) => {
       stop();
-      stateRef.current = { nodes, edges, cx, cy };
+      stateRef.current = { nodes, edges, cx, cy, forces };
       tickRef.current  = 0;
 
       const step = () => {
         const s = stateRef.current;
         if (!s) return;
-        tick(s.nodes, s.edges, s.cx, s.cy);
+        tick(s.nodes, s.edges, s.cx, s.cy, s.forces);
         tickRef.current++;
         onFrame(s.nodes, s.edges);
         if (tickRef.current < 80) rafRef.current = requestAnimationFrame(step);
