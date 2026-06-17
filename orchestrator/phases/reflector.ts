@@ -55,7 +55,7 @@ import {
   type RetentionTag,
 } from '../../cli/cycle-retention.ts';
 import { writeCycleRecap } from '../../cli/cycle-recap.ts';
-import { cyclesThemesDir } from '../brain-paths.ts';
+import { cyclesThemesDir, projectThemesDir, readArtifactRoot } from '../brain-paths.ts';
 import { regenerateBrainIndex } from '../../cli/brain-index.ts';
 
 /**
@@ -175,7 +175,7 @@ export async function runReflector(
 
   const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
   const cycleArchivePath = resolve(forgeRoot, 'brain', 'cycles', '_raw', `${cycleId}.md`);
-  const themesDir = resolve(forgeRoot, 'projects', projectName, 'brain', 'themes');
+  const themesDir = projectThemesDir(forgeRoot, projectName, readArtifactRoot(input.projectRepoPath));
   // F-07: ensure brain destination dirs exist before invoking the SDK; the
   // reflector writes here directly. A first-time project (no themes/ yet) or
   // a fresh forge install (no brain/cycles/_raw/) would otherwise see ENOENT

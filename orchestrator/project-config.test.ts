@@ -451,3 +451,147 @@ test('validateProjectConfig: all M2 fields valid together → round-trips', () =
   assert.deepEqual(cfg.skills, ['demo']);
   assert.equal(cfg.kb, 'cycles');
 });
+
+// ----- artifactRoot validation -----
+
+test('validateProjectConfig: artifactRoot absent → undefined (no own key in result)', () => {
+  const cfg = validateProjectConfig({ demo: { shape: 'none' }, quality_gate_cmd: ['true'] });
+  assert.equal(cfg.artifactRoot, undefined);
+  assert.ok(!Object.prototype.hasOwnProperty.call(cfg, 'artifactRoot'));
+});
+
+test('validateProjectConfig: artifactRoot "." → normalised to undefined (legacy layout)', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    artifactRoot: '.',
+  });
+  assert.equal(cfg.artifactRoot, undefined);
+});
+
+test('validateProjectConfig: artifactRoot "" → normalised to undefined', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    artifactRoot: '',
+  });
+  assert.equal(cfg.artifactRoot, undefined);
+});
+
+test('validateProjectConfig: artifactRoot "  " (whitespace only) → normalised to undefined', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    artifactRoot: '  ',
+  });
+  assert.equal(cfg.artifactRoot, undefined);
+});
+
+test('validateProjectConfig: artifactRoot "forge" → preserved as-is', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    artifactRoot: 'forge',
+  });
+  assert.equal(cfg.artifactRoot, 'forge');
+});
+
+test('validateProjectConfig: artifactRoot "forge/x" (nested clean relative) → preserved', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    artifactRoot: 'forge/x',
+  });
+  assert.equal(cfg.artifactRoot, 'forge/x');
+});
+
+test('validateProjectConfig: artifactRoot "/abs" (leading slash) → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: '/abs',
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: artifactRoot "../escape" (dotdot segment) → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: '../escape',
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: artifactRoot "a/../b" (embedded dotdot) → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: 'a/../b',
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: artifactRoot with backslash → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: 'a\\b',
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: artifactRoot as number → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: 42,
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: artifactRoot as object → throws mentioning artifactRoot', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        artifactRoot: { path: 'forge' },
+      }),
+    /artifactRoot/,
+  );
+});
+
+test('validateProjectConfig: full valid config WITH artifactRoot round-trips alongside M2 fields', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    northStar: 'Ship great things.',
+    instructions: 'Write tests first.',
+    demoProcess: [{ kind: 'verify', text: 'Check API.' }],
+    skills: ['demo'],
+    kb: 'cycles',
+    artifactRoot: 'forge',
+  });
+  assert.equal(cfg.artifactRoot, 'forge');
+  assert.equal(cfg.northStar, 'Ship great things.');
+  assert.equal(cfg.instructions, 'Write tests first.');
+  assert.deepEqual(cfg.demoProcess, [{ kind: 'verify', text: 'Check API.' }]);
+  assert.deepEqual(cfg.skills, ['demo']);
+  assert.equal(cfg.kb, 'cycles');
+});

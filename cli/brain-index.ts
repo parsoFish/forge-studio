@@ -18,10 +18,11 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 // gray-matter parses frontmatter from `profile.md` for the sub-wiki one-liner.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
+import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 
 export type BrainCategory = 'pattern' | 'antipattern' | 'decision' | 'operation' | 'reference';
 
@@ -73,9 +74,16 @@ export function loadBrainIndex(opts: LoadBrainIndexOptions = {}): string {
   }
 
   if (opts.scope) {
+    // Project brains live inside the project repo at
+    // projects/<scope>/<artifactRoot>/brain/<file> (artifactRoot default "." =
+    // legacy projects/<scope>/brain/<file>).
+    const artifactRoot = readArtifactRoot(resolve(cwd, 'projects', opts.scope));
+    const brainRel =
+      artifactRoot === '.'
+        ? `projects/${opts.scope}/brain`
+        : `projects/${opts.scope}/${artifactRoot}/brain`;
     for (const file of PROJECT_INDEX_FILES) {
-      // Project brains live inside the project repo at projects/<scope>/brain/<file>
-      const rel = `projects/${opts.scope}/brain/${file}`;
+      const rel = `${brainRel}/${file}`;
       const full = resolve(cwd, rel);
       if (existsSync(full)) sections.push(renderSection(cwd, rel));
     }
@@ -179,10 +187,12 @@ function readProjectDescription(profilePath: string): string {
   }
 }
 
-function inventoryProjects(cwd: string): Array<{ name: string; description: string }> {
+function inventoryProjects(
+  cwd: string,
+): Array<{ name: string; description: string; brainDir: string }> {
   const projectsRoot = join(cwd, 'projects');
   if (!existsSync(projectsRoot)) return [];
-  const out: Array<{ name: string; description: string }> = [];
+  const out: Array<{ name: string; description: string; brainDir: string }> = [];
   for (const entry of readdirSync(projectsRoot).sort()) {
     if (entry === 'README.md') continue;
     const dir = join(projectsRoot, entry);
@@ -195,10 +205,12 @@ function inventoryProjects(cwd: string): Array<{ name: string; description: stri
     if (!st.isDirectory()) continue;
     // Skip contamination dirs.
     if (/^__/.test(entry)) continue;
-    // Need a brain/profile.md to be a "real" project with a brain.
-    const profile = join(dir, 'brain', 'profile.md');
+    // Need a <artifactRoot>/brain/profile.md to be a "real" project with a brain
+    // (artifactRoot default "." = legacy brain/profile.md at the project root).
+    const brainDir = join(dir, readArtifactRoot(dir), 'brain');
+    const profile = join(brainDir, 'profile.md');
     if (!existsSync(profile)) continue;
-    out.push({ name: entry, description: readProjectDescription(profile) });
+    out.push({ name: entry, description: readProjectDescription(profile), brainDir });
   }
   return out;
 }
@@ -219,16 +231,17 @@ export function regenerateBrainIndex(
   const projects = inventoryProjects(cwd);
   let projectThemeCount = 0;
   for (const p of projects) {
-    projectThemeCount += countMarkdownFiles(join(cwd, 'projects', p.name, 'brain', 'themes'), {
+    projectThemeCount += countMarkdownFiles(join(p.brainDir, 'themes'), {
       exclude: new Set(['README.md']),
     });
   }
   const rawCount = countAllRawSources(join(brainRoot, 'cycles', '_raw'));
 
   const projectListing = projects
-    .map((p) =>
-      `- [${p.name}](../projects/${p.name}/brain/profile.md)${p.description ? ` — ${p.description}` : ''}`,
-    )
+    .map((p) => {
+      const rel = relative(brainRoot, join(p.brainDir, 'profile.md'));
+      return `- [${p.name}](${rel})${p.description ? ` — ${p.description}` : ''}`;
+    })
     .join('\n');
 
   const content = `# Brain — Meta-Index

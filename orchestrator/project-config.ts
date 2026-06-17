@@ -164,6 +164,17 @@ export type ProjectConfig = {
   skills?: string[];
   /** KB id bound to this project, or null to explicitly leave unbound. */
   kb?: string | null;
+  /**
+   * Project-root-relative subdirectory under which a project's COMMITTED forge
+   * artifacts live: its Brain 3 (`<artifactRoot>/brain/`) and its development
+   * history (`<artifactRoot>/history/<initiative-id>/`). Default `"."` keeps the
+   * legacy layout (`brain/` directly at the project root) so existing managed
+   * projects are unaffected; a project that wants a single visible home for its
+   * forge artifacts sets e.g. `"forge"`. Only affects committed artifacts —
+   * runtime/session scratch (`_architect/`, worktree `demo/<id>/`, `.forge/`)
+   * is unchanged. Validated as a clean relative path (no leading `/`, no `..`).
+   */
+  artifactRoot?: string;
 };
 
 /**
@@ -263,6 +274,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const demoProcess = parseDemoProcess(obj.demoProcess);
   const skills = parseSkills(obj.skills);
   const kb = parseKb(obj.kb);
+  const artifactRoot = parseArtifactRoot(obj.artifactRoot);
 
   return {
     demo,
@@ -280,7 +292,33 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(demoProcess !== undefined ? { demoProcess } : {}),
     ...(skills !== undefined ? { skills } : {}),
     ...(kb !== undefined ? { kb } : {}),
+    ...(artifactRoot !== undefined ? { artifactRoot } : {}),
   };
+}
+
+/**
+ * Parse + validate the optional `artifactRoot`. Must be a clean relative path
+ * (no leading `/`, no `..` segment, no backslashes) so it can never escape the
+ * project root. Returns `undefined` when absent (callers default to `"."`).
+ */
+function parseArtifactRoot(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string') {
+    throw new Error('project-config: artifactRoot must be a string when present');
+  }
+  const trimmed = v.trim();
+  if (trimmed === '' || trimmed === '.') return undefined;
+  if (
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('\\') ||
+    trimmed.includes('\\') ||
+    trimmed.split('/').includes('..')
+  ) {
+    throw new Error(
+      `project-config: artifactRoot must be a clean project-relative path (no leading slash, no "..") — got ${JSON.stringify(v)}`,
+    );
+  }
+  return trimmed;
 }
 
 /**

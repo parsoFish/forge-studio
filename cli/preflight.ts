@@ -31,6 +31,7 @@ import {
   validateProjectConfig,
   DEMO_SHAPES,
 } from '../orchestrator/project-config.ts';
+import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 
 export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
 
@@ -323,16 +324,20 @@ function checkC3(dir: string): ClauseResult {
 function checkC4(dir: string, projectName: string, _forgeRoot: string): ClauseResult {
   const base = { clause: 'C4' as const, title: 'Machine-readable architecture context', hard: true };
   const roadmap = join(dir, 'roadmap.md');
-  // Brain 3 now lives inside the project repo itself (three-brain restructure 2026-05-26).
-  const brainProfile = join(dir, 'brain', 'profile.md');
+  // Brain 3 lives inside the project repo (three-brain restructure 2026-05-26),
+  // under the project's committed-artifact root (project.json `artifactRoot`,
+  // default "." = legacy brain/profile.md at the project root).
+  const artifactRoot = readArtifactRoot(dir);
+  const brainRel = artifactRoot === '.' ? 'brain/profile.md' : `${artifactRoot}/brain/profile.md`;
+  const brainProfile = join(dir, brainRel);
   const hasRoadmap = existsSync(roadmap);
   const hasBrain = existsSync(brainProfile);
   if (hasRoadmap && hasBrain) {
-    return { ...base, pass: true, detail: `roadmap.md + brain sub-wiki present (${projectName}/brain/profile.md)` };
+    return { ...base, pass: true, detail: `roadmap.md + brain sub-wiki present (${projectName}/${brainRel})` };
   }
   const missing: string[] = [];
   if (!hasRoadmap) missing.push('roadmap.md (in project root)');
-  if (!hasBrain) missing.push(`brain/profile.md (project brain — three-brain model, Brain 3)`);
+  if (!hasBrain) missing.push(`${brainRel} (project brain — three-brain model, Brain 3)`);
   return {
     ...base,
     pass: false,
@@ -576,8 +581,9 @@ function checkBrainStaleness(
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
-  // Brain 3 now lives inside the project repo itself (three-brain restructure 2026-05-26).
-  const themesDir = join(dir, 'brain', 'themes');
+  // Brain 3 lives inside the project repo, under the committed-artifact root
+  // (project.json `artifactRoot`, default "." = legacy brain/themes/).
+  const themesDir = join(dir, readArtifactRoot(dir), 'brain', 'themes');
   if (!existsSync(themesDir)) {
     return { ...base, pass: true, detail: 'no project brain themes to check' };
   }
