@@ -241,6 +241,19 @@ test('round-trip: a minimal WI (only required fields) serialises byte-identicall
   assert.ok(!md1.includes('\ncreates:'), 'creates must not appear when undefined');
 });
 
+test('behavior_preserving: round-trips when true, omitted when unset', () => {
+  // Unset → must not leak into frontmatter (byte-stability for the common case).
+  const plain = serializeWorkItem(fixture());
+  assert.ok(!plain.includes('behavior_preserving'), 'behavior_preserving must not appear when unset');
+  // true → round-trips.
+  const w = fixture({ behavior_preserving: true });
+  const md = serializeWorkItem(w);
+  assert.match(md, /behavior_preserving: true/);
+  assert.equal(parseWorkItem(md).behavior_preserving, true);
+  // A non-true value (false/absent) parses to undefined (omit-on-default).
+  assert.equal(parseWorkItem(serializeWorkItem(fixture())).behavior_preserving, undefined);
+});
+
 test('quality_gate_cmd: round-trips a valid non-empty array', () => {
   const w = fixture({ quality_gate_cmd: ['npm', 'test', '--', 'tests/x.test.ts'] });
   const md = serializeWorkItem(w);

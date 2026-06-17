@@ -451,6 +451,12 @@ export async function runDeveloperLoop(
           // when ALL of THIS WI's declared outputs are on the branch (a sibling
           // genuinely delivered them) — not on a bare "branch has a commit".
           requiredPaths: wi.creates ?? [],
+          // A behaviour-preserving refactor WI (rename/move/reformat) has no
+          // fail-first gate — the existing suite is green on the base — so the
+          // iter-0 hollow-gate guard would wrongly reject it. The PM marks such
+          // WIs; honour the marker by disabling that guard for them (the diff +
+          // empty-delivery backstop still guard against a no-op).
+          failOnHollowIter0Gate: !wi.behavior_preserving,
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,

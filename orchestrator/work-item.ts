@@ -47,6 +47,19 @@ export type WorkItem = {
   /** Structured marker — files this WI creates from scratch. Subset of files_in_scope. */
   creates?: string[];
   /**
+   * Behaviour-PRESERVING refactor marker (rename / move / reformat where the
+   * project's existing tests stay green before AND after). Such a WI has no
+   * fail-first gate — the existing suite passes on the base — so the dev-loop's
+   * iter-0 hollow-gate guard (which assumes write-a-failing-test-first) would
+   * wrongly reject it as `gate-too-loose`. When `true`, the dev-loop runs this
+   * WI with `failOnHollowIter0Gate: false`; discrimination shifts to the diff
+   * (the branch must carry real changes — the unifier's empty-delivery guard is
+   * the backstop) plus the gate staying green. Absent/false ⇒ normal
+   * write-a-failing-test-first discipline. The PM sets it ONLY for genuinely
+   * behaviour-preserving work.
+   */
+  behavior_preserving?: boolean;
+  /**
    * ADR 026 — UWI dispatch type (unifier-items only; dev WIs leave it unset, so
    * their frontmatter stays byte-identical). `packaging` runs the
    * developer-unifier skill against the 5-gate composed unifier gate (UWI-1,
@@ -117,6 +130,9 @@ export function parseWorkItem(content: string): WorkItem {
   if (data.kind === 'packaging' || data.kind === 'code-fix') {
     w.kind = data.kind;
   }
+  if (data.behavior_preserving === true) {
+    w.behavior_preserving = true;
+  }
 
   return w;
 }
@@ -152,6 +168,9 @@ export function serializeWorkItem(w: WorkItem): string {
   }
   if (w.kind !== undefined) {
     data.kind = w.kind;
+  }
+  if (w.behavior_preserving === true) {
+    data.behavior_preserving = true;
   }
   return matter.stringify('\n' + w.body.replace(/^\n+/, ''), data);
 }
