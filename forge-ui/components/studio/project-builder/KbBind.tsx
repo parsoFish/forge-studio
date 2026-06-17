@@ -2,9 +2,14 @@
 
 import { useState } from 'react';
 import type { Kb } from '@/lib/studio-client';
-import { createKb } from '@/lib/studio-client';
+import { createKb, bootstrapKb } from '@/lib/studio-client';
 
-type CreateState = 'idle' | 'creating' | 'done' | 'error';
+type CreateState = 'idle' | 'creating' | 'bootstrapping' | 'done' | 'error';
+const KB_KINDS = [
+  { id: 'project', label: 'Project' },
+  { id: 'flow', label: 'Flow' },
+  { id: 'agent-integration', label: 'Agent integration' },
+];
 
 function slugify(name: string): string {
   return name
@@ -18,16 +23,19 @@ export function KbBind({
   kb,
   kbs,
   projectName,
+  summary,
   onChange,
 }: {
   kb: string | null;
   kbs: Kb[];
   projectName?: string;
+  summary?: string;
   onChange: (v: string | null) => void;
 }) {
   const boundKb = kb ? kbs.find((k) => k.id === kb) : null;
   const [createState, setCreateState] = useState<CreateState>('idle');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [kind, setKind] = useState('project');
 
   async function handleCreateProjectBrain() {
     const base = projectName ? slugify(projectName) : 'project';
@@ -38,12 +46,21 @@ export function KbBind({
     const result = await createKb({
       id,
       name,
-      scope: 'project',
-      desc: `Project knowledge base for ${projectName ?? id}`,
+      scope: kind,
+      desc: `${KB_KINDS.find((k) => k.id === kind)?.label ?? 'Project'} knowledge base for ${projectName ?? id}`,
     });
     if (!result.ok) {
       setCreateState('error');
       setCreateError(result.error ?? 'Unknown error');
+      return;
+    }
+    // P3: bootstrap real content (a seeded profile node + index) so the brain
+    // isn't an empty stub — staged progress, not an instant fake "Created".
+    setCreateState('bootstrapping');
+    const boot = await bootstrapKb(result.id ?? id, { name, summary });
+    if (!boot.ok) {
+      setCreateState('error');
+      setCreateError(boot.error ?? 'bootstrap failed');
       return;
     }
     setCreateState('done');
@@ -76,13 +93,31 @@ export function KbBind({
         <option value="">— bind a knowledge base —</option>
         {kbs.map((k) => <option key={k.id} value={k.id}>{k.name} [{k.scope}]</option>)}
       </select>
+      {/* P3: pick the KB kind before building the brain. */}
+      <select
+        data-field="kb-kind"
+        value={kind}
+        onChange={(e) => setKind(e.target.value)}
+        disabled={createState === 'creating' || createState === 'bootstrapping'}
+        style={{
+          width: '100%', background: 'var(--panel)', border: '1px solid var(--line-2)',
+          borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)',
+          fontSize: 12.5, padding: '6px 10px', cursor: 'pointer', outline: 'none', marginBottom: 6,
+        }}
+      >
+        {KB_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label} brain</option>)}
+      </select>
       <button
         className="btn btn-ghost"
+        data-action="create-project-brain"
         style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
-        disabled={createState === 'creating'}
+        disabled={createState === 'creating' || createState === 'bootstrapping'}
         onClick={handleCreateProjectBrain}
       >
-        {createState === 'creating' ? 'Creating…' : createState === 'done' ? '✓ Created' : '+ Create project brain'}
+        {createState === 'creating' ? 'Creating…'
+          : createState === 'bootstrapping' ? 'Building brain…'
+          : createState === 'done' ? '✓ Brain built'
+          : '+ Build project brain'}
       </button>
       {createState === 'error' && createError && (
         <div style={{ fontSize: 11, color: 'var(--error, #f87171)', marginTop: 4 }}>

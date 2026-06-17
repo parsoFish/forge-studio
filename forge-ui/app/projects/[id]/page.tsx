@@ -209,7 +209,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             </div>
           </div>
 
-          <KbBind kb={kb} kbs={kbs} projectName={name} onChange={(v) => { setKb(v); markDirty(); }} />
+          <KbBind kb={kb} kbs={kbs} projectName={name} summary={northStar} onChange={(v) => { setKb(v); markDirty(); }} />
 
           <ContractReadiness
             northStar={northStar}

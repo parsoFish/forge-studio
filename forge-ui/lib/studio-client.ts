@@ -431,6 +431,15 @@ export async function saveProject(
   return { ok: r.ok, error: r.error };
 }
 
+/** Bootstrap a freshly-created KB with real content (P3): seed profile + index. */
+export async function bootstrapKb(
+  id: string,
+  body: { name?: string; summary?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/bootstrap`, body);
+  return { ok: r.ok, error: r.error };
+}
+
 /** Run a manual brain-maintenance op on a KB (K3): 'lint' or 'index'. */
 export async function runKbMaintenance(
   id: string,

@@ -559,6 +559,50 @@ export async function handleStudioKbRoutes(
     return true;
   }
 
+  // ---- POST /api/studio/kbs/:id/bootstrap (P3) — give a new brain real content --
+  const bootstrapMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/bootstrap$/);
+  if (bootstrapMatch && method === 'POST') {
+    try {
+      const kbId = decodeURIComponent(bootstrapMatch[1]);
+      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      const kbDir = resolve(brainBase, kbId);
+      if (!kbDir.startsWith(brainBase + sep) || !existsSync(kbDir)) {
+        sendJson(res, 404, { error: 'unknown kb (create it first)' }, origin); return true;
+      }
+      let body: unknown;
+      try { body = await readJson(req); } catch { body = {}; }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const name = typeof b['name'] === 'string' && b['name'].trim() ? b['name'].trim() : kbId;
+      const summary = typeof b['summary'] === 'string' ? b['summary'].trim() : '';
+
+      // Seed a real profile node (Brain-3 convention) so the brain isn't an empty
+      // single node — a readable starting point cycles then build on.
+      const profilePath = resolve(kbDir, 'profile.md');
+      if (!existsSync(profilePath)) {
+        writeFileSync(profilePath, [
+          `# ${name}`,
+          '',
+          summary || '_Project knowledge base. Populated as cycles run and the reflector ingests learnings._',
+          '',
+          '## Themes',
+          '',
+          '_(none yet — the reflector adds a theme per durable learning)_',
+          '',
+          '## Known failure modes',
+          '',
+          '_(none recorded yet)_',
+          '',
+        ].join('\n'), 'utf8');
+      }
+      const result = regenerateBrainIndex({ cwd: ctx.forgeRoot });
+      sendJson(res, 200, { ok: true, seeded: ['profile.md'], result }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- POST /api/studio/kbs/:id/maintenance (K3) — manual brain maintenance --
   const maintMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/maintenance$/);
   if (maintMatch && method === 'POST') {
