@@ -92,6 +92,8 @@ const BLANK_STATE: AgentState = {
   hooks: ['event-log'],
   runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', range: [] },
   brainAccess: 'none',
+  // A2: a sensible, editable starting point for interactivity — not a blank box.
+  interactivity: 'Autonomous — runs to completion without human input.',
 };
 
 // ---------------------------------------------------------------------------
@@ -423,14 +425,14 @@ export default function AgentBuilderPage() {
               />
             </div>
 
-            {/* Process (required) */}
+            {/* Instructions (required) — the agent's instruction file (A3). */}
             <div className="field-group">
-              <label className="field-label" htmlFor="process-input">Process</label>
+              <label className="field-label" htmlFor="process-input">Instructions</label>
               <textarea
                 id="process-input"
                 className="input"
                 rows={4}
-                placeholder="Describe the loop this agent runs — what it reads, what it decides, how it produces its output artifact."
+                placeholder="What this agent does, step by step — what it reads, what it decides, and the artifact it produces."
                 value={state.process}
                 onChange={(e) => patchState({ process: e.target.value })}
               />
