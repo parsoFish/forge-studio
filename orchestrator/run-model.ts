@@ -333,6 +333,22 @@ function buildRun(args: {
 
   const validatedOrigin: Run['origin'] = (origin !== undefined && VALID_ORIGINS.has(origin)) ? (origin as Run['origin']) : 'architect';
 
+  // Reconcile the queue-derived status against the derived phase map. A manifest
+  // can land in _queue/done/ (→ 'complete') a beat before the cycle's own
+  // review/closure events are written (merge-confirmation closure runs in a
+  // separate sweep), so the left panel would flash 'complete' while the review
+  // hex is still gated/active. Hold 'complete' until the terminal node (reflect
+  // when present, else review) has actually resolved. Flows without a review
+  // node are unaffected (terminalNode undefined ⇒ no change).
+  const terminalNode = phases['reflect'] ?? phases['review'];
+  const reconciledStatus: RunStatus =
+    runStatus === 'complete' &&
+    terminalNode !== undefined &&
+    terminalNode !== 'complete' &&
+    terminalNode !== 'failed'
+      ? 'active'
+      : runStatus;
+
   return {
     id: cycleId,
     // ADR-028 / J5: associate the run with the flow its manifest names, so a
@@ -341,7 +357,7 @@ function buildRun(args: {
     flowId: manifest.flow_id ?? FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative,
-    status: runStatus,
+    status: reconciledStatus,
     origin: validatedOrigin,
     costUsd,
     startedAt,

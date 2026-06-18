@@ -1817,6 +1817,7 @@ async function main() {
       () => cycleEvent('closure', 'end', 'closure.end'),
       () => cycleEvent('reflection', 'start', 'reflection.start'),
       () => cycleEvent('reflection', 'tool_use', 'reflection.brain-query', { metadata: { tool: 'brain-query' } }),
+      () => cycleEvent('reflection', 'end', 'reflection.end'),
     ], WORK);
     moveManifest('ready-for-review', 'done');
     writeReflectionQuestions();

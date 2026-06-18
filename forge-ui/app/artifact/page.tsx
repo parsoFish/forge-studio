@@ -56,10 +56,17 @@ import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions,
 // Types for artifact docs fetched from the bridge
 // ---------------------------------------------------------------------------
 
+type PrArtifactDoc = {
+  /** Structured demo model (primary source — present when demo.json exists mid-cycle). */
+  demoModel: DemoModel | null;
+  /** PR description text (optional hero/header — may lag behind demo.json during a cycle). */
+  prDoc: PrDoc | null;
+};
+
 type ArtifactDoc =
   | { type: 'plan';       doc: PlanDoc }
   | { type: 'workitems';  doc: WorkItemEntry[] }
-  | { type: 'pr';         doc: PrDoc }
+  | { type: 'pr';         doc: PrArtifactDoc }
   | { type: 'demo';       doc: DemoModel }
   | { type: 'verdict';    doc: VerdictDoc }
   | { type: 'reflection'; doc: ReflectionDoc }
@@ -153,14 +160,23 @@ async function fetchArtifactDoc(
     }
 
     if (type === 'pr') {
-      // Fetch pr-description.md as text
-      const base = await resolveBridgeUrl();
-      if (!base) return { type: 'empty' };
-      const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
-      if (!res.ok) return { type: 'empty' };
-      const text = await res.text();
-      const prDoc = parsePrDescription(text);
-      return { type: 'pr', doc: prDoc };
+      // PRIMARY: fetch demo.json (resolves mid-cycle since it's the gate's own
+      // evidence and is mirrored to artifacts/). Fall back to pr-description.md
+      // text when demo.json is absent (current behaviour, preserves the chip).
+      const demoModel = await fetchDemoModel(runId);
+
+      // SECONDARY (optional): pr-description.md as hero header text.
+      let prDoc: PrDoc | null = null;
+      try {
+        const base = await resolveBridgeUrl();
+        if (base) {
+          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
+          if (res.ok) prDoc = parsePrDescription(await res.text());
+        }
+      } catch { /* best-effort */ }
+
+      if (!demoModel && !prDoc) return { type: 'empty' };
+      return { type: 'pr', doc: { demoModel, prDoc } };
     }
 
     if (type === 'plan') {
@@ -723,7 +739,26 @@ function ArtifactPageInner() {
               )}
 
               {artifact && artifact.type === 'pr' && (
-                <PrRenderer doc={artifact.doc} />
+                <div>
+                  {/* PR description as hero header (when present) */}
+                  {artifact.doc.prDoc && (
+                    <div style={{
+                      marginBottom: 24,
+                      padding: '16px 20px',
+                      background: 'var(--panel)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 8,
+                    }}>
+                      <PrRenderer doc={artifact.doc.prDoc} />
+                    </div>
+                  )}
+                  {/* Demo evidence (primary) */}
+                  {artifact.doc.demoModel ? (
+                    <div data-section="demo-evaluation">
+                      <DemoComparison model={artifact.doc.demoModel} cycleId={runId} />
+                    </div>
+                  ) : artifact.doc.prDoc ? null : null}
+                </div>
               )}
 
               {artifact && artifact.type === 'demo' && (

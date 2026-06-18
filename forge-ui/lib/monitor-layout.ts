@@ -26,7 +26,7 @@ import type { Flow, FlowNode, Run } from './studio-client';
 
 export const HEX_W = 88;
 export const HEX_H = 80;
-const COL_GAP = 180; // horizontal gap between level columns (center-to-center)
+export const COL_GAP = 180; // horizontal gap between level columns (center-to-center)
 const ROW_GAP = 110; // vertical gap between sibling nodes (center-to-center)
 const PAD_X = 80;
 const PAD_Y = 80;
@@ -218,9 +218,15 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
     const rerouted: typeof edges = [];
     for (const e of edges) {
       if (e.to === fanOutNodeId) {
-        for (const r of roots) rerouted.push({ from: e.from, to: r, artifact: e.artifact });
+        // Emit the artifact label only on the FIRST rerouted leg to avoid
+        // stacking the same label box N times over fanned WI hexes.
+        roots.forEach((r, idx) =>
+          rerouted.push({ from: e.from, to: r, artifact: idx === 0 ? e.artifact : undefined }),
+        );
       } else if (e.from === fanOutNodeId) {
-        for (const l of leaves) rerouted.push({ from: l, to: e.to, artifact: e.artifact });
+        leaves.forEach((l, idx) =>
+          rerouted.push({ from: l, to: e.to, artifact: idx === 0 ? e.artifact : undefined }),
+        );
       } else {
         rerouted.push(e);
       }

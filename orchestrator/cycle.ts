@@ -358,10 +358,14 @@ export async function snapshotCycleArtefacts(
     }
   } catch { /* best-effort — never block the cycle on plan mirroring */ }
 
-  // PR description draft: useful for the report's "What landed" section.
+  // PR description draft → into artifacts/ (same dir as demo.json) so the bridge
+  // artifact route (which serves _logs/<cycleId>/artifacts/<file>) resolves it;
+  // previously written to the cycle-log root, so the monitor's PR chip always
+  // 404'd → "artifact not yet produced".
   const prSrc = resolve(input.worktreePath, '.forge', 'pr-description.md');
   if (existsSync(prSrc)) {
-    cpSync(prSrc, resolve(cycleLogDir, 'pr-description.md'), { force: true });
+    mkdirSync(artifactsDst, { recursive: true });
+    cpSync(prSrc, resolve(artifactsDst, 'pr-description.md'), { force: true });
   }
 }
 

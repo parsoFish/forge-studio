@@ -328,7 +328,10 @@ export function deriveWorkItems(
 
   for (const e of events) {
     const wiId = e.metadata?.work_item_id;
-    if (typeof wiId === 'string' && !wiIdSet.has(wiId)) {
+    // Only dev WIs (WI-*) are hexes here. Unifier items (UWI-*) are the unifier
+    // node's own work — surfaced via that node's gateChecks, not as dev hexes;
+    // including them produced a phantom always-'pending' UWI hex (no dev events).
+    if (typeof wiId === 'string' && wiId.startsWith('WI-') && !wiIdSet.has(wiId)) {
       wiOrder.push(wiId);
       wiIdSet.add(wiId);
     }
@@ -367,12 +370,17 @@ export function deriveWorkItems(
     if (bucket) bucket.push(e);
   }
 
-  return wiOrder.map((id) => ({
-    id,
-    status: wiStatusFor(buckets.get(id) ?? []),
-    ...wiSpec.get(id),
-    delivered: findDelivered(events, id), // M5: this WI's own net delta (undefined if absent)
-  }));
+  return wiOrder.map((id) => {
+    const delivered = findDelivered(events, id); // M5: this WI's own net delta
+    let status = wiStatusFor(buckets.get(id) ?? []);
+    // A WI that auto-committed real work then crashed on a later retry is
+    // recoverable, not a red failure — show 'retrying' so the hex matches its
+    // green delivery stats (the agent-crash-retry case).
+    if (status === 'failed' && delivered && delivered.commits > 0) {
+      status = 'retrying';
+    }
+    return { id, status, ...wiSpec.get(id), delivered };
+  });
 }
 
 export function wiStatusFor(events: readonly EventLogEntry[]): RunPhaseStatus {
@@ -441,8 +449,13 @@ export function deriveArtifacts(
     } catch { /* ignore */ }
   }
 
-  // pr: pr-description.md
-  if (existsSync(join(logDir, 'pr-description.md'))) {
+  // pr: pr-description.md. New cycles mirror it into artifacts/ (same dir the
+  // bridge route serves from); accept the legacy cycle-log-root location too so
+  // older frozen logs still resolve.
+  if (
+    existsSync(join(artifactsDir, 'pr-description.md')) ||
+    existsSync(join(logDir, 'pr-description.md'))
+  ) {
     artifacts['pr'] = mode;
   }
 

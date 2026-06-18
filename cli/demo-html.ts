@@ -45,6 +45,8 @@ export type DemoCheckpoint = {
   afterVideoSrc?: string | null;
   beforeNote?: string;
   afterNote?: string;
+  /** Captured live external evidence — a real API GET persisted by the acceptance test. */
+  liveEvidence?: { url: string; method?: string; capturedAt?: string; response?: string } | null;
 };
 
 export type DemoBuildStatus = {
@@ -225,6 +227,30 @@ function harnessTable(cp: DemoCheckpoint): string {
     <p class="legend"><strong>match</strong>/<strong>within</strong> = unchanged from baseline · <strong>new</strong> = newly added, no prior baseline (see the <em>after</em> column for the result — a PASS means the new test is green) · <strong>diverged</strong> = regressed vs baseline (the only state that signals a problem)</p>`;
 }
 
+function buildLiveEvidenceCard(cp: DemoCheckpoint): string {
+  const ev = cp.liveEvidence;
+  if (!ev?.url) return '';
+  const method = ev.method ?? 'GET';
+  const responseHtml = ev.response
+    ? (() => {
+        const truncated = ev.response.length > 6000 ? ev.response.slice(0, 6000) + '\n… (truncated)' : ev.response;
+        const lang = looksLikeJson(ev.response) ? 'json' : '';
+        return `
+        <details class="live-evidence-body">
+          <summary>Response body</summary>
+          <pre class="code-block ${lang}">${esc(truncated)}</pre>
+        </details>`;
+      })()
+    : '';
+  return `
+  <div class="live-evidence-card">
+    <div class="live-evidence-header">&#10003; Live evidence — real REST ${esc(method)}</div>
+    <code class="live-evidence-url">${esc(ev.url)}</code>
+    ${ev.capturedAt ? `<div class="live-evidence-meta">Captured ${esc(ev.capturedAt)}</div>` : ''}
+    ${responseHtml}
+  </div>`;
+}
+
 function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
   const beforeNote = cp.beforeNote ? `<p class="note">${esc(cp.beforeNote)}</p>` : '';
   const afterNote = cp.afterNote ? `<p class="note">${esc(cp.afterNote)}</p>` : '';
@@ -234,10 +260,12 @@ function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
       : cp.kind === 'harness'
         ? '<span class="kind">harness</span>'
         : '';
+  const liveCard = buildLiveEvidenceCard(cp);
   if (cp.kind === 'harness') {
     return `
   <div class="checkpoint">
     <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
+    ${liveCard}
     ${harnessTable(cp)}
     ${beforeNote}${afterNote}
   </div>`;
@@ -245,6 +273,7 @@ function buildCheckpoint(cp: DemoCheckpoint, i: number): string {
   return `
   <div class="checkpoint">
     <h3><span class="step">${i + 1}</span> ${esc(cp.caption)} ${kindBadge}</h3>
+    ${liveCard}
     <div class="pair">
       <figure>
         <figcaption>Before — baseline behaviour</figcaption>
@@ -334,8 +363,17 @@ function buildApiDiffSection(model: DemoComparisonModel): string {
 </section>`;
 }
 
-function buildTestEvidenceSection(model: DemoComparisonModel): string {
+function buildTestEvidenceSection(model: DemoComparisonModel, hasLiveEvidence: boolean): string {
   if (!model.testEvidence || model.testEvidence.length === 0) return '';
+  const hasSkips = model.testEvidence.some((r) => r.result === 'skip');
+  const passCount  = model.testEvidence.filter((r) => r.result === 'pass').length;
+  const failCount  = model.testEvidence.filter((r) => r.result === 'fail').length;
+  const skipCount  = model.testEvidence.filter((r) => r.result === 'skip').length;
+  const allPass    = failCount === 0 && skipCount === 0;
+  const countBadge = allPass
+    ? `<span class="badge badge-added">${passCount} / ${passCount} pass</span>`
+    : `<span>${passCount} pass · ${failCount} fail · ${skipCount} skip</span>`;
+
   const rows = model.testEvidence
     .map((r) => {
       const cls = r.result === 'pass' ? 'result-pass' : r.result === 'fail' ? 'result-fail' : 'result-skip';
@@ -346,14 +384,21 @@ function buildTestEvidenceSection(model: DemoComparisonModel): string {
       </tr>`;
     })
     .join('');
+
+  // Suppress the credentials-absent / offline-floor skip note when live evidence
+  // was captured (the live tier actually ran — skip rows are not a coverage gap).
+  const skipNote = (!hasLiveEvidence && hasSkips)
+    ? ' · <strong>skip</strong> = not run in this gate (e.g. a live test with no credentials present) — not a failure'
+    : (hasSkips ? ' · <strong>skip</strong> = not a failure' : '');
+
   return `
 <section class="section" id="test-evidence">
-  <h2>Test Evidence</h2>
+  <h2>Test Evidence <span style="font-size:.75rem;font-weight:400;margin-left:.6rem;">${countBadge}</span></h2>
   <table class="test-table">
     <thead><tr><th>test</th><th>result</th><th>delta</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="legend"><strong>pass</strong> = green · <strong>fail</strong> = failed (a problem) · <strong>skip</strong> = not run in this gate (e.g. a live test with no credentials present) — not a failure · delta <strong>new</strong> = test added by this change</p>
+  <p class="legend"><strong>pass</strong> = green · <strong>fail</strong> = failed (a problem)${skipNote} · delta <strong>new</strong> = test added by this change</p>
 </section>`;
 }
 
@@ -368,6 +413,25 @@ function stripScratchDiffStat(diffStat: string): string {
     .trim();
 }
 
+/**
+ * Parse a `git diff --stat` output into per-file rows.
+ * Each data line looks like: " path/to/file.ts | 42 +++---"
+ * The summary line ("3 files changed, ...") is excluded.
+ */
+function parseDiffStatRows(diffStat: string): Array<{ path: string; ins: number; del: number; total: number }> {
+  const rows: Array<{ path: string; ins: number; del: number; total: number }> = [];
+  for (const line of diffStat.split('\n')) {
+    const m = line.match(/^\s*(.+?)\s*\|\s*(\d+)\s*([+\-]*)\s*$/);
+    if (!m) continue;
+    const path = m[1].trim();
+    const bars = m[3] ?? '';
+    const ins = (bars.match(/\+/g) ?? []).length;
+    const del = (bars.match(/-/g) ?? []).length;
+    rows.push({ path, ins, del, total: ins + del });
+  }
+  return rows;
+}
+
 function buildFilesChangedSection(model: DemoComparisonModel): string {
   const hasAnnotated = model.filesChanged && model.filesChanged.length > 0;
   const rawDiff = model.diffStat ? stripScratchDiffStat(model.diffStat) : '';
@@ -379,7 +443,27 @@ function buildFilesChangedSection(model: DemoComparisonModel): string {
       ${model.filesChanged!.map((f) => `<li><code>${esc(f.path)}</code>${f.note ? ` <span class="muted">— ${esc(f.note)}</span>` : ''}</li>`).join('\n      ')}
     </ul>`
     : '';
-  const diffBlock = hasDiff
+
+  // Parse diff stat into per-file bar rows when available
+  const diffRows = hasDiff ? parseDiffStatRows(rawDiff) : [];
+  const maxTotal = diffRows.reduce((m, r) => Math.max(m, r.total), 1);
+  const diffTable = diffRows.length > 0
+    ? `<div class="diff-stat-table">
+      ${diffRows.map((r) => {
+        const insPct  = (r.ins / maxTotal) * 100;
+        const delPct  = (r.del / maxTotal) * 100;
+        return `<div class="diff-stat-row">
+          <code class="diff-stat-path">${esc(r.path)}</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:${insPct.toFixed(1)}%"></span><span class="diff-bar-del" style="width:${delPct.toFixed(1)}%"></span>
+          </div>
+          <span class="diff-stat-count muted">${r.ins > 0 ? `+${r.ins}` : ''}${r.del > 0 ? ` -${r.del}` : ''}</span>
+        </div>`;
+      }).join('\n      ')}
+    </div>`
+    : '';
+
+  const diffRawBlock = hasDiff
     ? `<details class="diff-stat-toggle"><summary>git diff --stat <code>${esc(model.baseRef)}</code>..<code>${esc(model.changedRef)}</code></summary><pre class="diff-stat">${esc(rawDiff)}</pre></details>`
     : '';
 
@@ -387,7 +471,8 @@ function buildFilesChangedSection(model: DemoComparisonModel): string {
 <section class="section" id="files-changed">
   <h2>Files Changed</h2>
   ${annotatedList}
-  ${diffBlock}
+  ${diffTable}
+  ${diffRawBlock}
 </section>`;
 }
 
@@ -420,6 +505,10 @@ function buildImpactSection(model: DemoComparisonModel): string {
 function buildEvaluationSection(model: DemoComparisonModel): string {
   if (!model.acEvaluations || model.acEvaluations.length === 0) return '';
 
+  const metCount     = model.acEvaluations.filter((e) => e.verdict === 'met').length;
+  const partialCount = model.acEvaluations.filter((e) => e.verdict === 'partial').length;
+  const missedCount  = model.acEvaluations.filter((e) => e.verdict === 'missed').length;
+
   const verdictLabel = (v: string): string => v === 'met' ? 'met' : v === 'missed' ? 'missed' : 'partial';
   const rows = model.acEvaluations
     .map(
@@ -432,9 +521,12 @@ function buildEvaluationSection(model: DemoComparisonModel): string {
     )
     .join('');
 
+  const rollupCls = missedCount > 0 ? 'rollup-has-missed' : partialCount > 0 ? 'rollup-has-partial' : 'rollup-all-met';
+  const rollup = `<span class="ac-rollup ${rollupCls}">${metCount} met${partialCount > 0 ? ` · ${partialCount} partial` : ''}${missedCount > 0 ? ` · ${missedCount} missed` : ''}</span>`;
+
   return `
 <section class="section" id="demo-evaluation" data-section="demo-evaluation" data-ac-eval-count="${model.acEvaluations.length}">
-  <h2>Intent &amp; Outcome</h2>
+  <h2>Intent &amp; Outcome ${rollup}</h2>
   <p class="intent-essence">${esc(model.essence)}</p>
   <table class="ac-eval">
     <thead><tr><th class="ac-idx">#</th><th>Acceptance criterion</th><th>Verdict</th><th>Evidence</th></tr></thead>
@@ -459,6 +551,10 @@ function buildAcAppendix(model: DemoComparisonModel): string {
  * Empty sections are suppressed so a notes-only demo stays clean.
  */
 export function renderComparisonHtml(model: DemoComparisonModel): string {
+  // Derive whether any checkpoint carries captured live REST evidence.
+  // When true: render a green banner and suppress the credentials-absent skip note.
+  const hasLiveEvidence = model.checkpoints.some((c) => c.liveEvidence?.url);
+
   const headerMeta: string[] = [];
   if (model.initiativeId) headerMeta.push(`<code>${esc(model.initiativeId)}</code>`);
   headerMeta.push(`project <strong>${esc(model.project)}</strong>`);
@@ -494,6 +590,7 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   /* ── Banners ── */
   .banner { margin: 1rem 0; padding: .9rem 1.1rem; border-radius: 6px; background: color-mix(in srgb, #e0a800 22%, transparent); font-size: .9rem; }
   .banner hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); margin: .6rem 0; }
+  .live-evidence-banner { background: color-mix(in srgb, #3fae6a 18%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 40%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
 
   /* ── Summary ── */
   .summary-bullets { margin: 0 0 .6rem 1.2rem; padding: 0; }
@@ -586,6 +683,29 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
   .ac-partial { background: color-mix(in srgb, #e0a800 25%, transparent); color: #9a7200; }
   .ac-missed { background: color-mix(in srgb, #e0584a 25%, transparent); color: #b03030; }
 
+  /* ── Live evidence card ── */
+  .live-evidence-card { margin: .8rem 0 1rem; padding: .9rem 1.1rem; border-radius: 7px; background: color-mix(in srgb, #3fae6a 8%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 35%, transparent); }
+  .live-evidence-header { font-size: .82rem; font-weight: 700; color: color-mix(in srgb, #3fae6a 90%, currentColor); margin-bottom: .35rem; }
+  .live-evidence-url { display: block; font-size: .82rem; word-break: break-all; margin-bottom: .25rem; }
+  .live-evidence-meta { font-size: .75rem; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .live-evidence-body { margin-top: .4rem; }
+  .live-evidence-body summary { cursor: pointer; font-size: .8rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+
+  /* ── Diff stat bar chart ── */
+  .diff-stat-table { margin: .6rem 0 .8rem; display: flex; flex-direction: column; gap: .3rem; }
+  .diff-stat-row { display: grid; grid-template-columns: minmax(160px, 40%) 1fr auto; align-items: center; gap: .6rem; font-size: .82rem; }
+  .diff-stat-path { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .diff-stat-bars { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, currentColor 8%, transparent); min-width: 40px; }
+  .diff-bar-ins { background: color-mix(in srgb, #3fae6a 70%, transparent); height: 100%; }
+  .diff-bar-del { background: color-mix(in srgb, #e0584a 70%, transparent); height: 100%; }
+  .diff-stat-count { font-size: .75rem; white-space: nowrap; }
+
+  /* ── AC roll-up chip ── */
+  .ac-rollup { display: inline-block; font-size: .7rem; font-weight: 500; padding: .15rem .55rem; border-radius: 999px; margin-left: .6rem; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+  .rollup-all-met  { background: color-mix(in srgb, #3fae6a 22%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
+  .rollup-has-partial { background: color-mix(in srgb, #e0a800 22%, transparent); color: color-mix(in srgb, #e0a800 90%, currentColor); }
+  .rollup-has-missed  { background: color-mix(in srgb, #e0584a 22%, transparent); color: color-mix(in srgb, #e0584a 90%, currentColor); }
+
   /* ── Shared utils ── */
   .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
   footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); padding-top: 1rem; }
@@ -603,6 +723,8 @@ export function renderComparisonHtml(model: DemoComparisonModel): string {
 
 ${buildBanner(model)}
 
+${hasLiveEvidence ? `<div class="banner live-evidence-banner">&#10003; <strong>Live evidence captured</strong> — real ADO REST GET confirmed against the live system. The live tier ran successfully.</div>` : ''}
+
 ${buildSummarySection(model)}
 
 ${buildEvaluationSection(model)}
@@ -611,7 +733,7 @@ ${buildVisualChangesSection(model)}
 
 ${buildApiDiffSection(model)}
 
-${buildTestEvidenceSection(model)}
+${buildTestEvidenceSection(model, hasLiveEvidence)}
 
 ${buildFilesChangedSection(model)}
 

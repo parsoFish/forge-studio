@@ -249,6 +249,7 @@ export function toComparisonModel(model: DemoModel, generatedAt: string): DemoCo
       afterVideoSrc: c.afterVideoSrc ?? null,
       beforeNote: c.beforeNote,
       afterNote: c.afterNote,
+      liveEvidence: c.liveEvidence ?? null,
     })),
     diffStat: stripScratchFromDiffStat(model.diffStat),
     acceptanceCriteria: model.acceptanceCriteria,

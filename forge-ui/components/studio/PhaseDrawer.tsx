@@ -231,7 +231,7 @@ function DrawerBody({
   const [stderrOnly, setStderrOnly] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
 
-  // Fetch phase log whenever nodeId/stderrOnly changes
+  // Effect 1 — identity: clear + fetch on identity change (new node / filter toggle)
   useEffect(() => {
     const signal = { cancelled: false };
     setLogLoading(true);
@@ -248,6 +248,23 @@ function DrawerBody({
   }, [cycleId, nodeId, stderrOnly, isWi, wiId]);
 
   const lastProgressAt = meta?.lastProgressAt;
+
+  // Effect 2 — live refresh: re-fetch IN PLACE (no flicker) while the phase is
+  // still running, keyed on lastProgressAt so we refetch on each tool-progress
+  // tick. Terminal phases (complete/failed) keep their final snapshot.
+  const isTerminal = status === 'complete' || status === 'failed';
+  useEffect(() => {
+    if (!lastProgressAt || isTerminal) return;
+    const signal = { cancelled: false };
+    void (async () => {
+      try {
+        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly, isWi ? wiId : undefined);
+        // Replace lines in place — do NOT setLogLines([]) first to avoid flicker.
+        if (!signal.cancelled) setLogLines(lines);
+      } catch { /* best-effort */ }
+    })();
+    return () => { signal.cancelled = true; };
+  }, [lastProgressAt, cycleId, nodeId, stderrOnly, isWi, wiId, isTerminal]);
   const livenessColor = useLivenessColor(lastProgressAt, status);
   const livenessText = useLivenessText(lastProgressAt, status);
 

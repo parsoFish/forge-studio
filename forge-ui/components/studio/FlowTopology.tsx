@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { buildMonitorLayout, HEX_W, HEX_H, type HexPos, type HexKind } from '@/lib/monitor-layout';
+import { buildMonitorLayout, HEX_W, HEX_H, COL_GAP, type HexPos, type HexKind } from '@/lib/monitor-layout';
 import type { Flow, Run } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
@@ -264,8 +264,11 @@ function EdgePath({
   const y1 = fromHex.y;
   const x2 = toHex.x - HEX_W / 2 + 2;
   const y2 = toHex.y;
-  const cx = (x1 + x2) / 2;
-  const d = `M ${x1} ${y1} C ${cx} ${y1} ${cx} ${y2} ${x2} ${y2}`;
+  // S-curve: per-endpoint horizontal stubs whose offset grows with the drop
+  // and is clamped to the inter-column gap, so curves never swing back through
+  // stacked WI hexes in the same column.
+  const k = Math.min(0.5 * Math.abs(x2 - x1) + 0.4 * Math.abs(y2 - y1), COL_GAP * 0.9);
+  const d = `M ${x1} ${y1} C ${x1 + k} ${y1}, ${x2 - k} ${y2}, ${x2} ${y2}`;
 
   // Edge flow follows each endpoint hex's OWN status (a WI hex carries its WI's
   // status), so an in-progress edge clears the moment its source WI completes —
