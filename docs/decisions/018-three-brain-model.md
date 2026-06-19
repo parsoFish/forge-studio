@@ -90,7 +90,7 @@ all relevant project constraints in the work items regardless.
 - `brain/forge/{themes,patterns,antipatterns,operations}.md` → `brain/cycles/`
 - `brain/forge/{decisions,reference}.md` → `brain/forge-dev/`
 - `brain/log.md` → `brain/forge-dev/log.md`
-- `brain/projects/claude-harness/` → `projects/claude-harness/brain/`
+- `brain/projects/mdtoc/` → `projects/mdtoc/brain/`
 - `brain/projects/terraform-provider-betterado/` → `projects/terraform-provider-betterado/brain/`
 - `brain/projects/trafficGame/` → `projects/trafficGame/brain/`
 - `brain/projects/` removed from forge repo

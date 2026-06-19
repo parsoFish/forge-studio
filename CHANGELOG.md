@@ -5,6 +5,47 @@ All notable changes to Forge are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — productionisation
+
+This entry covers the **productionisation pass**: a release final-loop, disk-based
+project auto-discovery, a creds-free reference project, and a hard cull of removed
+seams (Zep, graphify) and stale framing (forge-v2).
+
+### Added
+
+- **Release final-loop.** An in-cycle drafted changelog → operator **Approve** →
+  `release-finalize` (commits the changelog + docs) → forge merges the PR → CI
+  tags + publishes the release. Codified as contract clause **C10**, with the
+  `release-finalizer`, `doc-updater`, and `changelog-semver` skills.
+- **Disk-based project auto-discovery + first-run onramp.** Managed projects are
+  discovered from disk — any directory under `projects/` (or `$FORGE_PROJECTS_DIR`)
+  carrying a `.forge/project.json` is a managed project. No central registry file.
+- **`projects/mdtoc`** — a neutral, creds-free reference project (the default
+  `verify:cycle` ground; betterado remains the live tier).
+- **Getting-started guide + onboarding scaffolding** —
+  [`docs/getting-started.md`](docs/getting-started.md),
+  [`studio/starters/project.json.example`](studio/starters/project.json.example),
+  and the per-project `secrets.env` convention.
+- **Runtime-adapter `runtime.sdk` threading** — the resolved SDK id flows through
+  to `getAdapter(sdkId)`, with Gemini/Aider conformance.
+
+### Removed
+
+- **Zep KB backend** — `orchestrator/kb-backends/` and `@getzep/zep-cloud`. The KB
+  seam is now filesystem-only (`FilesystemKbBackend`).
+- **graphify** — tooling, config, and generated artifacts.
+- **`studio/projects.yaml`** project registry — replaced by disk auto-discovery.
+- **ADRs 005, 014, 016, 023** — superseded/consolidated (023 → ADR 031).
+- **forge-v2 / v1-vs-v2 framing** — the product is "Forge Studio".
+- **Dead dependencies** — `blessed-contrib`, `globby`, `@getzep/zep-cloud`, `dagre`.
+
+### Changed
+
+- **KB simplified to filesystem-only.** The `KbBackend` seam stays; the second
+  (Zep) implementation is gone.
+- **ADRs consolidated to current state.**
+- **Docs split into public (operators) vs internal (contributors).**
+
 ## [Unreleased] — 0.x (Studio era)
 
 This entry covers the **M7 consolidation** (Forge Studio became the one product)
@@ -23,19 +64,19 @@ real data-table dispatch and a second, gated implementation behind it).
   The dev-loop builds agents via `getAdapter(sdkId).createAgent` through the
   `RuntimeAdapter` registry instead of calling `createClaudeAgent` directly, so the
   underlying coding agent is swappable.
-- **Swappable brain store (`KbBackend` seam)** ([ADR-027](docs/decisions/027-studio-object-model.md)).
+- **`KbBackend` seam** ([ADR-027](docs/decisions/027-studio-object-model.md)).
   The brain's store sits behind a `KbBackend` interface dispatched from `kb.yaml`
-  (`orchestrator/kb-backend.ts`), making the knowledge-base backend pluggable.
+  (`orchestrator/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the
+  seam is present for a future second backend.
 - **Unifier as a first-class flow node.** `runUnifierPhase`
   (`orchestrator/phases/developer-loop.ts`) is now an independently-dispatchable
   flow node rather than logic buried inside the cycle runner.
-- **Second implementation behind every seam (subsumption proof)**
-  ([ADR-032](docs/decisions/032-subsumption-proof.md)). Each seam now resolves a
-  real drop-in alternative, all registered but **dependency- and credential-gated**
+- **Second implementation behind the runtime-adapter seam (subsumption proof)**
+  ([ADR-032](docs/decisions/032-subsumption-proof.md)). The runtime seam resolves
+  real drop-in alternatives, registered but **dependency- and credential-gated**
   (`available: false` until provisioned):
   - **Gemini** `RuntimeAdapter` — `loops/_adapters/gemini` (needs `@google/genai` + `GEMINI_API_KEY`).
   - **Aider** dev-loop `RuntimeAdapter` — `loops/_adapters/aider` (needs the Aider CLI + a model key).
-  - **Zep** `KbBackend` — `orchestrator/kb-backends/zep.ts` (needs `@getzep/zep-cloud` + Zep credentials).
   - Adapters are wired in `loops/_adapters/registry.ts` and surfaced in `studio/catalog.yaml`.
 
 #### M7 — Studio consolidation (Forge Studio is the one product)
@@ -46,7 +87,7 @@ real data-table dispatch and a second, gated implementation behind it).
 - **Native architect in Studio** — the architect interview and the PLAN gate were
   rebuilt natively inside Studio.
 - **Unified `/artifact` viewer** — the `/review` and `/reflect` human moments now
-  render on the single `/artifact` viewer ([ADR-020](docs/decisions/020-in-ui-architect.md)).
+  render on the single `/artifact` viewer ([ADR-020](docs/decisions/020-architect-in-ui.md)).
 - **Cycle-monitor regression guards** on the Studio flow monitor.
 
 ### Changed

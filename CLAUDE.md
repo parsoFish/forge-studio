@@ -1,4 +1,4 @@
-# Forge — Project Instructions for Claude Code
+# Forge Studio — Project Instructions for Claude Code
 
 > Idea machine for one human across many side projects. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
 
@@ -57,7 +57,7 @@ below. The dev-loop and reviewer correctly do NOT read the brain.)
 - Spawn agents as Claude CLI subprocesses. Use Claude Code skills via the SDK.
 - Ship a **planner or reflector** skill that doesn't read the brain first. (The dev-loop and reviewer skills correctly do NOT — see the brain-read policy.)
 - Add a feature flag, fallback, or "for backwards compatibility" path. There are no legacy users to support.
-- Squash-merge stacked PRs (we learned this in v1; the lesson lives in the brain after Pass B).
+- Squash-merge stacked PRs (the lesson lives in the brain after Pass B).
 
 ## Build & test
 
@@ -81,7 +81,7 @@ forge/
 ├── brain/              # the wiki (Karpathy three-layer)
 ├── skills/             # Claude Code skills (the agent surface)
 ├── loops/              # agentic loop runtimes (default: Ralph)
-├── orchestrator/       # scheduler, cycle runner, flow engine, KB backends, logging (hot path)
+├── orchestrator/       # scheduler, cycle runner, flow engine, KB backend seam, logging (hot path)
 ├── cli/                # operator utilities + forge subcommand handlers (post-2026-05-24 Move 1)
 ├── forge-ui/           # Next.js operator UI; launched by `forge studio` (see CWC DOM convention below)
 ├── _queue/             # initiative queue (gitignored)
@@ -108,11 +108,12 @@ artifacts rather than hand-curated fixtures.
 
 **Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md)):**
 the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
-fills the gap — `claude-harness` is forge's standing real-capability regression
+fills the gap — `verify-cycle.mjs` is forge's standing real-capability regression
 harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached
 PR/merge, dev-loop N/N, project tests green post-merge, cost under ceiling), not
-synthetic rubrics. Tiered (frozen-SHA routine / full-greenfield release), run as
-a manual gate before pointing forge at a real project.
+synthetic rubrics. Default ground is the creds-free **mdtoc** reference project;
+**betterado** is the live-ADO tier. Tiered (frozen-SHA routine / full-greenfield
+release), run as a manual gate before pointing forge at a real project.
 
 Where to look for as-built detail:
 
@@ -210,7 +211,8 @@ video and the regression layer stop entangling:
    project builders) → **RUN** (idea → architect interview → PLAN gate →
    autonomous build on `/flows/forge-cycle` → verdict gate send-back/payoff →
    approve+merge → reflect) → **SWAP** (the seams: flow-engine controls, the
-   runtime-adapter registry SDK picker, the KB-backend knowledge graph). It is
+   runtime-adapter registry SDK picker — the live swap surface — plus the
+   filesystem-only KB-backend seam). It is
    grounded on a **real betterado** release-definition feature (so the seeded
    artifacts read true), emulates the architect turns + autonomous cycle by
    seeding the same files/events the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`),
@@ -228,7 +230,7 @@ video and the regression layer stop entangling:
    regression harness for forge's actual capabilities (ADR 022): it asserts
    real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
    gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
-   **claude-harness** (default — the deterministic frozen-SHA corpus) and the
+   **mdtoc** (default — the creds-free neutral reference project) and the
    **betterado terraform provider** (`--project terraform-provider-betterado` —
    the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
    **live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /

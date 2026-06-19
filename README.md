@@ -22,17 +22,17 @@ There are two layers to the differentiation, and keeping them distinct matters.
 
 **Today — the intersection (§1).** Forge is the only system that combines a *visually editable* autonomous-SWE pipeline, *structurally code-enforced* human gates, and a *compounding, human-navigable engineering knowledge graph wired into planning*, for a single operator running a portfolio. Each capability has a competitor; the combination has none — and Forge is **the only open product at that intersection.** Open matters here for a specific reason: when the gate is in the code and the code is yours to read, "won't skip the human" is a property you can *verify*, not a vendor promise.
 
-**Over time — modularity-as-subsumption (§3).** Forge's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. M8 made three seams real and used in production, each with a second implementation behind it:
+**Over time — modularity-as-subsumption (§3).** Forge's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. The seams are real and used in production; the **runtime-adapter** seam carries a second implementation behind it:
 
 | Seam | Live | Second implementation (seam-proven) | ADR |
 |---|---|---|---|
 | Runtime / model | Claude Agent SDK | Gemini, Aider adapters | [029](./docs/decisions/029-runtime-adapters.md) |
 | Flow engine | node-executor registry (the old `classifyNode` switch is gone) | any node type as a data-table entry | [028](./docs/decisions/028-flow-engine.md) |
-| Knowledge backend | filesystem brain | Zep `KbBackend` | [027](./docs/decisions/027-studio-object-model.md) |
+| Knowledge backend | filesystem brain (`FilesystemKbBackend`) | seam present; filesystem-only today | [027](./docs/decisions/027-studio-object-model.md) |
 
-A standing test (`orchestrator/subsumption-proof.test.ts`) asserts every seam resolves a second implementation simultaneously — "competitors → components" made mechanically true, not just asserted.
+A standing test (`orchestrator/subsumption-proof.test.ts`) asserts the runtime-adapter seam resolves a second implementation — "competitors → components" made mechanically true, not just asserted.
 
-**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under a **steerable, gated, knowledge-compounding** pipeline for a **portfolio** operator. The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
+**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under a **steerable, gated, knowledge-compounding** pipeline for a **portfolio** operator. Today the **runtime-adapter** seam is the one with a shipped second implementation (the KB seam is filesystem-only — `FilesystemKbBackend` — and the flow engine is registry-driven). The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
 
 ## Quickstart
 
@@ -103,7 +103,7 @@ Forge runs unattended **between** exactly three deliberate human interaction poi
 | [`studio/`](./studio/) | Studio definitions as data — flows, agents, catalog, KBs |
 | [`forge-ui/`](./forge-ui/) | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
 | [`loops/`](./loops/) | Agentic loop runtimes + the runtime-adapter seam (`loops/_adapters/`) |
-| [`orchestrator/`](./orchestrator/) | Scheduler, cycle runner, flow engine, KB backends, logging |
+| [`orchestrator/`](./orchestrator/) | Scheduler, cycle runner, flow engine, the KB backend seam, logging |
 | [`skills/`](./skills/) | Claude Code skills — the agent surface |
 | [`brain/`](./brain/) | The compounding engineering wiki (three scoped graphs) |
 | [`cli/`](./cli/) | The runtime spine + the operator bridge |

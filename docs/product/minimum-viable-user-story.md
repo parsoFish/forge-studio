@@ -1,11 +1,9 @@
 # Minimum Viable User Story (MVUS) — the productionised forge
 
-> **Status:** canonical grounding for the 2026-06 slimming / productionisation round.
-> **Mandate:** anything not *explicitly required for*, or *forwarding the implementation of*, this
-> journey is a cull candidate. If a component has not proven it advances this journey, it is ripped out.
-> Be aggressive.
+> **Canonical product vision.** This document defines forge's productionised form as **one user
+> journey**. It is the timeless grounding every component is judged against.
 
-This document defines forge's productionised form as **one user journey**. Every component is judged against it:
+Every component is judged against this journey:
 
 - **REQUIRED** — the journey names this capability directly.
 - **FORWARDS** — it demonstrably enables/serves a named capability.
@@ -50,9 +48,17 @@ The unifier:
 
 The user **accepts** or **provides feedback**. When feedback is given, a **work item to complete that work
 is established and sent back to the unifier**. This loop continues until the user accepts — at which point the
-change is **closed out, merged to main**, and the cycle moves toward closure.
+change is **closed out, merged to main**, and the cycle moves toward release.
 
-## 4. Reflect phase
+## 4. Release phase — the final loop
+
+For a release-shaped cycle the unifier drafts a **changelog** from the merged work and presents it for a
+final human moment. The user reviews and **approves the release** (or sends the draft back for an edit); on
+approval, **release-finalize** runs, **forge merges the release**, and **CI tags and publishes** it
+(contract clause **C10**). The release final-loop is the bridge between an accepted change and a tagged,
+published artifact — the operator confirms the human-readable release notes before anything ships.
+
+## 5. Reflect phase
 
 An agent reviews the **entire cycle** and generates **interview questions for the user** that shape what is
 worth saving to the brain to **tune future projects**. These may include:
@@ -90,6 +96,7 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Rich HTML demo** with assessed-intent + evaluated-output + **human-watchable visual demonstration**
   (incl. CLI-behaviour video) for any component shape.
 - **Review feedback → work item → unifier** send-back loop, looping until accept (ADR-026, now built).
+- **Release final-loop**: draft changelog → operator approves the release → release-finalize → forge merges → CI tags/publishes (contract C10).
 - **Reflect interview → user feedback → brain tuning** at the relevant level.
 - **Live, drill-down, cross-project observability**: per-phase task/approach, cost, **per-worker token usage**,
   live hex UI, and **"interaction needed" signalling**.

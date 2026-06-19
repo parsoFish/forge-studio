@@ -38,31 +38,19 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 - **Wedge rate:** ≤ 5% of work items hit `iteration_budget` without completing.
 - **Merge success:** initiative-branch quality gates pass after all work items merge.
 
-## Benchmark suite
-
-> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
-
-`benchmarks/developer-loop/` (removed) — five fixtures, one per managed project.
-- `fixtures/<id>/` — seed worktree (source files + tests) plus `.forge/work-items/WI-1.md` (the WI spec) plus a failing acceptance test.
-- `cases.json` — catalogue with per-fixture `quality_gate_cmd` + `pre_existing_tests_cmd` + budgets.
-- `scoring.ts` — pure rubric (gate `terminated_cleanly`; weighted criteria for `loop_completed`, `iteration_budget_respected`, `files_in_scope_respected`, `no_regression`; pass threshold 0.7). `cost_budget_respected` was dropped (all $-budgets removed).
-- `sdk.ts` — per-fixture tempdir + runDevLoop entrypoint (shared with the live cycle via `orchestrator/dev-invocation.ts`).
-- `score.ts` — runs the Ralph loop against each fixture, scores, writes `results/<iso>.json`.
-
 ## Known failure modes (to defend against)
 
 - **Wedged loops** — Ralph never converges. The iteration budget is the backstop (loop aborts when iterations are exhausted). A dedicated wedged-detector existed historically but was removed in Tier 2 (2026-05-25); the iteration budget is now the only no-progress backstop.
 - **Token burn on no-op iterations** — iteration budget caps this; cost budget per initiative caps it harder.
-- **Hallucinated test passes** — quality gate verification runs in the orchestrator, not the agent (carried-over v1 lesson).
+- **Hallucinated test passes** — quality gate verification runs in the orchestrator, not the agent.
 - **Merge conflicts across parallel loops** — handled by per-work-item branches off the initiative branch + orchestrator-level rebase before declaring the initiative complete.
 
 ## TODO (post-scaffold)
 
 - [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent. The flow engine drives the dev loop via the RuntimeAdapter registry (`getAdapter(sdkId)`) — M8, ADR 029.
 - [ ] ~~Implement wedged-detector (no-progress heuristic).~~ Removed in Tier 2 (2026-05-25) — the iteration budget is the only no-progress backstop; no dedicated wedged-detector exists.
-- [x] Implement quality-gates-pass stop condition with per-fixture commands — done. `LoopInput.qualityGate` is now injectable; the (since-removed) bench harness wired per-fixture commands (pytest / bats / node:test / grep). Live cycle still defaults to `npm test --silent` until per-project quality-gate config lands.
+- [x] Implement quality-gates-pass stop condition with per-WI commands — done. `LoopInput.qualityGate` is injectable; the live cycle reads each WI's `quality_gate_cmd` (or the project's `quality_gate_cmd` from `.forge/project.json`).
 - [x] Per-iteration commit discipline + JSONL event emission — done. `orchestrator/cycle.ts:runDeveloperLoop` walks WIs in topological order, emits `ralph.start` / `ralph.end` per WI plus a phase-level summary.
-- [x] Populate `benchmarks/developer-loop/fixtures/` with reference fixtures — five fixtures landed, one per managed project (env-optimiser, trafficGame, simplarr, GitWeave, healarr); catalogue was in `benchmarks/developer-loop/cases.json`. (Benchmarks removed 2026-05-25.)
 
 ## Onboarding a project
 
@@ -87,26 +75,28 @@ missing or malformed, and surfaces the error in the operator queue.
    and passes it via env to the preview server.
 4. **For `shape: "harness"`:** confirm `demo.command` completes within
    ~5 minutes on baseline and emits stable, regex-scrapable lines.
-5. **Seed at least one brain theme** under
-   `brain/projects/<project>/themes/` describing the project's
-   demo-shape choice (see
-   [`brain/projects/terraform-provider-betterado/themes/2026-05-18-go-test-harness-demos.md`](../../brain/projects/terraform-provider-betterado/themes/2026-05-18-go-test-harness-demos.md)
+5. **Seed at least one Brain 3 theme** in the project's own repo
+   (`<project-root>/forge/brain/themes/` or `<project-root>/brain/themes/`,
+   per [ADR 018](../decisions/018-three-brain-model.md)) describing the
+   project's demo-shape choice (see
+   [`projects/mdtoc/forge/brain/themes/anchor-slug-fidelity.md`](../../projects/mdtoc/forge/brain/themes/anchor-slug-fidelity.md)
    for an example).
 
 ### Worked examples per `demo.shape`
 
 Reference templates live under
 [`docs/schemas/examples/`](../schemas/examples/) — operators run `cp` to
-install the appropriate one and edit the project-specific commands.
+install the appropriate one and edit the project-specific commands. Both
+templates back a live managed project:
 
 | Project | `demo.shape` | Example |
 |---|---|---|
-| trafficGame | `browser` | [`project.trafficGame.json`](../schemas/examples/project.trafficGame.json) |
-| terraform-provider-betterado | `harness` | [`project.betterado.json`](../schemas/examples/project.betterado.json) |
-| slugifier | `artifact` | [`project.slugifier.json`](../schemas/examples/project.slugifier.json) |
-| simplarr | `cli-diff` | [`project.simplarr.json`](../schemas/examples/project.simplarr.json) |
-| healarr | `cli-diff` | [`project.healarr.json`](../schemas/examples/project.healarr.json) |
-| env-optimiser | `artifact` | [`project.env-optimiser.json`](../schemas/examples/project.env-optimiser.json) |
+| mdtoc (creds-free OOTB reference) | `cli-diff` | [`project.mdtoc.json`](../schemas/examples/project.mdtoc.json) |
+| terraform-provider-betterado (live-ADO) | `harness` | [`project.betterado.json`](../schemas/examples/project.betterado.json) |
+
+(`trafficGame` is the live `browser`-shape managed project; it needs a
+`preview_command` in its `.forge/project.json` — see the `shape: "browser"`
+checklist item above.)
 
 ### Failure-mode table (unifier sub-phase)
 

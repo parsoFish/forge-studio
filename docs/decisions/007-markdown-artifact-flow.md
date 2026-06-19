@@ -42,7 +42,7 @@ Skills consume markdown via `gray-matter` for frontmatter parsing and emit markd
 - No bespoke serialisation; no migration when a field is added.
 
 **Negative / accepted trade-offs:**
-- No compile-time schema enforcement. Mitigated by lint skills and benchmarks that validate artifact shape.
+- No compile-time schema enforcement. Mitigated by lint skills (`forge brain lint`, `forge studio lint`) and the `orchestrator/work-item.ts` parser/validator, which assert artifact shape at the phase boundary.
 - Markdown is verbose vs binary formats. Accepted.
 
 ## Alternatives considered

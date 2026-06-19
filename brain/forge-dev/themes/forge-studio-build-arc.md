@@ -25,7 +25,7 @@ related_themes:
 
 # Forge Studio build arc — M0 to M6
 
-The full roadmap ([`docs/forge-studio/`](../../../docs/forge-studio/), ADRs 027-030) shipped to `main` across one push: definitions-as-data → run model + read-only UI → builders + single-source specs → the flow-engine cutover → flow builder + artifact viewer → KBs as objects → a pluggable runtime adapter framework. 1084 tests; relicensed AGPL-3.0.
+The full roadmap (the M-series milestone plans, now in git history; ADRs 027-030) shipped to `main` across one push: definitions-as-data → run model + read-only UI → builders + single-source specs → the flow-engine cutover → flow builder + artifact viewer → KBs as objects → a pluggable runtime adapter framework. 1084 tests; relicensed AGPL-3.0.
 
 ## The orchestration playbook (what worked)
 
@@ -39,7 +39,7 @@ The riskiest change (`runCycle` → `flow-runner` from `flow.yaml`) was made saf
 
 ## verify-cycle corpus non-determinism (load-bearing)
 
-Six real-money `verify:cycle` runs. The dev agent is **non-deterministic**: M3 + M4 did real work and hit fully-GREEN gates; M2 + M5 + M6 hit `WI-1 dev failed · iters=0 · gate-too-loose` (the iter-0 hollow-pass guard firing because the project's gate is already green at the frozen base). The engine ran claim→PM→dev faithfully every time — a `gate-too-loose` FAIL is the corpus artifact, NOT a code regression. Operational gotchas for a clean run: clear the stale `origin/forge/<id>` branch first, strip the manifest's stale `resume_from` (fixed in `stageManifest`), and the routine harness sets `FORGE_SKIP_CONTRACT_CHECK=1` (it tests execution, not onboarding). See [`docs/forge-studio/work-items.md`](../../../docs/forge-studio/work-items.md) per-milestone verify notes.
+Six real-money `verify:cycle` runs. The dev agent is **non-deterministic**: M3 + M4 did real work and hit fully-GREEN gates; M2 + M5 + M6 hit `WI-1 dev failed · iters=0 · gate-too-loose` (the iter-0 hollow-pass guard firing because the project's gate is already green at the frozen base). The engine ran claim→PM→dev faithfully every time — a `gate-too-loose` FAIL is the corpus artifact, NOT a code regression. Operational gotchas for a clean run: clear the stale `origin/forge/<id>` branch first, strip the manifest's stale `resume_from` (fixed in `stageManifest`), and the routine harness sets `FORGE_SKIP_CONTRACT_CHECK=1` (it tests execution, not onboarding). (The per-milestone verify notes lived in the retired `docs/forge-studio/` milestone plans — now in git history.)
 
 ## Endpoint
 

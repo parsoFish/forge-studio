@@ -29,38 +29,11 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 
 ## Success signals
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; the deterministic-metric / LLM-judge thresholds below are **historical**. Phase quality is now judged on real merged cycles.
-
-**Current success signals** (as-built):
+Brain quality is judged on real merged cycles (the brain themes accumulate the evidence), backed by these standing as-built signals:
 
 - **`brain-lint` zero findings** — `forge brain lint` exits non-zero on structural errors (orphans, malformed frontmatter, duplicate themes). This is the standing integrity gate.
 - **`brain-gaps.jsonl` trend** — rate of new gaps decreases over consecutive cycles. The gap-flagging rule in [`skills/brain-query/SKILL.md`](../../skills/brain-query/SKILL.md) is load-bearing: answers that name an absence MUST set `gap: true`.
 - **Reflector themes cite ≥1 source path** — theme pages produced by the reflector must reference at least one `_raw/` or cycle artifact path (no floating assertions).
-
-**Historical signals** (benchmarks removed 2026-05-25):
-
-- Recall ≥80% under `0.4 × source_recall + 0.6 × keyword_match` rubric (`benchmarks/brain/questions.json`).
-- Hallucination rate ≤5% (no cited path absent from disk).
-- Gap detection pass rate ≥80% (`benchmarks/brain/negatives.json`).
-- LLM-judge (Opus) agreement ≥85%; judge pass rate ≥90%.
-- `brain-query` p95 ≤15s (Haiku).
-
-**Coverage signal:**
-
-- `brain-gaps.jsonl` rate-of-new-gaps decreases over consecutive cycles. The gap-flagging rule in [`skills/brain-query/SKILL.md`](../../skills/brain-query/SKILL.md) is load-bearing here — answers that name an absence MUST set `gap: true`.
-
-## Benchmark suite
-
-> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
-
-`benchmarks/brain/` (removed)
-- `questions.json` — Q→expected-source-pages (primary recall suite, 18 cases)
-- `negatives.json` — gap-detection suite (out-of-scope / forge-adjacent-bait / partial-match, 10 cases)
-- `score.ts` — primary runner (recall + keyword + hallucination check)
-- `score-negatives.ts` — gap-detection runner
-- `score-judged.ts` — Opus LLM-judge over the latest primary result (validates the deterministic metric)
-- `judge.ts` — judge invocation logic (reusable for other phases)
-- Run via: `npm run bench:brain`, `npm run bench:brain:negatives`, `npm run bench:brain:judge`
 
 ## Known failure modes (to defend against)
 
@@ -70,7 +43,4 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 
 ## TODO (post-scaffold)
 
-- [x] Run brain seeding Pass A (general best practices) — complete.
-- [x] Run brain seeding Pass B (v1 wiki + existing projects) — complete.
-- ~~Populate `benchmarks/brain/questions.json`~~ — benchmarks removed 2026-05-25; superseded by real-cycle quality signal.
 - [ ] Wire Obsidian vault config (per-user, gitignored).

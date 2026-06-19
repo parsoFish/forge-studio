@@ -1,19 +1,17 @@
 # ADR 027 — Forge Studio object model: definitions as data, filesystem registries
 
-**Status:** Accepted — 2026-06-13. Implementation staged per
-[`docs/forge-studio/roadmap.md`](../forge-studio/roadmap.md) (M0 schemas,
-M2 builders). Amends ADR 003/024 (agent definition), ADR 018 (KB descriptor),
-ADR 010 (brain access becomes a per-agent field), ADR 017 (project config
-extensions).
+**Status:** Accepted — 2026-06-13. Implementation staged across the Studio
+milestones (M0 schemas, M2 builders). Amends ADR 003/024 (agent definition),
+ADR 018 (KB descriptor), ADR 010 (brain access becomes a per-agent field),
+ADR 017 (project config extensions).
 
 ## Context
 
 Forge is one flow definition compiled by hand into TypeScript. The Forge
-Studio direction (mocks at `mockups/agent-flow-builder/`, plan at
-`docs/forge-studio/`) requires Projects, Agents, Flows, and Knowledge Bases
-as first-class, operator-editable objects. The danger is a second source of
-truth: a registry that duplicates what SKILL.md, `.forge/project.json`, and
-the brains already encode.
+Studio direction (mocks at `mockups/agent-flow-builder/`) requires Projects,
+Agents, Flows, and Knowledge Bases as first-class, operator-editable objects.
+The danger is a second source of truth: a registry that duplicates what
+SKILL.md, `.forge/project.json`, and the brains already encode.
 
 ## Decision
 
@@ -42,8 +40,9 @@ written only through one canonical serializer module
 3. **Project = extended `.forge/project.json`**, staying in the project repo
    (portability, ADR 018): adds `northStar`, `instructions` (generalises
    `standing_work_item_acs`), `demoProcess[]` (typed capture/verify/present
-   steps — closes the `demo.skill` known-gap), `skills[]`, `kb`. Forge keeps
-   only an id→path registry (`studio/projects.yaml`).
+   steps — closes the `demo.skill` known-gap), `skills[]`, `kb`. Forge holds no
+   project registry file — projects are auto-discovered from disk
+   (`<projectsDir>/*`, each carrying a `.forge/project.json`).
 4. **Knowledge Base = `kb.yaml` descriptor over an existing brain**
    (id, name, scope: `project | flow | agent-integration`, desc). The graph is
    derived from the markdown wiki on disk; health stays `forge brain lint`. No
@@ -91,10 +90,10 @@ kb-backend.ts`):
   test (the KB analogue of the RuntimeAdapter conformance suite, ADR-029).
 
 This is the swap surface for memory: the seam exists and is exercised in
-production, but only the `FilesystemKbBackend` ships. A graph-memory backend
-(Zep/Mem0/Cognee) would implement the same `KbBackend` interface and register in
+production, but only the `FilesystemKbBackend` ships. A future graph-memory
+backend would implement the same `KbBackend` interface and register in
 `getKbBackend`; none is shipped — the descriptor's `backend:` field is the
-selection point a future backend hangs off. The bridge KB routes
+selection point such a backend hangs off. The bridge KB routes
 (`cli/bridge-studio-kbs.ts`) read through `getKbBackend` rather than calling
 `kb-graph.ts` directly, so the reroute point is already in place.
 

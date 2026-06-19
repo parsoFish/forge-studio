@@ -81,8 +81,6 @@ distributed artifact).
 | Package | Version | License | AGPL-compatible? |
 | --- | --- | --- | --- |
 | `@anthropic-ai/claude-agent-sdk` | 0.1.77 | **Proprietary** — `LICENSE.md`: "© Anthropic PBC. All rights reserved." governed by Anthropic's [legal & compliance terms](https://code.claude.com/docs/en/legal-and-compliance) (the `package.json` field reads `"SEE LICENSE IN README.md"`) | **Flagged — see note 1** |
-| `blessed-contrib` | 4.11.0 | MIT | Yes |
-| `globby` | 14.1.0 | MIT | Yes |
 | `gray-matter` | 4.0.3 | MIT | Yes |
 | `js-yaml` | 4.2.0 | MIT | Yes |
 | `proper-lockfile` | 4.1.2 | MIT | Yes |
@@ -109,7 +107,6 @@ distributed artifact unless an operator opts in by installing them.
 | Package | Backs | Published license (per registry; verify on install) | AGPL-compatible? |
 | --- | --- | --- | --- |
 | `@google/genai` | Gemini `RuntimeAdapter` (`loops/_adapters/gemini`) | Apache-2.0 | Yes |
-| `@getzep/zep-cloud` | Zep `KbBackend` (`orchestrator/kb-backends/zep.ts`) | Apache-2.0 | Yes |
 
 > The Aider drop-in invokes the **Aider CLI** as an external process rather than
 > linking a library, so it is not a Node dependency in this tree (Aider itself is
@@ -151,6 +148,6 @@ conflicting-copyleft package in the tree. The single non-OSS component,
 `@anthropic-ai/claude-agent-sdk` (proprietary, all-rights-reserved), is a
 separately-installed runtime dependency rather than embedded source, so it does
 not impair Forge's AGPL-3.0 distribution — but redistributors must not relicense it
-and operators accept Anthropic's terms to use it. The gated Gemini/Zep adapter deps
-(Apache-2.0, optional, not installed) are also AGPL-compatible. **The dependency set
+and operators accept Anthropic's terms to use it. The gated Gemini adapter dep
+(Apache-2.0, optional, not installed) is also AGPL-compatible. **The dependency set
 is compatible with AGPL-3.0 distribution.**
