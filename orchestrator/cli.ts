@@ -30,6 +30,7 @@ import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 import {
   runArchitectTurn,
 } from './architect-runner.ts';
@@ -43,6 +44,11 @@ const cmd = args[0];
 // silently miss the real one. The forge root is the parent of `orchestrator/`
 // where this file sits.
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
+// Capture the caller's working directory BEFORE we chdir to FORGE_ROOT. The
+// demo subcommands resolve relative demo dirs against this (the agent invokes
+// `forge demo render <id>` from its worktree, not from FORGE_ROOT). Without it,
+// a relative `demo/<id>` would resolve under the forge install root.
+const INVOCATION_CWD = process.cwd();
 process.chdir(FORGE_ROOT);
 
 (async () => {
@@ -609,11 +615,17 @@ async function cmdDemo(rest: string[]): Promise<void> {
       console.error('forge demo render: usage: demo render <initiative-id> [--dir <demoDir>]');
       process.exit(2);
     }
-    const demoDir = flagValue(rest, '--dir') ?? join('demo', initiativeId);
+    // Resolve the demo dir against the caller's worktree (INVOCATION_CWD), honouring
+    // the project's artifactRoot (legacy `demo/<id>` or `<artifactRoot>/history/<id>/demo`).
+    // An explicit --dir overrides; otherwise the worktree root is INVOCATION_CWD.
+    const dirFlag = flagValue(rest, '--dir');
+    const artifactRoot = readArtifactRoot(INVOCATION_CWD);
+    const demoDir = dirFlag ?? resolve(INVOCATION_CWD, projectDemoRelDir(initiativeId, artifactRoot));
+    const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
     const { renderDemoBundle } = await import('../cli/demo-model.ts');
-    // worktree root = demoDir/../.. — lets the bundle back-fill any live evidence
-    // the acceptance test persisted under <worktree>/.forge/live-evidence/.
-    const res = renderDemoBundle(demoDir, new Date().toISOString(), resolve(demoDir, '..', '..'));
+    // worktree root lets the bundle back-fill any live evidence the acceptance
+    // test persisted under <worktree>/.forge/live-evidence/.
+    const res = renderDemoBundle(demoDir, new Date().toISOString(), worktreeRoot);
     if (!res.ok) {
       console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
       for (const e of res.errors) console.error(`  - ${e}`);
@@ -634,14 +646,16 @@ async function cmdDemo(rest: string[]): Promise<void> {
       console.error('forge demo capture: usage: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
       process.exit(2);
     }
-    const demoDir = flagValue(rest, '--dir') ?? join('demo', initiativeId);
+    const projectArg = flagValue(rest, '--project');
+    const projectRepoPath = projectArg ? resolve('projects', projectArg) : INVOCATION_CWD;
+    const dirFlag = flagValue(rest, '--dir');
+    const artifactRoot = readArtifactRoot(projectRepoPath);
+    const demoDir = dirFlag ?? resolve(projectRepoPath, projectDemoRelDir(initiativeId, artifactRoot));
     const jsonPath = join(demoDir, 'demo.json');
     if (!existsSync(jsonPath)) {
       console.error(`forge demo capture: ${jsonPath} not found — author demo.json first. Skipping (best-effort).`);
       return;
     }
-    const projectArg = flagValue(rest, '--project');
-    const projectRepoPath = projectArg ? resolve('projects', projectArg) : process.cwd();
     const baseRef = flagValue(rest, '--base') ?? 'main';
     const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
     try {
@@ -654,7 +668,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
-      const r = renderDemoBundle(demoDir, new Date().toISOString(), resolve(demoDir, '..', '..'));
+      const r = renderDemoBundle(demoDir, new Date().toISOString(), projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md/DEMO.html' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
       console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);

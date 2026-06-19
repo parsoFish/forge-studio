@@ -20,6 +20,7 @@ import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, readManifestFlowId, persistManifestCycleId, parseManifest } from './manifest.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
 // phase runners import them from there, never from this module — keeps the
@@ -328,14 +329,18 @@ export async function snapshotCycleArtefacts(
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  // Demo bundle (ADR 021): the unifier writes the TRACKED demo at
-  // <worktree>/demo/<initiativeId>/ (demo.json + derived DEMO.md/DEMO.html +
-  // any media). Mirror it into _logs/<cycleId>/artifacts/ so the bridge can
-  // serve it to the in-UI review screen (`/api/artifact/<cycleId>/<file>`).
+  // Demo bundle (ADR 021): the unifier writes the TRACKED demo at the project's
+  // artifactRoot-resolved demo dir (legacy `demo/<initiativeId>/`, or
+  // `<artifactRoot>/history/<initiativeId>/demo` when the project gathers its
+  // committed artifacts under a sub-root — e.g. betterado's `forge/`). It holds
+  // demo.json + derived DEMO.md/DEMO.html + any media. Mirror it into
+  // _logs/<cycleId>/artifacts/ so the bridge can serve it to the in-UI review
+  // screen (`/api/artifact/<cycleId>/<file>`).
   // (Previously copied a stale `.forge/demos/` path into `_logs/<cycleId>/demo/`,
   // which nothing populated or served — the root cause of the blank review demo.)
   const artifactsDst = resolve(cycleLogDir, 'artifacts');
-  const demoSrc = resolve(input.worktreePath, 'demo', input.initiativeId);
+  const artifactRoot = readArtifactRoot(input.worktreePath);
+  const demoSrc = resolve(input.worktreePath, projectDemoRelDir(input.initiativeId, artifactRoot));
   if (existsSync(demoSrc)) {
     cpSync(demoSrc, artifactsDst, { recursive: true, force: true });
   }

@@ -88,6 +88,29 @@ export function projectHistoryDir(
 }
 
 /**
+ * The worktree-relative demo directory for one initiative, resolved against the
+ * project's `artifactRoot`. Single source of truth for where the unifier writes
+ * the tracked demo bundle (and where every demo-seam consumer looks for it).
+ *
+ * - `artifactRoot === '.'` (legacy layout) → `demo/<initiativeId>` — unchanged,
+ *   so projects that don't set `artifactRoot` keep the original location.
+ * - any other `artifactRoot` → `<artifactRoot>/history/<initiativeId>/demo`, so a
+ *   project that gathers its committed artifacts under (e.g.) `forge/` lands the
+ *   demo alongside that initiative's history record at
+ *   `forge/history/<initiativeId>/demo` rather than a parallel top-level `demo/`.
+ *
+ * Returns a POSIX-style relative path (forward slashes) because it is used both
+ * as a filesystem segment AND as display text in prompts; callers `resolve(...)`
+ * it against the worktree root when they need an absolute path. The same
+ * path-escape guard `readArtifactRoot` applies means the segment is always clean.
+ */
+export function projectDemoRelDir(initiativeId: string, artifactRoot = '.'): string {
+  const root = artifactRoot.trim();
+  if (root === '' || root === '.') return `demo/${initiativeId}`;
+  return `${root}/history/${initiativeId}/demo`;
+}
+
+/**
  * Read a managed project's `artifactRoot` straight from its `.forge/project.json`
  * without a full config validation pass — for the brain-path consumers that only
  * hold a `projectName`/`projectRoot` string. Returns `"."` (legacy layout) when

@@ -37,9 +37,16 @@ Invoke `brain-query` against the **project's** brain before authoring anything:
 
 ## The demo contract (what EVERY demo must contain)
 
-A demo is **one structured artefact**: `demo/<initiative-id>/demo.json`
+A demo is **one structured artefact**: `<demo-dir>/demo.json`
 (schema = `DemoModel` in [`cli/demo-model.ts`](../../cli/demo-model.ts),
-validated by the `pr_self_contained` gate). It must carry:
+validated by the `pr_self_contained` gate). The demo dir is resolved against the
+project's `artifactRoot`: it is `demo/<initiative-id>/` for a default-layout
+project (`artifactRoot: "."`), or `<artifactRoot>/history/<initiative-id>/demo/`
+when the project gathers its committed artifacts under a sub-root (e.g.
+betterado's `forge/`, giving `forge/history/<initiative-id>/demo/`). **The
+iteration brief (PROMPT.md) names the exact dir — write there**; `forge demo
+render <initiative-id>` resolves the same path from `artifactRoot`, so you never
+pass `--dir`. It must carry:
 
 ### Required core fields
 
@@ -191,9 +198,11 @@ collapses them gracefully when absent, but their absence means a less useful dem
 
 ## How forge runs a demo
 
-1. **Author `demo/<initiative-id>/demo.json`** to the contract above. Populate
-   ALL applicable rich sections — `summary`, `apiDiff`, `testEvidence`,
-   `filesChanged` — so the rendered HTML is genuinely informative.
+1. **Author the demo.json** at the dir named in PROMPT.md (`demo/<initiative-id>/`,
+   or `<artifactRoot>/history/<initiative-id>/demo/` for an artifactRoot project)
+   to the contract above. Populate ALL applicable rich sections — `summary`,
+   `apiDiff`, `testEvidence`, `filesChanged` — so the rendered HTML is genuinely
+   informative.
 2. **Derive the artefacts:** `Bash forge demo render <initiative-id>` →
    writes `DEMO.md` + `DEMO.html` from the JSON. **Never hand-write `DEMO.md`** —
    it is derived, so the PR artefact and the UI render stay identical.

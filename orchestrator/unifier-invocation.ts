@@ -3,9 +3,11 @@
  * prompt builder + workspace prep for the unifier sub-phase.
  *
  * The unifier is a final Ralph that runs after all per-WI Ralphs complete.
- * It owns the initiative-level acceptance criteria, the tracked demo bundle
- * at `<worktree>/demo/<initiative-id>/`, and the PR description draft at
- * `<worktree>/.forge/pr-description.md`. The cycle's developer-loop runner
+ * It owns the initiative-level acceptance criteria, the tracked demo bundle at
+ * the project's artifactRoot-resolved demo dir (legacy `<worktree>/demo/<initiative-id>/`,
+ * or `<worktree>/<artifactRoot>/history/<initiative-id>/demo` when the project
+ * gathers its committed artifacts under a sub-root), and the PR description draft
+ * at `<worktree>/.forge/pr-description.md`. The cycle's developer-loop runner
  * invokes this contract; the SDK-backed Claude agent receives the
  * `buildUnifierSystemPrompt` output as its system prompt and reads
  * `PROMPT.md` (stamped by `prepareUnifierWorkspace`) at the start of every
@@ -24,6 +26,7 @@ import { readWorkItemsFromDir } from './work-item.ts';
 import type { DemoShape } from './project-config.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
@@ -94,6 +97,12 @@ export type UnifierUserPromptInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /**
+   * Worktree-relative demo directory for this initiative, resolved against the
+   * project's `artifactRoot` (e.g. `demo/<id>` legacy, or
+   * `forge/history/<id>/demo`). When absent, defaults to the legacy `demo/<id>`.
+   */
+  demoDir?: string;
   /** Project's typed demo steps (M2). When present, appended to the demo instruction. */
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). When present, the unifier composes them. */
@@ -122,13 +131,17 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     ? input.workItemSpecs.map((p) => `- \`${p}\``).join('\n')
     : '- _(no work items recorded; consult the manifest body)_';
 
-  const demoBlock = demoInstructionsForShape(input.demoShape);
+  // Worktree-relative demo dir, artifactRoot-resolved. Defaults to the legacy
+  // `demo/<initiative-id>` so a caller that doesn't compute one is unchanged.
+  const demoDir = input.demoDir ?? `demo/${input.initiativeId}`;
+
+  const demoBlock = demoInstructionsForShape(input.demoShape, demoDir);
 
   // WS-A: when the project declares a release changelog, widen the scope ceiling
   // to admit the changelog file so the draft-changelog edit is in-bounds.
   const scopeCeiling = input.changelogPath
-    ? `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`demo/<initiative-id>/**\` ∪ \`.forge/pr-description.md\` ∪ \`${input.changelogPath}\` (the release draft changelog).`
-    : '- Scope ceiling: union of all WIs\' `files_in_scope` ∪ `demo/<initiative-id>/**` ∪ `.forge/pr-description.md`.';
+    ? `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`${demoDir}/**\` ∪ \`.forge/pr-description.md\` ∪ \`${input.changelogPath}\` (the release draft changelog).`
+    : `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`${demoDir}/**\` ∪ \`.forge/pr-description.md\`.`;
 
   const base = [
     '# Developer-unifier — iteration brief',
@@ -151,7 +164,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '1. **Read AGENT.md and fix_plan.md.**',
       '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
       `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-      '4. **Produce the demo** under `demo/<initiative-id>/`:',
+      `4. **Produce the demo** under \`${demoDir}/\`:`,
       demoBlock,
       '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
       '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
@@ -203,12 +216,12 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
  * The per-shape guidance below is its operational summary for the inline brief;
  * keep the two in sync.
  */
-function demoInstructionsForShape(shape: DemoShape): string {
+function demoInstructionsForShape(shape: DemoShape, demoDir = 'demo/<initiative-id>'): string {
   const schema = [
     '   **The demo contract is defined in `skills/demo/SKILL.md`** (the canonical',
     '   demo capability: what every demo must contain, effort tiers scaled to the',
     '   diff, per-shape rules, and how it maps to the review UI). Summary:',
-    '   **`demo/<initiative-id>/demo.json` schema (the contract):**',
+    `   **\`${demoDir}/demo.json\` schema (the contract):**`,
     '   - `title` (string, required) — one-line essence.',
     '   - `essence` (string, required) — what behaviour changed and why it matters.',
     '   - `project` (string, required), `initiativeId`, `baseRef`, `changedRef`.',
@@ -317,6 +330,12 @@ export function prepareUnifierWorkspace(
     }
   }
 
+  // Resolve the artifactRoot-aware demo dir from the worktree's own project.json
+  // (the worktree carries .forge/project.json), so the prompt instructs the agent
+  // to write the demo where the snapshot + flow-artifact guard + `forge demo
+  // render` all expect it.
+  const demoDir = projectDemoRelDir(input.initiativeId, readArtifactRoot(input.worktreePath));
+
   if (!existsSync(promptPath)) {
     const prompt = renderUnifierUserPrompt({
       initiativeId: input.initiativeId,
@@ -326,6 +345,7 @@ export function prepareUnifierWorkspace(
       iterationBudget: input.iterationBudget,
       demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
+      demoDir,
       demoProcess: input.demoProcess,
       skills: input.skills,
       changelogPath: input.changelogPath,
