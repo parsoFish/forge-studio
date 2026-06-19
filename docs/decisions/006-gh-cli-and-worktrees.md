@@ -5,7 +5,7 @@
 
 ## Context
 
-V1 hand-rolled a git workflow module (`src/git/`) and a job runner (`src/jobs/`) — branch naming, deterministic operations, cleanup, topological sort, claim/execute loop. Both were correct but heavy, and both shadowed mature equivalents that already exist:
+The earlier build hand-rolled a git workflow module (`src/git/`) and a job runner (`src/jobs/`) — branch naming, deterministic operations, cleanup, topological sort, claim/execute loop. Both were correct but heavy, and both shadowed mature equivalents that already exist:
 
 - **`gh` CLI** — official GitHub tool for branch/PR ops, well-supported, scriptable.
 - **`git worktree`** — native git for parallel checkouts; perfect filesystem isolation per parallel work unit.
@@ -28,7 +28,7 @@ Thin TS wrappers in [`orchestrator/worktree.ts`](../../orchestrator/worktree.ts)
 - Zero maintenance on git internals.
 - Battle-tested across millions of users.
 - Familiar to any contributor.
-- Worktrees give native filesystem isolation — no need for v1's process-isolation module.
+- Worktrees give native filesystem isolation — no need for the prior process-isolation module.
 
 **Negative / accepted trade-offs:**
 - Skills shell to `gh` rather than calling a typed library. Errors come back as exit codes / stderr text. Acceptable.
@@ -36,7 +36,7 @@ Thin TS wrappers in [`orchestrator/worktree.ts`](../../orchestrator/worktree.ts)
 
 ## Alternatives considered
 
-- **Continue v1's hand-rolled git module** — pure maintenance liability; rejected.
+- **Continue the prior hand-rolled git module** — pure maintenance liability; rejected.
 - **`@octokit/rest`** for GitHub ops — possible, but skills and orchestrator both want CLI invocation for portability and shell composition. `gh` it is.
 - **No CI** (rely on local quality gates only) — fragile for unattended operation; we want GitHub-side verification too.
 
@@ -44,4 +44,4 @@ Thin TS wrappers in [`orchestrator/worktree.ts`](../../orchestrator/worktree.ts)
 
 - [`gh` CLI](https://cli.github.com/)
 - [`git worktree` docs](https://git-scm.com/docs/git-worktree)
-- v1's `src/git/workflow.ts` (lessons folded into this ADR; module not ported)
+- The prior `src/git/workflow.ts` (lessons folded into this ADR; module not ported)

@@ -26,7 +26,7 @@
 
 ## Context
 
-Forge v2 is designed to progress a project toward *more automated cycles
+Forge is designed to progress a project toward *more automated cycles
 with less hand-holding*. The trafficGame arc (April–May 2026) was the
 first sustained attempt to run an external project unattended, and it
 proved that **forge cannot progress an arbitrary project** — the project

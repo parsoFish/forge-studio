@@ -45,8 +45,9 @@ written only through one canonical serializer module
    steps — closes the `demo.skill` known-gap), `skills[]`, `kb`. Forge keeps
    only an id→path registry (`studio/projects.yaml`).
 4. **Knowledge Base = `kb.yaml` descriptor over an existing brain**
-   (id, name, scope: `project | flow | agent-integration`, desc). Graph data
-   stays graphify output; health stays `forge brain lint`. No new graph store.
+   (id, name, scope: `project | flow | agent-integration`, desc). The graph is
+   derived from the markdown wiki on disk; health stays `forge brain lint`. No
+   new graph store.
 5. **Catalog = `studio/catalog.yaml` + filesystem scan** for skills.
    Tools/MCPs/hooks/SDKs/models declared once with picker metadata
    (tier, cost). Read-only API; editing is a git change.
@@ -89,10 +90,13 @@ kb-backend.ts`):
   routes to a registered non-FS backend. `kb-backend.test.ts` is the contract
   test (the KB analogue of the RuntimeAdapter conformance suite, ADR-029).
 
-This realises the modularity-as-subsumption thesis for memory: a Zep/Mem0/Cognee
-backend (M8-C) implements `KbBackend` and registers in `getKbBackend`, and the
-brain's store becomes swappable. The bridge KB routes (`cli/bridge-studio-kbs.ts`)
-now read through `getKbBackend` rather than calling `kb-graph.ts` directly.
+This is the swap surface for memory: the seam exists and is exercised in
+production, but only the `FilesystemKbBackend` ships. A graph-memory backend
+(Zep/Mem0/Cognee) would implement the same `KbBackend` interface and register in
+`getKbBackend`; none is shipped — the descriptor's `backend:` field is the
+selection point a future backend hangs off. The bridge KB routes
+(`cli/bridge-studio-kbs.ts`) read through `getKbBackend` rather than calling
+`kb-graph.ts` directly, so the reroute point is already in place.
 
 Next surface (not in this commit): the **planning-context** read — PM/reflector
 load the brain navigation index via `loadBrainIndex` (a separate module,

@@ -31,7 +31,7 @@ The interface is one function â€” `notify(event: NotifyEvent): Promise<void>` â€
 
 **Negative / accepted trade-offs:**
 - Desktop notification on a remote/headless machine is silent. Document `webhook` as the recommended provider for headless setups.
-- No retry on webhook failure (yet). Adequate for v0; can revisit.
+- No retry on webhook failure (yet). Adequate for the initial scaffold; can revisit.
 
 ## Alternatives considered
 
@@ -42,4 +42,4 @@ The interface is one function â€” `notify(event: NotifyEvent): Promise<void>` â€
 ## References
 
 - [`notify-send`](https://man.archlinux.org/man/notify-send.1)
-- v1's reflect-stage (no notification surface; v2 closes that loop)
+- The prior reflect-stage (no notification surface; the current architecture closes that loop)

@@ -5,7 +5,7 @@
 
 ## Context
 
-User principle 5: every component must log actions, inputs, outputs; iterations of agentic loops must be tracked; metrics enable monitoring + visualisation. V1 had several logging surfaces (worker logs, agent logs, event log, budget log) that were not unified — reflection had to stitch them together.
+User principle 5: every component must log actions, inputs, outputs; iterations of agentic loops must be tracked; metrics enable monitoring + visualisation. The prior approach had several logging surfaces (worker logs, agent logs, event log, budget log) that were not unified — reflection had to stitch them together.
 
 ## Decision
 
@@ -66,4 +66,4 @@ Readers:
 ## References
 
 - [JSON Lines spec](https://jsonlines.org/)
-- v1's `src/events/event-log.ts` — close to this design; this ADR locks it as canonical
+- The prior `src/events/event-log.ts` — close to this design; this ADR locks it as canonical

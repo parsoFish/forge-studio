@@ -5,11 +5,11 @@
 
 ## Context
 
-V1 had three agents (planner, developer, reviewer) defined as markdown personas spawned as Claude CLI subprocesses with custom turn limits, custom session handling, and custom prompt assembly. That made every prompt change a code change, every persona update a deploy, and every Claude Code platform improvement (skills, slash commands, hot-swappable prompts) bypass forge entirely.
+The prior approach had three agents (planner, developer, reviewer) defined as markdown personas spawned as Claude CLI subprocesses with custom turn limits, custom session handling, and custom prompt assembly. That made every prompt change a code change, every persona update a deploy, and every Claude Code platform improvement (skills, slash commands, hot-swappable prompts) bypass forge entirely.
 
 ## Decision
 
-**Every "agent" in forge v2 is a Claude Code skill.**
+**Every "agent" in forge is a Claude Code skill.**
 
 A skill is a directory containing a `SKILL.md` (mandatory) and optional helper files. Skills are version-controlled, hot-swappable, and benefit from the Claude Code platform's native skill conventions.
 
@@ -41,7 +41,7 @@ The orchestrator spawns each phase as a clean, model-tiered **agent** that compo
 
 ## Alternatives considered
 
-- **V1's markdown personas + spawned CLI** — explained above, rejected.
+- **The prior markdown personas + spawned CLI** — explained above, rejected.
 - **A custom skill registry/loader in TS** — premature; the filesystem is fine.
 - **gstack-style `SKILL.md.tmpl` per skill** — keep optional. Some skills will benefit; others won't. Don't mandate.
 
