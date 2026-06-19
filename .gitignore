@@ -87,3 +87,7 @@ npm-debug.log*
 
 # Local SQLite scratch (e.g. headroom memory) — never source
 *.db
+
+# graphify output — the graphify tooling was removed, but an external/global
+# graphify hook may still regenerate this at the repo root. Output-ignore only.
+graphify-out/
