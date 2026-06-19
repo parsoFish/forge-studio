@@ -28,7 +28,7 @@ import { join, resolve, relative } from 'node:path';
 
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
 import {
-  validateProjectConfig,
+  loadProjectConfig,
   demoProcessCoherenceWarning,
   DEMO_SHAPES,
 } from '../orchestrator/project-config.ts';
@@ -98,8 +98,9 @@ const C3_SKIP_DIRS = new Set([
 // here false-failed them.
 const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
-// DEMO: DEMO_SHAPES and validateProjectConfig are imported from
-// orchestrator/project-config.ts (single source of truth — CON-2).
+// DEMO: DEMO_SHAPES and loadProjectConfig are imported from
+// orchestrator/project-config.ts (single source of truth — CON-2). The loader
+// also single-sources quality_gate_cmd from the .forge/quality_gate_cmd sidecar.
 
 // C8: the project must have a human-authored agent-instruction file at its
 // root. Research shows ~4pp uplift from human-authored AGENTS.md/CLAUDE.md;
@@ -424,8 +425,9 @@ function checkC8(dir: string): ClauseResult {
 // --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
 
 /**
- * Delegates validation to `validateProjectConfig` from orchestrator/project-config.ts
- * (single source of truth). On a structural violation the throw is caught and
+ * Delegates validation to `loadProjectConfig` from orchestrator/project-config.ts
+ * (single source of truth; also single-sources the quality_gate_cmd sidecar). On
+ * a structural violation the throw is caught and
  * downgraded to an advisory WARN — DEMO is never a hard blocker.
  */
 function checkDemo(dir: string): ClauseResult {
@@ -446,22 +448,19 @@ function checkDemo(dir: string): ClauseResult {
         `(${[...DEMO_SHAPES].join(' | ')}). Advisory.`,
     };
   }
-  let parsed: unknown;
+  // Load via the canonical loader, which ALSO single-sources `quality_gate_cmd`
+  // from the `.forge/quality_gate_cmd` sidecar — so a project that declares the
+  // gate only in the sidecar (and omits it from project.json) validates here.
+  // Catch the throw and downgrade to advisory WARN so a bad sweep block etc. does
+  // not block a project that has a valid demo shape. `loadProjectConfig` returns
+  // null only when the file is absent (already handled above).
+  let cfg: NonNullable<ReturnType<typeof loadProjectConfig>>;
   try {
-    parsed = JSON.parse(readFileSync(cfgPath, 'utf8'));
-  } catch {
-    return {
-      ...base,
-      pass: false,
-      detail: '.forge/project.json is not valid JSON — cannot read the demo shape. Advisory.',
-    };
-  }
-  // Use the canonical validator from project-config.ts. Catch its throw and
-  // downgrade to advisory WARN so a missing quality_gate_cmd or bad sweep block
-  // does not block a project that has a valid demo shape.
-  let cfg: ReturnType<typeof validateProjectConfig>;
-  try {
-    cfg = validateProjectConfig(parsed);
+    const loaded = loadProjectConfig(dir);
+    if (!loaded) {
+      return { ...base, pass: false, detail: '.forge/project.json is not readable — cannot read the demo shape. Advisory.' };
+    }
+    cfg = loaded;
   } catch (err) {
     return {
       ...base,
