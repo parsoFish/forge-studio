@@ -29,6 +29,7 @@ import {
   type WorkItem,
 } from '../work-item.ts';
 import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
+import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
@@ -325,8 +326,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // every WI body as a fixed contract section. Static + automatic — removes
   // the per-WI PM judgment that kept varying. Body-only (frontmatter stays
   // byte-stable), idempotent (skips a WI already carrying the section).
-  if (projectConfig?.standing_work_item_acs && projectConfig.standing_work_item_acs.length > 0) {
-    items = appendStandingAcs(workItemsDir, items, projectConfig.standing_work_item_acs);
+  //
+  // WS-A (release): a project that declares `releaseProcess` also gets the
+  // in-cycle draft-changelog requirement folded into the SAME standing-AC
+  // section — so every WI in a release-bearing initiative carries it. A project
+  // without `releaseProcess` adds nothing (releaseDraftAcs → []), keeping the
+  // non-opted-in path byte-for-byte unchanged.
+  const standingAcs = [
+    ...(projectConfig?.standing_work_item_acs ?? []),
+    ...releaseDraftAcs(projectConfig?.releaseProcess),
+  ];
+  if (standingAcs.length > 0) {
+    items = appendStandingAcs(workItemsDir, items, standingAcs);
   }
 
   const { perItem, setErrors } = validateWorkItemSet(items, {

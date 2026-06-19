@@ -1283,6 +1283,7 @@ export async function runUnifier(
       demoCommand: projectConfig?.demo.command,
       demoProcess: projectConfig?.demoProcess,
       skills: projectConfig?.skills,
+      changelogPath: projectConfig?.releaseProcess?.changelogPath,
       unifierSdkId,
       devRoleSdkId,
     });
@@ -1377,6 +1378,8 @@ type UnifierItemArgs = {
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into prepareUnifierWorkspace. */
   skills?: string[];
+  /** WS-A: worktree-relative changelog path (release opt-in). Threaded into prepareUnifierWorkspace. */
+  changelogPath?: string;
   /** ADR 029: resolved runtime sdk for the packaging (unifier-role) UWI. */
   unifierSdkId: string;
   /** ADR 029: resolved runtime sdk for a code-fix UWI (dev-role inside the unifier). */
@@ -1476,6 +1479,7 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     qualityGateCmd: itemGateCmd,
     demoProcess: args.demoProcess,
     skills: args.skills,
+    changelogPath: args.changelogPath,
   });
 
   const systemPrompt = buildUnifierSystemPrompt();

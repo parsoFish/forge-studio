@@ -98,6 +98,13 @@ export type UnifierUserPromptInput = {
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). When present, the unifier composes them. */
   skills?: string[];
+  /**
+   * WS-A (release): worktree-relative changelog path when the project declares
+   * `releaseProcess`. When present, the unifier authors a DRAFT changelog entry
+   * and the scope ceiling is widened to include the file. Absent ⇒ no release
+   * behaviour (the non-opted-in path is unchanged).
+   */
+  changelogPath?: string;
 };
 
 /**
@@ -116,6 +123,12 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     : '- _(no work items recorded; consult the manifest body)_';
 
   const demoBlock = demoInstructionsForShape(input.demoShape);
+
+  // WS-A: when the project declares a release changelog, widen the scope ceiling
+  // to admit the changelog file so the draft-changelog edit is in-bounds.
+  const scopeCeiling = input.changelogPath
+    ? `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`demo/<initiative-id>/**\` ∪ \`.forge/pr-description.md\` ∪ \`${input.changelogPath}\` (the release draft changelog).`
+    : '- Scope ceiling: union of all WIs\' `files_in_scope` ∪ `demo/<initiative-id>/**` ∪ `.forge/pr-description.md`.';
 
   const base = [
     '# Developer-unifier — iteration brief',
@@ -148,7 +161,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '',
     '## Constraints',
     '',
-    '- Scope ceiling: union of all WIs\' `files_in_scope` ∪ `demo/<initiative-id>/**` ∪ `.forge/pr-description.md`.',
+    scopeCeiling,
     `- Iteration cap: **${input.iterationBudget}** (no $ cap per CONTRACTS.md C19).`,
     '- Do **NOT** call `gh pr create` or `gh pr merge`.',
     '- Do **NOT** re-implement work from the WI specs — every WI is ALREADY committed; verify with `git log`.',
@@ -167,7 +180,16 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       input.skills.map((s) => `\`${s}\``).join(', ') + '.'
     : '';
 
-  return base + projectDemoBlock + projectSkillsBlock;
+  // WS-A: when the project opts into the release process, instruct the unifier
+  // to author a DRAFT changelog entry. The DRAFT is what ships in the PR; the
+  // finalised entry (semver bump) is applied post-approval, pre-merge by the
+  // release-finalizer agent. Mirrors `projectDemoBlock`.
+  const projectReleaseBlock = input.changelogPath
+    ? '\n\n## Project release process (draft changelog)\n\nThis project declares a release process. Add a **DRAFT** changelog entry to ' +
+      `\`${input.changelogPath}\` under an \`## [Unreleased]\` heading: one bullet per user-visible behaviour change in this initiative, categorised (Added / Changed / Fixed). Do NOT compute the semver version or set a release date — that is the post-approval finaliser's job. Commit the draft as part of the unify commit.`
+    : '';
+
+  return base + projectDemoBlock + projectSkillsBlock + projectReleaseBlock;
 }
 
 /**
@@ -256,6 +278,8 @@ export type PrepareUnifierWorkspaceInput = {
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into the rendered prompt. */
   skills?: string[];
+  /** WS-A: worktree-relative changelog path (release opt-in). Threaded into the prompt. */
+  changelogPath?: string;
 };
 
 export type PreparedUnifierWorkspace = {
@@ -304,6 +328,7 @@ export function prepareUnifierWorkspace(
       qualityGateCmd: input.qualityGateCmd,
       demoProcess: input.demoProcess,
       skills: input.skills,
+      changelogPath: input.changelogPath,
     });
     writeFileSync(promptPath, prompt);
   }
