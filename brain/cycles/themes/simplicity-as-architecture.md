@@ -16,7 +16,7 @@ updated_at: 2026-05-04T17:55:00.000Z
 related_themes:
   - avoid-hand-rolling-tools
   - minimal-runtime-config
-  - v1-vs-v2-key-differences
+  - infrastructure-evolution
 ---
 
 # Simplicity is key — every "no" defends it
@@ -38,11 +38,11 @@ Every ADR's "Alternatives considered" + non-goals section is part of this princi
 
 ## Sources
 
-- [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 2.
+- [`PRINCIPLES.md`](../../../PRINCIPLES.md) — principle 2.
 - [`adr-009-minimal-config.docs.md`](../../_raw/docs/adr-009-minimal-config.docs.md), [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — explicit small-core defenses.
 
 ## See also
 
 - [[avoid-hand-rolling-tools]] — companion principle.
 - [[minimal-runtime-config]] — concrete codification.
-- [[v1-vs-v2-key-differences]] — v1 vs v2 — what was rejected and why.
+- [[infrastructure-evolution]] — what was rejected and why.

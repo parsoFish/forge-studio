@@ -5,6 +5,12 @@ source_title: v1 wiki extracts — failure modes + recovery patterns (Cycles 1�
 ingested_at: 2026-05-04T19:30:00Z
 ingested_by: brain-ingest (Pass B, batch 1)
 cycle_id: pass-b-bootstrap
+deprecated: true
+deprecated_in_favor_of: brain/forge-dev/themes/infrastructure-evolution.md
+deprecation_note: >-
+  Immutable archival record from the prior (pre-current) forge wiki. Preserved
+  as ground-truth evidence; superseded by the distilled cycles/ + forge-dev/
+  themes it fed into.
 ---
 
 # v1 wiki extracts — failure modes + recovery patterns

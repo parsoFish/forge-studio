@@ -1,32 +1,37 @@
 ---
-title: v1 vs v2 — what was rejected and why
+title: Infrastructure evolution — what was rejected and why
 description: >-
-  V2 keeps v1's mental models (TDD, dep-ordered work, brain-as-wiki) and
-  replaces v1's hand-rolled infrastructure with battle-tested community tools.
+  Forge keeps its founding mental models (TDD, dep-ordered work,
+  brain-as-wiki) and replaces hand-rolled infrastructure with battle-tested
+  community tools. The comparison records what the prior approach grew and
+  what the current design ships instead.
 category: reference
 keywords:
-  - v1
-  - v2
   - comparison
   - evolution
   - rejected
   - infrastructure
   - refactor
+  - hand-rolling
 created_at: 2026-05-04T17:55:00.000Z
-updated_at: 2026-05-04T17:55:00.000Z
+updated_at: 2026-06-19T00:00:00.000Z
 related_themes:
   - avoid-hand-rolling-tools
   - simplicity-as-architecture
   - six-phases-of-forge
 ---
 
-# v1 vs v2 — what was rejected and why
+# Infrastructure evolution — what was rejected and why
 
-V1 grew rich infrastructure: a job queue, a worker pool, a resource controller, adaptive concurrency, process isolation. Each was a reasonable response to a real problem at the time. Together they made it onerous to change the *shape* of the system.
+A **prior approach** grew rich infrastructure: a job queue, a worker pool, a
+resource controller, adaptive concurrency, process isolation. Each was a
+reasonable response to a real problem at the time. Together they made it
+onerous to change the *shape* of the system.
 
-V2 is a fresh repo (not a refactor) that keeps v1's mental models and replaces v1's infrastructure:
+The **current** design keeps the founding mental models and replaces the
+hand-rolled infrastructure with battle-tested community tools:
 
-| v1 | v2 |
+| Prior approach | Current |
 |---|---|
 | Job queue + worker pool + resource controller (~6,000 LOC) | `_queue/` directories + ~300-LOC scheduler |
 | Adaptive concurrency, CPU/memory monitoring | Static `maxConcurrentInitiatives` (default 2) |
@@ -38,12 +43,13 @@ V2 is a fresh repo (not a refactor) that keeps v1's mental models and replaces v
 | Bloated `forge.config.json` | Minimal config; settings live in ADRs / SKILL.md / manifest |
 | Multiple log surfaces (worker, agent, event, budget) | One JSONL event log per cycle |
 
-V2 has **no v1 users to support** — no feature flags, no fallbacks, no "for backwards compatibility" paths.
+The current design has **no legacy users to support** — no feature flags, no
+fallbacks, no "for backwards compatibility" paths.
 
 ## Sources
 
-- [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — "What forge is *not*" section.
-- [`adr-011-unattended-scheduler.docs.md`](../../_raw/docs/adr-011-unattended-scheduler.docs.md) — explicit non-rebuild list.
+- [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — "What forge is *not*" section.
+- [`docs/decisions/011-unattended-scheduler.md`](../../../docs/decisions/011-unattended-scheduler.md) — explicit non-rebuild list.
 
 ## See also
 

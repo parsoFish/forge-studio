@@ -38,7 +38,7 @@ Test: when reviewing a proposed addition to v2, ask "is this re-inventing X that
 
 ## Sources
 
-- [`forge-v2-principles.docs.md`](../../_raw/docs/forge-v2-principles.docs.md) — principle 1.
+- [`PRINCIPLES.md`](../../../PRINCIPLES.md) — principle 1.
 - [`adr-001-claude-agent-sdk.docs.md`](../../_raw/docs/adr-001-claude-agent-sdk.docs.md), [`adr-002-ralph-loop-pattern.docs.md`](../../_raw/docs/adr-002-ralph-loop-pattern.docs.md), [`adr-003-skills-not-self-baked-agents.docs.md`](../../_raw/docs/adr-003-skills-not-self-baked-agents.docs.md), [`adr-006-gh-cli-and-worktrees.docs.md`](../../_raw/docs/adr-006-gh-cli-and-worktrees.docs.md) — codifications.
 
 ## See also
@@ -47,4 +47,4 @@ Test: when reviewing a proposed addition to v2, ask "is this re-inventing X that
 - [[claude-agent-sdk]] — claude agent sdk as the agent runtime.
 - [[ralph-loop-pattern]] — ralph loop pattern.
 - [[gh-cli-and-worktrees]] — gh cli + git worktrees + github actions.
-- [[v1-vs-v2-key-differences]] — what got swapped.
+- [[infrastructure-evolution]] — what got swapped.
