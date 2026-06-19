@@ -13,7 +13,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { runFlow, forgeCycleFlowPath, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
-import { WedgeKillError } from './flow-budgets.ts';
+import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
 import type { CycleInput } from './cycle-context.ts';
@@ -49,7 +49,10 @@ function makeLogger(): EventLogger & { events: unknown[] } {
     cycleId: 'test-cycle-id',
     emit(event: unknown) {
       events.push(event);
-      return { event_id: `evt-${events.length}` } as ReturnType<EventLogger['emit']>;
+      // Echo the partial back in the return value (merged with event_id), as the
+      // real EventLogger does — wrapLoggerForCost reads cost_usd off the RETURN,
+      // so a stub that dropped it would silently disable cost accumulation.
+      return { ...(event as Record<string, unknown>), event_id: `evt-${events.length}` } as ReturnType<EventLogger['emit']>;
     },
   };
 }
@@ -727,5 +730,51 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     assert.ok(tracker.calls.includes('runUnifier'), 'default unifier executor must run (real node, not a marker)');
     assert.ok(tracker.calls.includes('runReflector'));
     assert.strictEqual(result.cycleOutcome, 'merged');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-run cost-ceiling override (forge-fix: a single initiative may carry a
+// higher ceiling than the shared seed flow without mutating the flow file).
+// ---------------------------------------------------------------------------
+
+describe('flow-runner per-run cost ceiling override', () => {
+  /** pm-only deps whose pm node emits `costUsd`, then no-op close helpers. */
+  function depsEmittingCost(costUsd: number): Partial<FlowRunnerDeps> {
+    return {
+      runProjectManager: async (input, nodeLogger) => {
+        nodeLogger.emit({
+          initiative_id: input.initiativeId,
+          phase: 'project-manager',
+          skill: 'project-manager',
+          event_type: 'end',
+          input_refs: [],
+          output_refs: [],
+          cost_usd: costUsd,
+        } as Parameters<typeof nodeLogger.emit>[0]);
+      },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+  }
+
+  it('flow ceiling stops the run when no override is supplied ($8 spent ≥ $5 flow ceiling)', async () => {
+    const flow = { ...makePmOnlyFlow(), costCeilingUsd: 5 };
+    await assert.rejects(
+      () => runFlow({ flow, input: makeInput(), logger: makeLogger(), deps: depsEmittingCost(8) }),
+      (err: unknown) => err instanceof CostCeilingError && err.ceilingUsd === 5,
+    );
+  });
+
+  it('per-run costCeilingUsd override raises the effective ceiling and prevents the stop', async () => {
+    const flow = { ...makePmOnlyFlow(), costCeilingUsd: 5 };
+    const logger = makeLogger();
+    // $8 spent; flow ceiling $5 would stop, but the $1000 override wins → completes.
+    await runFlow({ flow, input: makeInput(), logger, deps: depsEmittingCost(8), costCeilingUsd: 1000 });
+    const stops = logger.events.filter((e) => (e as { message?: string }).message === 'flow.cost-ceiling-stop');
+    assert.strictEqual(stops.length, 0, 'no cost-ceiling-stop when the override raises the ceiling above spend');
   });
 });

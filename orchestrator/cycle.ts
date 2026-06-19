@@ -19,7 +19,7 @@ import type { EventLogger } from './logging.ts';
 import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { readManifestOrigin, readManifestCycleId, readManifestFlowId, persistManifestCycleId, parseManifest } from './manifest.ts';
+import { readManifestOrigin, readManifestCycleId, readManifestFlowId, readManifestCostCeiling, persistManifestCycleId, parseManifest } from './manifest.ts';
 import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
@@ -74,6 +74,23 @@ import { loadFlowDefinition } from './studio/registry.ts';
 // GitHub; closure confirms); ADD-WORK-ITEMS (ADR 026) appends typed UWIs to the
 // unifier queue in the live worktree and the drain re-runs them in the SAME
 // cycle (one cycleId) — no requeue, no send-back to a dev phase.
+
+/**
+ * Resolve the effective per-run cost ceiling override for a cycle. Precedence:
+ *   FORGE_COST_CEILING_USD env  ??  manifest `cost_ceiling_usd`  ??  undefined
+ * When undefined, runFlow falls back to the flow's own `costCeilingUsd`. A
+ * non-numeric / non-positive env value is ignored (fail-soft to the manifest).
+ * Exported for unit testing of the precedence rule.
+ */
+export function resolveCostCeilingOverride(manifestPath: string): number | undefined {
+  const rawEnv = process.env.FORGE_COST_CEILING_USD;
+  if (rawEnv !== undefined && rawEnv.trim() !== '') {
+    const n = Number.parseFloat(rawEnv);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const fromManifest = readManifestCostCeiling(manifestPath);
+  return fromManifest ?? undefined;
+}
 
 /**
  * P4: emit synthetic architect start+end events into the cycle log.
@@ -226,7 +243,8 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
         }
       }
       const flow = loadFlowDefinition(flowPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger });
+      const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

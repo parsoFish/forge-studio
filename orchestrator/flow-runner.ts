@@ -329,6 +329,14 @@ export type FlowRunArgs = {
    * custom node behaviour.
    */
   nodeExecutors?: Partial<Record<NodeKind, NodeExecutor>>;
+  /**
+   * Optional per-run cost ceiling (USD) that OVERRIDES the flow's own
+   * `costCeilingUsd` for this run. Resolved by the caller (cycle.ts) from
+   * `FORGE_COST_CEILING_USD` env ?? manifest `cost_ceiling_usd`. Absent =
+   * fall back to `flow.costCeilingUsd`. Lets one initiative carry a higher
+   * ceiling than the shared seed flow without mutating the flow file.
+   */
+  costCeilingUsd?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -707,6 +715,7 @@ export async function runFlow({
   nodeBudgets,
   rateLimitGate: injectedGate,
   nodeExecutors: executorOverrides,
+  costCeilingUsd,
 }: FlowRunArgs): Promise<{
   cycleOutcome: CycleOutcome;
   reflectionStatus: string;
@@ -714,9 +723,11 @@ export async function runFlow({
 }> {
   const deps: FlowRunnerDeps = { ...DEFAULT_DEPS, ...depOverrides };
 
-  // M3-3: Budget setup — additive, no-ops when ceiling is 0/absent
+  // M3-3: Budget setup — additive, no-ops when ceiling is 0/absent.
+  // Per-run override (cycle.ts resolves FORGE_COST_CEILING_USD ?? manifest
+  // cost_ceiling_usd) wins over the flow's own ceiling when provided.
   const costTracker = new CostTracker({
-    ceilingUsd: flow.costCeilingUsd ?? 0,
+    ceilingUsd: costCeilingUsd ?? flow.costCeilingUsd ?? 0,
     initiativeId: input.initiativeId,
     logger,
   });
