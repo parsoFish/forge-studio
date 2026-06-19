@@ -47,6 +47,25 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
   }
 }
 
+/**
+ * Resolve where managed projects live, as an absolute path. Precedence:
+ *   1. `FORGE_PROJECTS_DIR` env var (operator/CI override)
+ *   2. `projectsDir` from `forge.config.json`
+ *   3. the default `<forgeRoot>/projects`
+ *
+ * A relative config/env value is resolved against `forgeRoot` (NOT cwd) so a
+ * project scan is stable regardless of where forge was invoked from. This is
+ * the single source of truth for the projects root; disk-scan callers
+ * (studio bridge, studio-lint) read it instead of hard-coding `projects/`.
+ */
+export function resolveProjectsDir(forgeRoot: string, cfg?: ForgeConfig): string {
+  const root = resolve(forgeRoot);
+  const fromEnv = process.env.FORGE_PROJECTS_DIR?.trim();
+  const fromCfg = cfg?.projectsDir?.trim();
+  const chosen = fromEnv || fromCfg || 'projects';
+  return resolve(root, chosen);
+}
+
 export type EnvAssertionMode = 'warn' | 'throw';
 
 /**

@@ -4,7 +4,7 @@
  * Spins up a real bridge against a tmp forge-root fixture with:
  *   - a synthetic _queue/done/<init>.md manifest
  *   - a matching _logs/<cycleId>/events.jsonl (minimal synthetic events)
- *   - studio/ directory (flows, catalog, projects.yaml)
+ *   - studio/ directory (flows, catalog) + projects/ dirs auto-discovered from disk
  *   - brain/ directory with kb.yaml files
  *   - skills/ directory with one stub studio SKILL.md
  *
@@ -216,17 +216,6 @@ function makeCatalogYaml(): string {
   ].join('\n');
 }
 
-/** Minimal projects.yaml with two projects (second has no project.json) */
-function makeProjectsYaml(): string {
-  return [
-    'projects:',
-    '  - id: test-project',
-    '    path: projects/test-project',
-    '  - id: bare-project',
-    '    path: projects/bare-project',
-  ].join('\n');
-}
-
 /** project.json with all mergeable fields */
 function makeProjectJson(): string {
   return JSON.stringify({
@@ -281,9 +270,7 @@ before(async () => {
   // -- studio/catalog.yaml --
   writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), makeCatalogYaml());
 
-  // -- studio/projects.yaml --
-  writeFileSync(join(forgeRoot, 'studio', 'projects.yaml'), makeProjectsYaml());
-
+  // Projects are auto-discovered from disk (B1) — no registry file to write.
   // -- projects/test-project/.forge/project.json (with instructions + skills) --
   mkdirSync(join(forgeRoot, 'projects', 'test-project', '.forge'), { recursive: true });
   writeFileSync(join(forgeRoot, 'projects', 'test-project', '.forge', 'project.json'), makeProjectJson());

@@ -18,7 +18,7 @@ import {
   serializeFlowDefinition,
   loadKbDescriptor,
   loadCatalog,
-  loadProjectsRegistry,
+  discoverProjects,
 } from './registry.ts';
 
 // ---------------------------------------------------------------------------
@@ -99,10 +99,6 @@ mcps:
   - { id: gmail, name: Gmail MCP }
 hooks:
   - { id: event-log, name: Event Log Hook }
-`;
-
-const PROJECTS_FIXTURE = `projects:
-  - { id: betterado, path: projects/betterado }
 `;
 
 // ---------------------------------------------------------------------------
@@ -419,17 +415,51 @@ describe('loadCatalog', () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadProjectsRegistry
+// discoverProjects (disk scan — replaces the projects.yaml registry)
 // ---------------------------------------------------------------------------
 
-describe('loadProjectsRegistry', () => {
-  it('parses projects list', () => {
-    const p = writeFixture('projects.yaml', PROJECTS_FIXTURE);
-    const reg = loadProjectsRegistry(p);
-    assert.equal(reg.projects.length, 1);
-    assert.equal(reg.projects[0].id, 'betterado');
-    assert.equal(reg.projects[0].path, 'projects/betterado');
-    assert.equal(reg.path, p);
+describe('discoverProjects', () => {
+  it('discovers a project dir that carries .forge/project.json', () => {
+    const forgeRoot = join(tmpDir, 'disc-cfg');
+    const projDir = join(forgeRoot, 'projects', 'betterado', '.forge');
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, 'project.json'), '{"name":"betterado"}', 'utf8');
+
+    const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].id, 'betterado');
+    assert.equal(found[0].path, 'projects/betterado');
+    assert.equal(found[0].hasConfig, true);
+  });
+
+  it('flags a project dir missing .forge/project.json (hasConfig=false)', () => {
+    const forgeRoot = join(tmpDir, 'disc-nocfg');
+    mkdirSync(join(forgeRoot, 'projects', 'half-onboarded'), { recursive: true });
+
+    const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].id, 'half-onboarded');
+    assert.equal(found[0].hasConfig, false);
+  });
+
+  it('slugifies a mixed-case dir name to a SLUG_RE id', () => {
+    const forgeRoot = join(tmpDir, 'disc-slug');
+    mkdirSync(join(forgeRoot, 'projects', 'trafficGame'), { recursive: true });
+
+    const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].id, 'trafficgame');
+    assert.equal(found[0].path, 'projects/trafficGame');
+  });
+
+  it('returns sorted entries and tolerates a missing projects root', () => {
+    const forgeRoot = join(tmpDir, 'disc-sort');
+    for (const n of ['zeta', 'alpha']) mkdirSync(join(forgeRoot, 'projects', n), { recursive: true });
+    const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
+    assert.deepEqual(found.map((p) => p.id), ['alpha', 'zeta']);
+
+    // missing projects root → empty list (not a throw)
+    assert.deepEqual(discoverProjects(join(tmpDir, 'does-not-exist'), tmpDir), []);
   });
 });
 
@@ -503,17 +533,6 @@ describe('error handling', () => {
     );
   });
 
-  it('loadProjectsRegistry throws with path on malformed YAML', () => {
-    const p = writeFixture('bad-projects.yaml', '{ not yaml: [');
-    assert.throws(
-      () => loadProjectsRegistry(p),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.ok(err.message.includes(p), `Expected path in error: ${err.message}`);
-        return true;
-      },
-    );
-  });
 });
 
 // ---------------------------------------------------------------------------

@@ -7,11 +7,13 @@
  *   1. Agent definitions  — every studio SKILL.md in skills/
  *   2. Flow definitions   — every studio/flows/<id>/flow.yaml
  *   3. Catalog            — studio/catalog.yaml
- *   4. Projects registry  — studio/projects.yaml
+ *   4. Projects           — auto-discovered from `<projectsDir>/*` (B1; no registry file)
  *   5. KB descriptors     — brain/<name>/kb.yaml (tolerate zero; duplicates are errors)
  *
- * Missing seed files (studio/ dir, catalog.yaml, projects.yaml) are errors.
- * Absent brain kb.yaml files are NOT errors (project KBs live in project repos).
+ * Missing seed files (studio/ dir, catalog.yaml) are errors. Zero discovered
+ * projects is NOT an error (a fresh box has none); a project dir missing its
+ * `.forge/project.json` is a warn. Absent brain kb.yaml files are NOT errors
+ * (project KBs live in project repos).
  *
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
@@ -26,7 +28,7 @@ import {
   loadCatalog,
   loadFlowDefinition,
   loadKbDescriptor,
-  loadProjectsRegistry,
+  discoverProjects,
 } from '../orchestrator/studio/registry.ts';
 import {
   validateAgent,
@@ -35,9 +37,10 @@ import {
   validateCatalog,
   validateFlow,
   validateKb,
-  validateProjectsRegistry,
+  validateDiscoveredProjects,
   type Finding,
 } from '../orchestrator/studio/validate.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import type { AgentDefinition } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -245,31 +248,15 @@ export function runStudioLint(root: string): StudioLintResult {
   }
 
   // ------------------------------------------------------------------
-  // 4. Projects registry (studio/projects.yaml)
+  // 4. Projects (auto-discovered from disk — B1; no projects.yaml registry)
+  //
+  // Zero projects is NOT an error (a fresh box has none). We scan the projects
+  // root and validate: duplicate/invalid ids error; a dir missing its
+  // `.forge/project.json` contract file warns (forge will skip it).
   // ------------------------------------------------------------------
 
-  const projectsPath = join(root, 'studio', 'projects.yaml');
-
-  if (!existsSync(projectsPath)) {
-    findings.push({
-      level: 'error',
-      object: 'studio:projects',
-      check: 'seed-present',
-      message: `Required file "${projectsPath}" is missing — run the M0 seed step`,
-    });
-  } else {
-    try {
-      const registry = loadProjectsRegistry(projectsPath);
-      findings.push(...validateProjectsRegistry(registry));
-    } catch (err) {
-      findings.push({
-        level: 'error',
-        object: 'studio:projects',
-        check: 'load',
-        message: `Cannot load projects.yaml — ${(err as Error).message}`,
-      });
-    }
-  }
+  const projectsDir = resolveProjectsDir(root, loadConfig());
+  findings.push(...validateDiscoveredProjects(discoverProjects(projectsDir, root)));
 
   // ------------------------------------------------------------------
   // 5. KB descriptors (brain/*/kb.yaml — absent = NOT an error)

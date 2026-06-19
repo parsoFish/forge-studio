@@ -45,7 +45,7 @@ git --version            # 2.20+ (for git worktree)
 # Install + build + test
 npm install
 npm run build
-npm test                 # ~1172 tests
+npm test                 # the full node:test suite
 npm link                 # puts the `forge` command on PATH (bin/forge.mjs)
 
 # Launch Forge Studio — the operator UI is the whole product
@@ -65,6 +65,23 @@ forge --help             # full surface
 npm run ui:journey       # end-to-end operator journey (UI regression + demo video)
 npm run verify:cycle     # real cycle against a managed project (real-money; operator-gated)
 ```
+
+## Onboard your first project
+
+Forge auto-discovers managed projects from disk — any directory under
+`projects/` (or `$FORGE_PROJECTS_DIR`) carrying a `.forge/project.json`
+contract file is a managed project. To get one ready:
+
+1. Read [**docs/getting-started.md**](./docs/getting-started.md) — the
+   install-to-first-merge walkthrough (clone/symlink → `forge preflight <id>`
+   until green → author or reuse a flow → `/architect/new` → approve → review →
+   merge).
+2. Bring the project up to the [**forge↔project contract**](./docs/forge-project-contract.md)
+   with the `forge-onboard-project` skill. Copy
+   [`studio/starters/project.json.example`](./studio/starters/project.json.example)
+   to `<project>/.forge/project.json` and fill in each field.
+3. Run `forge preflight <id>` until every hard clause is green (or onboard via
+   Studio → Projects → New, which scaffolds the contract files for you).
 
 ## The three human moments
 

@@ -181,17 +181,13 @@ function cleanFirstFlow() {
   try { rmSync(J3_FLOW_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
 
-// J4: the project the operator onboards via the UI. Onboarding rewrites the
-// tracked studio/projects.yaml, so we snapshot it at startup and restore it
-// verbatim on cleanup (zero working-tree diff).
+// J4: the project the operator onboards via the UI. Projects are now
+// auto-discovered from disk (B1) — onboarding writes a project dir under
+// projects/ (no tracked registry file), so cleanup just removes that dir.
 const J4_PROJECT = 'journey-demo-project';
-const PROJECTS_YAML = join(FORGE_ROOT, 'studio', 'projects.yaml');
-const PROJECTS_YAML_SNAPSHOT = existsSync(PROJECTS_YAML) ? readFileSync(PROJECTS_YAML, 'utf8') : null;
+const J4_PROJECT_DIR = join(FORGE_ROOT, 'projects', J4_PROJECT);
 function cleanFirstProject() {
-  try { rmSync(join(FORGE_ROOT, 'projects', J4_PROJECT), { recursive: true, force: true }); } catch { /* */ }
-  if (PROJECTS_YAML_SNAPSHOT !== null) {
-    try { writeFileSync(PROJECTS_YAML, PROJECTS_YAML_SNAPSHOT); } catch { /* */ }
-  }
+  try { rmSync(J4_PROJECT_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
 
 // J5: a seeded run of the AUTHORED flow (my-first-flow) given work against the
@@ -990,14 +986,10 @@ async function main() {
       'J4: project.json carries the DEMO block (demo.shape)');
     check(typeof projCfg.northStar === 'string' && projCfg.northStar.length > 0,
       'J4: project.json carries the north star');
-    // Registry entry exists.
-    const registered = (() => {
-      try {
-        const doc = yaml.load(readFileSync(PROJECTS_YAML, 'utf8'));
-        return Array.isArray(doc?.projects) && doc.projects.some((p) => p.id === J4_PROJECT);
-      } catch { return false; }
-    })();
-    check(registered, 'J4: the project is registered in studio/projects.yaml');
+    // The project is auto-discovered from disk: its dir carries the
+    // `.forge/project.json` contract file (B1 — no registry file).
+    check(existsSync(projectJsonPath),
+      'J4: the project is auto-discovered from disk (.forge/project.json present)');
 
     // Onboarding redirected to the editor — readiness renders + reflects the onboarded fields.
     await page.waitForURL(new RegExp(`/projects/${J4_PROJECT}`), { timeout: 15000 }).catch(() => {});
