@@ -16,15 +16,15 @@
  *       `forge studio lint`, prove structural parity with the production seed, and
  *       render it live in the flow builder. The hardcoded cycle is subsumed by data.
  *     · agent builder (/agents/project-manager) — composition + runtime + budgets
- *     · project builder (/projects/terraform-provider-betterado) — north star,
- *       live-ADO demo timeline, skills, KB binding, C-contract readiness
+ *     · project builder (/projects/mdtoc) — north star, creds-free demo timeline,
+ *       skills, KB binding, C-contract readiness (FORGE_E2E_PROJECT overrides)
  *
- *   ACT 2 — RUN   the cycle as the proof case, grounded on a REAL betterado feature
+ *   ACT 2 — RUN   the cycle as the proof case, grounded on a REAL mdtoc feature
  *     · idea (/architect/new) → interview (P1 stall / P2 free-text / P3 activity / P4 cost)
  *     · PLAN gate (/artifact ...type=plan&mode=gate) — send-back → revise → approve
  *     · autonomous build on /flows/forge-cycle — PM decomposes → WIs fan off dev →
  *       TDD red → grind → gate.pass (dependency-ordered) → unifier on its OWN hex
- *       authors the betterado demo (live-ADO REST evidence)
+ *       authors the mdtoc demo (captured CLI read-back evidence)
  *     · verdict gate — per-AC evaluated demo (AC-2 PARTIAL) → operator authors a new
  *       G/W/T criterion → dev-loop reruns → re-review PARTIAL→MET → approve + merge
  *     · reflect — operator tunes the brain
@@ -37,8 +37,8 @@
  *       (FilesystemKbBackend default; Zep descriptor swap)
  *
  * No live LLM: the architect runner's turns + the autonomous cycle are emulated by
- * seeding the same files/events the real phases write, grounded on a real betterado
- * release-definition feature (deployment_input override_inputs) so the artifacts read true.
+ * seeding the same files/events the real phases write, grounded on a real mdtoc
+ * roadmap feature (the `--write` in-place TOC injection mode) so the artifacts read true.
  *
  * REGRESSION HARNESS: all assertions are SOFT (shared journey-assertions module;
  * non-zero exit at end). Guards preserved: ≥5 phase hexes, ≥2 WI hexes, drawer
@@ -60,14 +60,23 @@ import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PROJECT = 'terraform-provider-betterado';
+// PROJECT is parameterised (FORGE_E2E_PROJECT) so the walkthrough can be
+// grounded on any managed project; the default is `mdtoc`, forge's creds-free
+// out-of-the-box reference project (markdown-TOC CLI). The seeded artifacts
+// below are grounded on a real mdtoc roadmap feature so the demo reads true.
+const PROJECT = process.env.FORGE_E2E_PROJECT || 'mdtoc';
 const projectRoot = join(FORGE_ROOT, 'projects', PROJECT);
 
-// SAFETY: this harness seeds + then deletes scratch. A REAL project (git-backed)
-// must NEVER have its directory removed — only the demo's own scratch (the one
-// architect session it creates, its cycle log, its queue manifest). betterado is
-// git-backed, so IS_SYNTHETIC is false and cleanProjectDir is a no-op.
-const IS_SYNTHETIC = !existsSync(join(projectRoot, '.git'));
+// SAFETY: this harness seeds + then deletes scratch. A REAL, pre-existing
+// project must NEVER have its directory removed — only the demo's own scratch
+// (the one architect session it creates, its cycle log, its queue manifest).
+// `mdtoc` is a checked-in reference project (lives inside forge's own repo, so
+// it has no nested `.git`); `betterado` is a separate git clone. EITHER way the
+// project directory pre-exists with real source, so it is NOT synthetic and
+// cleanProjectDir is a no-op. We only treat a project as synthetic (disposable)
+// if its directory did not exist before this harness ran.
+const PROJECT_PREEXISTED = existsSync(projectRoot);
+const IS_SYNTHETIC = !PROJECT_PREEXISTED;
 function cleanProjectDir() {
   if (IS_SYNTHETIC) rmSync(projectRoot, { recursive: true, force: true });
 }
@@ -82,22 +91,28 @@ const OUT = join(FORGE_ROOT, 'forge-ui/.demo-shots/e2e');
 const FRAMES = join(OUT, 'frames');
 const VIDEO = join(OUT, 'video');
 
-// ── BETTERADO GROUNDING ────────────────────────────────────────────────────────
-// A real, small terraform-provider-betterado release-definition feature (WI-C in
-// the release-definition roadmap): two ADO task fields the schema doesn't expose.
-const IDEA = 'Add override_inputs to betterado_release_definition deployment_input — the map of task-input overrides applied at the phase level, matching ADO\'s "Deployment input overrides".';
+// ── MDTOC GROUNDING ─────────────────────────────────────────────────────────────
+// A real, small mdtoc roadmap feature (Milestone 1 — In-place TOC injection):
+// `mdtoc --write <file>` inserts (or refreshes) the generated table of contents
+// between `<!-- toc -->` / `<!-- /toc -->` markers, idempotently. Creds-free —
+// the change is proven by running the BUILT CLI against a fixture (the `cli-diff`
+// demo shape), not against an external system.
+const IDEA = 'Add a --write mode to mdtoc that inserts or refreshes the generated table of contents in-place between <!-- toc --> / <!-- /toc --> marker comments, idempotently (re-running --write produces no diff).';
 const DATE = new Date().toISOString().slice(0, 10);
-const INIT = `INIT-${DATE}-e2e-deploy-input-overrides`;
+const INIT = `INIT-${DATE}-e2e-toc-write-mode`;
 const STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
 const CYCLE_ID = `${STAMP}_${INIT}`;
 const CYCLE_LOG = join(FORGE_ROOT, '_logs', CYCLE_ID);
 
-// Live ADO coordinates (real org/project/definition from the betterado standing
-// demo evidence) — used so the seeded demo carries a real REST-GET liveEvidence
-// block rather than a synthetic test-name table (demos-are-visual-evidence policy).
-const ADO_ORG = 'davidgparsonson';
-const ADO_PROJECT_UUID = '6ddb680c-093d-4953-9561-2266eb7af800';
-const ADO_DEF_ID = 1;
+// Acceptance coordinates: mdtoc is creds-free, so the demo evidence is a captured
+// CLI read-back (the `acceptance` gate runs the BUILT CLI against the fixture and
+// asserts the exact generated TOC) rather than a live REST GET. Kept as concrete
+// constants so the seeded demo carries a real, greppable evidence block
+// (demos-are-visual-evidence policy — for a CLI project the "real resource" is the
+// command's captured output, not a test-name table).
+const ACC_CMD = 'npm run acceptance';
+const ACC_FIXTURE = 'test/fixtures/release-notes.md';
+const TOC_SENTINEL = 'sentinel-7f3a9c';
 
 // ── ACT-1 AUTHOR: author-from-scratch flow definition ──────────────────────────
 // The forge cycle rebuilt from first principles as a flow definition: six named
@@ -369,17 +384,17 @@ async function paced(thunks, gap = THINK) {
 function writeQuestions(sid) {
   writeFileSync(join(archDir(sid), 'questions.json'), JSON.stringify([
     {
-      question: 'How should deployment_input.override_inputs be typed?', header: 'Schema shape',
+      question: 'How should --write find the region to replace?', header: 'Marker strategy',
       options: [
-        { label: 'Optional TypeMap (map[string]string)', description: 'A plain optional string→string map; omitted means no overrides — no spurious plan diff.' },
-        { label: 'Optional + Computed', description: 'Compute server-side defaults back into state.' },
+        { label: 'Explicit <!-- toc --> / <!-- /toc --> markers', description: 'Only rewrite between the marker comments; no markers means no write — predictable and idempotent.' },
+        { label: 'Heuristic (first list after the H1)', description: 'Guess the TOC location; risks clobbering unrelated content.' },
       ],
     },
     {
-      question: 'What fixture should the new live-acceptance test use?', header: 'Acc fixture',
+      question: 'What should --write do when no markers are present?', header: 'No-marker behaviour',
       options: [
-        { label: 'Reuse SharedReleaseFixture', description: 'Avoids provisioning a second agent-pool queue against the live org.' },
-        { label: 'Standalone fixture', description: 'Isolated — a shared-fixture failure will not block this test.' },
+        { label: 'Exit non-zero with a clear message', description: 'Fail fast — the user must add markers before --write can be idempotent.' },
+        { label: 'Insert markers after the first heading', description: 'Convenient, but mutates the doc structure on first run.' },
       ],
     },
   ], null, 2));
@@ -400,18 +415,18 @@ function writePlan(sid, round) {
     `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
     `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
     '---', '',
-    '# betterado_release_definition — deployment_input.override_inputs', '',
-    'Given a deployment_input block with override_inputs set, when terraform apply runs against a live ADO org, then GET release/definitions returns deployPhases[].deploymentInput.overrideInputs matching, and a re-plan shows No changes.',
-    'Given the resource is imported, when Terraform reads state back, then override_inputs round-trips with no plan diff.',
+    '# mdtoc — `--write` in-place TOC injection', '',
+    'Given a Markdown file with <!-- toc --> / <!-- /toc --> markers, when `mdtoc --write <file>` runs, then the generated table of contents is inserted between the markers and the surrounding content is left untouched.',
+    'Given a file whose embedded TOC is already current, when `mdtoc --write <file>` runs again, then the file is unchanged (idempotent — re-running produces no diff).',
   ].join('\n'));
   writeFileSync(join(dir, 'PLAN.html'), `<!doctype html><html><head><meta charset="utf-8"><style>
     body{font:14px ui-sans-serif,system-ui;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
     h1{font-size:18px}h2{font-size:14px;color:#d2a8ff}.card{border:1px solid #30363d;border-radius:8px;padding:14px;margin:12px 0;background:#161b22}
     .r{color:#7ee787}</style></head>
-    <body><h1>PLAN — betterado_release_definition deployment_input.override_inputs ${round > 1 ? '<span class="r">(revised)</span>' : ''}</h1>
-    <p>Operator brief: expose override_inputs (a map of task-input overrides) on the deployment_input block, wired through expand/flatten, round-tripping against a live ADO org.</p>
-    <div class="card"><h2>AC-1 — schema + apply + REST GET</h2><p>GIVEN a deployment_input with override_inputs = { "system.debug" = "true" } WHEN terraform apply THEN GET release/definitions returns deployPhases[].deploymentInput.overrideInputs matching; re-plan = No changes.</p></div>
-    <div class="card"><h2>AC-2 — import round-trip${round > 1 ? ' (every key)' : ''}</h2><p>GIVEN the resource is imported WHEN Terraform reads state THEN override_inputs is present and matches the live ADO values with no plan diff. The PM sizes the work items directly off these acceptance criteria.</p></div></body></html>`);
+    <body><h1>PLAN — mdtoc \`--write\` in-place TOC injection ${round > 1 ? '<span class="r">(revised)</span>' : ''}</h1>
+    <p>Operator brief: add a <code>--write</code> mode that inserts (or refreshes) the generated TOC between <code>&lt;!-- toc --&gt;</code> / <code>&lt;!-- /toc --&gt;</code> marker comments, idempotently, via a new pure <code>src/inject.ts</code> wired into the CLI.</p>
+    <div class="card"><h2>AC-1 — marker slice + insert</h2><p>GIVEN a doc with <code>&lt;!-- toc --&gt;</code> / <code>&lt;!-- /toc --&gt;</code> markers WHEN <code>mdtoc --write file.md</code> runs THEN the generated TOC replaces the marker region and nothing outside it changes; <code>npm run acceptance</code> reads back the built CLI's output.</p></div>
+    <div class="card"><h2>AC-2 — idempotency${round > 1 ? ' (every run)' : ''}</h2><p>GIVEN the embedded TOC is already current WHEN <code>mdtoc --write file.md</code> runs again THEN the file is byte-identical (no diff). The PM sizes the work items directly off these acceptance criteria.</p></div></body></html>`);
   writeStatus(sid, { phase: 'awaiting-verdict', round, idea: IDEA });
 }
 
@@ -448,77 +463,73 @@ function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
   writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
-    title: `betterado_release_definition: deployment_input override_inputs${revision > 1 ? ' (round ' + revision + ')' : ''}`,
-    essence: 'Adds override_inputs (a map of task-input overrides applied at the phase level) to the deployment_input block, wired through expandDeploymentInput / flattenDeploymentInput. Round-trips against a live ADO org with no residual plan diff; covered by a new unit round-trip test and a live acceptance test.',
+    title: `mdtoc: --write in-place TOC injection${revision > 1 ? ' (round ' + revision + ')' : ''}`,
+    essence: 'Adds a `--write` mode that inserts or refreshes the generated table of contents between <!-- toc --> / <!-- /toc --> markers via a new pure src/inject.ts, wired into the CLI. Idempotent — re-running --write on a current doc produces no diff; covered by a new unit suite and the creds-free acceptance read-back against the built CLI.',
     project: PROJECT, initiativeId: INIT, baseRef: 'main', changedRef: `forge/${INIT}`,
-    diffStat: ' azuredevops/internal/service/release/resource_release_definition.go   | 24 ++++\n .../service/release/deployment_input_schema.go                       | 12 ++-\n .../release/resource_release_definition_test.go                      | 176 +++++++\n 3 files changed, 206 insertions(+), 6 deletions(-)',
+    diffStat: ' src/inject.ts                |  38 ++++++++\n src/cli.ts                   |  21 +++-\n test/inject.test.ts          | 142 ++++++++++++++++++++++\n test/acceptance/run.ts       |  18 ++-\n 4 files changed, 213 insertions(+), 6 deletions(-)',
     acceptanceCriteria: [
-      'GIVEN deployment_input { override_inputs = { "system.debug" = "true" } } WHEN terraform apply THEN GET release/definitions returns deployPhases[].deploymentInput.overrideInputs matching and re-plan is No changes',
-      `GIVEN the resource is imported WHEN Terraform reads state THEN override_inputs round-trips with no plan diff${revision > 1 ? ' (every key round-trips on import now — added this round on review feedback)' : ''}`,
+      'GIVEN a doc with <!-- toc --> / <!-- /toc --> markers WHEN `mdtoc --write file.md` runs THEN the generated TOC replaces the marker region, nothing outside it changes, and `npm run acceptance` reads back the built CLI output',
+      `GIVEN the embedded TOC is already current WHEN \`mdtoc --write file.md\` runs again THEN the file is byte-identical${revision > 1 ? ' on every run — verified across two consecutive --write passes now (added this round on review feedback)' : ''}`,
     ],
-    // Round 1: AC-2 PARTIAL (a key drops on import) — what the operator sends back on.
-    // Round 2: both ACs MET — the payoff (PARTIAL→MET).
+    // Round 1: AC-2 PARTIAL (a trailing newline drifts on the 2nd write) — what the
+    // operator sends back on. Round 2: both ACs MET — the payoff (PARTIAL→MET).
     acEvaluations: [
       {
-        criterion: 'override_inputs persists via apply; GET returns the matching map; re-plan No changes',
+        criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI',
         verdict: 'met',
-        evidence: 'TestReleaseDefinition_DeploymentInputOverrideInputs_RoundTrip → PASS (go test -tags all -count=1 ./azuredevops/internal/service/release/... exit 0, N+1/N+1 green)',
+        evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test, node:test, suite green) + npm run acceptance reads back the exact TOC from dist/cli.js against test/fixtures/release-notes.md, exit 0',
       },
       {
-        criterion: 'override_inputs round-trips on terraform import with no plan diff',
+        criterion: 'idempotency: re-running --write on a current doc produces no diff',
         verdict: revision > 1 ? 'met' : 'partial',
         evidence: revision > 1
-          ? 'import reads back EVERY override_inputs key; ExpectNonEmptyPlan:false passes (fixed this round)'
-          : 'override_inputs applies, but one key (system.debug) drops on import → plan diff — operator asked every key round-trip',
+          ? 'two consecutive --write passes are byte-identical; injectToc_IsIdempotent asserts diff === "" on the 2nd AND 3rd run (fixed the trailing-newline drift this round)'
+          : 'first --write is correct, but a trailing newline drifts on the 2nd write → a one-line diff — operator asked for byte-identical on every run',
       },
     ],
     summary: {
       bullets: [
-        'Added override_inputs (map[string]string) to the deployment_input block.',
-        'Wired it through expandDeploymentInput / flattenDeploymentInput — apply + read + import.',
-        'Covered by a unit round-trip test and a live TF_ACC acceptance test against a real ADO org.',
+        'Added a pure src/inject.ts (doc string + toc string → new doc string) that slices the <!-- toc --> / <!-- /toc --> region.',
+        'Wired --write into the CLI — read file, inject, write back; no markers means a clear non-zero exit.',
+        'Covered by a unit suite (insert + idempotency) and the creds-free acceptance read-back against the built CLI.',
       ],
       branch: `forge/${INIT}`, commitSha: 'b7c4e9a',
     },
     apiDiff: [
-      { name: 'deployment_input.override_inputs', change: 'added',
-        before: '(field absent — schema dropped it silently)',
-        after: `Optional map[string]string → ADO deployPhases[].deploymentInput.overrideInputs${revision > 1 ? ' (now round-trips on import)' : ''}` },
+      { name: 'mdtoc --write <file>', change: 'added',
+        before: '(flag absent — mdtoc only printed the TOC to stdout)',
+        after: `Refreshes the TOC in-place between <!-- toc --> / <!-- /toc --> markers, idempotently${revision > 1 ? ' (byte-identical on every run)' : ''}` },
     ],
     testEvidence: [
-      { name: 'TestReleaseDefinition_DeploymentInputOverrideInputs_RoundTrip', result: 'pass' },
-      { name: 'TestReleaseDefinition_DeploymentInput_DefaultsNoDiff', result: 'pass' },
-      { name: 'TestAccReleaseDefinition_withOverrideInputs', result: 'pass' },
+      { name: 'injectToc_ReplacesMarkerRegion', result: 'pass' },
+      { name: 'injectToc_IsIdempotent', result: 'pass' },
+      { name: 'acceptance: --write read-back vs test/fixtures/release-notes.md', result: 'pass' },
     ],
     checkpoints: [
-      { label: 'Unit round-trip — TestReleaseDefinition_DeploymentInputOverrideInputs_RoundTrip', kind: 'harness',
-        caption: 'expand→flatten round-trip preserves every override_inputs key byte-for-byte',
+      { label: 'Unit suite — injectToc_ReplacesMarkerRegion + injectToc_IsIdempotent', kind: 'harness',
+        caption: 'marker-region slice replaces only the TOC; a second --write is byte-identical',
         metrics: [
-          { label: 'release package unit tests', before: 'N tests, 0 fail', after: 'N+1 tests, 0 fail', deltaPct: null, parity: 'within' },
-          { label: 'default (omitted) override_inputs — no plan diff', before: 'n/a', after: 'No changes', deltaPct: null, parity: 'match' },
+          { label: 'mdtoc unit tests', before: 'N tests, 0 fail', after: 'N+2 tests, 0 fail', deltaPct: null, parity: 'within' },
+          { label: 'idempotent re-write — no diff', before: 'n/a', after: 'diff === ""', deltaPct: null, parity: 'match' },
         ] },
-      // LIVE EVIDENCE (demos-are-visual-evidence policy): a real REST GET against
-      // the betterado ADO org, with the field the apply must persist, plus a
-      // clickable portal URL the operator screenshots. This is what the real
-      // verify:cycle betterado tier asserts (kind-agnostic on liveEvidence.url);
-      // kept as a `harness`-kind checkpoint so demo-model validation accepts it.
-      { label: 'Live evidence — GET release definition from the real ADO org', kind: 'harness',
-        caption: 'REST GET of the created definition proves override_inputs persisted in the live org.',
-        metrics: [],
-        liveEvidence: {
-          method: 'GET',
-          url: `https://vsrm.dev.azure.com/${ADO_ORG}/${ADO_PROJECT_UUID}/_apis/release/definitions/${ADO_DEF_ID}?api-version=7.1`,
-          assertionPath: 'environments[0].deployPhases[0].deploymentInput',
-          expectedFields: { overrideInputs: { 'system.debug': 'true' } },
-          portalUrl: `https://dev.azure.com/${ADO_ORG}/${ADO_PROJECT_UUID}/_release?definitionId=${ADO_DEF_ID}`,
-          portalCaption: 'ADO release editor → Deployment input overrides panel shows system.debug = true',
-        } },
+      // CAPTURED EVIDENCE (demos-are-visual-evidence policy): for a creds-free CLI
+      // project the "real resource" is the command's captured output, not a
+      // test-name table. The acceptance driver runs the BUILT CLI (dist/cli.js)
+      // against the fixture and reads back the exact generated TOC — including the
+      // non-default sentinel heading — proving the change end-to-end. Kept as a
+      // `harness`-kind checkpoint so demo-model validation accepts it.
+      { label: `Captured CLI read-back — ${ACC_CMD} against ${ACC_FIXTURE}`, kind: 'harness',
+        caption: `The built mdtoc CLI runs --write against the fixture; the captured TOC reads back the non-default ${TOC_SENTINEL} section.`,
+        metrics: [
+          { label: 'acceptance read-back (dist/cli.js)', before: 'no --write', after: 'TOC injected + idempotent', deltaPct: null, parity: 'match' },
+          { label: `sentinel heading present (${TOC_SENTINEL})`, before: 'n/a', after: 'present in captured TOC', deltaPct: null, parity: 'match' },
+        ] },
     ],
-    usage_example: '```hcl\nresource "betterado_release_definition" "example" {\n  # ...\n  environment {\n    deploy_phase {\n      deployment_input {\n        override_inputs = {\n          "system.debug" = "true"\n        }\n      }\n    }\n  }\n}\n```',
+    usage_example: '```bash\n# README.md contains:\n#   <!-- toc -->\n#   <!-- /toc -->\nmdtoc --write README.md   # injects the TOC between the markers\nmdtoc --write README.md   # idempotent — no diff on the second run\n```',
     impact: [
-      'Closes a writable release-definition gap — override_inputs is exposed in the ADO UI but was absent from the provider.',
-      'Verified the only way that counts for betterado: apply → live REST GET → idempotency re-plan → destroy.',
-      'Parameterises shared task groups — phase-level input overrides without forking the task definition.',
+      'Closes the manual-TOC gap — mdtoc now keeps an embedded table of contents current in-place, not just on stdout.',
+      'Verified the way that counts for a CLI: run the BUILT binary against a fixture and read back its captured output.',
+      'Idempotent --write is safe to wire into CI (a future --check mode can fail when the embedded TOC drifts).',
     ],
   }, null, 2));
 }
@@ -528,10 +539,10 @@ function writeReflectionQuestions() {
   mkdirSync(CYCLE_LOG, { recursive: true });
   writeFileSync(join(CYCLE_LOG, 'user-questions.json'), JSON.stringify([
     {
-      question: 'Was the 2-work-item split (schema+expand/flatten, then live-acceptance test) the right size?',
+      question: 'Was the 2-work-item split (pure inject.ts, then --write wiring + acceptance read-back) the right size?',
       header: 'WI sizing',
       options: [
-        { label: 'Right size', description: 'Schema/round-trip and the live-acc test mapped cleanly to the two ACs.' },
+        { label: 'Right size', description: 'The pure injector and the CLI-wiring + acceptance test mapped cleanly to the two ACs.' },
         { label: 'Too small', description: 'Could have been a single work item.' },
         { label: 'Too large', description: 'Should have been split further.' },
       ],
@@ -591,7 +602,7 @@ h1{letter-spacing:.4px}video{width:100%;border:1px solid #30363d;border-radius:8
 figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{line-height:1.8}</style></head>
 <body><h1>forge — Forge Studio operator journey</h1>
-<p>Author a flow · run it · swap its engine. Grounded on a real betterado release-definition feature. Recorded ${new Date().toISOString()}.</p>
+<p>Author a flow · run it · swap its engine. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded ${new Date().toISOString()}.</p>
 <h2>video</h2><video src="${videoName}" controls autoplay muted loop></video>
 <h2>frames</h2>${figs}</body></html>`);
 }
@@ -1030,7 +1041,7 @@ async function main() {
     // The user's authored flow (my-first-flow) is given work against the
     // onboarded project. Seeded (no real agents), this proves the monitor
     // surfaces a USER-AUTHORED flow's run — its plan→dev→review hexes progress
-    // and the run parks at the verdict gate. (The full betterado idea→reflect
+    // and the run parks at the verdict gate. (The full mdtoc idea→reflect
     // path is proven separately by the RUN act below.)
     console.log('\n[J5] Give the authored flow work (seeded run on my-first-flow)');
     cleanFirstFlowRun();
@@ -1087,7 +1098,7 @@ async function main() {
     check(reviewStatus === 'gated' || reviewStatus === 'active', `J5: review phase awaits the human verdict (got "${reviewStatus}")`);
     await expectPhaseCost(page, 'J5: the authored run shows accrued per-phase cost');
     await frame(page, 'j5-0-authored-run', 'J5 — the authored flow, given work, runs plan → dev → review to the verdict gate');
-    // Clean the seeded run now so it does not bleed into the betterado RUN act.
+    // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
     cleanFirstFlowRun();
 
     // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
@@ -1265,7 +1276,7 @@ async function main() {
       check(false, 'agent-builder: page did not become ready — agent-builder checks skipped');
     }
 
-    // ── A4: Project builder — the betterado project as data ───────────────────
+    // ── A4: Project builder — the managed project as data ─────────────────────
     console.log(`\n[A4] Project builder — /projects/${PROJECT}`);
     await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
     let projectPageReady = false;
@@ -1281,7 +1292,7 @@ async function main() {
         document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') ?? '(no data-page=projects)');
       check(false, `project-builder: data-page-ready (got "${pr}")`);
     }
-    await caption(page, 'The betterado project — north star, the live-ADO demo timeline (apply → REST GET → destroy), skills, KB, contract readiness.');
+    await caption(page, 'The mdtoc project — north star, the creds-free demo timeline (capture → verify → present), skills, KB, contract readiness.');
     await sleep(ACT);
     if (projectPageReady) {
       const projectId = await page.evaluate(() =>
@@ -1333,11 +1344,11 @@ async function main() {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // ACT 2 — RUN. The cycle as the proof case, on a real betterado feature.
+    // ACT 2 — RUN. The cycle as the proof case, on a real mdtoc roadmap feature.
     // ════════════════════════════════════════════════════════════════════════
 
     // ── R1.0: Operator drops the idea ─────────────────────────────────────────
-    console.log('\n[R1.0] Operator drops the betterado idea');
+    console.log('\n[R1.0] Operator drops the mdtoc idea');
     await page.goto(watch.uiUrl + '/architect/new', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('main[data-page="architect-new"][data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="new-idea"]', { timeout: 10000 });
@@ -1347,7 +1358,7 @@ async function main() {
     await page.locator('[data-section="new-idea"] [data-field="idea"]').click();
     await page.locator('[data-section="new-idea"] [data-field="idea"]').pressSequentially(IDEA, { delay: 18 });
     await sleep(THINK);
-    await frame(page, 'r1-0-idea-typed', 'R1 — operator types a real betterado feature idea');
+    await frame(page, 'r1-0-idea-typed', 'R1 — operator types a real mdtoc feature idea');
     check(await page.locator('[data-section="new-idea"]').count() > 0, '[data-section="new-idea"] present on /architect/new');
     await page.locator('[data-action="start-architect"]').hover();
     await sleep(ACT);
@@ -1364,19 +1375,19 @@ async function main() {
     archEvent(sid, 'start', 'architect turn (phase=interviewing, round=1)');
     await page.waitForSelector('main[data-page="architect-interview"]', { timeout: 15000 });
     await page.waitForSelector('[data-component="architect-hex"]', { timeout: 15000 });
-    await caption(page, 'Forge reads the provider and the brain before it asks anything — every tool call, every line of reasoning.');
+    await caption(page, 'Forge reads the CLI source and the brain before it asks anything — every tool call, every line of reasoning.');
     await sleep(ACT);
     const groundingTools = ['Read', 'Grep', 'Glob', 'Read', 'Bash', 'Read'];
     for (let i = 0; i < groundingTools.length; i++) {
       archEvent(sid, 'tool_use', `tool.${groundingTools[i]}`, { tool: groundingTools[i] });
       await sleep(THINK);
       if (i === 3) {
-        await frame(page, 'r1-1-activity-midstream', 'R1 (mid-stream) — P3 activity panel filling while the architect reads the provider');
+        await frame(page, 'r1-1-activity-midstream', 'R1 (mid-stream) — P3 activity panel filling while the architect reads the CLI source');
       }
     }
-    archReasoning(sid, 'override_inputs maps cleanly to the SDK DeploymentInput.OverrideInputs (map[string]string) — the schema needs a TypeMap with Elem string, wired through expandDeploymentInput / flattenDeploymentInput.');
+    archReasoning(sid, '--write needs a pure src/inject.ts (doc string + toc string → new doc string) that slices the <!-- toc --> / <!-- /toc --> region, then a thin CLI wire that reads the file, injects, and writes it back.');
     await sleep(THINK);
-    archReasoning(sid, 'override_inputs parameterises shared task groups at the phase level — expandDeploymentInput just never wrote it. A round-trip unit test plus a TF_ACC live test will prove apply + read + import.');
+    archReasoning(sid, 'idempotency is the sharp edge — a second --write must be byte-identical. A unit test asserting diff === "" on a re-run plus the acceptance read-back against the built CLI will prove insert + idempotency.');
     await sleep(THINK);
     try {
       await page.waitForSelector('[data-section="architect-activity"]', { timeout: 8000 });
@@ -1527,7 +1538,7 @@ async function main() {
     // ── R2.1: Send-back + revised plan ────────────────────────────────────────
     console.log('\n[R2.1] Send-back + revised plan');
     await caption(page, 'You decide when the plan is right.');
-    const rationale = 'Also cover the empty-map case (override_inputs = {}) so it does not drift to null before merging.';
+    const rationale = 'Also cover the no-markers case (exit non-zero with a clear message) so --write never silently does nothing before merging.';
     const rationaleLocator = page.locator(
       '[data-component="plan-gate"] [data-field="rationale"], [data-section="plan-gate"] [data-field="rationale"]'
     ).first();
@@ -1593,7 +1604,7 @@ async function main() {
 
     // ── R3.0: PM decomposes ACs into work items ───────────────────────────────
     console.log('\n[R3.0] PM decomposes ACs into work items');
-    await caption(page, 'Dependency-ordered work items — from G/W/T, not tasks. (Schema+round-trip, then the live-acc test.)');
+    await caption(page, 'Dependency-ordered work items — from G/W/T, not tasks. (Pure inject.ts, then the --write wiring + acceptance read-back.)');
     await paced([
       () => cycleEvent('project-manager', 'start', 'pm phase start'),
       () => cycleEvent('project-manager', 'tool_use', 'pm.brain-query', { metadata: { tool: 'brain-query' } }),
@@ -1611,19 +1622,19 @@ async function main() {
 
     // ── R3.1: Dev-loop TDD red — gate.expected-fail ───────────────────────────
     console.log('\n[R3.1] Dev-loop TDD red — gate.expected-fail');
-    await caption(page, 'The gate fails before a line is written — go test red on the new round-trip.');
+    await caption(page, 'The gate fails before a line is written — npm test red on the new inject suite.');
     await paced([
       () => cycleEvent('developer-loop', 'start', 'dev-loop start'),
       () => cycleEvent('developer-loop', 'log', 'gate.expected-fail', {
-        metadata: { work_item_id: 'WI-1', stderr: 'FAIL TestReleaseDefinition_DeploymentInputOverrideInputs_RoundTrip: override_inputs not in schema' },
+        metadata: { work_item_id: 'WI-1', stderr: 'FAIL injectToc_ReplacesMarkerRegion: Cannot find module ../dist/inject.js (src/inject.ts not implemented)' },
       }),
     ], WORK);
     await sleep(THINK);
-    await frame(page, 'r3-1-gate-fail', 'R3 — TDD red: gate.expected-fail — the round-trip test fails before the schema change');
+    await frame(page, 'r3-1-gate-fail', 'R3 — TDD red: gate.expected-fail — the inject test fails before src/inject.ts exists');
 
     // ── R3.2: Dev-loop GRIND — fast-forwarded ─────────────────────────────────
     console.log('\n[R3.2] Dev-loop GRIND (fast-forward)');
-    await caption(page, 'Autonomous — wiring expandDeploymentInput / flattenDeploymentInput. (4m compressed.)');
+    await caption(page, 'Autonomous — writing the pure src/inject.ts marker-slice. (4m compressed.)');
     await runningTimer(page, true, 0);
     const implTools = ['Edit', 'Edit', 'Bash', 'Edit', 'Bash', 'Edit', 'Bash', 'Read', 'Edit', 'Bash'];
     for (const t of implTools) {
@@ -1639,7 +1650,7 @@ async function main() {
     // ── R3.3: Dependency gate + gate.pass ─────────────────────────────────────
     console.log('\n[R3.3] Gate.pass + WI-1 green → WI-2 starts');
     await runningTimer(page, false);
-    await caption(page, 'Red four minutes ago — now green. WI-2 (the live-acc test) only started once WI-1 was done.');
+    await caption(page, 'Red four minutes ago — now green. WI-2 (the --write wiring + acceptance read-back) only started once WI-1 was done.');
     cycleEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-1' } });
     await sleep(THINK);
     cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', {
@@ -1661,15 +1672,15 @@ async function main() {
 
     // ── R3.4: Unifier on its OWN hex ──────────────────────────────────────────
     console.log('\n[R3.4] Unifier on its own hex');
-    await caption(page, 'A separate phase reviews the branch and authors the demo — with live ADO REST evidence.');
+    await caption(page, 'A separate phase reviews the branch and authors the demo — with captured CLI read-back evidence.');
     await paced([
       () => unifierEvent('start', 'unifier.start — reviewing the merged work-item output'),
-      () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: go test -tags all ./azuredevops/internal/service/release/...' } }),
+      () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test && npm run acceptance' } }),
     ], WORK);
-    await frame(page, 'r3-4-unifier-midpulse', 'R3 (mid-pulse) — unifier hex active, running go test on the merged branch');
+    await frame(page, 'r3-4-unifier-midpulse', 'R3 (mid-pulse) — unifier hex active, running the gate + acceptance on the merged branch');
     unifierEvent('log', 'unifier.gate — initiative gate green; cleaning output');
     await sleep(WORK);
-    unifierEvent('log', 'unifier.demo-skill — authoring demo.json (live-ADO REST evidence)');
+    unifierEvent('log', 'unifier.demo-skill — authoring demo.json (captured CLI read-back evidence)');
     await sleep(THINK);
     unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } });
     await sleep(THINK);
@@ -1720,10 +1731,10 @@ async function main() {
     await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await caption(page, 'Approve on evidence — a live REST GET proves override_inputs persisted. AC-2 is only PARTIAL (a key drops on import).');
+    await caption(page, 'Approve on evidence — the captured CLI read-back proves --write injects the TOC. AC-2 is only PARTIAL (a trailing newline drifts on the 2nd write).');
     await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
     await sleep(READ);
-    await frame(page, 'r4-0-review-partial', 'R4 — review demo: AC-1 MET (live REST GET), AC-2 PARTIAL (a key drops on import)');
+    await frame(page, 'r4-0-review-partial', 'R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)');
     await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict]', 2, 'review demo foregrounds per-AC evaluated output');
     check(
       await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count() > 0,
@@ -1738,7 +1749,7 @@ async function main() {
     if (await verdictTextarea.count() > 0) {
       await verdictTextarea.click();
       await verdictTextarea.pressSequentially(
-        'Close — but every override_inputs key must round-trip on terraform import (no plan diff) before this merges.',
+        'Close — but a second --write on an already-current doc must be byte-identical (no diff) before this merges.',
         { delay: 18 },
       );
     }
@@ -1746,10 +1757,10 @@ async function main() {
     const acGiven = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0);
     const acWhen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1);
     const acThen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2);
-    if (await acGiven.count() > 0) { await acGiven.click(); await acGiven.pressSequentially('a deployment_input with override_inputs containing two keys', { delay: 18 }); await sleep(THINK); }
-    if (await acWhen.count()  > 0) { await acWhen.click();  await acWhen.pressSequentially('terraform import then plan is run', { delay: 18 }); await sleep(THINK); }
-    if (await acThen.count()  > 0) { await acThen.click();  await acThen.pressSequentially('the plan shows No changes — every override_inputs key round-trips on import', { delay: 18 }); await sleep(THINK); }
-    await frame(page, 'r4-1-send-back', 'R4 — operator sends back with a new G/W/T criterion (retry round-trips on import)');
+    if (await acGiven.count() > 0) { await acGiven.click(); await acGiven.pressSequentially('a Markdown file whose embedded TOC is already current', { delay: 18 }); await sleep(THINK); }
+    if (await acWhen.count()  > 0) { await acWhen.click();  await acWhen.pressSequentially('mdtoc --write is run on it twice in a row', { delay: 18 }); await sleep(THINK); }
+    if (await acThen.count()  > 0) { await acThen.click();  await acThen.pressSequentially('the file is byte-identical after each run — no trailing-newline drift', { delay: 18 }); await sleep(THINK); }
+    await frame(page, 'r4-1-send-back', 'R4 — operator sends back with a new G/W/T criterion (--write is byte-identical on every run)');
     await page.locator('[data-action="send-back"]').click();
     await sleep(ACT);
 
@@ -1763,7 +1774,7 @@ async function main() {
       cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } });
       await pace('fastForward');
     }
-    unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (override_inputs round-trips on import)');
+    unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (--write is byte-identical on every run)');
     await pace('fastForward');
     writeDemoJson(2);
     unifierEvent('end', 'unifier.end (round 2) — demo re-rendered', { cost_usd: 0.06 });
@@ -1794,7 +1805,7 @@ async function main() {
     if (await lgtmTextarea.count() > 0) {
       await lgtmTextarea.click();
       await lgtmTextarea.pressSequentially(
-        'LGTM — override_inputs persists via apply, the live REST GET matches, and every key now round-trips on import. All ACs met.',
+        'LGTM — --write injects the TOC, the captured CLI read-back matches, and a second --write is now byte-identical. All ACs met.',
         { delay: 18 },
       );
     }
@@ -1860,7 +1871,7 @@ async function main() {
     if (await freeformLocator.count() > 0) {
       await freeformLocator.click();
       await freeformLocator.pressSequentially(
-        'Dependency ordering held. The send-back (every override_inputs key must round-trip on import) was exactly the right call — it caught a real flatten gap.',
+        'Dependency ordering held. The send-back (a second --write must be byte-identical) was exactly the right call — it caught a real trailing-newline drift.',
         { delay: 18 },
       );
     }
@@ -1915,7 +1926,7 @@ async function main() {
       `created_at: '${new Date().toISOString()}'`, `cycle_id: ${CYCLE_ID2}`,
       'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review', 'origin: architect',
       '---', '', '# Studio demo — gated run for the flow-engine controls', '',
-      'Add a betterado_release_folder data source.',
+      'Add a --check mode to mdtoc that exits non-zero when the embedded TOC is stale.',
     ].join('\n'));
     studioEvent('orchestrator', 'start', 'cycle.start', { metadata: { origin: 'architect' } });
     studioEvent('architect', 'start', 'architect.start');
@@ -2169,7 +2180,7 @@ async function main() {
     }
 
     // ── S3: KB-backend seam (ADR-027 §4) — knowledge graph + pin guidance ─────
-    const GUIDANCE_TEXT = '[e2e-journey] deployment_input theme: override_inputs is a TypeMap — flatten must emit every key or import drifts to a plan diff.';
+    const GUIDANCE_TEXT = '[e2e-journey] --write theme: idempotency is the sharp edge — a second --write must be byte-identical or a trailing newline drifts into a diff.';
     console.log('\n[S3.0] KB-backend seam — /knowledge?id=cycles (real brain)');
     await page.goto(`${watch.uiUrl}/knowledge?id=cycles`, { waitUntil: 'domcontentloaded' });
     let kbPageReady = false;
