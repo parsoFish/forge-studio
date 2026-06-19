@@ -12,7 +12,7 @@ Every PR must pass all four gates before merge:
 
 ```bash
 npm run build          # TypeScript compile — zero errors
-npm test               # ~1172 unit tests via node:test
+npm test               # the full unit-test suite via node:test
 forge studio lint      # validate agents/flows/catalog/kb defs; exits non-zero on error
 forge brain lint       # 8 structural integrity checks on brain/; exits non-zero on error
 ```

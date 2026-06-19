@@ -53,8 +53,26 @@ export type StudioPostContext = StudioContext & {
   projectsRoot: string;
   mergePr: (worktreePath: string) => boolean;
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  /**
+   * WS-A (release): post-approval, pre-merge release finalisation. Injectable
+   * for tests; in production defaults (in ui-bridge.ts) to a wrapper around the
+   * real `runReleaseFinalize` phase. Opt-in: a project without `releaseProcess`
+   * resolves to `release_status: 'skipped'`. Log-and-continue: a failure here
+   * does NOT block the merge (the in-cycle DRAFT changelog is the fallback).
+   */
+  runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   broadcastArchitectChanged: () => void;
   spawnArchitectTurnFn?: (forgeRoot: string, project: string, sessionId: string) => void;
+};
+
+/** The manifest-derived input the approve handler hands the release-finalize hook. */
+export type ReleaseFinalizeHookInput = {
+  initiativeId: string;
+  cycleId: string;
+  projectName: string;
+  worktreePath: string;
+  projectRepoPath: string;
+  logsRoot: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -175,6 +193,26 @@ export async function applyReviewVerdict(
     if (!resolvedWt.startsWith(projectsRoot + sep) && !resolvedWt.startsWith(worktreesRoot + sep)) {
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
+    }
+    // WS-A (release): finalise the release on the PR branch BEFORE merging.
+    // Opt-in on the project's `releaseProcess` (skips cleanly otherwise) and
+    // log-and-continue on failure — the merge MUST still fire (the in-cycle
+    // DRAFT changelog is the fallback), so this is awaited but never gates the
+    // merge. Present ⇒ finalise-then-merge; absent ⇒ straight-to-merge.
+    if (ctx.runReleaseFinalize) {
+      try {
+        await ctx.runReleaseFinalize({
+          initiativeId,
+          cycleId: approveManifest.cycle_id ?? initiativeId,
+          projectName: approveManifest.project,
+          worktreePath: approveWorktreePath,
+          projectRepoPath: approveManifest.project_repo_path,
+          logsRoot: ctx.logsRoot,
+        });
+      } catch {
+        // Defence in depth: the phase itself log-and-continues, but a hook-level
+        // throw must never block the merge either.
+      }
     }
     const merged = ctx.mergePr(approveWorktreePath);
     if (!merged) {

@@ -4,7 +4,7 @@ h1{letter-spacing:.4px}video{width:100%;border:1px solid #30363d;border-radius:8
 figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{line-height:1.8}</style></head>
 <body><h1>forge — Forge Studio operator journey</h1>
-<p>Author a flow · run it · swap its engine. Grounded on a real betterado release-definition feature. Recorded 2026-06-18T12:07:40.465Z.</p>
+<p>Author a flow · run it · swap its engine. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded 2026-06-19T03:08:15.946Z.</p>
 <h2>video</h2><video src="video/journey.webm" controls autoplay muted loop></video>
 <h2>frames</h2><figure><img src="frames/01-a1-0-title.png" loading="lazy"/><figcaption><code>01-a1-0-title.png</code> — Title — "Forge Studio: author a flow, run it, swap its engine"</figcaption></figure>
 <figure><img src="frames/02-a1-1-library.png" loading="lazy"/><figcaption><code>02-a1-1-library.png</code> — A1 — Studio library: flows/agents/projects/KBs as data + operator pulse</figcaption></figure>
@@ -22,9 +22,9 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <figure><img src="frames/14-a3-0-agent-builder.png" loading="lazy"/><figcaption><code>14-a3-0-agent-builder.png</code> — A3 — agent builder: catalog, drop zones, runtime, readiness panel</figcaption></figure>
 <figure><img src="frames/15-a3-1-agent-dirty.png" loading="lazy"/><figcaption><code>15-a3-1-agent-dirty.png</code> — A3 — data-dirty flips on edit (discarded, no save — seed SKILL.md immutable)</figcaption></figure>
 <figure><img src="frames/16-a4-0-project-builder.png" loading="lazy"/><figcaption><code>16-a4-0-project-builder.png</code> — A4 — project builder: north star, demo timeline, skills, contract readiness</figcaption></figure>
-<figure><img src="frames/17-a4-1-project-dirty.png" loading="lazy"/><figcaption><code>17-a4-1-project-dirty.png</code> — A4 — data-step-count incremented (4→5), data-dirty="true" (no save)</figcaption></figure>
-<figure><img src="frames/18-r1-0-idea-typed.png" loading="lazy"/><figcaption><code>18-r1-0-idea-typed.png</code> — R1 — operator types a real betterado feature idea</figcaption></figure>
-<figure><img src="frames/19-r1-1-activity-midstream.png" loading="lazy"/><figcaption><code>19-r1-1-activity-midstream.png</code> — R1 (mid-stream) — P3 activity panel filling while the architect reads the provider</figcaption></figure>
+<figure><img src="frames/17-a4-1-project-dirty.png" loading="lazy"/><figcaption><code>17-a4-1-project-dirty.png</code> — A4 — data-step-count incremented (3→4), data-dirty="true" (no save)</figcaption></figure>
+<figure><img src="frames/18-r1-0-idea-typed.png" loading="lazy"/><figcaption><code>18-r1-0-idea-typed.png</code> — R1 — operator types a real mdtoc feature idea</figcaption></figure>
+<figure><img src="frames/19-r1-1-activity-midstream.png" loading="lazy"/><figcaption><code>19-r1-1-activity-midstream.png</code> — R1 (mid-stream) — P3 activity panel filling while the architect reads the CLI source</figcaption></figure>
 <figure><img src="frames/20-r1-1-activity-settled.png" loading="lazy"/><figcaption><code>20-r1-1-activity-settled.png</code> — R1 (settled) — P3 activity panel: tool calls + reasoning rows persisted</figcaption></figure>
 <figure><img src="frames/21-r1-2-questions.png" loading="lazy"/><figcaption><code>21-r1-2-questions.png</code> — R1 — architect returns 2 clarifying questions (schema design + acc fixture)</figcaption></figure>
 <figure><img src="frames/22-r1-3-freetext.png" loading="lazy"/><figcaption><code>22-r1-3-freetext.png</code> — R1 — P2: operator types a free-text answer on Q2 (overriding the option list)</figcaption></figure>
@@ -41,15 +41,15 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <figure><img src="frames/33-r3-0b-pm-settled.png" loading="lazy"/><figcaption><code>33-r3-0b-pm-settled.png</code> — R3 — PM decomposed ACs into 2 dependency-ordered work items</figcaption></figure>
 <figure><img src="frames/34-hex-detail-phase.png" loading="lazy"/><figcaption><code>34-hex-detail-phase.png</code> — Phase drawer — phase hex opens the detail drawer (held open)</figcaption></figure>
 <figure><img src="frames/35-hex-detail-wi.png" loading="lazy"/><figcaption><code>35-hex-detail-wi.png</code> — Phase drawer — wi hex opens the detail drawer (held open)</figcaption></figure>
-<figure><img src="frames/36-r3-1-gate-fail.png" loading="lazy"/><figcaption><code>36-r3-1-gate-fail.png</code> — R3 — TDD red: gate.expected-fail — the round-trip test fails before the schema change</figcaption></figure>
+<figure><img src="frames/36-r3-1-gate-fail.png" loading="lazy"/><figcaption><code>36-r3-1-gate-fail.png</code> — R3 — TDD red: gate.expected-fail — the inject test fails before src/inject.ts exists</figcaption></figure>
 <figure><img src="frames/37-r3-2-grind.png" loading="lazy"/><figcaption><code>37-r3-2-grind.png</code> — R3 (fast-forward) — dev-loop implementing WI-1; token/cost bar growing</figcaption></figure>
 <figure><img src="frames/38-r3-3-wi1-green.png" loading="lazy"/><figcaption><code>38-r3-3-wi1-green.png</code> — R3 — gate.pass; WI-1 green; WI-2 (depends on WI-1) only now starts</figcaption></figure>
 <figure><img src="frames/39-r3-3b-devloop-green.png" loading="lazy"/><figcaption><code>39-r3-3b-devloop-green.png</code> — R3 — dev-loop hex greens (both WIs done); unifier runs next on its own hex</figcaption></figure>
-<figure><img src="frames/40-r3-4-unifier-midpulse.png" loading="lazy"/><figcaption><code>40-r3-4-unifier-midpulse.png</code> — R3 (mid-pulse) — unifier hex active, running go test on the merged branch</figcaption></figure>
+<figure><img src="frames/40-r3-4-unifier-midpulse.png" loading="lazy"/><figcaption><code>40-r3-4-unifier-midpulse.png</code> — R3 (mid-pulse) — unifier hex active, running the gate + acceptance on the merged branch</figcaption></figure>
 <figure><img src="frames/41-r3-4b-unifier-green.png" loading="lazy"/><figcaption><code>41-r3-4b-unifier-green.png</code> — R3 — unifier (own node) greens after authoring the demo</figcaption></figure>
 <figure><img src="frames/42-r3-5-cost-rollup.png" loading="lazy"/><figcaption><code>42-r3-5-cost-rollup.png</code> — R3 — cost rollup across the spine (Studio monitor)</figcaption></figure>
-<figure><img src="frames/43-r4-0-review-partial.png" loading="lazy"/><figcaption><code>43-r4-0-review-partial.png</code> — R4 — review demo: AC-1 MET (live REST GET), AC-2 PARTIAL (a key drops on import)</figcaption></figure>
-<figure><img src="frames/44-r4-1-send-back.png" loading="lazy"/><figcaption><code>44-r4-1-send-back.png</code> — R4 — operator sends back with a new G/W/T criterion (retry round-trips on import)</figcaption></figure>
+<figure><img src="frames/43-r4-0-review-partial.png" loading="lazy"/><figcaption><code>43-r4-0-review-partial.png</code> — R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)</figcaption></figure>
+<figure><img src="frames/44-r4-1-send-back.png" loading="lazy"/><figcaption><code>44-r4-1-send-back.png</code> — R4 — operator sends back with a new G/W/T criterion (--write is byte-identical on every run)</figcaption></figure>
 <figure><img src="frames/45-r4-2-rerun.png" loading="lazy"/><figcaption><code>45-r4-2-rerun.png</code> — R4 (fast-forward) — dev-loop reran on the new criterion; back to "Review →"</figcaption></figure>
 <figure><img src="frames/46-r4-3-rereview-met.png" loading="lazy"/><figcaption><code>46-r4-3-rereview-met.png</code> — R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)</figcaption></figure>
 <figure><img src="frames/47-r4-4-approve.png" loading="lazy"/><figcaption><code>47-r4-4-approve.png</code> — R4 — operator approves (human decision #2 complete)</figcaption></figure>
@@ -64,7 +64,7 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <figure><img src="frames/56-s2-0-sdk-picker.png" loading="lazy"/><figcaption><code>56-s2-0-sdk-picker.png</code> — S2 — adapter seam: claude selectable; codex/gemini disabled (registry-driven)</figcaption></figure>
 <figure><img src="frames/57-s2-1-range-chips.png" loading="lazy"/><figcaption><code>57-s2-1-range-chips.png</code> — S2 — range mode: 2 Claude tier chip(s) selected; routes to the cheapest capable tier first</figcaption></figure>
 <figure><img src="frames/58-s2-2-yaml-range.png" loading="lazy"/><figcaption><code>58-s2-2-yaml-range.png</code> — S2 — YAML preview shows strategy: range (authored in UI; no Save — seed SKILL.md immutable)</figcaption></figure>
-<figure><img src="frames/59-s3-0-kb-graph.png" loading="lazy"/><figcaption><code>59-s3-0-kb-graph.png</code> — S3 — /knowledge?id=cycles: force-graph rendered (106 nodes, real cycles brain)</figcaption></figure>
+<figure><img src="frames/59-s3-0-kb-graph.png" loading="lazy"/><figcaption><code>59-s3-0-kb-graph.png</code> — S3 — /knowledge?id=cycles: force-graph rendered (104 nodes, real cycles brain)</figcaption></figure>
 <figure><img src="frames/60-s3-0b-kb-node-article.png" loading="lazy"/><figcaption><code>60-s3-0b-kb-node-article.png</code> — S3 — theme node clicked: NODE ARTICLE panel visible</figcaption></figure>
 <figure><img src="frames/61-s3-1-guidance-typed.png" loading="lazy"/><figcaption><code>61-s3-1-guidance-typed.png</code> — S3 — guidance text typed into the HUMAN GUIDANCE panel</figcaption></figure>
 <figure><img src="frames/62-s3-1b-guidance-pinned.png" loading="lazy"/><figcaption><code>62-s3-1b-guidance-pinned.png</code> — S3 — guidance pinned: data-guidance-pinned="true", guidance node in graph</figcaption></figure>

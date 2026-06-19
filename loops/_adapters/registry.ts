@@ -75,3 +75,33 @@ export function registeredSdkIds(): string[] {
 export function isSdkAvailable(id: string): boolean {
   return ADAPTERS[id]?.available === true;
 }
+
+/**
+ * Resolves a requested sdk id to a usable one, defaulting to the canonical
+ * 'claude' adapter. The gate that stops a body's free-text `runtime.sdk` from
+ * reaching `getAdapter()` with an id nothing is registered under (which throws).
+ *
+ *   - unset/empty → 'claude'
+ *   - set but not available (unregistered, or registered-but-available:false)
+ *     → log `sdk.unavailable-fallback` (if a logger is supplied) and fall back
+ *     to 'claude'
+ *   - set and available → returned as-is
+ *
+ * The `log` callback is optional because the registry has no EventLogger in
+ * scope.
+ * TODO(threading): consumer passes a logger once runtime.sdk is threaded
+ * through to the call site, so the fallback is observable in the event log.
+ */
+export function resolveSdkId(
+  sdk: string | undefined,
+  log?: (event: { type: string; sdk?: string }) => void,
+): string {
+  if (sdk === undefined || sdk === '') {
+    return 'claude';
+  }
+  if (!isSdkAvailable(sdk)) {
+    log?.({ type: 'sdk.unavailable-fallback', sdk });
+    return 'claude';
+  }
+  return sdk;
+}

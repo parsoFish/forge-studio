@@ -15,8 +15,8 @@
 > reviewer do not ([ADR 010](./docs/decisions/010-brain-first.md));
 > (c) **no auto-merge** — the GitHub PR is the operator's merge surface;
 > `closure.ts` is the single terminal-move authority; (d) **Forge Studio is the
-> sole operator surface** ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md),
-> extended by ADR 031 — architect runs natively in Studio; review/reflect render
+> sole operator surface** ([ADR 031](./docs/decisions/031-studio-consolidation.md)
+> — architect runs natively in Studio; review/reflect render
 > on the unified `/artifact` viewer); (e) **three swappable seams are real and
 > used in production** ([ADR 032](./docs/decisions/032-subsumption-proof.md)):
 > runtime adapter registry, KbBackend, and the unifier as an independently-
@@ -248,8 +248,7 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 ### Unattended operation
 
 Three human interaction points, all on **Forge Studio** — the sole operator
-surface ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md), consolidated
-by [ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
+surface ([ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
 one launcher command). The load-bearing invariant is preserved: each moment is
 **explicit, operator-initiated, and impossible to silently auto-satisfy** (no
 auto-approve, no bench simulator in production —
@@ -267,7 +266,7 @@ Everything else runs unattended for arbitrary durations via:
 - **`orchestrator/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
 - **Crash recovery** by atomic claim + heartbeat: orphaned in-flight items return to `pending/` on restart.
 
-This is **not v1's job queue + worker + resource controller**. See ADR 011-013 for the line we're holding.
+This is **not a re-invented job queue + worker pool + resource controller**. See ADR 011-013 for the line we're holding.
 
 ### Brain-first research
 

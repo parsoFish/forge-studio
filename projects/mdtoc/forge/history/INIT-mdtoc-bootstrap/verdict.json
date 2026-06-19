@@ -1,0 +1,7 @@
+{
+  "initiative_id": "INIT-mdtoc-bootstrap",
+  "verdict": "approve",
+  "timestamp": "2026-06-19T00:00:00Z",
+  "notes": "Bootstrap of the mdtoc reference project: quality gate (npm test) and creds-free acceptance gate (npm run acceptance) both green; the built CLI produces the expected TOC for the fixture, including the non-default sentinel section and the duplicate-anchor read-back.",
+  "demo": "demo/toc-capture.md"
+}

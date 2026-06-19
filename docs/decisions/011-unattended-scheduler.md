@@ -5,9 +5,9 @@
 
 ## Context
 
-Forge v2's load-bearing requirement is **unattended operation between human interaction points** — the system must claim initiatives, drive each through PM → Developer Loop → Review-Prep, and surface completed initiatives without prompting the user, for arbitrary durations between the three human-in-the-loop moments (architect, review, reflection).
+Forge's load-bearing requirement is **unattended operation between human interaction points** — the system must claim initiatives, drive each through PM → Developer Loop → Review-Prep, and surface completed initiatives without prompting the user, for arbitrary durations between the three human-in-the-loop moments (architect, review, reflection).
 
-V1 met a similar requirement with a job queue + worker pool + resource controller + adaptive concurrency + process isolation. That was correct but heavy. V2 must achieve the same outcome without re-introducing that infrastructure.
+The prior approach met a similar requirement with a job queue + worker pool + resource controller + adaptive concurrency + process isolation. That was correct but heavy. The current architecture must achieve the same outcome without re-introducing that infrastructure.
 
 ## Decision
 
@@ -28,14 +28,14 @@ The scheduler exposes:
 ## Consequences
 
 **Positive:**
-- Honest LOC reconciliation (2026-05-16, post F-24…F-44): the scheduler subsystem ≈ **1,600 LOC** and the whole `orchestrator/` ≈ **4,400 LOC** vs v1's ~6,000 — still smaller, but well over the scaffold's "≈ 300 LOC" target. Most of the growth is the shared bench↔live `*-invocation.ts` prompt contracts (~1,100 LOC, single source of truth, defensible) plus the F-27 resilience layer. The cap is a *pressure to delete*, not a measured fact; the simplification track (Phase 3 — extract `pr.ts`, split files ≤800 LOC) reduces it. Per-file:
+- Honest LOC reconciliation (2026-05-16, post F-24…F-44): the scheduler subsystem ≈ **1,600 LOC** and the whole `orchestrator/` ≈ **4,400 LOC** vs the prior codebase's ~6,000 — still smaller, but well over the scaffold's "≈ 300 LOC" target. Most of the growth is the shared bench↔live `*-invocation.ts` prompt contracts (~1,100 LOC, single source of truth, defensible) plus the F-27 resilience layer. The cap is a *pressure to delete*, not a measured fact; the simplification track (Phase 3 — extract `pr.ts`, split files ≤800 LOC) reduces it. Per-file:
   - `scheduler.ts` (~874) — claim loop + recovery + dispatch + cleanup + bounded auto-retry.
   - `queue.ts` (~185) — file-state machine + recovery sweep.
   - `worktree.ts` (~120) — `add` / `remove` / `cleanup` / `list`.
   - `notify.ts` (~75) — desktop + webhook providers.
   - `file-verdict.ts` (~310) — F-02 file-based verdict provider (production human-in-the-loop transport for review verdicts).
   - `config.ts` (~85) — F-10 / F-18 `forge.config.json` loader + env assertion.
-  Each addition closes a specific operational gap surfaced in the [pass-1 review](../../_review/00-summary.md). Net surface still much smaller than v1.
+  Each addition closes a specific operational gap surfaced in the [pass-1 review](../../_review/00-summary.md). Net surface still much smaller than the prior approach.
 - No DB, no IPC, no daemon protocol — the filesystem is the protocol.
 - Inspectable: `ls _queue/` is the entire system state.
 - Trivially recoverable from crash (see ADR 012).
@@ -47,11 +47,11 @@ The scheduler exposes:
 
 ## Alternatives considered
 
-- **V1's job queue + worker** — the explicit thing we're not rebuilding.
+- **The prior job queue + worker** — the explicit thing we're not rebuilding.
 - **systemd timer** — fine for periodic jobs, awkward for the long-running watch-and-claim model.
 - **A local message broker (Redis, NATS)** — adds a service to manage; the filesystem suffices.
 - **GitHub Actions for scheduling** — possible, but couples to GitHub for what is fundamentally a local concern; rejected.
 
 ## References
 
-- v1's `src/jobs/`, `src/monitor/`, `src/agents/runner.ts` — the scope being collapsed
+- The prior `src/jobs/`, `src/monitor/`, `src/agents/runner.ts` — the scope being collapsed

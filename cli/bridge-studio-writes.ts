@@ -16,22 +16,25 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import yaml from 'js-yaml';
 import matter from 'gray-matter';
 
 import {
   listAgentDefinitions,
   loadAgentDefinition,
   loadFlowDefinition,
-  loadProjectsRegistry,
+  discoverProjects,
   serializeAgentDefinition,
   serializeFlowDefinition,
 } from '../orchestrator/studio/registry.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig } from '../orchestrator/project-config.ts';
+import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { runPreflight } from './preflight.ts';
 import { listRuns } from '../orchestrator/run-model.ts';
 import {
   sendJson,
@@ -41,6 +44,80 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
+
+// ---------------------------------------------------------------------------
+// C4 contract-artifact scaffolding (B3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Idempotently scaffold the machine-readable architecture context the C4
+ * preflight clause requires: a `roadmap.md` at the project root and the
+ * project's brain sub-wiki `profile.md` (under the project.json `artifactRoot`,
+ * default `.`). Each file is written ONLY if absent — an existing operator file
+ * is never clobbered. The stubs are clearly marked as TODO scaffolding so a
+ * hollow roadmap is never written silently. A git repo is initialised if the
+ * project dir is not already inside one (C6/preflight needs a git surface).
+ *
+ * Returns the list of relative paths actually created (empty if everything was
+ * already present), so the caller can tell the operator what it touched.
+ */
+export function scaffoldContractArtifacts(projectRoot: string, name: string): string[] {
+  const created: string[] = [];
+
+  // git init if the dir is not already a git work tree.
+  let isGit = false;
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: projectRoot, stdio: 'ignore' });
+    isGit = true;
+  } catch {
+    isGit = false;
+  }
+  if (!isGit) {
+    try {
+      execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
+      created.push('.git/');
+    } catch {
+      // git unavailable or dir not writable — preflight will surface C6.
+    }
+  }
+
+  // roadmap.md (C4) — TODO stub, clearly marked.
+  const roadmapPath = resolve(projectRoot, 'roadmap.md');
+  if (!existsSync(roadmapPath)) {
+    writeFileSync(
+      roadmapPath,
+      `# ${name} — Roadmap\n\n` +
+        `> TODO (scaffold): replace this stub with the real product roadmap.\n` +
+        `> Forge's architect/PM read this file to decompose work; an empty roadmap\n` +
+        `> means they have nothing to plan against. List the features/milestones\n` +
+        `> you want built, largest-chunk-first.\n\n` +
+        `## Milestones\n\n- [ ] TODO: describe the first milestone.\n`,
+      'utf8',
+    );
+    created.push('roadmap.md');
+  }
+
+  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot.
+  const artifactRoot = readArtifactRoot(projectRoot);
+  const brainRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
+  const profilePath = resolve(projectRoot, brainRel);
+  if (!existsSync(profilePath)) {
+    mkdirSync(resolve(profilePath, '..'), { recursive: true });
+    writeFileSync(
+      profilePath,
+      `# ${name} — Project Profile (Brain 3)\n\n` +
+        `> TODO (scaffold): replace this stub with the project's machine-readable\n` +
+        `> architecture profile — the durable facts forge's planners query before\n` +
+        `> designing (stack, module map, conventions, invariants). See\n` +
+        `> docs/forge-project-contract.md (clause C4) and the forge-onboard-project skill.\n\n` +
+        `## Stack\n\nTODO\n\n## Module map\n\nTODO\n\n## Conventions & invariants\n\nTODO\n`,
+      'utf8',
+    );
+    created.push(brainRel.split(sep).join('/'));
+  }
+
+  return created;
+}
 
 // ---------------------------------------------------------------------------
 // Write routes (M2-2) — PUT /api/studio/agents/:slug, PUT /api/studio/projects/:id
@@ -148,7 +225,7 @@ export async function handleStudioWriteRoutes(
           ? (rawRt as Record<string, unknown>)
           : {};
       const runtime = {
-        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude-code'),
+        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude'),
         strategy: (['fixed', 'range'] as const).includes(rtIn['strategy'] as 'fixed' | 'range')
           ? (rtIn['strategy'] as 'fixed' | 'range')
           : (existing?.runtime.strategy ?? 'fixed'),
@@ -200,8 +277,11 @@ export async function handleStudioWriteRoutes(
   }
 
   // ---- POST /api/studio/projects (create / onboard) ------------------------
-  // Register a new project: append to studio/projects.yaml + scaffold a minimal
-  // .forge/project.json with the hard contract fields (C1 quality gate + DEMO).
+  // Onboard a project: scaffold the `.forge/project.json` contract (C1 quality
+  // gate + DEMO) plus idempotent C4 artifact stubs (roadmap.md + the project's
+  // brain sub-wiki profile.md), git-init if absent, then preflight and report
+  // which clauses still fail. Projects are auto-discovered from disk (B1) — no
+  // registry file to append to.
   if (url === '/api/studio/projects' && method === 'POST') {
     try {
       let body: unknown;
@@ -229,10 +309,10 @@ export async function handleStudioWriteRoutes(
       const demoShape = typeof b['demoShape'] === 'string' && b['demoShape'] ? b['demoShape'] : 'harness';
       const demoCommand = toArgv(b['demoCommand']) ?? qualityGate;
 
-      // Registry: reject a duplicate id; resolve + guard the repo path.
-      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
-      const registry = existsSync(projectsYamlPath) ? loadProjectsRegistry(projectsYamlPath) : { projects: [], path: projectsYamlPath };
-      if (registry.projects.some((p) => p.id === id)) {
+      // Reject a duplicate id by disk scan (B1: projects are discovered, not
+      // registered). Resolve + guard the repo path under the projects root.
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      if (discoverProjects(projectsDir, ctx.forgeRoot).some((p) => p.id === id)) {
         sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
@@ -262,11 +342,20 @@ export async function handleStudioWriteRoutes(
       if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
       writeFileSync(resolve(forgeDir, 'project.json'), JSON.stringify(cfg, null, 2), 'utf8');
 
-      // Append to the registry (flow-style entries to match the seed file).
-      const nextRegistry = { projects: [...registry.projects.map((p) => ({ id: p.id, path: p.path })), { id, path: repoPathRel }] };
-      writeFileSync(projectsYamlPath, yaml.dump(nextRegistry, { flowLevel: 2 }), 'utf8');
+      // B3: scaffold the C4 artifacts the architect/PM need so a freshly
+      // onboarded project is preflight-green (or at least clear about what is
+      // missing). All writes are idempotent — never clobber an existing
+      // operator file, and the stubs are clearly marked as TODO scaffolding.
+      const scaffolded = scaffoldContractArtifacts(projectRoot, name);
 
-      sendJson(res, 200, { ok: true, id }, origin);
+      // Re-run preflight and surface the clauses that still fail so the UI can
+      // either celebrate (ready) or hand off to forge-onboard-project.
+      const report = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const failing = report.clauses
+        .filter((c) => c.hard && !c.pass)
+        .map((c) => ({ id: c.clause, title: c.title, detail: c.detail }));
+
+      sendJson(res, 200, { ok: true, id, ready: report.ok, scaffolded, failingClauses: failing }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -285,31 +374,18 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve the project path from studio/projects.yaml
-      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
-      if (!existsSync(projectsYamlPath)) {
-        sendJson(res, 404, { error: 'unknown project' }, origin);
-        return true;
-      }
-      let registry;
-      try {
-        // Note: projectRef.path is operator-authored config from projects.yaml.
-        // It is now guarded below against escaping the forge root.
-        registry = loadProjectsRegistry(projectsYamlPath);
-      } catch {
-        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
-        return true;
-      }
-      const projectRef = registry.projects.find((p) => p.id === id);
+      // 2. Resolve the project by disk scan (B1: auto-discovered from disk).
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
         return true;
       }
 
       // 3. Resolve the project.json path and prefix-guard it
-      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
-      // Guard: projectRef.path from projects.yaml must not escape the forge root.
-      // Stops an absolute or `..`-containing path writing outside the repo.
+      const projectRoot = projectRef.absPath;
+      // Guard: the discovered path must not escape the forge root (defensive —
+      // discoverProjects already relativises under the projects root).
       if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;

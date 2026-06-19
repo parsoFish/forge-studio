@@ -1,8 +1,15 @@
 # `projects/` — Managed Projects
 
-> Gitignored. Each subdirectory is a managed project; forge auto-discovers them.
+> Gitignored. Each subdirectory is a managed project; forge auto-discovers them
+> from disk — any sub-directory carrying a `.forge/project.json` contract file
+> is a managed project (no registry file to edit). The projects root is
+> configurable via `FORGE_PROJECTS_DIR` or `projectsDir` in `forge.config.json`
+> (default: this directory).
 
 ## Onboarding a project
+
+See [`docs/getting-started.md`](../docs/getting-started.md) for the full
+walkthrough; in short:
 
 1. Clone (or symlink) the project repo here:
    ```bash
@@ -10,7 +17,11 @@
    # OR
    ln -s ~/path/to/repo projects/<name>
    ```
-2. The first cycle on this project will:
+2. Bring it up to the forge↔project contract (the `forge-onboard-project`
+   skill + [`docs/forge-project-contract.md`](../docs/forge-project-contract.md)),
+   then run `forge preflight <name>` until every hard clause is green. The UI
+   onboarding form (Studio → Projects → New) scaffolds the same contract files.
+3. The first cycle on this project will:
    - Create `projects/<name>/brain/profile.md` (initial taste profile, populated by Pass B or by the architect).
    - Open the project's directory tree to the architect during ideation.
 3. From then on, the architect, project-manager, developer-loop, reviewer, and reflector all read this directory as the project's working tree.

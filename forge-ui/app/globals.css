@@ -5,8 +5,7 @@
      project = steel blue, agent = ember, flow = violet,
      knowledge = green, artifact = amber.
 
-   Verbatim from mockups/agent-flow-builder/shared/tokens.css,
-   with font @import replaced by system-font fallbacks (no Google Fonts dep).
+   System-font fallbacks throughout (no Google Fonts dep).
    ============================================================ */
 
 :root {

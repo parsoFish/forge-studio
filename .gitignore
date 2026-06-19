@@ -33,27 +33,14 @@ _queue/done/*
 _queue/failed/*
 !_queue/failed/.gitkeep
 
-# Per-run benchmark output is runtime, not source
-benchmarks/*/results/
-benchmarks/*/results-negatives/
-benchmarks/*/results-judged/
-
-# Bench-fixture runtime debris (Python compile cache; Ralph workspace artifacts
-# the agent leaves behind if a run leaks outside its tempdir; reviewer demo
-# bundles ditto). Seeds should only contain source files, tests, and the WI
-# spec.
-benchmarks/*/fixtures/**/__pycache__/
-benchmarks/*/fixtures/**/.pytest_cache/
-benchmarks/*/fixtures/**/AGENT.md
-benchmarks/*/fixtures/**/fix_plan.md
-benchmarks/*/fixtures/**/PROMPT.md
-benchmarks/*/fixtures/**/.forge/demos/
-benchmarks/*/fixtures/**/.forge/pr-description.md
-
 # Managed projects are auto-discovered, not committed to forge
 projects/*
 !projects/README.md
 !projects/.gitkeep
+# Exception: mdtoc is forge's checked-in OOTB reference project (WS-B5). Track
+# the directory so the contract's worked example ships with forge; the project's
+# own projects/mdtoc/.gitignore still excludes its build outputs + scratch.
+!projects/mdtoc/
 
 # Worktrees the scheduler creates
 _worktrees/
@@ -94,27 +81,13 @@ secrets.env
 # Obsidian vault config (per-user)
 brain/.obsidian/
 
-# Graphify output — three-brain model (Brain 1: forge-dev, Brain 2: cycles, Brain 3: per-project).
-# Per C21: `graph.json` is the canonical structural index (committed). The
-# semantic community names (.graphify_labels.json — populated by
-# scripts/brain-name-communities.ts) are also committed so navigation
-# names persist across clones. Everything else (`graph.html`,
-# `GRAPH_REPORT.md`, `manifest.json`, `cache/`, `.graphify_root`) is
-# regenerable view + machine-local state.
-# Brain 1 (forge-dev)
-brain/forge-dev/graphify-out/*
-!brain/forge-dev/graphify-out/graph.json
-!brain/forge-dev/graphify-out/.graphify_labels.json
-# Brain 2 (cycles)
-brain/cycles/graphify-out/*
-!brain/cycles/graphify-out/graph.json
-!brain/cycles/graphify-out/.graphify_labels.json
-# Graphify's own working state under brain/.graphify/ is per-machine.
-brain/.graphify/
-brain/.graphify-tmp/
-# Any accidental graphify-out/ at the forge root (e.g. from running cluster-only in CWD)
-graphify-out/
-
 # Logs from local runs
 *.log
 npm-debug.log*
+
+# Local SQLite scratch (e.g. headroom memory) — never source
+*.db
+
+# graphify output — the graphify tooling was removed, but an external/global
+# graphify hook may still regenerate this at the repo root. Output-ignore only.
+graphify-out/

@@ -20,21 +20,47 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEMO_STEP_KINDS } from './studio/types.ts';
-import type { DemoStep, DemoStepKind } from './studio/types.ts';
+import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
+import type {
+  DemoStep,
+  DemoStepKind,
+  ReleaseConfig,
+  ReleaseStep,
+  ReleaseStepKind,
+  ReleaseStepPhase,
+} from './studio/types.ts';
 
 export type { DemoStep, DemoStepKind } from './studio/types.ts';
 export { DEMO_STEP_KINDS } from './studio/types.ts';
+export type { ReleaseStep, ReleaseConfig } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
-export type DemoShape = 'browser' | 'harness' | 'cli-diff' | 'artifact' | 'none';
+/**
+ * The `quality_gate_cmd` sidecar — `.forge/quality_gate_cmd`, a single
+ * whitespace-separated command line. Preflight already reads it
+ * (`cli/preflight.ts`); `loadProjectConfig` reads it too so a project can
+ * declare the gate in ONE place. When `project.json` omits `quality_gate_cmd`,
+ * the sidecar is the source of truth; when both are present, the JSON wins
+ * (explicit override). The two were kept in lockstep by hand before — now the
+ * sidecar can stand alone.
+ */
+export const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
+
+export type DemoShape =
+  | 'browser'
+  | 'harness'
+  | 'cli-diff'
+  | 'artifact'
+  | 'live-external'
+  | 'none';
 
 export const DEMO_SHAPES: ReadonlySet<DemoShape> = new Set<DemoShape>([
   'browser',
   'harness',
   'cli-diff',
   'artifact',
+  'live-external',
   'none',
 ]);
 
@@ -175,7 +201,41 @@ export type ProjectConfig = {
    * is unchanged. Validated as a clean relative path (no leading `/`, no `..`).
    */
   artifactRoot?: string;
+  /**
+   * Optional release-process declaration: the repo-side prep a cycle performs
+   * before merge (refresh docs, write a changelog entry, bump a version file).
+   * Mirrors `demoProcess` — typed, optional, fail-closed when malformed.
+   * Tagging + publishing are CI's job, NOT forge step kinds. Absent ⇒ no
+   * release steps.
+   */
+  releaseProcess?: ReleaseConfig;
 };
+
+/**
+ * E2: the `demoProcess` (typed steps) and the `demo` block (`demo.shape`) are
+ * two faces of ONE declaration — `demoProcess` is the executed demo, `demo.shape`
+ * is the evidence floor. They must be coherent. The one structural incoherence
+ * we can check without running the demo: a `demoProcess` that declares a
+ * `capture` step under `demo.shape: "none"` — `none` means "no observable
+ * surface", so there is nothing for the capture step to record into. Returns a
+ * human-readable warning string when incoherent, or `null` when coherent (or
+ * when `demoProcess` is absent — a project may declare only the legacy `demo`
+ * block). Advisory: surfaced by `forge preflight`, never a hard blocker.
+ */
+export function demoProcessCoherenceWarning(cfg: ProjectConfig): string | null {
+  const steps = cfg.demoProcess;
+  if (!steps || steps.length === 0) return null;
+  const hasCapture = steps.some((s) => s.kind === 'capture');
+  if (hasCapture && cfg.demo.shape === 'none') {
+    return (
+      'demoProcess declares a `capture` step but demo.shape is "none" — "none" has ' +
+      'no observable surface, so there is nothing to capture into. Either set a ' +
+      'demo.shape that can carry the captured evidence (e.g. harness, live-external, ' +
+      'browser, cli-diff, artifact) or drop the capture step. Advisory.'
+    );
+  }
+  return null;
+}
 
 /**
  * Load and validate `<projectRoot>/.forge/project.json`. Returns `null` if
@@ -201,7 +261,37 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
       `project-config: ${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+  // Single-source the gate from the `.forge/quality_gate_cmd` sidecar when
+  // project.json omits it (the JSON wins when both are present). This lets a
+  // project declare the gate in ONE place instead of mirroring it by hand.
+  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    if (obj.quality_gate_cmd === undefined || obj.quality_gate_cmd === null) {
+      const sidecar = readQualityGateSidecar(projectRoot);
+      if (sidecar) obj.quality_gate_cmd = sidecar;
+    }
+  }
   return validateProjectConfig(parsed);
+}
+
+/**
+ * Read + tokenise the `.forge/quality_gate_cmd` sidecar (a single
+ * whitespace-separated command line) into an argv array. Returns `null` when the
+ * file is absent, unreadable, or empty — the caller falls back to the JSON field
+ * (or throws if neither is present). Whitespace-splitting mirrors how preflight
+ * already consumes the sidecar (`cli/preflight.ts readQualityGateCmd`).
+ */
+function readQualityGateSidecar(projectRoot: string): string[] | null {
+  try {
+    const sidecarPath = join(projectRoot, QUALITY_GATE_SIDECAR_REL_PATH);
+    if (!existsSync(sidecarPath)) return null;
+    const raw = readFileSync(sidecarPath, 'utf8').trim();
+    if (raw === '') return null;
+    const argv = raw.split(/\s+/).filter((t) => t.length > 0);
+    return argv.length > 0 ? argv : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -275,6 +365,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const skills = parseSkills(obj.skills);
   const kb = parseKb(obj.kb);
   const artifactRoot = parseArtifactRoot(obj.artifactRoot);
+  const releaseProcess = parseReleaseProcess(obj.releaseProcess);
 
   return {
     demo,
@@ -293,7 +384,27 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(skills !== undefined ? { skills } : {}),
     ...(kb !== undefined ? { kb } : {}),
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
+    ...(releaseProcess !== undefined ? { releaseProcess } : {}),
   };
+}
+
+/**
+ * Assert `value` is a clean project/worktree-relative path: no leading `/`, no
+ * leading or embedded backslash, no `..` segment — so it can never escape the
+ * root it's resolved against. Throws (mentioning `label`) on any violation.
+ * Shared by `parseArtifactRoot` and `parseReleaseProcess`.
+ */
+function assertCleanRelativePath(value: string, label: string): void {
+  if (
+    value.startsWith('/') ||
+    value.startsWith('\\') ||
+    value.includes('\\') ||
+    value.split('/').includes('..')
+  ) {
+    throw new Error(
+      `project-config: ${label} must be a clean project-relative path (no leading slash, no "..") — got ${JSON.stringify(value)}`,
+    );
+  }
 }
 
 /**
@@ -308,17 +419,79 @@ function parseArtifactRoot(v: unknown): string | undefined {
   }
   const trimmed = v.trim();
   if (trimmed === '' || trimmed === '.') return undefined;
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('\\') ||
-    trimmed.includes('\\') ||
-    trimmed.split('/').includes('..')
-  ) {
-    throw new Error(
-      `project-config: artifactRoot must be a clean project-relative path (no leading slash, no "..") — got ${JSON.stringify(v)}`,
-    );
-  }
+  assertCleanRelativePath(trimmed, 'artifactRoot');
   return trimmed;
+}
+
+/**
+ * Parse + validate the optional `releaseProcess` block. Mirrors
+ * `parseDemoProcess`: fail-closed — absent ⇒ `undefined`; present-but-malformed
+ * throws (`project-config: releaseProcess...`). Each step's `kind` must be in
+ * RELEASE_STEP_KINDS, `phase` in RELEASE_STEP_PHASES, `text` a string, and the
+ * optional `command` an argv string[]. The optional `versionFile` /
+ * `changelogPath` / `docsDir` are clean worktree-relative paths.
+ */
+function parseReleaseProcess(raw: unknown): ReleaseConfig | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('project-config: releaseProcess must be an object when present');
+  }
+  const r = raw as Record<string, unknown>;
+
+  if (!Array.isArray(r.steps)) {
+    throw new Error('project-config: releaseProcess.steps must be an array');
+  }
+  const steps: ReleaseStep[] = r.steps.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`project-config: releaseProcess.steps[${i}] must be an object`);
+    }
+    const s = item as Record<string, unknown>;
+    if (typeof s.kind !== 'string' || !RELEASE_STEP_KINDS.includes(s.kind as ReleaseStepKind)) {
+      throw new Error(
+        `project-config: releaseProcess.steps[${i}].kind must be one of ${RELEASE_STEP_KINDS.join('|')} (got ${JSON.stringify(s.kind)})`,
+      );
+    }
+    if (
+      typeof s.phase !== 'string' ||
+      !RELEASE_STEP_PHASES.includes(s.phase as ReleaseStepPhase)
+    ) {
+      throw new Error(
+        `project-config: releaseProcess.steps[${i}].phase must be one of ${RELEASE_STEP_PHASES.join('|')} (got ${JSON.stringify(s.phase)})`,
+      );
+    }
+    if (typeof s.text !== 'string') {
+      throw new Error(`project-config: releaseProcess.steps[${i}].text must be a string`);
+    }
+    const command = optionalArgv(s.command, `releaseProcess.steps[${i}].command`);
+    return {
+      kind: s.kind as ReleaseStepKind,
+      phase: s.phase as ReleaseStepPhase,
+      text: s.text,
+      ...(command ? { command } : {}),
+    };
+  });
+
+  const versionFile = parseReleasePath(r.versionFile, 'releaseProcess.versionFile');
+  const changelogPath = parseReleasePath(r.changelogPath, 'releaseProcess.changelogPath');
+  const docsDir = parseReleasePath(r.docsDir, 'releaseProcess.docsDir');
+
+  return {
+    steps,
+    ...(versionFile !== undefined ? { versionFile } : {}),
+    ...(changelogPath !== undefined ? { changelogPath } : {}),
+    ...(docsDir !== undefined ? { docsDir } : {}),
+  };
+}
+
+/**
+ * Parse one optional clean worktree-relative path field of `releaseProcess`.
+ * Absent ⇒ `undefined`; present must be a string + a clean relative path.
+ */
+function parseReleasePath(v: unknown, label: string): string | undefined {
+  const s = optionalString(v, label);
+  if (s === undefined) return undefined;
+  assertCleanRelativePath(s, label);
+  return s;
 }
 
 /**

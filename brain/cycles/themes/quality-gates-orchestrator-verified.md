@@ -38,7 +38,7 @@ Trade-off: makes acceptance-criteria authoring discipline more important — vag
 
 ## Sources
 
-- [`forge-v2-phase-developer-loop.docs.md`](../../_raw/docs/forge-v2-phase-developer-loop.docs.md) — "hallucinated test passes" failure mode.
+- [`docs/phases/developer-loop.md`](../../../docs/phases/developer-loop.md) — "hallucinated test passes" failure mode.
 - [`v1-themes-failure-modes.cycle.md`](../../_raw/v1-wiki/v1-themes-failure-modes.cycle.md) — trusting-agent-output cross-system data + review-fix-loop concrete numbers.
 
 ## See also

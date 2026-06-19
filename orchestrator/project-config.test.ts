@@ -16,6 +16,7 @@ import {
   loadProjectConfig,
   PROJECT_CONFIG_REL_PATH,
   validateProjectConfig,
+  demoProcessCoherenceWarning,
 } from './project-config.ts';
 
 function newTempDir(): string {
@@ -169,6 +170,67 @@ test('validateProjectConfig: shape: "none" is accepted without a demo.command', 
   });
   assert.equal(cfg.demo.shape, 'none');
   assert.equal(cfg.demo.command, undefined);
+});
+
+test('loadProjectConfig: single-sources quality_gate_cmd from the .forge/quality_gate_cmd sidecar', () => {
+  const root = newTempDir();
+  try {
+    // project.json OMITS quality_gate_cmd; the sidecar is the single source.
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' } }));
+    writeFileSync(
+      join(root, '.forge', 'quality_gate_cmd'),
+      'go test -tags all ./azuredevops/internal/service/release/...\n',
+    );
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg);
+    assert.deepEqual(cfg!.quality_gate_cmd, [
+      'go', 'test', '-tags', 'all', './azuredevops/internal/service/release/...',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: project.json quality_gate_cmd wins over the sidecar when both present', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' }, quality_gate_cmd: ['npm', 'test'] }));
+    writeFileSync(join(root, '.forge', 'quality_gate_cmd'), 'go test ./...\n');
+    const cfg = loadProjectConfig(root);
+    assert.deepEqual(cfg!.quality_gate_cmd, ['npm', 'test']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: throws when neither quality_gate_cmd nor sidecar is present', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' } }));
+    assert.throws(() => loadProjectConfig(root), /quality_gate_cmd/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validateProjectConfig: shape: "live-external" is accepted with a demo.command', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'live-external', command: ['go', 'test', '-tags', 'all', './...'] },
+    quality_gate_cmd: ['true'],
+  });
+  assert.equal(cfg.demo.shape, 'live-external');
+  assert.deepEqual(cfg.demo.command, ['go', 'test', '-tags', 'all', './...']);
+});
+
+test('validateProjectConfig: shape: "live-external" still requires a demo.command', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'live-external' },
+        quality_gate_cmd: ['true'],
+      }),
+    /demo\.command/,
+  );
 });
 
 test('validateProjectConfig: shape: "browser" requires a preview_command', () => {
@@ -396,6 +458,52 @@ test('validateProjectConfig: demoProcess must be an array when present', () => {
   );
 });
 
+// ----- E2: demoProcess <-> demo.shape coherence -----
+
+test('demoProcessCoherenceWarning: capture step under shape "none" is flagged', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    demoProcess: [
+      { kind: 'capture', text: 'API GET of created entity' },
+      { kind: 'verify', text: 'Project tests green' },
+    ],
+  });
+  const warn = demoProcessCoherenceWarning(cfg);
+  assert.ok(warn, 'expected a coherence warning');
+  assert.match(warn!, /capture/);
+  assert.match(warn!, /none/);
+});
+
+test('demoProcessCoherenceWarning: capture step under a non-none shape is coherent', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'harness', command: ['go', 'test', './...'] },
+    quality_gate_cmd: ['true'],
+    demoProcess: [
+      { kind: 'capture', text: 'Scrape harness metrics' },
+      { kind: 'verify', text: 'Project tests green' },
+    ],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
+});
+
+test('demoProcessCoherenceWarning: a verify-only process under shape "none" is coherent', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    demoProcess: [{ kind: 'verify', text: 'Project tests green' }],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
+});
+
+test('demoProcessCoherenceWarning: absent demoProcess is coherent (legacy demo block only)', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
+});
+
 test('validateProjectConfig: skills string array round-trips', () => {
   const cfg = validateProjectConfig({
     demo: { shape: 'none' },
@@ -594,4 +702,230 @@ test('validateProjectConfig: full valid config WITH artifactRoot round-trips alo
   assert.deepEqual(cfg.demoProcess, [{ kind: 'verify', text: 'Check API.' }]);
   assert.deepEqual(cfg.skills, ['demo']);
   assert.equal(cfg.kb, 'cycles');
+});
+
+// ----- releaseProcess validation (WS-F1) -----
+
+test('validateProjectConfig: releaseProcess full round-trip (steps + paths + command)', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    releaseProcess: {
+      steps: [
+        { kind: 'docs', phase: 'in-cycle', text: 'Refresh the README usage section.' },
+        { kind: 'changelog', phase: 'pre-merge', text: 'Add a CHANGELOG entry.' },
+        {
+          kind: 'version',
+          phase: 'pre-merge',
+          text: 'Bump the version file.',
+          command: ['bash', '-lc', 'npm version patch --no-git-tag-version'],
+        },
+      ],
+      versionFile: 'package.json',
+      changelogPath: 'CHANGELOG.md',
+      docsDir: 'docs',
+    },
+  });
+  assert.deepEqual(cfg.releaseProcess, {
+    steps: [
+      { kind: 'docs', phase: 'in-cycle', text: 'Refresh the README usage section.' },
+      { kind: 'changelog', phase: 'pre-merge', text: 'Add a CHANGELOG entry.' },
+      {
+        kind: 'version',
+        phase: 'pre-merge',
+        text: 'Bump the version file.',
+        command: ['bash', '-lc', 'npm version patch --no-git-tag-version'],
+      },
+    ],
+    versionFile: 'package.json',
+    changelogPath: 'CHANGELOG.md',
+    docsDir: 'docs',
+  });
+});
+
+test('validateProjectConfig: releaseProcess absent → undefined (no own key in result)', () => {
+  const cfg = validateProjectConfig({ demo: { shape: 'none' }, quality_gate_cmd: ['true'] });
+  assert.equal(cfg.releaseProcess, undefined);
+  assert.ok(!Object.prototype.hasOwnProperty.call(cfg, 'releaseProcess'));
+});
+
+test('validateProjectConfig: releaseProcess step with bad kind → throws', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: { steps: [{ kind: 'tag', phase: 'pre-merge', text: 'Tag the release.' }] },
+      }),
+    /releaseProcess\.steps\[0\]\.kind/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess step with bad phase → throws', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: { steps: [{ kind: 'docs', phase: 'post-merge', text: 'Refresh docs.' }] },
+      }),
+    /releaseProcess\.steps\[0\]\.phase/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess.versionFile rejects "../escape"', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: {
+          steps: [{ kind: 'version', phase: 'pre-merge', text: 'Bump version.' }],
+          versionFile: '../escape',
+        },
+      }),
+    /releaseProcess\.versionFile/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess.changelogPath rejects "../escape"', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: {
+          steps: [{ kind: 'changelog', phase: 'pre-merge', text: 'Add entry.' }],
+          changelogPath: '../escape',
+        },
+      }),
+    /releaseProcess\.changelogPath/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess.docsDir rejects "../escape"', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: {
+          steps: [{ kind: 'docs', phase: 'in-cycle', text: 'Refresh docs.' }],
+          docsDir: '../escape',
+        },
+      }),
+    /releaseProcess\.docsDir/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess step command round-trips', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    releaseProcess: {
+      steps: [
+        {
+          kind: 'docs',
+          phase: 'in-cycle',
+          text: 'Regenerate the docs site.',
+          command: ['make', 'docs'],
+        },
+      ],
+    },
+  });
+  assert.ok(cfg.releaseProcess);
+  assert.deepEqual(cfg.releaseProcess.steps[0].command, ['make', 'docs']);
+});
+
+test('validateProjectConfig: releaseProcess must be an object when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: 'bump and ship',
+      }),
+    /releaseProcess/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess requires a steps array', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: { versionFile: 'package.json' },
+      }),
+    /releaseProcess\.steps/,
+  );
+});
+
+test('validateProjectConfig: releaseProcess step command must be argv string[] when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: {
+          steps: [{ kind: 'version', phase: 'pre-merge', text: 'Bump.', command: 'npm version' }],
+        },
+      }),
+    /releaseProcess\.steps\[0\]\.command/,
+  );
+});
+
+test('loadProjectConfig: releaseProcess round-trips from project.json', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(
+      root,
+      JSON.stringify({
+        demo: { shape: 'none' },
+        quality_gate_cmd: ['true'],
+        releaseProcess: {
+          steps: [
+            { kind: 'changelog', phase: 'pre-merge', text: 'Write a CHANGELOG entry.' },
+          ],
+          changelogPath: 'CHANGELOG.md',
+        },
+      }),
+    );
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg?.releaseProcess);
+    assert.deepEqual(cfg.releaseProcess.steps, [
+      { kind: 'changelog', phase: 'pre-merge', text: 'Write a CHANGELOG entry.' },
+    ]);
+    assert.equal(cfg.releaseProcess.changelogPath, 'CHANGELOG.md');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validateProjectConfig: full valid config WITH releaseProcess round-trips alongside all fields', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    northStar: 'Ship great things.',
+    instructions: 'Write tests first.',
+    demoProcess: [{ kind: 'verify', text: 'Check API.' }],
+    skills: ['demo'],
+    kb: 'cycles',
+    artifactRoot: 'forge',
+    releaseProcess: {
+      steps: [
+        { kind: 'docs', phase: 'in-cycle', text: 'Refresh docs.' },
+        { kind: 'version', phase: 'pre-merge', text: 'Bump version.' },
+      ],
+      versionFile: 'package.json',
+      docsDir: 'docs',
+    },
+  });
+  assert.equal(cfg.artifactRoot, 'forge');
+  assert.equal(cfg.kb, 'cycles');
+  assert.ok(cfg.releaseProcess);
+  assert.equal(cfg.releaseProcess.steps.length, 2);
+  assert.equal(cfg.releaseProcess.versionFile, 'package.json');
+  assert.equal(cfg.releaseProcess.docsDir, 'docs');
+  assert.equal(cfg.releaseProcess.changelogPath, undefined);
 });

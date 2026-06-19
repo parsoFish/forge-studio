@@ -12,7 +12,6 @@ import type {
   FlowDefinition,
   KbDescriptor,
   ProjectDefinition,
-  ProjectsRegistry,
 } from './types.ts';
 import {
   SLUG_RE,
@@ -23,7 +22,7 @@ import {
   validateFlow,
   validateKb,
   validateProject,
-  validateProjectsRegistry,
+  validateDiscoveredProjects,
 } from './validate.ts';
 
 // ---------------------------------------------------------------------------
@@ -744,7 +743,7 @@ describe('validateCatalog — unique-ids', () => {
 });
 
 // ---------------------------------------------------------------------------
-// validateProjectsRegistry
+// validateDiscoveredProjects
 // ---------------------------------------------------------------------------
 
 describe('validateCatalog — community-skills', () => {
@@ -804,16 +803,12 @@ describe('validateCatalog — community-skills', () => {
   });
 });
 
-describe('validateProjectsRegistry — unique-ids', () => {
+describe('validateDiscoveredProjects — unique-ids', () => {
   it('duplicate project id → error unique-ids', () => {
-    const reg: ProjectsRegistry = {
-      projects: [
-        { id: 'betterado', path: 'projects/betterado' },
-        { id: 'betterado', path: 'projects/betterado-2' },
-      ],
-      path: '/studio/projects.yaml',
-    };
-    const findings = validateProjectsRegistry(reg);
+    const findings = validateDiscoveredProjects([
+      { id: 'betterado', path: 'projects/betterado', hasConfig: true },
+      { id: 'betterado', path: 'projects/betterado-2', hasConfig: true },
+    ]);
     const f = findings.find((x) => x.check === 'unique-ids');
     assert.ok(f, 'expected unique-ids finding');
     assert.equal(f.level, 'error');
@@ -821,38 +816,46 @@ describe('validateProjectsRegistry — unique-ids', () => {
   });
 
   it('unique project ids → no unique-ids finding', () => {
-    const reg: ProjectsRegistry = {
-      projects: [
-        { id: 'betterado', path: 'projects/betterado' },
-        { id: 'claude-harness', path: 'projects/claude-harness' },
-      ],
-      path: '/studio/projects.yaml',
-    };
-    const findings = validateProjectsRegistry(reg);
+    const findings = validateDiscoveredProjects([
+      { id: 'betterado', path: 'projects/betterado', hasConfig: true },
+      { id: 'claude-harness', path: 'projects/claude-harness', hasConfig: true },
+    ]);
     assert.ok(!findings.some((x) => x.check === 'unique-ids'));
   });
 });
 
-describe('validateProjectsRegistry — slug', () => {
+describe('validateDiscoveredProjects — slug', () => {
   it('id failing SLUG_RE → error slug', () => {
-    const reg: ProjectsRegistry = {
-      projects: [{ id: 'My_Project', path: 'projects/my' }],
-      path: '/studio/projects.yaml',
-    };
-    const findings = validateProjectsRegistry(reg);
+    const findings = validateDiscoveredProjects([
+      { id: 'My_Project', path: 'projects/my', hasConfig: true },
+    ]);
     const f = findings.find((x) => x.check === 'slug');
     assert.ok(f, 'expected slug finding');
     assert.equal(f.level, 'error');
     assert.ok(f.message.includes('My_Project'));
   });
 
-  it('clean projects registry → no findings', () => {
-    const reg: ProjectsRegistry = {
-      projects: [{ id: 'betterado', path: 'projects/betterado' }],
-      path: '/studio/projects.yaml',
-    };
-    const findings = validateProjectsRegistry(reg);
+  it('clean, configured projects → no findings', () => {
+    const findings = validateDiscoveredProjects([
+      { id: 'betterado', path: 'projects/betterado', hasConfig: true },
+    ]);
     assert.deepEqual(findings, []);
+  });
+});
+
+describe('validateDiscoveredProjects — missing config', () => {
+  it('project dir without .forge/project.json → flag missing-config', () => {
+    const findings = validateDiscoveredProjects([
+      { id: 'half-onboarded', path: 'projects/half-onboarded', hasConfig: false },
+    ]);
+    const f = findings.find((x) => x.check === 'missing-config');
+    assert.ok(f, 'expected missing-config finding');
+    assert.equal(f.level, 'flag');
+    assert.ok(f.message.includes('half-onboarded'));
+  });
+
+  it('zero projects → no findings', () => {
+    assert.deepEqual(validateDiscoveredProjects([]), []);
   });
 });
 

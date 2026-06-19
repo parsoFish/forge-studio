@@ -1,0 +1,109 @@
+// .forge/project.json — the forge↔project contract for ONE managed project.
+//
+// Copy this to `<your-project>/.forge/project.json`, strip the comments (this
+// file uses // comments for annotation; the real file must be strict JSON),
+// and fill in every placeholder. It is the single declaration forge reads to
+// develop a project unattended. Language-agnostic: the same shape onboards a
+// UI app, an HTTP API, a library, a CLI, or an infra provider — only the
+// command strings differ.
+//
+// Validate with:  forge preflight <project-id>
+// Full spec:      docs/forge-project-contract.md
+{
+  // ── Identity (Studio face) ────────────────────────────────────────────────
+
+  // name (required): human-readable project name shown in Studio.
+  "name": "<project name>",
+
+  // northStar (required, <= 140 chars): the project's primary objective in one
+  // line. Every planning prompt is anchored on this.
+  "northStar": "<one-line statement of what this project is for>",
+
+  // instructions (required, non-empty): standing rules injected into every
+  // project-manager prompt — conventions a developer agent must always honour.
+  "instructions": "<standing instructions; e.g. 'TDD; never edit generated files; see AGENTS.md'>",
+
+  // demoProcess (required: >= 1 capture + >= 1 verify step): the typed demo
+  // recipe the unifier follows. kind is one of capture | verify | present.
+  "demoProcess": [
+    { "kind": "capture", "text": "<capture the before state of the change>" },
+    { "kind": "verify",  "text": "<run the quality gate / hit the resource to prove the change>" }
+    // , { "kind": "present", "text": "<optional: how to present the evidence>" }
+  ],
+
+  // skills (optional): per-project skill slugs the agents may compose.
+  "skills": [],
+
+  // kb (optional): the knowledge-base id this project's brain binds to, or null.
+  "kb": null,
+
+  // ── Quality gate (C1, HARD) ───────────────────────────────────────────────
+
+  // quality_gate_cmd (required): ONE deterministic command, green at HEAD, that
+  // proves a change is good. Argv array (no shell pipes/&&/;). Must be fast and
+  // not require live external systems. Examples by project type:
+  //   library/api:   ["npm","test"]      ["go","test","./..."]    ["pytest","-q"]
+  //   infra/provider:["go","test","./..."]  (unit tier; live tier via acceptance_gate)
+  "quality_gate_cmd": ["<test-runner>", "<args>"],
+
+  // ── Demo shape (DEMO, advisory) ───────────────────────────────────────────
+
+  // demo: how a change is demonstrated. shape is one of
+  //   harness | cli-diff | artifact | browser | none.
+  // command (required unless shape=none): argv producing the demo evidence.
+  "demo": {
+    "shape": "harness",
+    "command": ["<demo-command>", "<args>"]
+    // browser shape also needs:  "preview_command": ["<dev-server>", "<args>"]
+  },
+
+  // ── Committed-artifact root (C4) ──────────────────────────────────────────
+
+  // artifactRoot (optional, default "."): where the project's committed forge
+  // artifacts live — its Brain 3 (<artifactRoot>/brain/profile.md) + history.
+  // "." keeps brain/ at the project root.
+  "artifactRoot": ".",
+
+  // ── Live-acceptance gate (C7, HARD only when required=true) ───────────────
+  //
+  // Declare this block ONLY if the project has a live/external acceptance tier
+  // (e.g. a Terraform provider hitting a real API). Omit it entirely otherwise.
+  //
+  //   match        — substring identifying a live-acceptance gate in a WI's
+  //                  quality_gate_cmd (e.g. "TF_ACC=1").
+  //   required     — when true, the PM phase hard-fails a cycle unless >= 1 WI
+  //                  carries a matching live gate.
+  //   requires_env — every env var a matching live gate needs to actually run
+  //                  against the live system (e.g. ["TF_ACC","AZDO_ORG_SERVICE_URL"]).
+  //                  These are looked up in the project's gitignored secrets.env
+  //                  (see docs/getting-started.md). If a matching gate runs with
+  //                  one of these unset, the dev-loop ERRORS the gate (no false pass).
+  //
+  // "acceptance_gate": {
+  //   "match": "<live-gate token, e.g. TF_ACC=1>",
+  //   "required": true,
+  //   "requires_env": ["<ENV_VAR_1>", "<ENV_VAR_2>"]
+  // },
+
+  // ci_gate (optional): the full CI command, when quality_gate_cmd is a strict
+  // subset of it. Used as the post-merge whole-project gate.
+  "ci_gate": ["<full-ci-command>", "<args>"]
+
+  // releaseProcess (optional, C10): opt into the release flow. Declaring it
+  // turns on (1) an in-cycle DRAFT changelog (every WI's standing ACs), (2) a
+  // post-approval pre-merge finaliser (semver bump + finalised changelog + the
+  // pre-merge steps below + optional version bump, committed to the PR branch),
+  // and (3) a CI release on merge. Forge SHIPS the release CI workflow
+  // (studio/starters/release-workflow.yml.example) but NEVER runs tag/publish —
+  // that is CI's job. A project without this block is unchanged.
+  // , "releaseProcess": {
+  //   "changelogPath": "CHANGELOG.md",
+  //   "versionFile": "<path holding the version, e.g. package.json | VERSION>",
+  //   "docsDir": "docs",
+  //   "steps": [
+  //     { "kind": "changelog", "phase": "in-cycle",  "text": "draft an Unreleased entry per WI" },
+  //     { "kind": "docs",      "phase": "pre-merge", "text": "regenerate reference docs", "command": ["<doc-gen>", "<args>"] },
+  //     { "kind": "version",   "phase": "pre-merge", "text": "bump the version file to the computed semver" }
+  //   ]
+  // }
+}

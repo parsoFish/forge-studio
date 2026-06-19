@@ -5,7 +5,7 @@
 
 ## Context
 
-The developer phase needs to iterate on a work item until quality gates pass — write code, run tests, fix what's broken, repeat. V1 modelled this as a sequence of stage agents (`plan → test → develop → pr`), each invoked once, each potentially retried by the orchestrator. That worked but conflated "agent ran" with "work item complete," and added retry/fix-loop machinery to the orchestrator itself.
+The developer phase needs to iterate on a work item until quality gates pass — write code, run tests, fix what's broken, repeat. The prior approach modelled this as a sequence of stage agents (`plan → test → develop → pr`), each invoked once, each potentially retried by the orchestrator. That worked but conflated "agent ran" with "work item complete," and added retry/fix-loop machinery to the orchestrator itself.
 
 A simpler, more battle-tested approach exists: the **Ralph loop pattern** (Geoffrey Huntley, late 2025). The loop is the entire developer phase. Iteration happens inside the loop, not at the orchestrator.
 
@@ -48,10 +48,10 @@ The pattern is **agent-swappable**: alternative loop runtimes can implement the 
 
 ## Alternatives considered
 
-- **V1's stage pipeline** — strictly more orchestration code and worse error handling. Rejected.
+- **The prior stage pipeline** — strictly more orchestration code and worse error handling. Rejected.
 - **Hermes Agent** as the loop runtime — duplicates the brain (Hermes has its own persistent memory). Rejected for that reason; keeping the brain layer pure.
 - **OpenClaw** — heavyweight app, opinionated about its skill registry, conflicts with our `skills/` directory. Rejected.
-- **No loop, agent one-shots** — observed in v1 to be the dominant cause of incomplete work items. Rejected.
+- **No loop, agent one-shots** — observed in the prior approach to be the dominant cause of incomplete work items. Rejected.
 
 ## References
 

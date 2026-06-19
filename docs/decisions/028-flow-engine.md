@@ -4,7 +4,7 @@
 [`docs/forge-studio/roadmap.md`](../forge-studio/roadmap.md) (M1 run model,
 M3 engine + cutover). Amends ADR 011 (queue serves flow runs), ADR 019
 (resume points become `resumable` node flags), ADR 026 (gate send-back
-generalised). Generalises the human moments of ADR 020/021/023 into declared
+generalised). Generalises the human moments of ADR 020/021/031 into declared
 gates. The forge cycle's behaviour is preserved bit-for-bit; ADR 022's
 harness is the cutover oracle.
 
@@ -73,7 +73,7 @@ self-modifies while running, and resume never discards work.
 - The scheduler/queue (ADR 011/012) is untouched in shape — `_queue/`
   directories now hold flow-run manifests; atomic-mv claims, heartbeats, and
   the two-sweep recovery work as-is.
-- Human-moment screens (ADR 020/021/023) survive as renderers of declared
+- Human-moment screens (ADR 020/021/031) survive as renderers of declared
   gates; the unified artifact viewer routes them (roadmap M4).
 - The harness suite must evolve with the engine: e2e-journey gains acts per
   surface; verify-cycle gates every milestone touching the execution path

@@ -31,7 +31,7 @@ import {
   type WorkItem,
 } from '../work-item.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
-import { getAdapter } from '../../loops/_adapters/registry.ts';
+import { getAdapter, resolveSdkId } from '../../loops/_adapters/registry.ts';
 import type { AgentInvocation } from '../../loops/_adapters/types.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
@@ -114,6 +114,33 @@ const DEV_AGENT_CRASH_BACKOFF_MS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Adapt an EventLogger into the `resolveSdkId` log callback (ADR 029). When a
+ * SKILL.md declares a `runtime.sdk` that is not available (unregistered, or
+ * registered-but-available:false in this environment), `resolveSdkId` falls
+ * back to `claude` AND fires this callback so the fallback is observable in the
+ * event log instead of being a silent downgrade.
+ */
+function sdkFallbackEventSink(
+  logger: EventLogger,
+  initiativeId: string,
+  phase: 'developer-loop' | 'unifier',
+  skill: string,
+): (event: { type: string; sdk?: string }) => void {
+  return (event) => {
+    logger.emit({
+      initiative_id: initiativeId,
+      phase,
+      skill,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: event.type,
+      metadata: { requested_sdk: event.sdk ?? null, resolved_sdk: 'claude' },
+    });
+  };
+}
+
+/**
  * Change C — shared factory for tool-event-sink + Claude agent pairs.
  *
  * Both the per-WI dev-loop and the unifier follow the identical pattern:
@@ -145,10 +172,12 @@ function makeAgentWithTelemetry(
     workItemId?: string;
   },
   agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
-  // Runtime selection (ADR-029). Defaults to 'claude' — the only registered
-  // available adapter today. M8-A threads the agent definition's runtime.sdk
-  // here so a flow node can run on a second runtime; the conformance suite is
-  // the admission gate for any such adapter.
+  // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
+  // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
+  // resolveSdkId at the caller so a free-text/unavailable id falls back to
+  // 'claude' (logged). The 'claude' default here is the safe fallback for any
+  // future call site that does not yet thread an sdk; the conformance suite is
+  // the admission gate for any non-claude adapter.
   sdkId = 'claude',
   // Studio observability sub-gap #2 — when provided, fired for each non-empty
   // assistant text block. Only wired for dev-loop per-WI agents (not unifier).
@@ -261,6 +290,15 @@ export async function runDeveloperLoop(
   const systemPrompt = buildDevSystemPrompt(forgeRoot);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
+  // ADR 029: resolve the dev agent's runtime sdk ONCE (the SKILL.md
+  // `runtime.sdk`, threaded via devAgentSpec). resolveSdkId gates a free-text /
+  // unavailable id back to 'claude' and logs `sdk.unavailable-fallback` so the
+  // downgrade is observable rather than silent. Stock SKILL.md → 'claude'.
+  const DEV_SDK_ID = resolveSdkId(
+    devAgentSpec.sdk,
+    sdkFallbackEventSink(logger, input.initiativeId, 'developer-loop', 'developer-ralph'),
+  );
+
   // Live-acc env guard (2026-06-06): when the project declares an
   // `acceptance_gate` with `requires_env`, a WI whose gate targets the acc
   // suite must run with those vars set — else the runner SKIPS and the gate
@@ -367,7 +405,8 @@ export async function runDeveloperLoop(
         // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,
       },
-      'claude',
+      // ADR 029: spawn on the resolved runtime sdk (default 'claude').
+      DEV_SDK_ID,
       // Studio observability sub-gap #2: emit each assistant reasoning block
       // as a log event so the operator UI can show live "thinking" per WI hex.
       (text) => {
@@ -1154,6 +1193,19 @@ export async function runUnifier(
     projectConfig?.quality_gate_cmd ??
     input.qualityGateCmd ??
     (['npm', 'test'] as string[]);
+
+  // ADR 029: resolve the runtime sdk for each role the unifier phase spawns.
+  // The packaging UWI runs on the unifier agent's sdk; a code-fix UWI wears the
+  // DEV role (dev SKILL.md + tools), so it spawns on the dev agent's sdk. Both
+  // are gated through resolveSdkId (free-text/unavailable → 'claude', logged).
+  const unifierSdkId = resolveSdkId(
+    unifierAgentSpec.sdk,
+    sdkFallbackEventSink(logger, input.initiativeId, 'unifier', 'developer-unifier'),
+  );
+  const devRoleSdkId = resolveSdkId(
+    devAgentSpec.sdk,
+    sdkFallbackEventSink(logger, input.initiativeId, 'unifier', 'developer-ralph'),
+  );
   // betterado #5: right-size the unifier loop to the diff. A trivial change (a
   // one-file test add) was burning ~15 iters / ~$11 packaging-only because the
   // cap was a flat 15. Scale it to the branch's diff size so packaging-only work
@@ -1231,6 +1283,9 @@ export async function runUnifier(
       demoCommand: projectConfig?.demo.command,
       demoProcess: projectConfig?.demoProcess,
       skills: projectConfig?.skills,
+      changelogPath: projectConfig?.releaseProcess?.changelogPath,
+      unifierSdkId,
+      devRoleSdkId,
     });
     writeWorkItemStatus(uwiPath, itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
@@ -1323,6 +1378,12 @@ type UnifierItemArgs = {
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into prepareUnifierWorkspace. */
   skills?: string[];
+  /** WS-A: worktree-relative changelog path (release opt-in). Threaded into prepareUnifierWorkspace. */
+  changelogPath?: string;
+  /** ADR 029: resolved runtime sdk for the packaging (unifier-role) UWI. */
+  unifierSdkId: string;
+  /** ADR 029: resolved runtime sdk for a code-fix UWI (dev-role inside the unifier). */
+  devRoleSdkId: string;
 };
 type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
 
@@ -1418,6 +1479,7 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     qualityGateCmd: itemGateCmd,
     demoProcess: args.demoProcess,
     skills: args.skills,
+    changelogPath: args.changelogPath,
   });
 
   const systemPrompt = buildUnifierSystemPrompt();
@@ -1444,6 +1506,8 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       // Per CONTRACTS.md C19: no $ cap on the unifier. Iteration cap is the only bound.
       queryFn: sdkQueryFn,
     },
+    // ADR 029: spawn the packaging UWI on the unifier agent's resolved sdk.
+    args.unifierSdkId,
   );
 
   // Composed quality gate per plan 04 (5 gates after Wave B):
@@ -1564,6 +1628,8 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
       maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
       queryFn: sdkQueryFn,
     },
+    // ADR 029: a code-fix UWI wears the dev role — spawn it on the dev sdk.
+    args.devRoleSdkId,
   );
 
   let lastGateErrored = false;

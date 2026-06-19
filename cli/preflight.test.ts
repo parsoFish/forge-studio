@@ -350,6 +350,52 @@ test('DEMO (ADVISORY): shape "none" is valid with no command', () => {
   }
 });
 
+test('DEMO (ADVISORY): a demoProcess capture step under shape "none" is flagged (E2 coherence)', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        demo: { shape: 'none' },
+        demoProcess: [
+          { kind: 'capture', text: 'API GET of created entity' },
+          { kind: 'verify', text: 'Project tests green' },
+        ],
+        quality_gate_cmd: ['vitest', 'run'],
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO');
+    assert.equal(c.pass, false, 'incoherent demoProcess/shape flagged');
+    assert.equal(c.hard, false);
+    assert.equal(r.ok, true, 'DEMO is advisory — must not flip ok');
+    assert.match(c.detail, /capture.*demo\.shape is "none"|nothing to capture/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO (ADVISORY): a coherent demoProcess + non-none shape passes (E2 coherence)', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        demo: { shape: 'harness', command: ['vitest', 'run'] },
+        demoProcess: [
+          { kind: 'capture', text: 'Scrape harness metrics' },
+          { kind: 'verify', text: 'Project tests green' },
+        ],
+        quality_gate_cmd: ['vitest', 'run'],
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'DEMO').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
 test('ARTIFACTS (ADVISORY): a Go project whose .gitignore lacks any binary ignore warns', () => {
   const p = happyProject();
   try {

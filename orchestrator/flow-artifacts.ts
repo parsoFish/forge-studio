@@ -30,6 +30,7 @@ import { existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { FlowDefinition } from './studio/types.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 /** The subset of CycleInput the guard needs to resolve artifact locations. */
 export type ArtifactGuardInput = {
@@ -56,6 +57,16 @@ export function resolveRequiredFile(rf: string, input: ArtifactGuardInput, forge
   if (rf.startsWith('_queue/in-flight/')) return input.manifestPath;
 
   let p = rf;
+  // Demo artifacts live at the project's artifactRoot-resolved demo dir, NOT a
+  // hardcoded top-level `demo/<initiative-id>/` (e.g. betterado lands them at
+  // `forge/history/<initiative-id>/demo`). Rewrite the canonical `demo/<initiative-id>`
+  // prefix BEFORE the generic `<initiative-id>` expansion so the suffix (e.g.
+  // `/demo.json`) is preserved.
+  if (p.startsWith('demo/<initiative-id>')) {
+    const artifactRoot = readArtifactRoot(input.worktreePath);
+    const demoDir = projectDemoRelDir(input.initiativeId, artifactRoot);
+    p = demoDir + p.slice('demo/<initiative-id>'.length);
+  }
   if (p.includes('<initiative-id>')) p = p.split('<initiative-id>').join(input.initiativeId);
   if (p.includes('<cycleId>')) {
     if (!input.cycleId) return null; // unbound placeholder → cannot assert
@@ -143,6 +154,50 @@ export function writeVerdictJson(
   opts: { overwrite?: boolean } = {},
 ): string | null {
   const p = verdictJsonPath(logsRoot, record.cycleId);
+  if (!opts.overwrite && existsSync(p)) return null;
+  try {
+    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Release persistence — the `release` terminal record (WS-A · final-loop)
+// ---------------------------------------------------------------------------
+
+export type ReleaseRecord = {
+  initiative_id: string;
+  cycleId: string;
+  project: string;
+  /** Computed semver version (null when the finaliser could not determine one). */
+  version: string | null;
+  /** Worktree-relative changelog path the finaliser promoted. */
+  changelogPath: string;
+  /** The PR branch the finalised release commit landed on. */
+  branch: string;
+  /** ISO-8601 timestamp of finalisation. */
+  finalizedAt: string;
+};
+
+export function releaseJsonPath(logsRoot: string, cycleId: string): string {
+  return resolve(logsRoot, cycleId, 'artifacts', 'release.json');
+}
+
+/**
+ * Persist the release terminal record. `overwrite: false` (the default) keeps a
+ * re-approve from clobbering the first finalisation. Returns the path written,
+ * or null when skipped (exists + !overwrite) or on an IO error — the durable
+ * record is best-effort and never breaks the merge.
+ */
+export function writeReleaseJson(
+  logsRoot: string,
+  record: ReleaseRecord,
+  opts: { overwrite?: boolean } = {},
+): string | null {
+  const p = releaseJsonPath(logsRoot, record.cycleId);
   if (!opts.overwrite && existsSync(p)) return null;
   try {
     mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });

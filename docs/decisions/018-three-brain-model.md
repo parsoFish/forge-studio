@@ -15,7 +15,7 @@ This caused two problems:
 
 2. **Project brain portability** — project brains were nested inside the forge
    repo at `brain/projects/<name>/`. This coupled project knowledge to forge's
-   commit history, made project-scoped graphify graphs impossible, and complicated
+   commit history, made project-scoped knowledge graphs impossible, and complicated
    the workflow for projects that forge manages (each project's brain should travel
    with the project, not with the tool running it).
 
@@ -30,13 +30,12 @@ Split into three scoped brains:
 
 Forge TypeScript source knowledge, ADRs, engineering notes, and build-time
 reference material. Read by the architect and PM when working on forge itself.
-Graphify graph at `brain/forge-dev/graphify-out/`.
 
 ### Brain 2 — cycles (`brain/cycles/`)
 
 Cycle-derived patterns, antipatterns, operations, architectural decisions, and
 raw cycle archives. This is the primary brain for forge's operational knowledge —
-what every planning phase reads. Graphify graph at `brain/cycles/graphify-out/`.
+what every planning phase reads.
 
 Category indexes:
 - `brain/cycles/patterns.md`
@@ -48,7 +47,6 @@ Category indexes:
 
 Lives inside each managed project's own repo, not in the forge repo. Contains
 taste profiles, project-specific patterns, and project cycle archives.
-Graphify graph at `<project-repo>/brain/graphify-out/`.
 
 Accessed at `projects/<name>/brain/` when the project is checked out under
 forge's `projects/` directory (gitignored; each project remains an independent
@@ -59,8 +57,8 @@ git repo).
 - **Project portability** — the project brain travels with the project. If the
   project is managed by a different forge instance, the brain comes with it.
 - **Commit isolation** — project brain writes don't pollute forge's commit history.
-- **Per-project graphify** — each project gets a targeted graph of its own code
-  and brain themes.
+- **Per-project scope** — each project's brain is a self-contained wiki over its
+  own code and themes.
 - **Preflight check** — `forge preflight` (C4) verifies `<project-dir>/brain/profile.md`
   exists, failing fast when the project hasn't been onboarded.
 
@@ -76,7 +74,7 @@ all relevant project constraints in the work items regardless.
 **Positive:**
 - Clean scope separation for `brain-query` and `brain-lint`
 - Project brains travel with projects
-- Per-brain targeted graphify graphs
+- Each brain is an independently-scoped wiki
 - forge commit history is not polluted with project knowledge writes
 
 **Negative / accepted trade-offs:**
@@ -104,4 +102,3 @@ Recovery tag: `brain-pre-restructure` at commit `86f936c`.
 - [ADR 004](./004-obsidian-wiki.md) — original brain structural decision
 - [ADR 010](./010-brain-first.md) — brain-first research policy
 - [`brain/cycles/themes/karpathy-three-layer-wiki.md`](../../brain/cycles/themes/karpathy-three-layer-wiki.md) — three-layer model
-- [`scripts/brain-graphify-all.sh`](../../scripts/brain-graphify-all.sh) — rebuild all three brain graphs

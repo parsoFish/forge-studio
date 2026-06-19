@@ -283,12 +283,61 @@ resource names prefixed with a run-specific UUID, a shared fixture factory
 
 ---
 
+### C10 — Documentation parity & release *(advisory; active when `releaseProcess` declared)*
+
+A project that ships versioned releases must keep its **documented surface, its
+changelog, and its version in sync with the code that merges** — and must own the
+release in CI, not in forge. This clause is **opt-in**: it is inert unless the
+project declares a `releaseProcess` block in `.forge/project.json`. A project that
+omits the block is unaffected (the entire release flow is skipped).
+
+When declared, the clause has three parts, all enforced by forge's release flow:
+
+1. **In-cycle draft changelog.** Every work item in a release-bearing initiative
+   carries a standing AC to draft a changelog entry under `## [Unreleased]`. The
+   unifier authors the draft into `changelogPath`; the DRAFT is what ships in the
+   PR. (Source of intent: the `changelog`/`in-cycle` step.)
+2. **Post-approval pre-merge finalisation.** When the operator approves, forge's
+   **release-finalizer** runs on the PR branch *before* merge: it computes the
+   semver bump, promotes the draft to a versioned `## [X.Y.Z] - <date>` entry,
+   runs the declared `pre-merge` steps (doc regeneration, version-file bump), and
+   commits + pushes. Failure is log-and-continue — the merge still proceeds with
+   the DRAFT as the fallback. (Source of intent: the `pre-merge` steps +
+   `versionFile`/`docsDir`.)
+3. **CI release on merge.** Forge **ships** a release CI workflow
+   (`studio/starters/release-workflow.yml.example`, installed at
+   `.github/workflows/release.yml` during onboarding) that reads the committed
+   version/changelog and tags + cuts the release on merge to the default branch.
+   **Forge never runs tag/publish** — that is exclusively CI's job.
+
+The point: a merged feature whose docs/changelog/version are stale ships a lie;
+this clause makes "the release artifacts are truthful and tagged by CI" a
+structural property when the project opts in.
+
+---
+
 ### DEMO — The change is demonstrable *(advisory)*
 
-The project must declare how a change is demonstrated. The `demoProcess` Studio
-field (Face A) is the primary declaration; the legacy `demo` block in
-`.forge/project.json` (shape/command/preview_command) remains valid and is
-checked structurally by preflight.
+The project declares how a change is demonstrated in **two married faces of one
+declaration**, not two competing fields:
+
+- **`demoProcess`** (Face A — typed steps `capture` / `verify` / `present`) is the
+  **executed demo**: `capture` steps name the before/after evidence to record,
+  `verify` steps name the assertion that makes the evidence non-trivial (forge
+  runs the step and encodes its concrete result), `present` steps say how it is
+  surfaced. This is the primary declaration.
+- **`demo.shape`** (the `demo` block: `shape` / `command` / `preview_command`) is
+  the **evidence floor** — the minimum a `demo.json` must carry for that project
+  form (`harness` ⇒ a metrics + `testEvidence[]` table; `live-external` ⇒ a
+  checkpoint carrying a real `liveEvidence.url`; `browser` ⇒ captured before/after
+  screenshots; etc.). It is checked structurally by preflight.
+
+**The unifier/demo skill derives the executed demo from `demoProcess` and lets
+`demo.shape` set the floor.** The two must be coherent: a `demoProcess` with a
+`capture` step requires a `demo.shape` that can carry captured evidence — a
+`capture`-bearing process under `demo.shape: "none"` is **flagged by `forge
+preflight`** (the DEMO clause; advisory), since `none` has no surface to capture
+into.
 
 The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
@@ -391,7 +440,8 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requires_env` guard) | `acceptance_gate` enforcement; `ci_gate_unset_env` on final delivery gate |
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
-| DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation |
+| C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
+| DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation + `demoProcess`↔`demo.shape` coherence (capture step ⇏ shape "none") |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/themes/` path-existence scan |
 
@@ -413,7 +463,7 @@ flow-ready — the flow engine will not accept it.
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 in `brain/`) |
 | **C1 / C1b** | `quality_gate_cmd`: `go test -tags all -count=1 ./...` scoped to changed packages. `ci_gate`: `make test && golangci-lint run ./... && make terrafmt-check`. `ci_fix_cmd`: `make fmt && make terrafmt` |
-| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `graphify-out/`, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
+| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
 | C3 | Net-new code isolated to `azuredevops/internal/service/release/` and `/taskagent/`. No god-files in net-new scope |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
@@ -421,7 +471,7 @@ flow-ready — the flow engine will not accept it.
 | C7 | `acceptance_gate: { match: "acceptancetests", required: true, requires_env: ["TF_ACC"] }`. `ci_gate_unset_env: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
-| DEMO | `demo.shape: "harness"` for the creds-free floor; richer live evidence via `demoProcess` steps |
+| DEMO | `demo.shape: "live-external"` — real ADO REST round-trip evidence (`liveEvidence.url`); `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; falls back to the harness floor when creds are absent |
 
 ---
 

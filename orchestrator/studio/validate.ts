@@ -15,7 +15,6 @@ import type {
   FlowDefinition,
   KbDescriptor,
   ProjectDefinition,
-  ProjectsRegistry,
 } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -482,23 +481,42 @@ export function validateProject(def: ProjectDefinition): Finding[] {
 }
 
 // ---------------------------------------------------------------------------
-// validateProjectsRegistry
+// validateDiscoveredProjects
 // ---------------------------------------------------------------------------
 
-export function validateProjectsRegistry(r: ProjectsRegistry): Finding[] {
+/**
+ * Validate the disk-discovered project set (B1 — projects are auto-discovered
+ * from `<projectsDir>/*` rather than a `studio/projects.yaml` registry). The
+ * caller supplies the `discoverProjects` result. Errors: a project id that
+ * cannot form a slug (the dir name produced an empty/invalid id) or a duplicate
+ * id (two dirs slug to the same id). Flag (warn): a project dir without a
+ * `.forge/project.json` — a half-onboarded project forge will skip until its
+ * contract file lands.
+ */
+export function validateDiscoveredProjects(
+  projects: ReadonlyArray<{ id: string; path: string; hasConfig: boolean }>,
+): Finding[] {
   const findings: Finding[] = [];
   const obj = 'projects';
 
   // unique-ids
-  for (const dup of findDuplicates(r.projects.map((p) => p.id))) {
-    findings.push(err(obj, 'unique-ids', `Duplicate project id "${dup}"`));
+  for (const dup of findDuplicates(projects.map((p) => p.id))) {
+    findings.push(err(obj, 'unique-ids', `Duplicate project id "${dup}" (two project dirs slug to the same id)`));
   }
 
-  // slug per project id
-  for (const project of r.projects) {
+  for (const project of projects) {
+    // slug per project id (defensive — discoverProjects already slugifies)
     if (!SLUG_RE.test(project.id)) {
+      findings.push(err(obj, 'slug', `Project id "${project.id}" does not match ${SLUG_RE}`));
+    }
+    // half-onboarded: a dir without the contract file is a warn, not an error.
+    if (!project.hasConfig) {
       findings.push(
-        err(obj, 'slug', `Project id "${project.id}" does not match ${SLUG_RE}`),
+        flag(
+          obj,
+          'missing-config',
+          `Project dir "${project.path}" has no .forge/project.json — forge will skip it until the contract file is added (run \`forge preflight ${project.id}\` / the forge-onboard-project skill).`,
+        ),
       );
     }
   }

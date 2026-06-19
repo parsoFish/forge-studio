@@ -6,6 +6,7 @@ import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
+  type FailingClause,
 } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -245,6 +246,12 @@ function ProjectOnboardForm() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // B3: after onboarding, the server scaffolds C4 artifacts and preflights.
+  // If any hard clause still fails we keep the operator on the form, list the
+  // failing clauses, and point at the forge-onboard-project skill rather than
+  // navigating to an editor for a not-yet-buildable project.
+  const [failing, setFailing] = useState<FailingClause[] | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   const slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const canSubmit = name.trim().length > 0 && qualityGate.trim().length > 0 && northStar.trim().length > 0;
@@ -253,6 +260,7 @@ function ProjectOnboardForm() {
     if (!canSubmit || saving) return;
     setSaving(true);
     setError(null);
+    setFailing(null);
     const result = await createProject({
       name: name.trim(),
       qualityGateCmd: qualityGate.trim(),
@@ -262,12 +270,21 @@ function ProjectOnboardForm() {
       demoCommand: demoCommand.trim() || undefined,
       instructions: instructions.trim() || undefined,
     });
-    if (result.ok && result.id) {
-      router.push(`/projects/${encodeURIComponent(result.id)}`);
-    } else {
+    if (!result.ok || !result.id) {
       setError(result.error ?? 'onboarding failed');
       setSaving(false);
+      return;
     }
+    // Onboarded. If preflight is green, go straight to the editor; otherwise
+    // surface the still-failing hard clauses + let the operator proceed once
+    // they understand the project is not yet contract-complete.
+    if (result.ready !== false) {
+      router.push(`/projects/${encodeURIComponent(result.id)}`);
+      return;
+    }
+    setFailing(result.failingClauses ?? []);
+    setPendingId(result.id);
+    setSaving(false);
   }
 
   const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--dim)', display: 'block', marginBottom: 5 };
@@ -288,7 +305,9 @@ function ProjectOnboardForm() {
         <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
           Register a code project so a flow can build it. You only need a name, the command that
           proves a change is good (the quality gate), and a one-line north star. Everything else has
-          a sensible default.
+          a sensible default. The repo path must point at an <strong>existing git repository</strong>
+          {' '}(clone or symlink it under <code>projects/</code> first); onboarding scaffolds the
+          contract files and <code>git init</code>s the dir if it is not already a repo.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -324,12 +343,15 @@ function ProjectOnboardForm() {
                 <label style={labelStyle} htmlFor="onb-repo">Repo path</label>
                 <input id="onb-repo" data-field="repo-path" style={inputStyle} value={repoPath}
                   placeholder={`projects/${slug || '<id>'}`} onChange={(e) => setRepoPath(e.target.value)} />
+                <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
+                  Must be an existing git repo (clone/symlink it under projects/ first). Defaults to projects/&lt;id&gt;.
+                </div>
               </div>
               <div>
                 <label style={labelStyle} htmlFor="onb-demo-shape">Demo shape</label>
                 <select id="onb-demo-shape" data-field="demo-shape" style={inputStyle} value={demoShape}
                   onChange={(e) => setDemoShape(e.target.value)}>
-                  {['harness', 'cli-diff', 'artifact', 'browser', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
+                  {['harness', 'cli-diff', 'artifact', 'browser', 'live-external', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
@@ -348,13 +370,48 @@ function ProjectOnboardForm() {
 
           {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn btn-primary" data-action="onboard-project" onClick={() => void onSubmit()}
-              disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
-              {saving ? 'Onboarding…' : 'Onboard project →'}
-            </button>
-            {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, quality gate, and north star are required.</span>}
-          </div>
+          {failing && (
+            <div
+              data-section="onboard-preflight"
+              data-failing-count={failing.length}
+              data-pending-id={pendingId ?? ''}
+              style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '14px 16px', background: 'var(--bg-2)' }}
+            >
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+                Onboarded — but not yet contract-complete
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 10px' }}>
+                The project was registered and the C4 artifacts were scaffolded, but {failing.length} hard
+                preflight {failing.length === 1 ? 'clause' : 'clauses'} still {failing.length === 1 ? 'fails' : 'fail'}.
+                Forge will not build it until these are green. Finish onboarding with the{' '}
+                <code>forge-onboard-project</code> skill (or fix them by hand), then run{' '}
+                <code>forge preflight {pendingId}</code>.
+              </p>
+              <ul data-section="failing-clauses" style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--faint)', lineHeight: 1.7 }}>
+                {failing.map((c) => (
+                  <li key={c.id} data-clause-id={c.id}>
+                    <strong style={{ color: 'var(--dim)' }}>{c.id}</strong> — {c.title}: {c.detail}
+                  </li>
+                ))}
+              </ul>
+              {pendingId && (
+                <a className="btn" data-action="open-onboarded-project" href={`/projects/${encodeURIComponent(pendingId)}`}
+                  style={{ marginTop: 12, display: 'inline-block', textDecoration: 'none' }}>
+                  Open the project editor anyway →
+                </a>
+              )}
+            </div>
+          )}
+
+          {!failing && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button className="btn btn-primary" data-action="onboard-project" onClick={() => void onSubmit()}
+                disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+                {saving ? 'Onboarding…' : 'Onboard project →'}
+              </button>
+              {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, quality gate, and north star are required.</span>}
+            </div>
+          )}
         </div>
       </div>
     </main>

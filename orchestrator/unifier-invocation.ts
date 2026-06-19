@@ -3,9 +3,11 @@
  * prompt builder + workspace prep for the unifier sub-phase.
  *
  * The unifier is a final Ralph that runs after all per-WI Ralphs complete.
- * It owns the initiative-level acceptance criteria, the tracked demo bundle
- * at `<worktree>/demo/<initiative-id>/`, and the PR description draft at
- * `<worktree>/.forge/pr-description.md`. The cycle's developer-loop runner
+ * It owns the initiative-level acceptance criteria, the tracked demo bundle at
+ * the project's artifactRoot-resolved demo dir (legacy `<worktree>/demo/<initiative-id>/`,
+ * or `<worktree>/<artifactRoot>/history/<initiative-id>/demo` when the project
+ * gathers its committed artifacts under a sub-root), and the PR description draft
+ * at `<worktree>/.forge/pr-description.md`. The cycle's developer-loop runner
  * invokes this contract; the SDK-backed Claude agent receives the
  * `buildUnifierSystemPrompt` output as its system prompt and reads
  * `PROMPT.md` (stamped by `prepareUnifierWorkspace`) at the start of every
@@ -24,6 +26,7 @@ import { readWorkItemsFromDir } from './work-item.ts';
 import type { DemoShape } from './project-config.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
@@ -94,10 +97,23 @@ export type UnifierUserPromptInput = {
   iterationBudget: number;
   demoShape: DemoShape;
   qualityGateCmd: string[];
+  /**
+   * Worktree-relative demo directory for this initiative, resolved against the
+   * project's `artifactRoot` (e.g. `demo/<id>` legacy, or
+   * `forge/history/<id>/demo`). When absent, defaults to the legacy `demo/<id>`.
+   */
+  demoDir?: string;
   /** Project's typed demo steps (M2). When present, appended to the demo instruction. */
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). When present, the unifier composes them. */
   skills?: string[];
+  /**
+   * WS-A (release): worktree-relative changelog path when the project declares
+   * `releaseProcess`. When present, the unifier authors a DRAFT changelog entry
+   * and the scope ceiling is widened to include the file. Absent ⇒ no release
+   * behaviour (the non-opted-in path is unchanged).
+   */
+  changelogPath?: string;
 };
 
 /**
@@ -115,7 +131,17 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     ? input.workItemSpecs.map((p) => `- \`${p}\``).join('\n')
     : '- _(no work items recorded; consult the manifest body)_';
 
-  const demoBlock = demoInstructionsForShape(input.demoShape);
+  // Worktree-relative demo dir, artifactRoot-resolved. Defaults to the legacy
+  // `demo/<initiative-id>` so a caller that doesn't compute one is unchanged.
+  const demoDir = input.demoDir ?? `demo/${input.initiativeId}`;
+
+  const demoBlock = demoInstructionsForShape(input.demoShape, demoDir);
+
+  // WS-A: when the project declares a release changelog, widen the scope ceiling
+  // to admit the changelog file so the draft-changelog edit is in-bounds.
+  const scopeCeiling = input.changelogPath
+    ? `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`${demoDir}/**\` ∪ \`.forge/pr-description.md\` ∪ \`${input.changelogPath}\` (the release draft changelog).`
+    : `- Scope ceiling: union of all WIs' \`files_in_scope\` ∪ \`${demoDir}/**\` ∪ \`.forge/pr-description.md\`.`;
 
   const base = [
     '# Developer-unifier — iteration brief',
@@ -138,7 +164,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '1. **Read AGENT.md and fix_plan.md.**',
       '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
       `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-      '4. **Produce the demo** under `demo/<initiative-id>/`:',
+      `4. **Produce the demo** under \`${demoDir}/\`:`,
       demoBlock,
       '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
       '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
@@ -148,7 +174,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     '',
     '## Constraints',
     '',
-    '- Scope ceiling: union of all WIs\' `files_in_scope` ∪ `demo/<initiative-id>/**` ∪ `.forge/pr-description.md`.',
+    scopeCeiling,
     `- Iteration cap: **${input.iterationBudget}** (no $ cap per CONTRACTS.md C19).`,
     '- Do **NOT** call `gh pr create` or `gh pr merge`.',
     '- Do **NOT** re-implement work from the WI specs — every WI is ALREADY committed; verify with `git log`.',
@@ -157,8 +183,21 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     .filter((line) => line !== '')
     .join('\n');
 
+  // E2: marry `demoProcess` to the `demo` block. The typed steps are the
+  // EXECUTED demo: `capture` steps name what before/after evidence to record,
+  // `verify` steps name the assertion that makes the evidence non-trivial (run
+  // the step's command and encode its result), `present` steps say how to
+  // surface it. `demo.shape` (above) is the evidence FLOOR — the minimum the
+  // demo.json must contain — not a competing instruction.
   const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
-    ? '\n\n## Project demo process\n\nThis project defines typed demo steps. Follow them when authoring `demo.json`:\n' +
+    ? '\n\n## Project demo process (the executed demo — drives demo.json)\n\n' +
+      'These typed steps ARE the demo this project runs. The `demo.shape` above is ' +
+      'the evidence FLOOR; these steps say exactly how to fill it:\n' +
+      '- **capture** → record this before/after evidence as a checkpoint (and, for a ' +
+      'visual shape, the image).\n' +
+      '- **verify** → run the named assertion; encode its concrete result ' +
+      '(test name + pass/fail, API response, measured value) as `acEvaluations`/`testEvidence`.\n' +
+      '- **present** → how the evidence is surfaced in the PR/demo.\n\n' +
       input.demoProcess.map((s, i) => `${i + 1}. [${s.kind.toUpperCase()}] ${s.text}`).join('\n')
     : '';
 
@@ -167,7 +206,16 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       input.skills.map((s) => `\`${s}\``).join(', ') + '.'
     : '';
 
-  return base + projectDemoBlock + projectSkillsBlock;
+  // WS-A: when the project opts into the release process, instruct the unifier
+  // to author a DRAFT changelog entry. The DRAFT is what ships in the PR; the
+  // finalised entry (semver bump) is applied post-approval, pre-merge by the
+  // release-finalizer agent. Mirrors `projectDemoBlock`.
+  const projectReleaseBlock = input.changelogPath
+    ? '\n\n## Project release process (draft changelog)\n\nThis project declares a release process. Add a **DRAFT** changelog entry to ' +
+      `\`${input.changelogPath}\` under an \`## [Unreleased]\` heading: one bullet per user-visible behaviour change in this initiative, categorised (Added / Changed / Fixed). Do NOT compute the semver version or set a release date — that is the post-approval finaliser's job. Commit the draft as part of the unify commit.`
+    : '';
+
+  return base + projectDemoBlock + projectSkillsBlock + projectReleaseBlock;
 }
 
 /**
@@ -181,12 +229,12 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
  * The per-shape guidance below is its operational summary for the inline brief;
  * keep the two in sync.
  */
-function demoInstructionsForShape(shape: DemoShape): string {
+function demoInstructionsForShape(shape: DemoShape, demoDir = 'demo/<initiative-id>'): string {
   const schema = [
     '   **The demo contract is defined in `skills/demo/SKILL.md`** (the canonical',
     '   demo capability: what every demo must contain, effort tiers scaled to the',
     '   diff, per-shape rules, and how it maps to the review UI). Summary:',
-    '   **`demo/<initiative-id>/demo.json` schema (the contract):**',
+    `   **\`${demoDir}/demo.json\` schema (the contract):**`,
     '   - `title` (string, required) — one-line essence.',
     '   - `essence` (string, required) — what behaviour changed and why it matters.',
     '   - `project` (string, required), `initiativeId`, `baseRef`, `changedRef`.',
@@ -233,6 +281,22 @@ function demoInstructionsForShape(shape: DemoShape): string {
         '   - Summarise it in a checkpoint caption + before/after notes. No media required.',
         schema,
       ].join('\n');
+    case 'live-external':
+      return [
+        '   The change stands up a REAL resource in a live external system (e.g. a',
+        '   cloud API + portal). The evidence FLOOR is a real round-trip against that',
+        '   system, NOT a test-name table:',
+        '   - Provision the resource (apply/create), then read it back via the system\'s',
+        '     REST API; persist that GET under `.forge/live-evidence/<label>.json` (the',
+        '     project\'s demo skill / acceptance test does this via a capture helper).',
+        '   - `forge demo render` back-fills it into a checkpoint carrying',
+        '     `liveEvidence.url` (a real GET URL) — the demo MUST end with such a checkpoint.',
+        '   - Pair with `testEvidence[]` (the live acceptance test result) and, for a',
+        '     new-or-changed-capability initiative, `usage_example` + `impact`.',
+        '   - If credentials are absent, fall back to the harness floor and DOCUMENT the',
+        '     fallback in `essence` — never fabricate the live read-back.',
+        schema,
+      ].join('\n');
     case 'none':
       return [
         '   - Infra-only initiative. No media. A single checkpoint whose caption +',
@@ -256,6 +320,8 @@ export type PrepareUnifierWorkspaceInput = {
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into the rendered prompt. */
   skills?: string[];
+  /** WS-A: worktree-relative changelog path (release opt-in). Threaded into the prompt. */
+  changelogPath?: string;
 };
 
 export type PreparedUnifierWorkspace = {
@@ -293,6 +359,12 @@ export function prepareUnifierWorkspace(
     }
   }
 
+  // Resolve the artifactRoot-aware demo dir from the worktree's own project.json
+  // (the worktree carries .forge/project.json), so the prompt instructs the agent
+  // to write the demo where the snapshot + flow-artifact guard + `forge demo
+  // render` all expect it.
+  const demoDir = projectDemoRelDir(input.initiativeId, readArtifactRoot(input.worktreePath));
+
   if (!existsSync(promptPath)) {
     const prompt = renderUnifierUserPrompt({
       initiativeId: input.initiativeId,
@@ -302,8 +374,10 @@ export function prepareUnifierWorkspace(
       iterationBudget: input.iterationBudget,
       demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
+      demoDir,
       demoProcess: input.demoProcess,
       skills: input.skills,
+      changelogPath: input.changelogPath,
     });
     writeFileSync(promptPath, prompt);
   }

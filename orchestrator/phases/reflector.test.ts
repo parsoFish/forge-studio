@@ -65,7 +65,7 @@ function setupHarness(opts: { suffix: string }): Harness {
     [
       '---',
       'initiative_id: INIT-2026-05-23-s6a',
-      'project: slugifier',
+      'project: demo-project',
       'created_at: 2026-05-23T12:00:00Z',
       'iteration_budget: 3',
       'cost_budget_usd: 1.0',
@@ -159,13 +159,13 @@ function makeFlaggedLintStub(): (opts: { cwd: string; cycleId: string }) => RunB
   const findings: Finding[] = [
     {
       category: 'error',
-      file: '/fake/brain/projects/slugifier/themes/broken.md',
+      file: '/fake/brain/projects/demo-project/themes/broken.md',
       message: 'missing required frontmatter field: category',
       check: 'checkFrontmatter',
     },
     {
       category: 'error',
-      file: '/fake/brain/projects/slugifier/themes/orphan.md',
+      file: '/fake/brain/projects/demo-project/themes/orphan.md',
       message: 'broken link: ./nonexistent.md',
       check: 'checkSourceLinks',
     },

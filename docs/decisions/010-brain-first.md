@@ -13,7 +13,7 @@ remains off-limits for dev-loop and reviewer.
 
 ## Context
 
-User principle 4: every component must use the brain as its first source of knowledge but must be able to research further when the brain is insufficient. Without enforcement, agents will reach for whatever's familiar (web search, training data, ad-hoc reading) and the brain stops being useful — exactly what happened in v1's early cycles before the wiki existed.
+User principle 4: every component must use the brain as its first source of knowledge but must be able to research further when the brain is insufficient. Without enforcement, agents will reach for whatever's familiar (web search, training data, ad-hoc reading) and the brain stops being useful — exactly what happened in the earlier forge build's early cycles before the wiki existed.
 
 ## Decision (amended 2026-05-16)
 
@@ -56,10 +56,10 @@ Full rationale: `brain/cycles/themes/brain-read-policy.md`.
 
 ## Alternatives considered
 
-- **Optional brain consultation** — observed in v1 to drift to "never queried." Rejected.
+- **Optional brain consultation** — observed in the prior approach to drift to "never queried." Rejected.
 - **Brain queries as a hook injected by the runner** — couples the runner to the brain too tightly; better to keep it in the skill where it's visible.
 
 ## References
 
-- v1's `.forge/wiki/` — proved the wiki concept; this ADR makes consultation mandatory
+- The prior `.forge/wiki/` — proved the wiki concept; this ADR makes consultation mandatory
 - [Karpathy LLM-wiki gist](https://gist.github.com/karpathy/) — the philosophy

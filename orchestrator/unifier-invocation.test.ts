@@ -166,6 +166,37 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
     const prompt = readFileSync(out.promptPath, 'utf8');
     assert.ok(prompt.includes('INIT-x'));
     assert.ok(prompt.includes('WI-1'));
+    // No artifactRoot ⇒ legacy demo/<id> dir.
+    assert.ok(prompt.includes('demo/INIT-x/'), 'legacy demo dir in the prompt');
+    assert.ok(!prompt.includes('history/INIT-x/demo'), 'no artifactRoot path when unset');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('prepareUnifierWorkspace: resolves the artifactRoot-aware demo dir into the prompt', () => {
+  const root = newTempDir();
+  try {
+    mkdirSync(join(root, '.forge', 'work-items'), { recursive: true });
+    writeFileSync(join(root, '.forge', 'manifest.md'), '# manifest');
+    // A worktree carrying artifactRoot: "forge" lands its demo under
+    // forge/history/<id>/demo — the prompt must name that exact path so the
+    // agent writes where the snapshot + gate + `forge demo render` expect it.
+    writeFileSync(
+      join(root, '.forge', 'project.json'),
+      JSON.stringify({ artifactRoot: 'forge', demo: { shape: 'none' }, quality_gate_cmd: ['true'] }),
+    );
+    const out = prepareUnifierWorkspace({
+      initiativeId: 'INIT-x',
+      manifestRelPath: '.forge/manifest.md',
+      worktreePath: root,
+      iterationBudget: 3,
+      demoShape: 'harness',
+      qualityGateCmd: ['npm', 'test'],
+    });
+    const prompt = readFileSync(out.promptPath, 'utf8');
+    assert.ok(prompt.includes('forge/history/INIT-x/demo'), 'artifactRoot-resolved demo dir in the prompt');
+    assert.ok(!prompt.includes('`demo/INIT-x/'), 'no bare legacy demo dir when artifactRoot is set');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

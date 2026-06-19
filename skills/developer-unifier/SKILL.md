@@ -31,7 +31,7 @@ Once all per-WI Ralphs have run, take the **whole initiative branch** and prove 
 
 1. **Read** the initiative manifest (`.forge/manifest.md` or `.forge/manifest.yml`) for cross-WI ACs; read each WI under `.forge/work-items/` (their `acceptance_criteria` arrays are your checklist).
 2. **Run** the project's `quality_gate_cmd` (from PROMPT.md) to verify per-WI commits still pass together. If red, fix within the union of all WIs' `files_in_scope` — do NOT add files outside that union.
-3. **Author the structured demo** at `demo/<initiative-id>/demo.json` (ADR 021):
+3. **Author the structured demo** at the demo dir named in PROMPT.md (ADR 021) — `demo/<initiative-id>/demo.json` for a default-layout project, or `<artifactRoot>/history/<initiative-id>/demo/demo.json` when the project sets an `artifactRoot` (e.g. betterado's `forge/`). **PROMPT.md gives the exact path; write there.**
    - This directory must be **tracked** (committed on the branch). The unifier is the only sub-phase that writes to a tracked path.
    - `demo.json` is the **single source of truth** — schema-validated by the `pr_self_contained` gate (`validateDemoModel`). Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 `checkpoints[]` entry (`label` + `caption`, plus `beforeNote`/`afterNote` describing before-vs-after **behaviour**, never "what is broken").
    - **MUST populate `acEvaluations[]`** — one entry per acceptance criterion (from each WI's `acceptance_criteria` array) with `verdict` (`met`/`partial`/`missed`) and concrete `evidence` (a test name + result, an API response, a measured value — never "see code"). Powers the foregrounded "Intent & Outcome" section at the top of the review demo. Never write "tests pass" without naming the specific test. Example: `{ "criterion": "GIVEN X WHEN Y THEN Z", "verdict": "met", "evidence": "test 'X WHEN Y THEN Z' → pass (node:test 42/42 green)" }`.
@@ -71,7 +71,7 @@ A UWI carries a `kind`:
 
 ## Hard rules
 
-- **Scope discipline.** Files you may modify: union of all WIs' `files_in_scope` + `demo/<initiative-id>/**` + `.forge/pr-description.md`. Anything else is a violation; flag in `AGENT.md`.
+- **Scope discipline.** Files you may modify: union of all WIs' `files_in_scope` + the demo dir named in PROMPT.md (`demo/<initiative-id>/**` or `<artifactRoot>/history/<initiative-id>/demo/**`) + `.forge/pr-description.md`. Anything else is a violation; flag in `AGENT.md`.
 - **No `gh pr create`, no `gh pr merge`.** The review phase opens the PR from your output.
 - **No queue mutation.** `_queue/` is read-only. The orchestrator writes UWIs to `.forge/unifier-items/` and tracks their status; you only run the one in `PROMPT.md`.
 - **No web tools.** `WebFetch` and `WebSearch` are disabled.
@@ -80,7 +80,7 @@ A UWI carries a `kind`:
 
 ## Outputs (per iteration)
 
-- `<worktree>/demo/<initiative-id>/demo.json` (tracked) — structured source; `DEMO.md` + `DEMO.html` derived via `forge demo render`.
+- `<worktree>/<demo-dir>/demo.json` (tracked; the artifactRoot-resolved demo dir named in PROMPT.md) — structured source; `DEMO.md` + `DEMO.html` derived via `forge demo render`.
 - `<worktree>/.forge/pr-description.md` — read by review phase for `gh pr create --body-file`.
 - One conventional-commits commit on the initiative branch (if changes were made).
 - `AGENT.md` updated with what was tried this iteration.
@@ -88,7 +88,7 @@ A UWI carries a `kind`:
 Composed gates checked by the orchestrator after each iteration:
 - `initiative_gate` — project quality-gate against branch tip.
 - `demo_runs_clean` — `demo.command` exits 0; excused when `demo.shape: "none"`.
-- `pr_self_contained` — `demo/<initiative-id>/demo.json` exists + validates (ADR 021); `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections (NO `## Demo`).
+- `pr_self_contained` — the demo dir's `demo.json` (the artifactRoot-resolved path named in PROMPT.md) exists + validates (ADR 021); `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections (NO `## Demo`).
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` == merge-base.
 - `incomplete_delivery` — every WI's declared `creates[]` paths appear in the branch diff.
 
@@ -110,7 +110,7 @@ After your work, **commit** as `feat(<initiative-id>): unify and demo` (a `packa
 
 ## Write the demo + PR description first (draft within 2 tool calls)
 
-**Iteration 1, tool call #1 or #2: `Write` a SKELETON of `demo/<initiative-id>/demo.json` AND `.forge/pr-description.md`.** A minimal valid demo.json + placeholder prose is fine — the point is to have something on disk for the gate; refine in subsequent iterations (then re-run `forge demo render`).
+**Iteration 1, tool call #1 or #2: `Write` a SKELETON of the demo dir's `demo.json` (the path PROMPT.md names) AND `.forge/pr-description.md`.** A minimal valid demo.json + placeholder prose is fine — the point is to have something on disk for the gate; refine in subsequent iterations (then re-run `forge demo render`).
 
 Minimal valid iter-1 skeleton:
 

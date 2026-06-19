@@ -91,6 +91,7 @@ export function buildCycleReport(input: CycleReportInput): string {
     renderChanges(forgeRoot, manifest, cycleId, events),
     renderTrajectory(events, metrics),
     renderVerification(events, manifest, prUrl, cycleLogDir),
+    renderRelease(events, cycleLogDir),
     renderBrainLearning(forgeRoot, manifest, cycleStartedAt, cycleEndedAt, cycleLogDir),
     renderAppendix(cycleLogDir, forgeRoot, manifest, prUrl, cycleId),
   ];
@@ -447,6 +448,55 @@ function renderVerification(
     lines.push('');
     lines.push(readFileSync(prDescPath, 'utf8').trim());
   }
+
+  return lines.join('\n');
+}
+
+/**
+ * WS-A — the Release section. Rendered only when the cycle finalised a release
+ * (an opt-in `releaseProcess` project): reads the `release.finalized` event
+ * + the durable `release.json` artifact. Returns '' for a non-release cycle so
+ * the report is byte-for-byte unchanged when no release happened.
+ */
+function renderRelease(events: EventLogEntry[], cycleLogDir: string): string {
+  const finalized = events.find((e) => e.message === 'release.finalized');
+  const releaseJsonPath = join(cycleLogDir, 'artifacts', 'release.json');
+  const hasArtifact = existsSync(releaseJsonPath);
+  if (!finalized && !hasArtifact) return '';
+
+  const lines: string[] = ['## Release', ''];
+
+  let record: Record<string, unknown> | null = null;
+  if (hasArtifact) {
+    try {
+      record = JSON.parse(readFileSync(releaseJsonPath, 'utf8')) as Record<string, unknown>;
+    } catch {
+      record = null;
+    }
+  }
+
+  const version =
+    (record?.['version'] as string | null | undefined) ??
+    (finalized?.metadata?.['version'] as string | null | undefined) ??
+    null;
+  const branch =
+    (record?.['branch'] as string | undefined) ??
+    (finalized?.metadata?.['branch'] as string | undefined);
+  const changelogPath =
+    (record?.['changelogPath'] as string | undefined) ??
+    (finalized?.metadata?.['changelog_path'] as string | undefined);
+
+  lines.push(`**Finalised version:** \`${version ?? '(undetermined)'}\``);
+  if (branch) lines.push(`**Branch:** \`${branch}\``);
+  if (changelogPath) lines.push(`**Changelog:** \`${changelogPath}\` (draft promoted to a versioned entry pre-merge).`);
+  const finalizedAt = record?.['finalizedAt'] as string | undefined;
+  if (finalizedAt) lines.push(`**Finalised at:** ${finalizedAt}`);
+  if (hasArtifact) {
+    lines.push('');
+    lines.push(`Terminal record: \`${releaseJsonPath}\``);
+  }
+  lines.push('');
+  lines.push('> Tag + GitHub release are CI\'s job off merge-to-main (forge ships the workflow, never runs tag/publish).');
 
   return lines.join('\n');
 }

@@ -22,7 +22,6 @@
     "orchestrator/**/*.ts",
     "cli/**/*.ts",
     "loops/**/*.ts",
-    "benchmarks/**/*.ts",
     "skills/**/*.ts"
   ],
   "exclude": [
@@ -30,10 +29,6 @@
     "dist",
     "projects",
     "_logs",
-    "_queue",
-    "benchmarks/*/fixtures/projects",
-    "benchmarks/developer-loop/fixtures",
-    "benchmarks/review-loop/fixtures",
-    "benchmarks/e2e/fixtures"
+    "_queue"
   ]
 }

@@ -2,14 +2,35 @@
 
 - **Status:** accepted
 - **Date:** 2026-06-14
-- **Amends / completes:** [ADR 023](./023-ui-sole-operator-surface.md) (UI sole
-  operator surface) — 023 made the UI the only *interaction* surface but left the
+- **Subsumes:** the **sole-operator-surface** decision (formerly ADR 023, folded
+  here on consolidation — its file is removed, its number stays reserved). That
+  decision made the UI/bridge the only *interaction* surface but left the
   pre-Studio `/dashboard`, the three moment-routes (`/architect`, `/review`,
-  `/reflect`), and a CLI/bridge dual surface co-existing. This ADR collapses them
-  into a single product. Touches [ADR 020](./020-architect-in-ui.md) (architect
-  moves from its own screen into Studio) and [ADR 021](./021-local-review-and-unified-demo.md)
-  (review/reflect fully fold into the unified `/artifact` viewer). Closes the
-  `forge review --approve` deferral recorded at ADR 023 §"Still deferred".
+  `/reflect`), and a CLI/bridge dual surface co-existing. This ADR completes its
+  arc by collapsing them into a single product. Touches [ADR 020](./020-architect-in-ui.md)
+  (architect moves from its own screen into Studio) and
+  [ADR 021](./021-local-review-and-unified-demo.md) (review/reflect fully fold
+  into the unified `/artifact` viewer). Closes the `forge review --approve`
+  deferral the sole-operator-surface decision left open.
+
+## Surviving principle (folded from the former ADR 023)
+
+**Forge Studio (the UI + the CSRF-/origin-/path-guarded bridge) is the sole
+operator interaction surface.** Every human moment is a Studio surface; the
+bridge writes the handoff files the phases already consume (`answers.json`,
+`verdict-response.md`, `user-feedback.md`). The terminal / slash-commands /
+PR-comments are not operator-input surfaces. The load-bearing invariant is that
+each moment is **explicit, operator-initiated, and impossible to silently
+auto-satisfy** (no auto-approve, no simulator in production) — and a single
+write-path per moment makes that property assertable once rather than audited
+across many writers. The mechanisms the original sole-operator-surface pass
+retired as dead or duplicate (the PR-comment poller `cli/review-router.ts`, the
+`pr-verdict` provider, the `getVerdict` / `VerdictContext` verdict-provider seam,
+and the stale slash-commands) stay retired; this ADR removes the remaining
+CLI/route duplication described below. The UI **approve IS the merge** — the
+`POST /api/verdict 'approve'` handler calls `gh pr merge` on the operator's
+behalf, so the operator never leaves Studio, and the no-auto-approve invariant
+holds (the operator must click approve).
 
 ## Context
 
@@ -74,8 +95,8 @@ live Studio "Open gate →" links repoint to `/artifact?...&mode=review`).
   pid-file) directly, removing the bridge→CLI coupling that previously blocked
   removal.
 - `verify-cycle.mjs` migrates off `forge review --approve` onto the bridge
-  verdict POST **before** the command is removed (this closes the ADR 023
-  deferral).
+  verdict POST **before** the command is removed (this closes the sole-operator-surface
+  deferral folded above).
 - **Kept as the runtime spine** (no operator-UI equivalent, or recovery/CI only):
   `serve`, `cycle`, `enqueue`, `preflight`, `brain index|lint`, `studio lint`,
   `demo render|capture`, `log`, `review --inspect|--abandon`, `requeue`.

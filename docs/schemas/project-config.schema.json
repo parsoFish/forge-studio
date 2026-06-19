@@ -15,8 +15,8 @@
       "properties": {
         "shape": {
           "type": "string",
-          "enum": ["browser", "harness", "cli-diff", "artifact", "none"],
-          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; none = infra-only initiatives, DEMO.md rationale block."
+          "enum": ["browser", "harness", "cli-diff", "artifact", "live-external", "none"],
+          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; live-external = real resource stood up in a live external system (cloud API + portal), evidence floor is a real REST GET round-trip (liveEvidence.url), not a test-name table; none = infra-only initiatives, DEMO.md rationale block."
         },
         "command": {
           "type": "array",
@@ -135,6 +135,56 @@
         "measurement_extractor": {
           "type": "string",
           "description": "Path (worktree-relative) to a module that parses metrics.command output."
+        }
+      }
+    },
+    "releaseProcess": {
+      "type": "object",
+      "description": "Optional release-process declaration: the repo-side prep a cycle performs before merge. Mirrors demoProcess — typed, optional, fail-closed when malformed. Tagging the release (git tag) and publishing (npm/registry push) are CI's job, NOT forge step kinds. Absent ⇒ no release steps.",
+      "required": ["steps"],
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "description": "Ordered release steps forge performs. Each step is tagged with a kind (docs | changelog | version) and a phase (in-cycle | pre-merge).",
+          "items": {
+            "type": "object",
+            "required": ["kind", "phase", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["docs", "changelog", "version"],
+                "description": "docs = refresh project docs; changelog = write a changelog entry; version = bump the version file. Tag/publish are CI's job, not a forge step kind."
+              },
+              "phase": {
+                "type": "string",
+                "enum": ["in-cycle", "pre-merge"],
+                "description": "in-cycle = during the dev-loop alongside feature work; pre-merge = after the dev-loop, before the unifier opens the PR."
+              },
+              "text": {
+                "type": "string",
+                "description": "Human-readable description of the release step."
+              },
+              "command": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional argv-style command forge runs to perform the step."
+              }
+            }
+          }
+        },
+        "versionFile": {
+          "type": "string",
+          "description": "Worktree-relative path to the file holding the project version (clean relative path — no leading slash, no '..')."
+        },
+        "changelogPath": {
+          "type": "string",
+          "description": "Worktree-relative path to the changelog file (clean relative path — no leading slash, no '..')."
+        },
+        "docsDir": {
+          "type": "string",
+          "description": "Worktree-relative directory holding the project's docs (clean relative path — no leading slash, no '..')."
         }
       }
     }

@@ -4,8 +4,8 @@
  * definitions from disk. Validation lives in a separate module (Task 2).
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, dirname, basename, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
@@ -27,7 +27,6 @@ import type {
   FlowTrigger,
   KbDescriptor,
   ProjectRef,
-  ProjectsRegistry,
 } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -581,24 +580,53 @@ export function loadCatalog(catalogYamlPath: string): Catalog {
 }
 
 // ---------------------------------------------------------------------------
-// Projects registry
+// Project discovery (disk scan — replaces the studio/projects.yaml registry)
+//
+// A project is any immediate sub-directory of the projects root that carries a
+// `.forge/project.json` contract file. The id is the lowercased directory name
+// (matching SLUG_RE); the path is the project dir relative to forgeRoot. Dirs
+// without a `.forge/project.json` are surfaced (hasConfig: false) so the
+// operator/lint can warn rather than silently drop a half-onboarded project.
 // ---------------------------------------------------------------------------
 
-export function loadProjectsRegistry(projectsYamlPath: string): ProjectsRegistry {
-  const d = loadYaml(projectsYamlPath);
-  const rawProjects = d['projects'];
-  if (!Array.isArray(rawProjects)) {
-    throw new Error(`${projectsYamlPath}: "projects" must be an array`);
+export type DiscoveredProject = ProjectRef & {
+  /** True iff `<dir>/.forge/project.json` exists. */
+  hasConfig: boolean;
+  /** Absolute path to the project dir. */
+  absPath: string;
+};
+
+/**
+ * Scan `projectsDir` for project sub-directories. Pure + total: a missing or
+ * unreadable projects root yields an empty list (a fresh box has no projects,
+ * which is a working state, not an error). Entries are sorted by id so callers
+ * get deterministic output.
+ *
+ * @param projectsDir - absolute path to the projects root (see resolveProjectsDir)
+ * @param forgeRoot   - absolute forge root, used to relativise `path`
+ */
+export function discoverProjects(projectsDir: string, forgeRoot: string): DiscoveredProject[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(projectsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    return [];
   }
-  const projects: ProjectRef[] = rawProjects.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${projectsYamlPath}: projects[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    return {
-      id: reqString(e, 'id', projectsYamlPath),
-      path: reqString(e, 'path', projectsYamlPath),
-    };
-  });
-  return { projects, path: projectsYamlPath };
+
+  const root = resolve(forgeRoot);
+  const found: DiscoveredProject[] = [];
+  for (const name of entries) {
+    const id = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (!id) continue;
+    const absPath = join(projectsDir, name);
+    const rel = relative(root, absPath);
+    // Skip any dir that resolves outside the forge root (defensive; should not
+    // happen for a sub-dir of projectsDir, but guards a symlinked projectsDir).
+    const path = rel && !rel.startsWith('..') ? rel.split(sep).join('/') : absPath;
+    const hasConfig = existsSync(join(absPath, '.forge', 'project.json'));
+    found.push({ id, path, hasConfig, absPath });
+  }
+  return found.sort((a, b) => a.id.localeCompare(b.id));
 }

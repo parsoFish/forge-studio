@@ -54,8 +54,8 @@ Three human interaction points: Architect (ideation), Review (closeout on `/revi
 
 ## Sources
 
-- [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — narrative architecture.
-- [`forge-v2-phase-brain.docs.md`](../../_raw/docs/forge-v2-phase-brain.docs.md) through [`forge-v2-phase-reflection.docs.md`](../../_raw/docs/forge-v2-phase-reflection.docs.md) — per-phase docs.
+- [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — narrative architecture.
+- [`docs/phases/brain.md`](../../../docs/phases/brain.md) through [`docs/phases/reflection.md`](../../../docs/phases/reflection.md) — per-phase docs.
 
 ## See also
 

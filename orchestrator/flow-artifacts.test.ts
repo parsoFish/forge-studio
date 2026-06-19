@@ -79,6 +79,34 @@ test('resolveRequiredFile: worktree-rooted path substitutes <initiative-id>', ()
   rmSync(root, { recursive: true, force: true });
 });
 
+test('resolveRequiredFile: demo path is artifactRoot-aware (default "." → demo/<id>)', () => {
+  const root = tmp();
+  const input = guardInput(root);
+  // No .forge/project.json on the worktree ⇒ readArtifactRoot returns "." ⇒
+  // the canonical legacy `demo/<id>` location is unchanged.
+  const got = resolveRequiredFile('demo/<initiative-id>/demo.json', input, root);
+  assert.equal(got, resolve(input.worktreePath, 'demo', 'INIT-2026-06-16-x', 'demo.json'));
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('resolveRequiredFile: demo path follows artifactRoot when the worktree declares one', () => {
+  const root = tmp();
+  const input = guardInput(root);
+  // A worktree whose .forge/project.json sets artifactRoot: "forge" lands its
+  // demo under forge/history/<id>/demo (NOT a parallel top-level demo/).
+  mkdirSync(join(input.worktreePath, '.forge'), { recursive: true });
+  writeFileSync(
+    join(input.worktreePath, '.forge', 'project.json'),
+    JSON.stringify({ artifactRoot: 'forge', demo: { shape: 'none' }, quality_gate_cmd: ['true'] }),
+  );
+  const got = resolveRequiredFile('demo/<initiative-id>/demo.json', input, root);
+  assert.equal(
+    got,
+    resolve(input.worktreePath, 'forge', 'history', 'INIT-2026-06-16-x', 'demo', 'demo.json'),
+  );
+  rmSync(root, { recursive: true, force: true });
+});
+
 test('resolveRequiredFile: <cycleId> in _logs resolves to forge root; unbound → null', () => {
   const root = tmp();
   const input = guardInput(root);

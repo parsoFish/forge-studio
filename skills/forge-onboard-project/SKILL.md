@@ -76,11 +76,10 @@ repo-wide wildcard). Declare as ONE command in `.forge/quality_gate_cmd` +
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch
 (`.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`), build artifacts + generated
-output (binaries, bundles, coverage, knowledge-graph caches under
-`<artifactRoot>/brain/graphify-out/`), and force-track required config inside an
+output (binaries, bundles, coverage), and force-track required config inside an
 ignored dir (`.forge/project.json`). Acceptance: clean build ⇒ `git status` shows
 nothing but intended source. **Note:** `<artifactRoot>/` itself (brain, history,
-skills) IS committed — only the regenerable cache under it is ignored.
+skills) IS committed.
 
 ### Step 6 — Project-action skills (under `<artifactRoot>/skills/`)
 Capture the project's recurring actions as skills forge agents read by path:
@@ -133,6 +132,30 @@ Compose the project linter into the live-acc per-WI gate (its gate is the accept
 test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
 teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a
 read-back assertion on every written field.
+
+### Step 11.5 — Release process & CI release workflow (C10, only if the project releases)
+If the project ships versioned releases (a library, CLI, provider, or any package
+consumers depend on a version of), opt into the release flow by declaring
+**`releaseProcess`** in `.forge/project.json` (see
+`studio/starters/project.json.example`):
+- **`changelogPath`** — the changelog file (default `CHANGELOG.md`). Seed it with a
+  `## [Unreleased]` heading if absent.
+- **`steps`** — `{ kind: docs|changelog|version, phase: in-cycle|pre-merge, text,
+  command? }`. At minimum a `changelog`/`in-cycle` step (the DRAFT every WI writes)
+  and the `pre-merge` steps the finaliser runs (doc regen, version bump). Map each
+  to the project's real tool (the `command`).
+- **`versionFile` / `docsDir`** — where the version lives and where docs live.
+
+Then **install the release CI workflow**: copy
+`studio/starters/release-workflow.yml.example` to
+`<project>/.github/workflows/release.yml`, fill the two TODO knobs (how to read the
+committed version; optional publish). Forge SHIPS this workflow but NEVER runs
+tag/publish — CI owns that off merge-to-main. The forge release-finalizer commits
+the finalised changelog + version bump to the PR branch before merge; the workflow
+tags + releases on merge.
+
+Map the release process: draft (in-cycle) + finalise (pre-merge) + the CI workflow
+must all be present for the clause to be satisfied.
 
 ### Step 12 — Validate, then hand off roadmap-scale
 Both faces green: `forge preflight` passes (hard clauses) AND the UI readiness shows

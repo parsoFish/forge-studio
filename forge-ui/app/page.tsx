@@ -24,7 +24,6 @@ import {
 
 // ---------------------------------------------------------------------------
 // Library page — the Forge Studio entry screen.
-// Mirrors mockups/agent-flow-builder/index.html structure + visual language.
 // ---------------------------------------------------------------------------
 
 export default function LibraryPage() {
@@ -90,11 +89,25 @@ export default function LibraryPage() {
   const gatedCount = runs.filter((r) => r.status === 'gated').length;
   const activeCount = runs.filter((r) => r.status === 'active').length;
 
-  // First-run: a brand-new install has no agents, flows, or projects yet.
-  // Show an orientation panel with a single primary action instead of four
-  // empty card grids (UX spec §1 — empty states orient; one primary CTA).
-  const isFirstRun =
-    ready && agents.length === 0 && flows.length === 0 && projects.length === 0;
+  // First-run orientation (B2). A brand-new install ships ~12 seeded agents
+  // and 5 OOTB flows, so a naive `*.length === 0` test never fires — the
+  // onramp would never show. Instead, key off USER-authored content + a
+  // *valid* (onboarded, contract-complete) project:
+  //   - a valid project carries onboarded content (north star / instructions /
+  //     skills / kb / demo) — a bare `projects/<dir>` with no `.forge/project.json`
+  //     surfaces with id-as-name defaults and does NOT count.
+  //   - a user flow is one authored in-app (origin `studio`); the shipped
+  //     palette (`seed` / `ootb-library`) must not suppress the onramp.
+  const hasValidProject = projects.some(
+    (p) =>
+      (p.northStar && p.northStar.trim().length > 0) ||
+      (p.instructions && p.instructions.trim().length > 0) ||
+      (Array.isArray(p.skills) && p.skills.length > 0) ||
+      (p.kb && p.kb.trim().length > 0) ||
+      (Array.isArray(p.demoProcess) && p.demoProcess.length > 0),
+  );
+  const hasUserFlow = flows.some((f) => f.origin === 'studio');
+  const isFirstRun = ready && !hasValidProject && !hasUserFlow;
 
   return (
     <main

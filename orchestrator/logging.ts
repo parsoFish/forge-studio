@@ -16,6 +16,7 @@ export type Phase =
   | 'unifier'
   | 'review-loop'
   | 'closure'
+  | 'release-finalize'
   | 'reflection';
 
 export type EventType =

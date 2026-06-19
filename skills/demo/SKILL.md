@@ -37,9 +37,16 @@ Invoke `brain-query` against the **project's** brain before authoring anything:
 
 ## The demo contract (what EVERY demo must contain)
 
-A demo is **one structured artefact**: `demo/<initiative-id>/demo.json`
+A demo is **one structured artefact**: `<demo-dir>/demo.json`
 (schema = `DemoModel` in [`cli/demo-model.ts`](../../cli/demo-model.ts),
-validated by the `pr_self_contained` gate). It must carry:
+validated by the `pr_self_contained` gate). The demo dir is resolved against the
+project's `artifactRoot`: it is `demo/<initiative-id>/` for a default-layout
+project (`artifactRoot: "."`), or `<artifactRoot>/history/<initiative-id>/demo/`
+when the project gathers its committed artifacts under a sub-root (e.g.
+betterado's `forge/`, giving `forge/history/<initiative-id>/demo/`). **The
+iteration brief (PROMPT.md) names the exact dir — write there**; `forge demo
+render <initiative-id>` resolves the same path from `artifactRoot`, so you never
+pass `--dir`. It must carry:
 
 ### Required core fields
 
@@ -191,9 +198,11 @@ collapses them gracefully when absent, but their absence means a less useful dem
 
 ## How forge runs a demo
 
-1. **Author `demo/<initiative-id>/demo.json`** to the contract above. Populate
-   ALL applicable rich sections — `summary`, `apiDiff`, `testEvidence`,
-   `filesChanged` — so the rendered HTML is genuinely informative.
+1. **Author the demo.json** at the dir named in PROMPT.md (`demo/<initiative-id>/`,
+   or `<artifactRoot>/history/<initiative-id>/demo/` for an artifactRoot project)
+   to the contract above. Populate ALL applicable rich sections — `summary`,
+   `apiDiff`, `testEvidence`, `filesChanged` — so the rendered HTML is genuinely
+   informative.
 2. **Derive the artefacts:** `Bash forge demo render <initiative-id>` →
    writes `DEMO.md` + `DEMO.html` from the JSON. **Never hand-write `DEMO.md`** —
    it is derived, so the PR artefact and the UI render stay identical.
@@ -219,6 +228,24 @@ enhancement, never a gate. **Do author `summary` + `apiDiff` + `testEvidence` ev
 for notes-only demos when the diff touches a visible API or adds tests** — these
 sections make the HTML genuinely useful without requiring media capture.
 
+## demoProcess + demo.shape are one declaration (the two faces)
+
+A project declares the demo in two married fields, NOT two competing ones:
+
+- **`demoProcess`** (typed steps: `capture` / `verify` / `present`) is the
+  **executed demo** — it names exactly what evidence to record (`capture`), what
+  assertion makes the evidence non-trivial (`verify` → run the step's command and
+  encode the concrete result), and how it is surfaced (`present`).
+- **`demo.shape`** is the **evidence floor** — the minimum the `demo.json` must
+  carry for that project form (e.g. `harness` ⇒ a `testEvidence[]` table + harness
+  metrics; `live-external` ⇒ a checkpoint carrying a real `liveEvidence.url`).
+
+When both are present, derive the demo from `demoProcess` and let `demo.shape`
+set the floor every demo must meet. They must be coherent: a `demoProcess` with a
+`capture` step requires a `demo.shape` that can carry captured evidence — a
+`capture`-bearing process under `demo.shape: "none"` is flagged in preflight
+(there is nothing to capture into). `forge preflight` warns on this incoherence.
+
 ## Per-shape mapping (how each project form satisfies "demonstrable")
 
 The project declares its shape in `.forge/project.json` `demo.shape`:
@@ -242,6 +269,17 @@ The project declares its shape in `.forge/project.json` `demo.shape`:
   show the CLI flag / output format change.
 - **`artifact`** — a generated file/output; describe the before/after artefact in
   notes (and diffStat). No media. `filesChanged` shows which artefacts changed.
+- **`live-external`** — the change stands up a REAL resource in a live external
+  system (a cloud API + portal — e.g. betterado's Azure DevOps org). The evidence
+  floor is a **real REST round-trip, not a test-name table**: provision the
+  resource, read it back via the system's API, and persist that GET under
+  `.forge/live-evidence/<label>.json` (the project's demo skill / acceptance test
+  does this via a capture helper); `forge demo render` back-fills it into a
+  checkpoint carrying `liveEvidence.url`. The demo MUST end with such a checkpoint.
+  Pair with `testEvidence` (the live acceptance result) and, for a new capability,
+  `usage_example` + `impact`. When credentials are absent, fall back to the
+  `harness` floor and **document the fallback in `essence`** — never fabricate the
+  live read-back.
 - **`none`** — infra-only / no observable surface. A single checkpoint that is a
   rationale block: what changed and why it's correct. Use `summary` bullets for
   the rationale.

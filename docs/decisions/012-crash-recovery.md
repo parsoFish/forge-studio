@@ -5,7 +5,7 @@
 
 ## Context
 
-`forge serve` is a long-running process. It will die — power loss, OOM, manual restart. When it does, in-flight initiatives must not be silently lost. V1's solution involved session/process-isolation modules and a stateful worker. V2 needs equivalent correctness with much less code.
+`forge serve` is a long-running process. It will die — power loss, OOM, manual restart. When it does, in-flight initiatives must not be silently lost. The prior approach involved session/process-isolation modules and a stateful worker. The current architecture needs equivalent correctness with much less code.
 
 ## Decision
 
@@ -37,4 +37,4 @@ In-flight initiatives also write their **current phase + iteration count** to th
 
 ## References
 
-- v1's `src/agents/runner.ts` session-recovery code (inspiration; not ported)
+- The prior `src/agents/runner.ts` session-recovery code (inspiration; not ported)

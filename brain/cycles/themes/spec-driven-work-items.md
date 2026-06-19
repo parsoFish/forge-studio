@@ -52,7 +52,7 @@ A `_graph.md` (mermaid) sibling shows the dependency graph for human review.
 
 ## Sources
 
-- [`forge-v2-phase-project-manager.docs.md`](../../_raw/docs/forge-v2-phase-project-manager.docs.md) — primary source.
+- [`docs/phases/project-manager.md`](../../../docs/phases/project-manager.md) — primary source.
 
 ## See also
 

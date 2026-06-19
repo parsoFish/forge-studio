@@ -87,11 +87,16 @@ hooks: []
 `;
 }
 
-/** Minimal valid projects.yaml. */
-function validProjectsYaml(): string {
-  return `projects:
-  - { id: my-project, path: /home/user/my-project }
-`;
+/**
+ * Seed a discoverable, contract-complete project on disk (B1: projects are
+ * auto-discovered from `<root>/projects/*`, not a registry file). The dir
+ * carries a `.forge/project.json`, so `validateDiscoveredProjects` lints it
+ * clean (no missing-config warn, no slug/dup error).
+ */
+function seedValidProject(root: string, id = 'my-project'): void {
+  const forgeDir = join(root, 'projects', id, '.forge');
+  mkdirSync(forgeDir, { recursive: true });
+  writeFileSync(join(forgeDir, 'project.json'), JSON.stringify({ name: id }), 'utf8');
 }
 
 /** Minimal valid kb.yaml. */
@@ -135,8 +140,8 @@ function buildValidRoot(opts: {
   // studio/catalog.yaml
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
 
-  // studio/projects.yaml
-  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+  // a discoverable, contract-complete project on disk
+  seedValidProject(root);
 
   // optionally add brain/x/kb.yaml
   if (includeKb) {
@@ -199,7 +204,7 @@ triggers: []
 `,
   );
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
-  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+  seedValidProject(root);
 
   const result = runStudioLint(root);
 
@@ -371,7 +376,7 @@ This agent is broken.
   writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('good-flow', goodSlug));
 
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
-  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+  seedValidProject(root);
 
   const result = runStudioLint(root);
 
@@ -434,7 +439,7 @@ triggers: []
 `,
   );
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
-  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+  seedValidProject(root);
 
   const result = runStudioLint(root);
 
@@ -468,7 +473,7 @@ test('flow dir "my-cycle" with id "other-name" → dir-name error', () => {
   writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('other-name', agentSlug));
 
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
-  writeFileSync(join(root, 'studio', 'projects.yaml'), validProjectsYaml());
+  seedValidProject(root);
 
   const result = runStudioLint(root);
 

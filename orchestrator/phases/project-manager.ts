@@ -29,6 +29,7 @@ import {
   type WorkItem,
 } from '../work-item.ts';
 import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
+import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
@@ -325,8 +326,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // every WI body as a fixed contract section. Static + automatic — removes
   // the per-WI PM judgment that kept varying. Body-only (frontmatter stays
   // byte-stable), idempotent (skips a WI already carrying the section).
-  if (projectConfig?.standing_work_item_acs && projectConfig.standing_work_item_acs.length > 0) {
-    items = appendStandingAcs(workItemsDir, items, projectConfig.standing_work_item_acs);
+  //
+  // WS-A (release): a project that declares `releaseProcess` also gets the
+  // in-cycle draft-changelog requirement folded into the SAME standing-AC
+  // section — so every WI in a release-bearing initiative carries it. A project
+  // without `releaseProcess` adds nothing (releaseDraftAcs → []), keeping the
+  // non-opted-in path byte-for-byte unchanged.
+  const standingAcs = [
+    ...(projectConfig?.standing_work_item_acs ?? []),
+    ...releaseDraftAcs(projectConfig?.releaseProcess),
+  ];
+  if (standingAcs.length > 0) {
+    items = appendStandingAcs(workItemsDir, items, standingAcs);
   }
 
   const { perItem, setErrors } = validateWorkItemSet(items, {
@@ -340,9 +351,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
 
   // A2a (2026-06-06): live-acceptance-WI requirement (contract C7). When the
   // project declares `acceptance_gate.required`, the decomposition MUST include
-  // ≥1 WI whose `quality_gate_cmd` targets the live acceptance suite — so every
-  // initiative is proven by a real TF_ACC test, not an offline proxy. INIT-2
-  // shipped with NO live-acc WI; this makes that a hard PM failure.
+  // ≥1 WI whose `quality_gate_cmd` targets the acceptance suite — so every
+  // initiative is proven by a real acceptance test, not an offline proxy. An
+  // initiative shipped with NO acceptance WI is a hard PM failure.
   let accGateViolation: string | null = null;
   const accGate = projectConfig?.acceptance_gate;
   if (accGate?.required && items.length > 0) {
@@ -350,10 +361,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       (it.quality_gate_cmd ?? []).some((tok) => tok.includes(accGate.match)),
     );
     if (!hasLiveAccWi) {
+      // Derive the wording from the project's own gate config: a gate that
+      // requires env vars proves the change against a real external system (so
+      // call it the "live acceptance suite"); a creds-free gate is just "the
+      // acceptance suite". No project-flavoured language is hardcoded here.
+      const requiresEnv = (accGate.requires_env ?? []).length > 0;
+      const suiteName = requiresEnv
+        ? `the live acceptance suite (proving the change against the real external system; ` +
+          `requires ${accGate.requires_env!.join(', ')})`
+        : 'the acceptance suite';
       accGateViolation =
-        `no live-acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
-        `"${accGate.match}" (a live TF_ACC acceptance test proving the change against the real ` +
-        `external system). Add an acceptance WI whose gate runs that suite.`;
+        `no acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
+        `"${accGate.match}" — ${suiteName}. Add an acceptance WI whose gate runs that suite.`;
     }
   }
 

@@ -34,11 +34,12 @@ import {
   listStarterAgents,
   loadStarterFlow,
   loadFlowDefinition,
-  loadProjectsRegistry,
+  discoverProjects,
   loadCatalog,
 } from '../orchestrator/studio/registry.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 
 // ---------------------------------------------------------------------------
@@ -249,39 +250,36 @@ type ProjectWithMeta = {
 };
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
-  const projectsYamlPath = join(resolve(forgeRoot), 'studio', 'projects.yaml');
-  if (!existsSync(projectsYamlPath)) return [];
+  // B1: projects are auto-discovered from disk — scan `<projectsDir>/*` rather
+  // than reading a registry file. All discovered dirs are listed (a
+  // half-onboarded dir without `.forge/project.json` still surfaces, with
+  // id-as-name defaults, so the operator can SEE it and finish onboarding —
+  // `forge studio lint` warns about the missing contract file separately).
+  const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig());
+  const discovered = discoverProjects(projectsDir, forgeRoot);
 
-  let registry;
-  try {
-    registry = loadProjectsRegistry(projectsYamlPath);
-  } catch {
-    return [];
-  }
-
-  return registry.projects.map((ref) => {
-    const projectJsonPath = join(resolve(forgeRoot), ref.path, '.forge', 'project.json');
+  return discovered.map((ref) => {
     const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
-    if (existsSync(projectJsonPath)) {
-      try {
-        const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
-        if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
-        if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
-        if (typeof raw.kb === 'string') result.kb = raw.kb;
-        if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
-        if (Array.isArray(raw.skills) && raw.skills.every((s) => typeof s === 'string')) {
-          result.skills = raw.skills as string[];
-        }
-        // Surface the typed demo steps so the editor + ContractReadiness reflect
-        // a persisted demo (capture/verify/present) rather than showing none.
-        if (Array.isArray(raw.demoProcess)) {
-          result.demoProcess = (raw.demoProcess as Array<Record<string, unknown>>)
-            .filter((s) => s && typeof s.kind === 'string' && typeof s.text === 'string')
-            .map((s) => ({ kind: s.kind as string, text: s.text as string }));
-        }
-      } catch {
-        // ignore unreadable project.json
+    if (!ref.hasConfig) return result;
+    const projectJsonPath = join(ref.absPath, '.forge', 'project.json');
+    try {
+      const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+      if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
+      if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
+      if (typeof raw.kb === 'string') result.kb = raw.kb;
+      if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
+      if (Array.isArray(raw.skills) && raw.skills.every((s) => typeof s === 'string')) {
+        result.skills = raw.skills as string[];
       }
+      // Surface the typed demo steps so the editor + ContractReadiness reflect
+      // a persisted demo (capture/verify/present) rather than showing none.
+      if (Array.isArray(raw.demoProcess)) {
+        result.demoProcess = (raw.demoProcess as Array<Record<string, unknown>>)
+          .filter((s) => s && typeof s.kind === 'string' && typeof s.text === 'string')
+          .map((s) => ({ kind: s.kind as string, text: s.text as string }));
+      }
+    } catch {
+      // ignore unreadable project.json
     }
     return result;
   });
@@ -561,22 +559,16 @@ export async function handleStudioRoutes(
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
-      const projectsYamlPath = join(resolve(ctx.forgeRoot), 'studio', 'projects.yaml');
-      if (!existsSync(projectsYamlPath)) {
-        sendJson(res, 404, { error: 'unknown project' }, origin);
-        return true;
-      }
-      let registry: ReturnType<typeof loadProjectsRegistry>;
-      try { registry = loadProjectsRegistry(projectsYamlPath); } catch {
-        sendJson(res, 500, { error: 'failed to load projects registry' }, origin);
-        return true;
-      }
-      const projectRef = registry.projects.find((p) => p.id === id);
+      // B1: resolve the project by disk scan rather than the projects.yaml
+      // registry. A dir without `.forge/project.json` still preflights (the
+      // operator runs preflight to learn WHY it is not yet contract-green).
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
         return true;
       }
-      const projectRoot = resolve(ctx.forgeRoot, projectRef.path);
+      const projectRoot = projectRef.absPath;
       if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;

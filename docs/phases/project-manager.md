@@ -60,7 +60,7 @@ If the PM emits a WI whose acceptance criteria or files_in_scope have no groundi
 
 ## Benchmark suite
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles. (WI-shape validation lives on in `orchestrator/work-item.ts`.)
+> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles. (WI-shape validation lives on in `orchestrator/work-item.ts`.)
 
 `benchmarks/project-manager/` (removed)
 - `initiatives.json` — five fixtures, one per managed project, calibrated against project-specific brain themes. (See the former `benchmarks/project-manager/README.md`, removed 2026-05-25.) Per CONTRACTS.md C11 (archived planning doc, removed 2026-06-07), `score.ts` parses both the old `expected.{min,max}_work_items` shape and the new manifest-topology-derived shape for one release.

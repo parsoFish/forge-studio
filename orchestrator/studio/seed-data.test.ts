@@ -10,8 +10,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { loadFlowDefinition, listAgentDefinitions, loadCatalog, loadProjectsRegistry, loadKbDescriptor } from './registry.ts';
-import { validateFlow, validateCatalog, validateProjectsRegistry, validateKb, validateAgent } from './validate.ts';
+import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
+import { validateFlow, validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
+import { resolveProjectsDir } from '../config.ts';
 import { MODEL_BY_TIER } from '../phase-agent.ts';
 
 const ROOT = process.cwd();
@@ -67,19 +68,18 @@ test('catalog model ids cover MODEL_BY_TIER (lockstep)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// projects registry
+// projects (auto-discovered from disk — B1)
 // ---------------------------------------------------------------------------
 
-test('projects registry loads and validates clean', () => {
-  const projectsPath = join(ROOT, 'studio/projects.yaml');
-  const reg = loadProjectsRegistry(projectsPath);
-  const findings = validateProjectsRegistry(reg);
-  const errors = findings.filter((f) => f.level === 'error');
+test('disk-discovered projects validate clean (no error-level findings)', () => {
+  const projectsDir = resolveProjectsDir(ROOT);
+  const findings = validateDiscoveredProjects(discoverProjects(projectsDir, ROOT));
+  const errors = findings.filter((f: { level: string }) => f.level === 'error');
 
   assert.deepEqual(
     errors,
     [],
-    `projects registry has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+    `discovered projects have error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
 });
 
@@ -119,7 +119,7 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
 // Agent definitions
 // ---------------------------------------------------------------------------
 
-test('listAgentDefinitions returns the studio agent roster (6 seed + 3 OOTB library agents)', () => {
+test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB library agents)', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const slugs = agents.map((a) => a.slug).sort();
 
@@ -133,10 +133,13 @@ test('listAgentDefinitions returns the studio agent roster (6 seed + 3 OOTB libr
       'developer-unifier',
       'project-manager',
       'reflector',
+      // WS-A: the release-finalizer is a phase agent (full studio frontmatter,
+      // mirrors reflector) — it runs post-approval, pre-merge.
+      'release-finalizer',
       'security-auditor',
       'web-scraper',
     ],
-    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

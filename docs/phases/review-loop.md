@@ -62,7 +62,7 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
 
 ## Benchmark suite
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
+> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
 
 The per-phase `benchmarks/review-loop/` was archived 2026-05-23 (S4) when the reviewer collapsed into the developer-loop unifier. Review behaviour was then regressed (until the 2026-05-25 benchmark removal) via:
 
@@ -96,7 +96,7 @@ merged cycles.
   creation point is removed.
 - **Verdict via PR comments** (`pr-verdict.ts:makePrCommentVerdict`),
   with the file-verdict provider as a fallback when no PR can be created
-  (no remote / gh down) — never strands. *(Historical — [ADR 023](../decisions/023-ui-sole-operator-surface.md)
+  (no remote / gh down) — never strands. *(Historical — [ADR 031](../decisions/031-studio-consolidation.md)
   retired the PR-comment + CLI verdict ingress; `pr-verdict.ts` is deleted and
   the verdict now arrives solely from the `/review/<cycleId>` UI screen as a
   `verdict-response.md`.)*

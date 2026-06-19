@@ -91,7 +91,8 @@ screen (and the `/plan` `/demo` routes).
   is preserved: the operator must still click approve; only the *mechanism*
   changed (forge calls `gh pr merge` rather than the operator doing it manually
   on GitHub). This supersedes the G9 policy ("forge never auto-merges") which was
-  inconsistent with ADR-023 ("operator never leaves the forge UI"). `forge review
+  inconsistent with the sole-operator-surface principle ("operator never leaves
+  the forge UI", now [ADR 031](./031-studio-consolidation.md)). `forge review
   --approve` (CLI fallback) was updated in the same pass to also call
   `mergePullRequest` so the remote PR is closed there too.
 

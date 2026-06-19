@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — Final-Loop / Generalisation / SWAP / v2-Eradication · Change Report</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121722; --panel2:#171d2b; --line:#243049;
+    --ink:#e6edf6; --mut:#93a1b8; --dim:#6b7a93;
+    --cyan:#34d1c4; --green:#46d17f; --amber:#f0b352; --red:#f0766b; --violet:#9b8cff; --blue:#5aa9ff;
+    --add:#1f3a2a; --del:#3a2230;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#16203a 0,var(--bg) 55%) fixed;color:var(--ink);
+    font:15px/1.55 ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial}
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.4px}
+  h2{font-size:20px;margin:44px 0 14px;letter-spacing:-.2px;display:flex;align-items:center;gap:10px}
+  h2::before{content:"";width:9px;height:20px;border-radius:3px;background:linear-gradient(var(--cyan),var(--blue))}
+  h3{font-size:15px;margin:0 0 6px}
+  .sub{color:var(--mut);margin:0 0 22px}
+  .badges{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+  .badge{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+  .badge b{font-size:19px} .badge span{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  .ok{color:var(--green)} .warn{color:var(--amber)} .bad{color:var(--red)} .accent{color:var(--cyan)}
+  .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;border:1px solid transparent}
+  .pill.g{background:rgba(70,209,127,.12);color:var(--green);border-color:rgba(70,209,127,.35)}
+  .pill.a{background:rgba(240,179,82,.12);color:var(--amber);border-color:rgba(240,179,82,.35)}
+  .pill.r{background:rgba(240,118,107,.12);color:var(--red);border-color:rgba(240,118,107,.35)}
+  .pill.n{background:rgba(155,140,255,.12);color:var(--violet);border-color:rgba(155,140,255,.35)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card .tag{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+  .card .what{color:var(--ink);margin:7px 0 9px}
+  .card .impact{color:var(--mut);font-size:13.5px;border-top:1px dashed var(--line);padding-top:9px}
+  .card .impact b{color:var(--green);font-weight:600}
+  /* pipeline */
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;overflow-x:auto}
+  .step{min-width:118px;flex:1;text-align:center;padding:12px 8px;position:relative}
+  .step .n{font-size:12px;color:var(--dim)} .step .t{font-weight:600;margin-top:3px} .step .d{font-size:12px;color:var(--mut);margin-top:4px}
+  .step.new{background:rgba(52,209,196,.06);border:1px dashed rgba(52,209,196,.4);border-radius:10px}
+  .step.gate{background:rgba(155,140,255,.07);border:1px dashed rgba(155,140,255,.4);border-radius:10px}
+  .arrow{display:flex;align-items:center;color:var(--dim);font-size:20px;padding:0 2px}
+  /* two-col */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .col.rm{border-color:rgba(240,118,107,.3)} .col.add{border-color:rgba(70,209,127,.3)}
+  .col h3{display:flex;align-items:center;gap:8px}
+  .col ul{margin:8px 0 0;padding-left:18px} .col li{margin:5px 0;color:var(--mut)}
+  .col.rm li::marker{color:var(--red)} .col.add li::marker{color:var(--green)}
+  .col li b{color:var(--ink);font-weight:600}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+  th{background:var(--panel2);color:var(--mut);font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+  tr:last-child td{border-bottom:none}
+  td .mono{color:var(--cyan)}
+  .links a{color:var(--blue);text-decoration:none;border-bottom:1px solid rgba(90,169,255,.3)}
+  .foot{color:var(--dim);font-size:12.5px;margin-top:50px;border-top:1px solid var(--line);padding-top:16px}
+  @media(max-width:720px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Forge Studio — Final-Loop · Generalisation · SWAP · v2-Eradication</h1>
+  <p class="sub">Change report · 2026-06-19 · branch <code>feat/studio-finalloop-generalisation</code> · status <span class="pill g">ALL GATES GREEN</span></p>
+
+  <div class="badges">
+    <div class="badge"><b class="accent">54</b><span>commits</span></div>
+    <div class="badge"><b>244</b><span>files changed</span></div>
+    <div class="badge"><b class="ok">+6,230</b><span>insertions</span></div>
+    <div class="badge"><b class="bad">−4,010</b><span>deletions</span></div>
+    <div class="badge"><b class="ok">1330/1330</b><span>tests pass</span></div>
+    <div class="badge"><b class="ok">0</b><span>lint errors</span></div>
+    <div class="badge"><b>11</b><span>streams (worktree fan-out)</span></div>
+  </div>
+
+  <h2>The headline: the final loop is closed</h2>
+  <p class="sub">Before this work a cycle stopped at <i>"PR merged + reflected"</i> — no docs update, no version, no changelog, no release in any phase. Forge now drives work all the way to a published version, with the operator's existing <b>Approve</b> as the only gate and CI owning the irreversible tag/publish.</p>
+
+  <div class="pipe">
+    <div class="step"><div class="n">phase 1-5</div><div class="t">Cycle</div><div class="d">plan → build → verify</div></div>
+    <div class="arrow">→</div>
+    <div class="step new"><div class="n">new · in-cycle</div><div class="t">Draft changelog</div><div class="d">standing AC, in the PR</div></div>
+    <div class="arrow">→</div>
+    <div class="step gate"><div class="n">existing gate</div><div class="t">Approve</div><div class="d">operator, in Studio</div></div>
+    <div class="arrow">→</div>
+    <div class="step new"><div class="n">new · pre-merge</div><div class="t">Finalise</div><div class="d">changelog + docs, commit</div></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="n">existing</div><div class="t">Merge</div><div class="d">forge merges PR</div></div>
+    <div class="arrow">→</div>
+    <div class="step new"><div class="n">new · on main</div><div class="t">CI release</div><div class="d">version · tag · publish</div></div>
+  </div>
+  <p class="sub" style="margin-top:10px;font-size:13px">Opt-in per project via a declared <code>releaseProcess</code>; a project without one is byte-for-byte unchanged. Forge <b>never</b> runs tag/publish — it ships the CI workflow template. Terminal proof: <code>release.json</code> + a <code>release.finalized</code> event.</p>
+
+  <h2>What changed, and the expected impact</h2>
+  <div class="grid">
+    <div class="card"><div class="tag">WS-A · Final loop</div><div class="what">Project-declared generic <code>releaseProcess</code>; <code>release-finalizer</code> agent hooked before <code>mergePr</code>; C10 contract clause; <code>doc-updater</code> / <code>changelog-semver</code> skills; CI workflow template.</div><div class="impact"><b>Impact:</b> finalised work now ships a documented, versioned release — the loop the product was missing. Closes review-lens #2.</div></div>
+    <div class="card"><div class="tag">WS-B · Generalisation</div><div class="what">Projects <b>auto-discovered from disk</b> (deleted <code>studio/projects.yaml</code>); first-run onramp fixed; UI onboarding scaffolds C4; getting-started doc + annotated <code>project.json.example</code> + secrets convention.</div><div class="impact"><b>Impact:</b> a fresh clone no longer ships the operator's personal projects or a dead onramp — Studio is usable out-of-the-box for any user.</div></div>
+    <div class="card"><div class="tag">WS-B5 · Reference project</div><div class="what">New creds-free <code>projects/mdtoc</code> (markdown-TOC CLI) exercising <i>every</i> contract component; replaces claude-harness as the OOTB demo + <code>ui:journey</code>/<code>verify-cycle</code> default.</div><div class="impact"><b>Impact:</b> the "watch it run" artifact + contract worked-example are now neutral, not betterado-specific. <code>forge preflight mdtoc</code> = CONTRACT MET.</div></div>
+    <div class="card"><div class="tag">WS-C · SWAP + KB</div><div class="what"><code>runtime.sdk</code> threaded through the dev-loop (was silently dropped); sdk id unified on <code>claude</code> (killed a <code>claude-code</code> landmine); gemini/aider conformance. <b>Zep + graphify ripped out</b> → filesystem-only KB.</div><div class="impact"><b>Impact:</b> the runtime-adapter swap is real, not presentational; the KB seam stops carrying unbattle-tested cruft.</div></div>
+    <div class="card"><div class="tag">WS-D · v2 + cruft</div><div class="what">Live rename off "Forge v2"; brain v2 cleanup; rule-based <code>cruft-sweep</code> skill; dropped 4 dead deps, benchmarks globs, mockups, slugifier, lint dumps, orphan worktree.</div><div class="impact"><b>Impact:</b> ~115 MB + migration-era framing gone; the tree reads as one product (Forge Studio).</div></div>
+    <div class="card"><div class="tag">WS-D2 · ADRs</div><div class="what">Consolidated to current state (operator sign-off): removed 005/014/016, folded 023→031, reframed the v1/v2 narrative + the now-stale zep/graphify ADRs, reconciled the index.</div><div class="impact"><b>Impact:</b> the decision log describes what forge <i>is</i>, not the migration it came from.</div></div>
+    <div class="card"><div class="tag">WS-E · betterado + demo</div><div class="what"><code>artifactRoot</code>-aware demo seam (one home for demos); married <code>demoProcess</code> ↔ the demo block; <code>live-external</code> demo.shape; betterado <code>releaseProcess</code> + CHANGELOG 0.2.0 backfill + tag-on-changelog CI + 4 local skills.</div><div class="impact"><b>Impact:</b> demos land in one place; betterado's blank-changelog delivery gap is closed; the demo declaration is single-source.</div></div>
+    <div class="card"><div class="tag">WS-B6 · de-betterado</div><div class="what">Neutralised betterado-flavoured prompt strings; repointed <code>ui:journey</code> + <code>verify-cycle</code> onto mdtoc; <code>ui:journey</code> green (video produced) on the new subject.</div><div class="impact"><b>Impact:</b> generic agents no longer carry TF/ADO examples; the canonical demo is project-agnostic.</div></div>
+  </div>
+
+  <h2>Before → after</h2>
+  <div class="cols">
+    <div class="col rm"><h3>🗑 Removed</h3><ul>
+      <li><b>Zep KB backend</b> + subsumption-proof (unbattle-tested)</li>
+      <li><b>graphify</b> tooling, config, artifacts</li>
+      <li><b>studio/projects.yaml</b> registry (ghost projects)</li>
+      <li><b>"Forge v2" / v1-vs-v2</b> framing across live surfaces + brain</li>
+      <li><b>4 dead deps</b> (blessed-contrib, globby, @getzep/zep-cloud, dagre)</li>
+      <li><b>3 superseded ADRs</b> + mockups / slugifier / lint dumps / orphan worktree</li>
+      <li><b>claude-harness</b> (archived) + <b>demo-project</b> (deleted) from the projects list</li>
+    </ul></div>
+    <div class="col add"><h3>✨ Added</h3><ul>
+      <li><b>Release final-loop</b> — draft → approve → finalise → merge → CI</li>
+      <li><b>Disk-based project discovery</b> + working first-run onramp</li>
+      <li><b>projects/mdtoc</b> — neutral reference project + worked-example</li>
+      <li><b>Real runtime-adapter SWAP</b> (sdk threaded + conformance)</li>
+      <li><b>C10</b> documentation-parity & release contract clause</li>
+      <li><b>Skills</b> — release-finalizer, doc-updater, changelog-semver, cruft-sweep + 4 betterado-local</li>
+      <li><b>getting-started.md</b> + project.json.example + secrets convention</li>
+    </ul></div>
+  </div>
+
+  <h2>Cleanliness scorecard</h2>
+  <table>
+    <tr><th>Area</th><th>State</th><th>Notes</th></tr>
+    <tr><td><b>Forge build / tests</b></td><td><span class="pill g">CLEAN</span></td><td>build green · <span class="mono">1330/1330</span> tests · studio-lint 0 err · brain-lint 0 err</td></tr>
+    <tr><td><b>UI journey</b></td><td><span class="pill g">GREEN</span></td><td><code>ui:journey</code> passes on mdtoc (video + 63-frame gallery) · <code>ui:deadpaths</code> clean ×10 routes</td></tr>
+    <tr><td><b>Dependencies</b></td><td><span class="pill g">LEAN</span></td><td>4 dead deps removed; lockfiles regenerated</td></tr>
+    <tr><td><b>KB backend</b></td><td><span class="pill g">SIMPLE</span></td><td>filesystem-only; zep + graphify gone</td></tr>
+    <tr><td><b>Decision log (ADRs)</b></td><td><span class="pill g">CURRENT</span></td><td>consolidated; v1/v2 framing removed; index reconciled</td></tr>
+    <tr><td><b>project: mdtoc</b></td><td><span class="pill g">CONTRACT MET</span></td><td>tracked reference project; all hard clauses pass</td></tr>
+    <tr><td><b>project: terraform-provider-betterado</b></td><td><span class="pill g">CONTRACT MET</span></td><td>releaseProcess + CHANGELOG + CI added (1 advisory warn — pre-existing god-files)</td></tr>
+    <tr><td><b>project: trafficGame</b></td><td><span class="pill a">BARE</span></td><td>historical local repo, no <code>.forge/project.json</code> — left as-is (not requested); configure or archive when convenient</td></tr>
+    <tr><td><b>projects list</b></td><td><span class="pill g">TIDIED</span></td><td>5 → 3; claude-harness archived to <code>~/archive/</code>, demo-project deleted</td></tr>
+    <tr><td><b>git state</b></td><td><span class="pill n">READY</span></td><td>54 commits on the feature branch; merging to <code>main</code> as the finalisation step</td></tr>
+  </table>
+
+  <h2>Verification</h2>
+  <table>
+    <tr><th>Gate</th><th>Result</th></tr>
+    <tr><td><code>npm run build</code></td><td><span class="pill g">PASS</span> tsc + Next.js</td></tr>
+    <tr><td><code>npm test</code></td><td><span class="pill g">PASS</span> 1330/1330, 0 fail</td></tr>
+    <tr><td><code>forge studio lint</code></td><td><span class="pill g">PASS</span> 0 errors (advisory flags only)</td></tr>
+    <tr><td><code>forge brain lint</code></td><td><span class="pill g">PASS</span> 0 errors</td></tr>
+    <tr><td><code>npm run ui:journey</code></td><td><span class="pill g">PASS</span> all DOM-as-metrics assertions, video produced</td></tr>
+    <tr><td><code>npm run ui:deadpaths</code></td><td><span class="pill g">PASS</span> clean ×2 over 10 routes</td></tr>
+    <tr><td><code>verify:cycle --project betterado</code> (real money)</td><td><span class="pill a">DEFERRED</span> operator-gated — not run</td></tr>
+  </table>
+
+  <h2>Links &amp; what's next</h2>
+  <p class="links">
+    • Live demo gallery (mdtoc journey): <a href="../forge-ui/.demo-shots/e2e/index.html">forge-ui/.demo-shots/e2e/index.html</a> (+ <code>video/journey.webm</code>)<br>
+    • The seven-agent review that seeded the plan: <a href="./forge-studio-generalisation-review.md">docs/forge-studio-generalisation-review.md</a><br>
+    • Project contract: <a href="./forge-project-contract.md">docs/forge-project-contract.md</a> · Getting started: <a href="./getting-started.md">docs/getting-started.md</a>
+  </p>
+  <p class="sub" style="margin-top:14px">
+    <b>Next:</b> &nbsp;① merge to <code>main</code> (this finalisation) &nbsp;·&nbsp; ② push when ready &nbsp;·&nbsp; ③ operator-gated <code>verify:cycle</code> to exercise the real release loop &nbsp;·&nbsp; ④ optional: configure-or-archive <code>trafficGame</code>; add the official Anthropic Playwright plugin if you want MCP-level capture beyond the installed <code>webapp-testing</code>.
+  </p>
+
+  <div class="foot">
+    Generated for David · Forge Studio finalisation · executed via worktree-isolated subagent fan-out (thin orchestrator: sequence → per-stream gate → integrate). Rich-demo engine: <code>webapp-testing</code> (Playwright) — already installed; no low-quality "visual-review" plugin added (the niche 5★ option failed the highly-rated bar).
+  </div>
+
+</div>
+</body>
+</html>
