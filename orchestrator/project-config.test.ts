@@ -172,6 +172,67 @@ test('validateProjectConfig: shape: "none" is accepted without a demo.command', 
   assert.equal(cfg.demo.command, undefined);
 });
 
+test('loadProjectConfig: single-sources quality_gate_cmd from the .forge/quality_gate_cmd sidecar', () => {
+  const root = newTempDir();
+  try {
+    // project.json OMITS quality_gate_cmd; the sidecar is the single source.
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' } }));
+    writeFileSync(
+      join(root, '.forge', 'quality_gate_cmd'),
+      'go test -tags all ./azuredevops/internal/service/release/...\n',
+    );
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg);
+    assert.deepEqual(cfg!.quality_gate_cmd, [
+      'go', 'test', '-tags', 'all', './azuredevops/internal/service/release/...',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: project.json quality_gate_cmd wins over the sidecar when both present', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' }, quality_gate_cmd: ['npm', 'test'] }));
+    writeFileSync(join(root, '.forge', 'quality_gate_cmd'), 'go test ./...\n');
+    const cfg = loadProjectConfig(root);
+    assert.deepEqual(cfg!.quality_gate_cmd, ['npm', 'test']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: throws when neither quality_gate_cmd nor sidecar is present', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ demo: { shape: 'none' } }));
+    assert.throws(() => loadProjectConfig(root), /quality_gate_cmd/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validateProjectConfig: shape: "live-external" is accepted with a demo.command', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'live-external', command: ['go', 'test', '-tags', 'all', './...'] },
+    quality_gate_cmd: ['true'],
+  });
+  assert.equal(cfg.demo.shape, 'live-external');
+  assert.deepEqual(cfg.demo.command, ['go', 'test', '-tags', 'all', './...']);
+});
+
+test('validateProjectConfig: shape: "live-external" still requires a demo.command', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        demo: { shape: 'live-external' },
+        quality_gate_cmd: ['true'],
+      }),
+    /demo\.command/,
+  );
+});
+
 test('validateProjectConfig: shape: "browser" requires a preview_command', () => {
   assert.throws(
     () =>

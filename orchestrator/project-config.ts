@@ -36,13 +36,31 @@ export type { ReleaseStep, ReleaseConfig } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
-export type DemoShape = 'browser' | 'harness' | 'cli-diff' | 'artifact' | 'none';
+/**
+ * The `quality_gate_cmd` sidecar — `.forge/quality_gate_cmd`, a single
+ * whitespace-separated command line. Preflight already reads it
+ * (`cli/preflight.ts`); `loadProjectConfig` reads it too so a project can
+ * declare the gate in ONE place. When `project.json` omits `quality_gate_cmd`,
+ * the sidecar is the source of truth; when both are present, the JSON wins
+ * (explicit override). The two were kept in lockstep by hand before — now the
+ * sidecar can stand alone.
+ */
+export const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
+
+export type DemoShape =
+  | 'browser'
+  | 'harness'
+  | 'cli-diff'
+  | 'artifact'
+  | 'live-external'
+  | 'none';
 
 export const DEMO_SHAPES: ReadonlySet<DemoShape> = new Set<DemoShape>([
   'browser',
   'harness',
   'cli-diff',
   'artifact',
+  'live-external',
   'none',
 ]);
 
@@ -243,7 +261,37 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
       `project-config: ${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+  // Single-source the gate from the `.forge/quality_gate_cmd` sidecar when
+  // project.json omits it (the JSON wins when both are present). This lets a
+  // project declare the gate in ONE place instead of mirroring it by hand.
+  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    if (obj.quality_gate_cmd === undefined || obj.quality_gate_cmd === null) {
+      const sidecar = readQualityGateSidecar(projectRoot);
+      if (sidecar) obj.quality_gate_cmd = sidecar;
+    }
+  }
   return validateProjectConfig(parsed);
+}
+
+/**
+ * Read + tokenise the `.forge/quality_gate_cmd` sidecar (a single
+ * whitespace-separated command line) into an argv array. Returns `null` when the
+ * file is absent, unreadable, or empty — the caller falls back to the JSON field
+ * (or throws if neither is present). Whitespace-splitting mirrors how preflight
+ * already consumes the sidecar (`cli/preflight.ts readQualityGateCmd`).
+ */
+function readQualityGateSidecar(projectRoot: string): string[] | null {
+  try {
+    const sidecarPath = join(projectRoot, QUALITY_GATE_SIDECAR_REL_PATH);
+    if (!existsSync(sidecarPath)) return null;
+    const raw = readFileSync(sidecarPath, 'utf8').trim();
+    if (raw === '') return null;
+    const argv = raw.split(/\s+/).filter((t) => t.length > 0);
+    return argv.length > 0 ? argv : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

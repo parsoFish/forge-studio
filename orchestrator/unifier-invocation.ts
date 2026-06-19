@@ -281,6 +281,22 @@ function demoInstructionsForShape(shape: DemoShape, demoDir = 'demo/<initiative-
         '   - Summarise it in a checkpoint caption + before/after notes. No media required.',
         schema,
       ].join('\n');
+    case 'live-external':
+      return [
+        '   The change stands up a REAL resource in a live external system (e.g. a',
+        '   cloud API + portal). The evidence FLOOR is a real round-trip against that',
+        '   system, NOT a test-name table:',
+        '   - Provision the resource (apply/create), then read it back via the system\'s',
+        '     REST API; persist that GET under `.forge/live-evidence/<label>.json` (the',
+        '     project\'s demo skill / acceptance test does this via a capture helper).',
+        '   - `forge demo render` back-fills it into a checkpoint carrying',
+        '     `liveEvidence.url` (a real GET URL) — the demo MUST end with such a checkpoint.',
+        '   - Pair with `testEvidence[]` (the live acceptance test result) and, for a',
+        '     new-or-changed-capability initiative, `usage_example` + `impact`.',
+        '   - If credentials are absent, fall back to the harness floor and DOCUMENT the',
+        '     fallback in `essence` — never fabricate the live read-back.',
+        schema,
+      ].join('\n');
     case 'none':
       return [
         '   - Infra-only initiative. No media. A single checkpoint whose caption +',

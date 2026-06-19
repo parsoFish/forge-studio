@@ -269,6 +269,17 @@ The project declares its shape in `.forge/project.json` `demo.shape`:
   show the CLI flag / output format change.
 - **`artifact`** — a generated file/output; describe the before/after artefact in
   notes (and diffStat). No media. `filesChanged` shows which artefacts changed.
+- **`live-external`** — the change stands up a REAL resource in a live external
+  system (a cloud API + portal — e.g. betterado's Azure DevOps org). The evidence
+  floor is a **real REST round-trip, not a test-name table**: provision the
+  resource, read it back via the system's API, and persist that GET under
+  `.forge/live-evidence/<label>.json` (the project's demo skill / acceptance test
+  does this via a capture helper); `forge demo render` back-fills it into a
+  checkpoint carrying `liveEvidence.url`. The demo MUST end with such a checkpoint.
+  Pair with `testEvidence` (the live acceptance result) and, for a new capability,
+  `usage_example` + `impact`. When credentials are absent, fall back to the
+  `harness` floor and **document the fallback in `essence`** — never fabricate the
+  live read-back.
 - **`none`** — infra-only / no observable surface. A single checkpoint that is a
   rationale block: what changed and why it's correct. Use `summary` bullets for
   the rationale.

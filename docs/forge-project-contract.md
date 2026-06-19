@@ -471,7 +471,7 @@ flow-ready — the flow engine will not accept it.
 | C7 | `acceptance_gate: { match: "acceptancetests", required: true, requires_env: ["TF_ACC"] }`. `ci_gate_unset_env: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
-| DEMO | `demo.shape: "harness"` for the creds-free floor; richer live evidence via `demoProcess` steps |
+| DEMO | `demo.shape: "live-external"` — real ADO REST round-trip evidence (`liveEvidence.url`); `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; falls back to the harness floor when creds are absent |
 
 ---
 

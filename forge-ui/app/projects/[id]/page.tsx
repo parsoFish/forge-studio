@@ -351,7 +351,7 @@ function ProjectOnboardForm() {
                 <label style={labelStyle} htmlFor="onb-demo-shape">Demo shape</label>
                 <select id="onb-demo-shape" data-field="demo-shape" style={inputStyle} value={demoShape}
                   onChange={(e) => setDemoShape(e.target.value)}>
-                  {['harness', 'cli-diff', 'artifact', 'browser', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
+                  {['harness', 'cli-diff', 'artifact', 'browser', 'live-external', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
