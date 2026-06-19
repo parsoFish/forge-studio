@@ -24,6 +24,7 @@ Both surfaces use the same `SKILL.md` — that file is the contract.
 | [`brain-ingest`](./brain-ingest/SKILL.md) | Brain | unattended | Append raw, create theme pages |
 | [`brain-lint`](./brain-lint/SKILL.md) | Brain | unattended | Structural integrity checks |
 | [`brain-query`](./brain-query/SKILL.md) | Brain | unattended | Mandated first action of every other skill |
+| [`cruft-sweep`](./cruft-sweep/SKILL.md) | Maintenance | interactive | Rule-based directory-by-directory cruft cleanup |
 
 ## Authoring conventions
 
