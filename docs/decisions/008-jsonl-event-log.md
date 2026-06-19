@@ -42,7 +42,7 @@ Writers:
 
 Readers:
 - `orchestrator/metrics.ts` — aggregates cost, iterations, durations.
-- **forge-ui** — consumes events via the daemon bridge (SSE stream, [ADR 023](./023-ui-sole-operator-surface.md)) for the live phase/WI hex view and cost panel. The former `orchestrator/visualise.ts` CLI tail was removed when the UI became the sole operator surface.
+- **forge-ui** — consumes events via the daemon bridge (SSE stream, [ADR 031](./031-studio-consolidation.md), which carries the sole-operator-surface decision) for the live phase/WI hex view and cost panel. The former `orchestrator/visualise.ts` CLI tail was removed when the UI became the sole operator surface.
 - The reflector skill — reads the full log to write retros.
 
 ## Consequences
