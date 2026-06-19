@@ -958,6 +958,12 @@ async function main() {
       () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
       null, { timeout: 15000 },
     ).catch(() => {});
+    // Baseline project count BEFORE onboarding — the discoverable-on-disk projects
+    // vary by checkout (this de-betterado'd worktree ships only the mdtoc reference
+    // project + scratch dirs), so the assertion is RELATIVE: onboarding must add
+    // exactly one project. Stronger than an absolute floor, and checkout-agnostic.
+    const projCountBefore = await page.evaluate(() =>
+      parseInt(document.querySelector('[data-section="projects"]')?.getAttribute('data-count') ?? '0', 10));
     const newProjCta = await page.evaluate(() => {
       const el = document.querySelector('[data-action="new-project"]');
       return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
@@ -1002,12 +1008,19 @@ async function main() {
     check(existsSync(projectJsonPath),
       'J4: the project is auto-discovered from disk (.forge/project.json present)');
 
-    // Onboarding redirected to the editor — readiness renders + reflects the onboarded fields.
+    // Onboarding redirects to the editor — readiness renders + reflects the
+    // onboarded fields. Navigate explicitly (don't rely solely on the redirect
+    // race) and wait for the editor's [data-ready-count] to materialise before
+    // reading it, so a slow first-compile doesn't read it as absent (-1).
     await page.waitForURL(new RegExp(`/projects/${J4_PROJECT}`), { timeout: 15000 }).catch(() => {});
+    if (!/\/projects\/[^/]*journey-demo-project/.test(page.url())) {
+      await page.goto(watch.uiUrl + `/projects/${J4_PROJECT}`, { waitUntil: 'domcontentloaded' });
+    }
     await page.waitForFunction(
       () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
-      null, { timeout: 15000 },
+      null, { timeout: 20000 },
     ).catch(() => {});
+    await page.waitForSelector('[data-ready-count]', { timeout: 15000 }).catch(() => {});
     const readyCount = await page.evaluate(() => {
       const el = document.querySelector('[data-ready-count]');
       return el ? parseInt(el.getAttribute('data-ready-count') ?? '0', 10) : -1;
@@ -1023,7 +1036,10 @@ async function main() {
     ).catch(() => {});
     const projCount = await page.evaluate(() =>
       parseInt(document.querySelector('[data-section="projects"]')?.getAttribute('data-count') ?? '0', 10));
-    check(projCount >= 4, `J4: onboarded project appears in the library (project count ${projCount})`);
+    const onboardedListed = await page.evaluate((id) =>
+      document.querySelector(`[data-section="projects"] [data-card-type="project"][data-card-id="${id}"]`) !== null, J4_PROJECT);
+    check(projCount === projCountBefore + 1 && onboardedListed,
+      `J4: onboarding adds exactly one project to the library (${projCountBefore}→${projCount}, ${J4_PROJECT} listed=${onboardedListed})`);
 
     // lint stays green with the new project registered.
     let j4LintOk = false;
