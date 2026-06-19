@@ -54,6 +54,10 @@ benchmarks/*/fixtures/**/.forge/pr-description.md
 projects/*
 !projects/README.md
 !projects/.gitkeep
+# Exception: mdtoc is forge's checked-in OOTB reference project (WS-B5). Track
+# the directory so the contract's worked example ships with forge; the project's
+# own projects/mdtoc/.gitignore still excludes its build outputs + scratch.
+!projects/mdtoc/
 
 # Worktrees the scheduler creates
 _worktrees/

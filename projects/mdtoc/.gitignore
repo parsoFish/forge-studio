@@ -1,0 +1,31 @@
+# --- Hermetic commit capture (forge contract C2 + ARTIFACTS) ---
+
+# Build outputs (tsc emits here) — never source.
+dist/
+*.tsbuildinfo
+coverage/
+
+# Dependencies.
+node_modules/
+
+# Forge per-cycle scratch (regenerated each cycle; must never enter a PR).
+# No trailing slash on work-items so the bare path is git-ignored too — the
+# preflight C2 git-truth check queries `.forge/work-items` (slash stripped).
+# `.forge/project.json` + `.forge/skills/` stay tracked (they aren't matched here).
+.forge/work-items
+AGENT.md
+PROMPT.md
+fix_plan.md
+
+# Runtime / session scratch that forge writes into the worktree.
+_architect/
+demo/
+
+# Local credentials (this project needs none, but guard against any).
+secrets.env
+*.env
+!*.env.example
+
+# Editor / OS noise.
+.DS_Store
+*.swp
