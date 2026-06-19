@@ -208,5 +208,7 @@ export type Catalog = {
   path: string;
 };
 
+// ProjectRef is the shape shared by disk-discovery (DiscoveredProject extends
+// it). Projects are auto-discovered from `<projectsDir>/*` (B1) — there is no
+// longer a `studio/projects.yaml` registry file.
 export type ProjectRef = { id: string; path: string };
-export type ProjectsRegistry = { projects: ProjectRef[]; path: string };

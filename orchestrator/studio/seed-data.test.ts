@@ -10,8 +10,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { loadFlowDefinition, listAgentDefinitions, loadCatalog, loadProjectsRegistry, loadKbDescriptor } from './registry.ts';
-import { validateFlow, validateCatalog, validateProjectsRegistry, validateKb, validateAgent } from './validate.ts';
+import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
+import { validateFlow, validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
+import { resolveProjectsDir } from '../config.ts';
 import { MODEL_BY_TIER } from '../phase-agent.ts';
 
 const ROOT = process.cwd();
@@ -67,19 +68,18 @@ test('catalog model ids cover MODEL_BY_TIER (lockstep)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// projects registry
+// projects (auto-discovered from disk — B1)
 // ---------------------------------------------------------------------------
 
-test('projects registry loads and validates clean', () => {
-  const projectsPath = join(ROOT, 'studio/projects.yaml');
-  const reg = loadProjectsRegistry(projectsPath);
-  const findings = validateProjectsRegistry(reg);
-  const errors = findings.filter((f) => f.level === 'error');
+test('disk-discovered projects validate clean (no error-level findings)', () => {
+  const projectsDir = resolveProjectsDir(ROOT);
+  const findings = validateDiscoveredProjects(discoverProjects(projectsDir, ROOT));
+  const errors = findings.filter((f: { level: string }) => f.level === 'error');
 
   assert.deepEqual(
     errors,
     [],
-    `projects registry has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+    `discovered projects have error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
 });
 
