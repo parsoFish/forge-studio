@@ -5,8 +5,9 @@
  * Runs a real forge cycle end-to-end against a managed project and asserts
  * real-cycle OUTCOMES — not synthetic rubrics — then records the run and writes a
  * pass/fail verdict. Two grounds:
- *   - claude-harness (default): the deterministic frozen-SHA corpus — cheap,
- *     repeatable engine regression.
+ *   - mdtoc (default): forge's creds-free out-of-the-box reference project (a
+ *     dependency-light markdown-TOC CLI) — cheap, repeatable, no credentials,
+ *     the routine engine regression.
  *   - the betterado terraform provider (--project terraform-provider-betterado):
  *     the LIVE-ADO tier — a real release-definition feature stood up against a
  *     real Azure DevOps org, the richest proof of forge's actual capability.
@@ -35,7 +36,7 @@
  *   --cost-ceiling <usd>    fail the gate above this total cost (default 25;
  *                           default 40 when --send-back is set, to accommodate
  *                           the extra unifier pass).
- *   --project <name>        managed project to run against (default claude-harness;
+ *   --project <name>        managed project to run against (default mdtoc;
  *                           terraform-provider-betterado for the live-ADO tier).
  *   --require-live-evidence force the live-demo-evidence gate on (default: on for
  *                           known live-resource projects). --no-live-evidence opts out.
@@ -78,10 +79,10 @@ function flag(name, def) {
 const TIER = flag('tier', 'routine');
 const BASE_SHA = flag('base-sha', null);
 const SEND_BACK = argv.includes('--send-back');
-const PROJECT = flag('project', 'claude-harness');
+const PROJECT = flag('project', 'mdtoc');
 // Live-resource projects (e.g. the betterado terraform provider stands up real
-// Azure DevOps resources) run longer + cost more than the deterministic
-// claude-harness corpus, so they get a higher default ceiling — still overridable.
+// Azure DevOps resources) run longer + cost more than the creds-free default
+// mdtoc reference project, so they get a higher default ceiling — still overridable.
 const LIVE_PROJECTS = new Set(['terraform-provider-betterado']);
 const IS_LIVE_PROJECT = LIVE_PROJECTS.has(PROJECT);
 // --send-back adds an extra unifier pass; live projects add live-infra cost.
@@ -699,7 +700,7 @@ async function main() {
   } else if (TIER === 'release') {
     const roadmap = IS_LIVE_PROJECT
       ? 'docs/planning/2026-06-03-betterado-release-roadmap.md'
-      : 'docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md';
+      : 'projects/mdtoc/roadmap.md';
     log(`release tier: greenfield rebuild — drive the roadmap by invoking the runner per initiative in order (${roadmap}).`);
   }
 
