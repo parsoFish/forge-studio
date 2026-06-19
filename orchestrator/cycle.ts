@@ -504,6 +504,28 @@ const CI_FIX_TIMEOUT_MS = 5 * 60_000;
 const CI_GATE_TIMEOUT_MS = 20 * 60_000;
 
 /**
+ * Resolve the CI command timeout (ms). The defaults (5 min fix / 20 min gate)
+ * can be raised per-run via env for heavy gates — e.g. a cold whole-module Go
+ * compile after a large dependency addition (terraform-plugin-framework + mux)
+ * can exceed 20 min on a cold build cache, which would SIGTERM a passing gate
+ * mid-run. Overriding lets one heavy migration run carry more headroom without
+ * changing the default for every cycle:
+ *   FORGE_CI_GATE_TIMEOUT_MS — overrides the 'gate' timeout
+ *   FORGE_CI_FIX_TIMEOUT_MS  — overrides the 'fix' timeout
+ * A non-numeric / non-positive value is ignored (falls back to the default).
+ * Exported for unit testing.
+ */
+export function resolveCiTimeoutMs(kind: 'fix' | 'gate'): number {
+  const def = kind === 'fix' ? CI_FIX_TIMEOUT_MS : CI_GATE_TIMEOUT_MS;
+  const raw = process.env[kind === 'fix' ? 'FORGE_CI_FIX_TIMEOUT_MS' : 'FORGE_CI_GATE_TIMEOUT_MS'];
+  if (raw !== undefined && raw.trim() !== '') {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return def;
+}
+
+/**
  * Production command runner. Runs the vector DIRECTLY via `execFileSync`
  * (`["bash","-c","…&&…"]` is run as `bash -c …`) — deliberately NOT routed
  * through the per-WI gate runner (runShellGate / gateIsShellPipeline), whose
@@ -519,7 +541,7 @@ export function execCommandVector(
   unsetEnv?: string[],
 ): CiCommandResult {
   const [head, ...rest] = cmd;
-  const timeout = kind === 'fix' ? CI_FIX_TIMEOUT_MS : CI_GATE_TIMEOUT_MS;
+  const timeout = resolveCiTimeoutMs(kind);
   // A3 (2026-06-06): strip the project's declared live-test triggers (e.g.
   // `TF_ACC`) so the CI delivery gate mirrors GitHub CI even when the serve
   // env set them for the per-WI live-acceptance gates. No list ⇒ inherit env.

@@ -18,6 +18,7 @@ import {
   execCommandVector,
   recordBrainGateResult,
   resolveCostCeilingOverride,
+  resolveCiTimeoutMs,
   runCycle,
   snapshotCycleArtefacts,
   type CiCommandRunner,
@@ -99,6 +100,35 @@ test('resolveCostCeilingOverride: undefined when neither env nor manifest set; b
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
+  }
+});
+
+// ----- resolveCiTimeoutMs (env-overridable CI gate/fix timeouts) -----
+
+test('resolveCiTimeoutMs: defaults are 20min gate / 5min fix', () => {
+  const prevG = process.env.FORGE_CI_GATE_TIMEOUT_MS, prevF = process.env.FORGE_CI_FIX_TIMEOUT_MS;
+  delete process.env.FORGE_CI_GATE_TIMEOUT_MS; delete process.env.FORGE_CI_FIX_TIMEOUT_MS;
+  try {
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+    assert.equal(resolveCiTimeoutMs('fix'), 5 * 60_000);
+  } finally {
+    if (prevG !== undefined) process.env.FORGE_CI_GATE_TIMEOUT_MS = prevG;
+    if (prevF !== undefined) process.env.FORGE_CI_FIX_TIMEOUT_MS = prevF;
+  }
+});
+
+test('resolveCiTimeoutMs: env overrides the gate timeout; bad values ignored', () => {
+  const prev = process.env.FORGE_CI_GATE_TIMEOUT_MS;
+  try {
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = '2400000';
+    assert.equal(resolveCiTimeoutMs('gate'), 2_400_000);
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = 'nope';
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = '-1';
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+  } finally {
+    if (prev === undefined) delete process.env.FORGE_CI_GATE_TIMEOUT_MS;
+    else process.env.FORGE_CI_GATE_TIMEOUT_MS = prev;
   }
 });
 
