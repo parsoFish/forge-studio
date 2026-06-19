@@ -148,7 +148,7 @@ export async function handleStudioWriteRoutes(
           ? (rawRt as Record<string, unknown>)
           : {};
       const runtime = {
-        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude-code'),
+        sdk: typeof rtIn['sdk'] === 'string' ? rtIn['sdk'] : (existing?.runtime.sdk ?? 'claude'),
         strategy: (['fixed', 'range'] as const).includes(rtIn['strategy'] as 'fixed' | 'range')
           ? (rtIn['strategy'] as 'fixed' | 'range')
           : (existing?.runtime.strategy ?? 'fixed'),
