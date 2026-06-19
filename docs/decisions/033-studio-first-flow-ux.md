@@ -4,7 +4,7 @@
 
 **Relates to:** ADR-027 (studio object model), ADR-028 (flow engine), ADR-031
 (Studio is the product). Realises the install-to-first-flow north star;
-campaign plan in `docs/superpowers/specs/2026-06-16-studio-first-flow-ux.md`.
+campaign plan in [`../reference/studio-first-flow-ux.md`](../reference/studio-first-flow-ux.md).
 
 ## Context
 
@@ -34,7 +34,8 @@ provable results at each step.
    skill. (The CLI/skill paths remain for automation and recovery.)
 
 2. **Project onboarding moves into the UI.** A guided "New Project" flow registers
-   a project (`studio/projects.yaml` + `.forge/project.json`) and must satisfy the
+   a project by writing its `.forge/project.json` (the project is then
+   auto-discovered from disk — there is no registry file) and must satisfy the
    same invariants the `forge-onboard-project` skill enforces
    (`docs/forge-project-contract.md`). The validation is **reused, not forked** —
    advanced contract clauses (C7 live-tier, standing ACs, ci-gate) live behind

@@ -17,10 +17,11 @@
 > `closure.ts` is the single terminal-move authority; (d) **Forge Studio is the
 > sole operator surface** ([ADR 031](./docs/decisions/031-studio-consolidation.md)
 > — architect runs natively in Studio; review/reflect render
-> on the unified `/artifact` viewer); (e) **three swappable seams are real and
+> on the unified `/artifact` viewer); (e) **the swappable seams are real and
 > used in production** ([ADR 032](./docs/decisions/032-subsumption-proof.md)):
-> runtime adapter registry, KbBackend, and the unifier as an independently-
-> dispatchable flow node — each with a second implementation shipped.
+> runtime adapter registry, the KbBackend seam (filesystem-only today), and the
+> unifier as an independently-dispatchable flow node — the **runtime adapter**
+> seam carries a second implementation shipped.
 
 ## Overview
 
@@ -58,10 +59,10 @@ flowchart TB
         RFL["reflector<br/>node kind: reflect"]
     end
 
-    subgraph SEAMS["Three swappable seams · ADR 032"]
+    subgraph SEAMS["Swappable seams · ADR 032"]
         direction LR
         RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>loops/_adapters/registry.ts"]
-        KB["KbBackend<br/>FilesystemKbBackend (live)<br/>ZepKbBackend · orchestrator/kb-backends/"]
+        KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>orchestrator/kb-backend.ts"]
         FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via nodeExecutors"]
     end
 
@@ -108,8 +109,9 @@ The same flow in one line (terminal-friendly fallback): the operator works only
 on **Forge Studio** (`forge studio`; architect → review/reflect on `/artifact`);
 the **flow engine** walks a YAML DAG dispatching nodes through a **registry** (no
 switch); agents are created via `getAdapter(sdkId).createAgent` (runtime adapter
-seam); the brain's store is behind a swappable `KbBackend`; the **brain** is
-read by planners + reflector and written by the reflector.
+seam — the seam that carries a second implementation); the brain's store is behind
+a `KbBackend` seam (filesystem-only today); the **brain** is read by planners +
+reflector and written by the reflector.
 
 ```
 operator ─(Studio only)─► ① architect ─INIT-*.md─► [orchestrator: load flow.yaml → runFlow]
@@ -231,7 +233,7 @@ The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orche
 
 Cap: fixed at ≤2 send-back rounds (iteration cap removed from the reviewer when `computeAdaptiveReviewIterationCap` was deleted with the Ralph reviewer in S4). There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
-The review human moment is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [ADR 031](./docs/decisions/031-studio-consolidation.md), amending ADR 023). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
+The review human moment is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [ADR 031](./docs/decisions/031-studio-consolidation.md)). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
 
 ### 6. Reflection *(human-in-the-loop, then unattended ingest)*
 
@@ -282,7 +284,7 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 ### Phase isolation & quality
 
-> Note (2026-05-25): the synthetic per-phase benchmark suites under `benchmarks/` were removed. They had begun teaching the phases toward the bench shape rather than measuring real outcomes. Phase quality is now judged on real merged cycles — brain themes accumulate the evidence. The phase-isolation decision itself (ADR 005) stands; only the benchmark realization was retired.
+> Note (2026-05-25): the synthetic per-phase benchmark suites under `benchmarks/` were removed. They had begun teaching the phases toward the bench shape rather than measuring real outcomes. Phase quality is now judged on real merged cycles — brain themes accumulate the evidence. The real-capability harness ([ADR 022](./docs/decisions/022-real-capability-harness.md)) is what asserts real-cycle outcomes now; only the synthetic benchmark realization was retired.
 
 ### Flow engine + node-executor registry (ADR 028)
 
@@ -298,17 +300,21 @@ The six built-in executors:
 
 Budget helpers (`orchestrator/flow-budgets.ts`): `CostTracker` (cost-ceiling check at every clean node boundary), `WedgeDetector` (per-node heartbeat/progress watch, race via `raceWithWedge`), `RateLimitGate` (gates spawn on rate-limit backoff).
 
-### Three swappable seams (ADR 032)
+### Swappable seams (ADR 032)
 
-M8 shipped a **second implementation behind each seam**, making the subsumption claim mechanically true. All second impls are DEP+CREDS-GATED (`available:false` until provisioned).
+The seams are declarative data over interfaces. The **runtime adapter** seam ships a
+**second implementation** behind it, making the subsumption claim mechanically true; the
+second impls are DEP+CREDS-GATED (`available:false` until provisioned). The **KbBackend**
+seam is present but **filesystem-only** (one impl, `FilesystemKbBackend`); the **flow
+engine** is registry-driven (any node type is a data-table entry).
 
-| Seam | Interface / registry | 1st impl (live) | 2nd impl (DEP-gated) |
+| Seam | Interface / registry | 1st impl (live) | 2nd impl |
 |---|---|---|---|
-| **Runtime adapter** (ADR 029) | `RuntimeAdapter` · `loops/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) |
-| **KbBackend** (ADR 027) | `KbBackend` · `orchestrator/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | `ZepKbBackend` (`orchestrator/kb-backends/zep.ts`) |
-| **Dev-loop runtime** | via RuntimeAdapter seam | Ralph + Claude Agent SDK | Aider CLI via `aiderAdapter` |
+| **Runtime adapter** (ADR 029) | `RuntimeAdapter` · `loops/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) — DEP-gated |
+| **KbBackend** (ADR 027) | `KbBackend` · `orchestrator/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
+| **Dev-loop runtime** | via RuntimeAdapter seam | Ralph + Claude Agent SDK | Aider CLI via `aiderAdapter` — DEP-gated |
 
-The closure is `orchestrator/subsumption-proof.test.ts`: asserts every seam resolves ≥2 non-default implementations simultaneously.
+The closure is `orchestrator/subsumption-proof.test.ts`: asserts the runtime adapter seam resolves a second implementation.
 
 Cycle helpers extracted to `orchestrator/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`.
 

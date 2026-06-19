@@ -49,6 +49,27 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
   writes a `verdict-response.md` that review-Ralph reads into `fix_plan.md`
   the next iteration and re-prepares. Cap: 2 rounds.
 
+## Release final-loop (contract C10 — advisory; only when the project declares `releaseProcess`)
+
+For a project that declares a `releaseProcess` block in `.forge/project.json`,
+a **release-finalizer** step ([`skills/release-finalizer/SKILL.md`](../../skills/release-finalizer/SKILL.md),
+`orchestrator/phases/release-finalize.ts`) sits **between operator-approve and
+the merge**:
+
+1. In-cycle, the unifier authors a **draft** changelog entry under
+   `## [Unreleased]` (a standing per-WI AC); the draft is what ships in the PR.
+2. **On approve**, before forge merges, the release-finalizer runs **on the PR
+   branch**: it computes the semver bump, promotes the draft to a versioned
+   `## [X.Y.Z] - <date>` entry, runs the declared `pre-merge` steps (doc
+   regeneration, version-file bump), then commits + pushes.
+3. The **existing merge** (closure path above) then runs against the finalised
+   branch; a release CI workflow ships the actual release on merge.
+
+Failure is **log-and-continue**: a thrown finalizer surfaces
+`release_status: 'failed'` as telemetry but does NOT block the merge — the
+in-cycle DRAFT changelog is the fallback. A project that omits `releaseProcess`
+skips this entirely (the phase no-ops with `release_status: 'skipped'`).
+
 ## Skills
 
 - [`skills/developer-unifier/SKILL.md`](../../skills/developer-unifier/SKILL.md) — the unifier sub-phase that owns the review-prep iteration (post-S4 collapse; the dedicated `skills/reviewer/` was archived 2026-05-23).
@@ -60,21 +81,11 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
 - **Send-back resolution iterations:** when sent back, ≤2 further developer-loop passes resolve.
 - **PR description quality:** PR explains the why (initiative goal, key decisions), not just the what.
 
-## Benchmark suite
-
-> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
-
-The per-phase `benchmarks/review-loop/` was archived 2026-05-23 (S4) when the reviewer collapsed into the developer-loop unifier. Review behaviour was then regressed (until the 2026-05-25 benchmark removal) via:
-
-- `benchmarks/e2e/` — full cycle (PM → dev-loop → unifier → merge) with a human-simulator providing verdicts.
-- `benchmarks/developer-loop/` — extended with unifier criteria (`artifact`/`harness` fixtures).
-- `benchmarks/review-router/` — 6 deterministic mock-`gh` fixtures for the PR-comment poller.
-
 ## Known failure modes (to defend against)
 
 - **Demo doesn't actually work** — pre-review checklist must include running the demo script in the worktree.
-- **PR description is what-not-why** — explicit prompt rule (formerly also a benchmark check; benchmarks removed 2026-05-25).
-- **Squash-merge stacked PRs** — explicitly forbidden (v1 lesson, in the brain). Use layered merge order.
+- **PR description is what-not-why** — explicit prompt rule.
+- **Squash-merge stacked PRs** — explicitly forbidden (lesson in the brain). Use layered merge order.
 - **Stale demo capture** — the demo must capture *this* branch's build, never a stray/ambient dev server (`reuseExistingServer: true` latching the wrong app silently). The reviewer mandates an isolated strict-port server / built `preview`; pattern of record: [`brain/cycles/themes/pr-as-sole-review-window.md`](../../brain/cycles/themes/pr-as-sole-review-window.md).
 - **Reviewer never reaches the verdict gate** — historically a too-tight per-iteration $/turn budget cut every iteration before a verdict (0 verdicts, mislabelled send-back-cap). Those guards were removed; the loop is bounded only by the iteration cap.
 
@@ -83,10 +94,8 @@ The per-phase `benchmarks/review-loop/` was archived 2026-05-23 (S4) when the re
 Closed end-to-end. The send-back loop, demo-embedded self-contained PR,
 visibility-aware demo commit, and closure-as-single-mover are all
 implemented (Phase-6 redesign + the 2026-05-18 operator-review
-reliability pass + the 2026-05-23 S4 unifier collapse). The loop was
-formerly exercised by the e2e + developer-loop benches (removed
-2026-05-25; see *Benchmark suite* above); it is now exercised by real
-merged cycles.
+reliability pass + the 2026-05-23 S4 unifier collapse). The loop is
+exercised by real merged cycles.
 
 **2026-05-18 P2/P3 (unit-tested; not yet exercised against a live cycle):**
 - **PR at end of review iteration 1, not on approve.** The gate ensures
@@ -98,8 +107,8 @@ merged cycles.
   with the file-verdict provider as a fallback when no PR can be created
   (no remote / gh down) — never strands. *(Historical — [ADR 031](../decisions/031-studio-consolidation.md)
   retired the PR-comment + CLI verdict ingress; `pr-verdict.ts` is deleted and
-  the verdict now arrives solely from the `/review/<cycleId>` UI screen as a
-  `verdict-response.md`.)*
+  the verdict now arrives solely from the unified `/artifact?...&mode=review`
+  Studio surface as a `verdict-response.md`.)*
 - **P2 mechanical integrity gate:** a WI marked `complete` whose declared
   `files_in_scope` are entirely absent from the branch diff auto-sends-
   back into the loop WITHOUT consuming a human verdict round

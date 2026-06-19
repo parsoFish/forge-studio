@@ -1,8 +1,8 @@
 # ADR 028 — Definition-driven flow engine
 
-**Status:** Accepted — 2026-06-13. Implementation staged per
-[`docs/forge-studio/roadmap.md`](../forge-studio/roadmap.md) (M1 run model,
-M3 engine + cutover). Amends ADR 011 (queue serves flow runs), ADR 019
+**Status:** Accepted — 2026-06-13. Implementation staged across the M1 run
+model and the M3 engine + cutover (milestone plans now in git history).
+Amends ADR 011 (queue serves flow runs), ADR 019
 (resume points become `resumable` node flags), ADR 026 (gate send-back
 generalised). Generalises the human moments of ADR 020/021/031 into declared
 gates. The forge cycle's behaviour is preserved bit-for-bit; ADR 022's
@@ -12,8 +12,7 @@ harness is the cutover oracle.
 
 `orchestrator/cycle.ts` hardcodes PM → dev-loop → unifier → PR → closure →
 reflector. Studio requires arbitrary operator-authored flows. The brain
-binds twelve hard constraints on any such engine (see
-`docs/forge-studio/README.md` §non-negotiables) — most critically: human
+binds twelve hard constraints on any such engine — most critically: human
 gates are structural, gates are orchestrator-verified, the system never
 self-modifies while running, and resume never discards work.
 

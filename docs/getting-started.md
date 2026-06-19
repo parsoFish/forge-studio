@@ -142,7 +142,7 @@ When the cycle finishes, forge produces a **self-contained, demo-embedded PR**
 and stops. This is the second human moment: inspect the PR's demo (real evidence
 — an API response, a rendered page, plan output — not a table of test names),
 then either **approve** (merge it in GitHub) or **send it back** from the
-`/review/<cycleId>` screen in Studio.
+unified `/artifact/<cycleId>` viewer in Studio.
 
 Merging fires **closure**, which runs the third human moment — **reflection** —
 where the reflector asks its questions and writes brain themes + a retro + the

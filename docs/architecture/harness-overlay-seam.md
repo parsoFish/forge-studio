@@ -1,8 +1,8 @@
 # Harness-overlay seam (parked) — 2026-06-07
 
-> Decision **D1** of the [2026-06-07 simplification review](./2026-06-07-simplification-review.md):
-> the harness-overlay (running forge phases against an operator's **interactive
-> `claude` session** instead of spawning the Claude Agent SDK) is **PARKED**. The
+> The harness-overlay (running forge phases against an operator's **interactive
+> `claude` session** instead of spawning the Claude Agent SDK) is **PARKED** — its
+> transport channel is parked alongside [ADR 025](../decisions/025-live-observability.md). The
 > injection seam it would use is already clean, documented here, and exercised by
 > tests — so building the overlay later is additive, not a refactor. This doc is
 > the single place a future implementer starts.

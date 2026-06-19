@@ -1,0 +1,48 @@
+# Forge Studio Documentation
+
+Forge Studio is a visual SWE pipeline that develops your projects autonomously between a few human moments. This index splits the docs into two audiences. If you only want to **run forge on your own project**, read the *Using Forge Studio* set. If you want to understand or change **how forge is built**, read the *Developing Forge Studio* set.
+
+---
+
+## Using Forge Studio (operators)
+
+| Doc | What it covers |
+|-----|----------------|
+| [Getting started](./getting-started.md) | Install → onboard a project → first merged PR. Projects are auto-discovered from disk — there is no registry file to edit. |
+| [Project contract](./forge-project-contract.md) | The forge↔project contract every managed repo must satisfy (acceptance tiers, demo shapes, the C10 release final-loop). The SSOT. |
+| [Operator journey](./operator-journey.md) | The AUTHOR / RUN / SWAP narrative — what Studio actually does end to end. |
+| [Product vision](./product/minimum-viable-user-story.md) | The canonical user story: idea → autonomous build → review → release → reflect. |
+| [What makes it different](./forge-studio-market-and-differentiation.md) | Positioning and competitive analysis. |
+| [Licensing & dependencies](./licensing-and-dependencies.md) | What AGPL-3.0 means for you, plus the dependency audit. |
+| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference schema for a project's config, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
+
+The human moments: **architect interview** (shape the work), **review verdict** (approve / send back), and **release approve** (sign off the changelog before forge merges). Everything between runs unattended.
+
+---
+
+## Developing Forge Studio (contributors)
+
+**Orientation**
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — narrative as-built architecture (repo root).
+- [PRINCIPLES.md](../PRINCIPLES.md) — the five non-negotiable principles (repo root).
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — build/test gates and how to extend forge (repo root).
+- [Architecture overview](./architecture/overview.md) — internal index into phases, decisions, and the contract.
+
+**Decisions**
+- [ADR index](./decisions/README.md) — every load-bearing choice plus the retirement ledger.
+
+**Phases** (purpose + success signals)
+- [architect](./phases/architect.md) · [brain](./phases/brain.md) · [project-manager](./phases/project-manager.md) · [developer-loop](./phases/developer-loop.md) · [review-loop](./phases/review-loop.md) · [reflection](./phases/reflection.md)
+
+**Seams & extension**
+- [Extending forge](./extending-forge.md) — add a runtime adapter, flow, or skill.
+- [Harness-overlay seam](./architecture/harness-overlay-seam.md) — the parked injection seam.
+
+**Operations & backlog**
+- [Serve supervision](./operations/serve-supervision.md) — running `forge serve` under a supervisor.
+- [Known gaps](./known-gaps.md) — the open hardening backlog (internal).
+- [Investigations](./investigations/) · [UX reference](./reference/studio-first-flow-ux.md)
+
+---
+
+*Historical milestone plans, completed roadmaps, and one-shot review reports have been removed; they live in git history. Durable lessons live in the brain (`brain/forge-dev/themes/`) and the ADRs.*

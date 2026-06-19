@@ -8,7 +8,7 @@ After an initiative is merged, run a four-stage retrospective:
 
 1. **Agentic self-reflection (unattended)** — the agent reviews its own performance from the JSONL event log.
 2. **Agent-prompted user questions (file-based handoff)** — the agent writes structured questions into `_logs/<cycle-id>/user-questions.md`.
-3. **Pure user feedback (file-based handoff)** — the agent reads `_logs/<cycle-id>/user-feedback.md` (populated by a human in production; was formerly pre-populated by the bench simulator, removed 2026-05-25).
+3. **Pure user feedback (file-based handoff)** — the agent reads `_logs/<cycle-id>/user-feedback.md` (populated by a human in production; absent in unattended-only runs, in which case the stage is a no-op).
 4. **Brain writes (unattended)** — direct file writes of theme markdown + cycle archive.
 
 All four feed the brain by direct file writes, which is what makes forge improve cycle-over-cycle. The `brain-ingest` sub-skill is not invoked in this closure pass; a future closure may switch to it.
@@ -17,7 +17,7 @@ All four feed the brain by direct file writes, which is what makes forge improve
 
 - `_logs/<cycle-id>/events.jsonl` (the full cycle log).
 - `_logs/<cycle-id>/brain-gaps.jsonl` (questions the brain couldn't answer during the cycle; may be empty).
-- `_logs/<cycle-id>/user-feedback.md` (pre-populated; missing in unattended-only runs).
+- `_logs/<cycle-id>/user-feedback.md` (human-populated in production; missing in unattended-only runs).
 - The merged project tree (`projects/<name>/`).
 - Brain knowledge (prior retros, established patterns).
 
@@ -55,10 +55,17 @@ The reflector does NOT move the manifest to `_queue/done/`. The reviewer already
 - **Themes labelled `pattern` despite send-backs** — the skill contract requires ≥ 1 `category: antipattern` theme when the events.jsonl contains any wedge or send-back signal.
 - **Missing user questions** — the Studio `/artifact` viewer (formerly `/reflect`) shows nothing if `user-questions.json` is absent. The orchestrator now derives it post-exit from `user-questions.md`.
 
+## Order relative to the release final-loop (C10)
+
+Reflection is the **last** stage of a cycle and fires **post-merge**. The
+release-finalizer (contract C10, review-loop doc) runs **earlier** — between
+operator-approve and the merge — so by the time reflection runs the release is
+already finalised + merged. Reflection does not interact with the release flow;
+it only reads the merged tree + the event log.
+
 ## TODO (post-scaffold)
 
 - [x] Define the retro.md template (three structural sections; rendered via `renderReflectorUserPrompt`).
-- [x] ~~Populate `benchmarks/reflection/fixtures/`~~ — benchmarks removed 2026-05-25 (see [ADR-022](../decisions/022-real-capability-harness.md)); real-cycle quality signal takes over.
 - [x] Wire `orchestrator/cycle.ts:runReflector()` end-to-end (real SDK invocation; log-and-continue failure mode).
 - [ ] Future: orchestrator gate that blocks scheduler from queueing new initiatives for a project whose last N reflections failed.
 - [ ] Future: stdin / CLI transport for stages 2 + 3 in production (currently file-based only).

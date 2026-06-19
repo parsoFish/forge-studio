@@ -1,4 +1,4 @@
-# ADR 022 — claude-harness as forge's standing real-capability regression harness
+# ADR 022 — a neutral reference project as forge's standing real-capability regression harness
 
 - **Status:** accepted
 - **Date:** 2026-05-30
@@ -21,13 +21,11 @@ opposite of the intent." The closing note promised benches would be "rebuilt
 later, anchored on actual past successful cycle artifacts rather than
 hand-curated fixtures."
 
-Since then the `claude-harness` project (the `claude-trail` CLI at
-`projects/claude-harness/`) has, as a side effect of being forge's dogfood
-target, become exactly that: a real repository that forge cycles run against
-end-to-end. It is a zero-runtime-dependency TypeScript CLI
-(`node --experimental-strip-types`, `node:test`) — ~203 tests green across ~12
-real cycles. Crucially, running forge against it has surfaced **real forge
-defects that unit tests and the old synthetic benches never caught**:
+A small, creds-free, zero-runtime-dependency reference project (`projects/mdtoc`,
+a TypeScript CLI on `node:test`) is exactly that: a real repository that forge
+cycles run against end-to-end. Running forge against an arm's-length real repo
+of this kind has surfaced **real forge defects that unit tests and the old
+synthetic benches never caught**:
 
 - a hardcoded `main...HEAD` gate diff that broke on master-default repos;
 - no-origin-remote assumptions in closure;
@@ -43,20 +41,25 @@ These are *system* behaviours. No phase-isolated synthetic fixture would have
 produced them, because they live in the seams between phases and in the
 real-repo edge cases (default branch name, remote presence, resume state).
 
-The corpus to drive this already exists and is greppable:
+The corpus to drive this is the set of closed initiative manifests in
+`_queue/done/` and their reflection archives under `brain/cycles/_raw/`, which
+are greppable and reused as regression cases.
 
-- 10 closed initiative manifests at
-  `_queue/done/INIT-2026-05-2*-claude-trail-*.md`;
-- 8 reflection archives at `brain/cycles/_raw/*claude-trail*.md`;
-- the abandoned betterado dogfood arc at
-  `brain/cycles/_raw/2026-05-23_betterado-init01-dogfood-abandoned-arc.md`
-  (the negative example: a real project is too costly/taste-driven to be the
-  *routine* regression target — which is why `claude-harness` exists).
+> **Historical note.** The original real-capability target was the `claude-harness`
+> project (the `claude-trail` CLI), forge's first dogfood repo — ~200 tests green
+> across ~12 real cycles, with a corpus of `claude-trail` manifests + reflection
+> archives. It has since been retired from the tree; `projects/mdtoc` is the
+> neutral, creds-free default corpus that replaces it. The abandoned 2026-05-23
+> betterado dogfood arc was the negative example that motivated an arm's-length
+> regression target in the first place (a real operator project is too
+> costly/taste-driven to be the *routine* target). The mechanism below is
+> unchanged by the corpus swap.
 
 ## Decision
 
-**`claude-harness` is forge's standing real-capability regression harness.** It
-is the gate forge passes before being pointed at a real operator project.
+**A neutral reference project (`projects/mdtoc`) is forge's standing
+real-capability regression harness; betterado is the live tier.** It is the gate
+forge passes before being pointed at a real operator project.
 
 **1. It asserts real-cycle OUTCOMES, not synthetic rubrics.** This is the line
 that keeps it out of the 2026-05-25 trap. A harness run asserts only
@@ -64,9 +67,10 @@ observable, binary, system-level outcomes:
 
 - the cycle reached `pr-open` / merge (not abandoned, not wedged);
 - the dev-loop completed N/N work items (no `complete:0, failed:N`);
-- the project's own `npm test` is green **post-merge** on the harness repo;
-- the golden trail files (`*.trail.golden.md`) the cycle should produce are
-  present and match byte-for-byte;
+- the project's own quality gate (e.g. `npm test`) is green **post-merge** on
+  the harness repo;
+- the demo/acceptance evidence the cycle should produce is present (for the live
+  tier, a real REST GET round-trip — `liveEvidence.url` — not a test-name table);
 - total cycle cost is under a declared ceiling.
 
 It does **not** score token-level agent behaviour, prose quality, or any
@@ -79,13 +83,13 @@ occasional to a codified gate.
 
 **2. Mode is TIERED.**
 
-- **Routine tier — frozen-SHA-per-initiative.** Reset the `claude-harness` repo
-  to a known base SHA, re-run *one* initiative from the corpus, assert its
-  outcomes. Cheap, low-flake (one cycle, deterministic base, one golden set).
-  This is the everyday verification.
-- **Release tier — full greenfield rebuild.** Run initiatives 1→5 from an empty
-  repo (the roadmap below), reconstructing `claude-trail` from scratch. Reserved
-  for major forge releases — expensive, exercises the whole pipeline including
+- **Routine tier — frozen-SHA-per-initiative.** Reset the reference repo
+  (`projects/mdtoc`) to a known base SHA, re-run *one* initiative from the corpus,
+  assert its outcomes. Cheap, low-flake (one cycle, deterministic base, one golden
+  set). This is the everyday verification.
+- **Release tier — full greenfield rebuild.** Run a full initiative sequence from
+  an empty repo, reconstructing the reference project from scratch. Reserved for
+  major forge releases — expensive, exercises the whole pipeline including
   scaffold-from-nothing and cross-cycle dependency ordering.
 
 **3. Trigger is a MANUAL GATE.** Operator-initiated. It runs as the gate *before
@@ -98,10 +102,9 @@ is the pre-flight assurance, not continuous noise.
 runner code). The runner's **contract** is:
 
 - **Inputs:**
-  - an initiative manifest drawn from the corpus
-    (`_queue/done/INIT-...-claude-trail-*.md`);
-  - a base SHA for the `claude-harness` repo (routine tier) **or** the
-    empty-repo marker (release tier);
+  - an initiative manifest drawn from the corpus (`_queue/done/INIT-...*.md`);
+  - a base SHA for the reference repo (routine tier) **or** the empty-repo marker
+    (release tier);
   - the tier selector (`routine` | `release`);
   - the cost ceiling for the run.
 - **Behaviour:** reset the harness repo to the base SHA (routine) or init empty
@@ -121,8 +124,8 @@ runner code). The runner's **contract** is:
   a "can it still ship a correct, cheap cycle against a real repo?" check that is
   outcome-only, so phases can't overfit it.
 - **The corpus is the test suite.** Closed manifests + reflection archives are
-  reused as regression cases; new cycles extend the corpus naturally (the
-  roadmap initiatives double as cases — see the ROADMAP).
+  reused as regression cases; new cycles extend the corpus naturally (each new
+  initiative the reference project ships doubles as a case).
 - **Cheap by default, thorough on demand.** Routine frozen-SHA runs are one
   deterministic cycle; the expensive full rebuild is reserved for releases.
 - **No drift from real-world.** Because the target is a real repo with real git
@@ -139,9 +142,11 @@ runner code). The runner's **contract** is:
 - **Rebuild the synthetic per-phase benches.** Rejected — this is precisely the
   2026-05-25 trap (phases overfit the rubric). Outcome-only real cycles avoid it.
 - **Point routine verification at a real operator project (betterado).**
-  Rejected — taste-driven / expensive / mutates the operator's real work; the
-  abandoned betterado dogfood arc is the evidence. The whole point of
-  `claude-harness` is an arm's-length, binary-acceptance target.
+  Rejected as the *routine* target — taste-driven / expensive / mutates the
+  operator's real work; the abandoned betterado dogfood arc is the evidence. The
+  whole point of the neutral reference project is an arm's-length,
+  binary-acceptance target; betterado is kept as the on-demand *live tier* (real
+  external resources, higher ceiling, live REST evidence), not the everyday gate.
 - **CI-on-every-change.** Rejected — real cycles cost money and the value is the
   pre-flight assurance, not continuous signal; a manual gate fits unattended
   operation's economics.

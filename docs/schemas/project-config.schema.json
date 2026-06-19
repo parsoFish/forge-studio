@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://forge/docs/schemas/project-config.schema.json",
   "title": "ProjectConfig",
-  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json. Declares the project's demo shape, quality gate, optional logging knobs, metrics, and sweep plug-ins. The authoritative validator is orchestrator/project-config.ts validateProjectConfig; this schema is the operator-facing reference.",
+  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json. Declares the project's demo shape, quality gate, M2 Studio fields (northStar, instructions, demoProcess, skills, kb, artifactRoot), the release process, and optional acceptance/ci gates, logging knobs, metrics, and sweep plug-ins. The authoritative validator is orchestrator/project-config.ts validateProjectConfig; this schema is the operator-facing reference.",
   "type": "object",
   "required": ["demo", "quality_gate_cmd"],
   "additionalProperties": true,
@@ -83,6 +83,48 @@
           "description": "Env vars that MUST be set for a matching (live-acc) gate to actually run live, e.g. [\"TF_ACC\"]. If a WI's gate matches `match` but one is unset, the dev-loop ERRORS the gate instead of letting a skipped runner (`ok pkg 0.00s`) false-pass. Optional."
         }
       }
+    },
+    "northStar": {
+      "type": "string",
+      "maxLength": 140,
+      "description": "M2 Studio field. One-liner mission statement (≤140 chars) for the project. Flows into the planner's context. Optional."
+    },
+    "instructions": {
+      "type": "string",
+      "description": "M2 Studio field. Free-text standing instructions injected into every PM prompt (generalises standing_work_item_acs into prose guidance). Optional."
+    },
+    "demoProcess": {
+      "type": "array",
+      "description": "M2 Studio field. Typed demo steps the unifier executes — the executed-demo face of the demo contract (demo.shape is the evidence floor). A capture step under demo.shape 'none' is advisory-incoherent (forge preflight warns). Optional.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["capture", "verify", "present"],
+            "description": "capture = record real evidence (output/screenshot/API GET); verify = assert the captured evidence against expectations; present = attach the evidence to the PR."
+          },
+          "text": {
+            "type": "string",
+            "description": "Human-readable description of the demo step."
+          }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "M2 Studio field. Skill slugs bound to this project (project-action recipes, typically under <project>/forge/skills or .forge/skills). Optional."
+    },
+    "kb": {
+      "type": ["string", "null"],
+      "description": "M2 Studio field. KB id bound to this project, or null to explicitly leave it unbound. Optional (absent ⇒ unset)."
+    },
+    "artifactRoot": {
+      "type": "string",
+      "description": "Project-root-relative subdirectory under which the project's COMMITTED forge artifacts live: its Brain 3 (<artifactRoot>/brain/) and development history (<artifactRoot>/history/<initiative-id>/). Must be a clean relative path (no leading slash, no '..'). Default '.' keeps the legacy layout (brain/ at the project root); set e.g. 'forge' for a single visible home. Only affects committed artifacts — runtime scratch is unchanged. Optional."
     },
     "logging": {
       "type": "object",

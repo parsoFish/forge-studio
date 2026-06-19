@@ -30,7 +30,7 @@ npm run ui:journey     # headless end-to-end operator journey (video + DOM asser
 Conventional commits, no exceptions:
 
 ```
-feat: add Zep KbBackend behind the kb seam
+feat: add gemini runtime adapter behind the runtime seam
 fix: unifier exits non-zero when no WI branches found
 refactor: extract cycle helpers to cycle-helpers.ts
 docs: extend ADR-029 with Gemini realization gap
@@ -53,7 +53,7 @@ If your change conflicts with or supersedes a decision in `docs/decisions/`, **u
 The three seams that accept new implementations without touching core orchestration are documented in [`docs/extending-forge.md`](./docs/extending-forge.md):
 
 1. **RuntimeAdapter** — plug in a new LLM SDK or agentic coder (`loops/_adapters/`).
-2. **KbBackend** — swap the brain's storage layer (`orchestrator/kb-backends/`).
+2. **KbBackend** — the brain's storage seam (`orchestrator/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the seam is present for a future second backend.
 3. **Flow** — add a new agent workflow (`studio/flows/`).
 4. **Skill/agent** — define a new phase agent (`skills/`).
 

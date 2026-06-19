@@ -2,7 +2,7 @@
 
 Forge has three pluggable seams. Each seam has a typed interface, a conformance/contract test suite as the admission gate, a registration step, and a `catalog.yaml` entry. The pattern is the same across all three: implement the interface, prove it with the test suite, register it, gate it on dep+creds.
 
-The worked examples are the second implementations that shipped in M8 (ADR-032): Gemini and Aider as RuntimeAdapters, Zep as a KbBackend. Every instruction below has a corresponding file you can diff against.
+The RuntimeAdapter worked examples are the second implementations that shipped in M8 (ADR-032): Gemini and Aider. Every RuntimeAdapter, Flow, and Skill instruction below has a corresponding file you can diff against. The KbBackend seam is **filesystem-only today** — `FilesystemKbBackend` is the sole implementation; the interface is present for a future backend.
 
 ---
 
@@ -146,8 +146,10 @@ New external dependencies are a maintenance liability — per `PRINCIPLES.md`, r
 ## 2. KbBackend — swap the brain's storage layer
 
 **Interface:** `orchestrator/kb-backend.ts`
-**Contract test:** `orchestrator/kb-backends/zep.test.ts` (pattern to mirror)
-**Worked example:** `orchestrator/kb-backends/zep.ts`
+**Reference impl:** `FilesystemKbBackend` (in the same file)
+**Contract test:** `orchestrator/kb-backend.test.ts`
+
+This seam is **filesystem-only today.** `FilesystemKbBackend` is the only implementation — it reads `brain/<kbId>/` from disk by delegating to `kb-graph.ts`. The interface, the contract test, and the `getKbBackend` / `getKbBackendAsync` resolvers are all present so a future graph-memory backend (Mem0/…) can be added without touching call sites — but no second backend ships today.
 
 ### The interface
 
@@ -163,16 +165,14 @@ export interface KbBackend {
 }
 ```
 
-The interface is **synchronous**. When the underlying store is async (like Zep), bridge with a primed snapshot: add an `async prime()` method (not part of the interface) that pulls data from the store into memory, then let the synchronous interface read that snapshot. The bridge calls `await backend.prime()` once at resolve time.
+The interface is **synchronous**. `FilesystemKbBackend.search` does cheap title-substring ranking over the graph; a semantic backend would override it with embedding/graph search. If a future backend's underlying store is **async**, bridge with a primed snapshot: add an `async prime()` method (not part of the interface) that pulls data into memory, then let the synchronous interface read that snapshot, and call `await backend.prime()` once at resolve time (`getKbBackendAsync` is the async resolver kept for exactly this).
 
-`FilesystemKbBackend` in `orchestrator/kb-backend.ts` is the reference implementation (reads `brain/<kbId>/` from disk). `ZepKbBackend` in `orchestrator/kb-backends/zep.ts` is the second implementation — graph/search reads come from Zep; guidance ops delegate back to the composed `FilesystemKbBackend` because Zep has no `_guidance` concept.
-
-### Implementing a new backend
+### Implementing a new backend (the seam, for reference)
 
 ```typescript
-import { FilesystemKbBackend } from '../kb-backend.ts';
-import type { KbBackend, KbSearchHit } from '../kb-backend.ts';
-import type { KbGraph, KbNodeArticle, PendingGuidance } from '../kb-graph.ts';
+import { FilesystemKbBackend } from './kb-backend.ts';
+import type { KbBackend, KbSearchHit } from './kb-backend.ts';
+import type { KbGraph, KbNodeArticle, PendingGuidance } from './kb-graph.ts';
 
 export class MyKbBackend implements KbBackend {
   readonly kbId: string;
@@ -183,7 +183,7 @@ export class MyKbBackend implements KbBackend {
     this.fsBackend = new FilesystemKbBackend(opts.forgeRoot, opts.kbId);
   }
 
-  // async escape hatch — NOT on the interface
+  // async escape hatch — NOT on the interface; called by getKbBackendAsync
   async prime(): Promise<void> { /* fetch from your store, cache in memory */ }
 
   buildGraph(): KbGraph         { /* return cached snapshot */ return { nodes: [], edges: [] }; }
@@ -194,17 +194,19 @@ export class MyKbBackend implements KbBackend {
 }
 ```
 
-**Dep + creds gating** follows the same string-variable import pattern as RuntimeAdapter. See `zep.ts` — `ZEP_PACKAGE`, `isZepAvailable`, `createZepGraphClient`.
+Delegating guidance ops (`listPendingGuidance` / `deleteGuidanceFile`) to a composed `FilesystemKbBackend` is the expected pattern — `_guidance` is a filesystem concept a remote store has no equivalent for.
 
-**Contract test** — write a test that constructs your backend with an injected fake client (no live dep, no network) and asserts each interface method returns the right shape. Mirror the structure of `orchestrator/kb-backends/zep.test.ts`.
+**Dep + creds gating** follows the same string-variable import pattern as RuntimeAdapter (§1): import the package through a string variable so `tsc` never resolves an absent module, then set an `available`-style flag at module load.
 
-**Routing** — `getKbBackend(forgeRoot, kbId)` in `orchestrator/kb-backend.ts` is the resolution entry point. It currently always returns `FilesystemKbBackend`. To route to your backend, add a `backend:` field to the `kb.yaml` descriptor for a given KB and add a dispatch branch in `getKbBackend`. The hook point is already noted in the source:
+**Contract test** — write a test that constructs your backend with an injected fake client (no live dep, no network) and asserts each interface method returns the right shape. Mirror `orchestrator/kb-backend.test.ts`.
+
+**Routing** — `getKbBackend(forgeRoot, kbId)` / `getKbBackendAsync(...)` in `orchestrator/kb-backend.ts` are the resolution entry points. Both always return `FilesystemKbBackend` today. To route to a new backend, add a `backend:` field to the KB's `kb.yaml` descriptor and add a dispatch branch in the resolver:
 
 ```typescript
 // orchestrator/kb-backend.ts: getKbBackend()
-// Round-trips the descriptor (validates it parses) and is the hook point where
-// a `backend:` field would select a non-FS implementation (M8-C).
-loadKbDescriptor(kbYamlPath);
+const kbYamlPath = join(resolve(forgeRoot, 'brain', kbId), 'kb.yaml');
+if (!existsSync(kbYamlPath)) throw new Error(`Unknown kbId: "${kbId}" …`);
+// future hook: read kb.yaml `backend:` here and dispatch to a non-FS impl.
 return new FilesystemKbBackend(forgeRoot, kbId);
 ```
 

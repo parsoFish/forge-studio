@@ -67,6 +67,8 @@ Each subsumption point is an existing socket, not a hypothetical:
 
 The commodity findings from the scorecard (§4: defs-as-data, runtime-agnosticism, cost routing are all available elsewhere) are **re-read here as enablers**: ubiquitous, well-understood primitives are exactly what make a clean integration seam possible.
 
+> **Accuracy caveat (as-built):** the *proven* subsumption socket today is the **runtime adapter** (the SDK is threaded through and the gemini / aider adapters drop in). The **memory / knowledge** row is aspirational — the KB-backend swap was scoped to **filesystem-only**, so "the backend is swappable" describes the seam's design, not a shipped second backend. Read the table as architecture-validated seams, with the runtime adapter as the one currently exercised.
+
 ### 3.3 Alignment with the founding principle
 
 This is not a new direction — it is the original thesis made explicit. PRINCIPLES.md #1: *"I think my idea is powerful in hanging other powerful ideas together, not in building the entire thing from scratch."* The modularity-as-subsumption strategy is that principle applied to the market: **don't beat Devin/Mem0/Cursor at their game — orchestrate them under a layer they don't have.**
