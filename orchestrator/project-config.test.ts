@@ -16,6 +16,7 @@ import {
   loadProjectConfig,
   PROJECT_CONFIG_REL_PATH,
   validateProjectConfig,
+  demoProcessCoherenceWarning,
 } from './project-config.ts';
 
 function newTempDir(): string {
@@ -394,6 +395,52 @@ test('validateProjectConfig: demoProcess must be an array when present', () => {
       }),
     /demoProcess/,
   );
+});
+
+// ----- E2: demoProcess <-> demo.shape coherence -----
+
+test('demoProcessCoherenceWarning: capture step under shape "none" is flagged', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    demoProcess: [
+      { kind: 'capture', text: 'API GET of created entity' },
+      { kind: 'verify', text: 'Project tests green' },
+    ],
+  });
+  const warn = demoProcessCoherenceWarning(cfg);
+  assert.ok(warn, 'expected a coherence warning');
+  assert.match(warn!, /capture/);
+  assert.match(warn!, /none/);
+});
+
+test('demoProcessCoherenceWarning: capture step under a non-none shape is coherent', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'harness', command: ['go', 'test', './...'] },
+    quality_gate_cmd: ['true'],
+    demoProcess: [
+      { kind: 'capture', text: 'Scrape harness metrics' },
+      { kind: 'verify', text: 'Project tests green' },
+    ],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
+});
+
+test('demoProcessCoherenceWarning: a verify-only process under shape "none" is coherent', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+    demoProcess: [{ kind: 'verify', text: 'Project tests green' }],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
+});
+
+test('demoProcessCoherenceWarning: absent demoProcess is coherent (legacy demo block only)', () => {
+  const cfg = validateProjectConfig({
+    demo: { shape: 'none' },
+    quality_gate_cmd: ['true'],
+  });
+  assert.equal(demoProcessCoherenceWarning(cfg), null);
 });
 
 test('validateProjectConfig: skills string array round-trips', () => {

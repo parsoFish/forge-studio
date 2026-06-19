@@ -318,10 +318,26 @@ structural property when the project opts in.
 
 ### DEMO — The change is demonstrable *(advisory)*
 
-The project must declare how a change is demonstrated. The `demoProcess` Studio
-field (Face A) is the primary declaration; the legacy `demo` block in
-`.forge/project.json` (shape/command/preview_command) remains valid and is
-checked structurally by preflight.
+The project declares how a change is demonstrated in **two married faces of one
+declaration**, not two competing fields:
+
+- **`demoProcess`** (Face A — typed steps `capture` / `verify` / `present`) is the
+  **executed demo**: `capture` steps name the before/after evidence to record,
+  `verify` steps name the assertion that makes the evidence non-trivial (forge
+  runs the step and encodes its concrete result), `present` steps say how it is
+  surfaced. This is the primary declaration.
+- **`demo.shape`** (the `demo` block: `shape` / `command` / `preview_command`) is
+  the **evidence floor** — the minimum a `demo.json` must carry for that project
+  form (`harness` ⇒ a metrics + `testEvidence[]` table; `live-external` ⇒ a
+  checkpoint carrying a real `liveEvidence.url`; `browser` ⇒ captured before/after
+  screenshots; etc.). It is checked structurally by preflight.
+
+**The unifier/demo skill derives the executed demo from `demoProcess` and lets
+`demo.shape` set the floor.** The two must be coherent: a `demoProcess` with a
+`capture` step requires a `demo.shape` that can carry captured evidence — a
+`capture`-bearing process under `demo.shape: "none"` is **flagged by `forge
+preflight`** (the DEMO clause; advisory), since `none` has no surface to capture
+into.
 
 The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
@@ -425,7 +441,7 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
 | C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
-| DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation |
+| DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation + `demoProcess`↔`demo.shape` coherence (capture step ⇏ shape "none") |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/themes/` path-existence scan |
 

@@ -228,6 +228,24 @@ enhancement, never a gate. **Do author `summary` + `apiDiff` + `testEvidence` ev
 for notes-only demos when the diff touches a visible API or adds tests** — these
 sections make the HTML genuinely useful without requiring media capture.
 
+## demoProcess + demo.shape are one declaration (the two faces)
+
+A project declares the demo in two married fields, NOT two competing ones:
+
+- **`demoProcess`** (typed steps: `capture` / `verify` / `present`) is the
+  **executed demo** — it names exactly what evidence to record (`capture`), what
+  assertion makes the evidence non-trivial (`verify` → run the step's command and
+  encode the concrete result), and how it is surfaced (`present`).
+- **`demo.shape`** is the **evidence floor** — the minimum the `demo.json` must
+  carry for that project form (e.g. `harness` ⇒ a `testEvidence[]` table + harness
+  metrics; `live-external` ⇒ a checkpoint carrying a real `liveEvidence.url`).
+
+When both are present, derive the demo from `demoProcess` and let `demo.shape`
+set the floor every demo must meet. They must be coherent: a `demoProcess` with a
+`capture` step requires a `demo.shape` that can carry captured evidence — a
+`capture`-bearing process under `demo.shape: "none"` is flagged in preflight
+(there is nothing to capture into). `forge preflight` warns on this incoherence.
+
 ## Per-shape mapping (how each project form satisfies "demonstrable")
 
 The project declares its shape in `.forge/project.json` `demo.shape`:

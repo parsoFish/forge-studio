@@ -183,8 +183,21 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     .filter((line) => line !== '')
     .join('\n');
 
+  // E2: marry `demoProcess` to the `demo` block. The typed steps are the
+  // EXECUTED demo: `capture` steps name what before/after evidence to record,
+  // `verify` steps name the assertion that makes the evidence non-trivial (run
+  // the step's command and encode its result), `present` steps say how to
+  // surface it. `demo.shape` (above) is the evidence FLOOR — the minimum the
+  // demo.json must contain — not a competing instruction.
   const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
-    ? '\n\n## Project demo process\n\nThis project defines typed demo steps. Follow them when authoring `demo.json`:\n' +
+    ? '\n\n## Project demo process (the executed demo — drives demo.json)\n\n' +
+      'These typed steps ARE the demo this project runs. The `demo.shape` above is ' +
+      'the evidence FLOOR; these steps say exactly how to fill it:\n' +
+      '- **capture** → record this before/after evidence as a checkpoint (and, for a ' +
+      'visual shape, the image).\n' +
+      '- **verify** → run the named assertion; encode its concrete result ' +
+      '(test name + pass/fail, API response, measured value) as `acEvaluations`/`testEvidence`.\n' +
+      '- **present** → how the evidence is surfaced in the PR/demo.\n\n' +
       input.demoProcess.map((s, i) => `${i + 1}. [${s.kind.toUpperCase()}] ${s.text}`).join('\n')
     : '';
 

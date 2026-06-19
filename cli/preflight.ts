@@ -29,6 +29,7 @@ import { join, resolve, relative } from 'node:path';
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
 import {
   validateProjectConfig,
+  demoProcessCoherenceWarning,
   DEMO_SHAPES,
 } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
@@ -489,6 +490,12 @@ function checkDemo(dir: string): ClauseResult {
       detail:
         'demo.shape "browser" needs a demo.preview_command (the dev/preview server forge serves the built worktree on) — none declared. Advisory.',
     };
+  }
+  // E2: the demoProcess (executed demo) and demo.shape (evidence floor) must be
+  // coherent — flag a capture step under shape "none" (nothing to capture into).
+  const coherence = demoProcessCoherenceWarning(cfg);
+  if (coherence) {
+    return { ...base, pass: false, detail: coherence };
   }
   return {
     ...base,

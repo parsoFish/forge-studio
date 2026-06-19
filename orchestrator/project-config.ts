@@ -194,6 +194,32 @@ export type ProjectConfig = {
 };
 
 /**
+ * E2: the `demoProcess` (typed steps) and the `demo` block (`demo.shape`) are
+ * two faces of ONE declaration — `demoProcess` is the executed demo, `demo.shape`
+ * is the evidence floor. They must be coherent. The one structural incoherence
+ * we can check without running the demo: a `demoProcess` that declares a
+ * `capture` step under `demo.shape: "none"` — `none` means "no observable
+ * surface", so there is nothing for the capture step to record into. Returns a
+ * human-readable warning string when incoherent, or `null` when coherent (or
+ * when `demoProcess` is absent — a project may declare only the legacy `demo`
+ * block). Advisory: surfaced by `forge preflight`, never a hard blocker.
+ */
+export function demoProcessCoherenceWarning(cfg: ProjectConfig): string | null {
+  const steps = cfg.demoProcess;
+  if (!steps || steps.length === 0) return null;
+  const hasCapture = steps.some((s) => s.kind === 'capture');
+  if (hasCapture && cfg.demo.shape === 'none') {
+    return (
+      'demoProcess declares a `capture` step but demo.shape is "none" — "none" has ' +
+      'no observable surface, so there is nothing to capture into. Either set a ' +
+      'demo.shape that can carry the captured evidence (e.g. harness, live-external, ' +
+      'browser, cli-diff, artifact) or drop the capture step. Advisory.'
+    );
+  }
+  return null;
+}
+
+/**
  * Load and validate `<projectRoot>/.forge/project.json`. Returns `null` if
  * the file doesn't exist; throws on any structural / semantic violation
  * (callers depend on the throw to enforce fail-closed scheduling).
