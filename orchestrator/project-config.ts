@@ -20,11 +20,19 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEMO_STEP_KINDS } from './studio/types.ts';
-import type { DemoStep, DemoStepKind } from './studio/types.ts';
+import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
+import type {
+  DemoStep,
+  DemoStepKind,
+  ReleaseConfig,
+  ReleaseStep,
+  ReleaseStepKind,
+  ReleaseStepPhase,
+} from './studio/types.ts';
 
 export type { DemoStep, DemoStepKind } from './studio/types.ts';
 export { DEMO_STEP_KINDS } from './studio/types.ts';
+export type { ReleaseStep, ReleaseConfig } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
@@ -175,6 +183,14 @@ export type ProjectConfig = {
    * is unchanged. Validated as a clean relative path (no leading `/`, no `..`).
    */
   artifactRoot?: string;
+  /**
+   * Optional release-process declaration: the repo-side prep a cycle performs
+   * before merge (refresh docs, write a changelog entry, bump a version file).
+   * Mirrors `demoProcess` — typed, optional, fail-closed when malformed.
+   * Tagging + publishing are CI's job, NOT forge step kinds. Absent ⇒ no
+   * release steps.
+   */
+  releaseProcess?: ReleaseConfig;
 };
 
 /**
@@ -275,6 +291,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const skills = parseSkills(obj.skills);
   const kb = parseKb(obj.kb);
   const artifactRoot = parseArtifactRoot(obj.artifactRoot);
+  const releaseProcess = parseReleaseProcess(obj.releaseProcess);
 
   return {
     demo,
@@ -293,7 +310,27 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(skills !== undefined ? { skills } : {}),
     ...(kb !== undefined ? { kb } : {}),
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
+    ...(releaseProcess !== undefined ? { releaseProcess } : {}),
   };
+}
+
+/**
+ * Assert `value` is a clean project/worktree-relative path: no leading `/`, no
+ * leading or embedded backslash, no `..` segment — so it can never escape the
+ * root it's resolved against. Throws (mentioning `label`) on any violation.
+ * Shared by `parseArtifactRoot` and `parseReleaseProcess`.
+ */
+function assertCleanRelativePath(value: string, label: string): void {
+  if (
+    value.startsWith('/') ||
+    value.startsWith('\\') ||
+    value.includes('\\') ||
+    value.split('/').includes('..')
+  ) {
+    throw new Error(
+      `project-config: ${label} must be a clean project-relative path (no leading slash, no "..") — got ${JSON.stringify(value)}`,
+    );
+  }
 }
 
 /**
@@ -308,17 +345,79 @@ function parseArtifactRoot(v: unknown): string | undefined {
   }
   const trimmed = v.trim();
   if (trimmed === '' || trimmed === '.') return undefined;
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('\\') ||
-    trimmed.includes('\\') ||
-    trimmed.split('/').includes('..')
-  ) {
-    throw new Error(
-      `project-config: artifactRoot must be a clean project-relative path (no leading slash, no "..") — got ${JSON.stringify(v)}`,
-    );
-  }
+  assertCleanRelativePath(trimmed, 'artifactRoot');
   return trimmed;
+}
+
+/**
+ * Parse + validate the optional `releaseProcess` block. Mirrors
+ * `parseDemoProcess`: fail-closed — absent ⇒ `undefined`; present-but-malformed
+ * throws (`project-config: releaseProcess...`). Each step's `kind` must be in
+ * RELEASE_STEP_KINDS, `phase` in RELEASE_STEP_PHASES, `text` a string, and the
+ * optional `command` an argv string[]. The optional `versionFile` /
+ * `changelogPath` / `docsDir` are clean worktree-relative paths.
+ */
+function parseReleaseProcess(raw: unknown): ReleaseConfig | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('project-config: releaseProcess must be an object when present');
+  }
+  const r = raw as Record<string, unknown>;
+
+  if (!Array.isArray(r.steps)) {
+    throw new Error('project-config: releaseProcess.steps must be an array');
+  }
+  const steps: ReleaseStep[] = r.steps.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`project-config: releaseProcess.steps[${i}] must be an object`);
+    }
+    const s = item as Record<string, unknown>;
+    if (typeof s.kind !== 'string' || !RELEASE_STEP_KINDS.includes(s.kind as ReleaseStepKind)) {
+      throw new Error(
+        `project-config: releaseProcess.steps[${i}].kind must be one of ${RELEASE_STEP_KINDS.join('|')} (got ${JSON.stringify(s.kind)})`,
+      );
+    }
+    if (
+      typeof s.phase !== 'string' ||
+      !RELEASE_STEP_PHASES.includes(s.phase as ReleaseStepPhase)
+    ) {
+      throw new Error(
+        `project-config: releaseProcess.steps[${i}].phase must be one of ${RELEASE_STEP_PHASES.join('|')} (got ${JSON.stringify(s.phase)})`,
+      );
+    }
+    if (typeof s.text !== 'string') {
+      throw new Error(`project-config: releaseProcess.steps[${i}].text must be a string`);
+    }
+    const command = optionalArgv(s.command, `releaseProcess.steps[${i}].command`);
+    return {
+      kind: s.kind as ReleaseStepKind,
+      phase: s.phase as ReleaseStepPhase,
+      text: s.text,
+      ...(command ? { command } : {}),
+    };
+  });
+
+  const versionFile = parseReleasePath(r.versionFile, 'releaseProcess.versionFile');
+  const changelogPath = parseReleasePath(r.changelogPath, 'releaseProcess.changelogPath');
+  const docsDir = parseReleasePath(r.docsDir, 'releaseProcess.docsDir');
+
+  return {
+    steps,
+    ...(versionFile !== undefined ? { versionFile } : {}),
+    ...(changelogPath !== undefined ? { changelogPath } : {}),
+    ...(docsDir !== undefined ? { docsDir } : {}),
+  };
+}
+
+/**
+ * Parse one optional clean worktree-relative path field of `releaseProcess`.
+ * Absent ⇒ `undefined`; present must be a string + a clean relative path.
+ */
+function parseReleasePath(v: unknown, label: string): string | undefined {
+  const s = optionalString(v, label);
+  if (s === undefined) return undefined;
+  assertCleanRelativePath(s, label);
+  return s;
 }
 
 /**

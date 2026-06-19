@@ -153,6 +153,41 @@ export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
 export type DemoStepKind = (typeof DEMO_STEP_KINDS)[number];
 export type DemoStep = { kind: DemoStepKind; text: string };
 
+/**
+ * Release-process step kinds. Tagging a release (git tag) and publishing
+ * (npm/registry push) are CI's job — NOT forge step kinds. Forge's release
+ * steps cover the repo-side prep a cycle performs before merge: refreshing
+ * docs, writing a changelog entry, bumping a version file.
+ */
+export const RELEASE_STEP_KINDS = ['docs', 'changelog', 'version'] as const;
+export type ReleaseStepKind = (typeof RELEASE_STEP_KINDS)[number];
+
+/**
+ * When a release step runs relative to the cycle: `in-cycle` (during the
+ * dev-loop, alongside feature work) or `pre-merge` (after the dev-loop, before
+ * the unifier opens the PR).
+ */
+export const RELEASE_STEP_PHASES = ['in-cycle', 'pre-merge'] as const;
+export type ReleaseStepPhase = (typeof RELEASE_STEP_PHASES)[number];
+
+export type ReleaseStep = {
+  kind: ReleaseStepKind;
+  phase: ReleaseStepPhase;
+  text: string;
+  /** Optional argv-style command forge runs to perform the step. */
+  command?: string[];
+};
+
+export type ReleaseConfig = {
+  steps: ReleaseStep[];
+  /** Worktree-relative path to the file holding the project version. */
+  versionFile?: string;
+  /** Worktree-relative path to the changelog file. */
+  changelogPath?: string;
+  /** Worktree-relative directory holding the project's docs. */
+  docsDir?: string;
+};
+
 export type ProjectDefinition = {
   id: string;
   name: string;
