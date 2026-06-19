@@ -96,7 +96,7 @@ merged cycles.
   creation point is removed.
 - **Verdict via PR comments** (`pr-verdict.ts:makePrCommentVerdict`),
   with the file-verdict provider as a fallback when no PR can be created
-  (no remote / gh down) — never strands. *(Historical — [ADR 023](../decisions/023-ui-sole-operator-surface.md)
+  (no remote / gh down) — never strands. *(Historical — [ADR 031](../decisions/031-studio-consolidation.md)
   retired the PR-comment + CLI verdict ingress; `pr-verdict.ts` is deleted and
   the verdict now arrives solely from the `/review/<cycleId>` UI screen as a
   `verdict-response.md`.)*

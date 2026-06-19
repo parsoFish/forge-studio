@@ -15,8 +15,8 @@
 > reviewer do not ([ADR 010](./docs/decisions/010-brain-first.md));
 > (c) **no auto-merge** — the GitHub PR is the operator's merge surface;
 > `closure.ts` is the single terminal-move authority; (d) **Forge Studio is the
-> sole operator surface** ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md),
-> extended by ADR 031 — architect runs natively in Studio; review/reflect render
+> sole operator surface** ([ADR 031](./docs/decisions/031-studio-consolidation.md)
+> — architect runs natively in Studio; review/reflect render
 > on the unified `/artifact` viewer); (e) **three swappable seams are real and
 > used in production** ([ADR 032](./docs/decisions/032-subsumption-proof.md)):
 > runtime adapter registry, KbBackend, and the unifier as an independently-
@@ -248,8 +248,7 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 ### Unattended operation
 
 Three human interaction points, all on **Forge Studio** — the sole operator
-surface ([ADR 023](./docs/decisions/023-ui-sole-operator-surface.md), consolidated
-by [ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
+surface ([ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
 one launcher command). The load-bearing invariant is preserved: each moment is
 **explicit, operator-initiated, and impossible to silently auto-satisfy** (no
 auto-approve, no bench simulator in production —
