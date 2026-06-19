@@ -267,7 +267,7 @@ Everything else runs unattended for arbitrary durations via:
 - **`orchestrator/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
 - **Crash recovery** by atomic claim + heartbeat: orphaned in-flight items return to `pending/` on restart.
 
-This is **not v1's job queue + worker + resource controller**. See ADR 011-013 for the line we're holding.
+This is **not a re-invented job queue + worker pool + resource controller**. See ADR 011-013 for the line we're holding.
 
 ### Brain-first research
 

@@ -1,10 +1,10 @@
-# Forge v2 — Project Instructions for Claude Code
+# Forge — Project Instructions for Claude Code
 
 > Idea machine for one human across many side projects. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
 
 ## North star
 
-Forge v2 is **designed to run primarily unattended between human interaction points** (architect, review, reflection). Every decision is judged against three things:
+Forge is **designed to run primarily unattended between human interaction points** (architect, review, reflection). Every decision is judged against three things:
 
 1. Does it preserve unattended operation?
 2. Does it use a battle-tested community tool, or are we re-inventing one?
@@ -56,7 +56,7 @@ below. The dev-loop and reviewer correctly do NOT read the brain.)
 - Re-invent a job queue, worker pool, resource controller, or process isolator. (See ADRs 011-013 for the line we hold.)
 - Spawn agents as Claude CLI subprocesses. Use Claude Code skills via the SDK.
 - Ship a **planner or reflector** skill that doesn't read the brain first. (The dev-loop and reviewer skills correctly do NOT — see the brain-read policy.)
-- Add a feature flag, fallback, or "for backwards compatibility" path. v2 has no v1 users to support.
+- Add a feature flag, fallback, or "for backwards compatibility" path. There are no legacy users to support.
 - Squash-merge stacked PRs (we learned this in v1; the lesson lives in the brain after Pass B).
 
 ## Build & test
