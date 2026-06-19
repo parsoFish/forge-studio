@@ -33,23 +33,6 @@ _queue/done/*
 _queue/failed/*
 !_queue/failed/.gitkeep
 
-# Per-run benchmark output is runtime, not source
-benchmarks/*/results/
-benchmarks/*/results-negatives/
-benchmarks/*/results-judged/
-
-# Bench-fixture runtime debris (Python compile cache; Ralph workspace artifacts
-# the agent leaves behind if a run leaks outside its tempdir; reviewer demo
-# bundles ditto). Seeds should only contain source files, tests, and the WI
-# spec.
-benchmarks/*/fixtures/**/__pycache__/
-benchmarks/*/fixtures/**/.pytest_cache/
-benchmarks/*/fixtures/**/AGENT.md
-benchmarks/*/fixtures/**/fix_plan.md
-benchmarks/*/fixtures/**/PROMPT.md
-benchmarks/*/fixtures/**/.forge/demos/
-benchmarks/*/fixtures/**/.forge/pr-description.md
-
 # Managed projects are auto-discovered, not committed to forge
 projects/*
 !projects/README.md
@@ -97,3 +80,6 @@ brain/.obsidian/
 # Logs from local runs
 *.log
 npm-debug.log*
+
+# Local SQLite scratch (e.g. headroom memory) — never source
+*.db
