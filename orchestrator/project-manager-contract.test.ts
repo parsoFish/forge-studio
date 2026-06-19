@@ -219,6 +219,49 @@ test('A2b: standing_work_item_acs are appended to every WI body, exactly once', 
   }
 });
 
+test('WS-A: releaseProcess in-cycle changelog step → draft-changelog AC on every WI', async () => {
+  const h = setupHarness({
+    ...BASE_CONFIG,
+    releaseProcess: {
+      changelogPath: 'CHANGELOG.md',
+      steps: [
+        { kind: 'changelog', phase: 'in-cycle', text: 'draft an Unreleased entry per WI' },
+        { kind: 'version', phase: 'pre-merge', text: 'bump the version (pre-merge only)' },
+      ],
+    },
+  });
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await runProjectManager(h.input, h.logger, { queryFn });
+    for (const wi of ['WI-1', 'WI-2']) {
+      const body = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wi}.md`), 'utf8');
+      assert.match(body, /## Standing acceptance criteria \(project contract\)/);
+      // The in-cycle draft-changelog AC is present on every WI...
+      assert.match(body, /DRAFT CHANGELOG/);
+      assert.match(body, /CHANGELOG\.md/);
+      assert.match(body, /draft an Unreleased entry per WI/);
+      // ...but the pre-merge step is NOT a WI-level AC (that is the finaliser's job).
+      assert.doesNotMatch(body, /bump the version \(pre-merge only\)/);
+    }
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('WS-A: no releaseProcess → no draft-changelog AC (non-release projects unaffected)', async () => {
+  const h = setupHarness({ ...BASE_CONFIG });
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
+    await runProjectManager(h.input, h.logger, { queryFn });
+    const body = readFileSync(resolve(h.worktree, '.forge', 'work-items', 'WI-1.md'), 'utf8');
+    assert.doesNotMatch(body, /DRAFT CHANGELOG/);
+    // With no standing ACs and no release process, the section is absent entirely.
+    assert.doesNotMatch(body, /## Standing acceptance criteria \(project contract\)/);
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // M2-3: brainAccess gate tests
 // ---------------------------------------------------------------------------

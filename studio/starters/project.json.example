@@ -88,4 +88,22 @@
   // ci_gate (optional): the full CI command, when quality_gate_cmd is a strict
   // subset of it. Used as the post-merge whole-project gate.
   "ci_gate": ["<full-ci-command>", "<args>"]
+
+  // releaseProcess (optional, C10): opt into the release flow. Declaring it
+  // turns on (1) an in-cycle DRAFT changelog (every WI's standing ACs), (2) a
+  // post-approval pre-merge finaliser (semver bump + finalised changelog + the
+  // pre-merge steps below + optional version bump, committed to the PR branch),
+  // and (3) a CI release on merge. Forge SHIPS the release CI workflow
+  // (studio/starters/release-workflow.yml.example) but NEVER runs tag/publish —
+  // that is CI's job. A project without this block is unchanged.
+  // , "releaseProcess": {
+  //   "changelogPath": "CHANGELOG.md",
+  //   "versionFile": "<path holding the version, e.g. package.json | VERSION>",
+  //   "docsDir": "docs",
+  //   "steps": [
+  //     { "kind": "changelog", "phase": "in-cycle",  "text": "draft an Unreleased entry per WI" },
+  //     { "kind": "docs",      "phase": "pre-merge", "text": "regenerate reference docs", "command": ["<doc-gen>", "<args>"] },
+  //     { "kind": "version",   "phase": "pre-merge", "text": "bump the version file to the computed semver" }
+  //   ]
+  // }
 }

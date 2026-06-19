@@ -283,6 +283,39 @@ resource names prefixed with a run-specific UUID, a shared fixture factory
 
 ---
 
+### C10 — Documentation parity & release *(advisory; active when `releaseProcess` declared)*
+
+A project that ships versioned releases must keep its **documented surface, its
+changelog, and its version in sync with the code that merges** — and must own the
+release in CI, not in forge. This clause is **opt-in**: it is inert unless the
+project declares a `releaseProcess` block in `.forge/project.json`. A project that
+omits the block is unaffected (the entire release flow is skipped).
+
+When declared, the clause has three parts, all enforced by forge's release flow:
+
+1. **In-cycle draft changelog.** Every work item in a release-bearing initiative
+   carries a standing AC to draft a changelog entry under `## [Unreleased]`. The
+   unifier authors the draft into `changelogPath`; the DRAFT is what ships in the
+   PR. (Source of intent: the `changelog`/`in-cycle` step.)
+2. **Post-approval pre-merge finalisation.** When the operator approves, forge's
+   **release-finalizer** runs on the PR branch *before* merge: it computes the
+   semver bump, promotes the draft to a versioned `## [X.Y.Z] - <date>` entry,
+   runs the declared `pre-merge` steps (doc regeneration, version-file bump), and
+   commits + pushes. Failure is log-and-continue — the merge still proceeds with
+   the DRAFT as the fallback. (Source of intent: the `pre-merge` steps +
+   `versionFile`/`docsDir`.)
+3. **CI release on merge.** Forge **ships** a release CI workflow
+   (`studio/starters/release-workflow.yml.example`, installed at
+   `.github/workflows/release.yml` during onboarding) that reads the committed
+   version/changelog and tags + cuts the release on merge to the default branch.
+   **Forge never runs tag/publish** — that is exclusively CI's job.
+
+The point: a merged feature whose docs/changelog/version are stale ships a lie;
+this clause makes "the release artifacts are truthful and tagged by CI" a
+structural property when the project opts in.
+
+---
+
 ### DEMO — The change is demonstrable *(advisory)*
 
 The project must declare how a change is demonstrated. The `demoProcess` Studio
@@ -391,6 +424,7 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requires_env` guard) | `acceptance_gate` enforcement; `ci_gate_unset_env` on final delivery gate |
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
+| C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
 | DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/themes/` path-existence scan |

@@ -108,6 +108,30 @@ export type ReflectorPhaseResult = {
   lint_status: LintStatus;
 };
 
+/**
+ * WS-A — outcome of the post-approval, pre-merge release-finalize phase.
+ *
+ * - `finalized` — the finaliser ran, committed + pushed the finalised release
+ *                 commit to the PR branch (or had nothing to finalise but
+ *                 completed cleanly).
+ * - `failed`    — the finaliser threw. **Log-and-continue**: the merge still
+ *                 proceeds (the in-cycle DRAFT changelog is the fallback). The
+ *                 status is surfaced as telemetry, never a merge gate.
+ * - `skipped`   — the project did not declare `releaseProcess` (no opt-in), so
+ *                 finalisation was not invoked.
+ */
+export type ReleaseFinalizeStatus = 'finalized' | 'failed' | 'skipped';
+
+/**
+ * Combined outcome of the release-finalize phase — what `runReleaseFinalize`
+ * returns so the approve handler can record telemetry from a single call.
+ */
+export type ReleaseFinalizePhaseResult = {
+  release_status: ReleaseFinalizeStatus;
+  /** The computed version, when the finaliser produced/recorded one. */
+  version?: string;
+};
+
 export type CycleResult = {
   cycle_id: string;
   initiative_id: string;

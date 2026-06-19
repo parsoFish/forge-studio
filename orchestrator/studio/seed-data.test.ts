@@ -119,7 +119,7 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
 // Agent definitions
 // ---------------------------------------------------------------------------
 
-test('listAgentDefinitions returns the studio agent roster (6 seed + 3 OOTB library agents)', () => {
+test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB library agents)', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const slugs = agents.map((a) => a.slug).sort();
 
@@ -133,10 +133,13 @@ test('listAgentDefinitions returns the studio agent roster (6 seed + 3 OOTB libr
       'developer-unifier',
       'project-manager',
       'reflector',
+      // WS-A: the release-finalizer is a phase agent (full studio frontmatter,
+      // mirrors reflector) — it runs post-approval, pre-merge.
+      'release-finalizer',
       'security-auditor',
       'web-scraper',
     ],
-    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

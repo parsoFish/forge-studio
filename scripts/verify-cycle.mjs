@@ -283,8 +283,48 @@ function liveEvidenceFromDemo(cycleId) {
   } catch (e) { return { present: false, reason: `demo.json unreadable: ${e.message}` }; }
 }
 
+/** Read the project's declared `releaseProcess` from `.forge/project.json`, or
+ *  null when the project did not opt into the release flow. */
+function releaseProcessFromConfig(repoPath) {
+  const cfgPath = join(repoPath, '.forge', 'project.json');
+  if (!existsSync(cfgPath)) return null;
+  try {
+    const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+    return cfg.releaseProcess ?? null;
+  } catch { return null; }
+}
+
+/** WS-A gate (release-bearing cycles only): assert the full release loop fired —
+ *  a DRAFT changelog reached the PR, the finalised (versioned) entry was committed
+ *  on the branch, and the terminal `release.json` record exists. Mirrors
+ *  liveEvidenceFromDemo's shape (present + reason). */
+function releaseEvidence(repoPath, cycleId, releaseProcess) {
+  const changelogPath = releaseProcess.changelogPath ?? 'CHANGELOG.md';
+  const changelogAbs = join(repoPath, changelogPath);
+  if (!existsSync(changelogAbs)) {
+    return { present: false, reason: `changelog ${changelogPath} absent on merged tree` };
+  }
+  const changelog = readFileSync(changelogAbs, 'utf8');
+  // The unifier seeds a DRAFT under `## [Unreleased]`; the finaliser promotes it
+  // to a versioned `## [X.Y.Z] - <date>` heading. A finalised release-bearing
+  // cycle shows the versioned heading on the merged tree.
+  const hasVersioned = /^##\s*\[\d+\.\d+\.\d+[^\]]*\]/m.test(changelog);
+  if (!hasVersioned) {
+    return { present: false, reason: `no finalised (versioned) changelog heading in ${changelogPath}` };
+  }
+  // The terminal record the release-finalize phase writes.
+  const releaseJson = join(FORGE_ROOT, '_logs', cycleId, 'artifacts', 'release.json');
+  if (!existsSync(releaseJson)) {
+    return { present: false, reason: 'no release.json terminal record in cycle artifacts' };
+  }
+  let version = null;
+  try { version = JSON.parse(readFileSync(releaseJson, 'utf8')).version ?? null; } catch { /* */ }
+  return { present: true, reason: `finalised changelog + release.json (version ${version ?? 'n/a'})` };
+}
+
 /** The ADR 022 gate: four binary, outcome-only assertions (plus a live-evidence
- *  check for live-resource projects). */
+ *  check for live-resource projects, plus a release-evidence check when the
+ *  project declares `releaseProcess`). */
 function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
@@ -302,6 +342,15 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
   if (REQUIRE_LIVE_EVIDENCE) {
     const le = liveEvidenceFromDemo(cycleId);
     checks.push({ name: 'live demo evidence present (REST GET)', pass: le.present, detail: le.reason });
+  }
+  // WS-A: release-bearing projects must prove the full release loop fired
+  // (draft → finalised changelog committed → release.json record). Gated on
+  // the project actually declaring `releaseProcess` — a non-release project is
+  // unaffected (the check is not added).
+  const releaseProcess = releaseProcessFromConfig(repoPath);
+  if (releaseProcess) {
+    const re = releaseEvidence(repoPath, cycleId, releaseProcess);
+    checks.push({ name: 'release finalised (changelog + release.json)', pass: re.present, detail: re.reason });
   }
   return { checks, wi };
 }

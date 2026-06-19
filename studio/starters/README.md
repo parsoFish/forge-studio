@@ -8,6 +8,13 @@ picks from when they create their first agents and flow in Studio:
 - `agents/review/SKILL.md` — a minimal **Review** agent (check the change → human verdict gate).
 - `flows/basic.yaml` — the most basic flow: **plan → dev → review (+ verdict gate)**.
 
+Project-onboarding templates (copied into a *managed project*, not instantiated as Studio objects):
+
+- `project.json.example` — the `.forge/project.json` contract template a new project fills in.
+- `release-workflow.yml.example` — the CI release workflow (C10). Installed at
+  `<project>/.github/workflows/release.yml` when the project opts into `releaseProcess`.
+  Forge ships it; CI (not forge) runs tag/publish on merge to the default branch.
+
 ## Why a separate `studio/starters/` directory
 
 The starters are deliberately **clean-room**. They carry none of the weight of forge's production
