@@ -159,5 +159,5 @@ review redesign).
 - [`orchestrator/project-config.ts`](../../orchestrator/project-config.ts) — canonical `validateProjectConfig` + `DEMO_SHAPES` (single source of truth imported by preflight).
 - [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json) — operator-facing schema (includes `logging` block; no phantom C26/C27/C28 references).
 - [ADR 011](./011-unattended-scheduler.md) — the unattended scheduler path the contract gates entry to.
-- [ADR 014](./014-roadmap-format.md) — `roadmap.md` schema, the C4 artefact.
+- The retired `roadmap.md`-schema ADR (number 014 reserved) — the C4 artefact's original schema; the roadmap is now a derived view of `_queue/` manifests.
 - [ADR 015](./015-work-item-format.md) — work-item schema; the manifest `origin` field (G6) is a sibling schema addition.
