@@ -25,6 +25,7 @@ test('deriveAgentSpec: project-manager spec matches known-good literal', () => {
     tier: 'sonnet',
     allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit'],
     disallowedTools: ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch'],
+    sdk: 'claude',
   });
 });
 
@@ -35,6 +36,7 @@ test('deriveAgentSpec: developer-loop spec matches known-good literal', () => {
     tier: 'sonnet',
     allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
     disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+    sdk: 'claude',
   });
 });
 
@@ -45,6 +47,7 @@ test('deriveAgentSpec: unifier spec matches known-good literal', () => {
     tier: 'sonnet',
     allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
     disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+    sdk: 'claude',
   });
 });
 
@@ -55,6 +58,7 @@ test('deriveAgentSpec: reflector spec matches known-good literal', () => {
     tier: 'sonnet',
     allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash'],
     disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+    sdk: 'claude',
   });
 });
 

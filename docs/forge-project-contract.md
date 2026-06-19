@@ -413,7 +413,7 @@ flow-ready — the flow engine will not accept it.
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 in `brain/`) |
 | **C1 / C1b** | `quality_gate_cmd`: `go test -tags all -count=1 ./...` scoped to changed packages. `ci_gate`: `make test && golangci-lint run ./... && make terrafmt-check`. `ci_fix_cmd`: `make fmt && make terrafmt` |
-| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `graphify-out/`, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
+| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
 | C3 | Net-new code isolated to `azuredevops/internal/service/release/` and `/taskagent/`. No god-files in net-new scope |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |

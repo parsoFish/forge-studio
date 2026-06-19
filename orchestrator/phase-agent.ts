@@ -44,6 +44,14 @@ export type PhaseAgentSpec = {
   allowedTools: readonly string[];
   /** Tools explicitly denied. */
   disallowedTools: readonly string[];
+  /**
+   * The runtime SDK id (ADR 029) this agent runs on — mirrors the SKILL.md
+   * `runtime.sdk` frontmatter (e.g. `claude`, `gemini`, `aider`). Free-text
+   * here is gated at the call site by `resolveSdkId` before it reaches
+   * `getAdapter` (which throws on an unregistered id), so an unknown/unavailable
+   * sdk falls back to `claude` rather than crashing the phase.
+   */
+  sdk?: string;
 };
 
 /** Resolve the concrete model id the orchestrator spawns this agent at. */

@@ -113,8 +113,12 @@ export type ArtifactTemplate = {
   path: string;
 };
 
-/** Valid KB storage backends (ADR-018 amendment — backend-selection seam). */
-export const KB_BACKENDS = ['filesystem', 'zep'] as const;
+/**
+ * Valid KB storage backends (ADR-018 amendment — backend-selection seam).
+ * Filesystem is the only implementation today; the seam is preserved for a
+ * future graph-memory backend (an earlier Zep attempt was removed).
+ */
+export const KB_BACKENDS = ['filesystem'] as const;
 export type KbBackendId = (typeof KB_BACKENDS)[number];
 
 export type KbDescriptor = {

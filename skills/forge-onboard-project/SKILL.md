@@ -76,11 +76,10 @@ repo-wide wildcard). Declare as ONE command in `.forge/quality_gate_cmd` +
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch
 (`.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`), build artifacts + generated
-output (binaries, bundles, coverage, knowledge-graph caches under
-`<artifactRoot>/brain/graphify-out/`), and force-track required config inside an
+output (binaries, bundles, coverage), and force-track required config inside an
 ignored dir (`.forge/project.json`). Acceptance: clean build ⇒ `git status` shows
 nothing but intended source. **Note:** `<artifactRoot>/` itself (brain, history,
-skills) IS committed — only the regenerable cache under it is ignored.
+skills) IS committed.
 
 ### Step 6 — Project-action skills (under `<artifactRoot>/skills/`)
 Capture the project's recurring actions as skills forge agents read by path:
