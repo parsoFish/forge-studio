@@ -5,7 +5,7 @@
 
 ## Context
 
-V1 represented work as a mix of TypeScript objects, JSON state files, and markdown agent personas. Inputs/outputs between phases were typed but not greppable; debugging "what did the planner emit?" required a JSON read or a database query.
+The prior approach represented work as a mix of TypeScript objects, JSON state files, and markdown agent personas. Inputs/outputs between phases were typed but not greppable; debugging "what did the planner emit?" required a JSON read or a database query.
 
 [gstack](https://github.com/garrytan/gstack) demonstrated a more debuggable approach: every phase reads and writes **markdown documents in the project**. The "spec" is the markdown doc, mutated by successive phases. Every artifact is greppable, debuggable, and version-controllable. The phase boundary is just "which file does this skill read and which does it write."
 
@@ -54,4 +54,4 @@ Skills consume markdown via `gray-matter` for frontmatter parsing and emit markd
 ## References
 
 - [garrytan/gstack](https://github.com/garrytan/gstack) — entire workflow is markdown-driven
-- v1's `src/state/store.ts` (structured state we are explicitly not reproducing)
+- The prior `src/state/store.ts` (structured state we are explicitly not reproducing)

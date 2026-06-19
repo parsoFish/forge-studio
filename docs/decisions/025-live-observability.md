@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-06-07
-- **Relates to:** [ADR 008](./008-jsonl-event-log.md) (the JSONL event log is the source of truth), [ADR 023](./023-ui-sole-operator-surface.md) (the UI is the operator surface). Records the observability decisions of the 2026-06-07 simplification pass.
+- **Relates to:** [ADR 008](./008-jsonl-event-log.md) (the JSONL event log is the source of truth), [ADR 031](./031-studio-consolidation.md) (which carries the sole-operator-surface decision — the UI is the operator surface). Records the observability decisions of the 2026-06-07 simplification pass.
 
 ## Context
 

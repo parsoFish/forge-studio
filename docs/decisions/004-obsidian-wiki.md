@@ -5,7 +5,7 @@
 
 ## Context
 
-The brain has two audiences: agents (need fast, accurate lookup) and humans (need to navigate, prune, audit). V1 validated the **Karpathy LLM-wiki model** — minimal summarisation, maximal indexation, three layers (raw → themes → indexes). The forge2.0 diagram explicitly calls for graph visualisation that "doubles as the visual layer for humans."
+The brain has two audiences: agents (need fast, accurate lookup) and humans (need to navigate, prune, audit). The **Karpathy LLM-wiki model** — minimal summarisation, maximal indexation, three layers (raw → themes → indexes) — is the design of record. The architecture calls for a brain that "doubles as the visual layer for humans."
 
 Obsidian renders markdown wikis as graphs natively, supports backlinks, and is read-only-friendly for agents (just markdown files on disk).
 
@@ -26,19 +26,16 @@ brain/
 ├── _raw/                           # immutable raw sources (ground truth)
 ├── forge-dev/                      # Brain 1 — forge engineering knowledge
 │   ├── themes/                     # ~15-40 line theme pages
-│   ├── graphify-out/               # knowledge graph (auto-built)
 │   └── (category indexes)
 ├── cycles/                         # Brain 2 — cross-cycle patterns + archives
 │   ├── themes/
-│   ├── _raw/                       # immutable cycle records
-│   └── graphify-out/
+│   └── _raw/                       # immutable cycle records
 └── log.md                          # significant operations log
 
 # Brain 3 (per-project) lives inside each managed project's repo:
 projects/<name>/brain/
 ├── profile.md                      # who/what/taste signals
-├── themes/
-└── graphify-out/
+└── themes/
 ```
 
 Original layout (scaffold, superseded by ADR 018):
@@ -69,7 +66,7 @@ The brain is itself fronted by three skills:
 
 **Positive:**
 - Same data structure agents query and humans browse.
-- Obsidian's graph view satisfies the visualisation requirement from the diagram.
+- A markdown vault renders as a navigable graph in Obsidian (or any wiki viewer), satisfying the human-visualisation requirement.
 - Markdown is the universal lowest-common-denominator — any future tool can read it.
 - Append-only `_raw/` means historical context is never lost.
 
@@ -81,10 +78,10 @@ The brain is itself fronted by three skills:
 
 - **Vector DB (Chroma, Qdrant, etc.)** — premature optimisation. Recall isn't the bottleneck; quality of theme pages is.
 - **Notion / Confluence / external wiki** — adds an external dependency, breaks "agents read from disk" simplicity, and pulls forge off the local-first path.
-- **One big markdown file** — v1 tried summary files; they grow unbounded and lose detail. Karpathy's "many small theme pages > few large summaries" is the correction.
+- **One big markdown file** — the prior approach tried summary files; they grow unbounded and lose detail. Karpathy's "many small theme pages > few large summaries" is the correction.
 
 ## References
 
 - [Karpathy LLM-Wiki gist](https://gist.github.com/karpathy/) (search "LLM wiki" — exact URL captured during Pass A ingest)
-- v1's Phase 3.5 wiki rebuild theme pages (carry into brain via Pass B)
+- The prior build's Phase 3.5 wiki rebuild theme pages (folded into the brain)
 - [Obsidian](https://obsidian.md/)

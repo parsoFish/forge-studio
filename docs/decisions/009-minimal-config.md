@@ -5,7 +5,7 @@
 
 ## Context
 
-V1's `forge.config.json` accumulated knobs: model overrides, concurrency settings, resource slots, budget thresholds, cost-tracking weights, retry policies. Most were untouched by users; some duplicated information that lived more naturally elsewhere (in skill prompts, in ADRs).
+The prior `forge.config.json` accumulated knobs: model overrides, concurrency settings, resource slots, budget thresholds, cost-tracking weights, retry policies. Most were untouched by users; some duplicated information that lived more naturally elsewhere (in skill prompts, in ADRs).
 
 ## Decision
 
@@ -35,7 +35,7 @@ Everything else lives in:
 - **`SKILL.md`** — prompt-level / behaviour-level settings.
 - **Initiative manifest frontmatter** — per-initiative budgets / overrides.
 
-There is no v1-style `concurrency.targetCpuLoad`, `resourceSlots`, `costTracking.warnAtPercent`, etc. If those become real needs, they get ADRs first.
+There is no prior-style `concurrency.targetCpuLoad`, `resourceSlots`, `costTracking.warnAtPercent`, etc. If those become real needs, they get ADRs first.
 
 ## Consequences
 
@@ -49,9 +49,9 @@ There is no v1-style `concurrency.targetCpuLoad`, `resourceSlots`, `costTracking
 
 ## Alternatives considered
 
-- **V1's full config** — a museum of knobs added in cycles 1-3 to fix specific issues. Most aren't needed in v2 because the underlying problems are gone.
+- **The prior full config** — a museum of knobs added in cycles 1-3 to fix specific issues. Most aren't needed now because the underlying problems are gone.
 - **No config file at all** — fine until the user has two machines with different `projectsDir`s.
 
 ## References
 
-- v1's `src/config/settings.ts` — explicitly not ported
+- The prior `src/config/settings.ts` — explicitly not ported

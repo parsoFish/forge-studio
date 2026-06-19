@@ -80,9 +80,9 @@ command and the `forge architect commit` CLI.
    `architect-commit.ts:doApprove` into a shared `promoteManifests()` helper the
    runner's finalize step reuses.
 
-   > **Amended ([ADR 023](./023-ui-sole-operator-surface.md)):** `architect-commit.ts`
-   > has since been **deleted** — the `doApprove`/`promoteManifests` logic now lives
-   > solely in [`orchestrator/promote-manifests.ts`](../../orchestrator/promote-manifests.ts).
+   > **Amended (sole-operator-surface pass, now [ADR 031](./031-studio-consolidation.md)):**
+   > `architect-commit.ts` has since been **deleted** — the `doApprove`/`promoteManifests`
+   > logic now lives solely in [`orchestrator/promote-manifests.ts`](../../orchestrator/promote-manifests.ts).
 
 ## Consequences
 

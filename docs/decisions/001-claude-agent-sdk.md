@@ -5,7 +5,7 @@
 
 ## Context
 
-V2 needs an underlying runtime to invoke Claude models with tool use, context management, and (where useful) subagents. V1 spawned the `claude` CLI as subprocesses, parsed streaming JSON, and handled session/context concerns itself. That worked, but every Claude Code platform improvement (subagents, hooks, MCP, headless mode, V2 preview) had to be re-plumbed by hand.
+Forge needs an underlying runtime to invoke Claude models with tool use, context management, and (where useful) subagents. The prior approach spawned the `claude` CLI as subprocesses, parsed streaming JSON, and handled session/context concerns itself. That worked, but every Claude Code platform improvement (subagents, hooks, MCP, headless mode) had to be re-plumbed by hand.
 
 ## Decision
 
@@ -19,20 +19,20 @@ Use the **first-party [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/p
 ## Consequences
 
 **Positive:**
-- TypeScript-native — drops directly into v2's TS orchestrator with no IPC or process-shelling tax.
+- TypeScript-native — drops directly into the TS orchestrator with no IPC or process-shelling tax.
 - Anthropic-maintained — subagents/hooks/MCP improvements arrive as version bumps, not re-implementation work.
-- V2 preview already removes async-generator friction.
-- Same primitives (skills, MCP, hooks) v2 already uses elsewhere.
+- The SDK removes async-generator friction.
+- Same primitives (skills, MCP, hooks) forge already uses elsewhere.
 
 **Negative / accepted trade-offs:**
-- Anthropic-only models. v1 already standardised on Claude, so no real loss; if portability later matters, add an Aider adapter under `loops/_adapters/`.
+- Anthropic-only models. Forge standardised on Claude, so no real loss; the runtime-adapter seam ([ADR 029](./029-runtime-adapters.md)) is where portability lands — non-Claude adapters (Gemini, Aider) are registered under `loops/_adapters/`, dep+creds-gated until provisioned.
 - Bundles a native Claude Code binary as an optional dep — slightly larger install footprint.
 
 ## Alternatives considered
 
-- **Aider** ([aider.chat](https://aider.chat/)) — Python; would require shelling out from TS. Strong runner-up if Anthropic lock-in becomes a concern. Documented in `loops/_adapters/` as the planned alternative.
-- **OpenHands**, **OpenClaw**, **Hermes Agent** — each duplicates layers forge already owns (memory, orchestration, job runtime). Adopting them means rewriting forge around their assumptions, the opposite of v2's "small core, plug in big tools" thesis.
-- **Continue spawning the `claude` CLI as subprocesses** — what v1 did. Strictly more work and strictly less leverage than the SDK; rejected.
+- **Aider** ([aider.chat](https://aider.chat/)) — Python; would require shelling out from TS. Strong runner-up if Anthropic lock-in becomes a concern; it now ships as a registered runtime adapter under `loops/_adapters/aider/` (ADR 029).
+- **OpenHands**, **OpenClaw**, **Hermes Agent** — each duplicates layers forge already owns (memory, orchestration, job runtime). Adopting them means rewriting forge around their assumptions, the opposite of the "small core, plug in big tools" thesis.
+- **Continue spawning the `claude` CLI as subprocesses** — the prior approach. Strictly more work and strictly less leverage than the SDK; rejected.
 
 ## References
 

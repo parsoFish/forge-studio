@@ -5,7 +5,7 @@
 
 ## Context
 
-User principle 5: every component must log actions, inputs, outputs; iterations of agentic loops must be tracked; metrics enable monitoring + visualisation. V1 had several logging surfaces (worker logs, agent logs, event log, budget log) that were not unified — reflection had to stitch them together.
+User principle 5: every component must log actions, inputs, outputs; iterations of agentic loops must be tracked; metrics enable monitoring + visualisation. The prior approach had several logging surfaces (worker logs, agent logs, event log, budget log) that were not unified — reflection had to stitch them together.
 
 ## Decision
 
@@ -42,7 +42,7 @@ Writers:
 
 Readers:
 - `orchestrator/metrics.ts` — aggregates cost, iterations, durations.
-- **forge-ui** — consumes events via the daemon bridge (SSE stream, [ADR 023](./023-ui-sole-operator-surface.md)) for the live phase/WI hex view and cost panel. The former `orchestrator/visualise.ts` CLI tail was removed when the UI became the sole operator surface.
+- **forge-ui** — consumes events via the daemon bridge (SSE stream, [ADR 031](./031-studio-consolidation.md), which carries the sole-operator-surface decision) for the live phase/WI hex view and cost panel. The former `orchestrator/visualise.ts` CLI tail was removed when the UI became the sole operator surface.
 - The reflector skill — reads the full log to write retros.
 
 ## Consequences
@@ -66,4 +66,4 @@ Readers:
 ## References
 
 - [JSON Lines spec](https://jsonlines.org/)
-- v1's `src/events/event-log.ts` — close to this design; this ADR locks it as canonical
+- The prior `src/events/event-log.ts` — close to this design; this ADR locks it as canonical

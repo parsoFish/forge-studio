@@ -15,7 +15,7 @@ The project-manager phase decomposes architect-emitted initiatives into atomic w
 2. `_graph.md` mermaid format.
 3. Work-item frontmatter schema — required fields, types, validation rules.
 
-Without these locked, the PM bench cannot deterministically score outputs, the orchestrator cannot validate before handing items to the developer loop, and every PM session would have to invent its own shape (the same drift problem [ADR 014](./014-roadmap-format.md) solved for `roadmap.md`).
+Without these locked, the PM bench cannot deterministically score outputs, the orchestrator cannot validate before handing items to the developer loop, and every PM session would have to invent its own shape (the same drift problem the retired `roadmap.md`-schema ADR solved for that artifact).
 
 Brain themes consulted: [`spec-driven-work-items`](../../brain/forge/themes/spec-driven-work-items.md) (Given-When-Then is the contract; declarative > imperative), [`design-is-the-bottleneck`](../../brain/forge/themes/design-is-the-bottleneck.md) (v1 evidence — bad decomposition produces churn), [`work-item-completion-by-domain`](../../brain/forge/themes/work-item-completion-by-domain.md) (109-item v1 dataset; domain complexity, not item count, predicts failure), [`markdown-artifact-flow`](../../brain/forge/themes/markdown-artifact-flow.md) (greppable markdown is the protocol), and [`brain/projects/env-optimiser/themes/specify-driven-features.md`](../../brain/projects/env-optimiser/themes/specify-driven-features.md) (env-optimiser already expects PM to use `WI-N` IDs in `tasks.md`).
 
@@ -135,13 +135,13 @@ creates: [tests/x.test.ts]                                   # files this WI cre
 - **DOT instead of mermaid for `_graph.md`.** DOT renders elsewhere (`dot -Tpng`), but mermaid renders inline in GitHub, Obsidian, and IDE markdown previews — the readers we actually use.
 - **Frontmatter-only WI files (no body).** Rejected — the rationale + per-criterion notes provide the "why" the developer loop needs when the criteria are ambiguous. Frontmatter is the contract; body is the briefing.
 - **JSON instead of YAML frontmatter + markdown body.** Rejected — breaks ADR 007's "documentation = data" property. JSON is harder to read in a PR diff and can't carry the markdown body without escaping.
-- **Defer the schema until the first PM session writes one.** Rejected — same reasoning as ADR 014: the bench needs *some* canonical shape to score against, and re-litigating per-fixture is more expensive than locking v0 now.
+- **Defer the schema until the first PM session writes one.** Rejected — same reasoning as the retired `roadmap.md`-schema ADR: the bench needs *some* canonical shape to score against, and re-litigating per-fixture is more expensive than locking it now.
 
 ## References
 
 - [ADR 007](./007-markdown-artifact-flow.md) — markdown-as-spec discipline this ADR specialises.
 - [ADR 008](./008-jsonl-event-log.md) — event log carries `work_item_id` for cross-initiative joins.
-- [ADR 014](./014-roadmap-format.md) — `roadmap.md` schema; same lock-it-before-the-bench rationale.
+- The retired `roadmap.md`-schema ADR (number 014 reserved) — same lock-it-before-the-bench rationale.
 - [`docs/phases/project-manager.md`](../phases/project-manager.md) — phase doc this ADR resolves.
 - [`skills/project-manager/SKILL.md`](../../skills/project-manager/SKILL.md) — interactive skill that emits work items.
 - [`orchestrator/manifest.ts`](../../orchestrator/manifest.ts) — manifest schema; sibling pattern for `work-item.ts`.
