@@ -63,5 +63,9 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = process.cwd())
     tier,
     allowedTools: def.allowedTools,
     disallowedTools: def.disallowedTools,
+    // ADR 029: carry the SKILL.md runtime.sdk through to the spec so the
+    // orchestrator can spawn the phase on a non-claude runtime. Previously
+    // dropped here; resolveSdkId gates it at the dev-loop call site.
+    sdk: def.runtime.sdk,
   };
 }
