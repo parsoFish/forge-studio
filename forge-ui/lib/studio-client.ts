@@ -466,12 +466,37 @@ export async function runKbMaintenance(
   return { ok: r.ok, error: r.error, data: r.data };
 }
 
-/** Onboard (create) a new project: registers it + scaffolds .forge/project.json. */
+/** A preflight clause the onboarded project still fails (surfaced to the UI). */
+export type FailingClause = { id: string; title: string; detail: string };
+
+/**
+ * Onboard (create) a new project: scaffolds `.forge/project.json` + the C4
+ * contract artifacts (roadmap.md + brain/profile.md stubs), git-inits if
+ * needed, then preflights. Surfaces `ready` (every hard clause green),
+ * `scaffolded` (relative paths the server created), and `failingClauses` (the
+ * hard clauses still red) so the form can either celebrate or hand off to the
+ * forge-onboard-project skill.
+ */
 export async function createProject(
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  id?: string;
+  error?: string;
+  ready?: boolean;
+  scaffolded?: string[];
+  failingClauses?: FailingClause[];
+}> {
   const r = await studioPost('/api/studio/projects', body);
-  return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
+  const data = r.data;
+  return {
+    ok: r.ok,
+    id: typeof data?.id === 'string' ? data.id : undefined,
+    error: r.error,
+    ready: typeof data?.ready === 'boolean' ? data.ready : undefined,
+    scaffolded: Array.isArray(data?.scaffolded) ? (data.scaffolded as string[]) : undefined,
+    failingClauses: Array.isArray(data?.failingClauses) ? (data.failingClauses as FailingClause[]) : undefined,
+  };
 }
 
 /** Fetch a single flow definition by id. */

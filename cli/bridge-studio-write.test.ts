@@ -20,6 +20,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -89,11 +90,6 @@ function makeProjectJson(extras: Record<string, unknown> = {}): string {
   );
 }
 
-/** Minimal projects.yaml pointing at a relative project path */
-function makeProjectsYaml(projectPath: string): string {
-  return ['projects:', `  - id: write-project`, `    path: ${projectPath}`].join('\n');
-}
-
 /** PUT body for agent edits */
 function makePutAgentBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -136,17 +132,11 @@ before(async () => {
     makeAgentSkillMd(),
   );
 
-  // ---- project dir + .forge/project.json --
+  // ---- project dir + .forge/project.json (auto-discovered from disk; B1) --
   projectDir = join(forgeRoot, 'projects', 'write-project');
   mkdirSync(join(projectDir, '.forge'), { recursive: true });
   writeFileSync(join(projectDir, '.forge', 'project.json'), makeProjectJson());
-
-  // ---- studio/projects.yaml -- uses path relative to forgeRoot
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
-  writeFileSync(
-    join(forgeRoot, 'studio', 'projects.yaml'),
-    makeProjectsYaml('projects/write-project'),
-  );
 
   // ---- minimal _queue and _logs for bridge health --
   mkdirSync(join(forgeRoot, '_queue', 'done'), { recursive: true });
@@ -170,6 +160,14 @@ after(async () => {
 async function putJson(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return fetch(url, {
     method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+async function postJson(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
     headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', ...headers },
     body: JSON.stringify(body),
   });
@@ -454,29 +452,73 @@ test('OPTIONS from a foreign origin → origin not echoed', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// projectRef.path escapes forge root → 400
+// Unknown project id (not discoverable on disk) → 404
+//
+// B1: project paths come from the disk scan, which only returns dirs under the
+// projects root — an attacker can no longer point a registry entry outside the
+// repo, so an id with no matching dir is simply unknown.
 // ---------------------------------------------------------------------------
 
-test('PUT /api/studio/projects/:id with absolute path in projects.yaml → 400 escapes-root', async () => {
-  // Temporarily overwrite projects.yaml with an absolute path
-  const badYaml = ['projects:', '  - id: escape-project', '    path: /tmp/evil-escape'].join('\n');
-  writeFileSync(join(forgeRoot, 'studio', 'projects.yaml'), badYaml);
-
-  const res = await putJson(`${bridgeUrl}/api/studio/projects/escape-project`, {
-    northStar: 'Escaped.',
+test('PUT /api/studio/projects/:id for an undiscovered project → 404', async () => {
+  const res = await putJson(`${bridgeUrl}/api/studio/projects/no-such-project`, {
+    northStar: 'Nope.',
   });
-  assert.equal(res.status, 400);
+  assert.equal(res.status, 404);
   const body = (await res.json()) as { error: string };
   assert.ok(
-    body.error.includes('escapes'),
-    `expected path-escape error, got: ${body.error}`,
+    body.error.includes('unknown project'),
+    `expected unknown-project error, got: ${body.error}`,
   );
+});
 
-  // Restore projects.yaml
-  writeFileSync(
-    join(forgeRoot, 'studio', 'projects.yaml'),
-    makeProjectsYaml('projects/write-project'),
-  );
+// ---------------------------------------------------------------------------
+// POST /api/studio/projects (onboard) — B1 disk discovery + B3 C4 scaffolding
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, reports preflight', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/projects`, {
+    name: 'Onboard Me',
+    qualityGateCmd: 'npm test',
+    northStar: 'Prove onboarding scaffolds the contract.',
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    ok: boolean; id: string; ready: boolean; scaffolded: string[]; failingClauses: Array<{ id: string }>;
+  };
+  assert.equal(body.ok, true);
+  assert.equal(body.id, 'onboard-me');
+
+  // .forge/project.json written with the hard contract fields.
+  const projDir = join(forgeRoot, 'projects', 'onboard-me');
+  const cfgPath = join(projDir, '.forge', 'project.json');
+  assert.ok(existsSync(cfgPath), 'project.json must be scaffolded');
+  const cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
+  assert.ok(Array.isArray(cfg.quality_gate_cmd), 'C1 quality_gate_cmd present');
+  assert.ok(cfg.demo && typeof cfg.demo === 'object', 'DEMO block present');
+
+  // B3: the C4 artifacts + a git repo were scaffolded (idempotent stubs).
+  assert.ok(existsSync(join(projDir, 'roadmap.md')), 'roadmap.md scaffolded (C4)');
+  assert.ok(existsSync(join(projDir, 'brain', 'profile.md')), 'brain/profile.md scaffolded (C4)');
+  assert.ok(existsSync(join(projDir, '.git')), 'git repo initialised');
+  assert.ok(body.scaffolded.includes('roadmap.md'), 'scaffolded list reports roadmap.md');
+  assert.ok(Array.isArray(body.failingClauses), 'failingClauses is an array');
+
+  // The project is now auto-discovered (B1) — GET lists it.
+  const list = await (await fetch(`${bridgeUrl}/api/studio/projects`)).json() as { projects: Array<{ id: string }> };
+  assert.ok(list.projects.some((p) => p.id === 'onboard-me'), 'onboarded project is discovered');
+
+  rmSync(projDir, { recursive: true, force: true });
+});
+
+test('POST /api/studio/projects rejects a duplicate id (already discovered) → 409', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/projects`, {
+    name: 'write-project', // collides with the fixture project dir
+    qualityGateCmd: 'npm test',
+    northStar: 'dup',
+  });
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error: string };
+  assert.ok(body.error.includes('already exists'), `expected duplicate error, got: ${body.error}`);
 });
 
 // ---------------------------------------------------------------------------
