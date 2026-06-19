@@ -152,3 +152,47 @@ export function writeVerdictJson(
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Release persistence — the `release` terminal record (WS-A · final-loop)
+// ---------------------------------------------------------------------------
+
+export type ReleaseRecord = {
+  initiative_id: string;
+  cycleId: string;
+  project: string;
+  /** Computed semver version (null when the finaliser could not determine one). */
+  version: string | null;
+  /** Worktree-relative changelog path the finaliser promoted. */
+  changelogPath: string;
+  /** The PR branch the finalised release commit landed on. */
+  branch: string;
+  /** ISO-8601 timestamp of finalisation. */
+  finalizedAt: string;
+};
+
+export function releaseJsonPath(logsRoot: string, cycleId: string): string {
+  return resolve(logsRoot, cycleId, 'artifacts', 'release.json');
+}
+
+/**
+ * Persist the release terminal record. `overwrite: false` (the default) keeps a
+ * re-approve from clobbering the first finalisation. Returns the path written,
+ * or null when skipped (exists + !overwrite) or on an IO error — the durable
+ * record is best-effort and never breaks the merge.
+ */
+export function writeReleaseJson(
+  logsRoot: string,
+  record: ReleaseRecord,
+  opts: { overwrite?: boolean } = {},
+): string | null {
+  const p = releaseJsonPath(logsRoot, record.cycleId);
+  if (!opts.overwrite && existsSync(p)) return null;
+  try {
+    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    return p;
+  } catch {
+    return null;
+  }
+}

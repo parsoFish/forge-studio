@@ -53,12 +53,14 @@ import {
   applyReviewVerdict,
   applyPlanVerdict,
   type StudioPostContext,
+  type ReleaseFinalizeHookInput,
 } from './bridge-studio-runs.ts';
+import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
-import type { EventLogEntry } from '../orchestrator/logging.ts';
+import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listArchitectSessions,
   readStatus,
@@ -111,6 +113,13 @@ export type BridgeOptions = {
    * from orchestrator/finalize-merged.ts. Fired (void, non-blocking) on approve.
    */
   finalizeAfterMerge?: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  /**
+   * WS-A (release) — injectable for tests; defaults to a wrapper around the real
+   * `runReleaseFinalize` phase. Called on approve, AWAITED immediately BEFORE
+   * mergePr. Opt-in (skips when the project has no `releaseProcess`) and
+   * log-and-continue (a failure never blocks the merge).
+   */
+  runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
 };
 
 type TailState = {
@@ -130,6 +139,15 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const projectsRoot = resolve(forgeRoot, 'projects');
   const mergePrFn = opts.mergePr ?? mergePullRequest;
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
+  // WS-A (release): the default release-finalize hook constructs a per-cycle
+  // logger and delegates to the real phase. Opt-in + log-and-continue live
+  // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
+  const runReleaseFinalizeFn =
+    opts.runReleaseFinalize ??
+    (async (input: ReleaseFinalizeHookInput): Promise<{ release_status: string }> => {
+      const logger = createLogger(input.cycleId, logsRoot);
+      return runReleaseFinalize(input, logger);
+    });
 
   const clients = new Set<WebSocket>();
   const tails = new Map<string, TailState>();
@@ -356,6 +374,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       ensureArchitectTail: (sessionId: string) => ensureTailFor(`_architect-${sessionId}`),
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
+      runReleaseFinalize: runReleaseFinalizeFn,
     });
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -449,6 +468,8 @@ type HttpContext = {
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  /** WS-A — finalise the release on the PR branch before merge (opt-in; log-and-continue). */
+  runReleaseFinalize: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
 };
 
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
@@ -670,6 +691,7 @@ async function handleHttp(
     projectsRoot: ctx.projectsRoot,
     mergePr: ctx.mergePr,
     finalizeAfterMerge: ctx.finalizeAfterMerge,
+    runReleaseFinalize: ctx.runReleaseFinalize,
     broadcastArchitectChanged: ctx.broadcastArchitectChanged,
   };
   if (await handleStudioPostRoutes(req, res, studioPostCtx, url, method)) return;
