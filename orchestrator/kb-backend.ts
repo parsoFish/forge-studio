@@ -1,15 +1,13 @@
 /**
- * KbBackend — the pluggable knowledge-base seam (ADR-027 §4, ADR-031 subsumption).
+ * KbBackend — the pluggable knowledge-base seam (ADR-027 §4).
  *
  * A backend is bound to one `kbId` and exposes the read/query operations the
- * bridge (and, in a later pass, the planners) need. Today the only
- * implementation is `FilesystemKbBackend`, which reads `brain/<kbId>/` directly
- * (the historical behaviour). The point of the seam is that a graph-memory
- * backend — Zep (M8-C), Mem0, Cognee, Letta — can implement the SAME interface
- * over its own store, and `getKbBackend()` selects it from the `kb.yaml`
- * descriptor. This is the "subsume the best memory layer" flywheel made
- * concrete: the brain's backend becomes swappable, not hardcoded to the
- * filesystem.
+ * bridge (and, in a later pass, the planners) need. The only implementation is
+ * `FilesystemKbBackend`, which reads `brain/<kbId>/` directly. The seam is kept
+ * deliberately small: it is the SAME interface a future graph-memory backend
+ * (Mem0, Cognee, Letta, …) would implement over its own store, selected from
+ * the `kb.yaml` descriptor — but no such backend ships today (a first attempt,
+ * Zep, was removed; extra backends are revisited later).
  *
  * Scope note: the brain's *planning-context* read (PM/reflector load the brain
  * navigation index via `loadBrainIndex`, a separate module) is NOT yet routed
@@ -30,8 +28,6 @@ import {
   type KbNodeArticle,
   type PendingGuidance,
 } from './kb-graph.ts';
-import { loadKbDescriptor } from './studio/registry.ts';
-import { createZepKbBackend, isZepAvailable } from './kb-backends/zep.ts';
 
 /** A single search hit over KB nodes. `score` is backend-defined (higher = better). */
 export type KbSearchHit = {
@@ -43,7 +39,7 @@ export type KbSearchHit = {
 
 /**
  * The pluggable knowledge-base contract. Every backend is bound to one kbId.
- * A second implementation (e.g. ZepKbBackend) must satisfy this interface; the
+ * A future second implementation must satisfy this interface; the
  * `kb-backend.test.ts` contract test is the admission gate (mirrors the
  * RuntimeAdapter conformance suite, ADR-029).
  */
@@ -59,10 +55,10 @@ export interface KbBackend {
   /** Delete a consumed guidance note. Returns true if it was deleted. */
   deleteGuidanceFile(filePath: string): boolean;
   /**
-   * Free-text search over the KB. A graph-memory backend (Zep/Mem0) does this
-   * semantically — its native strength; the filesystem default does cheap title
-   * substring ranking (see below). The seam is what lets a planner ask the brain
-   * a question without knowing which backend answers.
+   * Free-text search over the KB. A future graph-memory backend (Mem0/…) would
+   * do this semantically; the filesystem default does cheap title substring
+   * ranking (see below). The seam is what lets a planner ask the brain a
+   * question without knowing which backend answers.
    */
   search(query: string, limit?: number): KbSearchHit[];
 }
@@ -116,48 +112,31 @@ export class FilesystemKbBackend implements KbBackend {
 }
 
 /**
- * Resolve the KbBackend for a kbId by reading its `kb.yaml` descriptor.
- *
- * Backend-selection seam: a future `backend:` field on the descriptor routes to
- * a registered non-filesystem backend here (M8-C registers ZepKbBackend keyed on
- * it). Today every kb resolves to the filesystem backend. Throws on an unknown
- * kbId (no `brain/<kbId>/kb.yaml`) — same contract as the underlying functions.
+ * Resolve the KbBackend for a kbId. The filesystem backend is the only
+ * implementation today; the seam is preserved for a future graph-memory backend
+ * routed off the `kb.yaml` `backend:` field. Throws on an unknown kbId (no
+ * `brain/<kbId>/kb.yaml`) — same contract as the underlying functions.
  */
 export function getKbBackend(forgeRoot: string, kbId: string): KbBackend {
   const kbYamlPath = join(resolve(forgeRoot, 'brain', kbId), 'kb.yaml');
   if (!existsSync(kbYamlPath)) {
     throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
   }
-  // The `zep` backend is async (dep import + live prime) — the sync path cannot
-  // build it. Callers of a zep-backed kb must use getKbBackendAsync().
-  const descriptor = loadKbDescriptor(kbYamlPath);
-  if (descriptor.backend === 'zep') {
-    throw new Error(`kb "${kbId}" uses the zep backend — call getKbBackendAsync() instead`);
-  }
   return new FilesystemKbBackend(forgeRoot, kbId);
 }
 
 /**
- * Async backend resolution — the production entry point that can route to a
- * graph-memory backend. Reads the descriptor's `backend:` field; `zep` resolves
- * to a primed ZepKbBackend when the dep + `ZEP_API_KEY` are available, else falls
- * back to the filesystem backend (graceful: a missing key never breaks the brain
- * view). For filesystem kbs this is behaviour-identical to getKbBackend().
+ * Async backend resolution — the production entry point. Kept async (and as a
+ * distinct symbol callers depend on) so a future graph-memory backend can be
+ * routed here without changing call sites; today it resolves the filesystem
+ * backend, behaviour-identical to getKbBackend().
  */
 export async function getKbBackendAsync(
   forgeRoot: string,
   kbId: string,
-  env: NodeJS.ProcessEnv = process.env,
+  // Retained for signature stability with callers; unused while the filesystem
+  // backend is the only implementation.
+  _env: NodeJS.ProcessEnv = process.env,
 ): Promise<KbBackend> {
-  const kbYamlPath = join(resolve(forgeRoot, 'brain', kbId), 'kb.yaml');
-  if (!existsSync(kbYamlPath)) {
-    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
-  }
-  const descriptor = loadKbDescriptor(kbYamlPath);
-  if (descriptor.backend === 'zep' && (await isZepAvailable(env))) {
-    const backend = await createZepKbBackend({ forgeRoot, kbId, env });
-    await backend.prime(); // warm the snapshot so the sync interface reads work
-    return backend;
-  }
-  return new FilesystemKbBackend(forgeRoot, kbId);
+  return getKbBackend(forgeRoot, kbId);
 }

@@ -91,15 +91,6 @@ community-skills:
     composedBy: [architect]
     stars: "151k"
     desc: Q&A that produces a new SKILL.md with full frontmatter.
-  - id: graphify
-    name: Graphify Code Graph
-    provenance: safishamsi/graphify
-    source: https://github.com/safishamsi/graphify
-    category: research
-    tier: haiku
-    composedBy: [project-manager, developer-ralph]
-    stars: "66.8k"
-    desc: Turn a codebase into a queryable knowledge graph (~70% token reduction on context packs).
   - id: agent-browser
     name: Agent Browser
     provenance: vercel-labs

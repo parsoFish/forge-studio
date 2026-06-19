@@ -212,8 +212,8 @@ mock's knowledge page over real brains.
 
 Workstreams:
 
-1. **KB read API** — descriptors, graph (graphify JSON + frontmatter layers
-   → nodes/edges with index/theme/raw), node article rendering (markdown +
+1. **KB read API** — descriptors, graph (brain filesystem markdown +
+   frontmatter layers → nodes/edges with index/theme/raw), node article rendering (markdown +
    `[[wiki-link]]` resolution, touched-by from frontmatter/git), health
    (`forge brain lint` as API: layer balance, orphans, link density,
    staleness).

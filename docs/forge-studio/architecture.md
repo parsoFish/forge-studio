@@ -133,8 +133,8 @@ desc: What forge has learned about running cycles.
 
 - The three-brain model maps 1:1 onto the mock's scopes: `forge-dev` →
   agent-integration, `cycles` → flow, per-project `brain/` → project.
-- Graph data comes from the existing graphify output (`graphify-out/graph.json`)
-  + frontmatter layers; **no new graph store**.
+- Graph data comes from the brain filesystem (`brain/<kb>/` markdown +
+  frontmatter layers); **no new graph store**.
 - Health = `forge brain lint` results served as API.
 - Human guidance = `_guidance/*.md` pending notes (node-linked or floating),
   consumed and deleted by the next `brain-ingest` pass — the human-originated
@@ -243,7 +243,7 @@ Port the mocks 1:1 in structure; reuse proven components.
 | `/flows/[id]` (build + monitor tabs) | flow-builder.html | AgentGraphCanvas, StageHex, HexDetailDrawer, ActivityPanel, dep-layout, wi-status/phases |
 | `/agents/[id]` | agent-builder.html | — (new builder) |
 | `/projects/[id]` | project-builder.html | preflight API |
-| `/knowledge/[id]` | knowledge-base.html | graphify data, brain lint |
+| `/knowledge/[id]` | knowledge-base.html | brain filesystem data, brain lint |
 | `/artifact?run&type&mode` | artifact.html | PlanGate, DemoComparison, ReviewVerdictForm |
 | `/architect/[sessionId]` | (kept) | existing screen, restyled into shell |
 
@@ -257,8 +257,8 @@ Port the mocks 1:1 in structure; reuse proven components.
   (react-flow/xyflow) over hand-rolled drag math — decided in ADR-030 after a
   spike (number reserved); the mock's interaction spec is the acceptance bar
   either way.
-- KB graph: d3-force (or sigma.js) over graphify JSON; the mock's custom
-  physics is spec, not implementation.
+- KB graph: d3-force (or sigma.js) over the brain filesystem (markdown +
+  frontmatter layers); the mock's custom physics is spec, not implementation.
 
 ## 5. Runtime adapters (ADR-029, last)
 

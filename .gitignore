@@ -94,27 +94,6 @@ secrets.env
 # Obsidian vault config (per-user)
 brain/.obsidian/
 
-# Graphify output — three-brain model (Brain 1: forge-dev, Brain 2: cycles, Brain 3: per-project).
-# Per C21: `graph.json` is the canonical structural index (committed). The
-# semantic community names (.graphify_labels.json — populated by
-# scripts/brain-name-communities.ts) are also committed so navigation
-# names persist across clones. Everything else (`graph.html`,
-# `GRAPH_REPORT.md`, `manifest.json`, `cache/`, `.graphify_root`) is
-# regenerable view + machine-local state.
-# Brain 1 (forge-dev)
-brain/forge-dev/graphify-out/*
-!brain/forge-dev/graphify-out/graph.json
-!brain/forge-dev/graphify-out/.graphify_labels.json
-# Brain 2 (cycles)
-brain/cycles/graphify-out/*
-!brain/cycles/graphify-out/graph.json
-!brain/cycles/graphify-out/.graphify_labels.json
-# Graphify's own working state under brain/.graphify/ is per-machine.
-brain/.graphify/
-brain/.graphify-tmp/
-# Any accidental graphify-out/ at the forge root (e.g. from running cluster-only in CWD)
-graphify-out/
-
 # Logs from local runs
 *.log
 npm-debug.log*

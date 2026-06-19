@@ -113,7 +113,7 @@ Source inventories: full-page feature extraction of all 6 mock pages +
 | Mock feature | Today | Category | Plan |
 |---|---|---|---|
 | KB selector grouped by scope (project/flow/agent-integration) | Three-brain model is exactly this scoping (forge-dev≈agent-integration, cycles≈flow, project) | **MODIFY** | `kb.yaml` descriptors over existing brains (M5) |
-| Force-directed graph (index hex / theme circle / raw dot), pan/zoom/drag | `brain/*/graphify-out/graph.json` exists; `cli/visualise.ts` exists; no interactive UI | **MODIFY** | Graph viewer over graphify output (M5); adopt library (d3-force) per battle-tested rule |
+| Force-directed graph (index hex / theme circle / raw dot), pan/zoom/drag | `brain/*/` markdown + frontmatter layers exist; `cli/visualise.ts` exists; no interactive UI | **MODIFY** | Graph viewer over the brain filesystem (M5); adopt library (d3-force) per battle-tested rule |
 | Node article panel (touched-by, inbound/outbound links, body) | Theme/raw pages with wiki-links + frontmatter ARE the articles | **MODIFY** | Serve rendered node content via bridge (M5) |
 | Wiki-link + chip navigation between nodes | Links exist in markdown | **MODIFY** | Resolve `[[link]]` → node nav (M5) |
 | Human guidance pin (attach note to node, awaiting ingest) | `brain-gaps.jsonl` feedback loop — same shape, agent-originated only | **MODIFY** | `_guidance/` pending notes consumed by brain-ingest (M5) |
