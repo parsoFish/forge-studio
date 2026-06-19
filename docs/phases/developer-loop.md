@@ -40,7 +40,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## Benchmark suite
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
+> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
 
 `benchmarks/developer-loop/` (removed) — five fixtures, one per managed project.
 - `fixtures/<id>/` — seed worktree (source files + tests) plus `.forge/work-items/WI-1.md` (the WI spec) plus a failing acceptance test.
