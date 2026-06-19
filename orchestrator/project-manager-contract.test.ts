@@ -149,7 +149,7 @@ test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async (
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
     await assert.rejects(
       () => runProjectManager(h.input, h.logger, { queryFn }),
-      /live-acceptance work item/,
+      /no acceptance work item/,
     );
     const events = readEvents(h.logger);
     const end = events.find(

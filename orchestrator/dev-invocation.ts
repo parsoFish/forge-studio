@@ -123,7 +123,7 @@ export function renderDevUserPrompt(input: DevUserPromptInput): string {
     '',
     `Your current working directory is **already** \`${input.worktreePath}\` — your shell starts there and every tool runs there.`,
     '',
-    '- Reference files **relative to it** (`AGENT.md`, `fix_plan.md`, `azuredevops/…`, `.forge/work-items/…`). Do NOT prepend an absolute prefix, and do NOT guess paths like `/workspaces/…`, `/repo/…`, `/workspace/…`, `/root/…` — they do not exist here. If ever unsure, run `pwd` once, then keep using relative paths. Don\'t spend tool calls re-locating the tree — you are already in it.',
+    '- Reference files **relative to it** (`AGENT.md`, `fix_plan.md`, `src/…`, `.forge/work-items/…`). Do NOT prepend an absolute prefix, and do NOT guess paths like `/workspaces/…`, `/repo/…`, `/workspace/…`, `/root/…` — they do not exist here. If ever unsure, run `pwd` once, then keep using relative paths. Don\'t spend tool calls re-locating the tree — you are already in it.',
     '',
     '## Spec',
     '',
