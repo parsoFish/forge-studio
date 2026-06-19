@@ -114,6 +114,13 @@ export type Flow = {
   edges: FlowEdge[];
   triggers: FlowTrigger[];
   costCeilingUsd?: number;
+  /**
+   * Provenance of the flow. The bundled OOTB palette ships `seed` /
+   * `ootb-library`; a flow authored in-app via PUT /api/studio/flows is
+   * stamped `studio`. The first-run onramp keys off this to tell apart
+   * shipped flows (don't suppress the onramp) from user-authored content.
+   */
+  origin?: string;
 };
 
 export type DemoStep = { kind: 'capture' | 'verify' | 'present'; text: string };
