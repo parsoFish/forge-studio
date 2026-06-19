@@ -9,7 +9,7 @@
 ### System overviews
 
 - [`six-phases-of-forge`](./themes/six-phases-of-forge.md) — Brain → Architect → PM → Developer Loop → Review Loop → Reflection.
-- [`v1-vs-v2-key-differences`](./themes/v1-vs-v2-key-differences.md) — What v2 kept from v1's mental models and what it replaced with battle-tested tools.
+- [`infrastructure-evolution`](./themes/infrastructure-evolution.md) — What forge kept from its founding mental models and what it replaced with battle-tested tools.
 - [`forge-studio-build-arc`](./themes/forge-studio-build-arc.md) — How the full Forge Studio roadmap (M0-M6) was built via subagent orchestration, and the durable lessons (strangler equivalence, verify-cycle corpus non-determinism, review discipline).
 
 ### External-system profiles

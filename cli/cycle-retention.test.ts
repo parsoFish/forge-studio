@@ -182,7 +182,7 @@ function setupBrainTree(opts: {
 
 test('collectCitedBy: returns themes that mention the cycle archive', () => {
   const h = setupBrainTree({
-    projectName: 'slugifier',
+    projectName: 'demo-project',
     themes: {
       'a.md': 'body refers to brain/cycles/_raw/CY-1.md\n',
       'b.md': 'body refers to _logs/CY-1/events.jsonl\n',
@@ -192,7 +192,7 @@ test('collectCitedBy: returns themes that mention the cycle archive', () => {
   try {
     const cited = collectCitedBy({
       forgeRoot: h.forgeRoot,
-      projectName: 'slugifier',
+      projectName: 'demo-project',
       cycleId: 'CY-1',
       sinceMs: 0,
     });
@@ -208,7 +208,7 @@ test('collectCitedBy: returns themes that mention the cycle archive', () => {
 test('collectCitedBy: filters by mtime (sinceMs)', () => {
   const old = new Date(Date.now() - 24 * 60 * 60 * 1000); // 1 day ago
   const h = setupBrainTree({
-    projectName: 'slugifier',
+    projectName: 'demo-project',
     themes: {
       'old.md': 'body refers to brain/cycles/_raw/CY-1.md\n',
     },
@@ -217,7 +217,7 @@ test('collectCitedBy: filters by mtime (sinceMs)', () => {
   try {
     const cited = collectCitedBy({
       forgeRoot: h.forgeRoot,
-      projectName: 'slugifier',
+      projectName: 'demo-project',
       cycleId: 'CY-1',
       sinceMs: Date.now() - 60 * 1000, // only "modified in last minute"
     });
@@ -229,7 +229,7 @@ test('collectCitedBy: filters by mtime (sinceMs)', () => {
 
 test('collectCitedBy: returns forge-rooted relative paths', () => {
   const h = setupBrainTree({
-    projectName: 'slugifier',
+    projectName: 'demo-project',
     themes: {
       'a.md': 'mentions CY-XYZ\n',
     },
@@ -237,12 +237,12 @@ test('collectCitedBy: returns forge-rooted relative paths', () => {
   try {
     const cited = collectCitedBy({
       forgeRoot: h.forgeRoot,
-      projectName: 'slugifier',
+      projectName: 'demo-project',
       cycleId: 'CY-XYZ',
       sinceMs: 0,
     });
     assert.equal(cited.length, 1);
-    assert.equal(cited[0], 'projects/slugifier/brain/themes/a.md');
+    assert.equal(cited[0], 'projects/demo-project/brain/themes/a.md');
   } finally {
     h.cleanup();
   }
@@ -250,7 +250,7 @@ test('collectCitedBy: returns forge-rooted relative paths', () => {
 
 test('collectCitedBy: includes forge-themes namespace', () => {
   const h = setupBrainTree({
-    projectName: 'slugifier',
+    projectName: 'demo-project',
     themes: {},
     forgeThemes: {
       'cross-cycle.md': 'mentions _logs/CY-X/events.jsonl\n',
@@ -259,7 +259,7 @@ test('collectCitedBy: includes forge-themes namespace', () => {
   try {
     const cited = collectCitedBy({
       forgeRoot: h.forgeRoot,
-      projectName: 'slugifier',
+      projectName: 'demo-project',
       cycleId: 'CY-X',
       sinceMs: 0,
     });
@@ -284,14 +284,14 @@ function makeArchive(opts: { withRetention?: boolean; withCitedBy?: boolean }): 
     'source_url: _logs/CY-1/events.jsonl',
     'cycle_id: CY-1',
     'initiative_id: INIT-x',
-    'project: slugifier',
+    'project: demo-project',
     'ingested_at: 2026-05-23T12:00:00Z',
     'ingested_by: reflector',
   ];
   if (opts.withRetention) lines.push('retention: auto');
   if (opts.withCitedBy) {
     lines.push('cited_by:');
-    lines.push('  - projects/slugifier/brain/themes/stale.md');
+    lines.push('  - projects/demo-project/brain/themes/stale.md');
   }
   lines.push('---', '', 'Body here.', '');
   writeFileSync(path, lines.join('\n'));
@@ -311,15 +311,15 @@ test('patchArchiveFrontmatter: inserts retention + cited_by when absent', () => 
   const a = makeArchive({});
   try {
     const ok = patchArchiveFrontmatter(a.path, 'load-bearing', [
-      'projects/slugifier/brain/themes/x.md',
-      'projects/slugifier/brain/themes/y.md',
+      'projects/demo-project/brain/themes/x.md',
+      'projects/demo-project/brain/themes/y.md',
     ]);
     assert.equal(ok, true);
     const body = readFileSync(a.path, 'utf8');
     assert.match(body, /^retention: load-bearing$/m);
     assert.match(body, /^cited_by:$/m);
-    assert.match(body, /- projects\/slugifier\/brain\/themes\/x\.md/);
-    assert.match(body, /- projects\/slugifier\/brain\/themes\/y\.md/);
+    assert.match(body, /- projects\/demo-project\/brain\/themes\/x\.md/);
+    assert.match(body, /- projects\/demo-project\/brain\/themes\/y\.md/);
     // Original frontmatter preserved.
     assert.match(body, /^source_type: cycle$/m);
     assert.match(body, /^cycle_id: CY-1$/m);
@@ -348,11 +348,11 @@ test('patchArchiveFrontmatter: overwrites existing cited_by list', () => {
   const a = makeArchive({ withCitedBy: true });
   try {
     const ok = patchArchiveFrontmatter(a.path, 'routine', [
-      'projects/slugifier/brain/themes/fresh.md',
+      'projects/demo-project/brain/themes/fresh.md',
     ]);
     assert.equal(ok, true);
     const body = readFileSync(a.path, 'utf8');
-    assert.match(body, /- projects\/slugifier\/brain\/themes\/fresh\.md/);
+    assert.match(body, /- projects\/demo-project\/brain\/themes\/fresh\.md/);
     assert.doesNotMatch(body, /stale\.md/);
   } finally {
     a.cleanup();

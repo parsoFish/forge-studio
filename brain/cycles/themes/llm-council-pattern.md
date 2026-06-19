@@ -35,8 +35,8 @@ The dependency-graph critic specifically watches for hidden dependencies that wo
 
 ## Sources
 
-- [`forge-v2-phase-architect.docs.md`](../../_raw/docs/forge-v2-phase-architect.docs.md) — phase doc references the pattern.
-- [`forge-v2-architecture.docs.md`](../../_raw/docs/forge-v2-architecture.docs.md) — narrative mention.
+- [`docs/phases/architect.md`](../../../docs/phases/architect.md) — phase doc references the pattern.
+- [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — narrative mention.
 
 ## See also
 

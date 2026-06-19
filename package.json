@@ -20,7 +20,7 @@
     "build:ui": "npm run build --workspace=forge-ui",
     "build:watch": "tsc --watch",
     "test": "node --test --experimental-strip-types orchestrator/*.test.ts orchestrator/phases/*.test.ts orchestrator/studio/*.test.ts cli/*.test.ts loops/ralph/*.test.ts loops/_adapters/*.test.ts loops/_adapters/**/*.test.ts skills/*/*.test.ts scripts/*.test.ts",
-    "lint": "echo 'TODO: pick a linter; v2 stays minimal until a need appears'",
+    "lint": "echo 'TODO: pick a linter; the toolchain stays minimal until a need appears'",
     "forge": "node --experimental-strip-types orchestrator/cli.ts",
     "forge:brain:lint": "node --experimental-strip-types cli/brain-lint.ts",
     "forge:brain:index": "node --experimental-strip-types cli/brain-index.ts",
@@ -32,8 +32,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
     "@getzep/zep-cloud": "^3.23.0",
-    "blessed-contrib": "^4.11.0",
-    "globby": "^14.1.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.2.0",
     "proper-lockfile": "^4.1.2",

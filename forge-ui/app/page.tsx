@@ -24,7 +24,6 @@ import {
 
 // ---------------------------------------------------------------------------
 // Library page — the Forge Studio entry screen.
-// Mirrors mockups/agent-flow-builder/index.html structure + visual language.
 // ---------------------------------------------------------------------------
 
 export default function LibraryPage() {

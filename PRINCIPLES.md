@@ -1,6 +1,6 @@
 # Principles
 
-These are the five user-stated principles that gate every decision in forge v2. They are reproduced verbatim from the prompt that initiated the v2 scaffold, with brief commentary linking each to the ADR that codifies it.
+These are the five user-stated principles that gate every decision in forge. They are reproduced verbatim from the prompt that initiated the forge scaffold, with brief commentary linking each to the ADR that codifies it.
 
 ---
 

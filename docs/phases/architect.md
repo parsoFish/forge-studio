@@ -62,7 +62,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 ## Benchmark suite
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
+> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
 
 `benchmarks/architect/` (removed)
 - `prompts.json` — sample idea → expected initiative shape (feature count, dependency depth, acceptance-criteria presence).

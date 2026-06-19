@@ -41,7 +41,7 @@ Practice:
 ## Sources
 
 - [`agentic-engineering-best-practices.chat.md`](../../_raw/web/agentic-engineering-best-practices.chat.md) — synthesis section 2.
-- [`forge-v2-phase-project-manager.docs.md`](../../_raw/docs/forge-v2-phase-project-manager.docs.md) — forge's instantiation.
+- [`docs/phases/project-manager.md`](../../../docs/phases/project-manager.md) — forge's instantiation.
 
 ## See also
 

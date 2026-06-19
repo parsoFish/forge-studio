@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
- * Sticky top nav mirroring mockups/agent-flow-builder/shared/shell.js.
+ * Sticky top nav.
  *
  * Every nav item is a live link (the builders all ship — ADR-033):
  *   Library   → /

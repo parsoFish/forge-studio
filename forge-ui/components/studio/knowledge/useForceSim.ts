@@ -3,7 +3,7 @@
 import { useRef, useCallback } from 'react';
 import type { KbNode, KbEdge } from '@/lib/studio-client';
 
-// ── Physics constants (ported from mockups/agent-flow-builder/knowledge-base.html) ──
+// ── Physics constants for the knowledge-graph force simulation ──
 const K_SPRING   = 0.04;
 const REST_LEN   = 160;
 const REPULSION  = 6000;

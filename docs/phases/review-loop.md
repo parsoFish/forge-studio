@@ -62,7 +62,7 @@ Two stages, unified as one **review-Ralph** loop (Phase-6 redesign):
 
 ## Benchmark suite
 
-> Note (2026-05-25): the `benchmarks/` harnesses were removed; this section is historical. Phase quality is now judged on real merged cycles.
+> Note (2026-05-25): the `benchmarks/` harnesses were removed (see [ADR-022](../decisions/022-real-capability-harness.md)); this section is historical. Phase quality is now judged on real merged cycles.
 
 The per-phase `benchmarks/review-loop/` was archived 2026-05-23 (S4) when the reviewer collapsed into the developer-loop unifier. Review behaviour was then regressed (until the 2026-05-25 benchmark removal) via:
 
