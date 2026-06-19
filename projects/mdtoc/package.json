@@ -1,0 +1,20 @@
+{
+  "name": "mdtoc",
+  "version": "0.1.0",
+  "description": "A dependency-light CLI that generates a Markdown table of contents from a document's headings.",
+  "type": "module",
+  "bin": {
+    "mdtoc": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/unit.test.ts",
+    "acceptance": "node --import tsx test/acceptance/run.ts",
+    "demo": "node --import tsx test/acceptance/run.ts --demo"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4",
+    "typescript": "^5.6.0"
+  },
+  "license": "AGPL-3.0"
+}
