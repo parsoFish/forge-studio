@@ -20,6 +20,8 @@ import { join } from 'node:path';
 import { runAdapterConformance, type ConformanceOpts } from './conformance.ts';
 import { exampleAdapter } from './example/index.ts';
 import { claudeAdapter } from './claude/index.ts';
+import { geminiAdapter } from './gemini/index.ts';
+import { makeAiderAdapter, type AiderRunner } from './aider/index.ts';
 import { getAdapter, listAdapters, registeredSdkIds, isSdkAvailable } from './registry.ts';
 import type { QueryFn } from './types.ts';
 
@@ -112,6 +114,48 @@ test('claude adapter: createAgent with mock queryFn resolves well-formed AgentIt
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// B2. Gemini adapter conformance (mock queryFn — no @google/genai, no key)
+// ---------------------------------------------------------------------------
+
+// The Gemini adapter honours `opts.queryFn` directly (createGeminiAgent:
+// `opts.queryFn ?? geminiQuery`), so the SAME mock-stream seam the Claude
+// adapter uses drives it — proving the stream-folding glue without the dep or a
+// real API call. This makes the registry's "must pass conformance" admission
+// gate real for the gemini drop-in (M8-A), not just asserted.
+describe('gemini adapter: conformance contract (mock queryFn)', () => {
+  const conformanceOpts: ConformanceOpts = {
+    queryFn: makeMockQueryFn(),
+    label: 'gemini (mock)',
+  };
+  runAdapterConformance(geminiAdapter, conformanceOpts);
+});
+
+// ---------------------------------------------------------------------------
+// B3. Aider adapter conformance (mock subprocess runner — no aider CLI, no key)
+// ---------------------------------------------------------------------------
+
+// Aider is loop-driven, not a token stream: createAgent reads `opts.runAider`
+// (a subprocess seam), not `opts.queryFn`. So the conformance suite drives it
+// through `makeAiderAdapter(runner, available)` — the test factory that injects
+// a fake subprocess into BOTH createAgent and the query shim. No `queryFn` opt
+// is passed (the suite then exercises `adapter.query`, which is the mock-runner-
+// backed shim). One aider iteration = one subprocess; the fake returns a clean
+// exit + a parseable cost line, so the §3/§4 assertions see a well-formed result.
+const mockAiderRunner: AiderRunner = async () => ({
+  stdout: 'Applied edit.\nCost: $0.0100 message, $0.0200 session.\n',
+  stderr: '',
+  exitCode: 0,
+});
+
+describe('aider adapter: conformance contract (mock subprocess runner)', () => {
+  // available:true is fine for the contract test — it never touches the real
+  // CLI (the injected runner stands in). The registry keeps the real adapter at
+  // available:false until the binary + a model key are provisioned.
+  const testAiderAdapter = makeAiderAdapter(mockAiderRunner, true);
+  runAdapterConformance(testAiderAdapter, { label: 'aider (mock runner)' });
 });
 
 // ---------------------------------------------------------------------------
