@@ -4,7 +4,7 @@
  * Spins up a real bridge against a tmp forge-root fixture with:
  *   - a synthetic _queue/done/<init>.md manifest
  *   - a matching _logs/<cycleId>/events.jsonl (minimal synthetic events)
- *   - studio/ directory (flows, catalog, projects.yaml)
+ *   - studio/ directory (flows, catalog) + projects/ dirs auto-discovered from disk
  *   - brain/ directory with kb.yaml files
  *   - skills/ directory with one stub studio SKILL.md
  *

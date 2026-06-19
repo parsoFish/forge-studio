@@ -3,8 +3,7 @@
  *
  * Spins up a real bridge against a tmp forge-root fixture that includes:
  *   - skills/<slug>/SKILL.md  (studio frontmatter — used for agent PUT tests)
- *   - studio/projects.yaml    (registry pointing at a tmp project path)
- *   - <project>/.forge/project.json  (full valid config including demo/quality_gate_cmd)
+ *   - <project>/.forge/project.json  (full valid config; project is auto-discovered from disk)
  *
  * Covers:
  *   - PUT /api/studio/agents/:slug  — edit composition + purpose (merge, preserve)
