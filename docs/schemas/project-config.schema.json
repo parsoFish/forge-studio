@@ -15,8 +15,8 @@
       "properties": {
         "shape": {
           "type": "string",
-          "enum": ["browser", "harness", "cli-diff", "artifact", "none"],
-          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; none = infra-only initiatives, DEMO.md rationale block."
+          "enum": ["browser", "harness", "cli-diff", "artifact", "live-external", "none"],
+          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; live-external = real resource stood up in a live external system (cloud API + portal), evidence floor is a real REST GET round-trip (liveEvidence.url), not a test-name table; none = infra-only initiatives, DEMO.md rationale block."
         },
         "command": {
           "type": "array",

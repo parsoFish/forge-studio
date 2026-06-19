@@ -17,6 +17,7 @@ import {
   projectBrainDir,
   projectThemesDir,
   projectHistoryDir,
+  projectDemoRelDir,
   readArtifactRoot,
 } from './brain-paths.ts';
 
@@ -112,6 +113,24 @@ test('projectHistoryDir: artifactRoot "forge" → <projectRoot>/forge/history/<i
   const result = projectHistoryDir(projectRoot, initiativeId, 'forge');
   const expected = resolve(projectRoot, 'forge', 'history', initiativeId);
   assert.equal(result, expected);
+});
+
+// ---------------------------------------------------------------------------
+// projectDemoRelDir
+// ---------------------------------------------------------------------------
+
+test('projectDemoRelDir: default artifactRoot "." → legacy demo/<initiativeId>', () => {
+  assert.equal(projectDemoRelDir('INIT-001'), 'demo/INIT-001');
+  assert.equal(projectDemoRelDir('INIT-001', '.'), 'demo/INIT-001');
+});
+
+test('projectDemoRelDir: empty artifactRoot collapses to the legacy demo/<initiativeId>', () => {
+  assert.equal(projectDemoRelDir('INIT-001', ''), 'demo/INIT-001');
+  assert.equal(projectDemoRelDir('INIT-001', '  '), 'demo/INIT-001');
+});
+
+test('projectDemoRelDir: artifactRoot "forge" → forge/history/<initiativeId>/demo', () => {
+  assert.equal(projectDemoRelDir('INIT-001', 'forge'), 'forge/history/INIT-001/demo');
 });
 
 // ---------------------------------------------------------------------------
