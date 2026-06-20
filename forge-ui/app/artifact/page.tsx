@@ -46,6 +46,7 @@ import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/arti
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
+import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
 import { fetchRun, type Run } from '@/lib/studio-client';
@@ -674,29 +675,44 @@ function ArtifactPageInner() {
                   yet — we're authoring it). */}
               {type === 'verdict' && isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Demo evidence panel — mirrors /review/[cycleId] layout */}
                   {demoModel ? (
-                    <DemoComparison model={demoModel} cycleId={runId} />
+                    <>
+                      {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
+                      <DemoComparison model={demoModel} cycleId={runId} />
+                      {/* DEC-5: the comment-on-page visual review IS the verdict — markdown
+                          narrative + per-region slider/JSON-diff + anchored comments derive
+                          approve/send-back. Replaces the textarea form; still emits the
+                          verdict-form data-* contract. */}
+                      <DemoReviewSurface
+                        model={demoModel}
+                        cycleId={runId}
+                        initiativeId={run?.initiativeId ?? runId}
+                        onSubmitted={(kind) => {
+                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                        }}
+                      />
+                    </>
                   ) : (
-                    <div style={{
-                      border: '1px solid var(--line)',
-                      borderRadius: 8,
-                      padding: '14px 18px',
-                      background: 'var(--panel)',
-                      fontSize: 13,
-                      color: 'var(--dim)',
-                    }}>
-                      No structured demo (<code>demo.json</code>) filed for this run yet.
-                    </div>
+                    <>
+                      <div style={{
+                        border: '1px solid var(--line)',
+                        borderRadius: 8,
+                        padding: '14px 18px',
+                        background: 'var(--panel)',
+                        fontSize: 13,
+                        color: 'var(--dim)',
+                      }}>
+                        No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
+                      </div>
+                      {/* No-demo fallback: the plain verdict form (same data-* contract). */}
+                      <ReviewVerdictForm
+                        initiativeId={run?.initiativeId ?? runId}
+                        onSubmitted={(kind) => {
+                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                        }}
+                      />
+                    </>
                   )}
-
-                  {/* Verdict form — harness asserts data-component="verdict-form" + data-action=* */}
-                  <ReviewVerdictForm
-                    initiativeId={run?.initiativeId ?? runId}
-                    onSubmitted={(kind) => {
-                      setGateState(kind === 'approve' ? 'approved' : 'sent-back');
-                    }}
-                  />
 
                   {/* Approval payoff — surface the final human moment (reflect).
                       Re-homed from the retired /review screen; points at the
