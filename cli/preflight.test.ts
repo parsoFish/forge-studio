@@ -42,11 +42,17 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
-  // DEMO: a declared demo shape (the project half of the demo contract family).
+  // DEMO: a declared demoProcess (the project half of the demo contract family).
   mkdirSync(join(dir, '.forge'), { recursive: true });
   writeFileSync(
     join(dir, '.forge', 'project.json'),
-    JSON.stringify({ demo: { shape: 'harness', command: ['npm', 'run', 'demo'] }, quality_gate_cmd: ['vitest', 'run'] }),
+    JSON.stringify({
+      quality_gate_cmd: ['vitest', 'run'],
+      demoProcess: [
+        { kind: 'capture', text: 'Capture before state.' },
+        { kind: 'verify', text: 'Run vitest to verify the change.' },
+      ],
+    }),
   );
   // A GitHub remote (C6) — set on a real git repo so `git remote get-url` works.
   execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main']);
@@ -298,96 +304,80 @@ test('DEMO (ADVISORY): no .forge/project.json warns but does NOT flip ok', () =>
     assert.equal(c.pass, false);
     assert.equal(c.hard, false);
     assert.equal(r.ok, true, 'DEMO is advisory — must not flip ok');
-    assert.match(c.detail, /demo shape is undeclared|notes-only/);
+    assert.match(c.detail, /demoProcess undeclared/);
   } finally {
     p.cleanup();
   }
 });
 
-test('DEMO (ADVISORY): browser shape without preview_command warns', () => {
+test('DEMO (ADVISORY): demoProcess with only verify step (no capture) warns', () => {
   const p = happyProject();
   try {
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
-      JSON.stringify({ demo: { shape: 'browser', command: ['npm', 'run', 'demo'] }, quality_gate_cmd: ['vitest', 'run'] }),
+      JSON.stringify({
+        quality_gate_cmd: ['vitest', 'run'],
+        demoProcess: [{ kind: 'verify', text: 'Run vitest' }],
+      }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'DEMO');
     assert.equal(c.pass, false);
     assert.equal(r.ok, true);
-    assert.match(c.detail, /preview_command/);
+    assert.match(c.detail, /capture step/);
   } finally {
     p.cleanup();
   }
 });
 
-test('DEMO (ADVISORY): a non-none shape without a command warns', () => {
-  const p = happyProject();
-  try {
-    writeFileSync(
-      join(p.dir, '.forge', 'project.json'),
-      JSON.stringify({ demo: { shape: 'cli-diff' }, quality_gate_cmd: ['vitest', 'run'] }),
-    );
-    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
-    assert.equal(clause(r, 'DEMO').pass, false);
-    assert.equal(r.ok, true);
-    assert.match(clause(r, 'DEMO').detail, /demo\.command/);
-  } finally {
-    p.cleanup();
-  }
-});
-
-test('DEMO (ADVISORY): shape "none" is valid with no command', () => {
-  const p = happyProject();
-  try {
-    writeFileSync(
-      join(p.dir, '.forge', 'project.json'),
-      JSON.stringify({ demo: { shape: 'none' }, quality_gate_cmd: ['vitest', 'run'] }),
-    );
-    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
-    assert.equal(clause(r, 'DEMO').pass, true);
-  } finally {
-    p.cleanup();
-  }
-});
-
-test('DEMO (ADVISORY): a demoProcess capture step under shape "none" is flagged (E2 coherence)', () => {
+test('DEMO (ADVISORY): demoProcess with only capture step (no verify) warns', () => {
   const p = happyProject();
   try {
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
       JSON.stringify({
-        demo: { shape: 'none' },
-        demoProcess: [
-          { kind: 'capture', text: 'API GET of created entity' },
-          { kind: 'verify', text: 'Project tests green' },
-        ],
         quality_gate_cmd: ['vitest', 'run'],
+        demoProcess: [{ kind: 'capture', text: 'Screenshot' }],
       }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'DEMO');
-    assert.equal(c.pass, false, 'incoherent demoProcess/shape flagged');
-    assert.equal(c.hard, false);
-    assert.equal(r.ok, true, 'DEMO is advisory — must not flip ok');
-    assert.match(c.detail, /capture.*demo\.shape is "none"|nothing to capture/);
+    assert.equal(c.pass, false);
+    assert.equal(r.ok, true);
+    assert.match(c.detail, /verify step/);
   } finally {
     p.cleanup();
   }
 });
 
-test('DEMO (ADVISORY): a coherent demoProcess + non-none shape passes (E2 coherence)', () => {
+test('DEMO (ADVISORY): empty demoProcess warns', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ quality_gate_cmd: ['vitest', 'run'] }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO');
+    assert.equal(c.pass, false);
+    assert.equal(r.ok, true, 'DEMO is advisory — must not flip ok');
+    assert.match(c.detail, /capture step/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO (ADVISORY): demoProcess with capture + verify passes', () => {
   const p = happyProject();
   try {
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
       JSON.stringify({
-        demo: { shape: 'harness', command: ['vitest', 'run'] },
+        quality_gate_cmd: ['vitest', 'run'],
         demoProcess: [
           { kind: 'capture', text: 'Scrape harness metrics' },
           { kind: 'verify', text: 'Project tests green' },
         ],
-        quality_gate_cmd: ['vitest', 'run'],
       }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });

@@ -5,10 +5,9 @@
  *
  * Control flow reminder (short-circuit on first failure):
  *   1. initiative_gate  — runShellGate(qualityGateCmd)
- *   2. demo_runs_clean  — runShellGate(demoCommand), excused for shape "none"
- *   3. pr_self_contained — demo.json valid + pr-description.md present
- *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw
- *   5. incomplete_delivery — all WI creates[] paths in git diff
+ *   2. pr_self_contained — demo.json valid + pr-description.md present
+ *   3. branches_in_sync — assertLocalRemoteSynced doesn't throw
+ *   4. incomplete_delivery — all WI creates[] paths in git diff
  *
  * A failing sub-check aborts later ones, so a failure at gate N produces
  * exactly N sub-check events (no fabricated "skipped" events).
@@ -195,15 +194,14 @@ const BASE_INPUT = {
   initiativeIdForEvent: INITIATIVE_ID,
   parentEventId: 'parent-evt-1',
   demoDir: `demo/${INITIATIVE_ID}`,
-  // demoShape, demoCommand, qualityGateCmd, worktreePath, wiDir, logger
-  // filled per-test
+  // qualityGateCmd, worktreePath, wiDir, logger filled per-test
 } as const;
 
 // ---------------------------------------------------------------------------
-// Happy path: all 5 gates pass → 5 sub-check events, all pass:true
+// Happy path: all 4 gates pass → 4 sub-check events, all pass:true
 // ---------------------------------------------------------------------------
 
-test('composedUnifierGate happy-path: emits 5 sub-check events, all pass:true', async () => {
+test('composedUnifierGate happy-path: emits 4 sub-check events, all pass:true', async () => {
   const h = unifierGateHarness();
   try {
     writeDemoJson(h.worktreePath, INITIATIVE_ID);
@@ -220,8 +218,6 @@ test('composedUnifierGate happy-path: emits 5 sub-check events, all pass:true', 
       ...BASE_INPUT,
       worktreePath: h.worktreePath,
       qualityGateCmd: ['true'],
-      demoShape: 'none', // excuses demo_runs_clean
-      demoCommand: undefined,
       logger: h.logger,
       workItemsDir: h.wiDir,
     });
@@ -229,12 +225,11 @@ test('composedUnifierGate happy-path: emits 5 sub-check events, all pass:true', 
     assert.equal(passed, true, 'gate should pass');
 
     const checks = h.subCheckEvents();
-    assert.equal(checks.length, 5, `expected 5 sub-check events, got ${checks.length}`);
+    assert.equal(checks.length, 4, `expected 4 sub-check events, got ${checks.length}`);
 
     const ids = checks.map((c) => (c.metadata as { check_id: string }).check_id);
     assert.deepEqual(ids, [
       'initiative_gate',
-      'demo_runs_clean',
       'pr_self_contained',
       'branches_in_sync',
       'complete_delivery',
@@ -254,42 +249,6 @@ test('composedUnifierGate happy-path: emits 5 sub-check events, all pass:true', 
 });
 
 // ---------------------------------------------------------------------------
-// demo_runs_clean excused path: demoShape='none' → pass:true with excused detail
-// ---------------------------------------------------------------------------
-
-test('composedUnifierGate demo_runs_clean: excused (shape none) emits pass:true', async () => {
-  const h = unifierGateHarness();
-  try {
-    writeDemoJson(h.worktreePath, INITIATIVE_ID);
-    writePrDescription(h.worktreePath);
-    h.git('add', '-A');
-    h.git('commit', '-m', 'feat: setup');
-    h.git('push', 'origin', 'forge/init-test');
-
-    await composedUnifierGate({
-      ...BASE_INPUT,
-      worktreePath: h.worktreePath,
-      qualityGateCmd: ['true'],
-      demoShape: 'none',
-      demoCommand: ['false'], // would fail if run — must be excused
-      logger: h.logger,
-      workItemsDir: h.wiDir,
-    });
-
-    const checks = h.subCheckEvents();
-    const demoCheck = checks.find(
-      (c) => (c.metadata as { check_id: string }).check_id === 'demo_runs_clean',
-    );
-    assert.ok(demoCheck, 'demo_runs_clean event must be emitted');
-    const meta = demoCheck.metadata as { pass: boolean; detail: string };
-    assert.equal(meta.pass, true);
-    assert.match(meta.detail, /excused/i, 'detail should mention "excused"');
-  } finally {
-    h.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Failure at gate 1 (initiative_gate): only 1 sub-check event emitted (fail)
 // ---------------------------------------------------------------------------
 
@@ -300,8 +259,6 @@ test('composedUnifierGate initiative_gate fail: 1 sub-check event, pass:false, n
       ...BASE_INPUT,
       worktreePath: h.worktreePath,
       qualityGateCmd: ['false'], // always fails
-      demoShape: 'none',
-      demoCommand: undefined,
       logger: h.logger,
       workItemsDir: h.wiDir,
     });
@@ -321,43 +278,10 @@ test('composedUnifierGate initiative_gate fail: 1 sub-check event, pass:false, n
 });
 
 // ---------------------------------------------------------------------------
-// Failure at gate 2 (demo_runs_clean): 2 sub-check events
+// Failure at gate 2 (pr_self_contained): 2 sub-check events
 // ---------------------------------------------------------------------------
 
-test('composedUnifierGate demo_runs_clean fail: 2 sub-check events (gate1 pass, gate2 fail)', async () => {
-  const h = unifierGateHarness();
-  try {
-    const passed = await composedUnifierGate({
-      ...BASE_INPUT,
-      worktreePath: h.worktreePath,
-      qualityGateCmd: ['true'],      // passes
-      demoShape: 'harness',          // NOT none → demo gate runs
-      demoCommand: ['false'],        // fails
-      logger: h.logger,
-      workItemsDir: h.wiDir,
-    });
-
-    assert.equal(passed, false);
-
-    const checks = h.subCheckEvents();
-    assert.equal(checks.length, 2, 'initiative_gate + demo_runs_clean should emit');
-
-    const [g1, g2] = checks as [EventLogEntry, EventLogEntry];
-    assert.equal((g1.metadata as { check_id: string }).check_id, 'initiative_gate');
-    assert.equal((g1.metadata as { pass: boolean }).pass, true);
-
-    assert.equal((g2.metadata as { check_id: string }).check_id, 'demo_runs_clean');
-    assert.equal((g2.metadata as { pass: boolean }).pass, false);
-  } finally {
-    h.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Failure at gate 3 (pr_self_contained): 3 sub-check events
-// ---------------------------------------------------------------------------
-
-test('composedUnifierGate pr_self_contained fail: 3 events (g1+g2 pass, g3 fail)', async () => {
+test('composedUnifierGate pr_self_contained fail: 2 events (g1 pass, g2 fail)', async () => {
   const h = unifierGateHarness();
   try {
     // No demo.json, no pr-description → pr_self_contained fails
@@ -365,8 +289,6 @@ test('composedUnifierGate pr_self_contained fail: 3 events (g1+g2 pass, g3 fail)
       ...BASE_INPUT,
       worktreePath: h.worktreePath,
       qualityGateCmd: ['true'],
-      demoShape: 'none',        // demo_runs_clean excused → pass
-      demoCommand: undefined,
       logger: h.logger,
       workItemsDir: h.wiDir,
     });
@@ -374,24 +296,24 @@ test('composedUnifierGate pr_self_contained fail: 3 events (g1+g2 pass, g3 fail)
     assert.equal(passed, false);
 
     const checks = h.subCheckEvents();
-    assert.equal(checks.length, 3, 'initiative_gate + demo_runs_clean + pr_self_contained');
+    assert.equal(checks.length, 2, 'initiative_gate + pr_self_contained');
 
     const ids = checks.map((c) => (c.metadata as { check_id: string }).check_id);
-    assert.deepEqual(ids, ['initiative_gate', 'demo_runs_clean', 'pr_self_contained']);
+    assert.deepEqual(ids, ['initiative_gate', 'pr_self_contained']);
 
-    const g3meta = checks[2]!.metadata as { pass: boolean; detail: string };
-    assert.equal(g3meta.pass, false);
-    assert.ok(g3meta.detail.length > 0);
+    const g2meta = checks[1]!.metadata as { pass: boolean; detail: string };
+    assert.equal(g2meta.pass, false);
+    assert.ok(g2meta.detail.length > 0);
   } finally {
     h.cleanup();
   }
 });
 
 // ---------------------------------------------------------------------------
-// Failure at gate 5 (incomplete_delivery): 5 events, last one fail
+// Failure at gate 4 (incomplete_delivery): 4 events, last one fail
 // ---------------------------------------------------------------------------
 
-test('composedUnifierGate incomplete_delivery fail: 5 events, last pass:false with missing paths', async () => {
+test('composedUnifierGate incomplete_delivery fail: 4 events, last pass:false with missing paths', async () => {
   const h = unifierGateHarness();
   try {
     writeDemoJson(h.worktreePath, INITIATIVE_ID);
@@ -408,8 +330,6 @@ test('composedUnifierGate incomplete_delivery fail: 5 events, last pass:false wi
       ...BASE_INPUT,
       worktreePath: h.worktreePath,
       qualityGateCmd: ['true'],
-      demoShape: 'none',
-      demoCommand: undefined,
       logger: h.logger,
       workItemsDir: h.wiDir,
     });
@@ -417,9 +337,9 @@ test('composedUnifierGate incomplete_delivery fail: 5 events, last pass:false wi
     assert.equal(passed, false);
 
     const checks = h.subCheckEvents();
-    assert.equal(checks.length, 5, 'all 5 gates should emit before delivery fails');
+    assert.equal(checks.length, 4, 'all 4 gates should emit before delivery fails');
 
-    const last = checks[4]!;
+    const last = checks[3]!;
     const meta = last.metadata as { check_id: string; pass: boolean; detail: string };
     assert.equal(meta.check_id, 'complete_delivery');
     assert.equal(meta.pass, false);
@@ -441,8 +361,6 @@ test('composedUnifierGate sub-check events have correct phase/skill/event_type/m
       ...BASE_INPUT,
       worktreePath: h.worktreePath,
       qualityGateCmd: ['false'],
-      demoShape: 'none',
-      demoCommand: undefined,
       logger: h.logger,
       workItemsDir: h.wiDir,
     });

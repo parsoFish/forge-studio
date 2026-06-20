@@ -23,7 +23,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { readWorkItemsFromDir } from './work-item.ts';
-import type { DemoShape } from './project-config.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
@@ -95,7 +94,6 @@ export type UnifierUserPromptInput = {
   workItemSpecs: string[];
   iteration: number;
   iterationBudget: number;
-  demoShape: DemoShape;
   qualityGateCmd: string[];
   /**
    * Worktree-relative demo directory for this initiative, resolved against the
@@ -135,8 +133,6 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   // `demo/<initiative-id>` so a caller that doesn't compute one is unchanged.
   const demoDir = input.demoDir ?? `demo/${input.initiativeId}`;
 
-  const demoBlock = demoInstructionsForShape(input.demoShape, demoDir);
-
   // WS-A: when the project declares a release changelog, widen the scope ceiling
   // to admit the changelog file so the draft-changelog edit is in-bounds.
   const scopeCeiling = input.changelogPath
@@ -146,7 +142,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   const base = [
     '# Developer-unifier — iteration brief',
     '',
-    `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}** · Demo shape: **${input.demoShape}**`,
+    `> Initiative: **${input.initiativeId}** · Iteration **${input.iteration}** of **${input.iterationBudget}**`,
     '',
     '## Inputs',
     '',
@@ -164,8 +160,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '1. **Read AGENT.md and fix_plan.md.**',
       '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
       `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-      `4. **Produce the demo** under \`${demoDir}/\`:`,
-      demoBlock,
+      `4. **Produce the demo** under \`${demoDir}/\`: run the project's generated demo machinery (from the project's \`<artifactRoot>/skills/\` dir). Author \`${demoDir}/demo.json\` + run \`forge demo render <initiative-id>\` to derive \`DEMO.md\`. See \`skills/demo/SKILL.md\` for the full demo contract.`,
       '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
       '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
       '7. **Push** the branch so `origin/<branch>` == local HEAD.',
@@ -183,16 +178,13 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     .filter((line) => line !== '')
     .join('\n');
 
-  // E2: marry `demoProcess` to the `demo` block. The typed steps are the
-  // EXECUTED demo: `capture` steps name what before/after evidence to record,
-  // `verify` steps name the assertion that makes the evidence non-trivial (run
-  // the step's command and encode its result), `present` steps say how to
-  // surface it. `demo.shape` (above) is the evidence FLOOR — the minimum the
-  // demo.json must contain — not a competing instruction.
+  // The typed demoProcess steps are the EXECUTED demo: `capture` steps name what
+  // before/after evidence to record, `verify` steps name the assertion that makes
+  // the evidence non-trivial (run the step's command and encode its result),
+  // `present` steps say how to surface it.
   const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
     ? '\n\n## Project demo process (the executed demo — drives demo.json)\n\n' +
-      'These typed steps ARE the demo this project runs. The `demo.shape` above is ' +
-      'the evidence FLOOR; these steps say exactly how to fill it:\n' +
+      'These typed steps ARE the demo this project runs:\n' +
       '- **capture** → record this before/after evidence as a checkpoint (and, for a ' +
       'visual shape, the image).\n' +
       '- **verify** → run the named assertion; encode its concrete result ' +
@@ -218,95 +210,6 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   return base + projectDemoBlock + projectSkillsBlock + projectReleaseBlock;
 }
 
-/**
- * ADR 021: the demo author is unified around ONE structured `demo.json`
- * (validated against the schema — this is the contract that fixes free-form
- * inconsistency). `forge demo render` derives the single PR-facing DEMO.md (F4).
- *
- * The canonical demo capability — effort tiers, per-shape rules, the
- * behavioural-delta discipline, media capture, and the UI mapping — lives in
- * `skills/demo/SKILL.md` (ADR 024: a capability the unifier agent composes).
- * The per-shape guidance below is its operational summary for the inline brief;
- * keep the two in sync.
- */
-function demoInstructionsForShape(shape: DemoShape, demoDir = 'demo/<initiative-id>'): string {
-  const schema = [
-    '   **The demo contract is defined in `skills/demo/SKILL.md`** (the canonical',
-    '   demo capability: what every demo must contain, effort tiers scaled to the',
-    '   diff, per-shape rules, and how it maps to the review UI). Summary:',
-    `   **\`${demoDir}/demo.json\` schema (the contract):**`,
-    '   - `title` (string, required) — one-line essence.',
-    '   - `essence` (string, required) — what behaviour changed and why it matters.',
-    '   - `project` (string, required), `initiativeId`, `baseRef`, `changedRef`.',
-    '   - `diffStat` (string, required) — output of `git diff --stat main...HEAD`.',
-    '   - `checkpoints` (array, ≥1 required) — each `{ label, caption, beforeNote?, afterNote?, kind?: screenshot|video|harness, metrics?, beforeImage?, afterImage? }`. Describe BEHAVIOUR (before vs after), never "what is broken".',
-    '   - `acceptanceCriteria` (string[], optional).',
-    '   - `summary` (object, optional) — `{ bullets: string[], prUrl?, branch?, commitSha? }`.',
-    '   - `apiDiff` (array, optional) — `{ name, change: "added"|"changed"|"removed", before?, after? }[]`.',
-    '   - `testEvidence` (array, optional) — `{ name, result: "pass"|"fail"|"skip", delta? }[]`.',
-    '   - `filesChanged` (array, optional) — `{ path, note? }[]` annotated file list.',
-    '   - `usage_example` (string, optional) — a fenced code block (HCL/CLI/API) showing how to USE the new capability. Required for new-or-changed-capability initiatives.',
-    '   - `impact` (string[], optional) — bullet list of what the new capability unlocks. Required for new-or-changed-capability initiatives.',
-    '   **Parity vocabulary for harness metrics:** `match` (exact same), `within` (within tolerance), `diverged` (regression), `incomplete` (baseline missing).',
-    '   After writing demo.json, run `Bash forge demo render <initiative-id>` to derive DEMO.md, then commit both demo.json and DEMO.md.',
-  ].join('\n');
-  switch (shape) {
-    case 'browser':
-      return [
-        '   This is a VISUAL initiative — fill demo.json checkpoints AND capture media:',
-        '   - Author the structured checkpoints (label + caption + before/after notes).',
-        '   - **Run the demo skill\'s capture step** to fill before/after screenshots: `Bash forge demo capture <initiative-id>` (best-effort; back-fills `beforeImage`/`afterImage`; skip entirely for a trivial diff — see the effort tiers in skills/demo/SKILL.md).',
-        schema,
-      ].join('\n');
-    case 'harness':
-      return [
-        '   Behaviour measurable at the test layer — fill demo.json with harness metrics:',
-        '   - Run the project\'s demo/harness command against baseline AND HEAD, scrape stable result lines.',
-        '   - Encode them as a `harness` checkpoint with `metrics: [{ label, before, after, deltaPct, parity }]`.',
-        '   - Parity vocabulary: `match` = exact same, `within` = within tolerance, `diverged` = regression, `incomplete` = baseline missing.',
-        '   - Author a `testEvidence[]` array — one row per test suite or key case, with `result: "pass"|"fail"|"skip"` and coverage `delta`.',
-        '   - Do NOT author "Visual Changes"/screenshots — there are none for a harness demo.',
-        '   - For a new-or-changed-capability initiative: MUST also author `usage_example` (fenced HCL/CLI/API block showing how to use the capability) and `impact` (string array of what it unlocks).',
-        schema,
-      ].join('\n');
-    case 'cli-diff':
-      return [
-        '   - Run the project\'s demo command twice (baseline + HEAD); capture stdout.',
-        '   - Encode the before/after in checkpoint `beforeNote`/`afterNote` (or a metrics row). No media required.',
-        schema,
-      ].join('\n');
-    case 'artifact':
-      return [
-        '   - Run the project\'s demo command; capture the produced file/stdout block.',
-        '   - Summarise it in a checkpoint caption + before/after notes. No media required.',
-        schema,
-      ].join('\n');
-    case 'live-external':
-      return [
-        '   The change stands up a REAL resource in a live external system (e.g. a',
-        '   cloud API + portal). The evidence FLOOR is a real round-trip against that',
-        '   system, NOT a test-name table:',
-        '   - Provision the resource (apply/create), then read it back via the system\'s',
-        '     REST API; persist that GET under `.forge/live-evidence/<label>.json` (the',
-        '     project\'s demo skill / acceptance test does this via a capture helper).',
-        '   - `forge demo render` back-fills it into a checkpoint carrying',
-        '     `liveEvidence.url` (a real GET URL) — the demo MUST end with such a checkpoint.',
-        '   - Pair with `testEvidence[]` (the live acceptance test result) and, for a',
-        '     new-or-changed-capability initiative, `usage_example` + `impact`.',
-        '   - If credentials are absent, fall back to the harness floor and DOCUMENT the',
-        '     fallback in `essence` — never fabricate the live read-back.',
-        schema,
-      ].join('\n');
-    case 'none':
-      return [
-        '   - Infra-only initiative. No media. A single checkpoint whose caption +',
-        '     afterNote is a rationale block ("what would a reviewer grep to convince',
-        '     themselves this works") satisfies the schema.',
-        schema,
-      ].join('\n');
-  }
-}
-
 export type PrepareUnifierWorkspaceInput = {
   initiativeId: string;
   /** Worktree-relative manifest path. */
@@ -314,7 +217,6 @@ export type PrepareUnifierWorkspaceInput = {
   /** Absolute path to the worktree the agent runs in. */
   worktreePath: string;
   iterationBudget: number;
-  demoShape: DemoShape;
   qualityGateCmd: string[];
   /** Project's typed demo steps (M2). Threaded into the rendered prompt. */
   demoProcess?: Array<{ kind: string; text: string }>;
@@ -372,7 +274,6 @@ export function prepareUnifierWorkspace(
       workItemSpecs: wiSpecs,
       iteration: 1,
       iterationBudget: input.iterationBudget,
-      demoShape: input.demoShape,
       qualityGateCmd: input.qualityGateCmd,
       demoDir,
       demoProcess: input.demoProcess,

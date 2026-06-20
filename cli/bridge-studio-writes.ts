@@ -446,7 +446,13 @@ export async function handleStudioWriteRoutes(
       }
       writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
 
-      sendJson(res, 200, { ok: true, id }, origin);
+      // F5: when demoProcess was in the save body, signal that the demo-design
+      // skill should be run to generate per-project demo machinery. The UI
+      // surfaces this as data-demo-design-state="needed" on the project page
+      // so the operator can trigger: `forge run skill demo-design --project <id>`.
+      const demoDesignNeeded = Array.isArray(b['demoProcess']);
+
+      sendJson(res, 200, { ok: true, id, ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
