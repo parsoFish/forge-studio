@@ -18,24 +18,9 @@ import { MODEL_BY_TIER } from '../phase-agent.ts';
 const ROOT = process.cwd();
 
 // ---------------------------------------------------------------------------
-// forge-cycle flow
+// seed flows (forge-cycle retired in S8/DEC-3 — see the forge-reflect test below
+// + the forge-develop / forge-architect coverage in flow-runner.test.ts)
 // ---------------------------------------------------------------------------
-
-test('forge-cycle flow loads and validates clean', () => {
-  const flowPath = join(ROOT, 'studio/flows/forge-cycle/flow.yaml');
-  const agents = listAgentDefinitions(join(ROOT, 'skills'));
-  const agentMap = new Map(agents.map((a) => [a.slug, a]));
-
-  const flow = loadFlowDefinition(flowPath);
-  const findings = validateFlow(flow, agentMap);
-  const errors = findings.filter((f) => f.level === 'error');
-
-  assert.deepEqual(
-    errors,
-    [],
-    `forge-cycle flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // catalog

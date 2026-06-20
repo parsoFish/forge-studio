@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runFlow, forgeCycleFlowPath, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
@@ -274,16 +274,20 @@ describe('flow-runner reflect skipped when not merged', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4: REAL forge-cycle.yaml loaded from disk → real sequence from mock deps
+// Test 4: a REAL multi-node flow loaded from disk → real sequence from mock deps.
+// S8 retired forge-cycle; forge-cycle-with-review is the surviving ootb flow that
+// still carries the full architect→pm→dev→unifier→…→review→reflect shape (its
+// extra code-review node has no phase-agent kind, so it is a silent unknown-skip
+// and does NOT change the executor sequence).
 // ---------------------------------------------------------------------------
 
-describe('flow-runner with real forge-cycle.yaml', () => {
-  it('loads the real forge-cycle flow and produces the real executor sequence', async () => {
-    const flowPath = forgeCycleFlowPath();
+describe('flow-runner with a real full-sequence flow (forge-cycle-with-review)', () => {
+  it('loads the real flow and produces the real executor sequence', async () => {
+    const flowPath = flowPathForId('forge-cycle-with-review');
     const flow = loadFlowDefinition(flowPath);
 
-    assert.strictEqual(flow.id, 'forge-cycle', 'flow id must be forge-cycle');
-    assert.ok(flow.nodes.length >= 5, 'forge-cycle must have at least 5 nodes');
+    assert.strictEqual(flow.id, 'forge-cycle-with-review', 'flow id must be forge-cycle-with-review');
+    assert.ok(flow.nodes.length >= 5, 'the full-sequence flow must have at least 5 nodes');
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
@@ -305,8 +309,8 @@ describe('flow-runner with real forge-cycle.yaml', () => {
     assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep on real flow');
   });
 
-  it('loads the real forge-cycle flow and skips pm on unifier resume', async () => {
-    const flowPath = forgeCycleFlowPath();
+  it('loads the real flow and skips pm on unifier resume', async () => {
+    const flowPath = flowPathForId('forge-cycle-with-review');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();

@@ -7,9 +7,10 @@
  * No caching. Called per-request from the bridge (logs are small; note
  * perf deferral to M3 if needed).
  *
- * Node↔phase mapping: derived at runtime from studio/flows/forge-cycle/flow.yaml
- * + skills/<agent>/SKILL.md frontmatter `phase` field. Each flow node with an
- * `agent` field maps: SKILL.md[phase] → node.id.
+ * Node↔phase mapping: derived at runtime from the UNION of every seed flow under
+ * studio/flows/ (S8/DEC-3 retired the forge-cycle monolith) + skills/<agent>/SKILL.md
+ * frontmatter `phase` field. Each flow node with an `agent` field maps:
+ * SKILL.md[phase] → node.id.
  *
  * Canonicalization layer (hardcoded — ADR-028 engine will own the full table in M3):
  *   reflection  → reflect node (frontmatter says 'reflector', events say 'reflection')
@@ -60,7 +61,7 @@ export type RunPhaseMeta = {
 
 export type Run = {
   id: string;                        // cycleId (or initiativeId for planned runs)
-  flowId: string;                    // 'forge-cycle'
+  flowId: string;                    // the manifest's flow_id (e.g. forge-develop); 'unknown' for pre-S8 manifests
   initiativeId: string;
   initiative: string;                // manifest title
   status: RunStatus;
@@ -81,13 +82,14 @@ export type Run = {
 // Constants
 // ---------------------------------------------------------------------------
 
-// Hardcoded because today the scheduler only ever runs forge-cycle.yaml —
-// every run IS a forge-cycle run, so this constant is always correct.
-// When multi-flow scheduling lands (ADR-028 engine, M3+), derive the real
-// flow id from the manifest / the flow definition that spawned the run so
-// the M4 edit-lock predicate (bridge-studio.ts: r.flowId === id) correctly
-// locks user-authored flows too — not just forge-cycle.
-const FLOW_ID = 'forge-cycle';
+// A run's flow id comes from its manifest's `flow_id` (architect → forge-architect,
+// develop → forge-develop, seeded refinement → release-refine, …). This constant
+// is the fallback ONLY for pre-S8 manifests that predate the flow_id field — the
+// flow they ran (forge-cycle) was retired (S8/DEC-3), so it is honestly labelled
+// 'unknown' rather than pointing at a seed that no longer exists. The M4 edit-lock
+// predicate (bridge-studio.ts: r.flowId === id) never matches 'unknown', which is
+// correct — an unknowable archival flow is not editable.
+const FALLBACK_FLOW_ID = 'unknown';
 
 /** Valid origin values for a Run — anything else defaults to 'architect'. */
 const VALID_ORIGINS = new Set(['architect', 'human-directed']);
@@ -134,9 +136,16 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
 };
 
 /**
- * Build the event-phase → flow-node-id mapping from the real forge-cycle
- * flow definition and agent SKILL.md frontmatter. Falls back to the hardcoded
- * table if the studio/ directory or any required file is missing.
+ * Build the event-phase → flow-node-id mapping from the seed flow definitions on
+ * disk + agent SKILL.md frontmatter. Falls back to the hardcoded table if the
+ * studio/ directory or any required file is missing.
+ *
+ * S8/DEC-3: forge-cycle was retired, so this derives from the UNION of EVERY flow
+ * under studio/flows/ (forge-architect / forge-develop / forge-reflect /
+ * release-refine / …) rather than the single monolith. Each flow node with an
+ * `agent` maps SKILL.md[phase] → node.id; the first flow to map a phase wins (all
+ * seed flows share the canonical node ids, so the union is unambiguous), and any
+ * canonical phase a flow never declares is back-filled from the hardcoded table.
  *
  * Called once per aggregateRun / listRuns invocation. Results are not cached
  * (bridge adds none in M1 — definitions are small).
@@ -145,12 +154,10 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
  */
 export function buildNodeMapping(root: string): Map<string, string | null> {
   try {
-    const flowPath = join(resolve(root), 'studio', 'flows', 'forge-cycle', 'flow.yaml');
+    const flowsDir = join(resolve(root), 'studio', 'flows');
     const skillsDir = join(resolve(root), 'skills');
 
-    const flow = loadFlowDefinition(flowPath);
     const agents = listAgentDefinitions(skillsDir);
-
     // Index agents by slug for O(1) lookup
     const agentBySlug = new Map(agents.map((a) => [a.slug, a]));
 
@@ -161,24 +168,36 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
       mapping.set(phase, nodeId);
     }
 
-    // Derive from flow nodes that have an agent
-    for (const node of flow.nodes) {
-      if (!node.agent) continue; // gate-only nodes have no agent
-      const agentDef = agentBySlug.get(node.agent);
-      if (!agentDef?.phase) continue;
-      // Only set if not already covered by a canonicalization override
-      if (!mapping.has(agentDef.phase)) {
-        mapping.set(agentDef.phase, node.id);
+    // Derive from every seed flow's nodes (union; first-write-wins per phase).
+    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir) : [];
+    for (const entry of flowDirs) {
+      const flowPath = join(flowsDir, entry, 'flow.yaml');
+      if (!existsSync(flowPath)) continue;
+      let flow;
+      try {
+        flow = loadFlowDefinition(flowPath);
+      } catch {
+        continue; // a single malformed flow must not sink the whole mapping
       }
-      // Also handle 'reflector' frontmatter → 'reflect' node via the reflection override
-      // (already covered: CANONICAL_PHASE_OVERRIDES sets reflection → reflect)
+      for (const node of flow.nodes) {
+        if (!node.agent) continue; // gate-only nodes have no agent
+        const agentDef = agentBySlug.get(node.agent);
+        if (!agentDef?.phase) continue;
+        if (!mapping.has(agentDef.phase)) mapping.set(agentDef.phase, node.id);
+      }
+    }
+
+    // Back-fill any canonical phase no flow declared, so the mapping is always
+    // complete (e.g. a stripped studio/ dir). Never overwrites a derived value.
+    for (const [phase, nodeId] of Object.entries(FALLBACK_PHASE_TO_NODE)) {
+      if (!mapping.has(phase)) mapping.set(phase, nodeId);
     }
 
     return mapping;
   } catch (err) {
-    // Flow or registry unavailable — fall back to the hardcoded table so the
-    // bridge never crashes mid-edit. Log anything that is NOT a plain ENOENT
-    // so real configuration errors are observable.
+    // Registry unavailable — fall back to the hardcoded table so the bridge
+    // never crashes mid-edit. Log anything that is NOT a plain ENOENT so real
+    // configuration errors are observable.
     const isEnoent =
       (err as NodeJS.ErrnoException).code === 'ENOENT' ||
       (err instanceof Error && err.message.includes('no such file'));
@@ -352,9 +371,9 @@ function buildRun(args: {
   return {
     id: cycleId,
     // ADR-028 / J5: associate the run with the flow its manifest names, so a
-    // user-authored flow's run surfaces under /flows/<flow_id>. Legacy manifests
-    // carry no flow_id → the historical forge-cycle default (behaviour unchanged).
-    flowId: manifest.flow_id ?? FLOW_ID,
+    // flow's run surfaces under /flows/<flow_id>. Pre-S8 manifests carry no
+    // flow_id → 'unknown' (the forge-cycle default was retired; S8/DEC-3).
+    flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative,
     status: reconciledStatus,
@@ -442,7 +461,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
   const origin: Run['origin'] = VALID_ORIGINS.has(manifest.origin) ? (manifest.origin as Run['origin']) : 'architect';
   return {
     id: manifest.initiative_id,
-    flowId: manifest.flow_id ?? FLOW_ID,
+    flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative: extractTitle(manifest.body, manifest.initiative_id),
     status: 'planned',
@@ -457,7 +476,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
 function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
   return {
     id: initiativeId,
-    flowId: FLOW_ID,
+    flowId: FALLBACK_FLOW_ID,
     initiativeId,
     initiative: '(unreadable manifest)',
     status: QUEUE_STATE_TO_RUN_STATUS[state],

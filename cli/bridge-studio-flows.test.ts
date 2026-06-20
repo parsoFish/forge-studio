@@ -113,6 +113,10 @@ function makeInFlightManifest(initId: string, cycleId: string): string {
     'project: test-project',
     'project_repo_path: /tmp/test-project',
     'worktree_path: /tmp/worktrees/test',
+    // S8/DEC-3: run-model stamps the run's flowId from the manifest's flow_id
+    // (the forge-cycle default was retired) — name the locked-flow fixture so the
+    // edit-lock predicate (r.flowId === id) matches.
+    'flow_id: locked-flow',
     'origin: architect',
     'created_at: 2026-06-13T10:00:00.000Z',
     'iteration_budget: 5',
@@ -462,27 +466,15 @@ test('PUT /api/studio/flows/test-flow zero-gate non-disposable → 400 + finding
 // ---------------------------------------------------------------------------
 
 test('PUT /api/studio/flows/locked-flow → 423 when a run with that flowId is active', async () => {
-  // The fixture sets up _queue/in-flight/INIT-LOCK-001.md which yields
-  // a Run with flowId='forge-cycle' (hardcoded in run-model.ts FLOW_ID).
-  // To test the lock we need a flow whose id matches the run's flowId.
-  // run-model hardcodes flowId='forge-cycle' for all runs today.
-  // So we test with the flow id = 'forge-cycle' (create it temporarily).
+  // The fixture sets up studio/flows/locked-flow/flow.yaml + an in-flight manifest
+  // (INIT-LOCK-001) whose flow_id is 'locked-flow', so run-model yields an active
+  // Run with flowId='locked-flow' (S8/DEC-3: the run's flowId comes from the
+  // manifest now, not a hardcoded forge-cycle constant) — the lock predicate
+  // (r.flowId === id) matches and the write is rejected.
+  const lockedFlowPath = join(forgeRoot, 'studio', 'flows', 'locked-flow', 'flow.yaml');
+  const originalYaml = readFileSync(lockedFlowPath, 'utf8');
 
-  const forgeCycleDir = join(forgeRoot, 'studio', 'flows', 'forge-cycle');
-  const forgeCyclePath = join(forgeCycleDir, 'flow.yaml');
-  const alreadyExisted = existsSync(forgeCyclePath);
-
-  if (!alreadyExisted) {
-    mkdirSync(forgeCycleDir, { recursive: true });
-    writeFileSync(
-      forgeCyclePath,
-      makeFlowYaml({ id: 'forge-cycle', version: 1, origin: 'architect' }),
-    );
-  }
-
-  const originalYaml = readFileSync(forgeCyclePath, 'utf8');
-
-  const res = await putJson(`${bridgeUrl}/api/studio/flows/forge-cycle`, {
+  const res = await putJson(`${bridgeUrl}/api/studio/flows/locked-flow`, {
     goal: 'Locked write attempt.',
     nodes: [{ id: 'architect', agent: 'test-agent' }, { id: 'review', gate: 'human' }],
     edges: [{ from: 'architect', to: 'review', artifact: 'PLAN.md' }],
@@ -494,13 +486,8 @@ test('PUT /api/studio/flows/locked-flow → 423 when a run with that flowId is a
   assert.ok(body.error.includes('locked') || body.error.includes('in flight'), `expected lock error, got: ${body.error}`);
 
   // File must be unchanged
-  const afterYaml = readFileSync(forgeCyclePath, 'utf8');
+  const afterYaml = readFileSync(lockedFlowPath, 'utf8');
   assert.equal(afterYaml, originalYaml, 'flow.yaml must be unchanged when locked');
-
-  // Restore if we created it
-  if (!alreadyExisted) {
-    rmSync(forgeCycleDir, { recursive: true });
-  }
 });
 
 // ---------------------------------------------------------------------------

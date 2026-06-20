@@ -559,6 +559,6 @@ export function eventToNodeId(phase: string, nodeMapping: Map<string, string | n
   if (nodeMapping.has(phase)) return nodeMapping.get(phase) ?? null;
   // Otherwise the event names its own node. For user-authored flows (ADR-028 /
   // J5) the agent slug = node id = event phase, so a run surfaces statuses on
-  // the right hexes without the canonical (forge-cycle) mapping knowing them.
+  // the right hexes without the canonical seed-flow mapping knowing them.
   return phase;
 }

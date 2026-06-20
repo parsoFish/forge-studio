@@ -23,7 +23,7 @@ import type {
 
 export type Finding = {
   level: 'error' | 'flag';
-  object: string; // e.g. 'agent:developer-ralph', 'flow:forge-cycle', 'kb:cycles', 'catalog', 'projects'
+  object: string; // e.g. 'agent:developer-ralph', 'flow:forge-develop', 'kb:cycles', 'catalog', 'projects'
   check: string;  // e.g. 'readiness/purpose', 'acyclic', 'zero-gate', 'slug'
   message: string;
 };

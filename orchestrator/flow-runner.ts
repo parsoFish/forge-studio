@@ -894,24 +894,17 @@ export async function runFlow({
 }
 
 // ---------------------------------------------------------------------------
-// Convenience: resolve the forge-cycle flow.yaml path
+// Convenience: resolve a flow.yaml path by id
 // ---------------------------------------------------------------------------
 
 /**
  * Resolve the absolute path to a flow's `flow.yaml` by id, relative to the forge
  * root (two levels above this file's directory). The scheduler routes a cycle to
- * the flow named by the initiative manifest's `flow_id` (default `forge-cycle`).
+ * the flow named by the initiative manifest's `flow_id`. S8/DEC-3 retired the
+ * forge-cycle default — there is no fallback; an unknown id resolves to a
+ * non-existent path and runCycle throws (see orchestrator/cycle.ts).
  */
 export function flowPathForId(flowId: string): string {
   const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   return resolve(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml');
-}
-
-/**
- * Returns the absolute path to the forge-cycle/flow.yaml, resolved relative
- * to the forge root (two levels above this file's directory).
- * Used by runCycle (Task 2) and tests that want to load the real definition.
- */
-export function forgeCycleFlowPath(): string {
-  return flowPathForId('forge-cycle');
 }

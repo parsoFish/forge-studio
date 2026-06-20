@@ -129,10 +129,13 @@ export type InitiativeManifest = {
    */
   cycle_id?: string;
   /**
-   * The Studio flow this initiative runs under (ADR-028 / J5). When present, the
-   * run-model associates the run with this flow so it surfaces under
-   * `/flows/<flow_id>` in the monitor. Absent ⇒ the historical default
-   * `forge-cycle` (every legacy manifest), so existing behaviour is unchanged.
+   * The Studio flow this initiative runs under (ADR-028 / J5). The run-model
+   * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
+   * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
+   * default: every NEW manifest names a flow (architect → forge-architect,
+   * develop → forge-develop, seeded refinement → release-refine), and runCycle
+   * throws on a missing/unknown flow_id (no fallback). Only historical `done/`
+   * manifests may lack it; they are never re-run.
    */
   flow_id?: string;
   /**
@@ -368,8 +371,10 @@ export function readManifestCycleId(manifestPath: string): string | null {
 
 /**
  * ADR 028 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
- * the cycle should run. Returns `null` when absent/unparseable so the caller
- * defaults to `forge-cycle`. Never throws — flow selection must not break a cycle.
+ * the cycle should run. Returns `null` when absent/unparseable. Never throws
+ * (the parse must not crash the caller) — but post-S8/DEC-3 a `null` flow_id is a
+ * terminal error in runCycle (the forge-cycle default was retired; there is no
+ * fallback), so the caller decides, not this reader.
  */
 export function readManifestFlowId(manifestPath: string): string | null {
   try {

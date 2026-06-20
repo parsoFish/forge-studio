@@ -28,6 +28,7 @@ import {
 import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingUnifierItems } from './drain-unifier-items.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
@@ -559,11 +560,14 @@ async function runOne(
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
 
     // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
+    // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
+    // a manifest with no flow_id is refused by validateClaimable.
     const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const claimCheck = validateClaimable(
       manifest.initiativeId,
       manifest.projectRepoPath,
       forgeRoot,
+      manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
       // Emit a structured claim.refused event to the initiative's log dir
@@ -743,6 +747,8 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
+  /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
+  flowId?: string;
   /**
    * ADR 019 (amended by ADR 026): resume the cycle against the preserved
    * worktree — 'unifier' skips PM + the per-WI dev-loop and runs only the
@@ -757,6 +763,7 @@ function parseManifest(path: string): ParsedManifest {
     initiativeId: m.initiative_id,
     project: m.project,
     projectRepoPath: m.project_repo_path || resolve('projects', m.project),
+    flowId: m.flow_id,
     resumeFrom: m.resume_from,
   };
 }

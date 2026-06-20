@@ -120,9 +120,12 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     const initId = 'INIT-2026-05-31-task-group-unit-tests';
     const cycleId = '2026-05-30T22-45-07_INIT-2026-05-31-task-group-unit-tests';
 
-    // Write manifest in ready-for-review (cycle ended at closure → gated)
+    // Write manifest in ready-for-review (cycle ended at closure → gated).
+    // The real betterado task-group cycle ran the release-refine flow (S8/DEC-3:
+    // every manifest names its flow; the forge-cycle default was retired).
     const manifestPath = writeManifest(root, 'ready-for-review', initId, {
       cycle_id: cycleId,
+      flow_id: 'release-refine',
     });
 
     // Copy fixture events.jsonl
@@ -147,7 +150,7 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     assert.equal(run.id, cycleId);
     assert.equal(run.initiativeId, initId);
     assert.equal(run.origin, 'architect');
-    assert.equal(run.flowId, 'forge-cycle');
+    assert.equal(run.flowId, 'release-refine');
 
     // Gate
     assert.equal(run.gate, 'review', 'gate node should be review');
@@ -739,12 +742,13 @@ test('buildNodeMapping: missing studio/ falls back to hardcoded table; aggregate
   }
 });
 
-test('ADR 028 / J5: a run carries the flow_id from its manifest (else forge-cycle)', () => {
+test('ADR 028 / J5: a run carries the flow_id from its manifest (else unknown, post-S8)', () => {
   const root = makeTmp();
   try {
-    // Legacy manifest (no flow_id) → forge-cycle default.
+    // Pre-S8 manifest (no flow_id) → 'unknown' (the forge-cycle default was
+    // retired in S8/DEC-3; an unknowable archival flow is labelled honestly).
     const legacyPath = writeManifest(root, 'pending', 'INIT-2026-01-01-legacy');
-    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: legacyPath, nowMs: Date.now() }).flowId, 'forge-cycle');
+    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: legacyPath, nowMs: Date.now() }).flowId, 'unknown');
 
     // Manifest with flow_id → the run surfaces under that flow.
     const authoredPath = writeManifest(root, 'pending', 'INIT-2026-01-01-authored', { flow_id: 'my-first-flow' });
