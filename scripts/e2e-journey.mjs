@@ -1868,14 +1868,19 @@ async function main() {
     );
     await frame(page, 'r4-1b-send-back', 'R4 — the comment persists; the derived verdict is "send back"');
     await page.locator('[data-component="verdict-form"] [data-action="send-back"]').click();
-    await sleep(ACT);
-    // ADR-026 in place: the send-back appended a UWI in the SAME cycle's worktree
-    // (no requeue, no sibling cycle/_logs).
+    // A 200 (the form reaches "submitted") means applyReviewVerdict appended the
+    // UWI in place — ADR-026, same cycle, no requeue.
+    await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
+    const sbState = await page.locator('[data-component="verdict-form"]').getAttribute('data-form-state');
+    const sbErr = await page.locator('[data-component="verdict-form"]').getAttribute('data-submit-error');
+    check(sbState === 'submitted', `send-back submitted (ADR-026 in-place append) — state=${sbState}${sbErr ? ` err=${sbErr}` : ''}`);
+    // Belt-and-braces: the UWI landed in the SAME cycle's worktree (no sibling).
     check(
       existsSync(join(REVIEW_WT, '.forge', 'unifier-items')) &&
         readdirSync(join(REVIEW_WT, '.forge', 'unifier-items')).some((f) => f.startsWith('UWI-')),
       'send-back appended a UWI into the SAME cycle worktree (ADR-026 in place, no new cycle)',
     );
+    await sleep(ACT);
 
     // ── R4.2: Dev-loop reruns on feedback (fast-forward) ──────────────────────
     console.log('\n[R4.2] Dev-loop reruns on feedback (fast-forward)');
@@ -2093,7 +2098,9 @@ async function main() {
 
     // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
     console.log('\n[R6.1] Start development trigger (DEC-3)');
-    const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"]`);
+    // The card div is uniquely identified by data-develop-state (the button also
+    // carries data-initiative-id, so select the div explicitly to avoid a match clash).
+    const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`);
     const startBtn = devCard.locator('[data-action="start-development"]');
     if (await startBtn.count() > 0) {
       check(

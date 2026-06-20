@@ -89,16 +89,21 @@ export function DemoReviewSurface({
   const regions = useMemo(() => buildRegions(model, cycleId), [model, cycleId]);
   const blockerCount = comments.filter((c) => c.blocking && !c.resolved).length;
 
+  // The verdict route validates the INIT-YYYY-MM-DD-slug id. When the run object
+  // didn't carry one, `initiativeId` can arrive as the full cycleId
+  // (`<timestamp>_<initiativeId>`) — recover the real id so the POST never 400s.
+  const verdictInitiativeId = effectiveInitiativeId(initiativeId, cycleId);
+
   async function onSubmit(): Promise<void> {
     setError(null);
     setSubmitting(true);
     try {
       const result =
         derived.kind === 'approve'
-          ? await submitVerdict({ kind: 'approve', initiativeId, rationale: 'Approved on the visual review — no blocking comments.' })
+          ? await submitVerdict({ kind: 'approve', initiativeId: verdictInitiativeId, rationale: 'Approved on the visual review — no blocking comments.' })
           : await submitVerdict({
               kind: 'send-back',
-              initiativeId,
+              initiativeId: verdictInitiativeId,
               rationale: derived.rationale,
               acceptanceCriteria: derived.acceptanceCriteria,
             });
@@ -147,8 +152,9 @@ export function DemoReviewSurface({
         data-component="verdict-form"
         data-form-state={formState}
         data-form-kind={derived.kind}
-        data-initiative-id={initiativeId}
+        data-initiative-id={verdictInitiativeId}
         data-ac-count={blockerCount}
+        data-submit-error={error ?? ''}
         style={{ border: `1px solid ${derived.kind === 'send-back' ? '#9e6a03' : '#238636'}`, borderRadius: 10, padding: 16, background: '#0d1117' }}
       >
         {submitted ? (
@@ -347,6 +353,18 @@ function ReviewRegion({
 
 function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element {
   return <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>{children}</div>;
+}
+
+/**
+ * Recover the initiative id for the verdict route. The id is preferred as-is when
+ * it already looks like an initiative id; otherwise it's pulled out of the
+ * `<timestamp>_<initiativeId>` cycle id (the timestamp segment carries no `_`).
+ */
+function effectiveInitiativeId(initiativeId: string, cycleId: string): string {
+  if (/^INIT-/.test(initiativeId)) return initiativeId;
+  const idx = cycleId.indexOf('_');
+  const fromCycle = idx >= 0 ? cycleId.slice(idx + 1) : cycleId;
+  return /^INIT-/.test(fromCycle) ? fromCycle : initiativeId;
 }
 
 /** Minimal fallback markdown when no DEMO.md is served yet (keeps the iframe non-empty). */
