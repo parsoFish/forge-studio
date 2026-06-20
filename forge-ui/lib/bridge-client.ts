@@ -182,6 +182,40 @@ export async function fetchWorkItem(cycleId: string, wiId: string): Promise<Work
   );
 }
 
+// ---- Per-project roadmap (S6) -----------------------------------------------
+
+export type RoadmapWorkItem = {
+  id: string;
+  title: string;
+  dependsOn: string[];
+};
+
+export type RoadmapInitiative = {
+  initiativeId: string;
+  title: string;
+  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  dependsOnInitiatives: string[];
+  workItems?: RoadmapWorkItem[];
+};
+
+export type ProjectRoadmap = {
+  projectId: string;
+  initiatives: RoadmapInitiative[];
+};
+
+/**
+ * Fetch the per-project roadmap (S6 DEC-3): all initiatives for this project
+ * across all queue states, each with nested WI sub-graph when decomposed.
+ * Returns null when the bridge is offline or the project is unknown.
+ */
+export async function fetchRoadmap(projectId: string): Promise<ProjectRoadmap | null> {
+  const body = await bridgeGet<{ roadmap: ProjectRoadmap } | null>(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/roadmap`,
+    null,
+  );
+  return body?.roadmap ?? null;
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;

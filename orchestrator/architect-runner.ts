@@ -62,6 +62,7 @@ import { loadBrainIndex } from '../cli/brain-index.ts';
 import {
   serializeManifest,
   parseManifest,
+  mintAndPersistManifestCycleId,
   type InitiativeManifest,
 } from './manifest.ts';
 import { promoteManifests } from './promote-manifests.ts';
@@ -764,6 +765,16 @@ async function runFinalizeStep(args: {
   const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
+
+  // DEC-2 (S6): thread the initiativeId+cycleId lineage at finalize time so that
+  // when the Develop (or forge-cycle) flow later claims this manifest it reuses the
+  // SAME `_logs/<cycleId>` dir instead of minting a sibling. One cycleId ⇒ one
+  // event log ⇒ cost/roadmap/metrics roll up as one unit. Idempotent + best-effort.
+  for (let i = 0; i < writtenManifestPaths.length; i++) {
+    const initId = writtenInitiativeIds[i];
+    if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
+  }
+
   writeStatus(paths.sessionDir, { ...status, phase: 'committed' });
 
   logger.emit({

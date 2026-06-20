@@ -8,6 +8,8 @@ import {
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
+import { fetchRoadmap, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
+import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
@@ -37,6 +39,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // F5: set after a demoProcess save — surfaces data-demo-design-state="needed"
   // so the operator knows to run `forge run skill demo-design --project <id>`.
   const [demoDesignNeeded, setDemoDesignNeeded] = useState(false);
+  // S6: Editor|Roadmap tab + the read-only roadmap read model.
+  const [tab, setTab] = useState<'editor' | 'roadmap'>('editor');
+  const [roadmap, setRoadmap] = useState<ProjectRoadmap | null>(null);
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -78,12 +83,18 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     if (!signal.cancelled) setPreflight(result);
   }, [id]);
 
+  const loadRoadmap = useCallback(async (signal: { cancelled: boolean }) => {
+    const result = await fetchRoadmap(id);
+    if (!signal.cancelled) setRoadmap(result);
+  }, [id]);
+
   useEffect(() => {
     const signal = { cancelled: false };
     void loadData(signal);
     void loadPreflight(signal);
+    void loadRoadmap(signal);
     return () => { signal.cancelled = true; };
-  }, [loadData, loadPreflight]);
+  }, [loadData, loadPreflight, loadRoadmap]);
 
   // Unified save feedback (X1). The hook owns saving/saved/error state.
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
@@ -190,61 +201,94 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         </button>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
-          <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
-          <Instructions value={instructions} onChange={(v) => { setInstructions(v); markDirty(); }} />
-          <DemoTimeline steps={demoSteps} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
-          <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
-        </div>
+      {/* Editor | Roadmap tab bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 2,
+        padding: '0 28px',
+        borderBottom: '1px solid var(--line)',
+        background: 'var(--bg-2)',
+      }}>
+        {(['editor', 'roadmap'] as const).map((t) => (
+          <button
+            key={t}
+            data-tab={t}
+            data-tab-active={tab === t ? 'true' : 'false'}
+            onClick={() => setTab(t)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
+              color: tab === t ? 'var(--text)' : 'var(--faint)',
+              padding: '10px 14px 8px',
+              borderBottom: tab === t ? '2px solid var(--c-project)' : '2px solid transparent',
+              textTransform: 'capitalize',
+            }}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
 
-        <aside style={{
-          width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
-          padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
-          gap: 16, overflowY: 'auto', background: 'var(--bg-2)',
-        }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Card Preview</div>
-            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: 14, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--c-project) 0%, transparent 100%)' }} />
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, marginBottom: 6, color: 'var(--text)' }}>{name || '—'}</div>
-              <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 10, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{northStar || '—'}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                <span className="badge badge-project">{skills.length} skill{skills.length !== 1 ? 's' : ''}</span>
-                {kb && kbs.find((k) => k.id === kb) && <span className="badge badge-kb">{kbs.find((k) => k.id === kb)?.name}</span>}
-              </div>
-            </div>
+      {tab === 'editor' && (
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
+            <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
+            <Instructions value={instructions} onChange={(v) => { setInstructions(v); markDirty(); }} />
+            <DemoTimeline steps={demoSteps} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
+            <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
           </div>
 
-          <KbBind kb={kb} kbs={kbs} projectName={name} summary={northStar} onChange={(v) => { setKb(v); markDirty(); }} />
-
-          {demoDesignNeeded && (
-            <div
-              data-section="demo-design-prompt"
-              style={{ background: 'var(--bg-2)', border: '1px solid var(--yellow)', borderRadius: 'var(--radius)', padding: '10px 12px' }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>Demo machinery needed</div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-                demoProcess saved. Run the demo-design skill to generate per-project demo machinery:
+          <aside style={{
+            width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
+            padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
+            gap: 16, overflowY: 'auto', background: 'var(--bg-2)',
+          }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Card Preview</div>
+              <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: 14, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--c-project) 0%, transparent 100%)' }} />
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, marginBottom: 6, color: 'var(--text)' }}>{name || '—'}</div>
+                <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 10, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{northStar || '—'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <span className="badge badge-project">{skills.length} skill{skills.length !== 1 ? 's' : ''}</span>
+                  {kb && kbs.find((k) => k.id === kb) && <span className="badge badge-kb">{kbs.find((k) => k.id === kb)?.name}</span>}
+                </div>
               </div>
-              <code style={{ display: 'block', fontSize: 11, color: 'var(--faint)', marginTop: 6, wordBreak: 'break-all' }}>
-                forge run skill demo-design --project {id}
-              </code>
             </div>
-          )}
 
-          <ContractReadiness
-            northStar={northStar}
-            instructions={instructions}
-            demoSteps={demoSteps}
-            skills={skills}
-            kb={kb}
-            preflight={preflight}
-          />
+            {demoDesignNeeded && (
+              <div
+                data-section="demo-design-prompt"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--yellow)', borderRadius: 'var(--radius)', padding: '10px 12px' }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>Demo machinery needed</div>
+                <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+                  demoProcess saved. Run the demo-design skill to generate per-project demo machinery:
+                </div>
+                <code style={{ display: 'block', fontSize: 11, color: 'var(--faint)', marginTop: 6, wordBreak: 'break-all' }}>
+                  forge run skill demo-design --project {id}
+                </code>
+              </div>
+            )}
 
-          <UsedByFlows flows={flows} projectId={id} />
-        </aside>
-      </div>
+            <KbBind kb={kb} kbs={kbs} projectName={name} summary={northStar} onChange={(v) => { setKb(v); markDirty(); }} />
+
+            <ContractReadiness
+              northStar={northStar}
+              instructions={instructions}
+              demoSteps={demoSteps}
+              skills={skills}
+              kb={kb}
+              preflight={preflight}
+            />
+
+            <UsedByFlows flows={flows} projectId={id} />
+          </aside>
+        </div>
+      )}
+
+      {tab === 'roadmap' && (
+        <RoadmapView projectId={id} roadmap={roadmap} />
+      )}
     </main>
   );
 }
@@ -420,5 +464,153 @@ function ProjectOnboardForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RoadmapView — read-only per-project roadmap (S6 DEC-3)
+// ---------------------------------------------------------------------------
+
+const STATUS_COLOURS: Record<string, string> = {
+  'in-flight': 'var(--c-active)',
+  'ready-for-review': 'var(--c-review, #f0a500)',
+  'done': 'var(--c-complete)',
+  'failed': 'var(--c-failed, #e05454)',
+  'pending': 'var(--faint)',
+};
+
+function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: ProjectRoadmap | null }) {
+  if (!roadmap) {
+    return (
+      <div
+        data-section="project-roadmap"
+        data-project-id={projectId}
+        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13 }}
+      >
+        No roadmap data yet — run an architect session to generate initiatives.
+      </div>
+    );
+  }
+
+  const { initiatives } = roadmap;
+  if (initiatives.length === 0) {
+    return (
+      <div
+        data-section="project-roadmap"
+        data-project-id={projectId}
+        data-dep-count="0"
+        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13 }}
+      >
+        No initiatives found for this project.
+      </div>
+    );
+  }
+
+  // Topological level ordering for the initiative spine.
+  const initLevels = topoLevels(
+    initiatives,
+    (i) => i.initiativeId,
+    (i) => i.dependsOnInitiatives,
+  );
+
+  return (
+    <div
+      data-section="project-roadmap"
+      data-project-id={projectId}
+      data-dep-count={String(initLevels.maxLevel)}
+      style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24 }}
+    >
+      {Array.from({ length: initLevels.maxLevel + 1 }, (_, lvl) => {
+        const levelInits = initLevels.byLevel.get(lvl) ?? [];
+        return (
+          <div key={lvl} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {lvl === 0 ? null : (
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', paddingLeft: 4 }}>
+                Level {lvl}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {levelInits.map((init) => (
+                <InitiativeCard key={init.initiativeId} initiative={init} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
+  const { initiativeId, title, status, dependsOnInitiatives, workItems } = initiative;
+  const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
+
+  // WI topo levels (for sub-graph ordering).
+  const wiLevels = workItems && workItems.length > 0
+    ? topoLevels(workItems, (w) => w.id, (w) => w.dependsOn)
+    : null;
+
+  return (
+    <div
+      data-initiative-id={initiativeId}
+      data-initiative-status={status}
+      style={{
+        background: 'var(--panel)',
+        border: `1px solid var(--line)`,
+        borderTop: `3px solid ${colour}`,
+        borderRadius: 'var(--radius)',
+        padding: '14px 16px',
+        minWidth: 260, maxWidth: 380,
+        display: 'flex', flexDirection: 'column', gap: 10,
+        position: 'relative',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35 }}>{title}</div>
+          <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{initiativeId}</div>
+        </div>
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase',
+          color: colour, background: `${colour}18`, borderRadius: 4, padding: '2px 6px', flexShrink: 0,
+        }}>{status}</span>
+      </div>
+
+      {dependsOnInitiatives.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--dim)' }}>
+          Depends on: {dependsOnInitiatives.join(', ')}
+        </div>
+      )}
+
+      {wiLevels && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Work Items</div>
+          {Array.from({ length: wiLevels.maxLevel + 1 }, (_, lvl) => {
+            const levelWis = wiLevels.byLevel.get(lvl) ?? [];
+            return levelWis.map((wi) => (
+              <WorkItemBadge key={wi.id} wi={wi} />
+            ));
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkItemBadge({ wi }: { wi: RoadmapWorkItem }) {
+  return (
+    <div
+      data-work-item-id={wi.id}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        fontSize: 12, color: 'var(--text)',
+        background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
+        padding: '5px 9px',
+        border: '1px solid var(--line)',
+      }}
+    >
+      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'var(--c-dev, #4ca3f5)', fontWeight: 700 }}>{wi.id}</span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wi.title}</span>
+    </div>
   );
 }
