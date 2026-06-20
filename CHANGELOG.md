@@ -3,9 +3,11 @@
 All notable changes to Forge are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://semver.org/).
+and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — productionisation
+## [Unreleased]
+
+## [2.0.1] - 2026-06-21 — productionisation
 
 This entry covers the **productionisation pass**: a release final-loop, disk-based
 project auto-discovery, a creds-free reference project, and a hard cull of removed
@@ -113,4 +115,5 @@ real data-table dispatch and a second, gated implementation behind it).
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
-[Unreleased]: https://github.com/Parso/forge/compare/main...HEAD
+[Unreleased]: https://github.com/Parso/forge/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/Parso/forge/compare/v0.1.0...v2.0.1
