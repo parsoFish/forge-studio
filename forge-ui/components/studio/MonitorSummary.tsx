@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { Run, Flow } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,25 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
   const fillClass = pct >= 90 ? ' crit' : pct >= 70 ? ' warn' : '';
   const elapsedStr = elapsed(run.startedAt);
 
+  // Normalise artifactsReady: 'work-items' → 'workitems' so the /artifact
+  // page type param resolves correctly (mirrors artifact/page.tsx ~:479-487).
+  const ARTIFACT_KEYS: { key: string; label: string }[] = [
+    { key: 'plan',       label: 'PLAN.md' },
+    { key: 'workitems',  label: 'work-items/' },
+    { key: 'pr',         label: 'PR' },
+    { key: 'demo',       label: 'demo-evidence/' },
+    { key: 'verdict',    label: 'verdict.json' },
+    { key: 'reflection', label: 'reflection.md' },
+  ];
+  const ar = run.artifactsReady as Record<string, 'view' | 'gate'>;
+  const readyChips = ARTIFACT_KEYS.filter(({ key }) => {
+    const rawKey = key === 'workitems' ? 'work-items' : key;
+    return !!ar[rawKey];
+  }).map(({ key, label }) => {
+    const rawKey = key === 'workitems' ? 'work-items' : key;
+    return { key, label, mode: ar[rawKey] };
+  });
+
   return (
     <div
       className="fb-summary-strip"
@@ -87,80 +107,119 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
       data-run-cost-usd={run.costUsd.toFixed(4)}
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 20,
+        flexDirection: 'column',
         padding: '10px 20px',
         background: 'var(--panel)',
         borderBottom: '1px solid var(--line)',
         flexShrink: 0,
-        flexWrap: 'wrap',
+        gap: 8,
       }}
     >
-      <SummaryKV
-        label="Cost"
-        value={`$${run.costUsd.toFixed(2)}`}
-        ember
-      />
-      <SummaryKV label="Elapsed" value={elapsedStr} />
+      {/* Stats row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+        <SummaryKV
+          label="Cost"
+          value={`$${run.costUsd.toFixed(2)}`}
+          ember
+        />
+        <SummaryKV label="Elapsed" value={elapsedStr} />
 
-      <div style={{ fontSize: 12, color: 'var(--dim)' }}>
-        <span style={{ color: 'var(--green)' }}>{tally.complete} complete</span>
-        {' · '}
-        <span style={{ color: 'var(--ember)' }}>{tally.active} active</span>
-        {' · '}
-        <span style={{ color: 'var(--amber)' }}>{tally.retrying} retrying</span>
-        {' · '}
-        <span style={{ color: 'var(--faint)' }}>{tally.pending} pending</span>
-      </div>
+        <div style={{ fontSize: 12, color: 'var(--dim)' }}>
+          <span style={{ color: 'var(--green)' }}>{tally.complete} complete</span>
+          {' · '}
+          <span style={{ color: 'var(--ember)' }}>{tally.active} active</span>
+          {' · '}
+          <span style={{ color: 'var(--amber)' }}>{tally.retrying} retrying</span>
+          {' · '}
+          <span style={{ color: 'var(--faint)' }}>{tally.pending} pending</span>
+        </div>
 
-      {/* Cost gauge — only when ceiling is configured */}
-      {ceiling != null && ceiling > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-            minWidth: 140,
-          }}
-        >
+        {/* Cost gauge — only when ceiling is configured */}
+        {ceiling != null && ceiling > 0 && (
           <div
             style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11.5,
-              color: 'var(--dim)',
-            }}
-          >
-            ${run.costUsd.toFixed(2)} of ${ceiling} ceiling
-          </div>
-          <div
-            style={{
-              height: 5,
-              background: 'var(--line)',
-              borderRadius: 3,
-              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+              minWidth: 140,
             }}
           >
             <div
               style={{
-                height: '100%',
-                borderRadius: 3,
-                width: `${pct.toFixed(1)}%`,
-                background: fillClass.includes('crit')
-                  ? 'var(--red)'
-                  : fillClass.includes('warn')
-                  ? 'var(--amber)'
-                  : 'var(--ember)',
-                transition: 'width 0.3s',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11.5,
+                color: 'var(--dim)',
               }}
-            />
+            >
+              ${run.costUsd.toFixed(2)} of ${ceiling} ceiling
+            </div>
+            <div
+              style={{
+                height: 5,
+                background: 'var(--line)',
+                borderRadius: 3,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  borderRadius: 3,
+                  width: `${pct.toFixed(1)}%`,
+                  background: fillClass.includes('crit')
+                    ? 'var(--red)'
+                    : fillClass.includes('warn')
+                    ? 'var(--amber)'
+                    : 'var(--ember)',
+                  transition: 'width 0.3s',
+                }}
+              />
+            </div>
           </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Run badge */}
+        <span className={`badge ${runBadgeClass(run.status)}`}>{run.id}</span>
+      </div>
+
+      {/* Artifact pill row — one chip per ready artifact, linking to /artifact */}
+      {readyChips.length > 0 && (
+        <div
+          data-section="monitor-artifacts"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+        >
+          {readyChips.map(({ key, label, mode }) => (
+            <Link
+              key={key}
+              href={`/artifact?run=${encodeURIComponent(run.id)}&type=${encodeURIComponent(key)}`}
+              data-artifact-pill={key}
+              data-artifact-mode={mode}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '3px 10px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                fontWeight: 500,
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${mode === 'gate' ? 'rgba(251,191,36,.55)' : 'rgba(251,191,36,.25)'}`,
+                background: mode === 'gate' ? 'rgba(251,191,36,.12)' : 'rgba(251,191,36,.05)',
+                color: mode === 'gate' ? 'var(--amber)' : 'var(--c-artifact)',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {mode === 'gate' && (
+                <span style={{ fontSize: 8, lineHeight: 1 }}>●</span>
+              )}
+              {label}
+            </Link>
+          ))}
         </div>
       )}
-
-      <div style={{ flex: 1 }} />
-
-      {/* Run badge */}
-      <span className={`badge ${runBadgeClass(run.status)}`}>{run.id}</span>
     </div>
   );
 }
