@@ -59,6 +59,7 @@ import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
+import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -131,6 +132,14 @@ type TailState = {
 
 export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
+  // F1: a stable identity for this bridge process, captured once at startup
+  // and served from GET /api/health, so a second `forge studio` can recognise
+  // a healthy forge bridge and ATTACH read-only instead of killing it.
+  const identity: BridgeIdentity = {
+    service: 'forge-bridge',
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  };
   const port = opts.port ?? 0; // 0 = OS-assigned
   // getPaths takes the QUEUE ROOT, not the forge root — _queue/ is a
   // child of forgeRoot.
@@ -361,6 +370,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
+      identity,
       scanCycles,
       liveness: computeLiveness,
       logsRoot,
@@ -450,6 +460,8 @@ type LivenessReport = {
 };
 
 type HttpContext = {
+  /** F1 — this bridge process's identity, served from GET /api/health. */
+  identity: BridgeIdentity;
   scanCycles: () => { live: Cycle[]; recent: Cycle[] };
   /** Feature #8 — daemon-stall liveness across in-flight cycles. */
   liveness: () => LivenessReport;
@@ -513,8 +525,10 @@ async function handleHttp(
   }
 
   if (method === 'GET' && url === '/api/health') {
-    res.writeHead(200, { 'content-type': 'text/plain' });
-    res.end('ok');
+    // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
+    // healthy forge bridge from a stale/foreign listener and attach instead of
+    // killing it. Probes still treat any 200 as "up", so readiness is unchanged.
+    sendJson(res, 200, ctx.identity, origin);
     return;
   }
   if (method === 'GET' && url === '/api/cycles') {

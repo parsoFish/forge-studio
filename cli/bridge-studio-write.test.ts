@@ -393,9 +393,18 @@ test('GET /api/studio/agents still works alongside write routes', async () => {
   assert.ok(Array.isArray(body.agents));
 });
 
-test('GET /api/health still returns ok', async () => {
+test('GET /api/health returns the bridge JSON identity (service/pid/startedAt)', async () => {
   const res = await fetch(`${bridgeUrl}/api/health`);
   assert.equal(res.status, 200);
+  assert.ok(
+    (res.headers.get('content-type') ?? '').includes('application/json'),
+    'health must be JSON so a second studio can read the identity',
+  );
+  const body = (await res.json()) as { service: string; pid: number; startedAt: string };
+  assert.equal(body.service, 'forge-bridge');
+  assert.equal(body.pid, process.pid, 'identity pid is the process serving the bridge');
+  assert.equal(typeof body.startedAt, 'string');
+  assert.ok(!Number.isNaN(Date.parse(body.startedAt)), 'startedAt is an ISO timestamp');
 });
 
 test('OPTIONS preflight returns PUT in access-control-allow-methods', async () => {

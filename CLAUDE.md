@@ -14,6 +14,13 @@ If the answer to (1) is no, the change must justify why. If (2) reveals a re-inv
 
 There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean but the full ADR-024 migration is incremental and not yet complete.
 
+## Studio session workflow
+
+`forge studio` is the operator surface (ADR-031: the UI/bridge is the sole interaction point). It runs on **fixed ports** — bridge `4123`, UI `4124` — so one browser tab stays pinned and auto-reconnects across re-runs.
+
+- **The agent runs `forge studio` once at session start and keeps it up all session.** Restart it **only** to apply changes to Studio's own code (bridge/UI). It is the live window onto every cycle — don't tear it down between tasks.
+- **A second `forge studio` attaches read-only by default** (F1). It probes `GET /api/health` for the bridge identity `{service:'forge-bridge',pid,startedAt}`: a healthy forge bridge is **reused** (the running session — and any in-flight cycle — is left untouched); only a free, stale, or foreign port is taken over. Human viewers should open a second window with `forge studio --attach` (errors if nothing healthy is there) and **never `--force-takeover` a running agent session** — that SIGKILLs the bridge and hard-resets in-flight cycles. `--force-takeover` is the deliberate escape hatch to replace a healthy bridge on purpose.
+
 ## The brain is the first source of knowledge
 
 **Before** answering a question about how forge works, before designing, before implementing — **query the brain**. Since the three-brain restructure ([ADR 018](./docs/decisions/018-three-brain-model.md)) the brain is three scoped graphs: **Brain 1** `brain/forge-dev/` (forge engineering), **Brain 2** `brain/cycles/` (cross-cycle patterns + archives), and **Brain 3** `projects/<name>/brain/` (per-project, lives in each project's own repo). Query via the `brain-query` skill with `--scope`. If the brain doesn't know, research further AND log the gap so the next ingest pass can fill it.

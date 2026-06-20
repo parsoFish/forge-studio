@@ -859,26 +859,33 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
   const opts: {
     bridgeOnly?: boolean; bridgePort?: number; uiPort?: number;
     noOpen?: boolean; readyFile?: string;
+    noTakeover?: boolean; forceTakeover?: boolean;
   } = {};
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
     if (a === '--bridge-only') opts.bridgeOnly = true;
     else if (a === '--no-open') opts.noOpen = true;
+    else if (a === '--attach' || a === '--no-takeover') opts.noTakeover = true;
+    else if (a === '--force-takeover') opts.forceTakeover = true;
     else if (a === '--bridge-port') opts.bridgePort = parsePortFlag(rest[++i], '--bridge-port');
     else if (a === '--ui-port') opts.uiPort = parsePortFlag(rest[++i], '--ui-port');
     else if (a === '--ready-file') opts.readyFile = rest[++i];
     else if (a === '--help' || a === '-h') {
-      console.log(`forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+      console.log(`forge studio [--bridge-only] [--no-open] [--attach|--no-takeover] [--force-takeover] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
   Bring up the forge operator UI at http://localhost:4124 (foreground; Ctrl-C quits).
   Awaits a health probe on the bridge then the UI before opening the browser,
   then emits a deterministic 'forge-studio-ready {json}' line on stdout.
-  Re-runs take over any prior forge process on the fixed ports so a pinned
-  browser tab auto-reconnects via WebSocket backoff.
-    --bridge-only  Run only the WebSocket bridge (no Next.js dev server).
-    --no-open      Skip launching the browser.
-    --bridge-port  HTTP/WS port for the bridge (default: 4123).
-    --ui-port      Port for the Next.js dev server (default: 4124).
-    --ready-file   Atomically write the ready-info JSON to this path on readiness.`);
+  By default a second \`forge studio\` ATTACHES read-only to a healthy running
+  bridge (the agent's session stays alive); only a free/stale/foreign port is
+  taken over so a pinned browser tab auto-reconnects via WebSocket backoff.
+    --bridge-only    Run only the WebSocket bridge (no Next.js dev server).
+    --no-open        Skip launching the browser.
+    --attach         Attach read-only to a running bridge; never take it over
+    --no-takeover    (alias of --attach) — error if none is healthy.
+    --force-takeover Replace a running bridge even if it is healthy (escape hatch).
+    --bridge-port    HTTP/WS port for the bridge (default: 4123).
+    --ui-port        Port for the Next.js dev server (default: 4124).
+    --ready-file     Atomically write the ready-info JSON to this path on readiness.`);
       return;
     } else {
       console.error(`forge studio: unknown option ${a}`);

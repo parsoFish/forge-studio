@@ -125,6 +125,76 @@ export async function pollUntilReady(
 }
 
 /**
+ * The identity a healthy forge bridge reports from `GET /api/health` (F1).
+ * Lets a second `forge studio` recognise "this listener is my own bridge"
+ * before deciding whether to attach read-only or take the port over — the
+ * "identify is this my forge process" the fixed-port-takeover pattern always
+ * anticipated would be needed once the surface was shared.
+ */
+export type BridgeIdentity = { service: 'forge-bridge'; pid: number; startedAt: string };
+
+/** The launcher's decision for an already-occupied bridge port (F1).
+ *  - `attach`             a healthy forge bridge is already up → reuse it read-only.
+ *  - `takeover`           the port is free, stale, or owned by something else → kill+bind.
+ *  - `attach-unavailable` the operator demanded attach-only but nothing healthy is there. */
+export type PortStrategy = 'attach' | 'takeover' | 'attach-unavailable';
+
+/**
+ * Decide whether a second launcher should ATTACH read-only to an existing
+ * forge bridge or TAKE the port over. Pure — unit-tested.
+ *
+ * Default is attach-if-healthy: a live forge bridge is reused (never killed);
+ * anything else (free port, stale/old non-identifying bridge, foreign server)
+ * is taken over so a fresh studio can bind. `forceTakeover` is the escape
+ * hatch that always rebinds; `requireAttach` (`--attach`/`--no-takeover`)
+ * forbids takeover entirely, returning `attach-unavailable` when there is no
+ * healthy bridge rather than silently starting a competing one.
+ */
+export function decidePortStrategy(
+  identity: BridgeIdentity | null,
+  opts: { forceTakeover?: boolean; requireAttach?: boolean } = {},
+): PortStrategy {
+  if (opts.forceTakeover) return 'takeover';
+  const healthy = identity !== null && identity.service === 'forge-bridge';
+  if (healthy) return 'attach';
+  return opts.requireAttach ? 'attach-unavailable' : 'takeover';
+}
+
+/**
+ * Probe a bridge `GET /api/health` URL and return its {@link BridgeIdentity},
+ * or null when nothing healthy/identifying is there (port free, a pre-F1
+ * plain-text `ok` bridge, a non-2xx response, a foreign server, or malformed
+ * JSON). `fetchImpl` is injectable for tests. A short timeout keeps the
+ * launcher from hanging on a half-open socket.
+ */
+export async function probeBridgeIdentity(
+  healthUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BridgeIdentity | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetchImpl(healthUrl, { signal: controller.signal });
+    if (!res.ok) return null;
+    const body = (await res.json()) as Partial<BridgeIdentity>;
+    if (
+      body !== null &&
+      typeof body === 'object' &&
+      body.service === 'forge-bridge' &&
+      typeof body.pid === 'number' &&
+      typeof body.startedAt === 'string'
+    ) {
+      return { service: 'forge-bridge', pid: body.pid, startedAt: body.startedAt };
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Fixed default ports so the operator can pin one browser tab open at
  * `http://localhost:4124` and let it auto-reconnect across `forge watch`
  * / `forge-ui:demo` re-runs. If a previous forge process is still
@@ -151,6 +221,13 @@ export type WatchOptions = {
    *  the bridge and UI answer a health probe (M7-6). A consumer can wait on
    *  the file appearing instead of parsing stdout. */
   readyFile?: string;
+  /** F1 — refuse to take a running forge bridge over: attach read-only if one
+   *  is healthy, else error (do not start a competing bridge). `--attach` /
+   *  `--no-takeover`. Default behaviour is already attach-if-healthy. */
+  noTakeover?: boolean;
+  /** F1 — escape hatch: always take the port over even if a healthy forge
+   *  bridge is already there. `--force-takeover`. */
+  forceTakeover?: boolean;
   /** Log prefix — `[forge studio]` (canonical) or `[forge watch]`
    *  (deprecated alias). Defaults to `[forge studio]`. */
   logLabel?: string;
@@ -164,10 +241,52 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   const uiPort = opts.uiPort ?? DEFAULT_UI_PORT;
   const uiUrl = `http://localhost:${uiPort}`;
 
-  // 1. Take over the bridge port (kills any previous forge process on
-  //    it) and start. Fixed ports + takeover let the operator keep a
-  //    browser tab pinned at http://localhost:4124 across re-runs and
-  //    have it auto-reconnect via the bridge-client backoff.
+  // 1. Decide ATTACH vs TAKEOVER for the bridge port (F1). The default is
+  //    attach-if-healthy: a second `forge studio` that finds a live forge
+  //    bridge reuses it read-only instead of killing the agent's in-flight
+  //    session; only a free/stale/foreign port is taken over. `--force-takeover`
+  //    always rebinds; `--attach`/`--no-takeover` refuse to start a competing
+  //    bridge when none is there.
+  const bridgeBase = `http://localhost:${bridgePort}`;
+  const identity = opts.forceTakeover
+    ? null
+    : await probeBridgeIdentity(`${bridgeBase}/api/health`);
+  const strategy = decidePortStrategy(identity, {
+    forceTakeover: opts.forceTakeover,
+    requireAttach: opts.noTakeover,
+  });
+
+  if (strategy === 'attach-unavailable') {
+    console.error(
+      `${label} --attach/--no-takeover given but no healthy forge bridge is listening on :${bridgePort}. ` +
+        `Start one with \`forge studio\`, or use \`--force-takeover\` to rebind.`,
+    );
+    process.exit(1);
+  }
+
+  if (strategy === 'attach') {
+    // A healthy forge bridge (and its UI) is already up — attach read-only:
+    // do NOT take over either port, start a bridge, or spawn a second Next.js
+    // dev server (that would flap the operator's pinned tab). Just point the
+    // browser at the running UI and let this launcher exit; the owning session
+    // keeps the foreground.
+    console.log(
+      `${label} attaching read-only to existing bridge (pid ${identity?.pid}) at ${bridgeBase} — ` +
+        `not taking over (use --force-takeover to replace it)`,
+    );
+    if (!opts.bridgeOnly && !opts.noOpen) {
+      openBrowser(uiUrl).catch((err) => {
+        console.error(`${label} could not open browser: ${err.message}`);
+        console.log(`${label} open ${uiUrl} manually.`);
+      });
+    }
+    return;
+  }
+
+  // 1b. TAKEOVER: take over the bridge port (kills any previous forge process
+  //     on it) and start. Fixed ports + takeover let the operator keep a
+  //     browser tab pinned at http://localhost:4124 across re-runs and
+  //     have it auto-reconnect via the bridge-client backoff.
   takeoverPort(bridgePort, 'bridge', label);
   const bridge = await startBridge({ forgeRoot, port: bridgePort });
   console.log(`${label} bridge at ${bridge.url}`);

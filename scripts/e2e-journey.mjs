@@ -555,9 +555,12 @@ function writeReflectionQuestions() {
 async function startWatch() {
   // M7-7: spawn the canonical `forge studio` launcher and detect readiness via
   // its deterministic 'forge-studio-ready {json}' stdout line (no log scraping).
+  // F1: `--force-takeover` so the harness always binds its OWN fresh bridge — a
+  // leftover bridge from a crashed prior run must be replaced, not attached to
+  // (the attach path is read-only and never emits the ready signal).
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open', '--force-takeover'],
       { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let buf = '';
