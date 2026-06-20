@@ -1168,8 +1168,7 @@ export async function runUnifier(
   parentEventId: string,
 ): Promise<{ succeeded: boolean; failureClass: string | null }> {
   // Load the project config (mandatory per CONTRACTS.md C1 + council 04 F8).
-  // The config tells the unifier which demo.shape to author and which
-  // quality_gate_cmd to run.
+  // The config provides quality_gate_cmd and demoProcess for the unifier.
   let projectConfig: ProjectConfig | null = null;
   try {
     projectConfig = loadProjectConfig(input.projectRepoPath);
@@ -1189,7 +1188,6 @@ export async function runUnifier(
     // failure event below when it tries to use the demo command.
   }
 
-  const demoShape = projectConfig?.demo.shape ?? 'none';
   const qualityGateCmd =
     projectConfig?.quality_gate_cmd ??
     input.qualityGateCmd ??
@@ -1237,7 +1235,6 @@ export async function runUnifier(
     output_refs: [],
     message: 'unifier.start',
     metadata: {
-      demo_shape: demoShape,
       iteration_cap: iterationCap,
       pending_uwis: pending.map((p) => p.work_item_id),
       // ADR 024 seam observability: the agent + tier the orchestrator spawned.
@@ -1279,9 +1276,7 @@ export async function runUnifier(
       input,
       logger,
       startEventId: start.event_id,
-      demoShape,
       qualityGateCmd,
-      demoCommand: projectConfig?.demo.command,
       demoProcess: projectConfig?.demoProcess,
       skills: projectConfig?.skills,
       changelogPath: projectConfig?.releaseProcess?.changelogPath,
@@ -1348,7 +1343,6 @@ export async function runUnifier(
       status: succeeded ? 'complete' : (repResult?.status ?? 'crashed'),
       iterations: totalIterations,
       stop_reason: repResult?.stop_reason ?? (succeeded ? 'complete' : 'crashed'),
-      demo_shape: demoShape,
       runner_error: firstFailure?.runnerError ?? null,
       failure_class: failureClass,
       uwis_run: uwiOutcomes.map((o) => ({ id: o.id, status: o.status })),
@@ -1372,9 +1366,7 @@ type UnifierItemArgs = {
   input: CycleInput;
   logger: EventLogger;
   startEventId: string;
-  demoShape: import('../project-config.ts').DemoShape;
   qualityGateCmd: string[];
-  demoCommand: string[] | undefined;
   /** Project's typed demo steps (M2). Threaded into prepareUnifierWorkspace. */
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into prepareUnifierWorkspace. */
@@ -1462,10 +1454,10 @@ function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runne
   };
 }
 
-/** The packaging role: unify, author demo/PR, prove the 5-gate composed unifier
+/** The packaging role: unify, author demo/PR, prove the 4-gate composed unifier
  *  gate. UWI-1, the terminal re-prep, and demo/doc tweaks. */
 async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
-  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand } = args;
+  const { uwi, input, logger, startEventId, qualityGateCmd } = args;
 
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
@@ -1476,7 +1468,6 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     manifestRelPath: input.manifestPath,
     worktreePath: input.worktreePath,
     iterationBudget: itemCap,
-    demoShape,
     qualityGateCmd: itemGateCmd,
     demoProcess: args.demoProcess,
     skills: args.skills,
@@ -1511,19 +1502,16 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     args.unifierSdkId,
   );
 
-  // Composed quality gate per plan 04 (5 gates after Wave B):
+  // Composed quality gate (4 gates after Wave B):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
-  //   2. demo_runs_clean (demo.command exits 0 — excused for shape "none")
-  //   3. pr_self_contained (demo.json valid + pr-description.md present)
-  //   4. branches_in_sync (assertLocalRemoteSynced doesn't throw)
-  //   5. incomplete_delivery (every WI's creates[] paths in diff)
+  //   2. pr_self_contained (demo.json valid + pr-description.md present)
+  //   3. branches_in_sync (assertLocalRemoteSynced doesn't throw)
+  //   4. incomplete_delivery (every WI's creates[] paths in diff)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
       worktreePath: input.worktreePath,
       initiativeId: input.initiativeId,
       qualityGateCmd: itemGateCmd,
-      demoShape,
-      demoCommand,
       logger,
       initiativeIdForEvent: input.initiativeId,
       parentEventId: startEventId,
@@ -1676,8 +1664,6 @@ type ComposedUnifierGateInput = {
   worktreePath: string;
   initiativeId: string;
   qualityGateCmd: string[];
-  demoShape: import('../project-config.ts').DemoShape;
-  demoCommand: string[] | undefined;
   logger: EventLogger;
   initiativeIdForEvent: string;
   parentEventId: string;
@@ -1694,18 +1680,17 @@ type ComposedUnifierGateInput = {
 };
 
 /**
- * Five-gate composed check the unifier must clear to exit clean:
+ * Four-gate composed check the unifier must clear to exit clean:
  *   1. initiative_gate — project quality_gate_cmd against branch tip.
- *   2. demo_runs_clean — demo.command exits 0 (excused for shape "none").
- *   3. pr_self_contained — demo.json valid + pr-description.md present.
- *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw.
- *   5. incomplete_delivery — every WI's declared `creates[]` paths are
+ *   2. pr_self_contained — demo.json valid + pr-description.md present.
+ *   3. branches_in_sync — assertLocalRemoteSynced doesn't throw.
+ *   4. incomplete_delivery — every WI's declared `creates[]` paths are
  *      present in `git diff --name-only main...HEAD`. Fails the cycle
  *      before a PR opens when a WI's declared outputs were silently
  *      never written (the INIT-2 release_folder WI-3 scenario).
  *      WIs with empty `creates` are exempt.
  *
- * Returns true ONLY when all five pass. Emits a classified event on each
+ * Returns true ONLY when all four pass. Emits a classified event on each
  * sub-gate failure so the operator sees exactly which gate blocked.
  */
 
@@ -1728,11 +1713,11 @@ export function prBodyHasGitTruthSections(body: string): boolean {
 }
 
 export async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
-  const { worktreePath, qualityGateCmd, demoShape, demoCommand, logger, demoDir } = input;
+  const { worktreePath, qualityGateCmd, logger, demoDir } = input;
 
   // Local helper: emit one structured sub-check observation (always — pass OR fail).
   // This is ADDITIVE: existing failure events below are untouched.
-  type CheckId = 'initiative_gate' | 'demo_runs_clean' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
+  type CheckId = 'initiative_gate' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
   const emitSubCheck = (checkId: CheckId, pass: boolean, detail: string): void => {
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
@@ -1778,45 +1763,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('initiative_gate', true, `gate command exited 0 (${qualityGateCmd.join(' ')})`);
 
-  // 2. demo_runs_clean — excused for shape "none"
-  if (demoShape !== 'none' && demoCommand && demoCommand.length > 0) {
-    const demoGate = runShellGate(worktreePath, demoCommand);
-    if (!demoGate.passed) {
-      emitSubCheck(
-        'demo_runs_clean',
-        false,
-        demoGate.errored
-          ? `demo command errored: ${demoGate.stderr.slice(-400)}`
-          : `demo command failed (exit non-zero): ${demoGate.stderr.slice(-400)}`,
-      );
-      logger.emit({
-        initiative_id: input.initiativeIdForEvent,
-        parent_event_id: input.parentEventId,
-        phase: 'unifier',
-        skill: 'developer-unifier',
-        event_type: 'error',
-        input_refs: [worktreePath],
-        output_refs: [],
-        message: demoGate.errored ? 'unifier.gate.errored' : 'unifier.gate.demo-failed',
-        metadata: {
-          failure_class: demoGate.errored ? 'dev-loop-unifier-gate-errored' : 'dev-loop-unifier-demo-failed',
-          command: demoCommand,
-          ...(demoGate.errored ? { gate_errored: true } : {}),
-          gate_stderr_tail: demoGate.stderr.slice(-2000),
-        },
-      });
-      return false;
-    }
-    emitSubCheck('demo_runs_clean', true, `demo command exited 0 (${demoCommand.join(' ')})`);
-  } else {
-    emitSubCheck(
-      'demo_runs_clean',
-      true,
-      demoShape === 'none' ? 'demo shape none — excused' : 'demo command not configured — excused',
-    );
-  }
-
-  // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
+  // 2. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
   //    is derived. The gate validates demo.json against the schema — the
   //    structural check that fixes free-form demo inconsistency.)
   const demoJsonPath = join(worktreePath, demoDir, 'demo.json');
@@ -1867,7 +1814,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
 
-  // 4. branches_in_sync
+  // 3. branches_in_sync
   try {
     assertLocalRemoteSynced(worktreePath);
   } catch (err) {
@@ -1891,7 +1838,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
 
-  // 5. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
+  // 4. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
   //    `creates[]` paths must appear in `git diff --name-only main...HEAD`.
   //    WIs with empty `creates` are exempt. This catches the INIT-2
   //    release_folder scenario: WI-3 was skipped (gate-too-loose misfire)

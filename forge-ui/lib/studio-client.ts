@@ -435,9 +435,14 @@ export async function saveAgent(
 export async function saveProject(
   id: string,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; demoDesignNeeded?: boolean }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
-  return { ok: r.ok, error: r.error };
+  return {
+    ok: r.ok,
+    error: r.error,
+    // F5: set when demoProcess was saved — the demo-design skill should be run.
+    demoDesignNeeded: r.data?.demoDesignNeeded === true,
+  };
 }
 
 /** Author a plain composable skill (P2): writes skills/<slug>/SKILL.md. */

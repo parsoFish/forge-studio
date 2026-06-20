@@ -1,25 +1,29 @@
 ---
 name: demo
-description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The phase agent (today the developer-unifier; tomorrow a review agent, ADR 024) composes this skill to author the structured demo.json, derive DEMO.md/DEMO.html, and — for visual changes — optionally back-fill before/after media. Scale demo effort to the size of the change. This skill is the forge half of the demo contract family (docs/forge-project-contract.md); the project half is the project's demo.shape + how it exposes a before/after.
+description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The phase agent (the developer-unifier, ADR 024) composes this skill to author the structured demo.json and derive DEMO.md. The unifier reads the project's generated demo skill (from skills/demo-design) to know what evidence to produce; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
 phase: developer-loop
 surface: unattended
 model: claude-sonnet-4-6
 ---
 
-# Demo — the forge demo capability (the demo contract)
+# Demo — the forge demo capability (the consumer contract)
 
 ## What this skill is
 
-This is the **single source of truth** for the demo seam between forge and a
+This is the **single source of truth** for the demo contract between forge and a
 managed project. The review phase's job is to show the operator *what changed*
 so they can make the merge decision; the demo is that artefact. This skill owns:
 
 1. **What a demo must contain** (the contract below).
-2. **How forge runs a demo** — author `demo.json`, derive `DEMO.md`/`DEMO.html`,
-   optionally capture media.
+2. **How forge runs a demo** — read the project's generated demo skill, author
+   `demo.json`, derive `DEMO.md`.
 3. **How the demo maps to the forge UI** — the same `demo.json` the review
    screen renders (`DemoComparison`), so the PR artefact and the UI never drift.
-4. **The project-side requirements** a project must meet to be demo-able.
+
+The project-side demo machinery is **generated** by `skills/demo-design` when
+the operator configures `demoProcess` in Studio. The generated skill (at
+`<artifactRoot>/skills/<slug>/SKILL.md` in the project repo) tells the unifier
+what evidence to produce. This skill defines the contract that evidence satisfies.
 
 It supersedes the split that used to exist across `skills/demo` (a Playwright-spec
 author), `skills/demo-capture` (media back-fill), the inline unifier prompt, and
@@ -28,12 +32,12 @@ artefact is the contract from [ADR 021](../../docs/decisions/021-local-review-an
 
 ## Required first action
 
-Invoke `brain-query` against the **project's** brain before authoring anything:
-
-- "How does this project demonstrate a change — test harness, UI, CLI output?"
-- "Are there demo/recording conventions or gotchas for this project?" (e.g.
-  trafficGame's *serve the built `dist/`, never reuse a stray dev server* lesson;
-  betterado's *Go test-harness, no web UI* lesson).
+1. **Load the project's generated demo skill** — it is listed in the project's
+   `skills` array in `.forge/project.json`. Read it; it names the evidence form
+   and the exact commands to run.
+2. **Invoke `brain-query`** against the **project's** brain before authoring:
+   - "How does this project demonstrate a change — test harness, UI, live API?"
+   - "Are there demo/recording conventions or gotchas for this project?"
 
 ## The demo contract (what EVERY demo must contain)
 
@@ -67,7 +71,7 @@ collapses them gracefully when absent, but their absence means a less useful dem
 - **`summary`** — `{ bullets: string[], prUrl?, commitSha?, branch? }`.
   3–5 concise bullets: what changed, why it matters, what the operator should
   look for. Include the PR URL, branch, and commit SHA when available — these
-  appear in the header band of the HTML.
+  appear in the header band of the rendered DEMO.md.
 
   ```json
   "summary": {
@@ -95,12 +99,6 @@ collapses them gracefully when absent, but their absence means a less useful dem
       "change": "changed",
       "before": "{ \"id\": \"n1\", \"label\": \"A\" }",
       "after": "{ \"id\": \"n1\", \"label\": \"A\", \"grade\": 0.87 }"
-    },
-    {
-      "name": "computeGrade(node: Node): void",
-      "change": "changed",
-      "before": "computeGrade(node: Node): void",
-      "after": "computeGrade(node: Node): number"
     }
   ]
   ```
@@ -113,7 +111,6 @@ collapses them gracefully when absent, but their absence means a less useful dem
   ```json
   "testEvidence": [
     { "name": "computeGrade — returns float in [0,1]", "result": "pass", "delta": "+1 new test" },
-    { "name": "Inspector panel renders grade", "result": "pass" },
     { "name": "All existing tests", "result": "pass", "delta": "42/42 green" }
   ]
   ```
@@ -122,34 +119,14 @@ collapses them gracefully when absent, but their absence means a less useful dem
   absent the renderer falls back to `diffStat`. When present, each entry gets a
   human-readable annotation like `"core logic"`, `"new file"`, `"test"`.
 
-  ```json
-  "filesChanged": [
-    { "path": "src/grade.ts", "note": "new — grade computation" },
-    { "path": "src/Inspector.tsx", "note": "renders grade badge" },
-    { "path": "src/grade.test.ts", "note": "new tests" }
-  ]
-  ```
-
 - **`usage_example`** (string, required for new-or-changed-capability initiatives) —
   a fenced code block showing HOW to use the new capability: the HCL resource block,
   the CLI invocation, or the API request that exercises it. This is the first thing
   the operator looks for when reviewing a new feature.
 
-  ```json
-  "usage_example": "```hcl\nresource \"betterado_release_definition\" \"example\" {\n  name    = \"my-release\"\n  project = var.project_id\n}\n```"
-  ```
-
 - **`impact`** (string[], required for new-or-changed-capability initiatives) —
   bullets describing what the new capability unlocks for the operator. Distinct from
-  `essence` (which is the technical delta) — `impact` is the "so what":
-
-  ```json
-  "impact": [
-    "Operators can now define classic release pipelines as Terraform resources.",
-    "Full CRUD lifecycle: create, read, update, delete.",
-    "Idempotent — re-plan produces no diff after initial apply."
-  ]
-  ```
+  `essence` (which is the technical delta) — `impact` is the "so what".
 
 - **`acceptanceCriteria[]`** (optional) — the raw AC strings, kept for back-compat.
   Prefer `acEvaluations` (below) which supersedes this for the review screen.
@@ -165,11 +142,6 @@ collapses them gracefully when absent, but their absence means a less useful dem
       "criterion": "GIVEN a release definition WHEN applied THEN ADO returns 200",
       "verdict": "met",
       "evidence": "terraform apply exited 0; GET /api/release/{id} returned the resource."
-    },
-    {
-      "criterion": "GIVEN an existing definition WHEN destroyed THEN ADO returns 404",
-      "verdict": "partial",
-      "evidence": "destroy exits 0 but GET still returns 200 for ~2s (eventual-consistency)."
     }
   ]
   ```
@@ -198,18 +170,19 @@ collapses them gracefully when absent, but their absence means a less useful dem
 
 ## How forge runs a demo
 
-1. **Author the demo.json** at the dir named in PROMPT.md (`demo/<initiative-id>/`,
-   or `<artifactRoot>/history/<initiative-id>/demo/` for an artifactRoot project)
-   to the contract above. Populate ALL applicable rich sections — `summary`,
-   `apiDiff`, `testEvidence`, `filesChanged` — so the rendered HTML is genuinely
-   informative.
-2. **Derive the artefacts:** `Bash forge demo render <initiative-id>` →
-   writes `DEMO.md` + `DEMO.html` from the JSON. **Never hand-write `DEMO.md`** —
-   it is derived, so the PR artefact and the UI render stay identical.
-3. **(Visual only) Capture media:** for `demo.shape: "browser"`,
-   `Bash forge demo capture <initiative-id>` (best-effort; see *Media capture*).
-4. **Commit** `demo.json` + `DEMO.md` + `DEMO.html` (the bundle is born tracked —
-   no `.forge/demos/` shadow).
+1. **Read the project's generated demo skill** (from `<artifactRoot>/skills/<slug>/SKILL.md`
+   in the project repo). Follow its evidence instructions — it names what commands
+   to run, what to capture, and what the evidence floor is.
+2. **Author the demo.json** at the dir named in PROMPT.md to the contract above.
+   Populate ALL applicable rich sections — `summary`, `apiDiff`, `testEvidence`,
+   `filesChanged` — so the rendered DEMO.md is genuinely informative.
+3. **Derive the artefact:** `Bash forge demo render <initiative-id>` → writes
+   `DEMO.md` from the JSON. **Never hand-write `DEMO.md`** — it is derived, so
+   the PR artefact and the UI render stay identical.
+4. **(Visual only) Capture media:** when the generated skill specifies browser
+   screenshots, `Bash forge demo capture <initiative-id>` (best-effort).
+5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
+   shadow).
 
 ## Effort tiers — scale the demo to the change (load-bearing)
 
@@ -220,73 +193,46 @@ the effort to the diff:
 | Diff shape | Demo effort |
 |------------|-------------|
 | **Trivial** (≤~2 files, no behavioural surface — a test add, a constant, a doc) | **Notes-only.** One checkpoint, `essence` + `beforeNote`/`afterNote`. **No media capture.** Do not invoke `forge demo capture`. |
-| **Standard** (a feature or fix with a clear behavioural delta) | Full checkpoints grounded in ACs; `summary` + `apiDiff` + `testEvidence` when applicable; metrics if measurable; media only if `demo.shape: "browser"`. |
-| **Large / multi-feature** | A checkpoint per distinct delta (still tight per checkpoint); `summary` bullets for each sub-change; `apiDiff` for each changed surface; media for the visual ones; a metrics table for harness shapes. |
+| **Standard** (a feature or fix with a clear behavioural delta) | Full checkpoints grounded in ACs; `summary` + `apiDiff` + `testEvidence` when applicable; metrics if measurable; media only if the generated skill specifies screenshots. |
+| **Large / multi-feature** | A checkpoint per distinct delta (still tight per checkpoint); `summary` bullets for each sub-change; `apiDiff` for each changed surface; a metrics table for harness evidence. |
 
 When in doubt, prefer notes-only and let the operator ask for more. Media is an
 enhancement, never a gate. **Do author `summary` + `apiDiff` + `testEvidence` even
 for notes-only demos when the diff touches a visible API or adds tests** — these
-sections make the HTML genuinely useful without requiring media capture.
+sections make the rendered DEMO.md genuinely useful without requiring media capture.
 
-## demoProcess + demo.shape are one declaration (the two faces)
+## Evidence forms (what the generated demo skill specifies)
 
-A project declares the demo in two married fields, NOT two competing ones:
+The generated project demo skill (from `skills/demo-design`) specifies one of
+these evidence forms based on what the project's code actually exposes:
 
-- **`demoProcess`** (typed steps: `capture` / `verify` / `present`) is the
-  **executed demo** — it names exactly what evidence to record (`capture`), what
-  assertion makes the evidence non-trivial (`verify` → run the step's command and
-  encode the concrete result), and how it is surfaced (`present`).
-- **`demo.shape`** is the **evidence floor** — the minimum the `demo.json` must
-  carry for that project form (e.g. `harness` ⇒ a `testEvidence[]` table + harness
-  metrics; `live-external` ⇒ a checkpoint carrying a real `liveEvidence.url`).
-
-When both are present, derive the demo from `demoProcess` and let `demo.shape`
-set the floor every demo must meet. They must be coherent: a `demoProcess` with a
-`capture` step requires a `demo.shape` that can carry captured evidence — a
-`capture`-bearing process under `demo.shape: "none"` is flagged in preflight
-(there is nothing to capture into). `forge preflight` warns on this incoherence.
-
-## Per-shape mapping (how each project form satisfies "demonstrable")
-
-The project declares its shape in `.forge/project.json` `demo.shape`:
-
-- **`browser`** — a rendered UI. Author checkpoints, then `forge demo capture` to
-  back-fill before/after screenshots. `kind: "screenshot"` for a settled UI
-  state; `kind: "video"` for time-dependent behaviour. Requires `preview_command`
-  in project.json.
-- **`harness`** — behaviour measurable only at the test layer. Run the project's
-  own measurement command against baseline AND HEAD, scrape stable result lines,
+- **Portal/browser screenshot** — a rendered UI. Author checkpoints, then
+  `forge demo capture` to back-fill before/after screenshots. `kind: "screenshot"`
+  for a settled UI state; `kind: "video"` for time-dependent behaviour.
+- **Harness metrics** — behaviour measurable at the test layer. Run the project's
+  measurement command against baseline AND HEAD, scrape stable result lines,
   encode them as a `kind: "harness"` checkpoint with
   `metrics: [{ label, before, after, deltaPct, parity }]`. **Reuse the project's
   test — never re-derive the measurement.** Pair with `testEvidence` rows.
   **Parity vocabulary:** `match` (exact same result), `within` (within tolerance),
   `diverged` (regression), `incomplete` (no baseline available).
-  **Do NOT author "Visual Changes"/screenshots for a harness demo** — no UI exists.
-  Use `testEvidence` for the pass/fail table and `usage_example`/`impact` for
-  new-capability initiatives.
-- **`cli-diff`** — run the project's demo command twice (baseline + HEAD), capture
-  stdout, encode the before/after in `beforeNote`/`afterNote`. Use `apiDiff` to
-  show the CLI flag / output format change.
-- **`artifact`** — a generated file/output; describe the before/after artefact in
-  notes (and diffStat). No media. `filesChanged` shows which artefacts changed.
-- **`live-external`** — the change stands up a REAL resource in a live external
-  system (a cloud API + portal — e.g. betterado's Azure DevOps org). The evidence
-  floor is a **real REST round-trip, not a test-name table**: provision the
-  resource, read it back via the system's API, and persist that GET under
-  `.forge/live-evidence/<label>.json` (the project's demo skill / acceptance test
-  does this via a capture helper); `forge demo render` back-fills it into a
-  checkpoint carrying `liveEvidence.url`. The demo MUST end with such a checkpoint.
-  Pair with `testEvidence` (the live acceptance result) and, for a new capability,
-  `usage_example` + `impact`. When credentials are absent, fall back to the
-  `harness` floor and **document the fallback in `essence`** — never fabricate the
-  live read-back.
-- **`none`** — infra-only / no observable surface. A single checkpoint that is a
-  rationale block: what changed and why it's correct. Use `summary` bullets for
-  the rationale.
+- **Live external API round-trip** — the change stands up a REAL resource in a
+  live external system. The evidence floor is a **real REST round-trip, not a
+  test-name table**: provision the resource, read it back via the system's API,
+  and persist that GET under `.forge/live-evidence/<label>.json`; `forge demo render`
+  back-fills it into a checkpoint carrying `liveEvidence.url`. The demo MUST end
+  with such a checkpoint. Pair with `testEvidence` (the live acceptance result)
+  and, for a new capability, `usage_example` + `impact`. When credentials are
+  absent, fall back to notes-only and **document the fallback in `essence`** —
+  never fabricate the live read-back.
+- **JSON-diff / notes-only** — no UI surface, no measurement command, no live
+  external calls. A single checkpoint whose caption + `afterNote` is a rationale
+  block ("what changed and why it's correct"). Use `summary` bullets for the
+  rationale. `apiDiff` to show any changed API/config surface.
 
 ## Media capture (the optional, best-effort step)
 
-For `demo.shape: "browser"` only, after `demo.json` checkpoints are authored:
+For projects with a renderable UI, after `demo.json` checkpoints are authored:
 
 ```
 forge demo capture <initiative-id>
@@ -297,7 +243,7 @@ serves each, takes ONE screenshot per checkpoint label →
 `before/<label>.png` + `after/<label>.png` (the capture engine calls
 `playwright screenshot` per label — no agent-authored spec, no full test run),
 then merges the captured images into `demo.json` checkpoints as inline `data:`
-URIs (size-capped to 1.5 MB each) and re-renders `DEMO.md`/`DEMO.html`.
+URIs (size-capped to 1.5 MB each) and re-renders `DEMO.md`.
 
 Discipline:
 - **Best-effort, never fatal.** No buildable app / missing Playwright / capture
@@ -314,21 +260,21 @@ Discipline:
 ## How the demo maps to the forge UI page (the presentation half)
 
 The structured `demo.json` is **both** the PR artefact (via the derived `DEMO.md`)
-and the UI artefact: the review screen (`forge-ui/app/review/[cycleId]`) renders
-the same `DemoModel` natively via `DemoComparison.tsx`. **The schema is the
-template** — what you put in `demo.json` is exactly what the operator sees, so:
+and the UI artefact: the review screen renders the same `DemoModel` natively via
+`DemoComparison.tsx`. **The schema is the template** — what you put in `demo.json`
+is exactly what the operator sees, so:
 
 - The header band shows: title, cycle id, branch, commit SHA, PR link.
 - `summary` bullets appear in a dedicated Summary section above the checkpoints.
 - Each checkpoint becomes a `CheckpointCard` (caption + before/after media or
-  notes + a metrics table for `harness`).
+  notes + a metrics table for harness evidence).
 - `apiDiff` renders as syntax-highlighted before/after code blocks.
 - `testEvidence` renders as a pass/fail table with coverage deltas.
 - `filesChanged` renders as an annotated file list with the diffstat collapsible.
 - The screen mirrors structured state to `data-*` (`data-section="demo-comparison"`,
   per-checkpoint `data-checkpoint` / `data-checkpoint-kind`) per the forge-ui
   DOM-as-metrics convention.
-- `snapshotCycleArtefacts` copies `demo.json` + `DEMO.html` into
+- `snapshotCycleArtefacts` copies `demo.json` + `DEMO.md` into
   `_logs/<cycleId>/artifacts/` for the bridge to serve.
 
 If you change the demo's structure, change `DemoComparison` + its `data-*`
@@ -337,27 +283,23 @@ alongside it — the schema, the renderer, and the UI are one contract.
 ## The project-side requirements (what makes a project demo-able)
 
 For onboarding (the `forge-onboard-project` skill + `forge preflight`), a project
-must expose:
+must have:
 
-1. **A declared `demo.shape`** in `.forge/project.json` (+ `command` for any shape
-   ≠ `none`; + `preview_command` for `browser`).
-2. **A truthful test gate** (contract C1) — the same gate that *proves* the change
+1. **A `demoProcess`** in `.forge/project.json` with ≥1 `capture` and ≥1 `verify`
+   step — validated by `forge preflight` DEMO clause.
+2. **Generated demo machinery** — the `skills/demo-design` skill generates
+   `<artifactRoot>/skills/<slug>/SKILL.md` into the project repo; `forge preflight`
+   DEMO clause passes once this is present.
+3. **A truthful test gate** (contract C1) — the same gate that *proves* the change
    is what the demo *shows*.
-3. **A before/after path appropriate to the shape** — a UI a preview server can
-   render (`browser`); a measurement command with scrapable output (`harness`); a
-   CLI whose stdout differs (`cli-diff`); a generated artefact (`artifact`).
 4. **A valid prior state** — running the baseline must not error; the demo frames
    it as prior behaviour.
 
-`forge preflight` checks the structural part (the `demo` block) as the advisory
-**DEMO** clause; the deeper "does the before/after actually capture the delta"
-facet is verified during onboarding by hand until machine-checked.
-
 ## Done when
 
-`demo/<initiative-id>/demo.json` validates, `DEMO.md`/`DEMO.html` are *derived*
-(not hand-written) and committed alongside it, the effort matches the diff size,
+`demo/<initiative-id>/demo.json` validates, `DEMO.md` is *derived* (not
+hand-written) and committed alongside it, the effort matches the diff size,
 every checkpoint is grounded in an AC or a real diff change and framed prior→new,
 the `summary` / `apiDiff` / `testEvidence` / `filesChanged` sections are authored
-where the diff warrants them, and (for `browser`) media capture has been attempted
-best-effort.
+where the diff warrants them, and (for visual projects) media capture has been
+attempted best-effort.

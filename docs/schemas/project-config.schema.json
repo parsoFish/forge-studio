@@ -2,42 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://forge/docs/schemas/project-config.schema.json",
   "title": "ProjectConfig",
-  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json. Declares the project's demo shape, quality gate, M2 Studio fields (northStar, instructions, demoProcess, skills, kb, artifactRoot), the release process, and optional acceptance/ci gates, logging knobs, metrics, and sweep plug-ins. The authoritative validator is orchestrator/project-config.ts validateProjectConfig; this schema is the operator-facing reference.",
+  "description": "Per-project forge configuration. Lives at <project-root>/.forge/project.json. Declares the quality gate, M2 Studio fields (northStar, instructions, demoProcess, skills, kb, artifactRoot), the release process, and optional acceptance/ci gates, logging knobs, metrics, and sweep plug-ins. The authoritative validator is orchestrator/project-config.ts validateProjectConfig; this schema is the operator-facing reference.",
   "type": "object",
-  "required": ["demo", "quality_gate_cmd"],
+  "required": ["quality_gate_cmd"],
   "additionalProperties": true,
   "properties": {
-    "demo": {
-      "type": "object",
-      "required": ["shape"],
-      "additionalProperties": false,
-      "description": "How the project surfaces a reviewer-visible demo. The project half of the demo contract (docs/forge-project-contract.md); the forge half is skills/demo/SKILL.md. Demo composition is via demo.shape — there is no per-project demo.skill field.",
-      "properties": {
-        "shape": {
-          "type": "string",
-          "enum": ["browser", "harness", "cli-diff", "artifact", "live-external", "none"],
-          "description": "browser = Vite/Playwright; harness = test harness with regex-scrapable output; cli-diff = before/after stdout; artifact = generated file/output; live-external = real resource stood up in a live external system (cloud API + portal), evidence floor is a real REST GET round-trip (liveEvidence.url), not a test-name table; none = infra-only initiatives, DEMO.md rationale block."
-        },
-        "command": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Argv-style command the unifier runs to produce the demo. Required when shape != 'none'."
-        },
-        "output": {
-          "type": "string",
-          "description": "Output directory relative to worktree root. Default: demo/<initiative-id>/."
-        },
-        "baseline": {
-          "type": "string",
-          "description": "Git ref / branch the unifier diffs against for before/after captures. Default: main."
-        },
-        "preview_command": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Required when shape = 'browser'. The dev/preview server command (forge picks a free PORT)."
-        }
-      }
-    },
     "quality_gate_cmd": {
       "type": "array",
       "items": { "type": "string" },
@@ -95,7 +64,7 @@
     },
     "demoProcess": {
       "type": "array",
-      "description": "M2 Studio field. Typed demo steps the unifier executes — the executed-demo face of the demo contract (demo.shape is the evidence floor). A capture step under demo.shape 'none' is advisory-incoherent (forge preflight warns). Optional.",
+      "description": "M2 Studio field. Typed demo steps the unifier executes. Must include ≥1 capture step and ≥1 verify step (forge preflight warns if absent). Optional.",
       "items": {
         "type": "object",
         "required": ["kind", "text"],

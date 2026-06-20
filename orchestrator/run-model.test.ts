@@ -518,7 +518,6 @@ test('aggregateRun: gateChecks parsed from unifier.gate.sub-check events', () =>
       ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
       ev('unifier', 'start'),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'initiative_gate', pass: true, detail: 'All tests pass' }),
-      ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'demo_runs_clean', pass: true, detail: 'Demo OK' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'pr_self_contained', pass: false, detail: 'Missing demo.json' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'branches_in_sync', pass: true, detail: 'In sync' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'incomplete_delivery', pass: true, detail: 'Complete' }),
@@ -531,7 +530,7 @@ test('aggregateRun: gateChecks parsed from unifier.gate.sub-check events', () =>
 
     const checks = run.phaseMeta['unifier']?.gateChecks;
     assert.ok(Array.isArray(checks), 'gateChecks should be array');
-    assert.equal(checks?.length, 5, 'should have 5 gate checks');
+    assert.equal(checks?.length, 4, 'should have 4 gate checks');
 
     const failing = checks?.find((c) => c.id === 'pr_self_contained');
     assert.equal(failing?.pass, false);

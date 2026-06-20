@@ -1,9 +1,11 @@
 /**
  * Unit tests for orchestrator/brain-paths.ts.
  *
- * Covers the project-scoped helpers that incorporate the optional
- * `artifactRoot` field: projectArtifactDir, projectBrainDir, projectThemesDir,
- * projectHistoryDir, and readArtifactRoot.
+ * ADR 035: per-project brain + history + contract are forge-owned and CENTRAL
+ * (in the forge repo), not in the managed project's repo. Brain 3 lives at
+ * `brain/projects/<name>/themes/`; history + contract at
+ * `project-artifacts/<name>/`. The in-PR demo (`projectDemoRelDir`,
+ * worktree-relative) and `readArtifactRoot` are unchanged.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,10 +15,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  projectArtifactDir,
+  projectArtifactsDir,
   projectBrainDir,
   projectThemesDir,
   projectHistoryDir,
+  projectContractPath,
   projectDemoRelDir,
   readArtifactRoot,
 } from './brain-paths.ts';
@@ -36,83 +39,56 @@ function writeProjectJson(projectRoot: string, contents: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// projectArtifactDir
+// projectArtifactsDir — central forge-owned artifacts home (ADR 035)
 // ---------------------------------------------------------------------------
 
-test('projectArtifactDir: default artifactRoot "." resolves to legacy path (projects/<name>)', () => {
+test('projectArtifactsDir: central project-artifacts/<name> under the forge root', () => {
   const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectArtifactDir(forgeRoot, name);
-  const expected = resolve(forgeRoot, 'projects', name, '.');
-  assert.equal(result, expected);
+  const result = projectArtifactsDir(forgeRoot, 'my-project');
+  assert.equal(result, resolve(forgeRoot, 'project-artifacts', 'my-project'));
 });
 
-test('projectArtifactDir: artifactRoot "forge" resolves under projects/<name>/forge', () => {
+// ---------------------------------------------------------------------------
+// projectBrainDir — Brain 3, central in the brain wiki (ADR 035)
+// ---------------------------------------------------------------------------
+
+test('projectBrainDir: central brain/projects/<name> (no longer in the project repo)', () => {
   const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectArtifactDir(forgeRoot, name, 'forge');
-  const expected = resolve(forgeRoot, 'projects', name, 'forge');
-  assert.equal(result, expected);
+  const result = projectBrainDir(forgeRoot, 'my-project');
+  assert.equal(result, resolve(forgeRoot, 'brain', 'projects', 'my-project'));
 });
 
 // ---------------------------------------------------------------------------
-// projectBrainDir
+// projectThemesDir — Brain 3 themes, central (ADR 035)
 // ---------------------------------------------------------------------------
 
-test('projectBrainDir: default artifactRoot → legacy brain path (projects/<name>/brain)', () => {
+test('projectThemesDir: central brain/projects/<name>/themes', () => {
   const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectBrainDir(forgeRoot, name);
-  const expected = resolve(forgeRoot, 'projects', name, 'brain');
-  assert.equal(result, expected);
+  const result = projectThemesDir(forgeRoot, 'my-project');
+  assert.equal(result, resolve(forgeRoot, 'brain', 'projects', 'my-project', 'themes'));
 });
 
-test('projectBrainDir: artifactRoot "forge" → projects/<name>/forge/brain', () => {
+// ---------------------------------------------------------------------------
+// projectHistoryDir — central archived history per initiative (ADR 035)
+// ---------------------------------------------------------------------------
+
+test('projectHistoryDir: central project-artifacts/<name>/demo-history/<initiativeId>', () => {
   const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectBrainDir(forgeRoot, name, 'forge');
-  const expected = resolve(forgeRoot, 'projects', name, 'forge', 'brain');
-  assert.equal(result, expected);
+  const result = projectHistoryDir(forgeRoot, 'my-project', 'INIT-001');
+  assert.equal(
+    result,
+    resolve(forgeRoot, 'project-artifacts', 'my-project', 'demo-history', 'INIT-001'),
+  );
 });
 
 // ---------------------------------------------------------------------------
-// projectThemesDir
+// projectContractPath — central SSOT for the resolved contract (ADR 035)
 // ---------------------------------------------------------------------------
 
-test('projectThemesDir: default artifactRoot → legacy themes path (projects/<name>/brain/themes)', () => {
+test('projectContractPath: central project-artifacts/<name>/contract.json', () => {
   const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectThemesDir(forgeRoot, name);
-  const expected = resolve(forgeRoot, 'projects', name, 'brain', 'themes');
-  assert.equal(result, expected);
-});
-
-test('projectThemesDir: artifactRoot "forge" → projects/<name>/forge/brain/themes', () => {
-  const forgeRoot = '/srv/forge';
-  const name = 'my-project';
-  const result = projectThemesDir(forgeRoot, name, 'forge');
-  const expected = resolve(forgeRoot, 'projects', name, 'forge', 'brain', 'themes');
-  assert.equal(result, expected);
-});
-
-// ---------------------------------------------------------------------------
-// projectHistoryDir
-// ---------------------------------------------------------------------------
-
-test('projectHistoryDir: default artifactRoot "." → <projectRoot>/history/<initiativeId>', () => {
-  const projectRoot = '/srv/projects/my-project';
-  const initiativeId = 'INIT-001';
-  const result = projectHistoryDir(projectRoot, initiativeId);
-  const expected = resolve(projectRoot, '.', 'history', initiativeId);
-  assert.equal(result, expected);
-});
-
-test('projectHistoryDir: artifactRoot "forge" → <projectRoot>/forge/history/<initiativeId>', () => {
-  const projectRoot = '/srv/projects/my-project';
-  const initiativeId = 'INIT-001';
-  const result = projectHistoryDir(projectRoot, initiativeId, 'forge');
-  const expected = resolve(projectRoot, 'forge', 'history', initiativeId);
-  assert.equal(result, expected);
+  const result = projectContractPath(forgeRoot, 'my-project');
+  assert.equal(result, resolve(forgeRoot, 'project-artifacts', 'my-project', 'contract.json'));
 });
 
 // ---------------------------------------------------------------------------

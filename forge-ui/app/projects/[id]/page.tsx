@@ -34,6 +34,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [dirty, setDirty] = useState(false);
   const [ready, setReady] = useState(false);
+  // F5: set after a demoProcess save — surfaces data-demo-design-state="needed"
+  // so the operator knows to run `forge run skill demo-design --project <id>`.
+  const [demoDesignNeeded, setDemoDesignNeeded] = useState(false);
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -96,6 +99,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     if (result.ok) {
       setDirty(false);
       void loadPreflight({ cancelled: false });
+      // F5: surface demo-design trigger when demoProcess was in the save.
+      if (result.demoDesignNeeded) setDemoDesignNeeded(true);
     }
     return result;
   });
@@ -131,6 +136,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       data-project-id={id}
       data-dirty={dirty ? 'true' : 'false'}
       data-page-ready={ready ? 'true' : 'false'}
+      data-demo-design-state={demoDesignNeeded ? 'needed' : 'idle'}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
@@ -212,6 +218,21 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
           <KbBind kb={kb} kbs={kbs} projectName={name} summary={northStar} onChange={(v) => { setKb(v); markDirty(); }} />
 
+          {demoDesignNeeded && (
+            <div
+              data-section="demo-design-prompt"
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--yellow)', borderRadius: 'var(--radius)', padding: '10px 12px' }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>Demo machinery needed</div>
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+                demoProcess saved. Run the demo-design skill to generate per-project demo machinery:
+              </div>
+              <code style={{ display: 'block', fontSize: 11, color: 'var(--faint)', marginTop: 6, wordBreak: 'break-all' }}>
+                forge run skill demo-design --project {id}
+              </code>
+            </div>
+          )}
+
           <ContractReadiness
             northStar={northStar}
             instructions={instructions}
@@ -240,8 +261,6 @@ function ProjectOnboardForm() {
   const [qualityGate, setQualityGate] = useState('npm test');
   const [northStar, setNorthStar] = useState('');
   const [repoPath, setRepoPath] = useState('');
-  const [demoShape, setDemoShape] = useState('harness');
-  const [demoCommand, setDemoCommand] = useState('');
   const [instructions, setInstructions] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -266,8 +285,6 @@ function ProjectOnboardForm() {
       qualityGateCmd: qualityGate.trim(),
       northStar: northStar.trim(),
       repoPath: repoPath.trim() || undefined,
-      demoShape,
-      demoCommand: demoCommand.trim() || undefined,
       instructions: instructions.trim() || undefined,
     });
     if (!result.ok || !result.id) {
@@ -336,7 +353,7 @@ function ProjectOnboardForm() {
             onToggle={(e) => setAdvancedOpen((e.target as HTMLDetailsElement).open)}
             style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
             <summary data-action="toggle-onboard-advanced" style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13, color: 'var(--dim)' }}>
-              Advanced — repo path, demo &amp; instructions
+              Advanced — repo path &amp; instructions
             </summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
               <div>
@@ -346,18 +363,6 @@ function ProjectOnboardForm() {
                 <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
                   Must be an existing git repo (clone/symlink it under projects/ first). Defaults to projects/&lt;id&gt;.
                 </div>
-              </div>
-              <div>
-                <label style={labelStyle} htmlFor="onb-demo-shape">Demo shape</label>
-                <select id="onb-demo-shape" data-field="demo-shape" style={inputStyle} value={demoShape}
-                  onChange={(e) => setDemoShape(e.target.value)}>
-                  {['harness', 'cli-diff', 'artifact', 'browser', 'live-external', 'none'].map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle} htmlFor="onb-demo-cmd">Demo command</label>
-                <input id="onb-demo-cmd" data-field="demo-command" style={inputStyle} value={demoCommand}
-                  placeholder="defaults to the quality-gate command" onChange={(e) => setDemoCommand(e.target.value)} />
               </div>
               <div>
                 <label style={labelStyle} htmlFor="onb-instr">Instructions</label>

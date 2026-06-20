@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLAN — 2026-06-06T08-49-27 — terraform-provider-betterado</title>
+<style>
+  /* Unified with the forge-ui dark stage. Dark-only (the app has no light mode). */
+  :root {
+    --bg: #0a0e14;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #21262d;
+    --accent: #1f6feb;
+    --user: #2ea043;
+    --warn: #d29922;
+    --code-bg: #0a0f16;
+    --card-bg: #11161d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    max-width: 1180px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* ── Typography ── */
+  h1 { font-size: 1.75rem; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.1rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em;
+       text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; font-size: 0.72rem; }
+  h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.5rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.79rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+  ul, ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+  /* ── Badges & chips ── */
+  .badge {
+    display: inline-block;
+    background: var(--code-bg);
+    color: var(--muted);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  }
+  .chip {
+    display: inline-block;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+  }
+  .chip strong { color: var(--fg); }
+  .dep-chip { border-color: var(--warn); color: var(--warn); }
+  /* ── Notice ── */
+  .notice {
+    background: var(--card-bg);
+    border-left: 3px solid var(--accent);
+    padding: 0.65rem 1rem;
+    margin: 0.75rem 0 1.5rem;
+    border-radius: 3px;
+    font-size: 0.88rem;
+  }
+  /* ── Plan header ── */
+  .plan-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .plan-header .vision-block { flex: 1 1 55%; min-width: 260px; }
+  .plan-header .stats-block {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    min-width: 80px;
+  }
+  .stat-card .num { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .stat-card .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.2rem; }
+  .plan-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+  .plan-meta code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+  /* ── Initiative cards ── */
+  .init-cards { display: grid; gap: 1.25rem; }
+  .init-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--card-accent, var(--accent));
+    border-radius: 6px;
+    padding: 1rem 1.15rem 0.75rem;
+  }
+  .init-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .init-title-block { display: flex; flex-direction: column; gap: 0.25rem; }
+  .init-title { font-size: 1.05rem; font-weight: 600; }
+  .init-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.1rem; }
+  /* ── AC list ── */
+  .ac-list-wrap {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.85rem;
+    overflow-x: auto;
+  }
+  .ac-list-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  /* ── AC table ── */
+  .ac-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
+  .ac-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .ac-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  /* ── Tables (general) ── */
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+  th, td { padding: 0.45rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 0.88rem; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* ── Body drawer ── */
+  .body-drawer {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.4rem 0.75rem;
+  }
+  .body-drawer summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); padding: 0.2rem 0; }
+  .body-drawer[open] summary { margin-bottom: 0.5rem; }
+  /* ── Design decision cards ── */
+  .decisions { display: grid; gap: 1.25rem; }
+  .escalation {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .escalation .q { font-weight: 600; margin-bottom: 0.65rem; font-size: 0.95rem; }
+  .escalation .critic-chip {
+    display: inline-block;
+    font-size: 0.67rem;
+    background: var(--accent);
+    color: white;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    margin-right: 0.45rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .escalation .options {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  .escalation .option {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.83rem;
+  }
+  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+  .escalation .option .label { font-weight: 700; font-size: 0.88rem; }
+  .escalation .option .rationale { color: var(--muted); font-size: 0.82rem; }
+  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.55rem 0 0; font-size: 0.77rem; display: grid; gap: 0.15rem; }
+  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.3rem; }
+  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.3rem; }
+  .escalation .option .opt-visual { margin-top: 0.6rem; }
+  .escalation .option .opt-visual iframe.mockup { width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117; display: block; }
+  .escalation .option .opt-visual pre.code,
+  .escalation .option .opt-visual pre.diagram {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
+  }
+  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.7rem; font-style: italic; margin-top: 0.3rem; }
+  /* ── Council accordions ── */
+  details.council-critic {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    margin: 0.4rem 0;
+  }
+  details.council-critic summary { cursor: pointer; font-weight: 500; font-size: 0.88rem; padding: 0.25rem 0; }
+  details.council-critic[open] summary { margin-bottom: 0.5rem; }
+  /* ── Brain context ── */
+  .brain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.3rem; }
+  .brain-list li { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid #d2a8ff; border-radius: 4px; padding: 0.35rem 0.75rem; font-size: 0.83rem; }
+  .brain-list li code { color: #d2a8ff; }
+  /* ── Footprint bar ── */
+  .footprint { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+  .footprint .bar { display: flex; width: 100%; height: 1.5rem; border-radius: 3px; overflow: hidden; margin: 0.5rem 0; background: var(--code-bg); }
+  .footprint .seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 500; text-shadow: 0 0 2px rgba(0,0,0,.5); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 0.25rem; }
+  .footprint .summary { color: var(--muted); font-size: 0.83rem; margin-top: 0.25rem; }
+  .footprint .info { color: var(--muted); font-size: 0.78rem; font-style: italic; margin-top: 0.45rem; }
+  /* ── Misc ── */
+  .empty { color: var(--muted); font-style: italic; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0 1.25rem; }
+  .footer { color: var(--muted); font-size: 0.78rem; }
+  .footer code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+  <!-- ── 1. HEADER ── -->
+  <div class="plan-header">
+    <div class="vision-block">
+      <h1>Architect plan</h1>
+      <p style="color: var(--fg); font-size: 1rem; margin: 0.35rem 0 0.6rem; line-height: 1.5">Build a shared, reusable, creds-gated live acceptance fixture for the betterado provider&#39;s release-definition tests. This fixture provisions a coherent set of wired-together ADO objects (project, identities, variable group, repo, build, and one canonical multi-stage release-definition valid against ADO REST API 7.1) and is consumed by acceptance tests instead of each test hand-rolling its own minimal inline definition. Proof: refactor at least one existing test (e.g. `TestAccReleaseDefinition_basic`) to consume the fixture and pass live (real apply → API round-trip assert → clean destroy), demonstrating the fixture catches ADO-validity bugs (VS402877/VS402982/permission-key drift) that fragmented inline definitions let hide.</p>
+      <div class="plan-meta">
+        Session <code>2026-06-06T08-49-27</code>
+        · Project <code>terraform-provider-betterado</code>
+        · Repo <code>/home/parso/forge/projects/terraform-provider-betterado</code>
+      </div>
+    </div>
+    <div class="stats-block">
+      <div class="stat-card"><div class="num">1</div><div class="lbl">initiative</div></div>
+      <div class="stat-card"><div class="num">8</div><div class="lbl">total budget</div></div>
+      
+      
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>Read-only viewer.</strong> Review on the
+    <code>/architect/2026-06-06T08-49-27</code> screen in the forge UI —
+    approve, revise, or reject there. Your selections on design decisions are
+    applied at approval.
+  </div>
+
+  <!-- ── 2. INITIATIVE CARDS ── -->
+  <h2>Proposed initiatives</h2>
+  <div class="init-cards">
+<div class="init-card" data-initiative-id="INIT-2026-06-06-shared-acceptance-fixture" style="--card-accent: hsl(0, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-06-shared-acceptance-fixture</span>
+      <span class="init-title">Shared live acceptance fixture for betterado release-definition tests</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>8</strong></span>
+      <span class="chip">cap <strong>$3.5</strong></span>
+      
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Context
+
+Today every acceptance test in `azuredevops/internal/acceptancetests/` hand-rolls its own minimal release definition inline. This fragmentation let a cluster of real ADO-validity bugs hide until each test was finally run live with `TF_ACC=1`: VS402877 (current ADO requires BOTH pre- AND post-deploy approvals per stage), VS402982 (every stage needs a `retention_policy`), and an invalid permission key (`EditReleaseStage` vs the real `EditReleaseEnvironment`). A single canonical fixture, valid against current Azure DevOps REST API 7.1 and reused across tests, would have caught all of these in one place.
+
+## What to build
+
+One reusable, creds-gated live fixture in the existing acceptance-test helper layer (`azuredevops/internal/acceptancetests/` + its `testutils` patterns) that provisions/looks up a coherent set of wired-together ADO objects:
+
+- A project
+- A couple of real group/user identities (for approvals)
+- A variable group
+- A Git repo
+- A build definition
+- A **canonical multi-stage release definition** whose every stage is valid against current ADO (pre+post approvals AND a `retention_policy`)
+
+New-resource acceptance tests reference this shared fixture instead of re-declaring a minimal release definition inline.
+
+## Acceptance criteria
+
+**Given** the shared fixture is implemented in `azuredevops/internal/acceptancetests/shared_fixtures.go` (or similar helper)
+**When** a developer runs `TF_ACC=1 go test ./azuredevops/internal/service/release/... -run TestAccReleaseDefinition_basic`
+**Then** the test:
+- Provisions a real ADO project + identities + variable group + repo + build + release-definition via the fixture helper
+- Applies the Terraform config against the live fixture objects
+- Asserts the API round-trip (reads back the created release-definition and verifies its structure)
+- Cleans up all provisioned objects (no orphaned cloud resources)
+- Passes end-to-end with green output
+
+**Given** the fixture is valid against ADO REST API 7.1
+**When** examining the canonical release-definition returned by the fixture
+**Then** it includes:
+- At least one stage with BOTH `pre_deploy_approval` (with a real approver identity) AND `post_deploy_approval`
+- Every stage has a `retention_policy` block
+- All permission/approval keys match current ADO API schema (e.g. `EditReleaseEnvironment`, not the stale `EditReleaseStage`)
+
+**Given** at least one existing acceptance test is refactored to consume the fixture
+**When** `TestAccReleaseDefinition_basic` (or another high-value test) is updated to use the shared fixture
+**Then**:
+- The test&#39;s HCL no longer hand-rolls a minimal release-definition inline
+- Instead it references the canonical fixture objects (project ID, repo ID, build-definition ID, etc.)
+- The test passes live (`TF_ACC=1`) with the same apply → API-roundtrip-assert → destroy discipline
+
+## Hard constraints
+
+- **Creds-gated + self-cleaning** (C7 live-acceptance discipline): fixture only runs when `TF_ACC=1` + `AZDO_ORG_SERVICE_URL` + `AZDO_PERSONAL_ACCESS_TOKEN` are set; must destroy all provisioned objects on teardown; no orphaned cloud resources.
+- **Go Terraform provider project** (`github.com/parsoFish/terraform-provider-betterado`): implement under `azuredevops/internal/acceptancetests/...`; do NOT create release-notes markdown or touch the forge repo.
+- **Do NOT modify the parked `environment_templates` resource yet** — this fixture is the groundwork that will later give it a real environment to template from.
+- **Stay faithful to upstream patterns** (`testutils.HclXxx` helpers, existing fixture conventions in `acceptancetests/`).
+
+## Out of scope (v1)
+
+- Refactoring ALL acceptance tests to use the fixture (v1 bounds to at least ONE refactored test as proof).
+- Live CI integration (fixture runs locally with operator-supplied creds; CI remains offline unit-only).
+- Data-source acceptance tests (focus v1 on resource tests only).
+
+## Success signals
+
+- The canonical fixture stands up real ADO objects end-to-end (confirmed via live apply → API round-trip).
+- At least one existing acceptance test (`TestAccReleaseDefinition_basic` or similar) is refactored to consume the fixture and passes live.
+- No ADO-validity errors (VS402877, VS402982, invalid permission keys) when run against current Azure DevOps.
+- Clean teardown: no orphaned projects/repos/releases in the ADO org after test run.</pre>
+  </details>
+</div>
+  </div>
+
+  <!-- ── 3. DESIGN DECISIONS (comparative cards) ── -->
+  
+
+  <!-- ── 4. BRAIN CONTEXT ── -->
+  <h2>Brain context</h2>
+  <ul class="brain-list">
+    <li><code>brain/cycles/themes/spec-driven-work-items.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/spec-driven-development.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/tdd-with-agents.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/real-capability-harness.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md</code> — consulted during architect draft</li>
+    <li><code>projects/terraform-provider-betterado/brain/profile.md</code> — consulted during architect draft</li>
+    <li><code>projects/terraform-provider-betterado/brain/themes/2026-05-31-forge-onboarding-findings.md</code> — consulted during architect draft</li>
+    <li><code>projects/terraform-provider-betterado/brain/themes/2026-05-31-release-definition-unit-test-substrate.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/dependency-ordered-work.md</code> — consulted during architect draft</li>
+    <li><code>brain/cycles/themes/design-is-the-bottleneck.md</code> — consulted during architect draft</li>
+    <li><code>projects/terraform-provider-betterado/brain/themes/2026-05-18-stack-and-test-layout.md</code> — consulted during architect draft</li>
+  </ul>
+
+  <!-- ── 5. COUNCIL TRANSCRIPT (collapsed) ── -->
+  <h2>Council transcript</h2>
+  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.6rem">Total cost <code>$0.5546</code></p>
+  
+  <details class="council-critic">
+    <summary>CEO critic — <code>$0.1797</code></summary>
+    <p class="empty">No mechanical flags.</p>
+    <p class="empty">No taste escalations.</p>
+  </details>
+  <details class="council-critic">
+    <summary>Eng critic — <code>$0.0822</code></summary>
+    <p class="empty">No mechanical flags.</p>
+    <p class="empty">No taste escalations.</p>
+  </details>
+  <details class="council-critic">
+    <summary>Design critic — <code>$0.1521</code></summary>
+    <p class="empty">No mechanical flags.</p>
+    <p class="empty">No taste escalations.</p>
+  </details>
+  <details class="council-critic">
+    <summary>DX critic — <code>$0.1406</code></summary>
+    <p class="empty">No mechanical flags.</p>
+    <p class="empty">No taste escalations.</p>
+  </details>
+
+  <!-- ── 6. AGGREGATE FOOTPRINT (C19 informational) ── -->
+  <h2>Aggregate footprint <span class="badge">informational</span></h2>
+  <div class="footprint">
+    <div class="summary">1 initiative · total iteration budget <strong>8</strong></div>
+    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
+      <div class="seg" style="flex: 8; background: hsl(0, 55%, 50%);" title="INIT-2026-06-06-shared-acceptance-fixture — 8 iterations">shared-acceptance-fixture</div>
+    </div>
+    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+  </div>
+
+  <!-- ── 7. OPERATOR BRIEF + INTERVIEW ── -->
+  <h2>Operator brief + interview</h2>
+  <p class="empty">No interview rounds — operator drafted directly.</p>
+
+  <hr>
+  <div class="footer">
+    Generated by the architect runner on 2026-06-06T08:54:12.199Z.
+    Reviewed + approved on the <code>/architect/2026-06-06T08-49-27</code> screen.
+  </div>
+</body>
+</html>

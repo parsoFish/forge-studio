@@ -3,11 +3,10 @@
  *
  * The unifier authors ONE structured `demo.json` to this schema — the schema is
  * the contract that fixes the previous free-form `DEMO.md` inconsistency. The
- * review screen renders it natively, and forge derives `DEMO.md` + `DEMO.html`
- * from the same source (so the unifier authors once). `DemoModel` is the
- * unifier-authorable *subset* of `DemoComparisonModel`
- * ([cli/demo-html.ts](./demo-html.ts)) — forge fills the render-only fields
- * (`generatedAt`, build statuses) when adapting it for `renderComparisonHtml`.
+ * review screen renders `demo.json` natively, and forge derives a single
+ * PR-facing `DEMO.md` from it (F4 retired the parallel `DEMO.html` — the demo
+ * OUTPUT is one markdown + the demo.json sidecar). Shared section types live in
+ * [cli/demo-types.ts](./demo-types.ts).
  *
  * Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 checkpoint
  * (each with `label` + `caption`). Rich structured sections (`summary`,
@@ -22,17 +21,15 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type {
-  DemoComparisonModel,
-  DemoCheckpoint,
   HarnessMetricRow,
   DemoSummarySection,
   DemoApiDiffEntry,
   TestResultRow,
-} from './demo-html.ts';
-import { renderComparisonHtml } from './demo-html.ts';
+} from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
 
 // Re-export the rich section types so callers only need one import surface.
-export type { DemoSummarySection, DemoApiDiffEntry, TestResultRow } from './demo-html.ts';
+export type { DemoSummarySection, DemoApiDiffEntry, TestResultRow } from './demo-types.ts';
 
 export type DemoModelCheckpoint = {
   label: string;
@@ -224,53 +221,12 @@ export function validateDemoModel(raw: unknown): string[] {
   return errors;
 }
 
-/** Adapt the authorable `DemoModel` to the full `DemoComparisonModel` the
- *  renderer expects, filling render-only fields with neutral defaults (no build
- *  was run unless the capture skill populated media). */
-export function toComparisonModel(model: DemoModel, generatedAt: string): DemoComparisonModel {
-  return {
-    title: model.title,
-    initiativeId: model.initiativeId,
-    project: model.project,
-    baseRef: model.baseRef ?? 'main',
-    changedRef: model.changedRef ?? 'HEAD',
-    essence: model.essence,
-    generatedAt,
-    baselineBuild: { ok: true },
-    changedBuild: { ok: true },
-    checkpoints: model.checkpoints.map<DemoCheckpoint>((c) => ({
-      label: c.label,
-      kind: c.kind ?? 'screenshot',
-      metrics: c.metrics ?? null,
-      caption: c.caption,
-      beforeImage: c.beforeImage ?? null,
-      afterImage: c.afterImage ?? null,
-      beforeVideoSrc: c.beforeVideoSrc ?? null,
-      afterVideoSrc: c.afterVideoSrc ?? null,
-      beforeNote: c.beforeNote,
-      afterNote: c.afterNote,
-      liveEvidence: c.liveEvidence ?? null,
-    })),
-    diffStat: stripScratchFromDiffStat(model.diffStat),
-    acceptanceCriteria: model.acceptanceCriteria,
-    acEvaluations: model.acEvaluations,
-    summary: model.summary,
-    apiDiff: model.apiDiff,
-    testEvidence: model.testEvidence,
-    filesChanged: model.filesChanged,
-    usage_example: model.usage_example,
-    impact: model.impact,
-  };
-}
-
 export type CapturedMedia = {
   label: string;
   beforeImage?: string | null;
   afterImage?: string | null;
 };
 
-/** Per-image inline cap (bytes) — keep demo.json from ballooning. */
-const MAX_INLINE_IMAGE_BYTES = 1_500_000;
 
 function pngToDataUri(file: string): string | null {
   try {
@@ -343,12 +299,6 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
   return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
 
-/** Render the self-contained DEMO.html from a `DemoModel` (reuses the existing
- *  comparison renderer). `generatedAt` is injected (no `Date.now()` in here). */
-export function renderDemoHtml(model: DemoModel, generatedAt: string): string {
-  return renderComparisonHtml(toComparisonModel(model, generatedAt));
-}
-
 export type RenderDemoBundleResult = {
   ok: boolean;
   errors: string[];
@@ -357,10 +307,10 @@ export type RenderDemoBundleResult = {
 
 /**
  * Read `<demoDir>/demo.json`, validate it, and (when valid) write the derived
- * `DEMO.md` + `DEMO.html` alongside it. The unifier authors `demo.json` once
- * and runs this (via `forge demo render`) to emit the derived artifacts it
- * commits. Never throws — returns the validation errors so the caller can
- * surface them.
+ * `DEMO.md` alongside it (F4: the single PR-facing demo artifact; the demo.json
+ * sidecar stays for the review surface). The unifier authors `demo.json` once
+ * and runs this to emit the derived markdown it commits. Never throws — returns
+ * the validation errors so the caller can surface them.
  */
 /** A real API GET of a live resource, persisted by an acceptance test. */
 export type LiveEvidence = { label?: string; url: string; capturedAt?: string; response?: string };
@@ -424,7 +374,6 @@ export function mergeLiveEvidence(model: DemoModel, evidence: LiveEvidence[]): D
 
 export function renderDemoBundle(
   demoDir: string,
-  generatedAt: string,
   worktreePath?: string,
 ): RenderDemoBundleResult {
   const jsonPath = join(demoDir, 'demo.json');
@@ -451,11 +400,11 @@ export function renderDemoBundle(
   if (errors.length > 0) return { ok: false, errors, wrote: [] };
 
   const model = parsed as DemoModel;
+  // F4: the demo OUTPUT is a single PR-facing markdown (+ the demo.json sidecar
+  // the review surface renders natively). DEMO.html is retired.
   const mdPath = join(demoDir, 'DEMO.md');
-  const htmlPath = join(demoDir, 'DEMO.html');
   writeFileSync(mdPath, renderDemoMarkdown(model));
-  writeFileSync(htmlPath, renderDemoHtml(model, generatedAt));
-  return { ok: true, errors: [], wrote: [mdPath, htmlPath] };
+  return { ok: true, errors: [], wrote: [mdPath] };
 }
 
 /** Scratch files written by forge orchestrators that should not appear in the demo. */

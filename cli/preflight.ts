@@ -16,8 +16,8 @@
  * size is a heuristic, (C5) constraint-doc presence can't prove the harness
  * honours them, (C6) is structurally satisfied by forge post-Phase-6 (no
  * auto-merge; the operator merges the PR), (C8) absence of an agent-instruction
- * file is a gap but not a blocker, and (DEMO) a declared demo.shape can't prove
- * the before/after actually captures the delta (hand-verified at onboarding).
+ * file is a gap but not a blocker, and (DEMO) demoProcess step presence can't
+ * prove the demo evidence is correct (hand-verified at onboarding).
  * DEMO is the project half of the demo contract family; the forge half is
  * skills/demo/SKILL.md.
  */
@@ -29,10 +29,8 @@ import { join, resolve, relative } from 'node:path';
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
 import {
   loadProjectConfig,
-  demoProcessCoherenceWarning,
-  DEMO_SHAPES,
 } from '../orchestrator/project-config.ts';
-import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
+import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
 export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
 
@@ -98,9 +96,9 @@ const C3_SKIP_DIRS = new Set([
 // here false-failed them.
 const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
-// DEMO: DEMO_SHAPES and loadProjectConfig are imported from
-// orchestrator/project-config.ts (single source of truth — CON-2). The loader
-// also single-sources quality_gate_cmd from the .forge/quality_gate_cmd sidecar.
+// DEMO: loadProjectConfig is imported from orchestrator/project-config.ts
+// (single source of truth — CON-2). The loader also single-sources
+// quality_gate_cmd from the .forge/quality_gate_cmd sidecar.
 
 // C8: the project must have a human-authored agent-instruction file at its
 // root. Research shows ~4pp uplift from human-authored AGENTS.md/CLAUDE.md;
@@ -323,23 +321,21 @@ function checkC3(dir: string): ClauseResult {
 
 // --- C4: machine-consumable architecture context (HARD) ---
 
-function checkC4(dir: string, projectName: string, _forgeRoot: string): ClauseResult {
+function checkC4(dir: string, projectName: string, forgeRoot: string): ClauseResult {
   const base = { clause: 'C4' as const, title: 'Machine-readable architecture context', hard: true };
   const roadmap = join(dir, 'roadmap.md');
-  // Brain 3 lives inside the project repo (three-brain restructure 2026-05-26),
-  // under the project's committed-artifact root (project.json `artifactRoot`,
-  // default "." = legacy brain/profile.md at the project root).
-  const artifactRoot = readArtifactRoot(dir);
-  const brainRel = artifactRoot === '.' ? 'brain/profile.md' : `${artifactRoot}/brain/profile.md`;
-  const brainProfile = join(dir, brainRel);
+  // roadmap.md is the project's own architecture context (stays in the project
+  // repo). Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/profile.md.
+  const brainRel = `brain/projects/${projectName}/profile.md`;
+  const brainProfile = join(projectBrainDir(forgeRoot, projectName), 'profile.md');
   const hasRoadmap = existsSync(roadmap);
   const hasBrain = existsSync(brainProfile);
   if (hasRoadmap && hasBrain) {
-    return { ...base, pass: true, detail: `roadmap.md + brain sub-wiki present (${projectName}/${brainRel})` };
+    return { ...base, pass: true, detail: `roadmap.md + central brain sub-wiki present (${brainRel})` };
   }
   const missing: string[] = [];
   if (!hasRoadmap) missing.push('roadmap.md (in project root)');
-  if (!hasBrain) missing.push(`${brainRel} (project brain — three-brain model, Brain 3)`);
+  if (!hasBrain) missing.push(`${brainRel} (forge-owned central project brain — Brain 3, ADR 035)`);
   return {
     ...base,
     pass: false,
@@ -427,84 +423,30 @@ function checkC8(dir: string): ClauseResult {
 /**
  * Delegates validation to `loadProjectConfig` from orchestrator/project-config.ts
  * (single source of truth; also single-sources the quality_gate_cmd sidecar). On
- * a structural violation the throw is caught and
- * downgraded to an advisory WARN — DEMO is never a hard blocker.
+ * a structural violation the throw is caught and downgraded to an advisory WARN —
+ * DEMO is never a hard blocker.
  */
 function checkDemo(dir: string): ClauseResult {
-  const base = {
-    clause: 'DEMO' as const,
-    title: 'Demonstrable change (.forge/project.json demo.shape)',
-    hard: false,
-  };
+  const base = { clause: 'DEMO' as const, title: 'Demo process declared (.forge/project.json demoProcess)', hard: false };
   const cfgPath = join(dir, '.forge', 'project.json');
   if (!existsSync(cfgPath)) {
-    return {
-      ...base,
-      pass: false,
-      detail:
-        'no .forge/project.json — the demo shape is undeclared, so forge cannot ' +
-        'tell how this project shows a change. The unifier falls back to a ' +
-        'notes-only demo and the operator may approve blind. Declare a demo.shape ' +
-        `(${[...DEMO_SHAPES].join(' | ')}). Advisory.`,
-    };
+    return { ...base, pass: false, detail: 'no .forge/project.json — demoProcess undeclared. Advisory.' };
   }
-  // Load via the canonical loader, which ALSO single-sources `quality_gate_cmd`
-  // from the `.forge/quality_gate_cmd` sidecar — so a project that declares the
-  // gate only in the sidecar (and omits it from project.json) validates here.
-  // Catch the throw and downgrade to advisory WARN so a bad sweep block etc. does
-  // not block a project that has a valid demo shape. `loadProjectConfig` returns
-  // null only when the file is absent (already handled above).
   let cfg: NonNullable<ReturnType<typeof loadProjectConfig>>;
   try {
     const loaded = loadProjectConfig(dir);
-    if (!loaded) {
-      return { ...base, pass: false, detail: '.forge/project.json is not readable — cannot read the demo shape. Advisory.' };
-    }
+    if (!loaded) return { ...base, pass: false, detail: '.forge/project.json is not readable. Advisory.' };
     cfg = loaded;
   } catch (err) {
-    return {
-      ...base,
-      pass: false,
-      detail:
-        `.forge/project.json failed validation: ${err instanceof Error ? err.message : String(err)}. Advisory.`,
-    };
+    return { ...base, pass: false, detail: `.forge/project.json failed validation: ${err instanceof Error ? err.message : String(err)}. Advisory.` };
   }
-  const { shape } = cfg.demo;
-  const hasCommand = Array.isArray(cfg.demo.command) && cfg.demo.command.length > 0;
-  const hasPreview = Array.isArray(cfg.demo.preview_command) && cfg.demo.preview_command.length > 0;
-  // These are already enforced by validateProjectConfig, but we re-check
-  // defensively and surface them as advisory here (the throw path above already
-  // catches hard violations).
-  if (shape !== 'none' && !hasCommand) {
-    return {
-      ...base,
-      pass: false,
-      detail: `demo.shape "${shape}" needs a demo.command (how forge produces the before/after) — none declared. Advisory.`,
-    };
+  const steps = cfg.demoProcess ?? [];
+  const hasCapture = steps.some((s) => s.kind === 'capture');
+  const hasVerify = steps.some((s) => s.kind === 'verify');
+  if (!hasCapture || !hasVerify) {
+    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Run the demo-design skill to generate demo machinery. Advisory.` };
   }
-  if (shape === 'browser' && !hasPreview) {
-    return {
-      ...base,
-      pass: false,
-      detail:
-        'demo.shape "browser" needs a demo.preview_command (the dev/preview server forge serves the built worktree on) — none declared. Advisory.',
-    };
-  }
-  // E2: the demoProcess (executed demo) and demo.shape (evidence floor) must be
-  // coherent — flag a capture step under shape "none" (nothing to capture into).
-  const coherence = demoProcessCoherenceWarning(cfg);
-  if (coherence) {
-    return { ...base, pass: false, detail: coherence };
-  }
-  return {
-    ...base,
-    pass: true,
-    detail:
-      `demo.shape "${shape}" declared` +
-      (shape !== 'none' ? ' + command' : '') +
-      (shape === 'browser' ? ' + preview_command' : '') +
-      ' (forge can produce a demo; the before/after fidelity is hand-verified at onboarding)',
-  };
+  return { ...base, pass: true, detail: `demoProcess has ${steps.length} step(s) including capture + verify` };
 }
 
 // --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---
@@ -579,17 +521,16 @@ function readQualityGateCmd(dir: string): { source: string; cmd: string } | null
  */
 function checkBrainStaleness(
   dir: string,
-  _projectName: string,
-  _forgeRoot: string,
+  projectName: string,
+  forgeRoot: string,
 ): ClauseResult {
   const base = {
     clause: 'BRAIN' as const,
     title: 'Brain freshness (themes cite live source paths)',
     hard: false,
   };
-  // Brain 3 lives inside the project repo, under the committed-artifact root
-  // (project.json `artifactRoot`, default "." = legacy brain/themes/).
-  const themesDir = join(dir, readArtifactRoot(dir), 'brain', 'themes');
+  // Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/themes/.
+  const themesDir = projectThemesDir(forgeRoot, projectName);
   if (!existsSync(themesDir)) {
     return { ...base, pass: true, detail: 'no project brain themes to check' };
   }

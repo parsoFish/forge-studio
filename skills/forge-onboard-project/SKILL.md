@@ -108,13 +108,19 @@ this into the worktree as part of the work so it lands in the PR and is committe
 This is a project-side convention (forge does not hard-code it) — state it in the
 instruction file and back it with a `present` `demoProcess` step.
 
-### Step 10 — Demo-ability (the demo family)
+### Step 10 — Demo-ability (the demo-design skill)
 The review phase must *show* the operator the one behavioural delta. Declare
-`demo.shape` (`browser` + `preview_command` / `harness` / `cli-diff` / `artifact`
-/ `none`) + `demo.command`. Ensure a valid prior state (baseline doesn't error).
-For **live-external** evidence (an API response + portal view, not a local
-render), `harness` is the creds-free floor — point `demo.skill` at a project-owned
-demo skill that produces real API-GET evidence (not a test-name table).
+`demoProcess` in `.forge/project.json` with ≥1 `capture` step and ≥1 `verify`
+step describing what evidence to record and what assertion makes it non-trivial.
+Then **run the `demo-design` skill** — it reads `demoProcess` + the project's
+actual code, assesses the right evidence form (portal/browser screenshot
+opportunistically when a renderable surface exists, harness metrics when a
+measurement command exists, live external API round-trip when the code calls a
+live system, JSON-diff/notes-only by default), and **generates** the per-project
+demo machinery (`<artifactRoot>/skills/<slug>/SKILL.md`) committed into the
+project repo. Ensure a valid prior state (baseline doesn't error). The generated
+skill encodes the exhaustive discipline for live-external projects (every option
+exercised, round-trip proof, idempotency gate, clean destroy).
 
 ### Step 11 — External-resource model (C7, only if needed)
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)

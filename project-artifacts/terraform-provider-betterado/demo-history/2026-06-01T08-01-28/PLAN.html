@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLAN — 2026-06-01T08-01-28 — terraform-provider-betterado</title>
+<style>
+  /* Unified with the forge-ui dark stage so PLAN/DEMO + the live view share
+     one theme inside the same app. Dark-only (the app has no light mode). */
+  :root {
+    --bg: #0a0e14;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #21262d;
+    --accent: #1f6feb;
+    --brain: #d2a8ff;
+    --user: #2ea043;
+    --warn: #d29922;
+    --code-bg: #0a0f16;
+    --card-bg: #11161d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  h1 { font-size: 1.75rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.25rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em; }
+  h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .meta code { background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 3px; }
+  .notice {
+    background: var(--card-bg);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 1.5rem;
+    border-radius: 3px;
+    font-size: 0.9rem;
+  }
+  .notice code { background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 3px; }
+  /* Feature dependency graph */
+  .dep-graph-wrap {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 0.75rem 0 1.25rem;
+    overflow-x: auto;
+  }
+  .dep-graph-title { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+  svg.dep-graph { display: block; min-width: 100%; }
+  svg.dep-graph .node-box { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+  svg.dep-graph .node-box.root { stroke: var(--accent); stroke-width: 2; }
+  svg.dep-graph .node-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 11px; font-weight: 600; fill: var(--accent); }
+  svg.dep-graph .node-title { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 11px; fill: var(--fg); }
+  svg.dep-graph .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+  svg.dep-graph .arrowhead { fill: var(--muted); }
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+  th, td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    font-size: 0.9rem;
+  }
+  th { font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* Footprint bar */
+  .footprint {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .footprint .bar {
+    display: flex;
+    width: 100%;
+    height: 1.5rem;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+    background: var(--code-bg);
+  }
+  .footprint .seg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-shadow: 0 0 2px rgba(0,0,0,0.5);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 0.25rem;
+  }
+  .footprint .summary { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+  .footprint .info { color: var(--muted); font-size: 0.8rem; font-style: italic; margin-top: 0.5rem; }
+  /* Escalation cards */
+  .escalations { display: grid; gap: 1rem; }
+  .escalation {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .escalation .q {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  .escalation .critic-chip {
+    display: inline-block;
+    font-size: 0.7rem;
+    background: var(--accent);
+    color: white;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    margin-right: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .escalation .options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    align-items: start;
+  }
+  .escalation .option {
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .escalation .option:hover { border-color: var(--accent); }
+  .escalation .option:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
+  .escalation .option .label { font-weight: 600; }
+  .escalation .option .rationale { color: var(--muted); }
+  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.5rem 0 0; font-size: 0.78rem; display: grid; gap: 0.15rem; }
+  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.35rem; }
+  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.35rem; }
+  .escalation .option .opt-visual { margin-top: 0.6rem; }
+  .escalation .option .opt-visual iframe.mockup {
+    width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117;
+  }
+  .escalation .option .opt-visual pre.code,
+  .escalation .option .opt-visual pre.diagram {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
+  }
+  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.72rem; font-style: italic; margin-top: 0.3rem; }
+  /* Drawers */
+  details {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin: 0.5rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 500;
+    padding: 0.25rem 0;
+  }
+  details[open] summary { margin-bottom: 0.5rem; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  ul, ol { padding-left: 1.5rem; }
+  .empty { color: var(--muted); font-style: italic; }
+  .badge {
+    display: inline-block;
+    background: var(--code-bg);
+    color: var(--muted);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  }
+  .badge.user { background: var(--user); color: white; }
+  .badge.warn { background: var(--warn); color: white; }
+</style>
+</head>
+<body>
+  <h1>Architect plan — 2026-06-01T08-01-28</h1>
+  <div class="meta">
+    Project <code>terraform-provider-betterado</code>
+    · Initiative type <code>implementation</code>
+    · Repo <code>/home/parso/forge/projects/terraform-provider-betterado</code>
+  </div>
+
+  <div class="notice">
+    <strong>This is a read-only viewer.</strong> Review the plan on the
+    <code>/architect/2026-06-01T08-01-28</code> screen in the forge UI and
+    approve / revise / reject there.
+  </div>
+
+  <h2>Feature dependency graph</h2>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-ci-fix</code> — Fix gofmt/golint/terrafmt failures blocking CI</div>
+    <svg class="dep-graph" viewBox="0 0 232 88" width="232" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+
+    <g>
+      <title>FEAT-1: Fix gofmt/golint/terrafmt failures blocking CI</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Fix gofmt/golint/terrafmt f…</text>
+    </g>
+  </svg>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-release-definition-substrate</code> — Verify existing 11 unit tests pass and add any missing canonical tests</div>
+    <svg class="dep-graph" viewBox="0 0 232 88" width="232" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+
+    <g>
+      <title>FEAT-1: Verify existing 11 unit tests pass and add any missing canonical tests</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Verify existing 11 unit tes…</text>
+    </g>
+  </svg>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-release-folder</code> — Implement release_folder schema, CRUD, and provider registration</div>
+    <svg class="dep-graph" viewBox="0 0 502 88" width="502" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M 216 44 L 248 44 L 248 44 L 280 44" marker-end="url(#arrow)"/>
+    <g>
+      <title>FEAT-1: Implement release_folder schema, CRUD, and provider registration</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Implement release_folder sc…</text>
+    </g>
+    <g>
+      <title>FEAT-2: Add canonical 5 unit tests for release_folder</title>
+      <rect class="node-box" x="286" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="296" y="36">FEAT-2</text>
+      <text class="node-title" x="296" y="56">Add canonical 5 unit tests …</text>
+    </g>
+  </svg>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-environment-template</code> — Implement environment_template schema, CRD (no Update), and provider registration</div>
+    <svg class="dep-graph" viewBox="0 0 502 88" width="502" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M 216 44 L 248 44 L 248 44 L 280 44" marker-end="url(#arrow)"/>
+    <g>
+      <title>FEAT-1: Implement environment_template schema, CRD (no Update), and provider registration</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Implement environment_templ…</text>
+    </g>
+    <g>
+      <title>FEAT-2: Add canonical unit tests for environment_template (Create/Read/Delete only)</title>
+      <rect class="node-box" x="286" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="296" y="36">FEAT-2</text>
+      <text class="node-title" x="296" y="56">Add canonical unit tests fo…</text>
+    </g>
+  </svg>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-release-data-sources</code> — Implement data_release_definition (by ID or name)</div>
+    <svg class="dep-graph" viewBox="0 0 502 88" width="502" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M 216 44 L 248 44 L 248 44 L 280 44" marker-end="url(#arrow)"/>
+    <g>
+      <title>FEAT-1: Implement data_release_definition (by ID or name)</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Implement data_release_defi…</text>
+    </g>
+    <g>
+      <title>FEAT-2: Implement data_release_definitions (list with optional filters)</title>
+      <rect class="node-box" x="286" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="296" y="36">FEAT-2</text>
+      <text class="node-title" x="296" y="56">Implement data_release_defi…</text>
+    </g>
+  </svg>
+  </div>
+  <div class="dep-graph-wrap">
+    <div class="dep-graph-title"><code>INIT-2026-06-01-acceptance-test-refresh</code> — Update HCL fixtures with required stage retention_policy and pre_deploy_approval</div>
+    <svg class="dep-graph" viewBox="0 0 502 88" width="502" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M 216 44 L 248 44 L 248 44 L 280 44" marker-end="url(#arrow)"/>
+    <g>
+      <title>FEAT-1: Update HCL fixtures with required stage retention_policy and pre_deploy_approval</title>
+      <rect class="node-box root" x="16" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="26" y="36">FEAT-1</text>
+      <text class="node-title" x="26" y="56">Update HCL fixtures with re…</text>
+    </g>
+    <g>
+      <title>FEAT-2: Verify all acceptance tests pass against live ADO</title>
+      <rect class="node-box" x="286" y="16" width="200" height="56" rx="4" ry="4"/>
+      <text class="node-id" x="296" y="36">FEAT-2</text>
+      <text class="node-title" x="296" y="56">Verify all acceptance tests…</text>
+    </g>
+  </svg>
+  </div>
+
+  <h2>Operator brief + interview</h2>
+  <p>Fix CI pipeline (formatting/lint failures on stale branch) to unblock PR merges, then systematically complete the ADO Release API coverage as four independent initiatives: (1) complete the release_definition resource substrate with unit tests, (2) add release_folder resource, (3) add environment_template resource, and (4) add release data sources. Finally, refresh acceptance tests with stage retention_policy and pre_deploy_approval to pass live ADO 7.1+ validation.</p>
+  <h3>Interview</h3>
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Operator answer</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>The CI failures are formatting/lint issues (gofmt, golint, terrafmt) on a stale branch. Should I scope the CI fix as a separate quick initiative, or bundle it into the release work?</td><td>Separate CI-fix initiative, run FIRST to unblock PRs (CI first). Everything else depends on it.</td></tr>
+      <tr><td>2</td><td>The release API coverage has 4 proposed features: (1) release_definition substrate completion, (2) release_folder resource, (3) environment_template resource, (4) data sources. How should we scope the initiatives?</td><td>One initiative per feature — 4 separate, independently-releasable initiatives (north-star model). Order them by real build dependency (data sources depend on the release_definition resource they read).</td></tr>
+      <tr><td>3</td><td>The acceptance tests need live ADO creds and the HCL is stale (VS402982/VS402877 errors). Should acceptance test refresh be in scope or deferred?</td><td>Include acceptance refresh — add stage retention_policy + pre_deploy_approval so acceptance tests pass live. It depends on the resources being built first.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Brain context</h2>
+  <p class="empty">No brain entries consulted (brain-gap event emitted).</p>
+
+  <h2>Council transcript</h2>
+  <p class="meta">Total cost <code>$4.3868</code></p>
+  
+  <details>
+    <summary>CEO critic — $0.3004</summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>initiative2-redundant</code> — Initiative 2 (release_definition substrate verification) duplicates Initiative 1&#39;s quality gate (&#39;make test&#39; already runs all unit tests including release_definition). No unique verification value.. <em>Applied:</em> Recommend merging Initiative 2 into Initiative 1 as a single deliverable: &#39;Fix CI and verify release_definition substrate&#39;. The combined AC remains: all unit tests pass (which includes the 11 release_definition tests).</li><li><code>initiative1-scope-clarity</code> — Initiative 1 lists &#39;Fix any remaining manual lint issues&#39; but doesn&#39;t define &#39;manual&#39;. Scope could creep into refactoring.. <em>Applied:</em> Tighten scope: &#39;Fix any remaining lint issues that cannot be auto-fixed (e.g., unused variables, unreachable code) by removing dead code or adding _ assignments. Do not refactor working logic.&#39;</li><li><code>initiative6-credential-assumption</code> — Initiative 6 assumes live ADO credentials are available but doesn&#39;t list credential setup as in-scope work or a prerequisite.. <em>Applied:</em> Add to scope: &#39;Assumes AZDO_ORG_SERVICE_URL and AZDO_PERSONAL_ACCESS_TOKEN are already configured (via environment or secrets.env). Credential setup is out-of-scope.&#39;</li><li><code>initiative3-import-detail</code> — Initiative 3 (release_folder) mentions &#39;Import support via tfhelper.ImportProjectQualifiedResource()&#39; but doesn&#39;t specify the import ID format.. <em>Applied:</em> Add to AC2: &#39;Import ID format is {projectId}/{folderId}, parsed by tfhelper.ImportProjectQualifiedResource()—matching build_folder convention.&#39;</li><li><code>initiative4-immutability-risk</code> — Initiative 4 (environment_template) states templates are immutable but doesn&#39;t address user experience risk: users may not expect ForceNew on description changes.. <em>Applied:</em> Add to documentation requirement: &#39;Docs must clearly state that environment templates are immutable—any change to name, description, or environment triggers destroy/recreate (ADO API limitation).&#39;</li><li><code>initiative5-name-conflict</code> — Initiative 5 (data sources) allows lookup by name but doesn&#39;t specify behavior when multiple definitions have the same name in different paths.. <em>Applied:</em> Add to AC2: &#39;If name filter returns multiple matches, return error: &quot;Multiple release definitions found with name X. Use definition_id for unambiguous lookup.&quot;&#39;</li></ul>
+    <h3>Escalations</h3><div class="escalation"><div class="q">Should the release_definition substrate verification (Initiative 2) be merged into the CI fix (Initiative 1), or remain separate?</div><div class="options"><div class="option"><span class="label">Merge into CI fix (Recommended)</span><span class="rationale">Initiative 2&#39;s sole purpose is verifying existing tests pass. This is already covered by Initiative 1&#39;s AC4 (&#39;make test&#39; passes all unit tests). Running a subset of tests separately adds no strategic value—it&#39;s the same quality gate. Merging eliminates a phantom initiative and gets to the actual work (folders, templates, data sources) faster.</span></div><div class="option"><span class="label">Keep separate</span><span class="rationale">Treat the release_definition substrate as a distinct milestone requiring explicit sign-off before dependent work begins. Provides a clear checkpoint for stakeholders to confirm the foundation is solid before building on it.</span></div></div></div><div class="escalation"><div class="q">Should initiatives 3–5 (folder, template, data sources) remain separate or be bundled?</div><div class="options"><div class="option"><span class="label">Keep separate (Recommended)</span><span class="rationale">Each is independently releasable and provides standalone user value. A user can deploy folders without templates, or use data sources without creating folders. Separate initiatives allow parallel work if multiple contributors are available, and each can be released as soon as it passes CI—maximizing feedback velocity.</span></div><div class="option"><span class="label">Bundle into &#39;Complete Release API Coverage&#39;</span><span class="rationale">Deliver a coherent &#39;Release Management&#39; feature set in one release. Users get folders + templates + data sources together, which tells a complete story. Reduces PR/review overhead from 3 initiatives to 1.</span></div></div></div><div class="escalation"><div class="q">Is Initiative 6 (acceptance test refresh) correctly prioritized, or should it be deferred?</div><div class="options"><div class="option"><span class="label">Defer until after features ship (Recommended)</span><span class="rationale">Acceptance tests require live ADO credentials and validate end-to-end behavior. The unit tests (already passing after Initiative 1) provide sufficient CI gate for release_definition. Deferring this to a &#39;hardening&#39; phase after folders/templates/data sources are shipped maximizes feature velocity now. The resource already works (unit tests prove CRUD logic); acceptance tests verify API contract stability, which is lower priority than new capabilities.</span></div><div class="option"><span class="label">Keep as-prioritized (after substrate, before new features)</span><span class="rationale">Ensure the existing release_definition resource passes live ADO validation before building dependent features. Folders and templates may reference release definitions; better to confirm the foundation works end-to-end against real API before layering on new resources.</span></div></div></div>
+  </details>
+  <details>
+    <summary>Eng critic — $0.9181</summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>missing-depends-on</code> — The initiative draft lists six initiatives in narrative order but lacks explicit depends_on metadata. Initiative 1 (CI fixes) must gate all others since they require passing CI to merge.. <em>Applied:</em> Add explicit dependency metadata: Initiative 2-6 all have depends_on: [initiative-1-ci-fixes]. Initiative 6 (acceptance tests) has depends_on: [initiative-1-ci-fixes, initiative-2-release-definition-substrate]</li><li><code>ac-not-ci-executable</code> — Initiative 2 (release_definition substrate) AC1 says &quot;all 11 tests pass&quot; but doesn&#39;t specify which 11 tests or provide a command that can be run in CI to verify the count.. <em>Applied:</em> Refine AC1 to include exact verification command: go test -mod=vendor -tags all -count=1 -v -run ^TestReleaseDefinition ./azuredevops/internal/service/release/ | grep -c &quot;^--- PASS: TestReleaseDefinition&quot; | grep -q &quot;^11$&quot;</li><li><code>missing-build-tag-convention</code> — Initiative 3 (release_folder), 4 (environment_template), and 5 (data sources) mention build tags but don&#39;t specify the full pattern. Current convention requires both positive and negative build constraints.. <em>Applied:</em> Add build tag header to all new test files: //go:build (all || resource_release_folder) &amp;&amp; !exclude_resource_release_folder plus legacy +build directives</li><li><code>no-rollback-acceptance-tests</code> — Initiative 6 modifies existing acceptance test HCL templates to add retention_policy and pre_deploy_approval. If ADO API validation changes again, there&#39;s no stated rollback strategy.. <em>Applied:</em> Add rollback section to Initiative 6: Revert HCL template changes via git revert, re-run tests against baseline, document failing API validation errors in GitHub issue. No persistent state affected (tests create/destroy resources in isolated test projects)</li><li><code>missing-vendor-update</code> — Initiative 1 (CI fixes) runs golangci-lint run --fix which may add imports, but doesn&#39;t explicitly call go mod vendor before the final build step.. <em>Applied:</em> Add to Initiative 1 scope: After running all fix commands, regenerate vendor directory with go mod tidy &amp;&amp; go mod vendor</li><li><code>quality-gate-mismatch</code> — Initiative 1&#39;s quality gate runs go build -mod=vendor ./... but CI workflow unit-test.yml runs go build -v ./... (without -mod=vendor flag).. <em>Applied:</em> Align quality gate with exact CI commands: go build -v ./... &amp;&amp; make test (unit-test.yml), golangci-lint run -v ./azuredevops/... (golint.yml), make terrafmt-check (terrafmt.yml), make depscheck (depscheck.yml)</li><li><code>missing-gomock-pattern</code> — Initiative 2 AC3 mentions &quot;gomock controller usage&quot; but doesn&#39;t specify the canonical cleanup pattern used consistently across the codebase.. <em>Applied:</em> Refine AC3 to verify the exact pattern: ctrl := gomock.NewController(t) followed by defer ctrl.Finish() for proper cleanup, then azdosdkmocks.NewMockReleaseClient(ctrl)</li><li><code>data-source-naming</code> — Initiative 5 proposes data.betterado_release_definition (singular) and data.betterado_release_definitions (plural), but the test function prefix pattern is unclear.. <em>Applied:</em> Specify test naming convention: data_release_definition_test.go / data_release_definitions_test.go for files, TestDataReleaseDefinition_* / TestDataReleaseDefinitions_* for test function prefixes</li><li><code>missing-import-id-format</code> — Initiative 3 (release_folder) and 4 (environment_template) mention &quot;import support&quot; but don&#39;t specify the import ID format or whether it uses tfhelper.ImportProjectQualifiedResource().. <em>Applied:</em> Add import specification: Import ID format {projectId}/{folderId}, Import function tfhelper.ImportProjectQualifiedResourceUUID(), Example: terraform import betterado_release_folder.example 00000000-0000-0000-0000-000000000000/1</li><li><code>missing-file-count</code> — Initiative AC claims &quot;≤3 files where possible&quot; but doesn&#39;t enumerate files for new resources.. <em>Applied:</em> Add file manifest to each initiative: Initiative 3/4 have 4 new + 1 modified = 5 files (resource, test, docs, example, provider registration). Initiative 5 has 8 files (2 data sources × 4 files each). Recommend splitting Initiative 5 into 5a/5b to meet ≤3 file atomicity target</li></ul>
+    <h3>Escalations</h3><div class="escalation"><div class="q">Initiative 1 aims to fix format/lint failures to unblock PR merges. Should it also update stale dependencies (e.g., golangci-lint config version, Go SDK minor bumps) discovered during linting, or strictly limit to formatting fixes?</div><div class="options"><div class="option"><span class="label">Fix format/lint only, defer dependency updates (Recommended)</span><span class="rationale">Minimize blast radius. Updating dependencies introduces risk of behavioral changes unrelated to CI failures. Keep Initiative 1 as a surgical fix to unblock PRs, then handle dependency updates as a separate maintenance task.</span></div><div class="option"><span class="label">Fix format/lint AND update dependencies proactively</span><span class="rationale">Since we&#39;re already touching CI, update dependencies now to prevent future CI breakage. Newer SDK versions may include bug fixes that reduce lint warnings.</span></div></div></div><div class="escalation"><div class="q">Initiative 2 verifies the existing 11 unit tests pass for release_definition substrate. Should we also generate a code coverage report to identify untested edge cases, or trust the existing characterization tests are sufficient?</div><div class="options"><div class="option"><span class="label">Run existing 11 tests, no coverage analysis (Recommended)</span><span class="rationale">The 11 tests already cover the canonical 5-test pattern plus 6 deep-nested characterization tests. Coverage reports are useful for new code, but this is a verification initiative to confirm the substrate is CI-ready, not a quality improvement initiative.</span></div><div class="option"><span class="label">Generate coverage report to identify gaps</span><span class="rationale">Since this is the substrate for all downstream release work, ensure comprehensive coverage now. A coverage report will identify any critical paths missing tests (e.g., error handling in nested expand/flatten functions).</span></div></div></div><div class="escalation"><div class="q">Initiative 4 states environment templates are immutable (no Update operation). Should we enforce this by omitting UpdateContext from the resource schema, or also add client-side validation to prevent unexpected API changes?</div><div class="options"><div class="option"><span class="label">Omit UpdateContext, mark all fields ForceNew (Recommended)</span><span class="rationale">Terraform&#39;s schema layer already enforces immutability via ForceNew: true. If a user changes any field, Terraform will destroy and recreate the resource. No need for additional client-side validation.</span></div><div class="option"><span class="label">Omit UpdateContext AND add API immutability check in Read</span><span class="rationale">Defensive programming. If the ADO API ever changes to allow updates (or if our understanding is wrong), detect it early by checking if the API returns different values than expected.</span></div></div></div><div class="escalation"><div class="q">Initiative 6 updates acceptance tests to pass against ADO API 7.1+. Should we test against only ADO 7.1 (current stable), or add matrix testing for ADO 7.0, 7.1, and 7.2 (if available)?</div><div class="options"><div class="option"><span class="label">Test against single ADO API version (7.1) (Recommended)</span><span class="rationale">The codebase uses azure-devops-go-api/azuredevops/v7 SDK which targets ADO 7.x. Testing against a single stable version (7.1) reduces complexity and matches real-world usage (most orgs pin to a specific ADO version).</span></div><div class="option"><span class="label">Test against ADO 7.0, 7.1, and 7.2 (if available)</span><span class="rationale">Increase confidence in SDK compatibility. By testing across multiple ADO versions, catch breaking changes early and document which versions are supported.</span></div></div></div>
+  </details>
+  <details>
+    <summary>Design critic — $1.2266</summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>release-folder-naming</code> — Verify betterado_release_folder follows service_entity naming pattern (it does—matches build_folder, not workitemquery_folder outlier). <em>Applied:</em> Confirmed naming is consistent with build_folder pattern. No change needed.</li><li><code>missing-docs-templates</code> — Only 1 of 120+ resources has documentation. New resources should follow established structure: Example Usage, Argument Reference, Attribute Reference.. <em>Applied:</em> Ensure all new resource docs follow release_definition.md template structure with Basic/Advanced examples and schema references.</li><li><code>acceptance-test-missing-blocks</code> — Basic acceptance test HCL templates omit retention_policy and pre_deploy_approval, but need corresponding test assertions added too.. <em>Applied:</em> Add resource.TestCheckResourceAttr() assertions for retention_policy and pre_deploy_approval blocks to verify round-trip correctness.</li><li><code>retention-policy-optionality</code> — Schema marks retention_policy as Optional+Computed, but ADO API 7.1+ requires it. Creates UX confusion when users omit it.. <em>Applied:</em> Change retention_policy to Required OR add Default computed function with sensible defaults (30 days, 3 releases, retain_build=true) for backward compatibility.</li><li><code>error-messages-remediation</code> — Error messages like &#39;creating project: %v&#39; lack user-actionable remediation hints for common failures (auth, required fields).. <em>Applied:</em> Enhance error messages to detect common patterns (401→check creds, 400 with retention_policy→add required block) and append hints.</li><li><code>data-source-plural-naming</code> — Plural data source naming inconsistent across provider (some use _list suffix, others use plural s).. <em>Applied:</em> Confirmed release_definitions (with s) matches existing plural pattern. No change needed.</li></ul>
+    <h3>Escalations</h3><div class="escalation"><div class="q">Should betterado_release_folder accept &#39;path&#39; as user input (like build_folder) or accept &#39;name&#39; + auto-compute &#39;path&#39; (hierarchical)?</div><div class="options"><div class="option"><span class="label">path as Required input (matches build_folder)</span><span class="rationale">Users specify full folder path (e.g., \\Parent\\Child). Matches existing build_folder behavior and ADO portal UX where users see paths.</span></div><div class="option"><span class="label">name as Required, path as Computed (hierarchical)</span><span class="rationale">Users specify name and optional parent_id to build folder trees. API computes path. More Terraform-idiomatic for hierarchical resources like workitemquery_folder.</span></div><div class="option"><span class="label">Exact build_folder clone (Recommended)</span><span class="rationale">path Required, name Computed. This is what the initiative SHOULD be—100% copy-paste of build_folder schema. The draft has it backwards (name Required, path Computed). Zero cognitive load for users familiar with build folders.</span></div></div></div><div class="escalation"><div class="q">How should the provider communicate that release_environment_template is immutable to users who expect in-place updates?</div><div class="options"><div class="option"><span class="label">Pure ForceNew (Standard Terraform UX)</span><span class="rationale">Mark all fields ForceNew: true, no custom messaging. Let Terraform&#39;s standard behavior handle it—plan shows &#39;must be replaced&#39;. This is standard Terraform pattern for immutable resources.</span></div><div class="option"><span class="label">CustomizeDiff warning</span><span class="rationale">Add CustomizeDiff function to detect field changes and emit warnings explaining the ADO API immutability limitation during terraform plan. Educates users before apply.</span></div><div class="option"><span class="label">Documentation-only (Recommended)</span><span class="rationale">Use ForceNew schema attributes + prominent callout in docs explaining limitation. Add example showing lifecycle prevent_destroy block for safer updates. Standard Terraform documentation pattern.</span></div></div></div>
+  </details>
+  <details>
+    <summary>DX critic — $1.9417</summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>missing-precommit-hooks</code> — No pre-commit hooks for format enforcement (gofmt, gofumpt, terrafmt, golangci-lint) - CI failures catch issues late. <em>Applied:</em> Add .pre-commit-config.yaml with hooks for gofmt, gofumpt, terrafmt, and golangci-lint. Document setup in docs/contributing.md: &#39;pre-commit install&#39;</li><li><code>no-acceptance-test-runbook</code> — Initiative 6 requires live ADO acceptance tests but no runbook for credentials setup, test isolation, cleanup, or cost estimation. <em>Applied:</em> Create docs/acceptance-testing-runbook.md covering: PAT token scopes, test project isolation (AZDO_TEST_PROJECT_PREFIX), pre-flight checks, example commands, manual cleanup script (scripts/cleanup-test-projects.sh), and cost/runtime estimates</li><li><code>linter-debt-untracked</code> — .golangci.yml documents disabled linters (err113, errorlint, perfsprint - ~1000s instances) but no migration plan or tracking. <em>Applied:</em> Create docs/linter-debt.md documenting each disabled linter, instance count, migration strategy (e.g., &#39;Fix in new code only&#39; vs &#39;Plan full migration&#39;), and status tracking via GitHub issues</li><li><code>mock-regeneration-undocumented</code> — Initiatives 2/3/4 reference azdosdkmocks/release_sdk_mock.go as &#39;generated - do not modify&#39; but no process documented for regenerating mocks when SDK changes. <em>Applied:</em> Add section to docs/contributing.md: &#39;Regenerating Mocks&#39; with gomock installation and example commands for regenerating mocks after SDK updates</li><li><code>immutable-template-no-migration-plan</code> — Initiative 4 introduces immutable betterado_release_environment_template (no Update, all ForceNew) with no documented rationale or future migration path if immutability changes. <em>Applied:</em> Add Immutability Notice section to docs/resources/release_environment_template.md explaining API immutability, ForceNew behavior, impact on referencing release definitions, and future consideration if ADO adds update support</li></ul>
+    <h3>Escalations</h3><div class="escalation"><div class="q">Should acceptance tests run in CI, and if so, how should credentials and test isolation be managed?</div><div class="options"><div class="option"><span class="label">Manual acceptance testing (current state)</span><span class="rationale">Keep acceptance tests manual-only, run by maintainers with personal PAT tokens. No CI infrastructure changes needed.</span></div><div class="option"><span class="label">Automated CI with isolated test org (Recommended)</span><span class="rationale">Create dedicated Azure DevOps org for CI tests. Store PAT token in GitHub secrets. Run acceptance tests on PR comment trigger (e.g., /test-acceptance).</span></div><div class="option"><span class="label">Contributor-provided test credentials</span><span class="rationale">Document in CONTRIBUTING.md that contributors must create their own test ADO org and PAT token. Tests run locally before submitting PR. PR template requires acceptance tests passing checkbox.</span></div></div></div><div class="escalation"><div class="q">How should the project handle scenarios where the Azure DevOps Go SDK is missing features needed for complete API coverage?</div><div class="options"><div class="option"><span class="label">Block on upstream SDK support (Recommended)</span><span class="rationale">Only implement resources where the SDK already has full support. File issues upstream for missing methods. Prioritize initiatives that are unblocked.</span></div><div class="option"><span class="label">Bypass SDK with direct HTTP</span><span class="rationale">For missing SDK methods, implement direct HTTP calls to Azure DevOps REST API using the existing HTTP client from the SDK for auth continuity.</span></div><div class="option"><span class="label">Fork SDK temporarily and contribute back</span><span class="rationale">Fork the Azure DevOps Go SDK, add missing methods, vendor the fork. Submit PRs upstream. When upstream merges, switch back to official SDK.</span></div></div></div><div class="escalation"><div class="q">What is the right balance between unit test coverage and acceptance test coverage for complex resources like release_definition?</div><div class="options"><div class="option"><span class="label">High unit coverage + smoke acceptance tests (Recommended)</span><span class="rationale">Use unit tests to exhaustively cover expand/flatten edge cases, error propagation, and data integrity. Use acceptance tests to validate happy-path integration with real ADO API.</span></div><div class="option"><span class="label">Comprehensive acceptance coverage</span><span class="rationale">Invest in detailed acceptance tests covering most schema combinations. Run in nightly CI against dedicated test org. Unit tests cover only core logic (expand/flatten helpers).</span></div><div class="option"><span class="label">Contract testing with recorded fixtures</span><span class="rationale">Record real API interactions once using a tool like go-vcr. Play back recordings in CI for fast, realistic tests without live ADO dependency. Periodically re-record against live API.</span></div></div></div>
+  </details>
+
+  <h2>Proposed initiatives</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Title</th><th>Features</th><th>Iteration budget</th><th>Depends on</th></tr></thead>
+    <tbody>
+      <tr><td><code>INIT-2026-06-01-ci-fix</code></td><td>Fix gofmt/golint/terrafmt failures blocking CI</td><td>1</td><td>2</td><td>—</td></tr>
+      <tr><td><code>INIT-2026-06-01-release-definition-substrate</code></td><td>Verify existing 11 unit tests pass and add any missing canonical tests</td><td>1</td><td>3</td><td>—</td></tr>
+      <tr><td><code>INIT-2026-06-01-release-folder</code></td><td>Implement release_folder schema, CRUD, and provider registration</td><td>2</td><td>4</td><td>—</td></tr>
+      <tr><td><code>INIT-2026-06-01-environment-template</code></td><td>Implement environment_template schema, CRD (no Update), and provider registration</td><td>2</td><td>4</td><td>—</td></tr>
+      <tr><td><code>INIT-2026-06-01-release-data-sources</code></td><td>Implement data_release_definition (by ID or name)</td><td>2</td><td>3</td><td>—</td></tr>
+      <tr><td><code>INIT-2026-06-01-acceptance-test-refresh</code></td><td>Update HCL fixtures with required stage retention_policy and pre_deploy_approval</td><td>2</td><td>3</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  
+  <details>
+    <summary>INIT-2026-06-01-ci-fix — Fix gofmt/golint/terrafmt failures blocking CI (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+The GitHub Actions CI workflows (golint.yml, terrafmt.yml, unit-test.yml) are failing due to formatting and lint violations accumulated on the main branch. This blocks all PR merges and must be fixed first.
+
+## Background
+
+The CI checks run on every PR to main:
+- `golint.yml`: runs `golangci-lint run -v ./azuredevops/...`
+- `terrafmt.yml`: runs `make terrafmt-check` via `scripts/terrafmt.sh`
+- `unit-test.yml`: runs `go build -v ./...` + `make test`
+
+The fork has drifted from upstream formatting conventions and accumulated lint warnings that now fail CI.
+
+## Scope
+
+**In scope:**
+- Run `make fmt` to fix gofmt issues
+- Run `make fumpt` to apply gofumpt formatting
+- Run `make terrafmt` to fix HCL blocks in test files
+- Run `golangci-lint run --fix ./azuredevops/...` to auto-fix lint issues
+- Fix any remaining manual lint issues (unused variables, etc.)
+- Ensure `go build -mod=vendor ./...` passes
+- Ensure `make test` passes (unit tests, not acceptance)
+
+**Out of scope:**
+- Acceptance tests (require live ADO creds)
+- New features or resources
+- Documentation updates
+
+## Acceptance criteria
+
+### AC1: gofmt check passes
+**Given** the codebase after fixes are applied  
+**When** running `./scripts/gofmtcheck.sh`  
+**Then** the script exits 0 with no diff output
+
+### AC2: terrafmt check passes
+**Given** the codebase after fixes are applied  
+**When** running `make terrafmt-check`  
+**Then** the script exits 0 with no formatting errors
+
+### AC3: golangci-lint passes
+**Given** the codebase after fixes are applied  
+**When** running `golangci-lint run -v ./azuredevops/...`  
+**Then** the linter exits 0 with no errors
+
+### AC4: Build and unit tests pass
+**Given** the codebase after fixes are applied  
+**When** running `go build -mod=vendor ./...` and then `make test`  
+**Then** both commands exit 0
+
+## Quality gate
+
+```bash
+./scripts/gofmtcheck.sh &amp;&amp; make terrafmt-check &amp;&amp; golangci-lint run -v ./azuredevops/... &amp;&amp; go build -mod=vendor ./... &amp;&amp; make test
+```
+
+## Non-goals
+
+- Do not change any functional code behavior
+- Do not add new tests beyond what&#39;s needed for lint fixes
+- Do not update dependencies</pre>
+  </details>
+  <details>
+    <summary>INIT-2026-06-01-release-definition-substrate — Verify existing 11 unit tests pass and add any missing canonical tests (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+The `betterado_release_definition` resource has 11 gomock unit tests in `resource_release_definition_test.go` (1009 lines). This initiative verifies the substrate is complete and passes CI, ensuring it gates downstream release work.
+
+## Background
+
+The release_definition resource (`azuredevops/internal/service/release/resource_release_definition.go`, ~1618 lines) is the foundation of the Release API coverage. The existing unit test file covers:
+1. Roundtrip (expand/flatten)
+2. Create error propagation
+3. Read clears ID on 404
+4. Update calls SDK with args
+5. Delete surfaces API error
+6. Update revision-conflict retry
+7. Secret variables preserve value on flatten
+8. Deep-nested environment expand/flatten
+9. Artifacts definition_reference filtering
+10. Approval options round-trip
+11. Deploy phases JSON marshal/unmarshal
+
+The canonical 5-test pattern (roundtrip, create-error, read-404, update-args, delete-error) is covered. Additional characterization tests ensure deep-nested structures survive expand/flatten.
+
+## Scope
+
+**In scope:**
+- Verify all 11 existing tests pass with: `go test -mod=vendor -tags all -count=1 -run ^TestReleaseDefinition ./azuredevops/internal/service/release/`
+- Review test coverage for any gaps in the canonical pattern
+- Add any missing edge-case tests discovered during review
+
+**Out of scope:**
+- Acceptance tests (separate initiative)
+- New resource features
+- Schema changes
+
+## Acceptance criteria
+
+### AC1: All unit tests pass
+**Given** the release_definition unit test file  
+**When** running `go test -mod=vendor -tags all -count=1 -run ^TestReleaseDefinition ./azuredevops/internal/service/release/`  
+**Then** all tests pass (exit 0) with verbose PASS output for each test
+
+### AC2: Tests use correct build tags
+**Given** the test file header  
+**When** examining the build constraints  
+**Then** `//go:build (all || resource_release_definition)` is present, matching project convention
+
+### AC3: MockReleaseClient is properly configured
+**Given** the test setup  
+**When** examining the gomock controller usage  
+**Then** `azdosdkmocks.NewMockReleaseClient(ctrl)` is used consistently with proper cleanup via `defer ctrl.Finish()`
+
+## Quality gate
+
+```bash
+go test -mod=vendor -tags all -count=1 -v -run ^TestReleaseDefinition ./azuredevops/internal/service/release/
+```
+
+Expected: 11 tests pass (PASS lines in output), exit code 0.
+
+## Hard constraints
+
+- Tests must be creds-free (gomock only, no TF_ACC)
+- Must not modify `azdosdkmocks/release_sdk_mock.go` (generated file)
+- Inline fixtures preferred; `testdata/` only if &gt;20 lines</pre>
+  </details>
+  <details>
+    <summary>INIT-2026-06-01-release-folder — Implement release_folder schema, CRUD, and provider registration (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+Add `betterado_release_folder` resource to organize release definitions into folders, mirroring the `betterado_build_folder` pattern from the build service.
+
+## Background
+
+The Release API (`vsrm.dev.azure.com`) supports folders for organizing release definitions:
+- `POST /release/folders` — CreateFolder
+- `GET /release/folders` — GetFolders
+- `PATCH /release/folders` — UpdateFolder
+- `DELETE /release/folders` — DeleteFolder
+
+The mock client already exists in `azdosdkmocks/release_sdk_mock.go` with `CreateFolder`, `GetFolders`, `UpdateFolder`, `DeleteFolder` methods.
+
+## Scope
+
+**In scope:**
+- Schema: `name` (Required, ForceNew), `project_id` (Required, ForceNew), `path` (Computed — full path returned by API)
+- CRUD operations using `clients.ReleaseClient.{Create,Get,Update,Delete}Folder`
+- Import support via `tfhelper.ImportProjectQualifiedResource()`
+- Register in `azuredevops/provider.go` as `betterado_release_folder`
+- 5 canonical unit tests in `resource_release_folder_test.go`
+- Documentation in `docs/resources/release_folder.md`
+- Runnable example in `examples/release_folder/main.tf`
+
+**Out of scope:**
+- Acceptance tests (require live ADO)
+- Nested folder creation in one resource
+
+## Acceptance criteria
+
+### AC1: Resource is registered and builds
+**Given** the new resource file and provider registration  
+**When** running `go build -mod=vendor ./...`  
+**Then** the build succeeds with the resource registered as `betterado_release_folder`
+
+### AC2: Schema is correct
+**Given** the resource schema  
+**When** examining `ResourceReleaseFolder().Schema`  
+**Then** it contains: `name` (Required, string, ForceNew), `project_id` (Required, UUID, ForceNew), `path` (Computed, string)
+
+### AC3: Unit tests pass
+**Given** the unit test file  
+**When** running `go test -mod=vendor -tags all -count=1 -run ^TestReleaseFolder ./azuredevops/internal/service/release/`  
+**Then** all 5 canonical tests pass:
+- `TestReleaseFolder_ExpandFlatten_Roundtrip`
+- `TestReleaseFolder_Create_DoesNotSwallowError`
+- `TestReleaseFolder_Read_ClearsIdOn404`
+- `TestReleaseFolder_Update_CallsSDKWithArgs`
+- `TestReleaseFolder_Delete_SurfacesAPIError`
+
+### AC4: Documentation exists
+**Given** the docs directory  
+**When** checking `docs/resources/release_folder.md`  
+**Then** it exists with schema reference and example usage
+
+## Quality gate
+
+```bash
+go build -mod=vendor ./... &amp;&amp; go test -mod=vendor -tags all -count=1 -v -run ^TestReleaseFolder ./azuredevops/internal/service/release/
+```
+
+## Non-goals
+
+- Folder hierarchy management (parent/child relationships)
+- Moving existing release definitions between folders</pre>
+  </details>
+  <details>
+    <summary>INIT-2026-06-01-environment-template — Implement environment_template schema, CRD (no Update), and provider registration (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+Add `betterado_release_environment_template` resource to create reusable environment templates that can be referenced when creating release definitions.
+
+## Background
+
+The Release API supports environment templates:
+- `POST /release/definitions/environmenttemplates` — Create
+- `GET /release/definitions/environmenttemplates` — List/Get
+- `DELETE /release/definitions/environmenttemplates/{templateId}` — Delete
+
+**Note:** Templates are immutable after creation — there is no Update operation. Any schema change requires destroy/recreate (ForceNew on all mutable fields).
+
+## Scope
+
+**In scope:**
+- Schema: `name` (Required, ForceNew), `project_id` (Required, ForceNew), `description` (Optional, ForceNew), `environment` block (Required, ForceNew — reuses release_definition environment schema)
+- CRD operations (Create, Read, Delete — no Update)
+- Import support
+- Register in `azuredevops/provider.go` as `betterado_release_environment_template`
+- Unit tests: roundtrip, create-error, read-404-clears-id, delete-error (no update test — immutable)
+- Documentation and example
+
+**Out of scope:**
+- Update operation (templates are immutable)
+- Acceptance tests
+
+## Acceptance criteria
+
+### AC1: Resource is registered and builds
+**Given** the new resource file and provider registration  
+**When** running `go build -mod=vendor ./...`  
+**Then** the build succeeds with the resource registered as `betterado_release_environment_template`
+
+### AC2: Schema marks mutable fields as ForceNew
+**Given** the resource schema  
+**When** examining all non-Computed fields  
+**Then** they are marked `ForceNew: true` (no in-place updates)
+
+### AC3: No Update function is registered
+**Given** the resource definition  
+**When** examining `&amp;schema.Resource{}`  
+**Then** `UpdateContext` is nil or absent
+
+### AC4: Unit tests pass
+**Given** the unit test file  
+**When** running `go test -mod=vendor -tags all -count=1 -run ^TestReleaseEnvironmentTemplate ./azuredevops/internal/service/release/`  
+**Then** all 4 tests pass:
+- `TestReleaseEnvironmentTemplate_ExpandFlatten_Roundtrip`
+- `TestReleaseEnvironmentTemplate_Create_DoesNotSwallowError`
+- `TestReleaseEnvironmentTemplate_Read_ClearsIdOn404`
+- `TestReleaseEnvironmentTemplate_Delete_SurfacesAPIError`
+
+## Quality gate
+
+```bash
+go build -mod=vendor ./... &amp;&amp; go test -mod=vendor -tags all -count=1 -v -run ^TestReleaseEnvironmentTemplate ./azuredevops/internal/service/release/
+```
+
+## Hard constraints
+
+- No UpdateContext — immutable resource
+- Environment block reuses expand/flatten from release_definition where possible</pre>
+  </details>
+  <details>
+    <summary>INIT-2026-06-01-release-data-sources — Implement data_release_definition (by ID or name) (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+Add data sources to read existing release definitions: `data.betterado_release_definition` (single by ID or name) and `data.betterado_release_definitions` (list with optional filters).
+
+## Background
+
+The Release API supports reading release definitions:
+- `GET /release/definitions/{definitionId}` — Get single by ID
+- `GET /release/definitions` — List with query parameters (name, path, isExactNameMatch, etc.)
+
+Data sources allow Terraform configurations to reference existing release definitions without managing them.
+
+## Scope
+
+**In scope:**
+
+**data.betterado_release_definition:**
+- Schema: `project_id` (Required), `definition_id` (Optional, ConflictsWith name), `name` (Optional, ConflictsWith definition_id)
+- Computed: all fields from the resource schema (read-only)
+- Read via `GetReleaseDefinition` (by ID) or `GetReleaseDefinitions` + filter (by name)
+
+**data.betterado_release_definitions:**
+- Schema: `project_id` (Required), `name` (Optional filter), `path` (Optional filter)
+- Computed: `definitions` list with ID, name, path, revision
+- Read via `GetReleaseDefinitions`
+
+- Unit tests for both data sources
+- Documentation and examples
+
+**Out of scope:**
+- Acceptance tests
+- Full nested environment/artifact flattening in list (keep list items lightweight)
+
+## Acceptance criteria
+
+### AC1: Single data source works by ID
+**Given** a data source config with `definition_id`  
+**When** Terraform reads the data source  
+**Then** it calls `GetReleaseDefinition` and populates all computed fields
+
+### AC2: Single data source works by name
+**Given** a data source config with `name`  
+**When** Terraform reads the data source  
+**Then** it calls `GetReleaseDefinitions` with isExactNameMatch, finds the match, and populates fields
+
+### AC3: List data source returns filtered results
+**Given** a data source config with optional `name` and `path` filters  
+**When** Terraform reads the data source  
+**Then** it calls `GetReleaseDefinitions` with appropriate filters and returns matching definitions
+
+### AC4: Unit tests pass
+**Given** the data source test files  
+**When** running `go test -mod=vendor -tags all -count=1 -run ^TestDataReleaseDefinition ./azuredevops/internal/service/release/`  
+**Then** all tests pass for both data sources
+
+## Quality gate
+
+```bash
+go build -mod=vendor ./... &amp;&amp; go test -mod=vendor -tags all -count=1 -v -run ^TestDataReleaseDefinition ./azuredevops/internal/service/release/
+```
+
+## Hard constraints
+
+- Either `definition_id` or `name` required for single data source (not both)
+- Reuse flatten functions from resource where applicable</pre>
+  </details>
+  <details>
+    <summary>INIT-2026-06-01-acceptance-test-refresh — Update HCL fixtures with required stage retention_policy and pre_deploy_approval (manifest body)</summary>
+    
+    <h3>Manifest body</h3>
+    <pre>## Summary
+
+Refresh the `betterado_release_definition` acceptance tests to pass against live Azure DevOps REST API 7.1+, which now requires stage-level `retention_policy` and `pre_deploy_approval` blocks.
+
+## Background
+
+The existing 6 acceptance tests in `resource_release_definition_test.go` are stale:
+- `VS402982`: Stage-level `retention_policy` is now required by ADO
+- `VS402877`: Pre/post deploy approvals structure is now validated more strictly
+
+The HCL templates need updating to include these required blocks.
+
+## Scope
+
+**In scope:**
+- Update `hclReleaseDefinitionBasic()` to include `retention_policy` block
+- Update `hclReleaseDefinitionBasic()` to include `pre_deploy_approval` with automated approver
+- Update all HCL template functions similarly
+- Run acceptance tests with live ADO creds: `TF_ACC=1 go test -tags all -run TestAccReleaseDefinition ./azuredevops/internal/acceptancetests/`
+- Fix any additional API validation errors discovered
+
+**Out of scope:**
+- New acceptance test scenarios
+- Unit tests (separate initiative)
+- Other resources
+
+## Acceptance criteria
+
+### AC1: All HCL templates include retention_policy
+**Given** each HCL template function  
+**When** examining the `environment` blocks  
+**Then** each includes a `retention_policy` block with `days_to_keep`, `releases_to_keep`, `retain_build`
+
+### AC2: All HCL templates include pre_deploy_approval
+**Given** each HCL template function  
+**When** examining the `environment` blocks  
+**Then** each includes a `pre_deploy_approval` block with at least one automated approver
+
+### AC3: Acceptance tests pass
+**Given** the updated HCL templates and live ADO credentials  
+**When** running `TF_ACC=1 go test -tags all -v -run TestAccReleaseDefinition ./azuredevops/internal/acceptancetests/ -timeout 30m`  
+**Then** all 6 tests pass:
+- `TestAccReleaseDefinition_basic`
+- `TestAccReleaseDefinition_withDeploymentInput`
+- `TestAccReleaseDefinition_withApprovalOptions`
+- `TestAccReleaseDefinition_withEnvironmentOptions`
+- `TestAccReleaseDefinition_update`
+- `TestAccReleaseDefinition_complete`
+
+### AC4: Import still works
+**Given** the `TestAccReleaseDefinition_basic` and `TestAccReleaseDefinition_complete` tests  
+**When** examining the ImportState step  
+**Then** import succeeds with `ImportStateVerify: true`
+
+## Quality gate
+
+```bash
+TF_ACC=1 go test -tags all -v -run TestAccReleaseDefinition ./azuredevops/internal/acceptancetests/ -timeout 30m
+```
+
+Requires: `AZDO_ORG_SERVICE_URL` and `AZDO_PERSONAL_ACCESS_TOKEN` environment variables (or sourced from `secrets.env`).
+
+## Hard constraints
+
+- Tests must create resources in isolated test projects (use `testutils.GenerateResourceName()`)
+- Tests must auto-destroy resources (CheckDestroy function)
+- No manual intervention required</pre>
+  </details>
+
+  
+
+  <h2>Aggregate footprint <span class="badge">informational</span></h2>
+  <div class="footprint">
+    <div class="summary">6 initiatives · total iteration budget <strong>19</strong></div>
+    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
+      <div class="seg" style="flex: 2; background: hsl(0, 55%, 50%);" title="INIT-2026-06-01-ci-fix — 2 iterations">ci-fix</div>
+      <div class="seg" style="flex: 3; background: hsl(47, 55%, 50%);" title="INIT-2026-06-01-release-definition-substrate — 3 iterations">release-definition-substrate</div>
+      <div class="seg" style="flex: 4; background: hsl(94, 55%, 50%);" title="INIT-2026-06-01-release-folder — 4 iterations">release-folder</div>
+      <div class="seg" style="flex: 4; background: hsl(141, 55%, 50%);" title="INIT-2026-06-01-environment-template — 4 iterations">environment-template</div>
+      <div class="seg" style="flex: 3; background: hsl(188, 55%, 50%);" title="INIT-2026-06-01-release-data-sources — 3 iterations">release-data-sources</div>
+      <div class="seg" style="flex: 3; background: hsl(235, 55%, 50%);" title="INIT-2026-06-01-acceptance-test-refresh — 3 iterations">acceptance-test-refresh</div>
+    </div>
+    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+  </div>
+
+  
+  <h2>Design decisions</h2>
+  <p class="meta">The council surfaced these taste decisions. Compare the options side by side — pick the one you want for each on the <code>/architect</code> plan gate; your selection is applied at approval.</p>
+  <div class="escalations" data-section="design-decisions" data-decision-count="12">
+    <div class="escalation" data-decision="0" data-escalation-id="esc-0" data-escalation-question="Should the release_definition substrate verification (Initiative 2) be merged into the CI fix (Initiative 1), or remain separate?">
+      <div class="q"><span class="critic-chip">ceo</span>Should the release_definition substrate verification (Initiative 2) be merged into the CI fix (Initiative 1), or remain separate?</div>
+      <div class="options">
+      <label class="option" data-option-label="Merge into CI fix (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-0" value="Merge into CI fix (Recommended)"><span class="label">Merge into CI fix (Recommended)</span></div>
+        <div class="rationale">Initiative 2&#39;s sole purpose is verifying existing tests pass. This is already covered by Initiative 1&#39;s AC4 (&#39;make test&#39; passes all unit tests). Running a subset of tests separately adds no strategic value—it&#39;s the same quality gate. Merging eliminates a phantom initiative and gets to the actual work (folders, templates, data sources) faster.</div>
+        <ul class="tradeoffs"><li class="pro">Eliminates redundant verification work</li><li class="pro">Faster path to new feature delivery</li><li class="pro">CI fix already gates all unit tests passing</li><li class="pro">Clearer project velocity (5 initiatives → 5 real deliverables)</li><li class="con">Loses explicit &#39;substrate verified&#39; milestone (though CI passing proves this)</li><li class="con">Slightly less granular tracking of release_definition health</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+  A[Initiative 1: Fix CI] --&gt; B{All unit tests pass?}
+  B --&gt;|Yes| C[release_definition substrate verified ✓]
+  B --&gt;|Yes| D[Proceed to folders/templates/data]
+  
+  style C fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style D fill:#1f6feb,stroke:#21262d,color:#c9d1d9</pre></div>
+      </label>
+      <label class="option" data-option-label="Keep separate" data-option-visual-kind="none">
+        <div class="opt-head"><input type="radio" name="decision-0" value="Keep separate"><span class="label">Keep separate</span></div>
+        <div class="rationale">Treat the release_definition substrate as a distinct milestone requiring explicit sign-off before dependent work begins. Provides a clear checkpoint for stakeholders to confirm the foundation is solid before building on it.</div>
+        <ul class="tradeoffs"><li class="pro">Explicit validation milestone for downstream dependencies</li><li class="pro">Clearer communication to stakeholders about foundation readiness</li><li class="pro">Allows deeper review of release_definition coverage before proceeding</li><li class="con">Duplicates verification already done in Initiative 1</li><li class="con">Adds ceremony without adding verification rigor</li><li class="con">Delays feature work with no technical benefit</li><li class="con">Creates false sense of additional safety (same tests, different label)</li></ul>
+        
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="1" data-escalation-id="esc-1" data-escalation-question="Should initiatives 3–5 (folder, template, data sources) remain separate or be bundled?">
+      <div class="q"><span class="critic-chip">ceo</span>Should initiatives 3–5 (folder, template, data sources) remain separate or be bundled?</div>
+      <div class="options">
+      <label class="option" data-option-label="Keep separate (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-1" value="Keep separate (Recommended)"><span class="label">Keep separate (Recommended)</span></div>
+        <div class="rationale">Each is independently releasable and provides standalone user value. A user can deploy folders without templates, or use data sources without creating folders. Separate initiatives allow parallel work if multiple contributors are available, and each can be released as soon as it passes CI—maximizing feedback velocity.</div>
+        <ul class="tradeoffs"><li class="pro">Each initiative is independently deployable</li><li class="pro">Enables parallel development by multiple contributors</li><li class="pro">Faster time-to-value (release folder support without waiting for templates)</li><li class="pro">Lower risk per release (smaller blast radius)</li><li class="pro">Matches project vision&#39;s explicit &#39;four independent initiatives&#39; statement</li><li class="con">More overhead per initiative (separate PRs, reviews, releases)</li><li class="con">Could feel like feature fragmentation to users expecting complete Release API coverage</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+  A[CI Fixed] --&gt; B[Release Folder]
+  A --&gt; C[Environment Template]
+  A --&gt; D[Data Sources]
+  
+  B --&gt; E[v0.2.0]
+  C --&gt; F[v0.3.0]
+  D --&gt; G[v0.4.0]
+  
+  style B fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style C fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style D fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style E fill:#238636,stroke:#21262d,color:#c9d1d9
+  style F fill:#238636,stroke:#21262d,color:#c9d1d9
+  style G fill:#238636,stroke:#21262d,color:#c9d1d9</pre><div class="cap">Independent release cadence for each feature</div></div>
+      </label>
+      <label class="option" data-option-label="Bundle into &#39;Complete Release API Coverage&#39;" data-option-visual-kind="none">
+        <div class="opt-head"><input type="radio" name="decision-1" value="Bundle into &#39;Complete Release API Coverage&#39;"><span class="label">Bundle into &#39;Complete Release API Coverage&#39;</span></div>
+        <div class="rationale">Deliver a coherent &#39;Release Management&#39; feature set in one release. Users get folders + templates + data sources together, which tells a complete story. Reduces PR/review overhead from 3 initiatives to 1.</div>
+        <ul class="tradeoffs"><li class="pro">Single cohesive feature narrative for release notes</li><li class="pro">Less review/release overhead (1 PR vs 3)</li><li class="pro">Users get complete Release API surface in one upgrade</li><li class="con">Larger blast radius if bugs are introduced</li><li class="con">Longer time before any Release API feature ships</li><li class="con">Blocks parallel development (single sequence of work)</li><li class="con">Contradicts project vision&#39;s explicit &#39;four independent initiatives&#39;</li><li class="con">Users wanting just folders must wait for templates to be finished</li></ul>
+        
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="2" data-escalation-id="esc-2" data-escalation-question="Is Initiative 6 (acceptance test refresh) correctly prioritized, or should it be deferred?">
+      <div class="q"><span class="critic-chip">ceo</span>Is Initiative 6 (acceptance test refresh) correctly prioritized, or should it be deferred?</div>
+      <div class="options">
+      <label class="option" data-option-label="Defer until after features ship (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-2" value="Defer until after features ship (Recommended)"><span class="label">Defer until after features ship (Recommended)</span></div>
+        <div class="rationale">Acceptance tests require live ADO credentials and validate end-to-end behavior. The unit tests (already passing after Initiative 1) provide sufficient CI gate for release_definition. Deferring this to a &#39;hardening&#39; phase after folders/templates/data sources are shipped maximizes feature velocity now. The resource already works (unit tests prove CRUD logic); acceptance tests verify API contract stability, which is lower priority than new capabilities.</div>
+        <ul class="tradeoffs"><li class="pro">Unblocks feature work immediately after CI fix</li><li class="pro">Unit tests already verify CRUD logic correctness</li><li class="pro">Acceptance tests are a hardening step, not a feature gate</li><li class="pro">Allows credentials/API access issues to be solved separately from feature delivery</li><li class="pro">Faster path to user-facing value (folders, templates, data sources)</li><li class="con">Live ADO API changes could break release_definition silently until acceptance tests run</li><li class="con">Defers discovery of API contract drift (e.g., new required fields)</li><li class="con">May give false confidence if unit tests mock outdated API behavior</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+  A[Initiative 1: CI Fix] --&gt; B[Initiative 3: Folders]
+  B --&gt; C[Initiative 4: Templates]
+  C --&gt; D[Initiative 5: Data Sources]
+  D --&gt; E[v0.5.0 Release]
+  E --&gt; F[Initiative 6: Acceptance Tests]
+  F --&gt; G[v0.5.1 Hardening]
+  
+  style A fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style B fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style C fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style D fill:#1f6feb,stroke:#21262d,color:#c9d1d9
+  style F fill:#8b949e,stroke:#21262d,color:#c9d1d9</pre><div class="cap">Deferred acceptance test refresh after feature delivery</div></div>
+      </label>
+      <label class="option" data-option-label="Keep as-prioritized (after substrate, before new features)" data-option-visual-kind="none">
+        <div class="opt-head"><input type="radio" name="decision-2" value="Keep as-prioritized (after substrate, before new features)"><span class="label">Keep as-prioritized (after substrate, before new features)</span></div>
+        <div class="rationale">Ensure the existing release_definition resource passes live ADO validation before building dependent features. Folders and templates may reference release definitions; better to confirm the foundation works end-to-end against real API before layering on new resources.</div>
+        <ul class="tradeoffs"><li class="pro">Discovers API contract issues early (before new features depend on broken foundation)</li><li class="pro">De-risks downstream work (folders/templates verified against working release_definition)</li><li class="pro">Aligns with &#39;fix the base, then extend&#39; philosophy</li><li class="con">Delays new feature work by requiring live ADO credentials setup</li><li class="con">Acceptance tests are slow (30min timeout) compared to unit tests</li><li class="con">Folders/templates are independent resources—they don&#39;t require release_definition to work</li><li class="con">Unit tests already verify the logic; acceptance tests verify API stability (lower urgency)</li></ul>
+        
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="3" data-escalation-id="esc-3" data-escalation-question="Initiative 1 aims to fix format/lint failures to unblock PR merges. Should it also update stale dependencies (e.g., golangci-lint config version, Go SDK minor bumps) discovered during linting, or strictly limit to formatting fixes?">
+      <div class="q"><span class="critic-chip">eng</span>Initiative 1 aims to fix format/lint failures to unblock PR merges. Should it also update stale dependencies (e.g., golangci-lint config version, Go SDK minor bumps) discovered during linting, or strictly limit to formatting fixes?</div>
+      <div class="options">
+      <label class="option" data-option-label="Fix format/lint only, defer dependency updates (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-3" value="Fix format/lint only, defer dependency updates (Recommended)"><span class="label">Fix format/lint only, defer dependency updates (Recommended)</span></div>
+        <div class="rationale">Minimize blast radius. Updating dependencies introduces risk of behavioral changes unrelated to CI failures. Keep Initiative 1 as a surgical fix to unblock PRs, then handle dependency updates as a separate maintenance task.</div>
+        <ul class="tradeoffs"><li class="pro">Faster to complete (no dependency testing)</li><li class="pro">Easier to review (pure formatting diff)</li><li class="pro">No risk of SDK breaking changes</li><li class="pro">Clear rollback (just revert formatting commit)</li><li class="con">May leave stale dependencies (e.g., golangci-lint v1.64.8 from 2024)</li><li class="con">Linter may flag issues fixed in newer SDK versions</li><li class="con">Deferred work for dependency updates</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># Scope: Commands run for Initiative 1 (Option A)
+make fmt              # gofmt formatting
+make fumpt            # gofumpt stricter formatting
+make terrafmt         # HCL block formatting
+golangci-lint run --fix ./azuredevops/...  # Auto-fix lint
+# Manual fixes for remaining lint issues
+go mod tidy &amp;&amp; go mod vendor  # Sync vendor only</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Fix format/lint AND update dependencies proactively" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-3" value="Fix format/lint AND update dependencies proactively"><span class="label">Fix format/lint AND update dependencies proactively</span></div>
+        <div class="rationale">Since we&#39;re already touching CI, update dependencies now to prevent future CI breakage. Newer SDK versions may include bug fixes that reduce lint warnings.</div>
+        <ul class="tradeoffs"><li class="pro">Prevents future dependency drift</li><li class="pro">May auto-fix some lint issues via SDK updates</li><li class="pro">Single PR for all CI improvements</li><li class="con">Higher risk (SDK breaking changes possible)</li><li class="con">Longer testing cycle (acceptance tests recommended)</li><li class="con">Harder to isolate formatting vs. behavioral changes in review</li><li class="con">Rollback is complex (revert both format + deps)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># Scope: Commands run for Initiative 1 (Option B)
+make fmt &amp;&amp; make fumpt &amp;&amp; make terrafmt
+golangci-lint run --fix ./azuredevops/...
+go get -u github.com/microsoft/azure-devops-go-api/azuredevops/v7@latest
+go get -u github.com/hashicorp/terraform-plugin-sdk/v2@latest
+go mod tidy &amp;&amp; go mod vendor
+# Re-run full test suite including acceptance tests
+TF_ACC=1 go test -tags all -v ./azuredevops/internal/acceptancetests/</code></pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="4" data-escalation-id="esc-4" data-escalation-question="Initiative 2 verifies the existing 11 unit tests pass for release_definition substrate. Should we also generate a code coverage report to identify untested edge cases, or trust the existing characterization tests are sufficient?">
+      <div class="q"><span class="critic-chip">eng</span>Initiative 2 verifies the existing 11 unit tests pass for release_definition substrate. Should we also generate a code coverage report to identify untested edge cases, or trust the existing characterization tests are sufficient?</div>
+      <div class="options">
+      <label class="option" data-option-label="Run existing 11 tests, no coverage analysis (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-4" value="Run existing 11 tests, no coverage analysis (Recommended)"><span class="label">Run existing 11 tests, no coverage analysis (Recommended)</span></div>
+        <div class="rationale">The 11 tests already cover the canonical 5-test pattern plus 6 deep-nested characterization tests. Coverage reports are useful for new code, but this is a verification initiative to confirm the substrate is CI-ready, not a quality improvement initiative.</div>
+        <ul class="tradeoffs"><li class="pro">Faster completion (no coverage tooling setup)</li><li class="pro">Aligns with initiative goal (verify, not improve)</li><li class="pro">Existing tests cover critical paths (CRUD + edge cases)</li><li class="con">Unknown coverage percentage (could be 60% or 90%)</li><li class="con">May miss untested error paths</li><li class="con">No baseline for future coverage tracking</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># Test execution (Option A)
+go test -mod=vendor -tags all -count=1 -v \
+  -run ^TestReleaseDefinition \
+  ./azuredevops/internal/service/release/
+
+# Expected output:
+# --- PASS: TestReleaseDefinition_ExpandFlatten_Roundtrip (0.01s)
+# --- PASS: TestReleaseDefinition_Create_DoesNotSwallowError (0.00s)
+# ... (9 more PASS lines)
+# PASS
+# ok      github.com/parsoFish/terraform-provider-betterado/azuredevops/internal/service/release  0.123s</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Generate coverage report to identify gaps" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-4" value="Generate coverage report to identify gaps"><span class="label">Generate coverage report to identify gaps</span></div>
+        <div class="rationale">Since this is the substrate for all downstream release work, ensure comprehensive coverage now. A coverage report will identify any critical paths missing tests (e.g., error handling in nested expand/flatten functions).</div>
+        <ul class="tradeoffs"><li class="pro">Quantifies test quality (e.g., &quot;87% coverage&quot;)</li><li class="pro">May reveal untested edge cases</li><li class="pro">Provides baseline for future improvements</li><li class="pro">Low effort (just add -coverprofile flag)</li><li class="con">Scope creep (initiative becomes &quot;verify AND improve&quot;)</li><li class="con">May uncover gaps requiring new tests (delays completion)</li><li class="con">Coverage % doesn&#39;t guarantee quality (can have 100% coverage with bad assertions)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># Test execution with coverage (Option B)
+go test -mod=vendor -tags all -count=1 \
+  -coverprofile=coverage.out \
+  -run ^TestReleaseDefinition \
+  ./azuredevops/internal/service/release/
+
+go tool cover -html=coverage.out -o coverage.html
+
+# Open coverage.html to see:
+# - Red: Untested code (e.g., error path in expandRetentionPolicy)
+# - Green: Tested code
+# - Coverage %: e.g., &quot;resource_release_definition.go: 87.3%&quot;</code></pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="5" data-escalation-id="esc-5" data-escalation-question="Initiative 4 states environment templates are immutable (no Update operation). Should we enforce this by omitting UpdateContext from the resource schema, or also add client-side validation to prevent unexpected API changes?">
+      <div class="q"><span class="critic-chip">eng</span>Initiative 4 states environment templates are immutable (no Update operation). Should we enforce this by omitting UpdateContext from the resource schema, or also add client-side validation to prevent unexpected API changes?</div>
+      <div class="options">
+      <label class="option" data-option-label="Omit UpdateContext, mark all fields ForceNew (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-5" value="Omit UpdateContext, mark all fields ForceNew (Recommended)"><span class="label">Omit UpdateContext, mark all fields ForceNew (Recommended)</span></div>
+        <div class="rationale">Terraform&#39;s schema layer already enforces immutability via ForceNew: true. If a user changes any field, Terraform will destroy and recreate the resource. No need for additional client-side validation.</div>
+        <ul class="tradeoffs"><li class="pro">Simple implementation (no validation code)</li><li class="pro">Standard Terraform pattern (many resources use ForceNew)</li><li class="pro">Clear user feedback (&quot;forces replacement&quot; in plan output)</li><li class="con">If ADO API adds Update operation later, requires schema change to support it</li><li class="con">No defense against API drift (if ADO silently starts allowing updates)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Schema enforcement (Option A)
+func ResourceReleaseEnvironmentTemplate() *schema.Resource {
+    return &amp;schema.Resource{
+        CreateContext: resourceReleaseEnvironmentTemplateCreate,
+        ReadContext:   resourceReleaseEnvironmentTemplateRead,
+        DeleteContext: resourceReleaseEnvironmentTemplateDelete,
+        // UpdateContext: omitted (no updates allowed)
+
+        Schema: map[string]*schema.Schema{
+            &quot;name&quot;: {
+                Type:     schema.TypeString,
+                Required: true,
+                ForceNew: true, // Forces destroy/create on change
+            },
+            &quot;description&quot;: {
+                Type:     schema.TypeString,
+                Optional: true,
+                ForceNew: true, // All fields marked ForceNew
+            },
+            // ... more ForceNew fields
+        },
+    }
+}</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Omit UpdateContext AND add API immutability check in Read" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-5" value="Omit UpdateContext AND add API immutability check in Read"><span class="label">Omit UpdateContext AND add API immutability check in Read</span></div>
+        <div class="rationale">Defensive programming. If the ADO API ever changes to allow updates (or if our understanding is wrong), detect it early by checking if the API returns different values than expected.</div>
+        <ul class="tradeoffs"><li class="pro">Catches API drift early</li><li class="pro">Documents immutability assumption in code</li><li class="pro">Provides better error messages if API behavior changes</li><li class="con">Extra code complexity (validation logic in Read)</li><li class="con">Adds test burden (need to mock API drift scenarios)</li><li class="con">May be over-engineering (no evidence ADO will change this)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Read operation with validation (Option B)
+func resourceReleaseEnvironmentTemplateRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+    clients := m.(*client.AggregatedClient)
+
+    template, err := clients.ReleaseClient.GetReleaseDefinitionEnvironmentTemplate(ctx, args)
+    if err != nil {
+        return diag.FromErr(err)
+    }
+
+    // Defensive check: Verify immutability
+    if d.Get(&quot;name&quot;).(string) != *template.Name {
+        return diag.Errorf(
+            &quot;ADO API returned different name than stored in state. &quot; +
+            &quot;Environment templates should be immutable. &quot; +
+            &quot;Expected: %s, Got: %s&quot;,
+            d.Get(&quot;name&quot;).(string), *template.Name,
+        )
+    }
+
+    return flattenReleaseEnvironmentTemplate(d, template)
+}</code></pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="6" data-escalation-id="esc-6" data-escalation-question="Initiative 6 updates acceptance tests to pass against ADO API 7.1+. Should we test against only ADO 7.1 (current stable), or add matrix testing for ADO 7.0, 7.1, and 7.2 (if available)?">
+      <div class="q"><span class="critic-chip">eng</span>Initiative 6 updates acceptance tests to pass against ADO API 7.1+. Should we test against only ADO 7.1 (current stable), or add matrix testing for ADO 7.0, 7.1, and 7.2 (if available)?</div>
+      <div class="options">
+      <label class="option" data-option-label="Test against single ADO API version (7.1) (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-6" value="Test against single ADO API version (7.1) (Recommended)"><span class="label">Test against single ADO API version (7.1) (Recommended)</span></div>
+        <div class="rationale">The codebase uses azure-devops-go-api/azuredevops/v7 SDK which targets ADO 7.x. Testing against a single stable version (7.1) reduces complexity and matches real-world usage (most orgs pin to a specific ADO version).</div>
+        <ul class="tradeoffs"><li class="pro">Faster test execution (single environment)</li><li class="pro">Simpler CI setup (no matrix builds)</li><li class="pro">Matches actual user deployment (orgs rarely use multiple ADO versions)</li><li class="pro">Clear failure attribution (no version confusion)</li><li class="con">No forward compatibility validation (won&#39;t catch ADO 7.2 breaking changes early)</li><li class="con">No backward compatibility validation (won&#39;t verify 7.0 still works)</li><li class="con">Risk of surprise failures when users upgrade ADO</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># Acceptance test command (Option A)
+# Uses single ADO org at version 7.1
+export AZDO_ORG_SERVICE_URL=&quot;https://dev.azure.com/my-org-v71&quot;
+export AZDO_PERSONAL_ACCESS_TOKEN=&quot;***&quot;
+
+TF_ACC=1 go test -tags all -v \
+  -run TestAccReleaseDefinition \
+  ./azuredevops/internal/acceptancetests/ \
+  -timeout 30m
+
+# Expected: All tests pass against ADO 7.1</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Test against ADO 7.0, 7.1, and 7.2 (if available)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-6" value="Test against ADO 7.0, 7.1, and 7.2 (if available)"><span class="label">Test against ADO 7.0, 7.1, and 7.2 (if available)</span></div>
+        <div class="rationale">Increase confidence in SDK compatibility. By testing across multiple ADO versions, catch breaking changes early and document which versions are supported.</div>
+        <ul class="tradeoffs"><li class="pro">Validates forward/backward compatibility</li><li class="pro">Catches API deprecations early</li><li class="pro">Provides clear support matrix for users</li><li class="pro">Better aligns with SemVer practices</li><li class="con">3x longer test execution time</li><li class="con">Requires multiple ADO orgs (or version switching)</li><li class="con">Complex CI setup (matrix strategy in GitHub Actions)</li><li class="con">May uncover issues outside initiative scope (e.g., ADO 7.0 has different bug)</li></ul>
+        <div class="opt-visual"><pre class="diagram"># CI Matrix Strategy (Option B)
+┌─────────────────────────────────────────────────────┐
+│ Acceptance Test Matrix (3 parallel jobs)           │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │ ADO v7.0    │  │ ADO v7.1    │  │ ADO v7.2    │ │
+│  │ (baseline)  │  │ (current)   │  │ (latest)    │ │
+│  ├─────────────┤  ├─────────────┤  ├─────────────┤ │
+│  │ Org: org-70 │  │ Org: org-71 │  │ Org: org-72 │ │
+│  │ Tests: 6    │  │ Tests: 6    │  │ Tests: 6    │ │
+│  │ Expected:   │  │ Expected:   │  │ Expected:   │ │
+│  │ MAY FAIL    │  │ ALL PASS    │  │ BEST EFFORT │ │
+│  │ (known)     │  │ (required)  │  │ (optional)  │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│                                                     │
+│  Result: PASS if ADO 7.1 succeeds                  │
+└─────────────────────────────────────────────────────┘</pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="7" data-escalation-id="esc-7" data-escalation-question="Should betterado_release_folder accept &#39;path&#39; as user input (like build_folder) or accept &#39;name&#39; + auto-compute &#39;path&#39; (hierarchical)?">
+      <div class="q"><span class="critic-chip">Design (UX)</span>Should betterado_release_folder accept &#39;path&#39; as user input (like build_folder) or accept &#39;name&#39; + auto-compute &#39;path&#39; (hierarchical)?</div>
+      <div class="options">
+      <label class="option" data-option-label="path as Required input (matches build_folder)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-7" value="path as Required input (matches build_folder)"><span class="label">path as Required input (matches build_folder)</span></div>
+        <div class="rationale">Users specify full folder path (e.g., \\Parent\\Child). Matches existing build_folder behavior and ADO portal UX where users see paths.</div>
+        <ul class="tradeoffs"><li class="pro">Consistent with existing build_folder resource</li><li class="pro">Users have explicit control over folder hierarchy</li><li class="pro">Simple schema—no parent_id logic needed</li><li class="pro">Matches ADO portal UX (paths like \\Releases\\Production)</li><li class="con">Less intuitive for nested folder creation</li><li class="con">Path renaming requires destroy/recreate (ForceNew)</li><li class="con">Users must manually manage path separators</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code># Option: User provides full path
+resource &quot;betterado_release_folder&quot; &quot;prod&quot; {
+  project_id  = var.project_id
+  path        = &quot;\\Production\\US-East&quot;
+  description = &quot;US East production releases&quot;
+}
+
+# Computed: name = &quot;US-East&quot; (extracted from path)</code></pre></div>
+      </label>
+      <label class="option" data-option-label="name as Required, path as Computed (hierarchical)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-7" value="name as Required, path as Computed (hierarchical)"><span class="label">name as Required, path as Computed (hierarchical)</span></div>
+        <div class="rationale">Users specify name and optional parent_id to build folder trees. API computes path. More Terraform-idiomatic for hierarchical resources like workitemquery_folder.</div>
+        <ul class="tradeoffs"><li class="pro">More intuitive for nested folder creation (reference parent by ID)</li><li class="pro">Enables folder renaming without destroy/recreate</li><li class="pro">Matches workitemquery_folder pattern</li><li class="pro">Users don&#39;t manage path separators</li><li class="con">INCONSISTENT with build_folder (breaks established pattern)</li><li class="con">More complex schema (needs parent_id with ConflictsWith)</li><li class="con">Requires API support for parent-based creation (needs verification)</li><li class="con">Computed path may not match user expectations</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code># Option: Hierarchical approach
+resource &quot;betterado_release_folder&quot; &quot;parent&quot; {
+  project_id = var.project_id
+  name       = &quot;Production&quot;
+}
+
+resource &quot;betterado_release_folder&quot; &quot;child&quot; {
+  project_id = var.project_id
+  name       = &quot;US-East&quot;
+  parent_id  = betterado_release_folder.parent.id
+}
+
+# Computed: child.path = &quot;\\Production\\US-East&quot;</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Exact build_folder clone (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-7" value="Exact build_folder clone (Recommended)"><span class="label">Exact build_folder clone (Recommended)</span></div>
+        <div class="rationale">path Required, name Computed. This is what the initiative SHOULD be—100% copy-paste of build_folder schema. The draft has it backwards (name Required, path Computed). Zero cognitive load for users familiar with build folders.</div>
+        <ul class="tradeoffs"><li class="pro">100% consistent with existing build_folder resource</li><li class="pro">Zero cognitive load for users familiar with build folders</li><li class="pro">Proven pattern that works with ADO Release Folders API</li><li class="pro">Simple, predictable behavior</li><li class="con">Less flexible than hierarchical option</li><li class="con">Path editing triggers recreation</li><li class="con">Users must understand path syntax</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code># Option: Exact build_folder pattern (RECOMMENDED)
+resource &quot;betterado_release_folder&quot; &quot;prod&quot; {
+  project_id  = var.project_id
+  path        = &quot;\\Production\\US-East&quot;
+  description = &quot;Managed by Terraform&quot;
+}
+
+# Computed: name = &quot;US-East&quot;, id = &lt;folder-guid&gt;</code></pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="8" data-escalation-id="esc-8" data-escalation-question="How should the provider communicate that release_environment_template is immutable to users who expect in-place updates?">
+      <div class="q"><span class="critic-chip">Design (UX)</span>How should the provider communicate that release_environment_template is immutable to users who expect in-place updates?</div>
+      <div class="options">
+      <label class="option" data-option-label="Pure ForceNew (Standard Terraform UX)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-8" value="Pure ForceNew (Standard Terraform UX)"><span class="label">Pure ForceNew (Standard Terraform UX)</span></div>
+        <div class="rationale">Mark all fields ForceNew: true, no custom messaging. Let Terraform&#39;s standard behavior handle it—plan shows &#39;must be replaced&#39;. This is standard Terraform pattern for immutable resources.</div>
+        <ul class="tradeoffs"><li class="pro">Standard Terraform pattern (users expect ForceNew behavior)</li><li class="pro">No custom code needed</li><li class="pro">Clear plan output: &#39;must be replaced&#39;</li><li class="pro">Prevents accidental in-place updates</li><li class="con">Users unfamiliar with ForceNew may be surprised</li><li class="con">No explanation of WHY it&#39;s immutable (ADO API limitation)</li><li class="con">Risk of data loss if users don&#39;t read plan carefully</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code># User edits description
+resource &quot;betterado_release_environment_template&quot; &quot;prod&quot; {
+  name        = &quot;Production Template&quot;
+  project_id  = var.project_id
+  description = &quot;Updated description&quot;  # Changed
+
+  environment { ... }
+}
+
+# Terraform plan output:
+# ~ betterado_release_environment_template.prod must be replaced
+# -/+ description: &quot;Old&quot; -&gt; &quot;Updated&quot; (forces replacement)</code></pre></div>
+      </label>
+      <label class="option" data-option-label="CustomizeDiff warning" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-8" value="CustomizeDiff warning"><span class="label">CustomizeDiff warning</span></div>
+        <div class="rationale">Add CustomizeDiff function to detect field changes and emit warnings explaining the ADO API immutability limitation during terraform plan. Educates users before apply.</div>
+        <ul class="tradeoffs"><li class="pro">Educates users about ADO API limitation</li><li class="pro">Warning appears in plan output (high visibility)</li><li class="pro">Users make informed decision before apply</li><li class="pro">Prevents surprise during apply</li><li class="con">Adds code complexity (CustomizeDiff function)</li><li class="con">Warning may be ignored by automated pipelines</li><li class="con">Still requires ForceNew (doesn&#39;t prevent recreation)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code># Terraform plan output with CustomizeDiff:
+# Warning: Environment templates are immutable in Azure DevOps.
+# Changing any field will destroy and recreate the template.
+# 
+# ~ betterado_release_environment_template.prod must be replaced
+# -/+ description: &quot;Old&quot; -&gt; &quot;Updated&quot; (forces replacement)</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Documentation-only (Recommended)" data-option-visual-kind="mockup-html">
+        <div class="opt-head"><input type="radio" name="decision-8" value="Documentation-only (Recommended)"><span class="label">Documentation-only (Recommended)</span></div>
+        <div class="rationale">Use ForceNew schema attributes + prominent callout in docs explaining limitation. Add example showing lifecycle prevent_destroy block for safer updates. Standard Terraform documentation pattern.</div>
+        <ul class="tradeoffs"><li class="pro">No code complexity</li><li class="pro">Educates users who read docs first (best practice)</li><li class="pro">Can provide workarounds (lifecycle prevent_destroy)</li><li class="pro">Standard Terraform documentation pattern</li><li class="con">Users who skip docs won&#39;t be warned</li><li class="con">Help only available outside the tool</li><li class="con">No runtime protection against accidental recreation</li></ul>
+        <div class="opt-visual"><iframe class="mockup" sandbox="" title="mockup" srcdoc="&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;style&gt;
+body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, sans-serif; padding: 20px; }
+h2 { color: #58a6ff; border-bottom: 1px solid #21262d; padding-bottom: 8px; }
+.warning { background: rgba(187, 128, 9, 0.15); border-left: 4px solid #d29922; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+.warning-icon { color: #d29922; font-weight: bold; margin-right: 8px; }
+code { background: #161b22; padding: 2px 6px; border-radius: 3px; color: #79c0ff; font-size: 0.9em; }
+pre { background: #161b22; padding: 16px; border-radius: 6px; overflow-x: auto; border: 1px solid #21262d; }
+pre code { background: none; padding: 0; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h2&gt;betterado_release_environment_template&lt;/h2&gt;
+&lt;p&gt;Manages a reusable environment template for Azure DevOps release definitions.&lt;/p&gt;
+
+&lt;div class=&quot;warning&quot;&gt;
+  &lt;span class=&quot;warning-icon&quot;&gt;⚠️&lt;/span&gt;
+  &lt;strong&gt;Important: Immutable Resource&lt;/strong&gt;&lt;br&gt;&lt;br&gt;
+  Environment templates are immutable in Azure DevOps. Any change to &lt;code&gt;name&lt;/code&gt;, &lt;code&gt;description&lt;/code&gt;, or &lt;code&gt;environment&lt;/code&gt; will trigger a destroy and recreate.&lt;br&gt;&lt;br&gt;
+  To prevent accidental deletion, use a lifecycle block:
+&lt;/div&gt;
+
+&lt;pre&gt;&lt;code&gt;resource &quot;betterado_release_environment_template&quot; &quot;prod&quot; {
+  # ... config ...
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2&gt;Example Usage&lt;/h2&gt;
+&lt;pre&gt;&lt;code&gt;resource &quot;betterado_release_environment_template&quot; &quot;standard&quot; {
+  project_id  = var.project_id
+  name        = &quot;Production Template&quot;
+  description = &quot;Standard production environment&quot;
+
+  environment {
+    # ... environment config ...
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;/body&gt;
+&lt;/html&gt;"></iframe><div class="cap">Documentation showing prominent warning about immutability with lifecycle block workaround</div></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="9" data-escalation-id="esc-9" data-escalation-question="Should acceptance tests run in CI, and if so, how should credentials and test isolation be managed?">
+      <div class="q"><span class="critic-chip">dx</span>Should acceptance tests run in CI, and if so, how should credentials and test isolation be managed?</div>
+      <div class="options">
+      <label class="option" data-option-label="Manual acceptance testing (current state)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-9" value="Manual acceptance testing (current state)"><span class="label">Manual acceptance testing (current state)</span></div>
+        <div class="rationale">Keep acceptance tests manual-only, run by maintainers with personal PAT tokens. No CI infrastructure changes needed.</div>
+        <ul class="tradeoffs"><li class="pro">Zero infrastructure cost</li><li class="pro">No security risk of leaked credentials in CI</li><li class="pro">Simple workflow for small projects</li><li class="con">Contributors can&#39;t validate their own changes end-to-end</li><li class="con">PRs may be merged with broken acceptance tests</li><li class="con">Maintainer bottleneck for validating acceptance tests</li><li class="con">Slower PR iteration cycle</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+    A[PR Opened] --&gt; B[Unit Tests Run in CI]
+    B --&gt; C[Maintainer Reviews Code]
+    C --&gt; D[Maintainer Runs Acceptance Tests Locally]
+    D --&gt; E{Tests Pass?}
+    E --&gt;|Yes| F[Merge PR]
+    E --&gt;|No| G[Request Changes]
+    G --&gt; A</pre></div>
+      </label>
+      <label class="option" data-option-label="Automated CI with isolated test org (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-9" value="Automated CI with isolated test org (Recommended)"><span class="label">Automated CI with isolated test org (Recommended)</span></div>
+        <div class="rationale">Create dedicated Azure DevOps org for CI tests. Store PAT token in GitHub secrets. Run acceptance tests on PR comment trigger (e.g., /test-acceptance).</div>
+        <ul class="tradeoffs"><li class="pro">Contributors can trigger tests themselves via comment</li><li class="pro">Faster feedback loop - catch issues before merge</li><li class="pro">Tests run in isolated org (no production pollution)</li><li class="pro">Parallel test execution possible</li><li class="con">Requires maintaining separate ADO org (~$0-50/month)</li><li class="con">PAT token management and rotation overhead</li><li class="con">Need quota management in test org</li><li class="con">CI runtime costs for test execution</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+    A[PR Opened] --&gt; B[Unit Tests Run in CI]
+    B --&gt; C[Contributor Comments: /test-acceptance]
+    C --&gt; D[CI Workflow Triggered]
+    D --&gt; E[Load PAT from GitHub Secrets]
+    E --&gt; F[Run Tests in Dedicated ADO Org]
+    F --&gt; G{Tests Pass?}
+    G --&gt;|Yes| H[Comment: Tests Passed]
+    G --&gt;|No| I[Comment: Tests Failed]
+    H --&gt; J[Maintainer Reviews]
+    I --&gt; K[Contributor Fixes]</pre></div>
+      </label>
+      <label class="option" data-option-label="Contributor-provided test credentials" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-9" value="Contributor-provided test credentials"><span class="label">Contributor-provided test credentials</span></div>
+        <div class="rationale">Document in CONTRIBUTING.md that contributors must create their own test ADO org and PAT token. Tests run locally before submitting PR. PR template requires acceptance tests passing checkbox.</div>
+        <ul class="tradeoffs"><li class="pro">Zero shared infrastructure cost</li><li class="pro">No shared credential management needed</li><li class="pro">Contributors learn full testing workflow</li><li class="pro">Each contributor has isolated test environment</li><li class="con">Higher barrier to contribution (requires ADO org setup)</li><li class="con">No enforcement - maintainer must trust checkbox</li><li class="con">Inconsistent test environments across contributors</li><li class="con">ADO org creation requires Microsoft account and potential cost</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+    A[Fork Repository] --&gt; B[Create Personal ADO Test Org]
+    B --&gt; C[Generate PAT Token]
+    C --&gt; D[Configure secrets.env Locally]
+    D --&gt; E[Run Acceptance Tests Locally]
+    E --&gt; F{Tests Pass?}
+    F --&gt;|Yes| G[Submit PR with Checkbox]
+    F --&gt;|No| H[Fix Code]
+    H --&gt; E
+    G --&gt; I[Maintainer Spot-Checks]</pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="10" data-escalation-id="esc-10" data-escalation-question="How should the project handle scenarios where the Azure DevOps Go SDK is missing features needed for complete API coverage?">
+      <div class="q"><span class="critic-chip">dx</span>How should the project handle scenarios where the Azure DevOps Go SDK is missing features needed for complete API coverage?</div>
+      <div class="options">
+      <label class="option" data-option-label="Block on upstream SDK support (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-10" value="Block on upstream SDK support (Recommended)"><span class="label">Block on upstream SDK support (Recommended)</span></div>
+        <div class="rationale">Only implement resources where the SDK already has full support. File issues upstream for missing methods. Prioritize initiatives that are unblocked.</div>
+        <ul class="tradeoffs"><li class="pro">Cleanest architecture - no custom HTTP clients</li><li class="pro">SDK handles auth, retries, pagination automatically</li><li class="pro">No fork maintenance burden</li><li class="pro">Benefits from upstream bug fixes and improvements</li><li class="con">Blocked on upstream release cadence</li><li class="con">May delay features users need</li><li class="con">Upstream may not prioritize our needs</li><li class="con">Dependent on external maintainers</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Clean pattern: use SDK client directly
+func resourceReleaseDefinitionCreate(d *schema.ResourceData, m interface{}) error {
+    clients := m.(*client.AggregatedClient)
+    releaseClient := clients.ReleaseClient
+
+    definition, err := expandReleaseDefinition(d)
+    if err != nil {
+        return err
+    }
+
+    // SDK handles all HTTP details
+    created, err := releaseClient.CreateReleaseDefinition(ctx, args)
+    return err
+}</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Bypass SDK with direct HTTP" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-10" value="Bypass SDK with direct HTTP"><span class="label">Bypass SDK with direct HTTP</span></div>
+        <div class="rationale">For missing SDK methods, implement direct HTTP calls to Azure DevOps REST API using the existing HTTP client from the SDK for auth continuity.</div>
+        <ul class="tradeoffs"><li class="pro">Unblocked on SDK gaps immediately</li><li class="pro">Faster feature delivery to users</li><li class="pro">Full API coverage possible</li><li class="pro">Independence from upstream SDK cadence</li><li class="con">Duplicates SDK responsibilities (auth, retries, pagination)</li><li class="con">More complex to test (HTTP mocking vs SDK mocking)</li><li class="con">Risk of drift from SDK patterns</li><li class="con">Technical debt to maintain custom HTTP layer</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Complex pattern: manual HTTP calls
+func resourceReleaseDefinitionCreate(d *schema.ResourceData, m interface{}) error {
+    clients := m.(*client.AggregatedClient)
+
+    // Build request manually
+    body, _ := json.Marshal(expandReleaseDefinition(d))
+    req, _ := http.NewRequest(&quot;POST&quot;,
+        fmt.Sprintf(&quot;%s/_apis/release/definitions?api-version=7.1&quot;, baseURL),
+        bytes.NewBuffer(body))
+
+    // Handle auth, retries, pagination manually
+    req.Header.Set(&quot;Authorization&quot;, &quot;Bearer &quot; + token)
+    resp, err := httpClient.Do(req)
+    // ... manual error handling, retries, parsing
+}</code></pre></div>
+      </label>
+      <label class="option" data-option-label="Fork SDK temporarily and contribute back" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-10" value="Fork SDK temporarily and contribute back"><span class="label">Fork SDK temporarily and contribute back</span></div>
+        <div class="rationale">Fork the Azure DevOps Go SDK, add missing methods, vendor the fork. Submit PRs upstream. When upstream merges, switch back to official SDK.</div>
+        <ul class="tradeoffs"><li class="pro">Unblocks development immediately</li><li class="pro">Maintains SDK patterns (auth, retries, etc.)</li><li class="pro">Contributions benefit open source community</li><li class="pro">Easier to maintain than custom HTTP layer</li><li class="con">Fork maintenance burden (merge conflicts, security patches)</li><li class="con">Vendoring increases repo size (~5-10MB)</li><li class="con">Upstreaming takes time with no guarantee of acceptance</li><li class="con">Fork sync overhead until upstream merges</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+    A[Fork Azure DevOps Go SDK] --&gt; B[Add Missing Methods]
+    B --&gt; C[Vendor Fork in Provider]
+    C --&gt; D[Implement Provider Resource]
+    D --&gt; E[Submit PR to Upstream SDK]
+    E --&gt; F{PR Merged?}
+    F --&gt;|Yes| G[Switch Back to Official SDK]
+    F --&gt;|No| H[Continue Using Fork]
+    H --&gt; I[Sync Fork with Upstream Main]
+    I --&gt; E</pre></div>
+      </label>
+      </div>
+    </div>
+    <div class="escalation" data-decision="11" data-escalation-id="esc-11" data-escalation-question="What is the right balance between unit test coverage and acceptance test coverage for complex resources like release_definition?">
+      <div class="q"><span class="critic-chip">dx</span>What is the right balance between unit test coverage and acceptance test coverage for complex resources like release_definition?</div>
+      <div class="options">
+      <label class="option" data-option-label="High unit coverage + smoke acceptance tests (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-11" value="High unit coverage + smoke acceptance tests (Recommended)"><span class="label">High unit coverage + smoke acceptance tests (Recommended)</span></div>
+        <div class="rationale">Use unit tests to exhaustively cover expand/flatten edge cases, error propagation, and data integrity. Use acceptance tests to validate happy-path integration with real ADO API.</div>
+        <ul class="tradeoffs"><li class="pro">Fast test execution - unit tests run in CI on every PR (~30 seconds)</li><li class="pro">Comprehensive edge case coverage via unit tests</li><li class="pro">Lower CI cost - no ADO resources needed for unit tests</li><li class="pro">Sustainable long-term - unit tests scale well</li><li class="con">Unit tests use mocks - may not catch real API changes</li><li class="con">Acceptance tests may miss edge cases</li><li class="con">False confidence risk - mocks may drift from real API</li><li class="con">Requires manual periodic acceptance test runs</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TB
+    subgraph UT[Unit Tests: 11+ tests, ~30 seconds]
+        U1[Roundtrip: All field types]
+        U2[Error propagation: CRUD]
+        U3[Edge cases: 404, conflicts, secrets]
+        U4[Deep nesting validation]
+    end
+
+    subgraph AT[Acceptance Tests: 6 tests, ~15 minutes]
+        A1[Basic create/destroy]
+        A2[Update in-place]
+        A3[Import existing]
+        A4[Complete schema validation]
+    end
+
+    CI[CI Pipeline] --&gt; UT
+    Manual[Manual/Scheduled] --&gt; AT</pre></div>
+      </label>
+      <label class="option" data-option-label="Comprehensive acceptance coverage" data-option-visual-kind="diagram">
+        <div class="opt-head"><input type="radio" name="decision-11" value="Comprehensive acceptance coverage"><span class="label">Comprehensive acceptance coverage</span></div>
+        <div class="rationale">Invest in detailed acceptance tests covering most schema combinations. Run in nightly CI against dedicated test org. Unit tests cover only core logic (expand/flatten helpers).</div>
+        <ul class="tradeoffs"><li class="pro">High confidence in real API compatibility</li><li class="pro">Catches API breaking changes automatically</li><li class="pro">Production-realistic validation</li><li class="pro">Fewer user-reported bugs</li><li class="con">Slow test execution (15-30 min per run) - 10-20x slower feedback</li><li class="con">Higher CI cost (~$50-200/month estimate)</li><li class="con">Harder to debug failures (long runs, remote resources)</li><li class="con">Test flakiness risk (network, rate limits, quotas)</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TB
+    subgraph UT[Unit Tests: 5 tests, ~10 seconds]
+        U1[Expand/flatten helpers only]
+    end
+
+    subgraph AT[Acceptance Tests: 30+ tests, ~45 minutes]
+        A1[Basic CRUD]
+        A2[All field combinations]
+        A3[Update scenarios]
+        A4[Import variations]
+        A5[Error handling]
+        A6[Cross-resource refs]
+    end
+
+    CI[PR CI] --&gt; UT
+    Nightly[Nightly CI] --&gt; AT</pre></div>
+      </label>
+      <label class="option" data-option-label="Contract testing with recorded fixtures" data-option-visual-kind="code">
+        <div class="opt-head"><input type="radio" name="decision-11" value="Contract testing with recorded fixtures"><span class="label">Contract testing with recorded fixtures</span></div>
+        <div class="rationale">Record real API interactions once using a tool like go-vcr. Play back recordings in CI for fast, realistic tests without live ADO dependency. Periodically re-record against live API.</div>
+        <ul class="tradeoffs"><li class="pro">Fast test execution - playback is instant</li><li class="pro">Real API responses - high confidence</li><li class="pro">No live credentials needed in CI</li><li class="pro">Deterministic tests - no API flakiness</li><li class="con">Recording infrastructure setup complexity</li><li class="con">Fixtures become stale - need manual re-recording</li><li class="con">Large fixture files (~MB of JSON per resource)</li><li class="con">Repo size grows significantly with fixtures</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Example with go-vcr for contract testing
+func TestAccReleaseDefinition_Recorded(t *testing.T) {
+    r, _ := recorder.New(&quot;fixtures/release_definition_basic&quot;)
+    defer r.Stop()
+
+    // HTTP client uses recorder
+    client := &amp;http.Client{Transport: r}
+
+    // Test runs against recorded responses
+    resource.Test(t, resource.TestCase{
+        Providers: testProviders(client),
+        Steps: []resource.TestStep{
+            {
+                Config: hclReleaseDefinitionBasic(),
+                Check: resource.TestCheckResourceAttr(
+                    &quot;betterado_release_definition.test&quot;,
+                    &quot;name&quot;, &quot;Test&quot;),
+            },
+        },
+    })
+}</code></pre></div>
+      </label>
+      </div>
+    </div>
+  </div>
+
+  <hr style="margin: 3rem 0 1.5rem; border: none; border-top: 1px solid var(--border);">
+  <div class="meta">
+    Generated by the architect runner on 2026-06-01T08:15:46.407Z.
+    Reviewed + approved on the <code>/architect/2026-06-01T08-01-28</code> screen.
+  </div>
+</body>
+</html>

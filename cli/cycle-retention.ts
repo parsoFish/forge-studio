@@ -28,7 +28,6 @@ import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   cyclesThemesDir,
   projectThemesDir,
-  readArtifactRoot,
 } from '../orchestrator/brain-paths.ts';
 
 export type RetentionTag = 'load-bearing' | 'interesting' | 'routine';
@@ -103,9 +102,8 @@ export function collectCitedBy(opts: {
   const { forgeRoot, projectName, cycleId, sinceMs } = opts;
   const cited: string[] = [];
 
-  const artifactRoot = readArtifactRoot(resolve(forgeRoot, 'projects', projectName));
   const candidateDirs = [
-    projectThemesDir(forgeRoot, projectName, artifactRoot),
+    projectThemesDir(forgeRoot, projectName),
     cyclesThemesDir(forgeRoot),
   ];
 
