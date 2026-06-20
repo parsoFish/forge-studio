@@ -41,6 +41,17 @@ import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
 import {
+  readReviewComments,
+  writeReviewComments,
+  appendReviewComment,
+  resolveComment,
+  deriveVerdictFromComments,
+  reviewCommentsPath,
+  isSafeCycleId,
+  REVIEW_COMMENTS_MAX,
+} from '../orchestrator/review-comments.ts';
+import lockfile from 'proper-lockfile';
+import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
   sanitizeError,
@@ -494,6 +505,39 @@ function contentTypeFor(filename: string): string {
     : 'text/plain; charset=utf-8';
 }
 
+/** True when `v` is a `{given, when, then}` shape (all string fields present). */
+function isAcShape(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.given === 'string' && typeof o.when === 'string' && typeof o.then === 'string';
+}
+
+/**
+ * Atomically read-modify-write the review-comment sidecar for a cycle under a
+ * proper-lockfile guard (mirrors applyReviewVerdict). The sidecar file is
+ * created empty first so the lock has a target even on the first comment.
+ * `mutate` is a pure transform; the write persists its result.
+ */
+async function withReviewCommentLock(
+  logsRoot: string,
+  cycleId: string,
+  mutate: (sidecar: ReturnType<typeof readReviewComments>) => ReturnType<typeof readReviewComments>,
+): Promise<ReturnType<typeof readReviewComments>> {
+  // Ensure the sidecar exists so proper-lockfile has a target (writeReviewComments
+  // throws on a traversal cycleId — that propagates as a 500, never a write).
+  if (!existsSync(reviewCommentsPath(logsRoot, cycleId))) {
+    writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
+  }
+  const release = await lockfile.lock(reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  try {
+    const next = mutate(readReviewComments(logsRoot, cycleId));
+    writeReviewComments(logsRoot, cycleId, next);
+    return next;
+  } finally {
+    try { await release(); } catch { /* ignore */ }
+  }
+}
+
 async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
@@ -791,6 +835,57 @@ async function handleHttp(
         return;
       }
       sendJson(res, 200, { ok: true, ...result }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
+  // comments. GET reads them + the derived verdict; POST appends one; POST
+  // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
+  // read-modify-write is atomic per cycle). Verdict derivation is over the set:
+  // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
+  if (method === 'GET' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
+    const sidecar = readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
+      const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
+      if (readReviewComments(ctx.logsRoot, cycleId).comments.length >= REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
+        return;
+      }
+      const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+      );
+      sendJson(res, 200, {
+        ...result,
+        comment: result.comments[result.comments.length - 1],
+        derivedVerdict: deriveVerdictFromComments(result.comments),
+      }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
