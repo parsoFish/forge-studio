@@ -469,6 +469,20 @@ function seedReviewWorktree() {
   mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
   mkdirSync(join(wt, '.forge', 'unifier-items'), { recursive: true });
   writeFileSync(join(wt, 'package.json'), JSON.stringify({ name: 'mdtoc-review-wt', private: true }, null, 2));
+  // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes, so a
+  // review send-back appends UWI-2 (depends_on:[UWI-1]) rather than a self-cyclic UWI-1.
+  const uwi1 = {
+    work_item_id: 'UWI-1', initiative_id: INIT, status: 'pending', depends_on: [],
+    acceptance_criteria: [{
+      given: 'every dev work item is committed on the initiative branch',
+      when: 'the unifier integrates the branch into one cohesive, self-contained PR',
+      then: 'the quality gate passes against branch tip and demo.json + .forge/pr-description.md exist',
+    }],
+    files_in_scope: ['.forge/pr-description.md', `demo/${INIT}/demo.json`],
+    quality_gate_cmd: ['npm', 'test'], kind: 'packaging', estimated_iterations: 1,
+  };
+  writeFileSync(join(wt, '.forge', 'unifier-items', 'UWI-1.md'),
+    `---\n${yaml.dump(uwi1)}---\n\n# UWI-1 — unify & prep the PR (seeded for the review demo).\n`);
   for (const q of ['ready-for-review', 'in-flight', 'pending']) {
     const p = join(QDIR(q), `${INIT}.md`);
     if (existsSync(p)) {
