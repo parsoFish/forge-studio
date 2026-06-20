@@ -2085,6 +2085,12 @@ async function main() {
       check(false, `engine: seeded run gated (got "${got}")`);
     }
     await expectPhaseCost(page, 'engine: gated run shows accrued per-phase cost (metered vs ceiling)');
+
+    // F2: monitor-artifacts pill row — at least one [data-artifact-pill] chip
+    // (demo.json is seeded for CYCLE_ID2, so the demo chip must be present).
+    const monArtifactCount = await page.evaluate(() =>
+      document.querySelectorAll('[data-section="monitor-artifacts"] [data-artifact-pill]').length);
+    check(monArtifactCount >= 1, `monitor: [data-section="monitor-artifacts"] has ≥1 chip (got ${monArtifactCount})`);
     await frame(page, 's1-2-gate-control', 'S1 — engine: gated run parked, cost metered against the flow ceiling');
 
     // ── S2: Runtime-adapter seam (ADR-029) — registry-driven SDK picker + range
