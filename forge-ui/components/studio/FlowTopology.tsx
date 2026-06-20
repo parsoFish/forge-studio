@@ -31,7 +31,7 @@ export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
   // lib/monitor-layout.test.ts). `hexes` is the full set (edges resolve by
   // nodeId); `topologyHexes` is the deduplicated render set (one phase hex per
   // nodeId + every WI hex) so the per-PHASE node count is deterministic.
-  const { hexes, topologyHexes, fanOutAggregate, edges, canvasW, canvasH } = useMemo(
+  const { hexes, topologyHexes, fanOutAggregate, edges, hexBounds, canvasW, canvasH } = useMemo(
     () => buildMonitorLayout(flow, run),
     [flow, run],
   );
@@ -45,14 +45,30 @@ export function FlowTopology({ flow, run, onNodeClick }: FlowTopologyProps) {
 
   const fitView = useCallback(() => {
     const el = containerRef.current;
-    if (!el || !canvasW || !canvasH) return;
+    if (!el) return;
     const cw = el.clientWidth;
     const ch = el.clientHeight;
     if (!cw || !ch) return;
+
+    // Fit and centre on the tight hex bounding box, not the padded canvas extent.
+    // This ensures the topology is always centred on actual content rather than
+    // empty canvas padding around it.
+    const contentW = hexBounds.maxX - hexBounds.minX + HEX_W;
+    const contentH = hexBounds.maxY - hexBounds.minY + HEX_H;
+    if (!contentW || !contentH) return;
+
     const pad = 48;
-    const zoom = Math.max(ZOOM_MIN, Math.min((cw - pad) / canvasW, (ch - pad) / canvasH, 1.3));
-    setView({ zoom, tx: (cw - canvasW * zoom) / 2, ty: (ch - canvasH * zoom) / 2 });
-  }, [canvasW, canvasH]);
+    const zoom = Math.max(ZOOM_MIN, Math.min((cw - pad) / contentW, (ch - pad) / contentH, 1.3));
+
+    // Centre the content box (accounting for hex half-extents) in the viewport.
+    const contentCx = hexBounds.minX - HEX_W / 2;
+    const contentCy = hexBounds.minY - HEX_H / 2;
+    setView({
+      zoom,
+      tx: (cw - contentW * zoom) / 2 - contentCx * zoom,
+      ty: (ch - contentH * zoom) / 2 - contentCy * zoom,
+    });
+  }, [hexBounds]);
 
   // Auto-fit on mount + whenever the flow or canvas extent changes, so the whole
   // pipeline is visible without manual navigation.

@@ -48,6 +48,14 @@ export interface HexPos {
   costUsd: number; // per-phase cost (0 for WI hexes)
 }
 
+/** Tight bounding box over the render set (topologyHexes), in canvas-px hex centers. */
+export interface HexBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 export interface MonitorLayout {
   /** All hexes including every fanOut WI expansion (used for edge resolution). */
   hexes: HexPos[];
@@ -70,6 +78,12 @@ export interface MonitorLayout {
    */
   fanOutAggregate: { nodeId: string; status: string; costUsd: number } | null;
   edges: Array<{ from: string; to: string; artifact?: string }>;
+  /**
+   * Tight bounding box over topologyHexes (hex centers). Used by fitView to
+   * centre the topology on its actual content rather than the padded canvas
+   * extent. Zeroed when the flow has no nodes.
+   */
+  hexBounds: HexBounds;
   canvasW: number;
   canvasH: number;
 }
@@ -240,5 +254,19 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
   const canvasW = (allX.length ? Math.max(...allX) : 0) + PAD_X + HEX_W;
   const canvasH = (allY.length ? Math.max(...allY) : 0) + PAD_Y + HEX_H;
 
-  return { hexes, topologyHexes, fanOutAggregate, edges, canvasW, canvasH };
+  // Tight bounding box over the render set (topologyHexes centers).
+  // fitView uses this to centre the viewport on actual content, not padded canvas.
+  const topoXs = topologyHexes.map((h) => h.x);
+  const topoYs = topologyHexes.map((h) => h.y);
+  const hexBounds: HexBounds =
+    topoXs.length > 0
+      ? {
+          minX: Math.min(...topoXs),
+          maxX: Math.max(...topoXs),
+          minY: Math.min(...topoYs),
+          maxY: Math.max(...topoYs),
+        }
+      : { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
+  return { hexes, topologyHexes, fanOutAggregate, edges, hexBounds, canvasW, canvasH };
 }
