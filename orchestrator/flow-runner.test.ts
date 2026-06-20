@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runFlow, forgeCycleFlowPath, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { runFlow, forgeCycleFlowPath, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
@@ -323,7 +323,53 @@ describe('flow-runner with real forge-cycle.yaml', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 5: Wedge-kill race — raceWithWedge integration
+// Test 5: forge-architect flow — 2-node (architect + pm), no dev/review/reflect
+// ---------------------------------------------------------------------------
+
+describe('flow-runner with real forge-architect.yaml', () => {
+  it('loads the forge-architect flow and finalizes after pm — no dev, unifier, review, or reflect', async () => {
+    const flowPath = flowPathForId('forge-architect');
+    const flow = loadFlowDefinition(flowPath);
+
+    assert.strictEqual(flow.id, 'forge-architect', 'flow id must be forge-architect');
+    assert.strictEqual(flow.nodes.length, 2, 'forge-architect must have exactly 2 nodes (architect + pm)');
+    assert.ok(
+      flow.nodes.some((n) => n.gate === 'plan'),
+      'forge-architect must have an architect node with gate:plan',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'project-manager'),
+      'forge-architect must have a pm node',
+    );
+    assert.ok(
+      !flow.nodes.some((n) => n.agent === 'developer-ralph'),
+      'forge-architect must NOT have a dev node',
+    );
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const input = makeInput();
+    const logger = makeLogger();
+
+    const result = await runFlow({ flow, input, logger, deps });
+
+    // Architect is a silent marker; pm runs; no dev/unifier/review/reflect.
+    assert.deepEqual(tracker.calls, ['runProjectManager'],
+      'forge-architect: only runProjectManager must be called (architect is a silent marker, no dev/unifier/review/reflect)');
+
+    // Outcome: ready-for-review (the review gate never ran, so the cycle parks here).
+    // reflectionStatus + lintStatus are skipped because their nodes are absent.
+    assert.strictEqual(result.cycleOutcome, 'ready-for-review',
+      'forge-architect must finalize with ready-for-review (no review node ran)');
+    assert.strictEqual(result.reflectionStatus, 'skipped',
+      'reflectionStatus must be skipped when no reflect node is in the flow');
+    assert.strictEqual(result.lintStatus, 'skipped',
+      'lintStatus must be skipped when no reflect node is in the flow');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 6: Wedge-kill race — raceWithWedge integration
 // ---------------------------------------------------------------------------
 
 /** Minimal flow with just pm node — keeps wedge-kill tests focused. */

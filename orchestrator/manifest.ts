@@ -398,6 +398,25 @@ export function readManifestCostCeiling(manifestPath: string): number | null {
 }
 
 /**
+ * DEC-2 (S6 3-flow split): generate a fresh cycle id for an initiative and
+ * persist it onto the manifest at architect-finalize time so the Develop flow
+ * later picks up the SAME id rather than minting a sibling. This threads the
+ * initiativeId+cycleId lineage across the architect→develop→reflect split so
+ * cost, status, and WI hexes all roll up under one `_logs/<cycleId>` dir.
+ *
+ * Returns the minted cycleId (or the already-present one, idempotent).
+ * Best-effort: never throws.
+ */
+export function mintAndPersistManifestCycleId(manifestPath: string, initiativeId: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const cycleId = `${ts}_${initiativeId}`;
+  persistManifestCycleId(manifestPath, cycleId);
+  // Re-read to return whatever is on disk (may differ if idempotent no-op fired).
+  const onDisk = readManifestCycleId(manifestPath);
+  return onDisk ?? cycleId;
+}
+
+/**
  * ADR 026: persist `cycle_id` onto the manifest's frontmatter the first time an
  * initiative is claimed, so every later re-entry reuses the same `_logs` dir.
  * Idempotent + best-effort: if the manifest already carries a `cycle_id` (or is

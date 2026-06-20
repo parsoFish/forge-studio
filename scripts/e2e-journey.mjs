@@ -1915,6 +1915,67 @@ async function main() {
       check(false, `reflection node greened after tuning feedback (got "${reflStatus}")`);
     }
 
+    // ── R6: Per-project Roadmap tab (S6 DEC-3) ───────────────────────────────
+    // The manifest is now in done/; seed a minimal work-items-snapshot so the
+    // roadmap endpoint returns initiatives + WIs, then verify the tab renders them.
+    console.log('\n[R6] Per-project Roadmap tab');
+    const wiSnapshotDir = join(CYCLE_LOG, 'work-items-snapshot');
+    const ROADMAP_SEEDED_WI = join(wiSnapshotDir, 'WI-1.md');
+    let roadmapSeeded = false;
+    try {
+      mkdirSync(wiSnapshotDir, { recursive: true });
+      writeFileSync(ROADMAP_SEEDED_WI, [
+        '---',
+        `work_item_id: WI-1`,
+        `initiative_id: ${INIT}`,
+        'status: complete',
+        'depends_on: []',
+        'acceptance_criteria: []',
+        'files_in_scope: []',
+        'estimated_iterations: 1',
+        '---',
+        '',
+        '## Add --write mode',
+        '',
+        'Implement in-place TOC injection with idempotency.',
+      ].join('\n'));
+      roadmapSeeded = true;
+    } catch {
+      check(false, 'roadmap: seeded WI snapshot for roadmap assertion');
+    }
+    await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+    } catch { /* soft: continue to check tab */ }
+    // Click the Roadmap tab.
+    const roadmapTab = page.locator('button[data-tab="roadmap"]');
+    if (await roadmapTab.count() > 0) {
+      await roadmapTab.click();
+      await sleep(1500); // allow bridge fetch to settle
+      await caption(page, 'Per-project Roadmap — initiatives ordered by dependency level, with nested WI sub-graphs.');
+      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: initiative spine + work items');
+      const roadmapSection = await page.evaluate(() =>
+        document.querySelector('[data-section="project-roadmap"]') !== null);
+      check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
+      const initCount = await page.evaluate(() =>
+        document.querySelectorAll('[data-initiative-id]').length);
+      check(initCount >= 1, `roadmap: ≥1 [data-initiative-id] present (got ${initCount})`);
+      if (roadmapSeeded) {
+        const wiCount = await page.evaluate(() =>
+          document.querySelectorAll('[data-work-item-id]').length);
+        check(wiCount >= 1, `roadmap: ≥1 [data-work-item-id] present (got ${wiCount})`);
+      }
+    } else {
+      check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
+    }
+    // Clean up the seeded WI snapshot (the manifest in done/ is cleaned in the finally block).
+    if (roadmapSeeded) {
+      try { rmSync(ROADMAP_SEEDED_WI, { force: true }); } catch { /* */ }
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     // ACT 3 — SWAP. The seams — the platform is modular, not hardcoded.
     // ════════════════════════════════════════════════════════════════════════

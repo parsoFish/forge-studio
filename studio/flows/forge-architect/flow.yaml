@@ -1,0 +1,14 @@
+id: forge-architect
+name: Forge Architect
+version: 1
+goal: Draft an initiative roadmap and decompose it into work items — ready for Develop to execute.
+project: null
+kb: cycles
+costCeilingUsd: 10
+origin: seed
+nodes:
+  - { id: architect, agent: architect, gate: plan }
+  - { id: pm, agent: project-manager }
+edges:
+  - { from: architect, to: pm, artifact: plan }
+triggers: []
