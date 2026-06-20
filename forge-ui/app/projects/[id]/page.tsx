@@ -8,7 +8,7 @@ import {
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
-import { fetchRoadmap, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
+import { fetchRoadmap, startDevelopment, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -544,6 +544,26 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
 function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
+  const router = useRouter();
+
+  // S7 / DEC-3: "start development" runs the forge-develop flow on a decomposed,
+  // not-yet-developing initiative (pending = architect hand-off). It repoints the
+  // manifest at forge-develop + threads the cycle_id, then the scheduler claims it.
+  const [develop, setDevelop] = useState<'idle' | 'starting' | 'started' | 'error'>('idle');
+  const [developError, setDevelopError] = useState<string | null>(null);
+  const canStartDevelopment = status === 'pending';
+
+  async function onStartDevelopment(): Promise<void> {
+    setDevelop('starting');
+    setDevelopError(null);
+    const r = await startDevelopment(initiativeId);
+    if (r.ok && r.status === 'enqueued') {
+      setDevelop('started');
+    } else {
+      setDevelop('error');
+      setDevelopError(r.error ?? r.status ?? 'failed to start development');
+    }
+  }
 
   // WI topo levels (for sub-graph ordering).
   const wiLevels = workItems && workItems.length > 0
@@ -554,6 +574,7 @@ function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
     <div
       data-initiative-id={initiativeId}
       data-initiative-status={status}
+      data-develop-state={develop}
       style={{
         background: 'var(--panel)',
         border: `1px solid var(--line)`,
@@ -591,6 +612,41 @@ function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
               <WorkItemBadge key={wi.id} wi={wi} />
             ));
           })}
+        </div>
+      )}
+
+      {/* S7: start-development trigger — only on a decomposed, not-yet-developing
+          initiative. Runs the forge-develop flow (dev → unifier → review). */}
+      {canStartDevelopment && develop !== 'started' && (
+        <button
+          data-action="start-development"
+          data-initiative-id={initiativeId}
+          disabled={develop === 'starting'}
+          onClick={() => void onStartDevelopment()}
+          style={{
+            marginTop: 4, alignSelf: 'flex-start',
+            color: '#fff', background: develop === 'error' ? '#9e6a03' : '#238636',
+            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+            fontSize: 12, fontWeight: 600, cursor: develop === 'starting' ? 'default' : 'pointer',
+            opacity: develop === 'starting' ? 0.6 : 1,
+          }}
+        >
+          {develop === 'starting' ? 'starting…' : develop === 'error' ? 'retry — start development' : 'Start development →'}
+        </button>
+      )}
+      {develop === 'error' && developError && (
+        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{developError}</div>
+      )}
+      {develop === 'started' && (
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
+          <button
+            data-action="open-develop-run"
+            onClick={() => router.push('/flows/forge-develop')}
+            style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+          >
+            view run →
+          </button>
         </div>
       )}
     </div>
