@@ -270,6 +270,36 @@ test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps); pulse f
 });
 
 // ---------------------------------------------------------------------------
+// hexBounds — tight bounding box over topologyHexes (fix 1)
+// ---------------------------------------------------------------------------
+
+test('buildMonitorLayout: hexBounds wraps topologyHexes tightly', () => {
+  const layout = buildMonitorLayout(makeFlow(), makeRun());
+  const { hexBounds, topologyHexes } = layout;
+  expect(hexBounds).toBeDefined();
+
+  const xs = topologyHexes.map((h) => h.x);
+  const ys = topologyHexes.map((h) => h.y);
+  expect(hexBounds.minX).toBe(Math.min(...xs));
+  expect(hexBounds.maxX).toBe(Math.max(...xs));
+  expect(hexBounds.minY).toBe(Math.min(...ys));
+  expect(hexBounds.maxY).toBe(Math.max(...ys));
+});
+
+test('buildMonitorLayout: hexBounds is zeroed when there are no hexes', () => {
+  const emptyFlow = {
+    id: 'empty',
+    name: 'Empty',
+    goal: '',
+    nodes: [],
+    edges: [],
+    triggers: [],
+  } as unknown as Flow;
+  const layout = buildMonitorLayout(emptyFlow, null);
+  expect(layout.hexBounds).toEqual({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
+});
+
+// ---------------------------------------------------------------------------
 // null run + empty flow
 // ---------------------------------------------------------------------------
 
