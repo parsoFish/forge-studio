@@ -203,3 +203,29 @@ test('knowledge-ingest flow loads and validateFlow returns zero errors', () => {
     `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// forge-reflect flow (S8: the third flow that replaces the forge-cycle monolith)
+// ---------------------------------------------------------------------------
+
+test('forge-reflect flow loads and validateFlow returns zero errors', () => {
+  const flowPath = join(ROOT, 'studio/flows/forge-reflect/flow.yaml');
+  const agents = listAgentDefinitions(join(ROOT, 'skills'));
+  const agentMap = new Map(agents.map((a) => [a.slug, a]));
+
+  const flow = loadFlowDefinition(flowPath);
+
+  assert.strictEqual(flow.id, 'forge-reflect');
+  assert.strictEqual(flow.disposable, true, 'forge-reflect must be disposable:true (zero-gate rule)');
+  assert.ok(flow.nodes.some((n) => n.agent === 'reflector'), 'must have a reflector node');
+  assert.strictEqual(flow.edges.length, 0, 'forge-reflect has no edges (single-node, merge-triggered flow)');
+  assert.deepEqual(flow.triggers, [], 'forge-reflect has no flow-engine triggers (merge-triggered via finalize-merged)');
+
+  const findings = validateFlow(flow, agentMap);
+  const errors = findings.filter((f) => f.level === 'error');
+  assert.deepEqual(
+    errors,
+    [],
+    `forge-reflect flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+  );
+});
