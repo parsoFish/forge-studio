@@ -369,6 +369,71 @@ describe('flow-runner with real forge-architect.yaml', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Test 5b: forge-develop flow — 3-node (dev + unifier + review), no architect/pm/reflect
+// ---------------------------------------------------------------------------
+
+describe('flow-runner with real forge-develop.yaml', () => {
+  it('loads the forge-develop flow and runs dev → unifier → review — no architect, pm, or reflect', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    assert.strictEqual(flow.id, 'forge-develop', 'flow id must be forge-develop');
+    assert.strictEqual(flow.nodes.length, 3, 'forge-develop must have exactly 3 nodes (dev + unifier + review)');
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'developer-ralph'),
+      'forge-develop must have a dev node (developer-ralph)',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'developer-unifier' && n.resumable === true),
+      'forge-develop must have a resumable unifier node',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.gate === 'verdict'),
+      'forge-develop must have a review node with gate:verdict (the human gate — zero-gate flows are rejected)',
+    );
+    assert.ok(
+      !flow.nodes.some((n) => n.agent === 'project-manager' || n.gate === 'plan' || n.agent === 'reflector'),
+      'forge-develop must NOT have pm, architect, or reflect nodes (DEC-3 carve)',
+    );
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const input = makeInput();
+    const logger = makeLogger();
+
+    const result = await runFlow({ flow, input, logger, deps });
+
+    // Dev-loop + unifier + review (openPr → closure) run; pm/architect/reflect do not.
+    assert.deepEqual(tracker.calls, ['runDeveloperLoop', 'runUnifier', 'openPrInline', 'runClosure'],
+      'forge-develop: dev → unifier → review(openPr→closure) only — no pm/architect/reflect');
+
+    // Closure confirmed a merge in the mock, but there is no reflect node, so
+    // reflection never runs — the develop flow ends at the merged PR (S8 adds reflect).
+    assert.strictEqual(result.reflectionStatus, 'skipped',
+      'reflectionStatus must be skipped — forge-develop has no reflect node (S8 carves it)');
+  });
+
+  it('forge-develop resumes the unifier in place (ADR-026 drain) — skips the per-WI dev work but keeps the spine', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    // A send-back drain re-claims the manifest with resumeFrom:'unifier'.
+    const input = makeInput({ resumeFrom: 'unifier' });
+    const logger = makeLogger();
+
+    await runFlow({ flow, input, logger, deps });
+
+    // The dev node still runs (it self-no-ops the per-WI loop on resume but emits
+    // the phase-boundary events); the unifier + review spine re-runs in place.
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on resume)');
+    assert.ok(tracker.calls.includes('runUnifier'), 'unifier re-runs the pending UWIs on resume');
+    assert.ok(tracker.calls.includes('openPrInline'), 'review re-opens/updates the PR on resume');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Test 6: Wedge-kill race — raceWithWedge integration
 // ---------------------------------------------------------------------------
 

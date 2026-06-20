@@ -1,0 +1,27 @@
+id: forge-develop
+name: Forge Develop
+version: 1
+goal: Take a decomposed initiative's work items to a reviewed, merged PR — developer fan-out, unify+demo+open-PR, interactive review.
+project: null
+kb: cycles
+costCeilingUsd: 25
+origin: seed
+# DEC-3 (S7): the second of the three flows that replace the forge-cycle
+# monolith. Architect (forge-architect) decomposes; Develop builds → reviews;
+# Reflect (S8) captures the brain. DEC-2: a Develop run threads the SAME
+# initiativeId + cycle_id the architect flow minted, so cost/roadmap/metrics
+# (and the WI hexes pm already emitted) roll up under one _logs/<cycleId>.
+#
+# `dev` is the flow's entry node, so it carries NO `fanOut:` — the lint rule
+# requires a fanOut artifact to be fed by an inbound edge, and an entry node
+# has none. The per-WI fan-out is unchanged at runtime: runDeveloperLoop walks
+# the work items pm already wrote, and the WI hexes derive from the dev-loop
+# events in the shared cycle log (not from this static topology hint).
+nodes:
+  - { id: dev, agent: developer-ralph }
+  - { id: unifier, agent: developer-unifier, resumable: true }
+  - { id: review, gate: verdict }
+edges:
+  - { from: dev, to: unifier, artifact: wi-branches }
+  - { from: unifier, to: review, artifact: pr }
+triggers: []
