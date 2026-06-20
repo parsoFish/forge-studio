@@ -122,7 +122,10 @@ export type UnifierUserPromptInput = {
  * Static instructional prose (role, iter-1-skeleton rule, hard rules) now
  * lives in SKILL.md (ADR 024 prose migration). This builder emits only the
  * DYNAMIC run-context: initiative id, manifest path, WI spec list, iteration
- * counter, demo shape, and quality-gate command.
+ * counter, the artifactRoot-resolved demo dir, the project's typed demoProcess
+ * steps (F5 — the generated demo machinery the unifier executes), and the
+ * quality-gate command. (DEC-4 retired `demo.shape` typing; demo evidence is
+ * driven by the project's demoProcess + its generated demo skill.)
  */
 export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   const wiList = input.workItemSpecs.length > 0
@@ -160,7 +163,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '1. **Read AGENT.md and fix_plan.md.**',
       '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
       `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-      `4. **Produce the demo** under \`${demoDir}/\`: run the project's generated demo machinery (from the project's \`<artifactRoot>/skills/\` dir). Author \`${demoDir}/demo.json\` + run \`forge demo render <initiative-id>\` to derive \`DEMO.md\`. See \`skills/demo/SKILL.md\` for the full demo contract.`,
+      `4. **Produce the demo** under \`${demoDir}/\`: run the project's generated demo machinery (from the project's \`<artifactRoot>/skills/\` dir — F5 generates it from the project's demoProcess). Author \`${demoDir}/demo.json\` (populate \`acEvaluations[]\`, one per AC) + run \`forge demo render <initiative-id>\` to derive the **single** \`DEMO.md\` (no \`DEMO.html\` — the interactive review page renders this demo). See \`skills/demo/SKILL.md\` for the full demo contract.`,
       '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
       '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
       '7. **Push** the branch so `origin/<branch>` == local HEAD.',
