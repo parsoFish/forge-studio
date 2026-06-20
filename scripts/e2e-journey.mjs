@@ -459,6 +459,30 @@ function moveManifest(from, to) {
   throw new Error(`moveManifest: ${INIT}.md not found in any queue dir (wanted ${from} → ${to})`);
 }
 
+/**
+ * S7: seed a live worktree + stamp `worktree_path` onto the manifest so the
+ * comment-derived send-back genuinely appends a UWI in place (ADR-026), rather
+ * than 409'ing with no worktree. Returns the worktree path.
+ */
+function seedReviewWorktree() {
+  const wt = join(FORGE_ROOT, '_worktrees', INIT);
+  mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+  mkdirSync(join(wt, '.forge', 'unifier-items'), { recursive: true });
+  writeFileSync(join(wt, 'package.json'), JSON.stringify({ name: 'mdtoc-review-wt', private: true }, null, 2));
+  for (const q of ['ready-for-review', 'in-flight', 'pending']) {
+    const p = join(QDIR(q), `${INIT}.md`);
+    if (existsSync(p)) {
+      let txt = readFileSync(p, 'utf8');
+      if (!/^worktree_path:/m.test(txt)) {
+        txt = txt.replace(/^phase:.*$/m, (m) => `${m}\nworktree_path: ${wt}`);
+        writeFileSync(p, txt);
+      }
+      break;
+    }
+  }
+  return wt;
+}
+
 function writeDemoJson(revision) {
   const artifacts = join(CYCLE_LOG, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
@@ -506,6 +530,16 @@ function writeDemoJson(revision) {
       { name: 'acceptance: --write read-back vs test/fixtures/release-notes.md', result: 'pass' },
     ],
     checkpoints: [
+      // S7 visual review: a before/after screenshot checkpoint drives the
+      // img-comparison-slider on the interactive review page (data: URIs so the
+      // UI renders them directly — no remote fetch).
+      { label: 'README TOC region — before vs after --write', kind: 'screenshot',
+        caption: 'The embedded TOC region: empty markers before, the generated table after `mdtoc --write`.',
+        beforeNote: 'Markers present, no TOC between them.',
+        afterNote: 'Generated TOC injected between the markers; surrounding prose untouched.',
+        beforeImage: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#161b22"/><text x="16" y="40" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- toc --&gt;</text><text x="16" y="64" fill="#6e7681" font-family="monospace" font-size="13">(empty)</text><text x="16" y="88" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- /toc --&gt;</text><text x="16" y="160" fill="#d29922" font-family="sans-serif" font-size="12">before</text></svg>'),
+        afterImage: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#0d1117"/><text x="16" y="40" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- toc --&gt;</text><text x="16" y="62" fill="#58a6ff" font-family="monospace" font-size="12">- [Intro](#intro)</text><text x="16" y="80" fill="#58a6ff" font-family="monospace" font-size="12">- [Usage](#usage)</text><text x="16" y="100" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- /toc --&gt;</text><text x="16" y="160" fill="#3fb950" font-family="sans-serif" font-size="12">after</text></svg>'),
+      },
       { label: 'Unit suite — injectToc_ReplacesMarkerRegion + injectToc_IsIdempotent', kind: 'harness',
         caption: 'marker-region slice replaces only the TOC; a second --write is byte-identical',
         metrics: [
@@ -532,6 +566,30 @@ function writeDemoJson(revision) {
       'Idempotent --write is safe to wire into CI (a future --check mode can fail when the embedded TOC drifts).',
     ],
   }, null, 2));
+
+  // F4 single DEMO.md — the human/PR-facing markdown the S7 review page renders
+  // (markdown-it → sandbox iframe). Derived from demo.json by `forge demo render`
+  // in a real cycle; seeded here so the interactive review reads true.
+  writeFileSync(join(artifacts, 'DEMO.md'), [
+    `# mdtoc: \`--write\` in-place TOC injection${revision > 1 ? ' (round ' + revision + ')' : ''}`,
+    '',
+    '> Adds a `--write` mode that inserts or refreshes the generated table of contents between',
+    '> `<!-- toc -->` / `<!-- /toc -->` markers, idempotently.',
+    '',
+    '## Intent & Outcome',
+    '',
+    '| # | Acceptance criterion | Verdict |',
+    '| - | -------------------- | ------- |',
+    '| 1 | `--write` replaces only the marker region; acceptance reads back the built CLI | **met** |',
+    `| 2 | re-running \`--write\` on a current doc produces no diff | **${revision > 1 ? 'met' : 'partial'}** |`,
+    '',
+    '## Usage',
+    '',
+    '```bash',
+    'mdtoc --write README.md   # injects the TOC between the markers',
+    'mdtoc --write README.md   # idempotent — no diff on the second run',
+    '```',
+  ].join('\n'));
 }
 
 /** Reflector stage-2 emit: operator-facing questions for the reflect screen. */
@@ -1744,13 +1802,18 @@ async function main() {
     const REVIEW_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=gate`;
     const REFLECT_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=reflection&mode=view`;
 
-    // ── R4.0: Review — per-AC evaluated demo (PARTIAL) ────────────────────────
-    console.log('\n[R4.0] Review — per-AC demo (PARTIAL)');
+    // S7: seed a live worktree so the comment-derived send-back genuinely
+    // appends a UWI in place (ADR-026), not a 409.
+    const REVIEW_WT = seedReviewWorktree();
+
+    // ── R4.0: Review — the comment-on-page visual demo (DEC-5) ─────────────────
+    console.log('\n[R4.0] Review — comment-on-page visual demo (PARTIAL)');
     await sleep(ACT);
     await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await caption(page, 'Approve on evidence — the captured CLI read-back proves --write injects the TOC. AC-2 is only PARTIAL (a trailing newline drifts on the 2nd write).');
+    await page.waitForSelector('[data-component="demo-review-surface"]', { timeout: 15000 });
+    await caption(page, 'The interactive review page: the rendered DEMO.md, a before/after slider, and per-region comments that ARE the verdict.');
     await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
     await sleep(READ);
     await frame(page, 'r4-0-review-partial', 'R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)');
@@ -1759,29 +1822,60 @@ async function main() {
       await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count() > 0,
       'an AC reads PARTIAL on round 1 — the gap the operator sends back on',
     );
-
-    // ── R4.1: Send-back authoring a NEW acceptance criterion ──────────────────
-    console.log('\n[R4.1] Send-back — operator authors a new G/W/T AC');
-    await caption(page, 'The operator authors a new acceptance criterion — inside the review loop.');
-    await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();
-    const verdictTextarea = page.locator('[data-component="verdict-form"] textarea');
-    if (await verdictTextarea.count() > 0) {
-      await verdictTextarea.click();
-      await verdictTextarea.pressSequentially(
-        'Close — but a second --write on an already-current doc must be byte-identical (no diff) before this merges.',
-        { delay: 18 },
-      );
-    }
+    // DEC-5 surfaces: rendered DEMO.md iframe, per-region anchors, the before/after slider.
+    check(await page.locator('[data-demo-markdown]').count() > 0, 'review page renders DEMO.md in a sandboxed iframe');
+    await countAtLeast(page, '[data-demo-region]', 2, 'review page anchors per-demo-region comment targets');
+    await page.locator('[data-evidence="before-after-slider"]').first().scrollIntoViewIfNeeded().catch(() => {});
     await sleep(THINK);
-    const acGiven = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0);
-    const acWhen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1);
-    const acThen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2);
-    if (await acGiven.count() > 0) { await acGiven.click(); await acGiven.pressSequentially('a Markdown file whose embedded TOC is already current', { delay: 18 }); await sleep(THINK); }
-    if (await acWhen.count()  > 0) { await acWhen.click();  await acWhen.pressSequentially('mdtoc --write is run on it twice in a row', { delay: 18 }); await sleep(THINK); }
-    if (await acThen.count()  > 0) { await acThen.click();  await acThen.pressSequentially('the file is byte-identical after each run — no trailing-newline drift', { delay: 18 }); await sleep(THINK); }
-    await frame(page, 'r4-1-send-back', 'R4 — operator sends back with a new G/W/T criterion (--write is byte-identical on every run)');
-    await page.locator('[data-action="send-back"]').click();
+    await frame(page, 'r4-0b-slider', 'R4 — before/after image-comparison slider for the TOC region');
+    check(await page.locator('[data-evidence="before-after-slider"]').count() > 0, 'review page shows a before/after img-comparison-slider');
+
+    // ── R4.1: Send-back via an anchored blocking comment (DEC-5) ───────────────
+    console.log('\n[R4.1] Send-back — operator anchors a blocking comment to AC-2');
+    await caption(page, 'The operator comments directly on AC-2 — a blocking comment IS a send-back.');
+    const ac2 = page.locator('[data-demo-region="ac-2"]');
+    await ac2.scrollIntoViewIfNeeded().catch(() => {});
+    await ac2.locator('[data-action="comment-region"]').click();
+    await sleep(THINK);
+    const commentBody = ac2.locator('[data-field="comment-body"]');
+    await commentBody.click();
+    await commentBody.pressSequentially(
+      'A second --write on an already-current doc must be byte-identical (no trailing-newline drift) before this merges.',
+      { delay: 16 },
+    );
+    await sleep(THINK);
+    await frame(page, 'r4-1-comment', 'R4 — a blocking comment anchored to AC-2 (the send-back, on the page)');
+    await ac2.locator('[data-action="add-comment"]').click();
+    await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 8000 });
+    check(await ac2.locator('[data-comment-id]').count() > 0, 'the anchored comment renders under its region');
+    // The verdict is DERIVED — a blocking comment flips the bar to send-back.
+    await page.waitForFunction(
+      () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'send-back',
+      null, { timeout: 8000 },
+    ).catch(() => {});
+    check(
+      await page.locator('[data-component="verdict-form"][data-form-kind="send-back"]').count() > 0,
+      'the blocking comment derives a send-back verdict',
+    );
+
+    // Persistence: a reload must still show the anchored comment (sidecar-backed).
+    await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
+    await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 12000 });
+    check(
+      await page.locator('[data-demo-region="ac-2"] [data-comment-id]').count() > 0,
+      'the anchored comment PERSISTS across a reload (review-comments sidecar)',
+    );
+    await frame(page, 'r4-1b-send-back', 'R4 — the comment persists; the derived verdict is "send back"');
+    await page.locator('[data-component="verdict-form"] [data-action="send-back"]').click();
     await sleep(ACT);
+    // ADR-026 in place: the send-back appended a UWI in the SAME cycle's worktree
+    // (no requeue, no sibling cycle/_logs).
+    check(
+      existsSync(join(REVIEW_WT, '.forge', 'unifier-items')) &&
+        readdirSync(join(REVIEW_WT, '.forge', 'unifier-items')).some((f) => f.startsWith('UWI-')),
+      'send-back appended a UWI into the SAME cycle worktree (ADR-026 in place, no new cycle)',
+    );
 
     // ── R4.2: Dev-loop reruns on feedback (fast-forward) ──────────────────────
     console.log('\n[R4.2] Dev-loop reruns on feedback (fast-forward)');
@@ -1817,20 +1911,26 @@ async function main() {
     check(partialCount === 0, `re-review: partial AC count == 0 after dev-loop rerun (got ${partialCount})`);
     await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
 
+    // The blocking comment from R4.1 persists across the round — resolving it is
+    // what flips the DERIVED verdict from send-back back to approve.
+    const ac2b = page.locator('[data-demo-region="ac-2"]');
+    await ac2b.scrollIntoViewIfNeeded().catch(() => {});
+    await ac2b.locator('[data-action="resolve-comment"]').first().click().catch(() => {});
+    await page.waitForFunction(
+      () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'approve',
+      null, { timeout: 8000 },
+    ).catch(() => {});
+    check(
+      await page.locator('[data-component="verdict-form"][data-form-kind="approve"]').count() > 0,
+      'resolving the blocking comment flips the derived verdict to approve',
+    );
+
     // ── R4.4: Approve & merge → completed spine ───────────────────────────────
     console.log('\n[R4.4] Approve & merge → completed spine');
-    await caption(page, 'Six phases, every one accountable.');
-    const lgtmTextarea = page.locator('[data-component="verdict-form"] textarea');
-    if (await lgtmTextarea.count() > 0) {
-      await lgtmTextarea.click();
-      await lgtmTextarea.pressSequentially(
-        'LGTM — --write injects the TOC, the captured CLI read-back matches, and a second --write is now byte-identical. All ACs met.',
-        { delay: 18 },
-      );
-    }
+    await caption(page, 'Comment resolved → the page derives "approve". Six phases, every one accountable.');
     await sleep(ACT);
     await frame(page, 'r4-4-approve', 'R4 — operator approves (human decision #2 complete)');
-    await page.locator('[data-action="approve-and-merge"]').click();
+    await page.locator('[data-component="verdict-form"] [data-action="approve-and-merge"]').click();
     await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
     await paced([
       () => cycleEvent('review-loop', 'end', 'review-loop end — operator approved', { cost_usd: 0.21 }),
@@ -1946,6 +2046,22 @@ async function main() {
     } catch {
       check(false, 'roadmap: seeded WI snapshot for roadmap assertion');
     }
+    // S7 / DEC-3: seed a SECOND, decomposed-but-not-yet-developing initiative
+    // (pending) so the roadmap shows the "start development" trigger. A real
+    // develop run (dev→unifier→review) is the scheduler's job — exercised by the
+    // operator-gated verify:cycle; here we prove the trigger flips the manifest
+    // onto the forge-develop flow.
+    const INIT_DEV = `INIT-${DATE}-e2e-develop-trigger`;
+    const DEV_CYCLE_ID = `${STAMP}_${INIT_DEV}`;
+    mkdirSync(QDIR('pending'), { recursive: true });
+    writeFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), [
+      '---', `initiative_id: ${INIT_DEV}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
+      'origin: architect', `cycle_id: ${DEV_CYCLE_ID}`,
+      '---', '', '# mdtoc — `--check` mode (CI drift guard)', '',
+      'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',
+    ].join('\n'));
+
     await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
@@ -1974,10 +2090,37 @@ async function main() {
     } else {
       check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
     }
+
+    // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
+    console.log('\n[R6.1] Start development trigger (DEC-3)');
+    const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"]`);
+    const startBtn = devCard.locator('[data-action="start-development"]');
+    if (await startBtn.count() > 0) {
+      check(
+        await devCard.getAttribute('data-initiative-status') === 'pending',
+        'roadmap: the decomposed initiative is pending (develop-able)',
+      );
+      await devCard.scrollIntoViewIfNeeded().catch(() => {});
+      await caption(page, 'A decomposed initiative offers "Start development" — it runs the Forge Develop flow.');
+      await frame(page, 'r6-1-start-development', 'R6 — the "start development" trigger on a pending initiative');
+      await startBtn.click();
+      await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});
+      const devState = await devCard.getAttribute('data-develop-state');
+      check(devState === 'started', `start-development enqueues the develop run (data-develop-state=${devState})`);
+      await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review');
+      // The manifest is now claimable on the forge-develop flow, threading its cycle_id.
+      const devManifest = readFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), 'utf8');
+      check(/^flow_id:\s*forge-develop\s*$/m.test(devManifest), 'start-development repoints the manifest at the forge-develop flow');
+      check(devManifest.includes(DEV_CYCLE_ID), 'the develop run threads the architect-minted cycle_id (DEC-2)');
+    } else {
+      check(false, `roadmap: [data-action="start-development"] present on the pending initiative ${INIT_DEV}`);
+    }
+
     // Clean up the seeded WI snapshot (the manifest in done/ is cleaned in the finally block).
     if (roadmapSeeded) {
       try { rmSync(ROADMAP_SEEDED_WI, { force: true }); } catch { /* */ }
     }
+    try { rmSync(join(QDIR('pending'), `${INIT_DEV}.md`), { force: true }); } catch { /* */ }
 
     // ════════════════════════════════════════════════════════════════════════
     // ACT 3 — SWAP. The seams — the platform is modular, not hardcoded.
@@ -2037,7 +2180,8 @@ async function main() {
     writeFileSync(join(artifacts2, 'demo.json'), JSON.stringify({
       title: 'Studio demo — gated run', project: PROJECT, initiativeId: INIT2,
     }, null, 2));
-    writeFileSync(join(artifacts2, 'DEMO.html'), '<html><body>demo</body></html>');
+    // F4: the single DEMO.md (DEMO.html is retired — the review page renders markdown).
+    writeFileSync(join(artifacts2, 'DEMO.md'), '# Studio demo — gated run\n\n> A gated run for the flow-engine controls.\n');
 
     // ── S1.0: Flow monitor deep-dive (drawer / gate sub-checks / tail) ────────
     console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-cycle');
@@ -2427,9 +2571,13 @@ async function main() {
     cleanFirstProject();
     cleanFirstFlowRun();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
+    // S7: the seeded review worktree + the develop-trigger initiative (INIT_DEV).
+    try { rmSync(join(FORGE_ROOT, '_worktrees', INIT), { recursive: true, force: true }); } catch { /* */ }
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
       try { rmSync(join(QDIR(q), `${INIT}.verdict-response.md`), { force: true }); } catch { /* */ }
+      try { rmSync(join(QDIR(q), `${INIT}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
+      try { rmSync(join(QDIR(q), `INIT-${DATE}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
     }
     // ACT 3 studio cleanup (gated/ceiling/failed synthetic runs)
     try {
