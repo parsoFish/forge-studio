@@ -39,6 +39,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
+import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
@@ -764,6 +765,34 @@ async function handleHttp(
       sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+
+  // Start development (S7 / DEC-3) — the roadmap "start development" button.
+  // Repoints the initiative's manifest at the forge-develop flow and makes it
+  // claimable (the real enqueue behind the develop trigger). The global CSRF
+  // guard above (x-forge-csrf) already gates this POST.
+  if (method === 'POST' && url === '/api/develop/start') {
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const initiativeId = typeof body['initiativeId'] === 'string' ? body['initiativeId'] : '';
+      if (!initiativeId) {
+        sendJson(res, 400, { error: 'initiativeId required' }, origin);
+        return;
+      }
+      const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
+      if (result.status === 'not-found') {
+        sendJson(res, 404, result, origin);
+        return;
+      }
+      if (result.status === 'already-developing') {
+        sendJson(res, 409, result, origin);
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...result }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
   }

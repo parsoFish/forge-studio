@@ -265,10 +265,16 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
 }
 
 /**
- * M3-5 default: write a minimal flow-run-request into `_queue/pending/` so the
- * scheduler can discover it. M3 limitation: the scheduler only processes full
- * InitiativeManifests today; this file is a structural marker until M4+ extends
- * the claim path to handle flow-run-requests.
+ * Flow-TRIGGER enqueue (declarative `flow.triggers[]`, fired on terminal
+ * success). Writes a structural flow-run-request marker into `_queue/pending/`.
+ *
+ * NOTE (S7): the operator-driven "start development" path does NOT go through
+ * here — it threads a real initiative + cycle_id, so it has its own claimable
+ * enqueue (`orchestrator/enqueue-develop-run.ts`, behind `POST /api/develop/start`).
+ * This marker covers only auto-chaining BETWEEN flows (e.g. a future
+ * architect→develop trigger), which threads the just-completed initiative's
+ * manifest when the monolith retirement lands (S8). No seed flow declares a
+ * trigger today, so this stays a marker by design.
  */
 function defaultEnqueueFlowRun(flowId: string, opts: { origin: string; triggeredBy: string }): void {
   const pendingDir = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), '_queue', 'pending');

@@ -282,6 +282,32 @@ export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boo
   return bridgePost('/api/verdict', input);
 }
 
+// ---- Start development (S7 / DEC-3) --------------------------------------
+
+export type StartDevelopmentResult = {
+  ok: boolean;
+  error?: string;
+  status?: 'enqueued' | 'not-found' | 'already-developing';
+  cycleId?: string;
+  flowId?: string;
+};
+
+/**
+ * Trigger the forge-develop flow for a decomposed initiative (the roadmap
+ * "start development" button). Repoints the manifest at forge-develop +
+ * threads its cycle_id, then the scheduler claims it.
+ */
+export async function startDevelopment(initiativeId: string): Promise<StartDevelopmentResult> {
+  const r = await bridgePost('/api/develop/start', { initiativeId });
+  return {
+    ok: r.ok,
+    error: r.error,
+    status: r.data?.status as StartDevelopmentResult['status'],
+    cycleId: r.data?.cycleId as string | undefined,
+    flowId: r.data?.flowId as string | undefined,
+  };
+}
+
 // ---- Structured demo (ADR 021) ------------------------------------------
 
 export type DemoHarnessMetricRow = {
