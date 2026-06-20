@@ -199,7 +199,8 @@ export type ReflectorToolUseSummary = {
 /**
  * Inspect a streamed assistant message and increment the summary in place.
  * - `brainReads`     — Read/Grep/Glob with a target containing `brain/`.
- * - `themeWrites`    — Write/Edit with a target containing `projects/.../brain/themes/` or `brain/cycles/_raw/`.
+ * - `themeWrites`    — Write/Edit with a target containing `/themes/` (central Brain 3
+ *                      at `brain/projects/<name>/themes/`, ADR 035) or `brain/cycles/_raw/`.
  * - `retroWrites`    — Write/Edit with a target ending in `retro.md`.
  * - `bashCalls`      — any Bash invocation.
  */

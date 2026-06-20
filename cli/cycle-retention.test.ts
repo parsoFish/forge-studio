@@ -150,7 +150,8 @@ function setupBrainTree(opts: {
   mtime?: Date;
 }): TreeHarness {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'forge-retention-test-'));
-  const themesDir = join(forgeRoot, 'projects', opts.projectName, 'brain', 'themes');
+  // Brain 3 is forge-owned + central (ADR 035): brain/projects/<name>/themes/.
+  const themesDir = join(forgeRoot, 'brain', 'projects', opts.projectName, 'themes');
   mkdirSync(themesDir, { recursive: true });
   for (const [file, body] of Object.entries(opts.themes)) {
     const full = join(themesDir, file);
@@ -242,7 +243,7 @@ test('collectCitedBy: returns forge-rooted relative paths', () => {
       sinceMs: 0,
     });
     assert.equal(cited.length, 1);
-    assert.equal(cited[0], 'projects/demo-project/brain/themes/a.md');
+    assert.equal(cited[0], 'brain/projects/demo-project/themes/a.md');
   } finally {
     h.cleanup();
   }
@@ -393,7 +394,7 @@ test('patchArchiveFrontmatter: idempotent — second call yields same content', 
 test('test harness sanity: brain tree exists after setup', () => {
   const h = setupBrainTree({ projectName: 'p1', themes: { 'a.md': 'x' } });
   try {
-    assert.ok(existsSync(join(h.forgeRoot, 'projects', 'p1', 'brain', 'themes', 'a.md')));
+    assert.ok(existsSync(join(h.forgeRoot, 'brain', 'projects', 'p1', 'themes', 'a.md')));
   } finally {
     h.cleanup();
   }

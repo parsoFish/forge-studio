@@ -101,10 +101,14 @@ function setupContractReadyProject(dir: string): void {
     join(dir, '.gitignore'),
     '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n',
   );
-  // C4: roadmap.md + brain/profile.md
+  // C4: roadmap.md stays in the project repo; Brain 3 is forge-owned + CENTRAL
+  // (ADR 035) at <forgeRoot>/brain/projects/<name>/. The project dir is
+  // <forgeRoot>/projects/<name>, so the central brain is two levels up.
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
-  mkdirSync(join(dir, 'brain'), { recursive: true });
-  writeFileSync(join(dir, 'brain', 'profile.md'), '# Profile\n');
+  const name = dir.split('/').pop()!;
+  const centralBrain = join(dir, '..', '..', 'brain', 'projects', name);
+  mkdirSync(centralBrain, { recursive: true });
+  writeFileSync(join(centralBrain, 'profile.md'), '# Profile\n');
 }
 
 /** Setup helpers. */

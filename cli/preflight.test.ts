@@ -23,8 +23,8 @@ function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
 }
 
-/** A project dir that satisfies every clause. The project's brain is now
- *  inside the project repo itself (Brain 3 / three-brain restructure 2026-05-26). */
+/** A project dir that satisfies every clause. The project's brain is forge-owned
+ *  + CENTRAL at <forgeRoot>/brain/projects/<name>/ (ADR 035). */
 function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
   const dir = tmp();
   const forgeRoot = tmp();
@@ -39,9 +39,9 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\n');
-  // Brain 3: profile lives inside the project repo at brain/profile.md.
-  mkdirSync(join(dir, 'brain'), { recursive: true });
-  writeFileSync(join(dir, 'brain', 'profile.md'), '# profile\n');
+  // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
+  mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
+  writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
   // DEMO: a declared demo shape (the project half of the demo contract family).
   mkdirSync(join(dir, '.forge'), { recursive: true });
   writeFileSync(
@@ -181,8 +181,8 @@ test('C2 (HARD): no git repo + absent .gitignore fails', () => {
     const name = dir.split('/').pop()!;
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, scripts: { test: 'vitest run' } }));
     writeFileSync(join(dir, 'roadmap.md'), '# r\n');
-    mkdirSync(join(dir, 'brain'), { recursive: true });
-    writeFileSync(join(dir, 'brain', 'profile.md'), '# p\n');
+    mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
+    writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# p\n');
     const r = runPreflight(dir, { forgeRoot });
     assert.equal(clause(r, 'C2').pass, false);
     assert.equal(r.ok, false);
@@ -238,8 +238,9 @@ test('C4 (HARD): missing roadmap.md ⇒ fail + ok=false', () => {
 test('C4 (HARD): missing brain sub-wiki ⇒ fail', () => {
   const p = happyProject();
   try {
-    // Brain 3 now lives in the project dir itself; remove it to test the hard fail.
-    rmSync(join(p.dir, 'brain'), { recursive: true, force: true });
+    // Brain 3 is forge-owned + central (ADR 035); remove it to test the hard fail.
+    const name = p.dir.split('/').pop()!;
+    rmSync(join(p.forgeRoot, 'brain', 'projects', name), { recursive: true, force: true });
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C4').pass, false);
     assert.equal(r.ok, false);
@@ -272,9 +273,9 @@ test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-s
     writeFileSync(join(dir, '.gitignore'), ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
     writeFileSync(join(dir, 'roadmap.md'), '# r\n');
     writeFileSync(join(dir, 'CLAUDE.md'), '# c\n');
-    // Brain 3 lives in the project dir (three-brain restructure 2026-05-26).
-    mkdirSync(join(dir, 'brain'), { recursive: true });
-    writeFileSync(join(dir, 'brain', 'profile.md'), '# p\n');
+    // Brain 3 is forge-owned + central (ADR 035).
+    mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
+    writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# p\n');
     // No git repo / no remote at all.
     const r = runPreflight(dir, { forgeRoot });
     const c = clause(r, 'C6');
