@@ -1,0 +1,1 @@
+I would like the previously found CI that is not green fixed, and then I would like any remaining components of the release section of ADO specifically broken into initiatives to be worked on

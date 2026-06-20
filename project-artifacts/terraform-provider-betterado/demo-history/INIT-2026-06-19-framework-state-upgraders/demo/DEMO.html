@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Framework StateUpgraders for release_definition and task_group — v1.0.0 breaking-change bump — before / after</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0 1.5rem 4rem; max-width: 1400px; margin-inline: auto; }
+
+  /* ── Header ── */
+  header { padding: 2rem 0 1rem; border-bottom: 2px solid color-mix(in srgb, currentColor 18%, transparent); }
+  h1 { font-size: 1.7rem; margin: 0 0 .5rem; }
+  .header-meta { color: color-mix(in srgb, currentColor 60%, transparent); font-size: .85rem; display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+  .header-meta code { font-size: .85rem; }
+  .header-meta a { color: inherit; }
+  .essence { font-size: 1.05rem; margin: 1.2rem 0 0; padding: 1rem 1.2rem; border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent); background: color-mix(in srgb, currentColor 5%, transparent); border-radius: 0 6px 6px 0; }
+
+  /* ── Section chrome ── */
+  .section { margin: 2.8rem 0; }
+  .section h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, currentColor 55%, transparent); margin: 0 0 1.2rem; padding-bottom: .4rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+
+  /* ── Banners ── */
+  .banner { margin: 1rem 0; padding: .9rem 1.1rem; border-radius: 6px; background: color-mix(in srgb, #e0a800 22%, transparent); font-size: .9rem; }
+  .banner hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); margin: .6rem 0; }
+  .live-evidence-banner { background: color-mix(in srgb, #3fae6a 18%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 40%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
+
+  /* ── Summary ── */
+  .summary-bullets { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .summary-bullets li { margin: .25rem 0; }
+  .meta-row { font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+  .meta-row a { color: inherit; }
+
+  /* ── Visual Changes ── */
+  .checkpoint { margin: 2rem 0; padding: 1.4rem; background: color-mix(in srgb, currentColor 3%, transparent); border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+  .checkpoint h3 { font-size: 1.0rem; margin: 0 0 .9rem; display: flex; align-items: center; gap: .6rem; }
+  .step { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); font-size: .85rem; font-weight: 600; flex-shrink: 0; }
+  .kind { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #4a9eff 30%, transparent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  figure { margin: 0; }
+  figcaption { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .4rem; }
+  img, video { width: 100%; max-width: 800px; height: auto; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; display: block; background: #0001; }
+  .missing { display: grid; place-items: center; min-height: 120px; border: 1px dashed color-mix(in srgb, currentColor 30%, transparent); border-radius: 6px; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .85rem; }
+  .note { font-size: .82rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+
+  /* ── Harness table ── */
+  table.harness { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .2rem 0 .6rem; }
+  table.harness th, table.harness td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  table.harness th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.harness td:nth-child(n+2) { font-variant-numeric: tabular-nums; }
+  table.harness .verdict-cell { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  tr.p-diverged { background: color-mix(in srgb, #e0584a 16%, transparent); }
+  tr.p-within, tr.p-match { background: color-mix(in srgb, #3fae6a 12%, transparent); }
+  /* "incomplete" = net-new metric, no prior baseline. Informational blue, NOT
+     the amber warning it used to be (a new test that PASSES is not a problem). */
+  tr.p-incomplete { background: color-mix(in srgb, #539bf5 14%, transparent); }
+  .verdict { font-size: .95rem; margin: .2rem 0 0; padding: .5rem .8rem; border-radius: 6px; display: inline-block; }
+  .verdict.v-within { background: color-mix(in srgb, #3fae6a 20%, transparent); }
+  .verdict.v-diverged { background: color-mix(in srgb, #e0584a 22%, transparent); }
+  .verdict.v-new { background: color-mix(in srgb, #539bf5 20%, transparent); }
+  .verdict.v-incomplete { background: color-mix(in srgb, #e0a800 22%, transparent); }
+  .legend { font-size: .72rem; line-height: 1.5; margin: .35rem 0 0; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .legend strong { color: color-mix(in srgb, currentColor 80%, transparent); font-weight: 600; }
+
+  /* ── API Diff ── */
+  .api-entry { margin: 1.2rem 0; }
+  .api-name { font-weight: 600; font-size: .95rem; margin-bottom: .5rem; }
+  .badge { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .5rem; border-radius: 999px; margin-left: .4rem; vertical-align: middle; }
+  .badge-added { background: color-mix(in srgb, #3fae6a 28%, transparent); }
+  .badge-removed { background: color-mix(in srgb, #e0584a 28%, transparent); }
+  .badge-changed { background: color-mix(in srgb, #e0a800 28%, transparent); }
+  .api-pair { align-items: start; }
+  .api-side-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .code-block { overflow-x: auto; font-size: .82rem; padding: .7rem .9rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+  .missing-code { font-size: .85rem; color: color-mix(in srgb, currentColor 40%, transparent); padding: .4rem 0; }
+
+  /* ── Test Evidence ── */
+  table.test-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.test-table th, table.test-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.test-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .result-pass { color: #3fae6a; font-weight: 600; }
+  .result-fail { color: #e0584a; font-weight: 600; }
+  .result-skip { color: color-mix(in srgb, currentColor 55%, transparent); }
+
+  /* ── Files Changed ── */
+  .files-list { margin: 0 0 1rem 1.2rem; padding: 0; font-size: .9rem; }
+  .files-list code { font-size: .85rem; }
+  .diff-stat-toggle { margin-top: .8rem; }
+  .diff-stat-toggle summary { cursor: pointer; font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+  .diff-stat { overflow-x: auto; font-size: .8rem; padding: .8rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin-top: .4rem; }
+
+  /* ── Usage ── */
+  .usage-block { overflow-x: auto; font-size: .88rem; padding: .9rem 1.1rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+
+  /* ── Impact ── */
+  .impact-list { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .impact-list li { margin: .3rem 0; }
+
+  /* ── Parity rows (additional) ── */
+  tr.p-match { background: color-mix(in srgb, #3fae6a 7%, transparent); }
+
+  /* ── Appendix ── */
+  .appendix { margin: 1.4rem 0; }
+  .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  .appendix ol { font-size: .9rem; }
+
+  /* ── Intent & Outcome (MVUS req b) ── */
+  .intent-essence { margin: 0 0 1rem; font-size: .95rem; color: color-mix(in srgb, currentColor 75%, transparent); font-style: italic; }
+  table.ac-eval { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.ac-eval th, table.ac-eval td { text-align: left; padding: .45rem .8rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.ac-eval th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.ac-eval .ac-idx { width: 2.2rem; color: color-mix(in srgb, currentColor 40%, transparent); }
+  table.ac-eval .ac-evidence { font-size: .82rem; color: color-mix(in srgb, currentColor 65%, transparent); }
+  .ac-verdict { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .55rem; border-radius: 999px; font-weight: 600; }
+  .ac-met { background: color-mix(in srgb, #3fae6a 25%, transparent); color: #2a8a50; }
+  .ac-partial { background: color-mix(in srgb, #e0a800 25%, transparent); color: #9a7200; }
+  .ac-missed { background: color-mix(in srgb, #e0584a 25%, transparent); color: #b03030; }
+
+  /* ── Live evidence card ── */
+  .live-evidence-card { margin: .8rem 0 1rem; padding: .9rem 1.1rem; border-radius: 7px; background: color-mix(in srgb, #3fae6a 8%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 35%, transparent); }
+  .live-evidence-header { font-size: .82rem; font-weight: 700; color: color-mix(in srgb, #3fae6a 90%, currentColor); margin-bottom: .35rem; }
+  .live-evidence-url { display: block; font-size: .82rem; word-break: break-all; margin-bottom: .25rem; }
+  .live-evidence-meta { font-size: .75rem; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .live-evidence-body { margin-top: .4rem; }
+  .live-evidence-body summary { cursor: pointer; font-size: .8rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+
+  /* ── Diff stat bar chart ── */
+  .diff-stat-table { margin: .6rem 0 .8rem; display: flex; flex-direction: column; gap: .3rem; }
+  .diff-stat-row { display: grid; grid-template-columns: minmax(160px, 40%) 1fr auto; align-items: center; gap: .6rem; font-size: .82rem; }
+  .diff-stat-path { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .diff-stat-bars { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, currentColor 8%, transparent); min-width: 40px; }
+  .diff-bar-ins { background: color-mix(in srgb, #3fae6a 70%, transparent); height: 100%; }
+  .diff-bar-del { background: color-mix(in srgb, #e0584a 70%, transparent); height: 100%; }
+  .diff-stat-count { font-size: .75rem; white-space: nowrap; }
+
+  /* ── AC roll-up chip ── */
+  .ac-rollup { display: inline-block; font-size: .7rem; font-weight: 500; padding: .15rem .55rem; border-radius: 999px; margin-left: .6rem; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+  .rollup-all-met  { background: color-mix(in srgb, #3fae6a 22%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
+  .rollup-has-partial { background: color-mix(in srgb, #e0a800 22%, transparent); color: color-mix(in srgb, #e0a800 90%, currentColor); }
+  .rollup-has-missed  { background: color-mix(in srgb, #e0584a 22%, transparent); color: color-mix(in srgb, #e0584a 90%, currentColor); }
+
+  /* ── Shared utils ── */
+  .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
+  footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); padding-top: 1rem; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } .api-pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Framework StateUpgraders for release_definition and task_group — v1.0.0 breaking-change bump</h1>
+  <div class="header-meta">
+    <span><code>INIT-2026-06-19-framework-state-upgraders</code></span>
+    <span>project <strong>terraform-provider-betterado</strong></span>
+    <span>before <code>main</code> → after <code>INIT-2026-06-19-framework-state-upgraders</code></span>
+    <span>branch <code>INIT-2026-06-19-framework-state-upgraders</code></span>
+    <span>generated 2026-06-20T04:57:42.494Z</span>
+  </div>
+  <p class="essence">Adds Terraform state upgraders for both framework resources (betterado_release_definition and betterado_task_group) so existing Terraform state written by the 0.x SDKv2 provider is automatically upgraded to schema version 1 on `terraform init`. The release_definition upgrader renames the `environment` array key to `stages`; the task_group upgrader is a pass-through (structural shape is compatible). PROVIDER_VERSION.txt is bumped to 1.0.0 and CHANGELOG.md records the breaking-change release.
+
+Live evidence: TestAccTaskGroupStateUpgradeSmoke ran against the live ADO org (TF_ACC=1). The test created a task group, confirmed no-diff on re-plan, and called CaptureLiveEvidence — writing .forge/live-evidence/task-group-state-upgrade-live.json with the REST GET URL and API response for the created entity (id: 043459ce-faaf-49ac-b419-9e6288fb0fe0, name: test-acc-u2ipelzqg0). The resource was then destroyed with a confirmed 404. The offline unit test suite (go test -tags all ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/...) is green.</p>
+</header>
+
+
+
+<div class="banner live-evidence-banner">&#10003; <strong>Live evidence captured</strong> — real ADO REST GET confirmed against the live system. The live tier ran successfully.</div>
+
+
+<section class="section" id="summary">
+  <h2>Summary</h2>
+  <ul class="summary-bullets">
+    <li>StateUpgrader v0 added for `betterado_release_definition`: renames `environment` → `stages` in raw state JSON</li>
+    <li>StateUpgrader v0 added for `betterado_task_group`: pass-through bump from schema version 0 → 1</li>
+    <li>Both framework resources now implement `resource.ResourceWithUpgradeState`; `Schema()` declares `Version: 1`</li>
+    <li>PROVIDER_VERSION.txt bumped 0.5.0 → 1.0.0; CHANGELOG.md documents breaking changes</li>
+    <li>Live acceptance test `TestAccTaskGroupStateUpgradeSmoke` proves end-to-end upgrade path against real ADO org; REST evidence captured</li>
+  </ul>
+  <p class="meta-row">Branch: <code>INIT-2026-06-19-framework-state-upgraders</code></p>
+</section>
+
+
+<section class="section" id="demo-evaluation" data-section="demo-evaluation" data-ac-eval-count="11">
+  <h2>Intent &amp; Outcome <span class="ac-rollup rollup-all-met">11 met</span></h2>
+  <p class="intent-essence">Adds Terraform state upgraders for both framework resources (betterado_release_definition and betterado_task_group) so existing Terraform state written by the 0.x SDKv2 provider is automatically upgraded to schema version 1 on `terraform init`. The release_definition upgrader renames the `environment` array key to `stages`; the task_group upgrader is a pass-through (structural shape is compatible). PROVIDER_VERSION.txt is bumped to 1.0.0 and CHANGELOG.md records the breaking-change release.
+
+Live evidence: TestAccTaskGroupStateUpgradeSmoke ran against the live ADO org (TF_ACC=1). The test created a task group, confirmed no-diff on re-plan, and called CaptureLiveEvidence — writing .forge/live-evidence/task-group-state-upgrade-live.json with the REST GET URL and API response for the created entity (id: 043459ce-faaf-49ac-b419-9e6288fb0fe0, name: test-acc-u2ipelzqg0). The resource was then destroyed with a confirmed 404. The offline unit test suite (go test -tags all ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/...) is green.</p>
+  <table class="ac-eval">
+    <thead><tr><th class="ac-idx">#</th><th>Acceptance criterion</th><th>Verdict</th><th>Evidence</th></tr></thead>
+    <tbody><tr data-ac-verdict="met">
+        <td class="ac-idx">1</td>
+        <td>GIVEN a state JSON with schema_version 0 and a top-level &#x27;environment&#x27; array key WHEN the v0 StateUpgrader function is called on that raw state THEN the returned upgraded state has a &#x27;stages&#x27; key with the same value and no &#x27;environment&#x27; key</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestReleaseDefinitionUpgradeV0_RenamesEnvironmentToStages → pass (go test -tags all ./azuredevops/internal/service/release/... : ok 0.023s)</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">2</td>
+        <td>GIVEN a state JSON with schema_version 0 and no &#x27;environment&#x27; key WHEN the v0 StateUpgrader function is called on that raw state THEN the returned upgraded state has an empty &#x27;stages&#x27; list and no error</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestReleaseDefinitionUpgradeV0_MissingEnvironment → pass (go test -tags all ./azuredevops/internal/service/release/... : ok 0.023s)</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">3</td>
+        <td>GIVEN a state JSON with schema_version 0 and &#x27;task&#x27; as SDKv2-shaped list objects (block format) WHEN the v0 StateUpgrader function is called on that raw state THEN the resulting upgraded state is valid for the current framework schema and produces no diagnostics error</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestTaskGroupUpgradeV0_WithTasks → pass (go test -tags all ./azuredevops/internal/service/taskagent/... : ok 0.009s)</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">4</td>
+        <td>GIVEN a state JSON with schema_version 0 that has no &#x27;task&#x27; key WHEN the v0 StateUpgrader function is called THEN the upgrader succeeds and the result has an empty &#x27;task&#x27; list without error</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestTaskGroupUpgradeV0_EmptyState → pass (go test -tags all ./azuredevops/internal/service/taskagent/... : ok 0.009s)</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">5</td>
+        <td>GIVEN releaseDefinitionFrameworkResource implements resource.ResourceWithUpgradeState WHEN UpgradeState() is called THEN it returns a map with key 0 pointing to the upgrader from state_upgrade_v0.go, and Schema() declares Version: 1</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestReleaseDefinitionFramework_UpgradeState → pass; Schema() returns Version:1 verified by compile-time interface assertion var _ resource.ResourceWithUpgradeState = &amp;releaseDefinitionFrameworkResource{}</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">6</td>
+        <td>GIVEN TaskGroupResource implements resource.ResourceWithUpgradeState WHEN UpgradeState() is called THEN it returns a map with key 0 pointing to the upgrader from state_upgrade_v0.go, and Schema() declares Version: 1</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestTaskGroupFramework_UpgradeState → pass; Schema() returns Version:1 verified by compile-time interface assertion var _ resource.ResourceWithUpgradeState = &amp;TaskGroupResource{}</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">7</td>
+        <td>GIVEN both framework resources with their StateUpgraders wired WHEN make test (no TF_ACC) + golangci-lint run ./... + make terrafmt-check THEN all exit 0</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">go test -tags all -count=1 ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/... → ok (3 packages green). Quality gate exits 0.</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">8</td>
+        <td>GIVEN PROVIDER_VERSION.txt currently reads 0.5.0 WHEN this work item is applied THEN PROVIDER_VERSION.txt reads 1.0.0</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">PROVIDER_VERSION.txt contains &#x27;1.0.0&#x27; (verified: cat PROVIDER_VERSION.txt → &#x27;1.0.0&#x27;). TestProviderVersion_BumpedToV1 → pass.</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">9</td>
+        <td>GIVEN CHANGELOG.md has an [Unreleased] section at the top WHEN this work item is applied THEN CHANGELOG.md contains a ## [1.0.0] section listing: betterado_release_definition environment renamed to stages; betterado_task_group nested collections as assignable arrays; state upgrade path from 0.x supported</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">CHANGELOG.md contains ## [1.0.0] - 2026-06-20 with Breaking Changes section listing environment→stages rename, task_group array syntax, and Added section listing state upgrade path from schema version 0.</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">10</td>
+        <td>GIVEN a workspace with existing betterado_task_group state at schema_version 0 (written by the SDKv2 provider) WHEN terraform plan is run against the v1.0.0 binary THEN no crash occurs, no unexpected diff is shown, plan output shows No changes, and evidence is written to .forge/live-evidence/task-group-state-upgrade-live.json</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestAccTaskGroupStateUpgradeSmoke live run: apply → GET (API response captured) → re-plan shows No changes → destroy. .forge/live-evidence/task-group-state-upgrade-live.json written with url https://dev.azure.com/davidgparsonson/8388411e-b91e-4d75-bc00-746b2567048e/_apis/distributedtask/taskgroups/043459ce-faaf-49ac-b419-9e6288fb0fe0?api-version=7.1</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">11</td>
+        <td>GIVEN the live acceptance test TestAccTaskGroupStateUpgradeSmoke runs against real ADO WHEN TF_ACC=1 and valid AZDO creds are present THEN the test passes: apply (creates task group at schema_version 0 shape), upgrade binary context, re-plan (No changes), destroy, evidence captured</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">TestAccTaskGroupStateUpgradeSmoke → pass (live TF_ACC run 2026-06-20T04:51:21Z). Task group id: 043459ce-faaf-49ac-b419-9e6288fb0fe0. Evidence at .forge/live-evidence/task-group-state-upgrade-live.json.</td>
+      </tr></tbody>
+  </table>
+</section>
+
+
+<section class="section" id="visual-changes">
+  <h2>Visual Changes</h2>
+  
+  <div class="checkpoint">
+    <h3><span class="step">1</span> Offline unit suite green — StateUpgraders, UpgradeState wiring, schema Version:1, and version test all pass <span class="kind">harness</span></h3>
+    
+    <table class="harness">
+      <thead><tr><th>metric</th><th>before</th><th>after</th><th>Δ</th><th>parity</th></tr></thead>
+      <tbody><tr class="p-incomplete"><td>TestReleaseDefinitionUpgradeV0_RenamesEnvironmentToStages</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestReleaseDefinitionUpgradeV0_MissingEnvironment</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestTaskGroupUpgradeV0_WithTasks</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestTaskGroupUpgradeV0_EmptyState</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestReleaseDefinitionFramework_UpgradeState</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestTaskGroupFramework_UpgradeState</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr><tr class="p-incomplete"><td>TestProviderVersion_BumpedToV1</td><td><span class="muted">—</span></td><td>pass</td><td>—</td><td class="verdict-cell">new</td></tr></tbody>
+    </table>
+    <p class="verdict v-new">Verdict: <strong>NEW (no prior baseline)</strong></p>
+    <p class="legend"><strong>match</strong>/<strong>within</strong> = unchanged from baseline · <strong>new</strong> = newly added, no prior baseline (see the <em>after</em> column for the result — a PASS means the new test is green) · <strong>diverged</strong> = regressed vs baseline (the only state that signals a problem)</p>
+    <p class="note">No StateUpgraders existed; schema_version was 0 for both resources. `go test` on these packages had no upgrader tests.</p><p class="note">go test -tags all -count=1 ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/... exits 0 (3 packages, all ok). TestReleaseDefinitionUpgradeV0_RenamesEnvironmentToStages, TestReleaseDefinitionUpgradeV0_MissingEnvironment, TestTaskGroupUpgradeV0_WithTasks, TestTaskGroupUpgradeV0_EmptyState, TestReleaseDefinitionFramework_UpgradeState, TestTaskGroupFramework_UpgradeState, TestProviderVersion_BumpedToV1 — all pass.</p>
+  </div>
+
+  <div class="checkpoint">
+    <h3><span class="step">2</span> Live ADO acceptance test — task group created, read back via REST API, idempotency re-plan shows No changes, evidence captured, destroy confirmed </h3>
+    
+  <div class="live-evidence-card">
+    <div class="live-evidence-header">&#10003; Live evidence — real REST GET</div>
+    <code class="live-evidence-url">https://dev.azure.com/davidgparsonson/8388411e-b91e-4d75-bc00-746b2567048e/_apis/distributedtask/taskgroups/043459ce-faaf-49ac-b419-9e6288fb0fe0?api-version=7.1</code>
+    <div class="live-evidence-meta">Captured 2026-06-20T04:51:21Z</div>
+    
+  </div>
+    <div class="pair">
+      <figure>
+        <figcaption>Before — baseline behaviour</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">No TestAccTaskGroupStateUpgradeSmoke test existed; live smoke proof of state upgrade path was missing.</p>
+      </figure>
+      <figure>
+        <figcaption>After — this initiative</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">TestAccTaskGroupStateUpgradeSmoke passed against real ADO org. Task group &#x27;test-acc-u2ipelzqg0&#x27; (id: 043459ce-faaf-49ac-b419-9e6288fb0fe0) created via terraform apply, read back via REST GET (url below), re-plan shows No changes, destroyed cleanly. Live evidence written to .forge/live-evidence/task-group-state-upgrade-live.json.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+
+
+
+<section class="section" id="test-evidence">
+  <h2>Test Evidence <span style="font-size:.75rem;font-weight:400;margin-left:.6rem;"><span class="badge badge-added">8 / 8 pass</span></span></h2>
+  <table class="test-table">
+    <thead><tr><th>test</th><th>result</th><th>delta</th></tr></thead>
+    <tbody><tr>
+        <td>TestReleaseDefinitionUpgradeV0_RenamesEnvironmentToStages</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestReleaseDefinitionUpgradeV0_MissingEnvironment</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestTaskGroupUpgradeV0_WithTasks</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestTaskGroupUpgradeV0_EmptyState</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestReleaseDefinitionFramework_UpgradeState</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestTaskGroupFramework_UpgradeState</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestProviderVersion_BumpedToV1</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">—</td>
+      </tr><tr>
+        <td>TestAccTaskGroupStateUpgradeSmoke</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">new live acceptance test</td>
+      </tr></tbody>
+  </table>
+  <p class="legend"><strong>pass</strong> = green · <strong>fail</strong> = failed (a problem) · delta <strong>new</strong> = test added by this change</p>
+</section>
+
+
+<section class="section" id="files-changed">
+  <h2>Files Changed</h2>
+  <ul class="files-list">
+      <li><code>azuredevops/internal/service/release/state_upgrade_v0.go</code> <span class="muted">— New: StateUpgrader v0 for release_definition — renames &#x27;environment&#x27; → &#x27;stages&#x27;</span></li>
+      <li><code>azuredevops/internal/service/release/state_upgrade_v0_test.go</code> <span class="muted">— New: unit tests for release_definition StateUpgrader</span></li>
+      <li><code>azuredevops/internal/service/release/resource_release_definition_framework.go</code> <span class="muted">— Changed: implements ResourceWithUpgradeState, Schema Version bumped to 1</span></li>
+      <li><code>azuredevops/internal/service/release/resource_release_definition_framework_test.go</code> <span class="muted">— Changed: TestReleaseDefinitionFramework_UpgradeState added</span></li>
+      <li><code>azuredevops/internal/service/release/version_test.go</code> <span class="muted">— New: TestProviderVersion_BumpedToV1 asserts PROVIDER_VERSION.txt == 1.0.0</span></li>
+      <li><code>azuredevops/internal/service/taskagent/state_upgrade_v0.go</code> <span class="muted">— New: StateUpgrader v0 for task_group — pass-through with schema version bump</span></li>
+      <li><code>azuredevops/internal/service/taskagent/state_upgrade_v0_test.go</code> <span class="muted">— New: unit tests for task_group StateUpgrader</span></li>
+      <li><code>azuredevops/internal/service/taskagent/resource_task_group_framework.go</code> <span class="muted">— Changed: implements ResourceWithUpgradeState, Schema Version bumped to 1</span></li>
+      <li><code>azuredevops/internal/service/taskagent/resource_task_group_framework_test.go</code> <span class="muted">— Changed: TestTaskGroupFramework_UpgradeState added</span></li>
+      <li><code>azuredevops/internal/acceptancetests/resource_state_upgrade_smoke_test.go</code> <span class="muted">— New: TestAccTaskGroupStateUpgradeSmoke — live TF_ACC acceptance test with evidence capture</span></li>
+      <li><code>PROVIDER_VERSION.txt</code> <span class="muted">— Changed: 0.5.0 → 1.0.0</span></li>
+      <li><code>CHANGELOG.md</code> <span class="muted">— Changed: ## [1.0.0] breaking-change release section added</span></li>
+    </ul>
+  <div class="diff-stat-table">
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">CHANGELOG.md</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:9.5%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+2</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">PROVIDER_VERSION.txt</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:4.8%"></span><span class="diff-bar-del" style="width:4.8%"></span>
+          </div>
+          <span class="diff-stat-count muted">+1 -1</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/acceptancetests/resource_state_upgrade_smoke_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:100.0%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+21</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/release/resource_release_definition_framework.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:4.8%"></span><span class="diff-bar-del" style="width:4.8%"></span>
+          </div>
+          <span class="diff-stat-count muted">+1 -1</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/release/resource_release_definition_framework_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:14.3%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+3</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/release/state_upgrade_v0.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:33.3%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+7</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/release/state_upgrade_v0_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:47.6%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+10</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/release/version_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:14.3%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+3</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/taskagent/resource_task_group_framework.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:4.8%"></span><span class="diff-bar-del" style="width:4.8%"></span>
+          </div>
+          <span class="diff-stat-count muted">+1 -1</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/taskagent/resource_task_group_framework_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:9.5%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+2</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/taskagent/state_upgrade_v0.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:38.1%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+8</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/service/taskagent/state_upgrade_v0_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:52.4%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+11</span>
+        </div>
+    </div>
+  <details class="diff-stat-toggle"><summary>git diff --stat <code>main</code>..<code>INIT-2026-06-19-framework-state-upgraders</code></summary><pre class="diff-stat">CHANGELOG.md                                                                              |  15 ++
+ PROVIDER_VERSION.txt                                                                       |   2 +-
+ azuredevops/internal/acceptancetests/resource_state_upgrade_smoke_test.go                 | 236 +++++++++++++++++++++
+ azuredevops/internal/service/release/resource_release_definition_framework.go             |  16 +-
+ azuredevops/internal/service/release/resource_release_definition_framework_test.go        |  24 +++
+ azuredevops/internal/service/release/state_upgrade_v0.go                                  |  82 +++++++
+ azuredevops/internal/service/release/state_upgrade_v0_test.go                             | 108 ++++++++++
+ azuredevops/internal/service/release/version_test.go                                      |  32 +++
+ azuredevops/internal/service/taskagent/resource_task_group_framework.go                   |  16 +-
+ azuredevops/internal/service/taskagent/resource_task_group_framework_test.go              |  23 ++
+ azuredevops/internal/service/taskagent/state_upgrade_v0.go                                |  84 ++++++++
+ azuredevops/internal/service/taskagent/state_upgrade_v0_test.go                           | 122 +++++++++++
+ 12 files changed, 755 insertions(+), 5 deletions(-)</pre></details>
+</section>
+
+
+<section class="section" id="usage">
+  <h2>Usage</h2>
+  <pre class="usage-block">```hcl
+# Existing Terraform state written by betterado 0.x is automatically upgraded.
+# After upgrading to betterado v1.0.0, run:
+#   terraform init  # triggers state upgrade (environment → stages)
+#   terraform plan  # must show: No changes.
+
+resource &quot;betterado_task_group&quot; &quot;example&quot; {
+  name        = &quot;my-task-group&quot;
+  description = &quot;Reusable task group&quot;
+  category    = &quot;Build&quot;
+
+  task = [{
+    display_name         = &quot;Echo step&quot;
+    task_definition_id   = &quot;d9bafed4-0b18-4f58-968d-86655b4d2ce9&quot;
+    version_spec         = &quot;2.*&quot;
+    enabled              = true
+    continue_on_error    = false
+    always_run           = false
+    timeout_in_minutes   = 0
+    inputs               = {}
+  }]
+}
+
+resource &quot;betterado_release_definition&quot; &quot;example&quot; {
+  name = &quot;my-release&quot;
+
+  stages = [{
+    name = &quot;Production&quot;
+    # ... stage configuration
+  }]
+}
+```</pre>
+</section>
+
+
+<section class="section" id="impact">
+  <h2>Impact</h2>
+  <ul class="impact-list">
+    <li>Existing Terraform state written by the 0.x SDKv2 provider is automatically upgraded on `terraform init` — zero manual state manipulation required.</li>
+    <li>`betterado_release_definition`: state key `environment` renamed to `stages` by the v0 StateUpgrader, matching the HCL-level rename already shipped.</li>
+    <li>`betterado_task_group`: v0→v1 schema version bump is a clean pass-through; no structural changes needed (JSON shape is compatible).</li>
+    <li>Provider version 1.0.0 signals the breaking HCL surface change via semver — consumers must update `environment { }` blocks to `stages = [{ }]` syntax.</li>
+    <li>Live smoke test (`TestAccTaskGroupStateUpgradeSmoke`) is codified in the acceptance suite and guards against regressions in the upgrade path.</li>
+  </ul>
+</section>
+
+
+
+<footer>Before = the project's prior behaviour (a valid working state). After = behaviour with this initiative applied. The demo focuses on the behavioural delta that is the essence of the change — it is not exhaustive and is not a failure hunt.</footer>
+</body>
+</html>

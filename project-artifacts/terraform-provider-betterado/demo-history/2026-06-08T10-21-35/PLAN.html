@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLAN — 2026-06-08T10-21-35 — terraform-provider-betterado</title>
+<style>
+  /* Unified with the forge-ui dark stage. Dark-only (the app has no light mode). */
+  :root {
+    --bg: #0a0e14;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #21262d;
+    --accent: #1f6feb;
+    --user: #2ea043;
+    --warn: #d29922;
+    --code-bg: #0a0f16;
+    --card-bg: #11161d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    max-width: 1180px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* ── Typography ── */
+  h1 { font-size: 1.75rem; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.1rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em;
+       text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; font-size: 0.72rem; }
+  h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.5rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.79rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+  ul, ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+  /* ── Badges & chips ── */
+  .badge {
+    display: inline-block;
+    background: var(--code-bg);
+    color: var(--muted);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  }
+  .chip {
+    display: inline-block;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+  }
+  .chip strong { color: var(--fg); }
+  .dep-chip { border-color: var(--warn); color: var(--warn); }
+  /* ── Notice ── */
+  .notice {
+    background: var(--card-bg);
+    border-left: 3px solid var(--accent);
+    padding: 0.65rem 1rem;
+    margin: 0.75rem 0 1.5rem;
+    border-radius: 3px;
+    font-size: 0.88rem;
+  }
+  /* ── Plan header ── */
+  .plan-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .plan-header .vision-block { flex: 1 1 55%; min-width: 260px; }
+  .plan-header .stats-block {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    min-width: 80px;
+  }
+  .stat-card .num { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .stat-card .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.2rem; }
+  .plan-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+  .plan-meta code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+  /* ── Initiative cards ── */
+  .init-cards { display: grid; gap: 1.25rem; }
+  .init-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--card-accent, var(--accent));
+    border-radius: 6px;
+    padding: 1rem 1.15rem 0.75rem;
+  }
+  .init-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .init-title-block { display: flex; flex-direction: column; gap: 0.25rem; }
+  .init-title { font-size: 1.05rem; font-weight: 600; }
+  .init-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.1rem; }
+  /* ── AC list ── */
+  .ac-list-wrap {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.85rem;
+    overflow-x: auto;
+  }
+  .ac-list-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  /* ── AC table ── */
+  .ac-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
+  .ac-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .ac-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  /* ── Tables (general) ── */
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+  th, td { padding: 0.45rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 0.88rem; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* ── Body drawer ── */
+  .body-drawer {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.4rem 0.75rem;
+  }
+  .body-drawer summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); padding: 0.2rem 0; }
+  .body-drawer[open] summary { margin-bottom: 0.5rem; }
+  /* ── Brain context ── */
+  .brain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.3rem; }
+  .brain-list li { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid #d2a8ff; border-radius: 4px; padding: 0.35rem 0.75rem; font-size: 0.83rem; }
+  .brain-list li code { color: #d2a8ff; }
+  /* ── Footprint bar ── */
+  .footprint { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+  .footprint .bar { display: flex; width: 100%; height: 1.5rem; border-radius: 3px; overflow: hidden; margin: 0.5rem 0; background: var(--code-bg); }
+  .footprint .seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 500; text-shadow: 0 0 2px rgba(0,0,0,.5); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 0.25rem; }
+  .footprint .summary { color: var(--muted); font-size: 0.83rem; margin-top: 0.25rem; }
+  .footprint .info { color: var(--muted); font-size: 0.78rem; font-style: italic; margin-top: 0.45rem; }
+  /* ── Misc ── */
+  .empty { color: var(--muted); font-style: italic; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0 1.25rem; }
+  .footer { color: var(--muted); font-size: 0.78rem; }
+  .footer code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+  <!-- ── 1. HEADER ── -->
+  <div class="plan-header">
+    <div class="vision-block">
+      <h1>Architect plan</h1>
+      <p style="color: var(--fg); font-size: 1rem; margin: 0.35rem 0 0.6rem; line-height: 1.5">Bring betterado_release_definition to feature-complete status against ADO REST API 7.2 by: (1) auditing the full CRUD/configuration surface gap between the current provider schema and the ADO models, (2) producing a prioritised roadmap of remaining schema fields, data sources, and acceptance test gaps, and (3) implementing the high-priority configuration surface to achieve declarative parity with what ADO&#39;s vsrm host exposes for classic release pipelines.</p>
+      <div class="plan-meta">
+        Session <code>2026-06-08T10-21-35</code>
+        · Project <code>terraform-provider-betterado</code>
+        · Repo <code>/home/parso/forge/projects/terraform-provider-betterado</code>
+      </div>
+    </div>
+    <div class="stats-block">
+      <div class="stat-card"><div class="num">6</div><div class="lbl">initiatives</div></div>
+      <div class="stat-card"><div class="num">77</div><div class="lbl">total budget</div></div>
+      
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>Read-only viewer.</strong> Review on the
+    <code>/architect/2026-06-08T10-21-35</code> screen in the forge UI —
+    approve, revise, or reject there.
+  </div>
+
+  <!-- ── 2. INITIATIVE CARDS ── -->
+  <h2>Proposed initiatives</h2>
+  <div class="init-cards">
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-definition-schema-audit" style="--card-accent: hsl(0, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-definition-schema-audit</span>
+      <span class="init-title">Audit release_definition schema vs ADO REST 7.2 — produce gap matrix and implementation roadmap</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>8</strong></span>
+      <span class="chip">cap <strong>$12</strong></span>
+      
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Systematically compare the current `betterado_release_definition` Terraform schema against the ADO REST 7.2 `ReleaseDefinition` and `ReleaseDefinitionEnvironment` models. Produce a gap matrix documenting every unmapped field, categorised by CRUD lifecycle (Create-writable vs Read-only/Computed), and a prioritised implementation roadmap for the gaps.
+
+This initiative is pure evaluation and planning — no code implementation. The output feeds directly into subsequent implementation initiatives.
+
+## Acceptance criteria
+
+### AC-1: Gap matrix document
+
+**Given** the vendored `release/models.go` types (`ReleaseDefinition`, `ReleaseDefinitionEnvironment`, `Artifact`, triggers, `DeployPhase` subtypes, `ApprovalOptions`, `ReleaseDefinitionGatesStep`, `EnvironmentOptions`, `EnvironmentRetentionPolicy`, etc.)
+**When** compared field-by-field against the current `resource_release_definition.go` schema
+**Then** produce `docs/release-definition-gap-matrix.md` containing:
+- A table of every ADO model field with columns: Field path | ADO type | TF schema status (mapped / missing / partial) | Writable? | Notes
+- A summary count: N mapped, M missing, P partial
+- Explicit callout of read-only/computed fields (excluded from implementation scope per operator&#39;s brief)
+
+### AC-2: Data source gap assessment
+
+**Given** the SDK client methods `GetReleaseDefinition`, `GetReleaseDefinitions`, `GetDefinitionRevision`, `GetReleaseDefinitionHistory`
+**When** compared against existing data sources (`data_release_definition.go`, `data_release_definitions.go`)
+**Then** the gap matrix includes a data-source section documenting:
+- Which SDK read methods are surfaced as data sources
+- Which are missing (e.g., `GetDefinitionRevision` for revision history, `GetReleaseDefinitionHistory` for audit)
+- Recommendation: implement / defer / out-of-scope
+
+### AC-3: Acceptance test gap assessment
+
+**Given** the current `TestAccReleaseDefinition_*` tests in `azuredevops/internal/acceptancetests/`
+**When** audited for coverage of the schema fields
+**Then** the gap matrix includes a test-coverage section:
+- Fields exercised by existing tests vs fields with no acceptance coverage
+- Known stale/failing tests (e.g., missing `retention_policy` + `pre_deploy_approval` per `2026-05-31-forge-onboarding-findings`)
+- Recommended new test cases
+
+### AC-4: Implementation roadmap
+
+**Given** the gap matrix
+**When** prioritised by: (a) ADO 7.2 required-for-create fields, (b) operator&#39;s request for config-surface parity, (c) complexity (standalone fields vs nested blocks)
+**Then** produce `docs/release-definition-roadmap.md` containing:
+- Ordered list of implementation work items (one per logical gap cluster)
+- Estimated iteration budget per item (calibrated against prior WI-completion-by-domain data)
+- Explicit `depends_on` ordering where schema additions gate test additions
+- Clear &quot;out of scope&quot; section: read-only/computed values, imperative runtime operations (CreateRelease, UpdateApproval, etc.)
+
+### Not in scope
+
+- Implementing any schema changes (that&#39;s a follow-on initiative)
+- Modifying existing code
+- Running acceptance tests live — this is a pure documentation/analysis initiative
+- Imperative/runtime operations (CreateRelease, Approvals, ManualInterventions, Deployments) — documented as out-of-scope per operator&#39;s brief
+
+## Decision log
+
+**In the context of** needing to understand the full release_definition gap before implementation, **facing** the risk of piecemeal discovery during dev-loops, **we chose** a dedicated audit initiative **to achieve** a single source of truth for remaining work, **accepting** the upfront cost of ~8 iterations for analysis before code.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-definition-environment-config-surface" style="--card-accent: hsl(67, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-definition-environment-config-surface</span>
+      <span class="init-title">Implement missing environment configuration fields (environmentTriggers, schedules, processParameters, properties)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>20</strong></span>
+      <span class="chip">cap <strong>$35</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-08-release-definition-schema-audit</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Implement the high-priority missing configuration fields on `ReleaseDefinitionEnvironment` identified by the audit. These are the writable configuration surfaces that ADO 7.2 exposes but the current schema does not map.
+
+## Acceptance criteria
+
+### AC-1: Environment triggers block
+
+**Given** the ADO model field `ReleaseDefinitionEnvironment.EnvironmentTriggers *[]EnvironmentTrigger`
+**When** the user specifies an `environment_trigger` block inside an `environment`
+**Then**:
+- The schema accepts `environment_trigger` with `definition_environment_id`, `trigger_type`, `trigger_content`
+- `expandEnvironment` correctly maps to the SDK struct
+- `flattenEnvironment` correctly reads it back
+- Unit test `TestReleaseDefinition_EnvironmentTriggers_RoundTrip` passes
+
+### AC-2: Schedules block
+
+**Given** the ADO model field `ReleaseDefinitionEnvironment.Schedules *[]ReleaseSchedule`
+**When** the user specifies a `schedule` block inside an `environment`
+**Then**:
+- The schema accepts `schedule` with `days_to_release`, `start_hours`, `start_minutes`, `time_zone_id`, `job_id`
+- Expand/flatten round-trip preserves values
+- Unit test `TestReleaseDefinition_EnvironmentSchedules_RoundTrip` passes
+
+### AC-3: Process parameters block
+
+**Given** the ADO model field `ReleaseDefinitionEnvironment.ProcessParameters *distributedtaskcommon.ProcessParameters`
+**When** the user specifies `process_parameters` inside an `environment`
+**Then**:
+- The schema accepts `process_parameters` with `inputs` list (each: `name`, `default_value`, `parameter_type`)
+- Expand/flatten round-trip preserves values
+- Unit test `TestReleaseDefinition_ProcessParameters_RoundTrip` passes
+
+### AC-4: Environment properties map
+
+**Given** the ADO model field `ReleaseDefinitionEnvironment.Properties interface{}`
+**When** the user specifies `properties` as a `map[string]string` inside an `environment`
+**Then**:
+- The schema accepts `properties` as `TypeMap` with `TypeString` elements
+- Expand/flatten handles the `interface{}` → map conversion
+- Unit test `TestReleaseDefinition_EnvironmentProperties_RoundTrip` passes
+
+### AC-5: Live acceptance test — environment config surface
+
+**Given** a new `TestAccReleaseDefinition_environmentConfig` test case
+**When** `TF_ACC=1` is set and the test runs against live ADO
+**Then**:
+- The test creates a release definition with `environment_trigger`, `schedule`, and `properties` configured
+- `PlanOnly: true` step with `ExpectNonEmptyPlan: false` confirms idempotency
+- Test cleans up (auto-destroy)
+
+### Not in scope
+
+- Read-only/computed environment fields (`badgeUrl`, `currentRelease`, `deployStep`)
+- Demands (already mapped at deploy_phase level)
+- RunOptions (deprecated per ADO docs)
+- Gate steps (covered by existing `pre_deployment_gates`/`post_deployment_gates`)
+
+## Decision log
+
+**In the context of** the operator&#39;s request for configuration-surface parity, **facing** multiple unmapped environment fields, **we chose** to bundle environment-level config fields into one initiative **to achieve** a coherent release of environment configuration, **accepting** a larger iteration budget (~20) for the combined scope.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-definition-artifact-trigger-enhancements" style="--card-accent: hsl(134, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-definition-artifact-trigger-enhancements</span>
+      <span class="init-title">Implement artifact trigger enhancements (tag filters, source branch defaults, artifact filters)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>12</strong></span>
+      <span class="chip">cap <strong>$20</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-08-release-definition-schema-audit</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Enhance the `artifact` and `triggers` blocks to support the full ADO 7.2 artifact trigger configuration surface: tag filters, source branch defaults, and artifact filter options.
+
+## Acceptance criteria
+
+### AC-1: Artifact tag filter support
+
+**Given** the ADO model `ArtifactFilter.TagFilter *TagFilter` and `ArtifactFilter.Tags *[]string`
+**When** the user specifies `tag_filter` inside a `cd_artifact_trigger`
+**Then**:
+- The schema accepts `tag_filter` block with `pattern` and `tags` list
+- Expand/flatten round-trip preserves values
+- Unit test `TestReleaseDefinition_ArtifactTagFilter_RoundTrip` passes
+
+### AC-2: Source branch default flag
+
+**Given** the ADO model `ArtifactFilter.UseBuildDefinitionBranch *bool`
+**When** the user specifies `use_build_definition_branch = true` inside a trigger
+**Then**:
+- The schema accepts the boolean
+- The trigger correctly sets the flag
+- Unit test verifies round-trip
+
+### AC-3: Create release on build tagging flag
+
+**Given** the ADO model `ArtifactFilter.CreateReleaseOnBuildTagging *bool`
+**When** the user specifies `create_release_on_build_tagging = true`
+**Then**:
+- The schema accepts the boolean
+- Expand/flatten preserves it
+- Unit test verifies
+
+### AC-4: SourceRepoTrigger support
+
+**Given** the ADO model `SourceRepoTrigger` with `Alias` and `BranchFilters`
+**When** the user specifies a `source_repo_trigger` block inside `triggers`
+**Then**:
+- The schema accepts `source_repo_trigger` with `alias` and `branch_filters` list
+- Expand emits the correct trigger type
+- Unit test `TestReleaseDefinition_SourceRepoTrigger_RoundTrip` passes
+
+### AC-5: Live acceptance test — trigger enhancements
+
+**Given** a new `TestAccReleaseDefinition_triggerEnhancements` test case
+**When** `TF_ACC=1` and the test runs
+**Then**:
+- Creates a release definition with tag filters and source repo trigger
+- Idempotency step passes
+- Cleanup succeeds
+
+### Not in scope
+
+- PullRequestTrigger (complex PR metadata, low priority per typical usage)
+- ArtifactInstanceData (runtime, not definition-time)
+
+## Decision log
+
+**In the context of** trigger configuration being a key release definition surface, **facing** partial implementation of artifact triggers, **we chose** to complete the trigger schema in one focused initiative **to achieve** end-to-end trigger configuration, **accepting** ~12 iterations for the combined expand/flatten/test work.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-definition-approval-options-gates-comple" style="--card-accent: hsl(201, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-definition-approval-options-gates-comple</span>
+      <span class="init-title">Complete approval options and deployment gates schema (ApprovalOptions fields, gate options, sampling interval)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>15</strong></span>
+      <span class="chip">cap <strong>$25</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-08-release-definition-schema-audit</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Complete the approval and gates configuration surface: implement missing `ApprovalOptions` fields and enhance the `deployment_gates` block with the full `ReleaseDefinitionGatesOptions` schema.
+
+## Acceptance criteria
+
+### AC-1: ApprovalOptions completeness
+
+**Given** the ADO model `ApprovalOptions` fields:
+- `AutoTriggeredAndPreviousEnvironmentApprovedCanBeSkipped`
+- `EnforceIdentityRevalidation`
+- `ExecutionOrder` (beforeGates / afterSuccessfulGates / afterGatesAlways)
+- `ReleaseCreatorCanBeApprover`
+- `RequiredApproverCount`
+- `TimeoutInMinutes`
+
+**When** the user specifies an `approval_options` block inside `pre_deploy_approval` or `post_deploy_approval`
+**Then**:
+- All fields are mapped in the schema
+- Expand/flatten preserves them
+- Unit tests verify each field round-trips
+
+### AC-2: ReleaseDefinitionGatesOptions fields
+
+**Given** the ADO model `ReleaseDefinitionGatesOptions`:
+- `IsEnabled`
+- `MinimumSuccessDuration`
+- `SamplingInterval`
+- `StabilizationTime`
+- `Timeout`
+
+**When** the user specifies these inside `pre_deployment_gates` or `post_deployment_gates`
+**Then**:
+- The `gates_options` sub-block exposes all five fields
+- Values round-trip correctly
+- Unit test `TestReleaseDefinition_GatesOptions_RoundTrip` passes
+
+### AC-3: Gate task definitions
+
+**Given** the ADO model `ReleaseDefinitionGate.Tasks *[]WorkflowTask`
+**When** the user specifies `gate` blocks inside deployment gates
+**Then**:
+- Each gate accepts `name`, `inputs`, `enabled`, `timeout_in_minutes`
+- Expand correctly emits WorkflowTask structs
+- Unit test verifies
+
+### AC-4: Live acceptance test — approvals and gates
+
+**Given** a new `TestAccReleaseDefinition_approvalsAndGates` test
+**When** `TF_ACC=1` and the test runs
+**Then**:
+- Creates a release definition with non-default approval options and a gate task
+- Idempotency step passes
+- Cleanup succeeds
+
+### Not in scope
+
+- Runtime approval operations (UpdateReleaseApproval) — imperative
+- Runtime gate updates (UpdateGates) — imperative
+
+## Decision log
+
+**In the context of** approvals and gates being critical for production release pipelines, **facing** partial implementation of these blocks, **we chose** to complete them in one initiative **to achieve** a fully-configurable approval/gate surface, **accepting** ~15 iterations for the combined schema + test work.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-data-sources-completion" style="--card-accent: hsl(268, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-data-sources-completion</span>
+      <span class="init-title">Implement missing release data sources (revision history, definition history)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>10</strong></span>
+      <span class="chip">cap <strong>$15</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-08-release-definition-schema-audit</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Implement the remaining read-only data sources for release definitions identified by the audit: definition revision lookup and definition history (audit trail).
+
+## Acceptance criteria
+
+### AC-1: data.betterado_release_definition_revision
+
+**Given** the SDK method `GetDefinitionRevision(project, definitionId, revision)` returning `io.ReadCloser` (JSON payload)
+**When** the user specifies `data.betterado_release_definition_revision` with `project_id`, `release_definition_id`, `revision`
+**Then**:
+- The data source calls `GetDefinitionRevision`
+- Returns the raw JSON as a `json_content` attribute (string)
+- Unit test with gomock verifies the SDK call path
+- Acceptance test confirms live lookup returns valid JSON
+
+### AC-2: data.betterado_release_definition_history
+
+**Given** the SDK method `GetReleaseDefinitionHistory(project, definitionId)` returning `*[]ReleaseDefinitionRevision`
+**When** the user specifies `data.betterado_release_definition_history` with `project_id`, `release_definition_id`
+**Then**:
+- The data source returns a list of `revision` objects (each: `revision`, `changed_by`, `changed_date`, `change_type`, `comment`)
+- Unit test verifies flatten logic
+- Acceptance test confirms live listing
+
+### AC-3: Provider registration and docs
+
+**Given** the new data sources
+**When** the provider initialises
+**Then**:
+- Both data sources are registered in `provider.go` DataSourcesMap
+- `provider_test.go` count assertion updated
+- Docs pages added under `docs/data-sources/`
+
+### Not in scope
+
+- Implementing write operations on revision history (immutable by design)
+- ReleaseDefinitionRevision diffing (out of scope — consumer concern)
+
+## Decision log
+
+**In the context of** the operator&#39;s request to include data sources in scope, **facing** two SDK read methods not yet surfaced, **we chose** to implement them in one focused initiative **to achieve** complete read surface for release definitions, **accepting** ~10 iterations for the two data sources + tests.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-08-release-acceptance-test-fixes" style="--card-accent: hsl(335, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-08-release-acceptance-test-fixes</span>
+      <span class="init-title">Fix stale acceptance tests and add comprehensive test coverage for new schema fields</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>12</strong></span>
+      <span class="chip">cap <strong>$20</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-08-release-definition-environment-config-surface, INIT-2026-06-08-release-definition-artifact-trigger-enhancements, INIT-2026-06-08-release-definition-approval-options-gates-comple</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Summary
+
+Fix the known stale acceptance tests (missing `retention_policy` + `pre_deploy_approval` per ADO REST 7.1 requirements) and add comprehensive test coverage for all schema fields implemented in the prior initiatives.
+
+## Acceptance criteria
+
+### AC-1: Fix TestAccReleaseDefinition_basic
+
+**Given** the known failure: ADO REST 7.1+ requires stage-level `retention_policy` and `pre_deploy_approval` with a valid approver
+**When** the HCL fixture is updated with:
+- `retention_policy { days_to_keep = 30, releases_to_keep = 3 }`
+- `pre_deploy_approval { approver { id = var.approver_id } }`
+**Then**:
+- `TF_ACC=1` test passes
+- Idempotency step (`ExpectNonEmptyPlan: false`) passes
+
+### AC-2: Fix TestAccReleaseDefinition_complete
+
+**Given** the existing `_complete` test may be missing new fields
+**When** the HCL fixture is extended to exercise environment triggers, schedules, approval options, gates options
+**Then**:
+- Test passes live
+- Covers the fields added in prior initiatives
+
+### AC-3: TestAccReleaseDefinition_update
+
+**Given** the need to verify update path
+**When** a new `_update` test is added that:
+- Creates a minimal definition
+- Applies a second config with changed fields (name, description, new environment)
+- Verifies update-in-place (not ForceNew)
+**Then**:
+- Test passes live
+- Revision increments by 1
+
+### AC-4: TestAccReleaseDefinition_import
+
+**Given** the importer is wired (`tfhelper.ImportProjectQualifiedResource`)
+**When** a new `_import` test is added
+**Then**:
+- Creates a definition
+- Imports it by `project_id/definition_id`
+- State matches
+
+### AC-5: Provider-wide acceptance test green
+
+**Given** all release acceptance tests fixed
+**When** `TF_ACC=1 go test -run TestAcc ./azuredevops/internal/acceptancetests/...` runs
+**Then**:
+- All release-related tests pass
+- No regressions in other resource tests
+
+### Not in scope
+
+- Adding acceptance tests for resources outside the release service package
+- Performance benchmarking
+
+## Decision log
+
+**In the context of** known stale tests blocking confidence in the release resource, **facing** the need to validate all new schema fields live, **we chose** to fix tests after all schema initiatives merge **to achieve** a single comprehensive test pass, **accepting** the dependency on prior implementation initiatives.</pre>
+  </details>
+</div>
+  </div>
+
+  <!-- ── 3. BRAIN CONTEXT ── -->
+  <h2>Brain context</h2>
+  <ul class="brain-list">
+    <li><code>/Users/jchannon/Projects/forge/projects/terraform-provider-betterado/brain/profile.md</code> — consulted during architect draft</li>
+    <li><code>/Users/jchannon/Projects/forge/brain/cycles/themes/spec-driven-development.md</code> — consulted during architect draft</li>
+    <li><code>/Users/jchannon/Projects/forge/brain/cycles/themes/eval-driven-development.md</code> — consulted during architect draft</li>
+    <li><code>/Users/jchannon/Projects/forge/brain/cycles/themes/dependency-ordered-work.md</code> — consulted during architect draft</li>
+    <li><code>/Users/jchannon/Projects/forge/brain/forge-dev/themes/exploration-vs-implementation-initiatives.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/profile.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/spec-driven-development.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/eval-driven-development.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/dependency-ordered-work.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/forge-dev/themes/exploration-vs-implementation-initiatives.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/release-substrate-context.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-05-31-release-definition-unit-test-substrate.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-06-data-source-split-read-only-pattern.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-07-data-source-parity-pattern-confirmed.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-05-ado-silent-field-discard-idempotency.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-06-environment-templates-spike-findings.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-05-live-acceptance-gate-for-acceptance-wis.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-06-06-acceptance-test-compile-only-gate.md</code> — consulted during architect draft</li>
+  </ul>
+
+  <!-- ── 4. AGGREGATE FOOTPRINT (C19 informational) ── -->
+  <h2>Aggregate footprint <span class="badge">informational</span></h2>
+  <div class="footprint">
+    <div class="summary">6 initiatives · total iteration budget <strong>77</strong></div>
+    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
+      <div class="seg" style="flex: 8; background: hsl(0, 55%, 50%);" title="INIT-2026-06-08-release-definition-schema-audit — 8 iterations">release-definition-schema-audit</div>
+      <div class="seg" style="flex: 20; background: hsl(67, 55%, 50%);" title="INIT-2026-06-08-release-definition-environment-config-surface — 20 iterations">release-definition-environment-config-surface</div>
+      <div class="seg" style="flex: 12; background: hsl(134, 55%, 50%);" title="INIT-2026-06-08-release-definition-artifact-trigger-enhancements — 12 iterations">release-definition-artifact-trigger-enhancements</div>
+      <div class="seg" style="flex: 15; background: hsl(201, 55%, 50%);" title="INIT-2026-06-08-release-definition-approval-options-gates-comple — 15 iterations">release-definition-approval-options-gates-comple</div>
+      <div class="seg" style="flex: 10; background: hsl(268, 55%, 50%);" title="INIT-2026-06-08-release-data-sources-completion — 10 iterations">release-data-sources-completion</div>
+      <div class="seg" style="flex: 12; background: hsl(335, 55%, 50%);" title="INIT-2026-06-08-release-acceptance-test-fixes — 12 iterations">release-acceptance-test-fixes</div>
+    </div>
+    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+  </div>
+
+  <!-- ── 5. OPERATOR BRIEF + INTERVIEW ── -->
+  <h2>Operator brief + interview</h2>
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Operator answer</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Is this initiative producing an evaluation report and implementation plan, or actually implementing the missing CRUD operations and configurations?</td><td>Evaluation/audit (recommended)</td></tr>
+      <tr><td>2</td><td>What does &#39;feature complete&#39; mean for the release resource in this context?</td><td>Specifically in relation to CRUD operations inline with a terraform provider typical layout and the rest of the project</td></tr>
+      <tr><td>3</td><td>Should this initiative include live ADO acceptance test fixes, or focus purely on CRUD/schema analysis?</td><td>Include test fixes (recommended)</td></tr>
+      <tr><td>4</td><td>When you say &#39;CRUD operations available on classic releases,&#39; do you mean the resource lifecycle operations (Create/Read/Update/Delete on the resource itself) OR the configuration surface (schema features like gates, triggers, parallel execution)?</td><td>Configuration surface (recommended)</td></tr>
+      <tr><td>5</td><td>Should this initiative produce only an evaluation report, or also implement fixes for the stale acceptance tests?</td><td>And just to confirm, this is not a pure test fix initiative. this is planning all the way through to full feature parity.</td></tr>
+      <tr><td>6</td><td>What does &#39;feature complete&#39; mean for release_definition in your view — ADO API 7.2 parity, or a narrower scope?</td><td>Read only/computed values would be good to exclude given terraform cant influence them anyway, but otherwise ado rest parity is desired</td></tr>
+      <tr><td>7</td><td>This initiative will produce an evaluation report + implementation plan. Should it ALSO implement the missing schema fields it identifies, or stop at the planning stage?</td><td>I feel like the audit should be part of this architecting in order to generate initiatives as relevant given its investigation</td></tr>
+      <tr><td>8</td><td>For &#39;feature complete&#39; on release_definition, should the audit also evaluate whether data sources (List definitions, GetRevision, GetHistory) are needed, or focus purely on the resource schema?</td><td>Include data sources in scope</td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+  <div class="footer">
+    Generated by the architect runner on 2026-06-08T10:58:03.512Z.
+    Reviewed + approved on the <code>/architect/2026-06-08T10-21-35</code> screen.
+  </div>
+</body>
+</html>
