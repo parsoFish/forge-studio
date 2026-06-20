@@ -11,6 +11,7 @@
 - [`six-phases-of-forge`](./themes/six-phases-of-forge.md) — Brain → Architect → PM → Developer Loop → Review Loop → Reflection.
 - [`infrastructure-evolution`](./themes/infrastructure-evolution.md) — What forge kept from its founding mental models and what it replaced with battle-tested tools.
 - [`forge-studio-build-arc`](./themes/forge-studio-build-arc.md) — How the full Forge Studio roadmap (M0-M6) was built via subagent orchestration, and the durable lessons (strangler equivalence, verify-cycle corpus non-determinism, review discipline).
+- [`framework-migration-capstone-arc`](./themes/framework-migration-capstone-arc.md) — Operator-driven betterado SDKv2→plugin-framework migration: the four forge fixes, the TF_ACC-inheritance off-rails, and the gate-gap that shipped a mis-named headline resource (a passing live acc test doesn't prove the merged surface).
 
 ### External-system profiles
 

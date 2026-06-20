@@ -194,6 +194,7 @@ const BASE_INPUT = {
   initiativeId: INITIATIVE_ID,
   initiativeIdForEvent: INITIATIVE_ID,
   parentEventId: 'parent-evt-1',
+  demoDir: `demo/${INITIATIVE_ID}`,
   // demoShape, demoCommand, qualityGateCmd, worktreePath, wiDir, logger
   // filled per-test
 } as const;

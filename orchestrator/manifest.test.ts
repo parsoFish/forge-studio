@@ -81,6 +81,23 @@ test('validateManifest: rejects budgets ≤ 0', () => {
   assert.ok(e2.some((e) => e.includes('cost_budget_usd')));
 });
 
+test('cost_ceiling_usd: optional, round-trips through serialize/parse when present', () => {
+  const m: InitiativeManifest = { ...fixture(), cost_ceiling_usd: 120 };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.cost_ceiling_usd, 120);
+});
+
+test('cost_ceiling_usd: absent stays undefined (not serialized)', () => {
+  const md = serializeManifest(fixture());
+  assert.ok(!/cost_ceiling_usd/.test(md), 'absent ceiling must not be serialized');
+  assert.equal(parseManifest(md).cost_ceiling_usd, undefined);
+});
+
+test('validateManifest: rejects cost_ceiling_usd ≤ 0 when present, allows absent', () => {
+  assert.ok(validateManifest({ ...fixture(), cost_ceiling_usd: 0 }).some((e) => e.includes('cost_ceiling_usd')));
+  assert.equal(validateManifest(fixture()).filter((e) => e.includes('cost_ceiling_usd')).length, 0);
+});
+
 test('writeManifest: writes a parseable file under _queue/pending/', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-manifest-'));
   try {

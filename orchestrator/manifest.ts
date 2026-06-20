@@ -44,6 +44,14 @@ export type InitiativeManifest = {
   created_at: string;          // ISO-8601
   iteration_budget: number;    // > 0
   cost_budget_usd: number;     // > 0
+  /**
+   * Optional per-run cycle cost ceiling (USD). When present, overrides the
+   * flow's `costCeilingUsd` for THIS run only (see flow-runner runFlow). Lets a
+   * single initiative carry a higher ceiling than the shared seed flow without
+   * mutating the flow file. Absent = use the flow's ceiling. The
+   * `FORGE_COST_CEILING_USD` env var takes precedence over this when set.
+   */
+  cost_ceiling_usd?: number;   // > 0 when present
   phase: ManifestPhase;
   /**
    * G6: autonomous-vs-hand-directed cohort tag. Defaults to `architect`
@@ -207,6 +215,9 @@ export function parseManifest(content: string): InitiativeManifest {
     manifest.resume_from = data.resume_from;
   }
   if (data.disposable === true) manifest.disposable = true;
+  if (typeof data.cost_ceiling_usd === 'number' && data.cost_ceiling_usd > 0) {
+    manifest.cost_ceiling_usd = data.cost_ceiling_usd;
+  }
   if (typeof data.retry_count === 'number') manifest.retry_count = data.retry_count;
   if (Array.isArray(data.previous_failure_modes)) {
     const modes = (data.previous_failure_modes as unknown[]).filter((s): s is string => typeof s === 'string');
@@ -249,6 +260,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.disposable === true) {
     data.disposable = true;
   }
+  if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
+    data.cost_ceiling_usd = m.cost_ceiling_usd;
+  }
   if (typeof m.retry_count === 'number' && m.retry_count > 0) {
     data.retry_count = m.retry_count;
   }
@@ -270,6 +284,9 @@ export function validateManifest(m: InitiativeManifest): string[] {
   if (!m.created_at) errors.push('created_at is required');
   if (!(m.iteration_budget > 0)) errors.push(`iteration_budget must be > 0: got ${m.iteration_budget}`);
   if (!(m.cost_budget_usd > 0)) errors.push(`cost_budget_usd must be > 0: got ${m.cost_budget_usd}`);
+  if (m.cost_ceiling_usd !== undefined && !(m.cost_ceiling_usd > 0)) {
+    errors.push(`cost_ceiling_usd must be > 0 when present: got ${m.cost_ceiling_usd}`);
+  }
   if (!INITIATIVE_ORIGINS.includes(m.origin)) {
     errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
   }
@@ -358,6 +375,23 @@ export function readManifestFlowId(manifestPath: string): string | null {
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
     return m.flow_id && m.flow_id.length > 0 ? m.flow_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the optional per-run cost ceiling (USD) off the manifest frontmatter.
+ * Returns the positive number when present, else null. Best-effort: a
+ * missing/unparseable manifest yields null (caller falls back to the flow's
+ * own `costCeilingUsd`).
+ */
+export function readManifestCostCeiling(manifestPath: string): number | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0
+      ? m.cost_ceiling_usd
+      : null;
   } catch {
     return null;
   }

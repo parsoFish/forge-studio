@@ -17,6 +17,8 @@ import {
   decideFinalCiGate,
   execCommandVector,
   recordBrainGateResult,
+  resolveCostCeilingOverride,
+  resolveCiTimeoutMs,
   runCycle,
   snapshotCycleArtefacts,
   type CiCommandRunner,
@@ -40,6 +42,95 @@ function readEvents(logger: ReturnType<typeof createLogger>): EventLogEntry[] {
   const text = readFileSync(logger.logFilePath, 'utf8');
   return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as EventLogEntry);
 }
+
+// ----- resolveCostCeilingOverride (per-run cost ceiling precedence) -----
+
+function writeManifestWithCeiling(ceiling: number | undefined): string {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-ceiling-'));
+  const m: InitiativeManifest = {
+    initiative_id: 'INIT-2026-06-19-ceiling',
+    project: 'demo',
+    project_repo_path: '/tmp/demo',
+    created_at: '2026-06-19T00:00:00Z',
+    iteration_budget: 50,
+    cost_budget_usd: 25,
+    phase: 'pending',
+    origin: 'architect',
+    body: '# body',
+    ...(ceiling !== undefined ? { cost_ceiling_usd: ceiling } : {}),
+  };
+  const path = join(dir, 'manifest.md');
+  writeFileSync(path, serializeManifest(m));
+  return path;
+}
+
+test('resolveCostCeilingOverride: env wins over manifest', () => {
+  const path = writeManifestWithCeiling(120);
+  const prev = process.env.FORGE_COST_CEILING_USD;
+  process.env.FORGE_COST_CEILING_USD = '200';
+  try {
+    assert.equal(resolveCostCeilingOverride(path), 200);
+  } finally {
+    if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
+    else process.env.FORGE_COST_CEILING_USD = prev;
+  }
+});
+
+test('resolveCostCeilingOverride: falls back to manifest when env unset', () => {
+  const path = writeManifestWithCeiling(120);
+  const prev = process.env.FORGE_COST_CEILING_USD;
+  delete process.env.FORGE_COST_CEILING_USD;
+  try {
+    assert.equal(resolveCostCeilingOverride(path), 120);
+  } finally {
+    if (prev !== undefined) process.env.FORGE_COST_CEILING_USD = prev;
+  }
+});
+
+test('resolveCostCeilingOverride: undefined when neither env nor manifest set; bad env ignored', () => {
+  const path = writeManifestWithCeiling(undefined);
+  const prev = process.env.FORGE_COST_CEILING_USD;
+  delete process.env.FORGE_COST_CEILING_USD;
+  try {
+    assert.equal(resolveCostCeilingOverride(path), undefined);
+    process.env.FORGE_COST_CEILING_USD = 'not-a-number';
+    assert.equal(resolveCostCeilingOverride(path), undefined);
+    process.env.FORGE_COST_CEILING_USD = '-5';
+    assert.equal(resolveCostCeilingOverride(path), undefined);
+  } finally {
+    if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
+    else process.env.FORGE_COST_CEILING_USD = prev;
+  }
+});
+
+// ----- resolveCiTimeoutMs (env-overridable CI gate/fix timeouts) -----
+
+test('resolveCiTimeoutMs: defaults are 20min gate / 5min fix', () => {
+  const prevG = process.env.FORGE_CI_GATE_TIMEOUT_MS, prevF = process.env.FORGE_CI_FIX_TIMEOUT_MS;
+  delete process.env.FORGE_CI_GATE_TIMEOUT_MS; delete process.env.FORGE_CI_FIX_TIMEOUT_MS;
+  try {
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+    assert.equal(resolveCiTimeoutMs('fix'), 5 * 60_000);
+  } finally {
+    if (prevG !== undefined) process.env.FORGE_CI_GATE_TIMEOUT_MS = prevG;
+    if (prevF !== undefined) process.env.FORGE_CI_FIX_TIMEOUT_MS = prevF;
+  }
+});
+
+test('resolveCiTimeoutMs: env overrides the gate timeout; bad values ignored', () => {
+  const prev = process.env.FORGE_CI_GATE_TIMEOUT_MS;
+  try {
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = '2400000';
+    assert.equal(resolveCiTimeoutMs('gate'), 2_400_000);
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = 'nope';
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = '-1';
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000);
+  } finally {
+    if (prev === undefined) delete process.env.FORGE_CI_GATE_TIMEOUT_MS;
+    else process.env.FORGE_CI_GATE_TIMEOUT_MS = prev;
+  }
+});
 
 // ----- recordBrainGateResult -----
 

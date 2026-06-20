@@ -33,6 +33,7 @@ import {
 import { type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '../../loops/_adapters/registry.ts';
 import type { AgentInvocation } from '../../loops/_adapters/types.ts';
+import { projectDemoRelDir, readArtifactRoot } from '../brain-paths.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
@@ -1527,6 +1528,9 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       initiativeIdForEvent: input.initiativeId,
       parentEventId: startEventId,
       workItemsDir: resolve(input.worktreePath, '.forge/work-items'),
+      // artifactRoot-resolved so the gate checks demo.json where the unifier was
+      // told to author it (same projectDemoRelDir the invocation/mirror use).
+      demoDir: projectDemoRelDir(input.initiativeId, readArtifactRoot(input.projectRepoPath)),
     });
 
   let loopResult: LoopResult | null = null;
@@ -1679,6 +1683,14 @@ type ComposedUnifierGateInput = {
   parentEventId: string;
   /** Wave B (2026-06-04): path to the work-items dir for incomplete-delivery gate. */
   workItemsDir: string;
+  /**
+   * Worktree-relative demo dir, artifactRoot-resolved (e.g. `demo/<id>` legacy,
+   * or `<artifactRoot>/history/<id>/demo` when the project gathers artifacts).
+   * The pr_self_contained gate validates `<demoDir>/demo.json` — it MUST match
+   * where the unifier was told to author it (projectDemoRelDir), or the gate
+   * false-fails "demo.json missing" forever on artifactRoot≠"." projects.
+   */
+  demoDir: string;
 };
 
 /**
@@ -1716,7 +1728,7 @@ export function prBodyHasGitTruthSections(body: string): boolean {
 }
 
 export async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
-  const { worktreePath, initiativeId, qualityGateCmd, demoShape, demoCommand, logger } = input;
+  const { worktreePath, qualityGateCmd, demoShape, demoCommand, logger, demoDir } = input;
 
   // Local helper: emit one structured sub-check observation (always — pass OR fail).
   // This is ADDITIVE: existing failure events below are untouched.
@@ -1807,7 +1819,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
   //    is derived. The gate validates demo.json against the schema — the
   //    structural check that fixes free-form demo inconsistency.)
-  const demoJsonPath = join(worktreePath, 'demo', initiativeId, 'demo.json');
+  const demoJsonPath = join(worktreePath, demoDir, 'demo.json');
   const prDescPath = join(worktreePath, '.forge', 'pr-description.md');
   let demoErrors: string[] = ['demo.json missing'];
   if (existsSync(demoJsonPath)) {
