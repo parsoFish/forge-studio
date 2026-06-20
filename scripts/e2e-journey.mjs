@@ -4,15 +4,16 @@
  *   node scripts/e2e-journey.mjs   (npm run ui:journey)
  *
  * STORY: "Forge Studio — author a flow, run it, swap its engine."
- *   Post-M8 the platform is the hero, not one linear cycle. The forge cycle is
- *   just ONE flow definition (studio/flows/forge-cycle/flow.yaml) interpreted by
- *   the node-executor registry (ADR-028). The journey proves the three things the
+ *   Post-M8 the platform is the hero, not one linear cycle. The forge cycle is now
+ *   the 3-flow set (forge-architect → forge-develop → forge-reflect; the forge-cycle
+ *   monolith was retired in S8/DEC-3) — flow definitions interpreted by the
+ *   node-executor registry (ADR-028). The journey proves the three things the
  *   platform now does, in order:
  *
  *   ACT 1 — AUTHOR   everything in Studio is data you can edit
  *     · library (/) — flows / agents / projects / KBs as cards + operator pulse
- *     · BUILD THE FORGE CYCLE FROM SCRATCH — author forge-cycle-scratch as a flow
- *       definition (6 agents, 5 artifact edges, 2 gates), validate it with
+ *     · BUILD THE DEVELOP FLOW FROM SCRATCH — author forge-develop-scratch as a flow
+ *       definition (3 nodes, 2 artifact edges, 1 gate), validate it with
  *       `forge studio lint`, prove structural parity with the production seed, and
  *       render it live in the flow builder. The hardcoded cycle is subsumed by data.
  *     · agent builder (/agents/project-manager) — composition + runtime + budgets
@@ -22,7 +23,7 @@
  *   ACT 2 — RUN   the cycle as the proof case, grounded on a REAL mdtoc feature
  *     · idea (/architect/new) → interview (P1 stall / P2 free-text / P3 activity / P4 cost)
  *     · PLAN gate (/artifact ...type=plan&mode=gate) — send-back → revise → approve
- *     · autonomous build on /flows/forge-cycle — PM decomposes → WIs fan off dev →
+ *     · autonomous build on /flows/forge-develop — PM decomposes → WIs fan off dev →
  *       TDD red → grind → gate.pass (dependency-ordered) → unifier on its OWN hex
  *       authors the mdtoc demo (captured CLI read-back evidence)
  *     · verdict gate — per-AC evaluated demo (AC-2 PARTIAL) → operator authors a new
@@ -49,7 +50,7 @@
  *
  * Output: forge-ui/.demo-shots/e2e/{video/journey.webm, frames/*.png, index.html}.
  * Cleans up all seeded state (architect session, cycle logs, queue manifests,
- * the forge-cycle-scratch flow, any _guidance/*.md) in the finally block.
+ * the forge-develop-scratch flow, any _guidance/*.md) in the finally block.
  */
 import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
@@ -120,25 +121,24 @@ const TOC_SENTINEL = 'sentinel-7f3a9c';
 // data (ADR-028) — `forge studio lint` validates it and it is structurally
 // identical to the production seed. Written before the bridge boots so the UI can
 // load it; removed in the finally block.
-const SCRATCH_FLOW = 'forge-cycle-scratch';
+// S8/DEC-3: the forge-cycle monolith was retired; the AUTHOR proof re-anchors on
+// forge-develop — the build flow of the 3-flow set — rebuilt from scratch as data
+// and proven structurally identical to the shipped seed.
+const SCRATCH_FLOW = 'forge-develop-scratch';
 const SCRATCH_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', SCRATCH_FLOW);
-const SEED_FLOW_PATH = join(FORGE_ROOT, 'studio', 'flows', 'forge-cycle', 'flow.yaml');
-/** The explicit, from-scratch authoring spec (NOT a copy of the seed file). */
+const SEED_FLOW_PATH = join(FORGE_ROOT, 'studio', 'flows', 'forge-develop', 'flow.yaml');
+/** The explicit, from-scratch authoring spec (NOT a copy of the seed file).
+ *  Mirrors forge-develop: dev (entry, no fanOut) → unifier (resumable) → review
+ *  (verdict gate). 3 nodes, 2 edges, 1 gate. */
 const SCRATCH_SPEC = {
   nodes: [
-    { id: 'architect', agent: 'architect', gate: 'plan' },
-    { id: 'pm', agent: 'project-manager' },
-    { id: 'dev', agent: 'developer-ralph', fanOut: 'work-items' },
+    { id: 'dev', agent: 'developer-ralph' },
     { id: 'unifier', agent: 'developer-unifier', resumable: true },
     { id: 'review', gate: 'verdict' },
-    { id: 'reflect', agent: 'reflector' },
   ],
   edges: [
-    { from: 'architect', to: 'pm', artifact: 'plan' },
-    { from: 'pm', to: 'dev', artifact: 'work-items' },
     { from: 'dev', to: 'unifier', artifact: 'wi-branches' },
     { from: 'unifier', to: 'review', artifact: 'pr' },
-    { from: 'review', to: 'reflect', artifact: 'verdict' },
   ],
 };
 function inlineYaml(obj) {
@@ -150,9 +150,9 @@ function writeScratchFlow() {
   mkdirSync(SCRATCH_FLOW_DIR, { recursive: true });
   const lines = [
     `id: ${SCRATCH_FLOW}`,
-    'name: Forge Cycle (authored from scratch)',
+    'name: Forge Develop (authored from scratch)',
     'version: 1',
-    'goal: Author-from-scratch proof — the forge cycle rebuilt as a flow definition.',
+    'goal: Author-from-scratch proof — the forge-develop build flow rebuilt as a flow definition.',
     'project: null',
     'kb: cycles',
     'costCeilingUsd: 25',
@@ -688,7 +688,7 @@ const { failures, check, countAtLeast, expectPhaseCost, expectHexOpensDrawer } =
 
 /** Navigate to a Studio flow monitor and wait until it is ready with the cycle's
  *  run selected. The monitor refetches the run model from the bridge on load. */
-async function openStudioMonitor(page, watch, flowId = 'forge-cycle', runId = CYCLE_ID) {
+async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = CYCLE_ID) {
   await page.goto(watch.uiUrl + `/flows/${flowId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1192,12 +1192,12 @@ async function main() {
     // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
     cleanFirstFlowRun();
 
-    // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
-    // The headline new beat. We authored forge-cycle-scratch as a flow definition
-    // (6 agents, 5 edges, 2 gates). Prove: (1) `forge studio lint` validates it,
+    // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH ─────────────────────────
+    // The headline new beat. We authored forge-develop-scratch as a flow definition
+    // (3 nodes, 2 edges, 1 gate). Prove: (1) `forge studio lint` validates it,
     // (2) it is structurally identical to the production seed (subsumption), (3)
     // the flow builder renders it live, (4) the engine can run it (data-can-start).
-    console.log('\n[A2] Build the forge cycle from scratch (flow-as-data)');
+    console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
 
     // (1) `forge studio lint` validates the authored flow — the platform's own gate.
     let lintOk = false;
@@ -1209,15 +1209,15 @@ async function main() {
     } catch (e) {
       console.error(`  [studio lint] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
     }
-    check(lintOk, 'author-from-scratch: `forge studio lint` validates the authored forge-cycle-scratch flow (exit 0)');
+    check(lintOk, 'author-from-scratch: `forge studio lint` validates the authored forge-develop-scratch flow (exit 0)');
 
-    // (2) Structural parity with the production seed — the subsumption proof.
+    // (2) Structural parity with the production seed (forge-develop) — the subsumption proof.
     const seedStruct = parseFlowStructure(readFileSync(SEED_FLOW_PATH, 'utf8'));
     const scratchStruct = parseFlowStructure(readFileSync(join(SCRATCH_FLOW_DIR, 'flow.yaml'), 'utf8'));
     check(JSON.stringify(scratchStruct.nodeIds) === JSON.stringify(seedStruct.nodeIds),
       `author-from-scratch: node set matches the seed (${scratchStruct.nodeIds.join(',')})`);
-    check(scratchStruct.gates.architect === 'plan' && scratchStruct.gates.review === 'verdict',
-      'author-from-scratch: gates land on architect=plan + review=verdict (matches the seed)');
+    check(scratchStruct.gates.review === 'verdict',
+      'author-from-scratch: the review gate lands on verdict (matches the forge-develop seed)');
     check(scratchStruct.edgeCount === seedStruct.edgeCount,
       `author-from-scratch: edge count matches the seed (${scratchStruct.edgeCount})`);
 
@@ -1234,13 +1234,13 @@ async function main() {
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
       check(false, `author-from-scratch: flow-monitor ready (got "${pr}")`);
     }
-    await caption(page, 'The forge cycle, rebuilt from scratch — six agents, five artifacts, two gates. The platform validates it and it is identical to the production seed.');
+    await caption(page, 'The forge-develop build flow, rebuilt from scratch — dev → unifier → review, one verdict gate. The platform validates it and it is identical to the production seed.');
     await sleep(ACT);
     // (4) The engine can run it — start-run is enabled (no runs yet on this flow).
     const canStart = await page.evaluate(() =>
       document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
     check(canStart === 'true', `author-from-scratch: engine can run the authored flow (data-can-start="true", got "${canStart}")`);
-    await frame(page, 'a2-0-scratch-monitor', 'A2 — authored forge-cycle-scratch: lint green, parity with seed, runnable by the engine');
+    await frame(page, 'a2-0-scratch-monitor', 'A2 — authored forge-develop-scratch: lint green, parity with seed, runnable by the engine');
 
     // Open the BUILD tab to show the authored topology on the canvas.
     const buildTabBtn = page.locator('button.tab').filter({ hasText: 'BUILD' }).first();
@@ -2168,6 +2168,10 @@ async function main() {
     writeFileSync(join(QDIR('ready-for-review'), `${INIT2}.md`), [
       '---', `initiative_id: ${INIT2}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
       `created_at: '${new Date().toISOString()}'`, `cycle_id: ${CYCLE_ID2}`,
+      // S8/DEC-3: the gated demo run is monitored under forge-cycle-with-review —
+      // the surviving OOTB full-pipeline flow (7 nodes) the S1 monitor deep-dive
+      // needs (≥5 phase hexes). run-model stamps the run's flowId from this.
+      'flow_id: forge-cycle-with-review',
       'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review', 'origin: architect',
       '---', '', '# Studio demo — gated run for the flow-engine controls', '',
       'Add a --check mode to mdtoc that exits non-zero when the embedded TOC is stale.',
@@ -2205,8 +2209,10 @@ async function main() {
     writeFileSync(join(artifacts2, 'DEMO.md'), '# Studio demo — gated run\n\n> A gated run for the flow-engine controls.\n');
 
     // ── S1.0: Flow monitor deep-dive (drawer / gate sub-checks / tail) ────────
-    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-cycle');
-    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    // S8/DEC-3: forge-cycle retired; deep-dive the full OOTB pipeline that survives
+    // (forge-cycle-with-review, 7 nodes) so the ≥5-phase-hex topology assertion holds.
+    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-cycle-with-review');
+    await page.goto(watch.uiUrl + '/flows/forge-cycle-with-review', { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -2299,7 +2305,7 @@ async function main() {
 
     // ── S1.2: Engine control — gate + cost-ceiling on the gated run ───────────
     console.log('\n[S1.2] Engine — gate control + cost on the gated run');
-    await openStudioMonitor(page, watch, 'forge-cycle', CYCLE_ID2);
+    await openStudioMonitor(page, watch, 'forge-cycle-with-review', CYCLE_ID2);
     await caption(page, 'A gated run parks for you — "Open gate →" links straight to the verdict. Cost is metered against the flow ceiling.');
     await sleep(ACT);
     try {
