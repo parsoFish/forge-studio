@@ -129,7 +129,7 @@ Usage:
                                           failed/ and cleans up. Accepts INIT-…, handle proj#N, alias, or substring.
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
   forge demo render <initiative-id> [--dir <demoDir>]
-                                          Render DEMO.md/DEMO.html from demo.json (unifier-authored)
+                                          Render DEMO.md from demo.json (unifier-authored)
   forge demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]
                                           Capture before/after screenshots and back-fill demo.json
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
@@ -605,7 +605,7 @@ function flagValue(rest: string[], flag: string): string | undefined {
 }
 
 async function cmdDemo(rest: string[]): Promise<void> {
-  // ADR 021: `forge demo render <init>` derives DEMO.md + DEMO.html from the
+  // ADR 021 / F4: `forge demo render <init>` derives the single DEMO.md from the
   // unifier-authored `demo/<init>/demo.json`. Run from the worktree root (or
   // pass --dir). The unifier authors demo.json once and runs this to emit the
   // committed derived artifacts.
@@ -625,7 +625,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const { renderDemoBundle } = await import('../cli/demo-model.ts');
     // worktree root lets the bundle back-fill any live evidence the acceptance
     // test persisted under <worktree>/.forge/live-evidence/.
-    const res = renderDemoBundle(demoDir, new Date().toISOString(), worktreeRoot);
+    const res = renderDemoBundle(demoDir, worktreeRoot);
     if (!res.ok) {
       console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
       for (const e of res.errors) console.error(`  - ${e}`);
@@ -668,8 +668,8 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
-      const r = renderDemoBundle(demoDir, new Date().toISOString(), projectRepoPath);
-      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md/DEMO.html' : 'render failed: ' + r.errors.join('; ')}`);
+      const r = renderDemoBundle(demoDir, projectRepoPath);
+      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
       console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
     }

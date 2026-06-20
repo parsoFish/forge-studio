@@ -351,7 +351,7 @@ function reprepBody(id: string, concernId: string, initiativeId: string): string
     `> Auto-appended after ${concernId} (ADR 026). The code fix may have changed`,
     '> behaviour, so the demo + PR description must reflect the FINAL branch.',
     '',
-    `- Re-author \`demo/${initiativeId}/demo.json\` (and re-render DEMO.md/DEMO.html).`,
+    `- Re-author \`demo/${initiativeId}/demo.json\` (and re-render DEMO.md).`,
     '- Update `.forge/pr-description.md` Why/What/How to match the now-final diff.',
     '- Do NOT re-implement code — integrate + re-prove the composed unifier gate.',
   ].join('\n');

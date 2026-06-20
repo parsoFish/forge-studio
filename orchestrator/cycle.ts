@@ -351,7 +351,7 @@ export async function snapshotCycleArtefacts(
   // artifactRoot-resolved demo dir (legacy `demo/<initiativeId>/`, or
   // `<artifactRoot>/history/<initiativeId>/demo` when the project gathers its
   // committed artifacts under a sub-root — e.g. betterado's `forge/`). It holds
-  // demo.json + derived DEMO.md/DEMO.html + any media. Mirror it into
+  // demo.json + derived DEMO.md + any media. Mirror it into
   // _logs/<cycleId>/artifacts/ so the bridge can serve it to the in-UI review
   // screen (`/api/artifact/<cycleId>/<file>`).
   // (Previously copied a stale `.forge/demos/` path into `_logs/<cycleId>/demo/`,

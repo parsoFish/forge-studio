@@ -23,6 +23,8 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
+
 export type WorktreeAtRef = { path: string; repo: string };
 
 /**
@@ -75,12 +77,6 @@ function imageMime(file: string): string {
   return 'image/png';
 }
 
-/**
- * Per-screenshot inline cap. Self-contained HTML embeds every screenshot as
- * a base64 data URI; an oversized capture would balloon the HTML + Node heap.
- * Above the cap we drop the inline rather than emit a tens-of-MB file.
- */
-const MAX_INLINE_IMAGE_BYTES = 3 * 1024 * 1024;
 
 /** Read an image file into a base64 data URI; null if unreadable or > cap. */
 export function imageToDataUri(file: string): string | null {
@@ -185,10 +181,5 @@ export async function captureCheckpoints(
   return { capturedBefore, capturedAfter };
 }
 
-// Re-export the renderer's types so callers depend on one module surface.
-export type {
-  DemoComparisonModel,
-  DemoCheckpoint,
-  DemoBuildStatus,
-  HarnessMetricRow,
-} from './demo-html.ts';
+// Re-export the shared demo types so callers depend on one module surface.
+export type { DemoBuildStatus, HarnessMetricRow } from './demo-types.ts';

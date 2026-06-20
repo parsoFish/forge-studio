@@ -120,7 +120,9 @@ export function embedDemoInPr(
     const ownerRepo = parseOwnerRepo(originUrl);
     if (!ownerRepo) return null; // only GitHub raw URLs render inline
 
-    const relDir = `demo/${initiativeId}`;
+    // The tracked demo dir is worktree-relative; resolve it through the SSOT so
+    // a project with an artifactRoot (e.g. betterado's forge/) links correctly.
+    const relDir = projectDemoRelDir(initiativeId, readArtifactRoot(worktreePath));
 
     const images = entries
       .filter((n) => DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))

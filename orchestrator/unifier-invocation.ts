@@ -221,7 +221,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
 /**
  * ADR 021: the demo author is unified around ONE structured `demo.json`
  * (validated against the schema — this is the contract that fixes free-form
- * inconsistency). `forge demo render` derives DEMO.md/DEMO.html.
+ * inconsistency). `forge demo render` derives the single PR-facing DEMO.md (F4).
  *
  * The canonical demo capability — effort tiers, per-shape rules, the
  * behavioural-delta discipline, media capture, and the UI mapping — lives in
@@ -248,7 +248,7 @@ function demoInstructionsForShape(shape: DemoShape, demoDir = 'demo/<initiative-
     '   - `usage_example` (string, optional) — a fenced code block (HCL/CLI/API) showing how to USE the new capability. Required for new-or-changed-capability initiatives.',
     '   - `impact` (string[], optional) — bullet list of what the new capability unlocks. Required for new-or-changed-capability initiatives.',
     '   **Parity vocabulary for harness metrics:** `match` (exact same), `within` (within tolerance), `diverged` (regression), `incomplete` (baseline missing).',
-    '   After writing demo.json, run `Bash forge demo render <initiative-id>` to emit DEMO.md + DEMO.html, then commit all three.',
+    '   After writing demo.json, run `Bash forge demo render <initiative-id>` to derive DEMO.md, then commit both demo.json and DEMO.md.',
   ].join('\n');
   switch (shape) {
     case 'browser':
