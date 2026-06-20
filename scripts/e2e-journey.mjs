@@ -411,6 +411,14 @@ function writePlan(sid, round) {
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
     'origin: architect',
+    // S8/DEC-3: the RUN demonstration drives the full pipeline on
+    // forge-cycle-with-review — the surviving OOTB flow that carries every phase
+    // (architect → pm → dev[fanOut] → unifier → code-review → review → reflect)
+    // in one topology, so the lifecycle monitor (≥5 phase hexes + WI hexes +
+    // architect/unifier/reflect nodes) renders. The 3-flow split itself is shown
+    // by the AUTHOR step (forge-develop-scratch parity) + R6.1 (start-development
+    // → forge-develop). run-model stamps the run's flowId from this field.
+    'flow_id: forge-cycle-with-review',
     `architect_session_id: ${sid}`,
     `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
     `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
@@ -688,7 +696,7 @@ const { failures, check, countAtLeast, expectPhaseCost, expectHexOpensDrawer } =
 
 /** Navigate to a Studio flow monitor and wait until it is ready with the cycle's
  *  run selected. The monitor refetches the run model from the bridge on load. */
-async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = CYCLE_ID) {
+async function openStudioMonitor(page, watch, flowId = 'forge-cycle-with-review', runId = CYCLE_ID) {
   await page.goto(watch.uiUrl + `/flows/${flowId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1263,14 +1271,14 @@ async function main() {
     // ReactFlow hydrates after the tab switch — poll for the node count rather
     // than a fixed sleep (the canvas can render a tick late under load).
     await page.waitForFunction(
-      () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 6,
+      () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
       null, { timeout: 15000 },
     ).catch(() => {});
     const nodeCount = await page.evaluate(() => {
       const el = document.querySelector('[data-node-count]');
       return el ? parseInt(el.getAttribute('data-node-count') ?? '0', 10) : -1;
     });
-    check(nodeCount >= 6, `author-from-scratch: BUILD canvas renders ≥6 nodes for the authored flow (got ${nodeCount})`);
+    check(nodeCount >= 3, `author-from-scratch: BUILD canvas renders ≥3 nodes for the authored forge-develop-scratch flow (got ${nodeCount})`);
     await countAtLeast(page, '[data-flow-node]', 1, 'author-from-scratch: ≥1 [data-flow-node] rendered in BUILD canvas');
     const palettePresent = await page.evaluate(() => document.querySelector('[data-component="agent-palette"]') !== null);
     check(palettePresent, 'author-from-scratch: [data-component="agent-palette"] present (drag more agents in)');
