@@ -38,6 +38,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { extname, join } from 'node:path';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 /**
  * Best-effort PR creation via `gh pr create`. Returns the PR URL on success,
@@ -182,7 +183,11 @@ export function embedDemoInPr(
  * this asserts the structured source exists.
  */
 export function assertTrackedDemoExists(worktreePath: string, initiativeId: string): string {
-  const dir = join(worktreePath, 'demo', initiativeId);
+  // artifactRoot-resolved (e.g. forge/history/<id>/demo) so the PR-open
+  // prerequisite checks demo.json/DEMO.md where the unifier authored them —
+  // mirrors the composed-unifier-gate fix. Falls back to legacy demo/<id>
+  // when artifactRoot is "." or unreadable.
+  const dir = join(worktreePath, projectDemoRelDir(initiativeId, readArtifactRoot(worktreePath)));
   const demoJson = join(dir, 'demo.json');
   if (!existsSync(demoJson)) {
     throw new Error(
