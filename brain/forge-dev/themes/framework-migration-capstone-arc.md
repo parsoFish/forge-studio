@@ -87,9 +87,14 @@ resources (all hardcode or all derive) so one can't mask another.
 - **Classifier guards destructive infra + cycle-discard** — `make sweep` and
   `forge requeue` (deletes branch) require explicit operator authorization;
   escalate, don't work around.
-- **Chronic ADO 1000-project quota** blocks live acceptance org-wide; `make sweep`
-  only reaps `test-acc-*/AccTest*` (deleted 0 once exhausted). A live cycle
-  running the full acc suite accelerates it.
+- **ADO 1000-project quota = the SOFT-DELETE recycle bin** (verified). The org
+  showed 4 active projects yet creates failed with "1000 projects":
+  `stateFilter=deleted` returned **996** soft-deleted projects (28-day retention)
+  that count toward the cap but are hidden from the portal/`all` list API.
+  `make sweep` is counterproductive — it *soft-deletes*, feeding the bin. No purge
+  API (recycleBin 404s); auto-purge only after 28 days. A live cycle running the
+  full acc suite adds dozens of soft-deletes per run. Durable fix is project-side:
+  tests must REUSE an existing project, never create one.
 - `forge requeue --resume-from=unifier` preserves worktree+commits; plain requeue
   DELETES the branch (only OK with zero commits + authorization).
 
