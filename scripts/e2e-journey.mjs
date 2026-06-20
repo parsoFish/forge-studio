@@ -614,7 +614,10 @@ function writeDemoJson(revision) {
   ].join('\n'));
 }
 
-/** Reflector stage-2 emit: operator-facing questions for the reflect screen. */
+/** Reflector stage-2 emit: operator-facing questions for the reflect screen.
+ *  S8: the deeper retrospective — beyond WI sizing, the reflector now surfaces
+ *  repeated actions / roadblocks it found in the cycle log + a general-notes
+ *  freeform, all rendered through the same user-questions → ReflectionGate pipe. */
 function writeReflectionQuestions() {
   mkdirSync(CYCLE_LOG, { recursive: true });
   writeFileSync(join(CYCLE_LOG, 'user-questions.json'), JSON.stringify([
@@ -626,6 +629,20 @@ function writeReflectionQuestions() {
         { label: 'Too small', description: 'Could have been a single work item.' },
         { label: 'Too large', description: 'Should have been split further.' },
       ],
+    },
+    {
+      question: 'Repeated actions / roadblocks: the dev-loop re-ran the acceptance read-back 3× while tuning the marker regex. Worth a forge fix or a new tool?',
+      header: 'Roadblocks',
+      options: [
+        { label: 'New tool', description: 'A marker-aware fixture helper would have avoided the repeated read-back churn.' },
+        { label: 'Leave as-is', description: 'Three iterations is acceptable for a behaviour change like this.' },
+        { label: 'Forge fix', description: 'The acceptance gate should cache the build between read-backs.' },
+      ],
+    },
+    {
+      question: 'Any other notes on this initiative? (free-form)',
+      header: 'Notes',
+      options: [],
     },
   ], null, 2));
 }
@@ -2010,9 +2027,22 @@ async function main() {
     await page.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
     await page.waitForSelector('[data-section="reflect-questions"]', { timeout: 15000 }).catch(() => {});
     await sleep(READ);
-    await frame(page, 'r5-0-reflect-page', 'R5 — reflection screen: WI-sizing question + freeform observation');
-    await page.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
+    await frame(page, 'r5-0-reflect-page', 'R5 — reflection screen: WI-sizing + repeated-actions/roadblocks + general-notes (the S8 deeper retro)');
+    // Answer every question (S8 deeper retro: WI-sizing + repeated-actions/roadblocks
+    // option questions, plus a per-question general-notes freeform) so allAnswered
+    // is satisfied and the submit enables.
+    const optionFieldsets = page.locator('[data-question-mode="options"]');
+    const nOpt = await optionFieldsets.count();
+    for (let i = 0; i < nOpt; i++) {
+      await optionFieldsets.nth(i).locator('input[type="radio"]').first().check().catch(() => {});
+    }
+    const freeformQs = page.locator('[data-question-mode="freeform"] [data-question-freeform]');
+    const nFf = await freeformQs.count();
+    for (let i = 0; i < nFf; i++) {
+      await freeformQs.nth(i).fill('A marker-aware fixture helper would have saved the repeated acceptance read-backs.').catch(() => {});
+    }
     await sleep(THINK);
+    // The bottom "anything else" freeform (separate from the questions) — extra colour.
     const freeformLocator = page.locator('[data-field="freeform"]');
     if (await freeformLocator.count() > 0) {
       await freeformLocator.click();
