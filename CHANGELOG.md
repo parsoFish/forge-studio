@@ -19,6 +19,11 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 - **Demo evidence de-duplicated from the PR view.** The `DemoComparison` block was
   removed from the `type=pr` artifact view — the same evidence already lives on the
   `type=demo` and verdict-gate views, so the PR page now carries only the PR itself.
+- **"Back to monitor" no longer 404s on retired flows.** The artifact page's
+  breadcrumb + back link now validate the run's `flow_id` against the live flow set
+  (`/api/studio/flows`); an old cycle on a retired flow (`release-refine`,
+  `forge-cycle-with-review`) degrades to the dashboard cascade `/` instead of
+  linking to a now-deleted `/flows/<id>`.
 
 ## [0.2.0] - 2026-06-21
 

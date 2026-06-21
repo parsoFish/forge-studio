@@ -49,7 +49,7 @@ import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
-import { fetchRun, type Run } from '@/lib/studio-client';
+import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 
@@ -337,9 +337,8 @@ const PHASE_FOR_TYPE: Record<ArtifactKey, string> = {
   reflection: 'Reflector',
 };
 
-function EmptyState({ type, flowId }: { type: ArtifactKey; flowId?: string }) {
+function EmptyState({ type, backHref }: { type: ArtifactKey; backHref: string }) {
   const phase = PHASE_FOR_TYPE[type];
-  const backHref = flowId ? `/flows/${encodeURIComponent(flowId)}` : '/';
   return (
     <div style={{
       display: 'flex',
@@ -402,6 +401,9 @@ function ArtifactPageInner() {
   const type: ArtifactKey = isValidType(typeRaw) ? typeRaw : 'plan';
 
   const [run,        setRun]        = useState<Run | null>(null);
+  // Live flow ids — used to avoid linking "back to monitor" at a retired flow
+  // (release-refine / forge-cycle-with-review would 404). null = not loaded yet.
+  const [liveFlowIds, setLiveFlowIds] = useState<Set<string> | null>(null);
   const [artifact,   setArtifact]   = useState<ArtifactDoc | null>(null);
   const [verdictDoc, setVerdictDoc] = useState<VerdictDoc | null>(null);
   // For verdict gate-mode: the demo evidence shown above the verdict form
@@ -436,9 +438,10 @@ function ArtifactPageInner() {
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     if (!runId) { setReady(true); return; }
     try {
-      const [fetchedRun] = await Promise.all([fetchRun(runId)]);
+      const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
       setRun(fetchedRun);
+      setLiveFlowIds(new Set(flows.map((f) => f.id)));
 
       // Resolve the effective mode from the explicit param + the freshly
       // fetched run (NOT the derived `mode` render value, which is stale on the
@@ -514,11 +517,14 @@ function ArtifactPageInner() {
     }
   }, [type, artifact]);
 
-  // Back-to-monitor link
+  // Back-to-monitor link. Only deep-link to /flows/<id> when that flow STILL
+  // EXISTS — retired flows (release-refine, forge-cycle-with-review) would 404.
+  // Until the live flow set has loaded (null), trust flowId; once loaded,
+  // degrade a retired flow to the dashboard cascade '/', which aggregates the
+  // cycle regardless of flow.
   const flowId = run?.flowId;
-  const monitorHref = flowId
-    ? `/flows/${encodeURIComponent(flowId)}`
-    : '/';
+  const flowIsLive = !!flowId && (liveFlowIds === null || liveFlowIds.has(flowId));
+  const monitorHref = flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/';
 
   // Status pill
   const statusPill = run?.status ?? null;
@@ -777,7 +783,7 @@ function ArtifactPageInner() {
                     send back below.
                   </div>
                 ) : (
-                  <EmptyState type={type} flowId={flowId} />
+                  <EmptyState type={type} backHref={monitorHref} />
                 )
               )}
 
