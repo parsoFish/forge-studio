@@ -52,6 +52,13 @@ export type Run = {
   failedAt?: string;
   failNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
+  /**
+   * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
+   * A threaded spine run carries [forge-architect, forge-develop, forge-reflect] so it
+   * surfaces under all three flow monitors (each rendering its own slice). A single-flow
+   * run carries just its own flow id.
+   */
+  flowLineage: string[];
 };
 
 export type AgentRuntime = {
@@ -322,6 +329,7 @@ export function parseRun(raw: unknown): Run {
     failedAt:      r.failedAt,
     failNote:      r.failNote,
     workItems:     r.workItems     ?? [],
+    flowLineage:   r.flowLineage   ?? [],
   };
 }
 

@@ -283,9 +283,9 @@ test('readManifestFlowId: reads flow_id from a file, null on missing/absent/unpa
   const dir = mkdtempSync(join(tmpdir(), 'forge-flowid-'));
   try {
     const withFlow = join(dir, 'rr.md');
-    writeFileSync(withFlow, serializeManifest({ ...fixture(), flow_id: 'release-refine' }));
-    assert.equal(readManifestFlowId(withFlow), 'release-refine');
-    // Absent flow_id → null (caller defaults to forge-cycle).
+    writeFileSync(withFlow, serializeManifest({ ...fixture(), flow_id: 'forge-develop' }));
+    assert.equal(readManifestFlowId(withFlow), 'forge-develop');
+    // Absent flow_id → null (S8/DEC-3: runCycle then throws — no default flow).
     const noFlow = join(dir, 'plain.md');
     writeFileSync(noFlow, serializeManifest(fixture()));
     assert.equal(readManifestFlowId(noFlow), null);

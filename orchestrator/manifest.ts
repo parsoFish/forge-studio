@@ -133,7 +133,7 @@ export type InitiativeManifest = {
    * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
    * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
    * default: every NEW manifest names a flow (architect → forge-architect,
-   * develop → forge-develop, seeded refinement → release-refine), and runCycle
+   * develop → forge-develop, reflect → forge-reflect), and runCycle
    * throws on a missing/unknown flow_id (no fallback). Only historical `done/`
    * manifests may lack it; they are never re-run.
    */

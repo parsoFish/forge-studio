@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { aggregateRun, listRuns, buildNodeMapping } from './run-model.ts';
+import { aggregateRun, listRuns, buildNodeMapping, computeFlowLineage } from './run-model.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, 'run-model.fixtures');
@@ -121,11 +121,12 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     const cycleId = '2026-05-30T22-45-07_INIT-2026-05-31-task-group-unit-tests';
 
     // Write manifest in ready-for-review (cycle ended at closure → gated).
-    // The real betterado task-group cycle ran the release-refine flow (S8/DEC-3:
-    // every manifest names its flow; the forge-cycle default was retired).
+    // The real betterado task-group cycle's events, relabelled onto forge-develop
+    // (S8/DEC-3 retired the forge-cycle default; S9 retired the release-refine flow —
+    // the develop flow is the build spine every manifest now names).
     const manifestPath = writeManifest(root, 'ready-for-review', initId, {
       cycle_id: cycleId,
-      flow_id: 'release-refine',
+      flow_id: 'forge-develop',
     });
 
     // Copy fixture events.jsonl
@@ -150,7 +151,7 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     assert.equal(run.id, cycleId);
     assert.equal(run.initiativeId, initId);
     assert.equal(run.origin, 'architect');
-    assert.equal(run.flowId, 'release-refine');
+    assert.equal(run.flowId, 'forge-develop');
 
     // Gate
     assert.equal(run.gate, 'review', 'gate node should be review');
@@ -816,4 +817,40 @@ test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named node
   } finally {
     cleanup(root);
   }
+});
+
+// ---------------------------------------------------------------------------
+// S9: flow lineage — a threaded spine run surfaces under every flow it traversed
+// ---------------------------------------------------------------------------
+
+test('computeFlowLineage: a threaded spine run surfaces under all three spine flows', () => {
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-reflect', new Set(['reflect'])],
+  ]);
+  // The manifest's flow_id is forge-develop (repointed at the hand-off), but the run
+  // executed architect+pm (architect stage) and reflect (post-merge) too.
+  const lineage = computeFlowLineage(
+    ['architect', 'pm', 'dev', 'unifier', 'review', 'reflect'],
+    'forge-develop',
+    flowNodeSets,
+  );
+  assert.deepEqual(lineage, ['forge-architect', 'forge-develop', 'forge-reflect']);
+});
+
+test('computeFlowLineage: a run that only executed develop-flow phases carries just forge-develop', () => {
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-reflect', new Set(['reflect'])],
+  ]);
+  const lineage = computeFlowLineage(['dev', 'unifier', 'review'], 'forge-develop', flowNodeSets);
+  assert.deepEqual(lineage, ['forge-develop']);
+});
+
+test('computeFlowLineage: the manifest flow is always included even if its nodes had no events yet', () => {
+  const flowNodeSets = new Map([['forge-develop', new Set(['dev', 'unifier', 'review'])]]);
+  const lineage = computeFlowLineage([], 'forge-develop', flowNodeSets);
+  assert.deepEqual(lineage, ['forge-develop']);
 });

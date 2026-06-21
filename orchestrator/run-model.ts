@@ -76,6 +76,13 @@ export type Run = {
   failedAt?: string;                 // node id
   failNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
+  /**
+   * S9 (DEC-2/DEC-3): the seed flows this run traversed (derived from its phases ∩
+   * each flow's nodes). A threaded spine run carries [forge-architect, forge-develop,
+   * forge-reflect] so it surfaces under all three flow monitors, each rendering its
+   * own slice. A single-flow run carries just its own flow id.
+   */
+  flowLineage: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -83,7 +90,7 @@ export type Run = {
 // ---------------------------------------------------------------------------
 
 // A run's flow id comes from its manifest's `flow_id` (architect → forge-architect,
-// develop → forge-develop, seeded refinement → release-refine, …). This constant
+// develop → forge-develop, reflect → forge-reflect). This constant
 // is the fallback ONLY for pre-S8 manifests that predate the flow_id field — the
 // flow they ran (forge-cycle) was retired (S8/DEC-3), so it is honestly labelled
 // 'unknown' rather than pointing at a seed that no longer exists. The M4 edit-lock
@@ -141,8 +148,8 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
  * studio/ directory or any required file is missing.
  *
  * S8/DEC-3: forge-cycle was retired, so this derives from the UNION of EVERY flow
- * under studio/flows/ (forge-architect / forge-develop / forge-reflect /
- * release-refine / …) rather than the single monolith. Each flow node with an
+ * under studio/flows/ (forge-architect / forge-develop / forge-reflect)
+ * rather than the single monolith. Each flow node with an
  * `agent` maps SKILL.md[phase] → node.id; the first flow to map a phase wins (all
  * seed flows share the canonical node ids, so the union is unambiguous), and any
  * canonical phase a flow never declares is back-filled from the hardcoded table.
@@ -208,6 +215,55 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
   }
 }
 
+/**
+ * S9: map each seed flow id → its set of node ids, so a run's flow LINEAGE can be
+ * derived (the flows whose nodes the run actually executed). Built once per list
+ * pass, alongside buildNodeMapping. Empty map when studio/flows is unavailable.
+ */
+export function buildFlowNodeSets(root: string): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+  try {
+    const flowsDir = join(resolve(root), 'studio', 'flows');
+    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
+    for (const entry of flowDirs) {
+      const flowPath = join(flowsDir, entry, 'flow.yaml');
+      if (!existsSync(flowPath)) continue;
+      try {
+        const flow = loadFlowDefinition(flowPath);
+        result.set(flow.id, new Set(flow.nodes.map((n) => n.id)));
+      } catch {
+        continue; // a malformed flow must not sink the lineage of every run
+      }
+    }
+  } catch {
+    /* registry unavailable — degrade to flow-id-only lineage */
+  }
+  return result;
+}
+
+/**
+ * S9 (DEC-2/DEC-3): the seed flows this run traversed — every flow at least one of
+ * whose nodes the run executed (its phases). A threaded spine run (one cycle_id whose
+ * manifest flow_id is repointed architect→develop at the hand-off) therefore surfaces
+ * under forge-architect + forge-develop + forge-reflect, so each flow's monitor renders
+ * its own slice. The manifest's own flow is always included.
+ */
+export function computeFlowLineage(
+  phaseNodeIds: readonly string[],
+  manifestFlowId: string,
+  flowNodeSets: Map<string, Set<string>>,
+): string[] {
+  const ran = new Set(phaseNodeIds);
+  const lineage: string[] = [];
+  for (const [flowId, nodeIds] of flowNodeSets) {
+    for (const nid of nodeIds) {
+      if (ran.has(nid)) { lineage.push(flowId); break; }
+    }
+  }
+  if (manifestFlowId !== FALLBACK_FLOW_ID && !lineage.includes(manifestFlowId)) lineage.push(manifestFlowId);
+  return lineage;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -220,14 +276,16 @@ export function aggregateRun(args: {
 }): Run {
   // Build mapping once per call from flow.yaml + registry (falls back if unavailable)
   const nodeMapping = buildNodeMapping(args.root);
-  return aggregateRunWithMapping({ ...args, nodeMapping });
+  const flowNodeSets = buildFlowNodeSets(args.root);
+  return aggregateRunWithMapping({ ...args, nodeMapping, flowNodeSets });
 }
 
 export function listRuns(root: string, nowMs: number): Run[] {
   const runs: Run[] = [];
   const allStates: QueueState[] = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
-  // Build mapping once for the entire list pass
+  // Build mapping + flow-node-sets once for the entire list pass
   const nodeMapping = buildNodeMapping(root);
+  const flowNodeSets = buildFlowNodeSets(root);
 
   for (const state of allStates) {
     const queueDir = join(resolve(root), '_queue', state);
@@ -243,7 +301,7 @@ export function listRuns(root: string, nowMs: number): Run[] {
     for (const file of files) {
       const manifestPath = join(queueDir, file);
       try {
-        runs.push(aggregateRunWithMapping({ root, queueState: state, manifestPath, nowMs, nodeMapping }));
+        runs.push(aggregateRunWithMapping({ root, queueState: state, manifestPath, nowMs, nodeMapping, flowNodeSets }));
       } catch (err) {
         // Corrupt manifest: produce a degraded Run entry rather than crashing the list
         const initId = file.replace(/\.md$/, '');
@@ -273,8 +331,9 @@ function aggregateRunWithMapping(args: {
   manifestPath: string;
   nowMs: number;
   nodeMapping: Map<string, string | null>;
+  flowNodeSets: Map<string, Set<string>>;
 }): Run {
-  const { root, queueState, manifestPath, nowMs, nodeMapping } = args;
+  const { root, queueState, manifestPath, nowMs, nodeMapping, flowNodeSets } = args;
 
   // Parse manifest (throws on unreadable — caller wraps for listRuns)
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
@@ -297,7 +356,7 @@ function aggregateRunWithMapping(args: {
   const eventsPath = join(logDir, 'events.jsonl');
   const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
 
-  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping });
+  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets });
 }
 
 // ---------------------------------------------------------------------------
@@ -313,8 +372,9 @@ function buildRun(args: {
   runStatus: RunStatus;
   nowMs: number;
   nodeMapping: Map<string, string | null>;
+  flowNodeSets: Map<string, Set<string>>;
 }): Run {
-  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping } = args;
+  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets } = args;
 
   // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
   const phases = deriveNodeStatuses(events, runStatus, nodeMapping);
@@ -383,6 +443,9 @@ function buildRun(args: {
     phases,
     phaseMeta,
     artifactsReady,
+    // S9: surface the run under every flow whose nodes it executed (the threaded
+    // spine shows under forge-architect + forge-develop + forge-reflect).
+    flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
     ...(gate !== undefined ? { gate, gateNote } : {}),
     ...(failedAt !== undefined ? { failedAt, failNote } : {}),
     ...(workItems.length > 0 ? { workItems } : {}),
@@ -470,6 +533,8 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
     phases: {},
     phaseMeta: {},
     artifactsReady: {},
+    // A planned run hasn't executed any phase yet → lineage is just its own flow.
+    flowLineage: [manifest.flow_id ?? FALLBACK_FLOW_ID].filter((f) => f !== FALLBACK_FLOW_ID),
   };
 }
 
@@ -485,5 +550,6 @@ function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath:
     phases: {},
     phaseMeta: {},
     artifactsReady: {},
+    flowLineage: [],
   };
 }

@@ -565,7 +565,7 @@ export async function handleStudioWriteRoutes(
       // 8. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
       // The predicate `r.flowId === id` is correct: since S8/DEC-3 run-model stamps
       // each run with the flowId its manifest names (forge-architect / forge-develop
-      // / release-refine / …), so a run of THIS flow is locked while in flight.
+      // / forge-reflect), so a run of THIS flow is locked while in flight.
       // Pre-S8 manifests with no flow_id stamp as 'unknown' (never matches a real
       // editable flow id) — correct, an unknowable archival flow is not editable.
       const activeRun = listRuns(ctx.forgeRoot, Date.now()).find(

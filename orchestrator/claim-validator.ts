@@ -124,7 +124,7 @@ export function validateClaimable(
       ok: false,
       reason:
         'manifest names no flow_id — claim refused (the forge-cycle default was retired in S8/DEC-3; ' +
-        'set flow_id to an existing flow, e.g. forge-architect / forge-develop / release-refine)',
+        'set flow_id to an existing flow, e.g. forge-architect / forge-develop / forge-reflect)',
       terminal: true,
     };
   }

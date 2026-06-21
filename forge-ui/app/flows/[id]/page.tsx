@@ -8,7 +8,6 @@ import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
 import { FlowTopology } from '@/components/studio/FlowTopology';
-import { effectiveMonitorFlow } from '@/lib/spine-monitor';
 import { PhaseDrawer } from '@/components/studio/PhaseDrawer';
 import { EventTail } from '@/components/studio/EventTail';
 import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
@@ -92,8 +91,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         const found = flows.find((f) => f.id === id) ?? null;
         setFlow(found);
         setAllFlows(flows);
-        setFlowsWithRuns(new Set(everyRun.map((r) => r.flowId)));
-        const allRuns = everyRun.filter((r) => r.flowId === id);
+        // A threaded spine run surfaces under every flow in its lineage
+        // (architect→develop→reflect), so each flow's RUNS rail + monitor shows it.
+        setFlowsWithRuns(new Set(everyRun.flatMap((r) => (r.flowLineage?.length ? r.flowLineage : [r.flowId]))));
+        const allRuns = everyRun.filter((r) => r.flowId === id || (r.flowLineage ?? []).includes(id));
         setRuns(allRuns);
 
         // If preserving a run selection pick by id, else pick the default
@@ -567,13 +568,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Summary strip */}
               <MonitorSummary run={activeRun} flow={flow ?? EMPTY_FLOW} />
 
-              {/* Topology canvas. A threaded spine run (architect→develop→reflect,
-                  one cycle_id) is labelled forge-develop after the hand-off repoints
-                  its flow_id — so render it against the full spine lifecycle topology
-                  (architect…reflect + WI fan-out), not just the develop flow's nodes. */}
+              {/* Topology canvas — each flow's monitor renders its OWN nodes
+                  (Model B). A threaded spine run surfaces under all three flows via
+                  its derived flowLineage, so /flows/forge-architect shows architect+pm,
+                  /flows/forge-develop shows dev[+WI fan-out]+unifier+review, etc. */}
               {flow ? (
                 <FlowTopology
-                  flow={effectiveMonitorFlow(flow, activeRun)}
+                  flow={flow}
                   run={activeRun}
                   onNodeClick={handleNodeClick}
                 />

@@ -102,8 +102,18 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
 
   const { byLevel, maxLevel } = topoLevels(nodes, (n) => n.id, depsOf);
 
-  // Identify fanOut node
-  const fanOutNodeId = nodes.find((n) => n.fanOut)?.id ?? null;
+  // Identify the fanOut node. Primary signal: a node with an explicit `fanOut`
+  // artifact. S9 fallback: the develop flow's `dev` node is the flow's ENTRY node,
+  // so the lint rule forbids it from declaring `fanOut` (no inbound edge feeds the
+  // work-items artifact) — but at RUNTIME the dev-loop did fan out into work items.
+  // So when the run carries workItems, fan out the dev-loop node (agent
+  // developer-ralph, or id `dev`) even without the authoring flag.
+  const hasWorkItems = !!run?.workItems && run.workItems.length > 0;
+  const fanOutNodeId =
+    nodes.find((n) => n.fanOut)?.id ??
+    (hasWorkItems
+      ? (nodes.find((n) => n.agent === 'developer-ralph') ?? nodes.find((n) => n.id === 'dev'))?.id ?? null
+      : null);
 
   const hexes: HexPos[] = [];
 

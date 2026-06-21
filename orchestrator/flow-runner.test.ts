@@ -272,57 +272,11 @@ describe('flow-runner reflect skipped when not merged', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4: a REAL multi-node flow loaded from disk → real sequence from mock deps.
-// S8 retired forge-cycle; forge-cycle-with-review is the surviving ootb flow that
-// still carries the full architect→pm→dev→unifier→…→review→reflect shape (its
-// extra code-review node has no phase-agent kind, so it is a silent unknown-skip
-// and does NOT change the executor sequence).
-// ---------------------------------------------------------------------------
-
-describe('flow-runner with a real full-sequence flow (forge-cycle-with-review)', () => {
-  it('loads the real flow and produces the real executor sequence', async () => {
-    const flowPath = flowPathForId('forge-cycle-with-review');
-    const flow = loadFlowDefinition(flowPath);
-
-    assert.strictEqual(flow.id, 'forge-cycle-with-review', 'flow id must be forge-cycle-with-review');
-    assert.ok(flow.nodes.length >= 5, 'the full-sequence flow must have at least 5 nodes');
-
-    const tracker = makeCallTracker();
-    const deps = makeMockDeps(tracker);
-    const input = makeInput();
-    const logger = makeLogger();
-
-    await runFlow({ flow, input, logger, deps });
-
-    // Must produce the full sequence — proving the real definition is correct.
-    // The architect node is a silent marker: no dep call, so it does NOT appear here.
-    assert.deepEqual(tracker.calls, [
-      'runProjectManager',
-      'runDeveloperLoop',
-      'runUnifier',
-      'openPrInline',
-      'runClosure',
-      'runReflector',
-    ], 'real forge-cycle.yaml must produce the full executor sequence in order (architect node is a silent marker)');
-    assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep on real flow');
-  });
-
-  it('loads the real flow and skips pm on unifier resume', async () => {
-    const flowPath = flowPathForId('forge-cycle-with-review');
-    const flow = loadFlowDefinition(flowPath);
-
-    const tracker = makeCallTracker();
-    const deps = makeMockDeps(tracker);
-    const input = makeInput({ resumeFrom: 'unifier' });
-    const logger = makeLogger();
-
-    await runFlow({ flow, input, logger, deps });
-
-    assert.ok(!tracker.calls.includes('runProjectManager'));
-    assert.ok(tracker.calls.includes('runDeveloperLoop'));
-    assert.ok(tracker.calls.includes('runUnifier'));
-  });
-});
+// (S9 removed the "real full-sequence flow" test that loaded forge-cycle-with-review:
+// that monolith seed was retired with the 3-flow split. The full executor sequence is
+// covered by the synthetic makeForgeCycleFlow tests above; the real spine seeds —
+// forge-architect (architect+pm) and forge-develop (dev→unifier→review) — are loaded
+// and asserted in the tests below.)
 
 // ---------------------------------------------------------------------------
 // Test 5: forge-architect flow — 2-node (architect + pm), no dev/review/reflect

@@ -1,0 +1,51 @@
+{
+  "runHandle": "spine-gitpulse-ownership-hotspots",
+  "initiativeId": "INIT-2026-06-21-ownership-hotspots-top-flag",
+  "cycleId": "2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag",
+  "project": "gitpulse",
+  "baseSha": null,
+  "finalStatus": null,
+  "totalEvents": 521,
+  "costUsd": 20.2636,
+  "costCeilingUsd": 35,
+  "workItems": {
+    "total": 4,
+    "complete": 4,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "manifest in _queue/done/ (merged; bridge status unread post-merge)"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "4/4 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$20.26 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": true,
+      "detail": "3 theme(s) written this run (e.g. 2026-06-21-single-iteration-delivery-tdd-pure-modules.md)"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.3.0)"
+    }
+  ],
+  "gate": "pass",
+  "framesCaptured": 7,
+  "completedAt": "2026-06-21T05:23:09.259Z"
+}
