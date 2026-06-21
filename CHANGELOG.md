@@ -7,6 +7,35 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-21
+
+S9 — **the 3-stage spine is the REAL runtime + the CLI is retired as the operator
+surface**. (Reconciles the stray 0.1.1 self-release back into a clean lockstep bump.)
+
+### Added
+- **Spine as the runtime.** The `forge-architect → [plan gate] → forge-develop →
+  [verdict gate] → merge → forge-reflect` spine now runs end-to-end on real cycles
+  (proven on the gitpulse verify ground). `scripts/verify-cycle.mjs` drives the spine
+  via the bridge API as three gated runs threading one cycle_id (DEC-2), and now WAITS
+  for `reflector.end` so reflect-writes-central-brain is asserted.
+- **Per-flow spine observability (Model B).** Each flow's monitor renders its OWN slice;
+  a threaded run surfaces under all three flows via a derived `flowLineage` (keyed off
+  globally-unique nodes). WI fan-out on the develop `dev` node is now run-driven.
+- **DEC-6 recovery surface.** Bridge routes `GET /api/recovery/:id`,
+  `POST /api/recovery/:id/{abandon,requeue}`, `POST /api/initiatives` + a `/recovery`
+  UI screen replace the retired `forge review --inspect/--abandon` + `forge requeue`.
+
+### Changed / Fixed
+- The architect→develop hand-off reuses the preserved worktree (work-items survive);
+  a closure-less `ready-for-review` cycle is moved out of in-flight by the scheduler.
+
+### Removed
+- The `release-refine` + `forge-cycle-with-review` legacy flows; the flow-less
+  `web-scraper` + `security-auditor` agents.
+- The operator CLI surface (cycle / enqueue / metrics / review / report / log / requeue) —
+  `forge studio` is the sole operator surface. `serve` / `architect` / `brain` / `demo` /
+  `preflight` stay dispatchable but hidden (internal spawn targets + agent/dev tools).
+
 ## [0.1.1] - 2026-06-21
 
 ## [0.1.0] - 2026-06-21
