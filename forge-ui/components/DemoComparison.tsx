@@ -259,17 +259,18 @@ function CheckpointCard({ cp, cycleId, bridgeBase }: { cp: DemoModelCheckpoint; 
         <MetricTable rows={cp.metrics} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Side label="before" note={cp.beforeNote} image={cp.beforeImage} video={mediaUrl(bridgeBase, cycleId, cp.beforeVideoSrc)} />
-          <Side label="after" note={cp.afterNote} image={cp.afterImage} video={mediaUrl(bridgeBase, cycleId, cp.afterVideoSrc)} />
+          <Side label="before" note={cp.beforeNote} output={cp.beforeOutput} image={cp.beforeImage} video={mediaUrl(bridgeBase, cycleId, cp.beforeVideoSrc)} />
+          <Side label="after" note={cp.afterNote} output={cp.afterOutput} image={cp.afterImage} video={mediaUrl(bridgeBase, cycleId, cp.afterVideoSrc)} />
         </div>
       )}
     </figure>
   );
 }
 
-function Side({ label, note, image, video }: { label: string; note?: string; image?: string | null; video?: string | null }): JSX.Element {
+function Side({ label, note, output, image, video }: { label: string; note?: string; output?: string | null; image?: string | null; video?: string | null }): JSX.Element {
+  const kind = video ? 'video' : image ? 'image' : output ? 'output' : 'note';
   return (
-    <div data-side={label} data-media-kind={video ? 'video' : image ? 'image' : 'note'}>
+    <div data-side={label} data-media-kind={kind}>
       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#6e7681', marginBottom: 6 }}>{label}</div>
       {video ? (
         <video controls preload="metadata" playsInline src={video} style={{ width: '100%', border: '1px solid #21262d', borderRadius: 6, display: 'block', background: '#000' }} />
@@ -277,10 +278,13 @@ function Side({ label, note, image, video }: { label: string; note?: string; ima
         // Only data: URIs reach here (validateDemoModel rejects remote/scheme refs).
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt={`${label} state`} style={{ width: '100%', border: '1px solid #21262d', borderRadius: 6, display: 'block' }} />
+      ) : output ? (
+        // Real captured CLI stdout — show the actual terminal output, not a description.
+        <pre data-captured-output style={{ fontSize: 12, lineHeight: 1.45, color: '#c9d1d9', background: '#010409', border: '1px solid #21262d', borderRadius: 6, padding: 10, margin: 0, overflowX: 'auto', whiteSpace: 'pre', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{output}</pre>
       ) : (
         <div style={{ fontSize: 13, color: '#c9d1d9' }}>{note ?? <span style={{ color: '#6e7681' }}>—</span>}</div>
       )}
-      {(video || image) && note && <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>{note}</div>}
+      {(video || image || output) && note && <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>{note}</div>}
     </div>
   );
 }

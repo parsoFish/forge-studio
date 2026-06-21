@@ -557,8 +557,14 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle } = await import('../cli/demo-model.ts');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
-      const labels = (demoJson?.checkpoints ?? []).map((c: { label?: string }) => c.label).filter(Boolean) as string[];
-      await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, build: true });
+      const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;
+      // A checkpoint with a `command` captures real CLI stdout (before/after); one
+      // without is a browser screenshot checkpoint.
+      const checkpointCommands = cps
+        .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
+        .map((c) => ({ label: c.label as string, command: c.command as string }));
+      const labels = cps.filter((c) => c.label && !c.command).map((c) => c.label as string);
+      await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));

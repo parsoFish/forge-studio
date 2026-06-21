@@ -18,6 +18,8 @@ import {
   renderDemoMarkdown,
   renderDemoBundle,
   mergeCapturedMedia,
+  collectCapturedMedia,
+  MAX_CAPTURED_OUTPUT_BYTES,
   collectLiveEvidence,
   mergeLiveEvidence,
   type DemoModel,
@@ -506,4 +508,64 @@ test('collectLiveEvidence: reads .forge/live-evidence/*.json, skips malformed/ur
 
 test('collectLiveEvidence: missing dir → []', () => {
   assert.deepEqual(collectLiveEvidence(mkdtempSync(join(tmpdir(), 'le2-'))), []);
+});
+
+// ── S9 refinement: captured CLI output (real before/after stdout, not prose) ──
+
+test('validateDemoModel: a checkpoint with command + before/after output is valid', () => {
+  const model = {
+    title: 'T', essence: 'E', project: 'gitpulse', diffStat: '1 file changed',
+    checkpoints: [{
+      label: 'churn', caption: 'CLI run — churn',
+      command: 'node dist/cli.js churn .',
+      beforeOutput: 'author   commits\nAda      3\n',
+      afterOutput: 'author   commits  churn\nAda      3   +3/-0\n',
+    }],
+  };
+  assert.deepEqual(validateDemoModel(model), []);
+});
+
+test('validateDemoModel: rejects a blank command + oversize captured output', () => {
+  const big = 'x'.repeat(MAX_CAPTURED_OUTPUT_BYTES + 1);
+  const errs = validateDemoModel({
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'c', caption: 'c', command: '   ', beforeOutput: big }],
+  });
+  assert.ok(errs.some((e) => e.includes('command must be a non-empty string')), `command error, got ${errs}`);
+  assert.ok(errs.some((e) => e.includes('beforeOutput exceeds')), `oversize error, got ${errs}`);
+});
+
+test('collectCapturedMedia: picks up before/<label>.out + after/<label>.out as captured stdout', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-cap-out-'));
+  mkdirSync(join(dir, 'before'), { recursive: true });
+  mkdirSync(join(dir, 'after'), { recursive: true });
+  writeFileSync(join(dir, 'before', 'churn.out'), 'BEFORE stdout\n');
+  writeFileSync(join(dir, 'after', 'churn.out'), 'AFTER stdout\n');
+  const captured = collectCapturedMedia(dir);
+  const churn = captured.find((c) => c.label === 'churn');
+  assert.equal(churn?.beforeOutput, 'BEFORE stdout\n');
+  assert.equal(churn?.afterOutput, 'AFTER stdout\n');
+});
+
+test('mergeCapturedMedia: back-fills captured outputs into a command checkpoint (kind unchanged)', () => {
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'gitpulse', diffStat: 'd',
+    checkpoints: [{ label: 'churn', caption: 'CLI run', command: 'node dist/cli.js churn .' }],
+  };
+  const merged = mergeCapturedMedia(model, [{ label: 'churn', beforeOutput: 'B\n', afterOutput: 'A\n' }]);
+  const cp = merged.checkpoints[0];
+  assert.equal(cp.beforeOutput, 'B\n');
+  assert.equal(cp.afterOutput, 'A\n');
+  assert.notEqual(cp.kind, 'screenshot'); // a captured OUTPUT must not promote to screenshot
+});
+
+test('renderDemoMarkdown: fences the captured before/after output', () => {
+  const md = renderDemoMarkdown({
+    title: 'T', essence: 'E', project: 'gitpulse', diffStat: 'd',
+    checkpoints: [{ label: 'churn', caption: 'CLI run', command: 'gitpulse churn .', beforeOutput: 'OLD table', afterOutput: 'NEW table' }],
+  });
+  assert.match(md, /\*\*Command:\*\* `gitpulse churn \.`/);
+  assert.match(md, /\*\*Before output:\*\*/);
+  assert.match(md, /OLD table/);
+  assert.match(md, /NEW table/);
 });

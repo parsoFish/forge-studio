@@ -357,6 +357,11 @@ export type DemoModelCheckpoint = {
   caption: string;
   beforeNote?: string;
   afterNote?: string;
+  // CLI/output checkpoint — real captured stdout (before on baseRef, after on the
+  // branch HEAD), shown side-by-side as terminal output instead of a prose note.
+  command?: string;
+  beforeOutput?: string | null;
+  afterOutput?: string | null;
   metrics?: DemoHarnessMetricRow[];
   beforeImage?: string | null;
   afterImage?: string | null;

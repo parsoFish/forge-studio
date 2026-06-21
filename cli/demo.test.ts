@@ -122,3 +122,33 @@ test('imageToDataUri: returns null for oversized file', () => {
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+// ── S9 refinement: captureCommandOutput — real CLI stdout for demos ──────────
+import { captureCommandOutput } from './demo.ts';
+import { tmpdir as _tmpdir } from 'node:os';
+import { mkdtempSync as _mkdtemp, rmSync as _rm } from 'node:fs';
+import { join as _join } from 'node:path';
+
+test('captureCommandOutput: captures real stdout of a command run in the worktree', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-cmd-'));
+  try {
+    const out = captureCommandOutput(dir, "node -e console.log('churn:42')");
+    assert.match(out, /churn:42/);
+  } finally { _rm(dir, { recursive: true, force: true }); }
+});
+
+test('captureCommandOutput: a missing binary is captured as output, never thrown', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-cmd-'));
+  try {
+    const out = captureCommandOutput(dir, 'definitely-not-a-real-binary-xyz arg');
+    assert.match(out, /did not run|capture failed/);
+  } finally { _rm(dir, { recursive: true, force: true }); }
+});
+
+test('captureCommandOutput: oversize output is truncated', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-cmd-'));
+  try {
+    const out = captureCommandOutput(dir, "node -e process.stdout.write('x'.repeat(200000))");
+    assert.ok(out.includes('…[truncated]'), 'oversize output truncated');
+  } finally { _rm(dir, { recursive: true, force: true }); }
+});

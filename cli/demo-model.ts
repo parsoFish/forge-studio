@@ -28,6 +28,10 @@ import type {
 } from './demo-types.ts';
 import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
 
+/** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
+ *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
+export const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
+
 // Re-export the rich section types so callers only need one import surface.
 export type { DemoSummarySection, DemoApiDiffEntry, TestResultRow } from './demo-types.ts';
 
@@ -37,6 +41,17 @@ export type DemoModelCheckpoint = {
   caption: string;
   beforeNote?: string;
   afterNote?: string;
+  /**
+   * For a CLI/output checkpoint: the command whose stdout IS the visual evidence.
+   * `forge demo capture` runs it in the before-worktree (baseRef) and the
+   * after-worktree (changedRef) and back-fills beforeOutput/afterOutput with the
+   * REAL captured stdout — so the demo SHOWS the actual terminal output side-by-side
+   * rather than a hand-written prose description. A bare argv string (no shell).
+   */
+  command?: string;
+  /** Captured stdout of `command` on the before/after worktree (filled by capture). */
+  beforeOutput?: string | null;
+  afterOutput?: string | null;
   /** Harness metric rows (paired before/after). Optional. */
   metrics?: HarnessMetricRow[];
   /** Optional captured media — `data:image/...` ONLY (validator rejects schemes). */
@@ -170,6 +185,19 @@ export function validateDemoModel(raw: unknown): string[] {
           });
         }
       }
+      // CLI/output checkpoint: the command whose stdout is the visual evidence,
+      // and the captured before/after outputs (filled by `forge demo capture`).
+      if (cp.command !== undefined && (typeof cp.command !== 'string' || cp.command.trim() === '')) {
+        errors.push(`${at}.command must be a non-empty string when set (a bare argv command, no shell)`);
+      }
+      for (const f of ['beforeOutput', 'afterOutput'] as const) {
+        const v = cp[f];
+        if (v != null && typeof v !== 'string') {
+          errors.push(`${at}.${f} must be a string (captured stdout) when set`);
+        } else if (typeof v === 'string' && v.length > MAX_CAPTURED_OUTPUT_BYTES) {
+          errors.push(`${at}.${f} exceeds ${MAX_CAPTURED_OUTPUT_BYTES} bytes — capture truncates; check the command`);
+        }
+      }
     });
   }
 
@@ -280,6 +308,8 @@ export type CapturedMedia = {
   label: string;
   beforeImage?: string | null;
   afterImage?: string | null;
+  beforeOutput?: string | null;
+  afterOutput?: string | null;
 };
 
 
@@ -306,14 +336,25 @@ export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
     let names: string[] = [];
     try { names = readdirSync(dir); } catch { return; }
     for (const name of names) {
-      if (!name.toLowerCase().endsWith('.png')) continue;
-      const label = name.replace(/\.png$/i, '');
-      const uri = pngToDataUri(join(dir, name));
-      if (!uri) continue;
-      const entry = byLabel.get(label) ?? { label };
-      if (side === 'before') entry.beforeImage = uri;
-      else entry.afterImage = uri;
-      byLabel.set(label, entry);
+      const lower = name.toLowerCase();
+      if (lower.endsWith('.png')) {
+        const label = name.replace(/\.png$/i, '');
+        const uri = pngToDataUri(join(dir, name));
+        if (!uri) continue;
+        const entry = byLabel.get(label) ?? { label };
+        if (side === 'before') entry.beforeImage = uri;
+        else entry.afterImage = uri;
+        byLabel.set(label, entry);
+      } else if (lower.endsWith('.out')) {
+        // Captured CLI stdout (the real before/after terminal output).
+        const label = name.replace(/\.out$/i, '');
+        let text: string;
+        try { text = readFileSync(join(dir, name), 'utf8'); } catch { continue; }
+        const entry = byLabel.get(label) ?? { label };
+        if (side === 'before') entry.beforeOutput = text;
+        else entry.afterOutput = text;
+        byLabel.set(label, entry);
+      }
     }
   };
   scan('before');
@@ -335,21 +376,28 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
     const cap = byLabel.get(cp.label);
     if (!cap) return cp;
     matchedLabels.add(cp.label);
+    const hasImage = cap.beforeImage || cap.afterImage;
     return {
       ...cp,
-      kind: cp.kind === 'harness' ? cp.kind : 'screenshot',
+      // A captured image promotes the checkpoint to screenshot; a captured CLI
+      // output leaves the kind alone (the render picks output over note).
+      kind: cp.kind === 'harness' ? cp.kind : hasImage ? 'screenshot' : cp.kind,
       beforeImage: cap.beforeImage ?? cp.beforeImage ?? null,
       afterImage: cap.afterImage ?? cp.afterImage ?? null,
+      beforeOutput: cap.beforeOutput ?? cp.beforeOutput ?? null,
+      afterOutput: cap.afterOutput ?? cp.afterOutput ?? null,
     } satisfies DemoModelCheckpoint;
   });
   const appended = captured
-    .filter((c) => !matchedLabels.has(c.label) && (c.beforeImage || c.afterImage))
+    .filter((c) => !matchedLabels.has(c.label) && (c.beforeImage || c.afterImage || c.beforeOutput || c.afterOutput))
     .map<DemoModelCheckpoint>((c) => ({
       label: c.label,
-      kind: 'screenshot',
+      ...(c.beforeImage || c.afterImage ? { kind: 'screenshot' as const } : {}),
       caption: c.label,
       beforeImage: c.beforeImage ?? null,
       afterImage: c.afterImage ?? null,
+      beforeOutput: c.beforeOutput ?? null,
+      afterOutput: c.afterOutput ?? null,
     }));
   return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
@@ -525,6 +573,21 @@ export function renderDemoMarkdown(model: DemoModel): string {
     lines.push('');
     if (c.beforeNote) lines.push(`- **Before:** ${c.beforeNote}`);
     if (c.afterNote) lines.push(`- **After:** ${c.afterNote}`);
+    // Captured CLI output — the REAL terminal output before/after, fenced so the PR
+    // artifact shows it (the in-UI review renders it side-by-side).
+    if (c.beforeOutput || c.afterOutput) {
+      if (c.command) lines.push(`- **Command:** \`${c.command}\``);
+      const fence = (label: string, out?: string | null): void => {
+        if (!out) return;
+        lines.push('');
+        lines.push(`**${label}:**`);
+        lines.push('```');
+        lines.push(out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated)' : out);
+        lines.push('```');
+      };
+      fence('Before output', c.beforeOutput);
+      fence('After output', c.afterOutput);
+    }
     if (c.liveEvidence?.url) {
       lines.push(`- **Live evidence (real API GET):** \`${c.liveEvidence.url}\`${c.liveEvidence.capturedAt ? ` _(captured ${c.liveEvidence.capturedAt})_` : ''}`);
       if (c.liveEvidence.response) {

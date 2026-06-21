@@ -14,16 +14,18 @@
  * side-effecting and validated via the live trafficGame run.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
   readFileSync,
+  writeFileSync,
   rmSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
+import { MAX_CAPTURED_OUTPUT_BYTES } from './demo-model.ts';
 
 export type WorktreeAtRef = { path: string; repo: string };
 
@@ -112,6 +114,10 @@ export type CaptureCheckpointsInput = {
   initiativeId?: string;
   /** Labels to screenshot — each yields before/<label>.png + after/<label>.png. */
   checkpointLabels: string[];
+  /** CLI/output checkpoints — each runs `command` in the before+after worktree and
+   *  captures stdout to before/<label>.out + after/<label>.out (the real terminal
+   *  output the demo shows side-by-side, instead of a hand-written prose note). */
+  checkpointCommands?: Array<{ label: string; command: string }>;
   /** Build before serving (slower) vs dev-server only. */
   build?: boolean;
 };
@@ -127,6 +133,36 @@ export type CaptureCheckpointsResult = {
  * Best-effort: missing labels degrade to no capture (no throws). Always cleans
  * up worktrees. Side-effecting — validated via the live run.
  */
+/**
+ * Run a checkpoint's command in a worktree and capture its stdout (+ stderr tail) as
+ * the REAL terminal output. No shell — the command is split on whitespace into argv,
+ * so quoted args with spaces are not supported (CLI demo commands are simple). Never
+ * throws: a non-zero exit / missing binary / timeout is captured as the output (the
+ * "before" run of a new flag legitimately errors — that IS the before evidence).
+ * Truncated to MAX_CAPTURED_OUTPUT_BYTES.
+ */
+export function captureCommandOutput(worktreePath: string, command: string): string {
+  const argv = command.trim().split(/\s+/);
+  let out: string;
+  try {
+    const r = spawnSync(argv[0], argv.slice(1), {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      timeout: 60_000,
+      maxBuffer: MAX_CAPTURED_OUTPUT_BYTES * 2,
+    });
+    const stdout = r.stdout ?? '';
+    const stderr = (r.stderr ?? '').trim();
+    out = stderr ? `${stdout}${stdout && !stdout.endsWith('\n') ? '\n' : ''}[stderr] ${stderr}` : stdout;
+    if (r.error) out = `[command did not run: ${r.error.message}]\n${out}`;
+  } catch (err) {
+    out = `[capture failed: ${err instanceof Error ? err.message : String(err)}]`;
+  }
+  return out.length > MAX_CAPTURED_OUTPUT_BYTES
+    ? `${out.slice(0, MAX_CAPTURED_OUTPUT_BYTES)}\n…[truncated]`
+    : out;
+}
+
 export async function captureCheckpoints(
   input: CaptureCheckpointsInput,
 ): Promise<CaptureCheckpointsResult> {
@@ -157,20 +193,27 @@ export async function captureCheckpoints(
     ] as const) {
       const status = buildTree(wt.path, input.build ?? false);
       if (!status.ok) continue;
+      const captured = side === 'before' ? capturedBefore : capturedAfter;
 
-      const server = await startServer(wt.path);
-      if (!server) continue;
-      try {
-        for (const label of input.checkpointLabels) {
-          const outPath = join(capDir, `${label}.png`);
-          const ok = await screenshotUrl(server.url, outPath);
-          if (ok) {
-            if (side === 'before') capturedBefore.push(label);
-            else capturedAfter.push(label);
+      // CLI/output checkpoints: run the command in this worktree, capture stdout.
+      for (const { label, command } of input.checkpointCommands ?? []) {
+        const out = captureCommandOutput(wt.path, command);
+        writeFileSync(join(capDir, `${label}.out`), out);
+        captured.push(label);
+      }
+
+      // Screenshot checkpoints (browser): build + serve + screenshot per label.
+      if (input.checkpointLabels.length > 0) {
+        const server = await startServer(wt.path);
+        if (!server) continue;
+        try {
+          for (const label of input.checkpointLabels) {
+            const outPath = join(capDir, `${label}.png`);
+            if (await screenshotUrl(server.url, outPath)) captured.push(label);
           }
+        } finally {
+          await server.stop();
         }
-      } finally {
-        await server.stop();
       }
     }
   } finally {

@@ -59,8 +59,16 @@ pass `--dir`. It must carry:
   **prior → new**. State any non-visual delta here.
 - **`project`**, **`initiativeId`**, **`diffStat`** (`git diff --stat main...HEAD`).
 - **`checkpoints[]`** — ≥1, each `{ label, caption, kind?, beforeNote?, afterNote?,
-  metrics?, beforeImage?, afterImage? }`. Each checkpoint shows ONE before→after
-  pair, grounded in an acceptance criterion or a concrete diff change.
+  command?, beforeOutput?, afterOutput?, metrics?, beforeImage?, afterImage? }`. Each
+  checkpoint shows ONE before→after pair, grounded in an acceptance criterion or a
+  concrete diff change.
+- **Prefer REAL captured output over a prose note.** For a CLI tool, set `command` to
+  the exact argv whose stdout IS the evidence (e.g. `node dist/cli.js churn .`); leave
+  `beforeOutput`/`afterOutput` empty — `forge demo capture` runs the command on `main`
+  (before) AND the branch HEAD (after) and back-fills the REAL terminal output,
+  rendered side-by-side. The operator wants to SEE the actual output, not a description
+  of it. Use `beforeNote`/`afterNote` only as a one-line caption, or when no command
+  can show the change (a pure type/internal refactor).
 
 ### Rich structured sections (strongly recommended — prevents wall-of-text)
 
@@ -179,8 +187,10 @@ collapses them gracefully when absent, but their absence means a less useful dem
 3. **Derive the artefact:** `Bash forge demo render <initiative-id>` → writes
    `DEMO.md` from the JSON. **Never hand-write `DEMO.md`** — it is derived, so
    the PR artefact and the UI render stay identical.
-4. **(Visual only) Capture media:** when the generated skill specifies browser
-   screenshots, `Bash forge demo capture <initiative-id>` (best-effort).
+4. **Capture real before/after evidence:** `Bash forge demo capture <initiative-id>`
+   — for checkpoints with a `command`, captures the REAL stdout on `main` vs the branch
+   HEAD into `beforeOutput`/`afterOutput`; for browser checkpoints, captures screenshots.
+   Then re-renders DEMO.md. Best-effort (a capture failure leaves the checkpoint as-is).
 5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
    shadow).
 
