@@ -854,3 +854,19 @@ test('computeFlowLineage: the manifest flow is always included even if its nodes
   const lineage = computeFlowLineage([], 'forge-develop', flowNodeSets);
   assert.deepEqual(lineage, ['forge-develop']);
 });
+
+test('computeFlowLineage: a copy/subset flow (same node ids) never falsely claims the run', () => {
+  // The e2e author-from-scratch demo builds forge-develop-scratch as a PARITY copy
+  // of forge-develop (same dev/unifier/review node ids). It must NOT show the
+  // threaded run via lineage (it was never traversed) — so it stays a genuinely
+  // run-less flow for the start-run CTA.
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-develop-scratch', new Set(['dev', 'unifier', 'review'])],
+  ]);
+  const lineage = computeFlowLineage(['architect', 'pm', 'dev', 'unifier', 'review'], 'forge-develop', flowNodeSets);
+  assert.ok(lineage.includes('forge-develop'), 'manifest flow included');
+  assert.ok(lineage.includes('forge-architect'), 'architect stage (distinct nodes) included');
+  assert.ok(!lineage.includes('forge-develop-scratch'), 'a subset/copy flow must NOT claim the run');
+});

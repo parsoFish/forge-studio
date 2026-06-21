@@ -411,14 +411,13 @@ function writePlan(sid, round) {
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
     'origin: architect',
-    // S8/DEC-3: the RUN demonstration drives the full pipeline on
-    // forge-cycle-with-review — the surviving OOTB flow that carries every phase
-    // (architect → pm → dev[fanOut] → unifier → code-review → review → reflect)
-    // in one topology, so the lifecycle monitor (≥5 phase hexes + WI hexes +
-    // architect/unifier/reflect nodes) renders. The 3-flow split itself is shown
-    // by the AUTHOR step (forge-develop-scratch parity) + R6.1 (start-development
-    // → forge-develop). run-model stamps the run's flowId from this field.
-    'flow_id: forge-cycle-with-review',
+    // S9/DEC-3: the RUN demonstration drives the 3-stage spine. The manifest names
+    // forge-develop (the build flow the hand-off repoints onto); the seeded events
+    // span architect→pm→dev[fanOut]→unifier→review→reflect under ONE cycle_id, so
+    // run-model derives a flowLineage of [forge-architect, forge-develop,
+    // forge-reflect] (DEC-2). Under Model B each flow's monitor renders its OWN
+    // slice, and the threaded run surfaces under all three.
+    'flow_id: forge-develop',
     `architect_session_id: ${sid}`,
     `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
     `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
@@ -713,7 +712,7 @@ const { failures, check, countAtLeast, expectPhaseCost, expectHexOpensDrawer } =
 
 /** Navigate to a Studio flow monitor and wait until it is ready with the cycle's
  *  run selected. The monitor refetches the run model from the bridge on load. */
-async function openStudioMonitor(page, watch, flowId = 'forge-cycle-with-review', runId = CYCLE_ID) {
+async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = CYCLE_ID) {
   await page.goto(watch.uiUrl + `/flows/${flowId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1702,21 +1701,31 @@ async function main() {
     ).catch(() => {});
     await sleep(ACT);
     await frame(page, 'r2-2b-monitor-landing', 'R2 — "Watch it build →" lands on the Studio flow monitor');
-    await openStudioMonitor(page, watch);
-    await frame(page, 'r2-2c-monitor-live', 'R2 — flow monitor shows the cycle live (run rail + topology)');
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: pipeline spine shows ≥5 phase hexes');
+    await openStudioMonitor(page, watch); // forge-develop — the build slice (Model B)
+    await frame(page, 'r2-2c-monitor-live', 'R2 — Forge Develop monitor shows the build slice live (run rail + topology)');
+    // Model B: /flows/forge-develop renders ONLY the develop slice (dev→unifier→review,
+    // the dev node fanning out into per-WI hexes). It does NOT show architect/pm/reflect.
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'monitor: forge-develop slice shows its phase hexes (unifier/review)');
+    // P4: the architect ran in the architect FLOW — assert its real cost on the
+    // forge-architect slice (the threaded run surfaces there via flowLineage).
+    await openStudioMonitor(page, watch, 'forge-architect');
     try {
       await page.waitForFunction(
         () => (parseFloat(document.querySelector('[data-mon-node][data-node-id="architect"]')
           ?.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0,
         null, { timeout: 12000 },
       );
-      check(true, 'P4: architect hex carries real cost (data-phase-cost-usd > 0)');
+      check(true, 'P4: architect hex (on /flows/forge-architect) carries real cost (data-phase-cost-usd > 0)');
     } catch {
       const costVal = await page.evaluate(() =>
         document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-phase-cost-usd') ?? '(absent)');
       check(false, `P4: architect hex carries real cost (got "${costVal}")`);
     }
+    check(
+      await page.evaluate(() => document.querySelector('[data-mon-node][data-node-id="pm"]') !== null),
+      'monitor: forge-architect slice shows the pm hex (architect+pm, not the develop nodes)',
+    );
+    await openStudioMonitor(page, watch); // back to forge-develop for the build beat
 
     // ── R3.0: PM decomposes ACs into work items ───────────────────────────────
     console.log('\n[R3.0] PM decomposes ACs into work items');
@@ -2060,7 +2069,9 @@ async function main() {
     ], WORK);
     await sleep(ACT);
     await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain');
-    await openStudioMonitor(page, watch);
+    // Model B: the reflect node lives on the forge-reflect flow; the threaded run
+    // surfaces there via flowLineage (it ran a reflection phase).
+    await openStudioMonitor(page, watch, 'forge-reflect');
     await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
     await sleep(ACT);
     try {
@@ -2068,7 +2079,7 @@ async function main() {
         () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
         null, { timeout: 12000 },
       );
-      check(true, 'reflection node greened after tuning feedback (Studio monitor)');
+      check(true, 'reflection node greened after tuning feedback (/flows/forge-reflect slice)');
     } catch {
       const reflStatus = await page.evaluate(() =>
         document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') ?? '(absent)');
@@ -2206,10 +2217,11 @@ async function main() {
     writeFileSync(join(QDIR('ready-for-review'), `${INIT2}.md`), [
       '---', `initiative_id: ${INIT2}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
       `created_at: '${new Date().toISOString()}'`, `cycle_id: ${CYCLE_ID2}`,
-      // S8/DEC-3: the gated demo run is monitored under forge-cycle-with-review —
-      // the surviving OOTB full-pipeline flow (7 nodes) the S1 monitor deep-dive
-      // needs (≥5 phase hexes). run-model stamps the run's flowId from this.
-      'flow_id: forge-cycle-with-review',
+      // S9/DEC-3: the gated demo run names forge-develop (the build flow). Its events
+      // span architect→pm→dev→unifier→review (gated — no reflect yet), so its
+      // flowLineage is [forge-architect, forge-develop] and the S1 monitor deep-dive
+      // renders the develop slice (WI fan-out + unifier + review) under Model B.
+      'flow_id: forge-develop',
       'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review', 'origin: architect',
       '---', '', '# Studio demo — gated run for the flow-engine controls', '',
       'Add a --check mode to mdtoc that exits non-zero when the embedded TOC is stale.',
@@ -2246,11 +2258,13 @@ async function main() {
     // F4: the single DEMO.md (DEMO.html is retired — the review page renders markdown).
     writeFileSync(join(artifacts2, 'DEMO.md'), '# Studio demo — gated run\n\n> A gated run for the flow-engine controls.\n');
 
-    // ── S1.0: Flow monitor deep-dive (drawer / gate sub-checks / tail) ────────
-    // S8/DEC-3: forge-cycle retired; deep-dive the full OOTB pipeline that survives
-    // (forge-cycle-with-review, 7 nodes) so the ≥5-phase-hex topology assertion holds.
-    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-cycle-with-review');
-    await page.goto(watch.uiUrl + '/flows/forge-cycle-with-review', { waitUntil: 'domcontentloaded' });
+    // ── S1.0: Flow monitor deep-dive (Model B develop slice + lineage) ────────
+    // S9/DEC-3 + Model B: each flow's monitor shows ONLY its own hexes; the ONE
+    // threaded run surfaces under all three spine flows via its flowLineage. Deep-dive
+    // the develop slice (the dev node fans out into per-WI hexes → unifier → review),
+    // then prove the SAME run also renders its architect slice under forge-architect.
+    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)');
+    await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -2262,13 +2276,14 @@ async function main() {
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(no data-page=flow-monitor)');
       check(false, `monitor: data-page-ready (got "${pr}")`);
     }
-    await caption(page, 'The flow monitor — live topology of every agent phase, with phase logs and gate sub-checks. Pan + zoom the hex graph.');
+    await caption(page, 'The Forge Develop monitor — its own slice of the threaded run: the dev-loop fans out into per-WI hexes, then unifier + review. Pan + zoom the hex graph.');
     await sleep(ACT);
     await countAtLeast(page, '[data-run-id]', 1, 'monitor: run rail shows ≥1 [data-run-id]');
-    await countAtLeast(page, '[data-mon-node]', 6, 'monitor: topology renders ≥6 [data-mon-node] hexes');
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: ≥5 deterministic per-phase hexes');
+    await countAtLeast(page, '[data-mon-node]', 4, 'monitor: develop slice renders ≥4 [data-mon-node] hexes (WI fan-out + unifier + review)');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'monitor: the dev node fans out into ≥2 per-WI hexes (run-driven)');
+    await countAtLeast(page, '[data-mon-node][data-node-id="unifier"]', 1, 'monitor: develop slice shows the unifier phase hex');
     await sleep(READ);
-    await frame(page, 's1-0-monitor', 'S1 — flow monitor: run rail + topology (≥5 phase hexes + WI hexes)');
+    await frame(page, 's1-0-monitor', 'S1 — Forge Develop slice: WI fan-out + unifier + review');
     const unifierHex = page.locator('[data-node-id="unifier"]').first();
     let drawerOpened = false;
     if ((await unifierHex.count()) > 0) {
@@ -2315,19 +2330,23 @@ async function main() {
     });
     check(tailCount !== null, `monitor: [data-tail-count] attribute present (got ${tailCount})`);
 
-    // ── S1.1: Engine control — start-run CTA (forge-reflect, no runs) ──────────
-    console.log('\n[S1.1] Engine — start-run CTA (forge-reflect, no runs)');
-    await page.goto(watch.uiUrl + '/flows/forge-reflect', { waitUntil: 'domcontentloaded' });
+    // ── S1.1: Engine control — start-run CTA (a genuinely run-less flow) ───────
+    // Model B: every spine flow now shows the threaded run via flowLineage, so the
+    // run-less flow for the start-run CTA is the author-from-scratch SCRATCH_FLOW
+    // (forge-develop-scratch) — a parity copy that was never run, and which the
+    // lineage logic correctly excludes (its nodes are a subset of forge-develop's).
+    console.log(`\n[S1.1] Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`);
+    await page.goto(watch.uiUrl + `/flows/${SCRATCH_FLOW}`, { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
         null, { timeout: 20000 },
       );
-      check(true, 'engine: flow-monitor ready for forge-reflect');
+      check(true, `engine: flow-monitor ready for ${SCRATCH_FLOW}`);
     } catch {
       const pr = await page.evaluate(() =>
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
-      check(false, `engine: flow-monitor ready for forge-reflect (got "${pr}")`);
+      check(false, `engine: flow-monitor ready for ${SCRATCH_FLOW} (got "${pr}")`);
     }
     await caption(page, 'The engine runs any flow — Start Run launches a planned flow directly from the UI.');
     await sleep(ACT);
@@ -2343,7 +2362,7 @@ async function main() {
 
     // ── S1.2: Engine control — gate + cost-ceiling on the gated run ───────────
     console.log('\n[S1.2] Engine — gate control + cost on the gated run');
-    await openStudioMonitor(page, watch, 'forge-cycle-with-review', CYCLE_ID2);
+    await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
     await caption(page, 'A gated run parks for you — "Open gate →" links straight to the verdict. Cost is metered against the flow ceiling.');
     await sleep(ACT);
     try {
