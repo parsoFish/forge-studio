@@ -60,6 +60,7 @@ import {
   CSRF_HEADER,
 } from './bridge-studio.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
+import { handleRecoveryRoutes } from './bridge-recovery.ts';
 import {
   handleStudioPostRoutes,
   applyReviewVerdict,
@@ -739,6 +740,9 @@ async function handleHttp(
   if (await handleArchitect(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
+  // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
+  // read-only; the POSTs are gated by the x-forge-csrf guard above.
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot }, url, method)) return;
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
