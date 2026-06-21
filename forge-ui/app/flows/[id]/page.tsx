@@ -8,6 +8,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
 import { FlowTopology } from '@/components/studio/FlowTopology';
+import { effectiveMonitorFlow } from '@/lib/spine-monitor';
 import { PhaseDrawer } from '@/components/studio/PhaseDrawer';
 import { EventTail } from '@/components/studio/EventTail';
 import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
@@ -566,10 +567,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Summary strip */}
               <MonitorSummary run={activeRun} flow={flow ?? EMPTY_FLOW} />
 
-              {/* Topology canvas */}
+              {/* Topology canvas. A threaded spine run (architect→develop→reflect,
+                  one cycle_id) is labelled forge-develop after the hand-off repoints
+                  its flow_id — so render it against the full spine lifecycle topology
+                  (architect…reflect + WI fan-out), not just the develop flow's nodes. */}
               {flow ? (
                 <FlowTopology
-                  flow={flow}
+                  flow={effectiveMonitorFlow(flow, activeRun)}
                   run={activeRun}
                   onNodeClick={handleNodeClick}
                 />
