@@ -2157,18 +2157,25 @@ async function main() {
     if (await roadmapTab.count() > 0) {
       await roadmapTab.click();
       await sleep(1500); // allow bridge fetch to settle
-      await caption(page, 'Per-project Roadmap — a serpentine timeline of the project’s progression over time, with the initiative cards below.');
-      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: initiative spine + work items');
+      await caption(page, 'Per-project Roadmap — a serpentine timeline of the project’s progression over time; click a dot to pop its detail card.');
+      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time');
       const roadmapSection = await page.evaluate(() =>
         document.querySelector('[data-section="project-roadmap"]') !== null);
       check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
       const initCount = await page.evaluate(() =>
-        document.querySelectorAll('[data-initiative-id]').length);
-      check(initCount >= 1, `roadmap: ≥1 [data-initiative-id] present (got ${initCount})`);
+        document.querySelectorAll('[data-roadmap-node]').length);
+      check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the timeline (got ${initCount})`);
       if (roadmapSeeded) {
+        // The detail card pops OFF the dot now — click the seeded initiative's
+        // node, then assert its card (with WIs) appears in the popover.
+        await page.locator(`[data-roadmap-node][data-initiative-id="${INIT}"]`).first().click().catch(() => {});
+        await sleep(500);
         const wiCount = await page.evaluate(() =>
-          document.querySelectorAll('[data-work-item-id]').length);
-        check(wiCount >= 1, `roadmap: ≥1 [data-work-item-id] present (got ${wiCount})`);
+          document.querySelectorAll('[data-roadmap-popover] [data-work-item-id]').length);
+        check(wiCount >= 1, `roadmap: clicking a dot pops its card with ≥1 [data-work-item-id] (got ${wiCount})`);
+        await frame(page, 'r6-0b-popover', 'R6 — clicking an initiative dot pops its detail card up off the timeline');
+        await page.keyboard.press('Escape'); // dismiss before selecting the next node
+        await sleep(300);
       }
     } else {
       check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
@@ -2176,6 +2183,9 @@ async function main() {
 
     // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
     console.log('\n[R6.1] Start development trigger (DEC-3)');
+    // The card pops off the dot — click the pending initiative's node to reveal it.
+    await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"]`).first().click().catch(() => {});
+    await sleep(500);
     // The card div is uniquely identified by data-develop-state (the button also
     // carries data-initiative-id, so select the div explicitly to avoid a match clash).
     const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`);

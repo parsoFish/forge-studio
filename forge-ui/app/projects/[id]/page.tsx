@@ -511,50 +511,43 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
   }
 
   // Dependency depth is still surfaced (data-dep-count) for tooling, but the
-  // roadmap is now laid out over TIME: a serpentine timeline (S-curve arrow,
-  // oldest → newest) above the chronological initiative cards.
+  // roadmap is now laid out over TIME by the serpentine timeline (which orders
+  // its own nodes chronologically). The detail card pops off the selected dot.
   const initLevels = topoLevels(
     initiatives,
     (i) => i.initiativeId,
     (i) => i.dependsOnInitiatives,
   );
-  const dateKey = (id: string): string => {
-    const m = id.match(/(\d{4})-(\d{2})-(\d{2})/);
-    return m ? `${m[1]}${m[2]}${m[3]}` : '00000000';
-  };
-  const ordered = [...initiatives].sort(
-    (a, b) =>
-      dateKey(a.initiativeId).localeCompare(dateKey(b.initiativeId)) ||
-      a.initiativeId.localeCompare(b.initiativeId),
-  );
 
-  const handleSelect = (initiativeId: string): void => {
-    setSelectedId(initiativeId);
-    const card = document.querySelector(`[data-initiative-id="${initiativeId}"][data-develop-state]`);
-    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
+  // Toggle the selected dot; clicking the open one again (or × / Escape) closes.
+  const handleSelect = (initiativeId: string): void =>
+    setSelectedId((prev) => (prev === initiativeId ? null : initiativeId));
 
   return (
     <div
       data-section="project-roadmap"
       data-project-id={projectId}
       data-dep-count={String(initLevels.maxLevel)}
-      style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 28 }}
+      style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
-      {/* The roadmap-over-time: a serpentine arrow, oldest → newest. */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 4px' }}>
+      {/* The roadmap-over-time: a serpentine arrow, oldest → newest. Clicking a
+          dot pops that initiative's detail card up off the dot. */}
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 16px' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
           Progression over time
+          <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
+            click a dot for detail
+          </span>
         </div>
-        <SerpentineTimeline initiatives={initiatives} selectedId={selectedId} onSelect={handleSelect} />
+        <SerpentineTimeline
+          initiatives={initiatives}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onClose={() => setSelectedId(null)}
+          renderCard={(init) => <InitiativeCard initiative={init} selected />}
+        />
       </div>
 
-      {/* Chronological initiative detail + actions (start-development, WIs). */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        {ordered.map((init) => (
-          <InitiativeCard key={init.initiativeId} initiative={init} selected={init.initiativeId === selectedId} />
-        ))}
-      </div>
     </div>
   );
 }

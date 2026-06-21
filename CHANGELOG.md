@@ -46,9 +46,11 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   Roadmap tab replaces the dependency-level card grid with a winding S-curve
   arrow (`SerpentineTimeline`): initiatives ordered chronologically (oldest →
   arrowhead "NOW"), each a status-coloured node branching off the spine, with
-  dotted arcs for inter-initiative dependencies. The chronological initiative
-  cards (work items + start-development) remain below as the detail/action
-  strip. New `data-roadmap-timeline` / `data-roadmap-node` hooks.
+  dotted arcs for inter-initiative dependencies. Clicking a dot pops that
+  initiative's detail card (work items + start-development) up off the dot — a
+  connector-stubbed popover anchored to its point on the timeline — instead of
+  a separate card grid; Escape / × / re-click dismisses it. New
+  `data-roadmap-timeline` / `data-roadmap-node` / `data-roadmap-popover` hooks.
 
 ## [0.2.0] - 2026-06-21
 
