@@ -97,6 +97,32 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
   }
 }
 
+/**
+ * S9 — decide whether the scheduler should REUSE a preserved worktree or call
+ * `add()` (which self-heals by rm-rf'ing the path). Pure + unit-tested so the
+ * hand-off rule is provable without spinning a real cycle.
+ *
+ * Reuse iff a registered worktree is present at the expected path AND it carries
+ * durable, gitignored state the next phase consumes:
+ *   - resume-from-unifier (ADR-019): per-WI commits + `.forge/work-items/` +
+ *     `.forge/unifier-items/` live there; a fresh `add` re-checks-out the branch
+ *     and wipes those untracked specs.
+ *   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle preserved
+ *     its worktree at `ready-for-review` with pm's `.forge/work-items/`; the
+ *     develop run's dev node must read them. `resume_from` is cleared on the
+ *     hand-off, so this case is detected by the preserved work-items, not the
+ *     resume marker.
+ * Anything else (no preserved worktree, or a stale empty one) → `add`.
+ */
+export function decideWorktreeStrategy(opts: {
+  resumeFromUnifier: boolean;
+  worktreePresent: boolean;
+  handoffWorkItemsPresent: boolean;
+}): 'reuse' | 'add' {
+  if (opts.worktreePresent && (opts.resumeFromUnifier || opts.handoffWorkItemsPresent)) return 'reuse';
+  return 'add';
+}
+
 export function remove(handle: WorktreeHandle, opts: { force?: boolean } = {}): void {
   const args = ['-C', handle.projectRepoPath, 'worktree', 'remove'];
   if (opts.force) args.push('--force');
