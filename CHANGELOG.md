@@ -29,6 +29,13 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   `type=plan` view always fell through to "Artifact not yet produced". It now
   falls back to showing `PLAN.html` in a locked-down (`sandbox=""`) iframe, and
   the plan chip/badge is relabeled `PLAN.html` to match the real artifact.
+- **The flow-monitor run rail no longer grows the page forever.** The monitor
+  shell is now a fixed-height (`100vh`) app shell, so the left run rail scrolls
+  internally instead of stacking initiatives off the bottom of the page. Each
+  status group (NEEDS YOU / ACTIVE / FAILED / QUEUED / COMPLETE) is now a
+  collapsible section with a chevron + run-count badge — minimise the COMPLETE
+  pile to keep the rail navigable. New `data-run-group` / `data-group-collapsed`
+  / `data-group-count` hooks + a `data-action="toggle-run-group"` control.
 
 ## [0.2.0] - 2026-06-21
 
