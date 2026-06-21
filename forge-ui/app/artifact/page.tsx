@@ -245,18 +245,21 @@ function extractTitle(body: string): string {
 }
 
 function parsePrDescription(text: string): PrDoc {
-  // Extract key fields from a GitHub PR description markdown
-  // Heuristic: look for title on first heading, body is the rest
+  // Only a LEVEL-1 heading (`# Title`) is the PR title; level-2+ SECTION headings
+  // (`## Why`, `## What`) stay in the body so they render as sections, not get
+  // swallowed as a bogus "Why" title. The unifier's pr-description.md is
+  // section-structured (no top-level title), so the whole text is the body.
   const lines = text.split('\n');
   let title = '';
   let body = text;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (!title && line.startsWith('#')) {
+    if (/^#\s+/.test(line)) {
       title = line.replace(/^#+\s*/, '');
       body = lines.slice(i + 1).join('\n').trim();
       break;
     }
+    if (line && !line.startsWith('#')) break; // first real content — no title heading
   }
   return { title: title || undefined, body };
 }
@@ -818,14 +821,10 @@ function ArtifactPageInner() {
                       <PrRenderer doc={artifact.doc.prDoc} />
                     </div>
                   )}
-                  {/* Demo evidence: rendered WITHOUT data-section="demo-evaluation" here
-                      to ensure exactly one [data-section="demo-evaluation"] exists per page.
-                      The canonical demo-evaluation section lives on type=demo.
-                      FLAG: this duplication may be fully subsumed by F4/F5 (demo
-                      consolidation — demo.json/DEMO.md/DEMO.html triple → single markdown). */}
-                  {artifact.doc.demoModel && (
-                    <DemoComparison model={artifact.doc.demoModel} cycleId={runId} />
-                  )}
+                  {/* S9 refinement: the demo evidence is NOT duplicated here — the PR
+                      artifact (above) already carries the same content, and the canonical
+                      demo evidence lives on the demo-evidence artifact (type=demo) + the
+                      review gate (type=verdict&mode=gate). */}
                 </div>
               )}
 

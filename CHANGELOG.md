@@ -7,6 +7,19 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+### Demo + artifact polish (post-S9 refinements)
+
+- **Demos show REAL captured CLI output, not prose.** `forge demo capture` now runs
+  a checkpoint's `command` argv in both the before (main) and after (branch HEAD)
+  worktrees and back-fills the actual terminal stdout/stderr, rendered side-by-side
+  in the demo — replacing hand-written "before/after" notes for CLI tools.
+- **PR artifact "Why/What/How" renders as markdown.** The PR-description body on the
+  artifact page is now rendered (markdown-it + DOMPurify) instead of shown as literal
+  `##`/`**` text. A bare `## Why` section heading is no longer mis-parsed as the PR title.
+- **Demo evidence de-duplicated from the PR view.** The `DemoComparison` block was
+  removed from the `type=pr` artifact view — the same evidence already lives on the
+  `type=demo` and verdict-gate views, so the PR page now carries only the PR itself.
+
 ## [0.2.0] - 2026-06-21
 
 S9 — **the 3-stage spine is the REAL runtime + the CLI is retired as the operator
