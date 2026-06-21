@@ -191,7 +191,9 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '- **capture** → record this before/after evidence as a checkpoint (and, for a ' +
       'visual shape, the image).\n' +
       '- **verify** → run the named assertion; encode its concrete result ' +
-      '(test name + pass/fail, API response, measured value) as `acEvaluations`/`testEvidence`.\n' +
+      '(test name + pass/fail, API response, measured value) as `acEvaluations`/`testEvidence`. ' +
+      '`testEvidence` MUST be a JSON ARRAY of `{ name, result: "pass"|"fail"|"skip", delta? }` ' +
+      '(one object per suite/case) — NOT an object map keyed by suite name.\n' +
       '- **present** → how the evidence is surfaced in the PR/demo.\n\n' +
       input.demoProcess.map((s, i) => `${i + 1}. [${s.kind.toUpperCase()}] ${s.text}`).join('\n')
     : '';

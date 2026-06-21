@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 import {
   validateDemoModel,
+  coerceDemoModel,
   renderDemoMarkdown,
   renderDemoBundle,
   mergeCapturedMedia,
@@ -69,6 +70,46 @@ function richModel(): DemoModel {
     ],
   };
 }
+
+// ── coerceDemoModel — forgiving normalize (testEvidence object → array) ─────
+
+test('coerceDemoModel: testEvidence object map → TestResultRow[] (the gitpulse wedge)', () => {
+  const raw = {
+    ...validModel(),
+    testEvidence: {
+      qualityGate: 'npm test → 16/16 pass',
+      churnSuite: 'node --test test/churn.test.ts → 8/8 pass',
+      brokenSuite: 'window.test.ts → 2 failed',
+    },
+  };
+  const { model, changed } = coerceDemoModel(raw);
+  assert.equal(changed, true, 'an object testEvidence must be coerced');
+  const te = (model as DemoModel).testEvidence!;
+  assert.ok(Array.isArray(te), 'coerced testEvidence is an array');
+  assert.equal(te.length, 3);
+  assert.deepEqual(te[0], { name: 'qualityGate', result: 'pass', delta: 'npm test → 16/16 pass' });
+  assert.equal(te[2].result, 'fail', 'a value mentioning "failed" infers result=fail');
+  // The coerced model must now pass schema validation (the whole point).
+  assert.deepEqual(validateDemoModel(model), []);
+});
+
+test('coerceDemoModel: an already-array testEvidence is unchanged', () => {
+  const raw = richModel();
+  const { model, changed } = coerceDemoModel(raw);
+  assert.equal(changed, false);
+  assert.deepEqual(model, raw);
+});
+
+test('coerceDemoModel: object rows that already carry {result} are preserved', () => {
+  const raw = { ...validModel(), testEvidence: { unit: { result: 'skip', delta: '+0' } } };
+  const { model } = coerceDemoModel(raw);
+  assert.deepEqual((model as DemoModel).testEvidence, [{ name: 'unit', result: 'skip', delta: '+0' }]);
+});
+
+test('validateDemoModel: a non-array testEvidence error names the expected shape', () => {
+  const errs = validateDemoModel({ ...validModel(), testEvidence: { a: 'b' } });
+  assert.ok(errs.some((e) => e.includes('testEvidence must be an array') && e.includes('name')), errs.join('; '));
+});
 
 // ── Validation — required core ────────────────────────────────────────────
 

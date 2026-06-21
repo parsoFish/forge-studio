@@ -206,7 +206,11 @@ export function validateDemoModel(raw: unknown): string[] {
     errors.push('apiDiff must be an array when set');
   }
   if (m.testEvidence !== undefined && !Array.isArray(m.testEvidence)) {
-    errors.push('testEvidence must be an array when set');
+    errors.push(
+      'testEvidence must be an array of { name, result: "pass"|"fail"|"skip", delta? } when set ' +
+        `(got ${m.testEvidence === null ? 'null' : typeof m.testEvidence}) — not an object map. ` +
+        'e.g. [{ "name": "unit", "result": "pass" }]',
+    );
   }
   if (m.filesChanged !== undefined && !Array.isArray(m.filesChanged)) {
     errors.push('filesChanged must be an array when set');
@@ -219,6 +223,57 @@ export function validateDemoModel(raw: unknown): string[] {
   }
 
   return errors;
+}
+
+/**
+ * Coerce common authoring mistakes in a raw demo.json into the schema shape
+ * BEFORE validation, so a single wrong shape can't wedge the unifier loop. The
+ * unifier composed-gate calls this, persists the result, then validates — a
+ * forgiving normalize, not a silent rewrite of intent.
+ *
+ * Currently handles `testEvidence` authored as an object MAP
+ * (`{ qualityGate: "npm test → 16/16 pass", … }` — observed wedging gitpulse's
+ * first cycle 2026-06-21) → the schema's `TestResultRow[]` (`{ name, result,
+ * delta? }`), inferring `result` from the text (fail/skip keywords → fail/skip,
+ * else pass) and keeping the descriptive string as `delta`. An already-array
+ * `testEvidence` (or absent) passes through unchanged. Never throws.
+ */
+export function coerceDemoModel(raw: unknown): { model: unknown; changed: boolean } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { model: raw, changed: false };
+  const m = { ...(raw as Record<string, unknown>) };
+  let changed = false;
+
+  const te = m.testEvidence;
+  if (te && typeof te === 'object' && !Array.isArray(te)) {
+    m.testEvidence = Object.entries(te as Record<string, unknown>).map(([key, v]) => {
+      // Already a row-ish object — preserve its declared fields.
+      if (v && typeof v === 'object' && !Array.isArray(v) && 'result' in (v as object)) {
+        const vo = v as Record<string, unknown>;
+        const row: { name: string; result: string; delta?: string } = {
+          name: typeof vo.name === 'string' && vo.name.trim() ? vo.name : key,
+          result: inferTestResult(vo.result),
+        };
+        if (typeof vo.delta === 'string' && vo.delta.trim()) row.delta = vo.delta;
+        return row;
+      }
+      const text = typeof v === 'string' ? v : JSON.stringify(v);
+      const row: { name: string; result: string; delta?: string } = { name: key, result: inferTestResult(text) };
+      if (text && text.trim()) row.delta = text;
+      return row;
+    });
+    changed = true;
+  }
+
+  return { model: m, changed };
+}
+
+/** Infer a `pass|fail|skip` verdict from a free-text test-evidence value. */
+function inferTestResult(v: unknown): 'pass' | 'fail' | 'skip' {
+  if (v === 'pass' || v === 'fail' || v === 'skip') return v;
+  const text = typeof v === 'string' ? v : JSON.stringify(v ?? '');
+  if (/\b(fail|failed|error|✗|❌)\b/i.test(text)) return 'fail';
+  if (/\bskip(ped)?\b/i.test(text)) return 'skip';
+  return 'pass';
 }
 
 export type CapturedMedia = {

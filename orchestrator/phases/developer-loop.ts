@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -51,7 +51,7 @@ import {
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
-import { validateDemoModel } from '../../cli/demo-model.ts';
+import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -1246,13 +1246,7 @@ export async function runUnifier(
 
   // Run each pending UWI in dependency order (mirrors the dev-loop per-WI loop).
   const uwiDir = unifierItemsDir(input.worktreePath);
-  const uwiOutcomes: Array<{
-    id: string;
-    status: WorkItem['status'];
-    result: LoopResult | null;
-    failureClass: string | null;
-    runnerError: string | null;
-  }> = [];
+  const uwiOutcomes: UnifierItemOutcome[] = [];
   for (const uwi of pending) {
     const uwiPath = resolve(uwiDir, `${uwi.work_item_id}.md`);
     if (prerequisiteFailed(uwi, uwiOutcomes)) {
@@ -1268,26 +1262,53 @@ export async function runUnifier(
         message: 'unifier.uwi-skipped',
         metadata: { work_item_id: uwi.work_item_id, reason: 'prerequisite-failed' },
       });
-      uwiOutcomes.push({ id: uwi.work_item_id, status: 'failed', result: null, failureClass: 'dev-loop-unifier-gate-failed', runnerError: null });
+      uwiOutcomes.push({ id: uwi.work_item_id, status: 'failed', result: null, failureClass: 'dev-loop-unifier-gate-failed', runnerError: null, crashed: false });
       continue;
     }
-    const itemOutcome = await runUnifierItem({
-      uwi,
-      input,
-      logger,
-      startEventId: start.event_id,
-      qualityGateCmd,
-      demoProcess: projectConfig?.demoProcess,
-      skills: projectConfig?.skills,
-      changelogPath: projectConfig?.releaseProcess?.changelogPath,
-      unifierSdkId,
-      devRoleSdkId,
-    });
-    writeWorkItemStatus(uwiPath, itemOutcome.status);
+    const runOnce = (): Promise<UnifierItemOutcome> =>
+      runUnifierItem({
+        uwi,
+        input,
+        logger,
+        startEventId: start.event_id,
+        qualityGateCmd,
+        demoProcess: projectConfig?.demoProcess,
+        skills: projectConfig?.skills,
+        changelogPath: projectConfig?.releaseProcess?.changelogPath,
+        unifierSdkId,
+        devRoleSdkId,
+      });
+    // #1 (F-44 parity for the unifier): retry a transient agent-process CRASH
+    // inline (a fresh runUnifierItem re-spawns the agent) with backoff, up to
+    // DEV_AGENT_CRASH_MAX_RETRIES — the SAME bound the per-WI dev-loop already
+    // uses. A gate FAILURE is NOT retried (deterministic + operator-deferred).
+    // Observed: the unifier SDK process exiting 1 at iteration 0 right after a
+    // multi-WI burst (gitpulse, 2026-06-21) — the dev-loop had this guard, the
+    // unifier did not.
+    let itemOutcome = await runOnce();
+    for (let attempt = 1; itemOutcome.crashed && attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [uwiPath],
+        output_refs: [],
+        message: 'unifier.crash-retry',
+        metadata: { work_item_id: uwi.work_item_id, attempt, max_retries: DEV_AGENT_CRASH_MAX_RETRIES, runner_error: itemOutcome.runnerError },
+      });
+      await sleep(DEV_AGENT_CRASH_BACKOFF_MS);
+      itemOutcome = await runOnce();
+    }
+    // #2: a still-crashed UWI persists as re-runnable `pending` (so a later
+    // resume-from-unifier re-drains it) rather than operator-deferred `failed`.
+    // A real gate failure persists as `failed` (deferred to the operator).
+    writeWorkItemStatus(uwiPath, itemOutcome.crashed ? 'pending' : itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
-    // Stop the batch on the first failure — a failed concern UWI must not let a
-    // later re-prep UWI re-package over a broken state.
-    if (itemOutcome.status === 'failed') break;
+    // Stop the batch on the first non-complete outcome — a failed/crashed concern
+    // UWI must not let a later re-prep UWI re-package over a broken state.
+    if (itemOutcome.status !== 'complete') break;
   }
 
   // Push once more at unifier close, then assert sync. The unifier may have
@@ -1378,7 +1399,21 @@ type UnifierItemArgs = {
   /** ADR 029: resolved runtime sdk for a code-fix UWI (dev-role inside the unifier). */
   devRoleSdkId: string;
 };
-type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
+type UnifierItemOutcome = {
+  id: string;
+  status: WorkItem['status'];
+  result: LoopResult | null;
+  failureClass: string | null;
+  runnerError: string | null;
+  /**
+   * True when the UWI did not finish because the agent PROCESS crashed/threw
+   * (runnerError set), as opposed to running to completion and failing its
+   * composed gate. A crash is transient + incomplete, so the drain retries it
+   * inline and (if still crashing) persists the UWI as re-runnable `pending` —
+   * NOT operator-deferred `failed` (which is reserved for a real gate failure).
+   */
+  crashed: boolean;
+};
 
 async function runUnifierItem(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
   // Wipe per-UWI scratch (PROMPT.md / AGENT.md / fix_plan.md) so this UWI's
@@ -1443,14 +1478,21 @@ function unifierIterationHandler(
   };
 }
 
-function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runnerError: string | null): UnifierItemOutcome {
+export function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runnerError: string | null): UnifierItemOutcome {
   const status: WorkItem['status'] = loopResult?.status === 'complete' && runnerError === null ? 'complete' : 'failed';
+  // Distinguish a PROCESS crash (the agent threw/exited before producing a clean
+  // gate verdict — runnerError set, or the loop reports a crashed status) from a
+  // GATE failure (the agent ran to completion but its output failed the composed
+  // gate). The former is transient/incomplete (retry inline; resume re-drains);
+  // the latter is operator-deferred. A complete run is never a crash.
+  const crashed = status !== 'complete' && (runnerError !== null || loopResult === null);
   return {
     id: uwi.work_item_id,
     status,
     result: loopResult,
-    failureClass: status === 'complete' ? null : 'dev-loop-unifier-gate-failed',
+    failureClass: status === 'complete' ? null : crashed ? 'dev-loop-unifier-crashed' : 'dev-loop-unifier-gate-failed',
     runnerError,
+    crashed,
   };
 }
 
@@ -1771,7 +1813,27 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   let demoErrors: string[] = ['demo.json missing'];
   if (existsSync(demoJsonPath)) {
     try {
-      demoErrors = validateDemoModel(JSON.parse(readFileSync(demoJsonPath, 'utf8')));
+      const parsed = JSON.parse(readFileSync(demoJsonPath, 'utf8'));
+      // Forgiving normalize: coerce a common shape mistake (e.g. testEvidence
+      // authored as an object map instead of an array) into the schema shape and
+      // PERSIST it, so a single authoring slip can't wedge the unifier loop. The
+      // coerced form is what the PR carries + validates.
+      const { model, changed } = coerceDemoModel(parsed);
+      if (changed) {
+        writeFileSync(demoJsonPath, `${JSON.stringify(model, null, 2)}\n`);
+        logger.emit({
+          initiative_id: input.initiativeIdForEvent,
+          parent_event_id: input.parentEventId,
+          phase: 'unifier',
+          skill: 'developer-unifier',
+          event_type: 'log',
+          input_refs: [demoJsonPath],
+          output_refs: [demoJsonPath],
+          message: 'unifier.demo-json-normalized',
+          metadata: { detail: 'coerced demo.json into the schema shape before validation' },
+        });
+      }
+      demoErrors = validateDemoModel(model);
     } catch (err) {
       demoErrors = [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`];
     }
