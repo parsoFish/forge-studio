@@ -71,15 +71,17 @@ function makeAgentSkillMd(): string {
   ].join('\n');
 }
 
-/** Full valid project.json that includes the required demo + quality_gate_cmd */
+/** Full valid project.json that includes the required quality_gate_cmd */
 function makeProjectJson(extras: Record<string, unknown> = {}): string {
   return JSON.stringify(
     {
-      demo: { shape: 'harness', command: ['npm', 'test'] },
       quality_gate_cmd: ['npm', 'test'],
       northStar: 'Ship a great product.',
       instructions: 'Always write tests first.',
-      demoProcess: [{ kind: 'verify', text: 'Run npm test' }],
+      demoProcess: [
+        { kind: 'capture', text: 'Capture before state.' },
+        { kind: 'verify', text: 'Run npm test' },
+      ],
       skills: ['tdd-workflow', 'coding-standards'],
       kb: 'forge-dev',
       ...extras,
@@ -295,7 +297,7 @@ test('PUT /api/studio/agents/UPPERCASE → 400 (slug must be lowercase)', async 
 // PUT /api/studio/projects/:id — edits M2 fields, preserves required fields
 // ---------------------------------------------------------------------------
 
-test('PUT /api/studio/projects/write-project edits northStar + demoProcess, preserves demo + quality_gate_cmd', async () => {
+test('PUT /api/studio/projects/write-project edits northStar + demoProcess, preserves quality_gate_cmd', async () => {
   // Reset to known state
   writeFileSync(join(projectDir, '.forge', 'project.json'), makeProjectJson());
 
@@ -319,7 +321,6 @@ test('PUT /api/studio/projects/write-project edits northStar + demoProcess, pres
   ]);
 
   // Preserved fields
-  assert.deepEqual(written['demo'], { shape: 'harness', command: ['npm', 'test'] }, 'demo preserved');
   assert.deepEqual(written['quality_gate_cmd'], ['npm', 'test'], 'quality_gate_cmd preserved');
   assert.equal(written['instructions'], 'Always write tests first.', 'instructions preserved');
   assert.deepEqual(written['skills'], ['tdd-workflow', 'coding-standards'], 'skills preserved');
@@ -393,9 +394,18 @@ test('GET /api/studio/agents still works alongside write routes', async () => {
   assert.ok(Array.isArray(body.agents));
 });
 
-test('GET /api/health still returns ok', async () => {
+test('GET /api/health returns the bridge JSON identity (service/pid/startedAt)', async () => {
   const res = await fetch(`${bridgeUrl}/api/health`);
   assert.equal(res.status, 200);
+  assert.ok(
+    (res.headers.get('content-type') ?? '').includes('application/json'),
+    'health must be JSON so a second studio can read the identity',
+  );
+  const body = (await res.json()) as { service: string; pid: number; startedAt: string };
+  assert.equal(body.service, 'forge-bridge');
+  assert.equal(body.pid, process.pid, 'identity pid is the process serving the bridge');
+  assert.equal(typeof body.startedAt, 'string');
+  assert.ok(!Number.isNaN(Date.parse(body.startedAt)), 'startedAt is an ISO timestamp');
 });
 
 test('OPTIONS preflight returns PUT in access-control-allow-methods', async () => {
@@ -493,7 +503,7 @@ test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, rep
   assert.ok(existsSync(cfgPath), 'project.json must be scaffolded');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
   assert.ok(Array.isArray(cfg.quality_gate_cmd), 'C1 quality_gate_cmd present');
-  assert.ok(cfg.demo && typeof cfg.demo === 'object', 'DEMO block present');
+  assert.ok(Array.isArray(cfg.demoProcess), 'demoProcess present');
 
   // B3: the C4 artifacts + a git repo were scaffolded (idempotent stubs).
   assert.ok(existsSync(join(projDir, 'roadmap.md')), 'roadmap.md scaffolded (C4)');

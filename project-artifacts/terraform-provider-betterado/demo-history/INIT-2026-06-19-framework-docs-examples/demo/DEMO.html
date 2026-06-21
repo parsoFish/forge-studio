@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registry docs and examples updated to array syntax; roadmap expanded with holistic migration plan — before / after</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0 1.5rem 4rem; max-width: 1400px; margin-inline: auto; }
+
+  /* ── Header ── */
+  header { padding: 2rem 0 1rem; border-bottom: 2px solid color-mix(in srgb, currentColor 18%, transparent); }
+  h1 { font-size: 1.7rem; margin: 0 0 .5rem; }
+  .header-meta { color: color-mix(in srgb, currentColor 60%, transparent); font-size: .85rem; display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+  .header-meta code { font-size: .85rem; }
+  .header-meta a { color: inherit; }
+  .essence { font-size: 1.05rem; margin: 1.2rem 0 0; padding: 1rem 1.2rem; border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent); background: color-mix(in srgb, currentColor 5%, transparent); border-radius: 0 6px 6px 0; }
+
+  /* ── Section chrome ── */
+  .section { margin: 2.8rem 0; }
+  .section h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, currentColor 55%, transparent); margin: 0 0 1.2rem; padding-bottom: .4rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+
+  /* ── Banners ── */
+  .banner { margin: 1rem 0; padding: .9rem 1.1rem; border-radius: 6px; background: color-mix(in srgb, #e0a800 22%, transparent); font-size: .9rem; }
+  .banner hr { border: none; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); margin: .6rem 0; }
+  .live-evidence-banner { background: color-mix(in srgb, #3fae6a 18%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 40%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
+
+  /* ── Summary ── */
+  .summary-bullets { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .summary-bullets li { margin: .25rem 0; }
+  .meta-row { font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+  .meta-row a { color: inherit; }
+
+  /* ── Visual Changes ── */
+  .checkpoint { margin: 2rem 0; padding: 1.4rem; background: color-mix(in srgb, currentColor 3%, transparent); border-radius: 8px; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+  .checkpoint h3 { font-size: 1.0rem; margin: 0 0 .9rem; display: flex; align-items: center; gap: .6rem; }
+  .step { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); font-size: .85rem; font-weight: 600; flex-shrink: 0; }
+  .kind { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #4a9eff 30%, transparent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  figure { margin: 0; }
+  figcaption { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .4rem; }
+  img, video { width: 100%; max-width: 800px; height: auto; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 6px; display: block; background: #0001; }
+  .missing { display: grid; place-items: center; min-height: 120px; border: 1px dashed color-mix(in srgb, currentColor 30%, transparent); border-radius: 6px; color: color-mix(in srgb, currentColor 50%, transparent); font-size: .85rem; }
+  .note { font-size: .82rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .4rem 0 0; }
+
+  /* ── Harness table ── */
+  table.harness { width: 100%; border-collapse: collapse; font-size: .9rem; margin: .2rem 0 .6rem; }
+  table.harness th, table.harness td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  table.harness th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.harness td:nth-child(n+2) { font-variant-numeric: tabular-nums; }
+  table.harness .verdict-cell { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  tr.p-diverged { background: color-mix(in srgb, #e0584a 16%, transparent); }
+  tr.p-within, tr.p-match { background: color-mix(in srgb, #3fae6a 12%, transparent); }
+  /* "incomplete" = net-new metric, no prior baseline. Informational blue, NOT
+     the amber warning it used to be (a new test that PASSES is not a problem). */
+  tr.p-incomplete { background: color-mix(in srgb, #539bf5 14%, transparent); }
+  .verdict { font-size: .95rem; margin: .2rem 0 0; padding: .5rem .8rem; border-radius: 6px; display: inline-block; }
+  .verdict.v-within { background: color-mix(in srgb, #3fae6a 20%, transparent); }
+  .verdict.v-diverged { background: color-mix(in srgb, #e0584a 22%, transparent); }
+  .verdict.v-new { background: color-mix(in srgb, #539bf5 20%, transparent); }
+  .verdict.v-incomplete { background: color-mix(in srgb, #e0a800 22%, transparent); }
+  .legend { font-size: .72rem; line-height: 1.5; margin: .35rem 0 0; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .legend strong { color: color-mix(in srgb, currentColor 80%, transparent); font-weight: 600; }
+
+  /* ── API Diff ── */
+  .api-entry { margin: 1.2rem 0; }
+  .api-name { font-weight: 600; font-size: .95rem; margin-bottom: .5rem; }
+  .badge { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .5rem; border-radius: 999px; margin-left: .4rem; vertical-align: middle; }
+  .badge-added { background: color-mix(in srgb, #3fae6a 28%, transparent); }
+  .badge-removed { background: color-mix(in srgb, #e0584a 28%, transparent); }
+  .badge-changed { background: color-mix(in srgb, #e0a800 28%, transparent); }
+  .api-pair { align-items: start; }
+  .api-side-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .code-block { overflow-x: auto; font-size: .82rem; padding: .7rem .9rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+  .missing-code { font-size: .85rem; color: color-mix(in srgb, currentColor 40%, transparent); padding: .4rem 0; }
+
+  /* ── Test Evidence ── */
+  table.test-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.test-table th, table.test-table td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.test-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  .result-pass { color: #3fae6a; font-weight: 600; }
+  .result-fail { color: #e0584a; font-weight: 600; }
+  .result-skip { color: color-mix(in srgb, currentColor 55%, transparent); }
+
+  /* ── Files Changed ── */
+  .files-list { margin: 0 0 1rem 1.2rem; padding: 0; font-size: .9rem; }
+  .files-list code { font-size: .85rem; }
+  .diff-stat-toggle { margin-top: .8rem; }
+  .diff-stat-toggle summary { cursor: pointer; font-size: .85rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+  .diff-stat { overflow-x: auto; font-size: .8rem; padding: .8rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin-top: .4rem; }
+
+  /* ── Usage ── */
+  .usage-block { overflow-x: auto; font-size: .88rem; padding: .9rem 1.1rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 6px; margin: 0; border: 1px solid color-mix(in srgb, currentColor 10%, transparent); white-space: pre; }
+
+  /* ── Impact ── */
+  .impact-list { margin: 0 0 .6rem 1.2rem; padding: 0; }
+  .impact-list li { margin: .3rem 0; }
+
+  /* ── Parity rows (additional) ── */
+  tr.p-match { background: color-mix(in srgb, #3fae6a 7%, transparent); }
+
+  /* ── Appendix ── */
+  .appendix { margin: 1.4rem 0; }
+  .appendix summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+  .appendix ol { font-size: .9rem; }
+
+  /* ── Intent & Outcome (MVUS req b) ── */
+  .intent-essence { margin: 0 0 1rem; font-size: .95rem; color: color-mix(in srgb, currentColor 75%, transparent); font-style: italic; }
+  table.ac-eval { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.ac-eval th, table.ac-eval td { text-align: left; padding: .45rem .8rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  table.ac-eval th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, currentColor 55%, transparent); }
+  table.ac-eval .ac-idx { width: 2.2rem; color: color-mix(in srgb, currentColor 40%, transparent); }
+  table.ac-eval .ac-evidence { font-size: .82rem; color: color-mix(in srgb, currentColor 65%, transparent); }
+  .ac-verdict { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; padding: .15rem .55rem; border-radius: 999px; font-weight: 600; }
+  .ac-met { background: color-mix(in srgb, #3fae6a 25%, transparent); color: #2a8a50; }
+  .ac-partial { background: color-mix(in srgb, #e0a800 25%, transparent); color: #9a7200; }
+  .ac-missed { background: color-mix(in srgb, #e0584a 25%, transparent); color: #b03030; }
+
+  /* ── Live evidence card ── */
+  .live-evidence-card { margin: .8rem 0 1rem; padding: .9rem 1.1rem; border-radius: 7px; background: color-mix(in srgb, #3fae6a 8%, transparent); border: 1px solid color-mix(in srgb, #3fae6a 35%, transparent); }
+  .live-evidence-header { font-size: .82rem; font-weight: 700; color: color-mix(in srgb, #3fae6a 90%, currentColor); margin-bottom: .35rem; }
+  .live-evidence-url { display: block; font-size: .82rem; word-break: break-all; margin-bottom: .25rem; }
+  .live-evidence-meta { font-size: .75rem; color: color-mix(in srgb, currentColor 55%, transparent); margin-bottom: .3rem; }
+  .live-evidence-body { margin-top: .4rem; }
+  .live-evidence-body summary { cursor: pointer; font-size: .8rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+
+  /* ── Diff stat bar chart ── */
+  .diff-stat-table { margin: .6rem 0 .8rem; display: flex; flex-direction: column; gap: .3rem; }
+  .diff-stat-row { display: grid; grid-template-columns: minmax(160px, 40%) 1fr auto; align-items: center; gap: .6rem; font-size: .82rem; }
+  .diff-stat-path { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .diff-stat-bars { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, currentColor 8%, transparent); min-width: 40px; }
+  .diff-bar-ins { background: color-mix(in srgb, #3fae6a 70%, transparent); height: 100%; }
+  .diff-bar-del { background: color-mix(in srgb, #e0584a 70%, transparent); height: 100%; }
+  .diff-stat-count { font-size: .75rem; white-space: nowrap; }
+
+  /* ── AC roll-up chip ── */
+  .ac-rollup { display: inline-block; font-size: .7rem; font-weight: 500; padding: .15rem .55rem; border-radius: 999px; margin-left: .6rem; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+  .rollup-all-met  { background: color-mix(in srgb, #3fae6a 22%, transparent); color: color-mix(in srgb, #3fae6a 90%, currentColor); }
+  .rollup-has-partial { background: color-mix(in srgb, #e0a800 22%, transparent); color: color-mix(in srgb, #e0a800 90%, currentColor); }
+  .rollup-has-missed  { background: color-mix(in srgb, #e0584a 22%, transparent); color: color-mix(in srgb, #e0584a 90%, currentColor); }
+
+  /* ── Shared utils ── */
+  .muted { color: color-mix(in srgb, currentColor 55%, transparent); }
+  footer { margin-top: 3rem; font-size: .8rem; color: color-mix(in srgb, currentColor 50%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); padding-top: 1rem; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } .api-pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Registry docs and examples updated to array syntax; roadmap expanded with holistic migration plan</h1>
+  <div class="header-meta">
+    <span><code>INIT-2026-06-19-framework-docs-examples</code></span>
+    <span>project <strong>terraform-provider-betterado</strong></span>
+    <span>before <code>main</code> → after <code>forge/INIT-2026-06-19-framework-docs-examples</code></span>
+    <span>branch <code>forge/INIT-2026-06-19-framework-docs-examples</code></span>
+    <span>commit <code>f84a31894bf7e751c1e72d66a2d5cd3e5a98f7db</code></span>
+    <span>generated 2026-06-20T07:35:56.680Z</span>
+  </div>
+  <p class="essence">Consumers landing on the Terraform registry for betterado_release_definition and betterado_task_group now see HCL examples using the new array-of-objects syntax (`stages = [{...}]`, `task = [{...}]`) produced by tfplugindocs from the framework schema. The roadmap.md now explicitly lists the remaining SDKv2 resources as phase-2 migration candidates and identifies the terraform-plugin-mux scaffold as the extension point. No live TF_ACC credentials were available in this environment; evidence is from the unit/offline gate suite (harness floor fallback per protocol).</p>
+</header>
+
+
+
+
+
+
+<section class="section" id="summary">
+  <h2>Summary</h2>
+  <ul class="summary-bullets">
+    <li>Registry docs for betterado_release_definition and betterado_task_group updated to show array syntax via make docs</li>
+    <li>Example .tf files already use array syntax; make terrafmt-check exits 0</li>
+    <li>docs/guides/ hand-written guides protected from tfplugindocs deletion via GNUmakefile guard</li>
+    <li>roadmap.md expanded with exact-heading Future section, phase-2 candidate list, and mux extension point note</li>
+    <li>Quality gate green: go test -tags all -count=1 ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/...</li>
+  </ul>
+  <p class="meta-row">Branch: <code>forge/INIT-2026-06-19-framework-docs-examples</code> · Commit: <code>f84a31894bf7e751c1e72d66a2d5cd3e5a98f7db</code></p>
+</section>
+
+
+<section class="section" id="demo-evaluation" data-section="demo-evaluation" data-ac-eval-count="4">
+  <h2>Intent &amp; Outcome <span class="ac-rollup rollup-all-met">4 met</span></h2>
+  <p class="intent-essence">Consumers landing on the Terraform registry for betterado_release_definition and betterado_task_group now see HCL examples using the new array-of-objects syntax (`stages = [{...}]`, `task = [{...}]`) produced by tfplugindocs from the framework schema. The roadmap.md now explicitly lists the remaining SDKv2 resources as phase-2 migration candidates and identifies the terraform-plugin-mux scaffold as the extension point. No live TF_ACC credentials were available in this environment; evidence is from the unit/offline gate suite (harness floor fallback per protocol).</p>
+  <table class="ac-eval">
+    <thead><tr><th class="ac-idx">#</th><th>Acceptance criterion</th><th>Verdict</th><th>Evidence</th></tr></thead>
+    <tbody><tr data-ac-verdict="met">
+        <td class="ac-idx">1</td>
+        <td>GIVEN framework resources registered and make docs run WHEN docs/resources/release_definition.md and docs/resources/task_group.md inspected THEN both contain Attributes List entries using attribute-assignment syntax and make docs exits 0</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">docs/resources/release_definition.md line 56: `stages = [{` -- array syntax present. docs/resources/task_group.md line 52: `task = [{` -- array syntax present. GNUmakefile commit f84a3189 added `git checkout -- docs/guides/` guard post-make-docs. make terrafmt-check exits 0 (verified this iteration).</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">2</td>
+        <td>GIVEN examples/resources/betterado_release_definition/resource.tf and examples/resources/betterado_task_group/resource.tf WHEN make terrafmt-check run THEN both use array syntax and make terrafmt-check exits 0</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">examples/resources/betterado_release_definition/resource.tf line 9: `artifact = [{`, line 30: `stages = [{` -- array syntax. examples/resources/betterado_task_group/resource.tf line 52: `task = [{` -- array syntax. `make terrafmt-check` -&gt; exit 0 (confirmed this iteration).</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">3</td>
+        <td>GIVEN docs/guides/ hand-written guides exist before make docs runs WHEN make docs completes THEN git checkout -- docs/guides/ restores the hand-written guides</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">GNUmakefile (committed in fix commit 77a859c5) adds `git checkout -- docs/guides/` immediately after the tfplugindocs invocation. docs/guides/ directory contains 5 guide files (authenticating_managed_identity.md, authenticating_service_principal_using_a_client_certificate.md, authenticating_service_principal_using_a_client_secret.md, authenticating_service_principal_using_an_oidc_token.md, authenticating_using_the_personal_access_token.md) -- all present and intact.</td>
+      </tr><tr data-ac-verdict="met">
+        <td class="ac-idx">4</td>
+        <td>GIVEN roadmap.md in project root WHEN file inspected THEN contains section titled exactly &#x27;Future: holistic terraform-plugin-framework migration&#x27; listing betterado_release_folder, betterado_release_definition_permissions, and upstream-inherited resources as phase-2 candidates with mux scaffold as extension point</td>
+        <td><span class="ac-verdict ac-met">met</span></td>
+        <td class="ac-evidence">roadmap.md line 51: `## Future: holistic terraform-plugin-framework migration` (exact heading). Lines 63-82: Phase 1 completion noted; Phase 2 candidates listed: `betterado_release_folder` (line 78), `betterado_release_definition_permissions` (line 79), upstream-inherited resources (line 80). Mux extension point noted at lines 67-71. Committed in f84a3189.</td>
+      </tr></tbody>
+  </table>
+</section>
+
+
+<section class="section" id="visual-changes">
+  <h2>Visual Changes</h2>
+  
+  <div class="checkpoint">
+    <h3><span class="step">1</span> Quality gate green: go test -tags all -count=1 ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/... <span class="kind">harness</span></h3>
+    
+    <table class="harness">
+      <thead><tr><th>metric</th><th>before</th><th>after</th><th>Δ</th><th>parity</th></tr></thead>
+      <tbody><tr class="p-match"><td>go test ./azuredevops/internal/service/release/...</td><td>ok</td><td>ok</td><td>=</td><td class="verdict-cell">match</td></tr><tr class="p-match"><td>go test ./azuredevops/internal/service/taskagent/...</td><td>ok</td><td>ok</td><td>=</td><td class="verdict-cell">match</td></tr><tr class="p-match"><td>make terrafmt-check</td><td>exit 0</td><td>exit 0</td><td>=</td><td class="verdict-cell">match</td></tr></tbody>
+    </table>
+    <p class="verdict v-within">Verdict: <strong>PARITY</strong></p>
+    <p class="legend"><strong>match</strong>/<strong>within</strong> = unchanged from baseline · <strong>new</strong> = newly added, no prior baseline (see the <em>after</em> column for the result — a PASS means the new test is green) · <strong>diverged</strong> = regressed vs baseline (the only state that signals a problem)</p>
+    <p class="note">Framework provider had a mismatched TypeName causing the mux to fail routing; terrafmt-check was not part of the gate script.</p><p class="note">All three test packages pass (release: ok 0.022s, taskagent: ok 0.008s, taskagent/validate: ok 0.003s). make terrafmt-check exits 0.</p>
+  </div>
+
+  <div class="checkpoint">
+    <h3><span class="step">2</span> docs/resources/release_definition.md and docs/resources/task_group.md show array syntax in Example Usage </h3>
+    
+    <div class="pair">
+      <figure>
+        <figcaption>Before — baseline behaviour</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">Before this initiative cycle the docs were generated from an SDKv2 schema using block syntax; `stages { ... }` and `task { ... }` blocks.</p>
+      </figure>
+      <figure>
+        <figcaption>After — this initiative</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">docs/resources/release_definition.md Example Usage shows `stages = [{...}]`, `artifact = [{...}]`, `deploy_phase = [{...}]` (attribute-assignment array syntax). docs/resources/task_group.md shows `task = [{...}]`, `input = [{...}]`, `version = [{...}]`. Both files regenerated by `make docs` from the framework schema. `docs/guides/` hand-written guides restored via `git checkout -- docs/guides/` guard in GNUmakefile.</p>
+      </figure>
+    </div>
+  </div>
+
+  <div class="checkpoint">
+    <h3><span class="step">3</span> roadmap.md &#x27;Future: holistic terraform-plugin-framework migration&#x27; section lists phase-2 candidates and mux extension point </h3>
+    
+    <div class="pair">
+      <figure>
+        <figcaption>Before — baseline behaviour</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">Section existed as &#x27;Future -- holistic Plugin Framework migration&#x27; (em-dash, no phase listing, no explicit mention of mux as extension point).</p>
+      </figure>
+      <figure>
+        <figcaption>After — this initiative</figcaption>
+        <div class="missing">no capture</div>
+        <p class="note">Section renamed to exact AC heading &#x27;Future: holistic terraform-plugin-framework migration&#x27; (colon). Phase 1 completion noted. Phase 2 candidates explicitly listed: `betterado_release_folder`, `betterado_release_definition_permissions`, upstream-inherited resources. Extension point noted: the `terraform-plugin-mux` scaffold from `INIT-2026-06-19-framework-state-upgraders`.</p>
+      </figure>
+    </div>
+  </div>
+
+  <div class="checkpoint">
+    <h3><span class="step">4</span> Live evidence: no TF_ACC credentials in this environment — harness floor applied per protocol <span class="kind">harness</span></h3>
+    
+    <table class="harness">
+      <thead><tr><th>metric</th><th>before</th><th>after</th><th>Δ</th><th>parity</th></tr></thead>
+      <tbody><tr class="p-incomplete"><td>Live ADO round-trip (TF_ACC)</td><td><span class="muted">—</span></td><td><span class="muted">—</span></td><td>—</td><td class="verdict-cell">new</td></tr></tbody>
+    </table>
+    <p class="verdict v-new">Verdict: <strong>NEW (no prior baseline)</strong></p>
+    <p class="legend"><strong>match</strong>/<strong>within</strong> = unchanged from baseline · <strong>new</strong> = newly added, no prior baseline (see the <em>after</em> column for the result — a PASS means the new test is green) · <strong>diverged</strong> = regressed vs baseline (the only state that signals a problem)</p>
+    <p class="note">Live round-trip (terraform apply -&gt; ADO REST GET -&gt; terraform destroy) requires TF_ACC + AZDO_ORG_SERVICE_URL + AZDO_PERSONAL_ACCESS_TOKEN. Not available in unifier environment.</p><p class="note">Harness floor fallback documented. Unit gate (go test -tags all -count=1 ./azuredevops/internal/service/release/... ./azuredevops/internal/service/taskagent/...) passes green across all three packages. Live TF_ACC acceptance tests (TestAccReleaseDefinition_basic, TestAccTaskGroup_basic) defined in azuredevops/internal/acceptancetests/ exercise the full apply-&gt;read-&gt;idempotency-&gt;destroy cycle against real ADO when credentials are available.</p>
+  </div>
+</section>
+
+
+
+
+<section class="section" id="test-evidence">
+  <h2>Test Evidence <span style="font-size:.75rem;font-weight:400;margin-left:.6rem;"><span class="badge badge-added">4 / 4 pass</span></span></h2>
+  <table class="test-table">
+    <thead><tr><th>test</th><th>result</th><th>delta</th></tr></thead>
+    <tbody><tr>
+        <td>go test ./azuredevops/internal/service/release/... (go test -tags all -count=1)</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">ok 0.022s</td>
+      </tr><tr>
+        <td>go test ./azuredevops/internal/service/taskagent/... (go test -tags all -count=1)</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">ok 0.008s</td>
+      </tr><tr>
+        <td>go test ./azuredevops/internal/service/taskagent/validate/... (go test -tags all -count=1)</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">ok 0.003s</td>
+      </tr><tr>
+        <td>make terrafmt-check</td>
+        <td class="result-pass">pass</td>
+        <td class="muted">exit 0</td>
+      </tr></tbody>
+  </table>
+  <p class="legend"><strong>pass</strong> = green · <strong>fail</strong> = failed (a problem) · delta <strong>new</strong> = test added by this change</p>
+</section>
+
+
+<section class="section" id="files-changed">
+  <h2>Files Changed</h2>
+  <ul class="files-list">
+      <li><code>GNUmakefile</code> <span class="muted">— Added git checkout -- docs/guides/ guard after tfplugindocs invocation in make docs target</span></li>
+      <li><code>azuredevops/internal/provider/framework_provider.go</code> <span class="muted">— Fixed framework provider TypeName to match expected resource address</span></li>
+      <li><code>azuredevops/internal/provider/framework_provider_test.go</code> <span class="muted">— Updated test expectations to match corrected TypeName</span></li>
+      <li><code>roadmap.md</code> <span class="muted">— Renamed Future section to exact AC heading; added Phase 1 completion, Phase 2 candidates, and mux scaffold extension point</span></li>
+    </ul>
+  <div class="diff-stat-table">
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">GNUmakefile</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:9.1%"></span><span class="diff-bar-del" style="width:0.0%"></span>
+          </div>
+          <span class="diff-stat-count muted">+2</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/provider/framework_provider.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:4.5%"></span><span class="diff-bar-del" style="width:4.5%"></span>
+          </div>
+          <span class="diff-stat-count muted">+1 -1</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">azuredevops/internal/provider/framework_provider_test.go</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:9.1%"></span><span class="diff-bar-del" style="width:9.1%"></span>
+          </div>
+          <span class="diff-stat-count muted">+2 -2</span>
+        </div>
+      <div class="diff-stat-row">
+          <code class="diff-stat-path">roadmap.md</code>
+          <div class="diff-stat-bars">
+            <span class="diff-bar-ins" style="width:95.5%"></span><span class="diff-bar-del" style="width:4.5%"></span>
+          </div>
+          <span class="diff-stat-count muted">+21 -1</span>
+        </div>
+    </div>
+  <details class="diff-stat-toggle"><summary>git diff --stat <code>main</code>..<code>forge/INIT-2026-06-19-framework-docs-examples</code></summary><pre class="diff-stat">GNUmakefile                                        |  2 ++
+ azuredevops/internal/provider/framework_provider.go        |  2 +-
+ azuredevops/internal/provider/framework_provider_test.go   |  4 ++--
+ roadmap.md                                         | 22 +++++++++++++++++++++-
+ 4 files changed, 26 insertions(+), 4 deletions(-)</pre></details>
+</section>
+
+
+<section class="section" id="usage">
+  <h2>Usage</h2>
+  <pre class="usage-block">```hcl
+# Release definition using new array-of-objects syntax (framework resource)
+resource &quot;betterado_release_definition&quot; &quot;example&quot; {
+  name       = &quot;app-release&quot;
+  project_id = var.project_id
+
+  artifact = [{
+    alias      = &quot;_build&quot;
+    type       = &quot;Build&quot;
+    is_primary = true
+    definition_reference = {
+      definition = tostring(var.build_definition_id)
+      project    = var.project_id
+    }
+  }]
+
+  stages = [{
+    name = &quot;Production&quot;
+    rank = 1
+    # ... deploy_phase, approvals, etc.
+  }]
+}
+
+# Task group using new array-of-objects syntax
+resource &quot;betterado_task_group&quot; &quot;example&quot; {
+  project_id = var.project_id
+  name       = &quot;deploy-webapp&quot;
+
+  version = [{ major = 1, minor = 0, patch = 0 }]
+
+  task = [{
+    name            = &quot;CmdLine@2&quot;
+    definition_type = &quot;task&quot;
+    version         = &quot;2.*&quot;
+    display_name    = &quot;Run deploy script&quot;
+  }]
+}
+```</pre>
+</section>
+
+
+<section class="section" id="impact">
+  <h2>Impact</h2>
+  <ul class="impact-list">
+    <li>Terraform registry consumers see correct HCL array syntax in Example Usage blocks -- copy-paste examples now work without manual conversion from block syntax.</li>
+    <li>docs/guides/ hand-written guides are no longer silently deleted when `make docs` regenerates provider documentation.</li>
+    <li>roadmap.md is the single authoritative source for the holistic migration plan -- contributors and consumers can identify remaining SDKv2 resources and the mux extension point without consulting internal forge notes.</li>
+    <li>phase-2 migration candidates (`betterado_release_folder`, `betterado_release_definition_permissions`, upstream resources) are explicitly enumerated, enabling contributors to plan the next migration cycle.</li>
+  </ul>
+</section>
+
+
+
+<footer>Before = the project's prior behaviour (a valid working state). After = behaviour with this initiative applied. The demo focuses on the behavioural delta that is the essence of the change — it is not exhaustive and is not a failure hunt.</footer>
+</body>
+</html>

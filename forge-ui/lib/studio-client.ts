@@ -52,6 +52,13 @@ export type Run = {
   failedAt?: string;
   failNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
+  /**
+   * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
+   * A threaded spine run carries [forge-architect, forge-develop, forge-reflect] so it
+   * surfaces under all three flow monitors (each rendering its own slice). A single-flow
+   * run carries just its own flow id.
+   */
+  flowLineage: string[];
 };
 
 export type AgentRuntime = {
@@ -322,6 +329,7 @@ export function parseRun(raw: unknown): Run {
     failedAt:      r.failedAt,
     failNote:      r.failNote,
     workItems:     r.workItems     ?? [],
+    flowLineage:   r.flowLineage   ?? [],
   };
 }
 
@@ -435,9 +443,14 @@ export async function saveAgent(
 export async function saveProject(
   id: string,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; demoDesignNeeded?: boolean }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
-  return { ok: r.ok, error: r.error };
+  return {
+    ok: r.ok,
+    error: r.error,
+    // F5: set when demoProcess was saved — the demo-design skill should be run.
+    demoDesignNeeded: r.data?.demoDesignNeeded === true,
+  };
 }
 
 /** Author a plain composable skill (P2): writes skills/<slug>/SKILL.md. */

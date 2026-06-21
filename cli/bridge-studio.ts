@@ -41,6 +41,10 @@ import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
+import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseWorkItem } from '../orchestrator/work-item.ts';
+import type { QueueState } from '../orchestrator/queue.ts';
+import { getPaths } from '../orchestrator/queue.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -588,7 +592,187 @@ export async function handleStudioRoutes(
     return true;
   }
 
+  // ---- /api/studio/projects/:id/roadmap -----------------------------------
+  const roadmapMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/roadmap$/);
+  if (roadmapMatch) {
+    try {
+      const id = decodeURIComponent(roadmapMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id' }, origin);
+        return true;
+      }
+      const roadmap = buildProjectRoadmap(id, ctx.forgeRoot, ctx.logsRoot);
+      sendJson(res, 200, { roadmap }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Roadmap read model (S6 DEC-3 / per-project Roadmap tab)
+// ---------------------------------------------------------------------------
+
+export type RoadmapWorkItem = {
+  id: string;
+  title: string;
+  dependsOn: string[];
+};
+
+export type RoadmapInitiative = {
+  initiativeId: string;
+  title: string;
+  status: QueueState;
+  dependsOnInitiatives: string[];
+  /** Present when the initiative has been decomposed (non-pending). */
+  workItems?: RoadmapWorkItem[];
+};
+
+export type ProjectRoadmap = {
+  projectId: string;
+  initiatives: RoadmapInitiative[];
+};
+
+/**
+ * Build a read-only roadmap for a project by scanning all queue dirs for
+ * manifests owned by this project. For each initiative:
+ *   - pending-only: initiatives with no work items (PM hasn't run yet).
+ *   - non-pending: reads WI-*.md from the work-items-snapshot in `_logs/`.
+ *
+ * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
+ */
+function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
+  const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
+  const stateDirs: Array<[string, QueueState]> = [
+    [queuePaths.inFlight, 'in-flight'],
+    [queuePaths.readyForReview, 'ready-for-review'],
+    [queuePaths.done, 'done'],
+    [queuePaths.failed, 'failed'],
+    [queuePaths.pending, 'pending'],
+  ];
+
+  // Collect all manifests for this project across all queue dirs. The first
+  // matching state wins (inFlight checked before pending) — same precedence as ui-bridge.
+  const seen = new Set<string>();
+  const initiatives: RoadmapInitiative[] = [];
+
+  for (const [dir, status] of stateDirs) {
+    if (!existsSync(dir)) continue;
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      const initId = file.replace(/\.md$/, '');
+      if (seen.has(initId)) continue;
+      const fp = join(dir, file);
+      let manifest;
+      try {
+        manifest = parseManifest(readFileSync(fp, 'utf8'));
+      } catch {
+        continue;
+      }
+      if (manifest.project !== projectId) continue;
+      seen.add(initId);
+
+      // Extract title from manifest body: first non-empty heading line, or fall back to id.
+      const titleMatch = manifest.body.match(/^##?\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1].trim() : initId;
+
+      const workItems = status === 'pending'
+        ? undefined
+        : readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
+
+      initiatives.push({
+        initiativeId: initId,
+        title,
+        status,
+        dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
+        ...(workItems !== undefined ? { workItems } : {}),
+      });
+    }
+  }
+
+  return { projectId, initiatives };
+}
+
+/**
+ * Read work items for a non-pending initiative. Tries the work-items-snapshot
+ * in `_logs/<cycleId>/` first (reliable for done/in-flight); falls back to
+ * the live worktree spec if the snapshot isn't present yet.
+ */
+function readWorkItemsForInitiative(
+  initId: string,
+  cycleId: string | null,
+  forgeRoot: string,
+  logsRoot: string,
+): RoadmapWorkItem[] {
+  const logsRootAbs = resolve(logsRoot);
+  const forgeRootAbs = resolve(forgeRoot);
+
+  // 1. Snapshot path (post-PM, reliable for done cycles).
+  if (cycleId) {
+    const snapshotDir = join(logsRootAbs, cycleId, 'work-items-snapshot');
+    const items = tryReadWorkItemDir(snapshotDir);
+    if (items !== null) return items;
+  }
+  // 2. Also try discovering the cycleId from logs dir if not stamped on manifest.
+  if (!cycleId) {
+    const discovered = discoverCycleIdFromLogs(logsRootAbs, initId);
+    if (discovered) {
+      const snapshotDir = join(logsRootAbs, discovered, 'work-items-snapshot');
+      const items = tryReadWorkItemDir(snapshotDir);
+      if (items !== null) return items;
+    }
+  }
+  // 3. Live worktree path (in-flight cycle, PM just ran).
+  const liveDir = join(forgeRootAbs, '_worktrees', initId, '.forge', 'work-items');
+  const items = tryReadWorkItemDir(liveDir);
+  return items ?? [];
+}
+
+/** Try to read WI-*.md files from a directory; returns null if dir absent. */
+function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
+  if (!existsSync(dir)) return null;
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => /^WI-\d+\.md$/.test(f));
+  } catch {
+    return null;
+  }
+  if (files.length === 0) return null;
+  const items: RoadmapWorkItem[] = [];
+  for (const file of files) {
+    try {
+      const raw = readFileSync(join(dir, file), 'utf8');
+      const wi = parseWorkItem(raw);
+      // Extract title from WI body: first heading line or fall back to id.
+      const titleMatch = raw.match(/^##?\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1].trim() : wi.work_item_id;
+      items.push({ id: wi.work_item_id, title, dependsOn: wi.depends_on });
+    } catch {
+      // skip unparseable WI
+    }
+  }
+  return items;
+}
+
+/** Scan _logs/ for the latest cycle dir belonging to initId. */
+function discoverCycleIdFromLogs(logsRoot: string, initId: string): string | null {
+  if (!existsSync(logsRoot)) return null;
+  try {
+    const dirs = readdirSync(logsRoot).filter((d) => d.endsWith(`_${initId}`));
+    if (dirs.length === 0) return null;
+    dirs.sort();
+    return dirs[dirs.length - 1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Write routes (PUT agents/projects/flows) live in bridge-studio-writes.ts.

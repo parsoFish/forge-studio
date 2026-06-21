@@ -27,7 +27,7 @@ const ROUTES = [
   { path: '/agents/new', name: 'agent-builder (new)' },
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
-  { path: '/flows/forge-cycle', name: 'flow monitor (seed)' },
+  { path: '/flows/forge-develop', name: 'flow monitor (seed)' },
   { path: '/flows/new', name: 'flow builder (new)' },
   { path: '/knowledge', name: 'knowledge' },
   { path: '/knowledge/new', name: 'knowledge base (new)' },

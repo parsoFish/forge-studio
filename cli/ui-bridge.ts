@@ -39,6 +39,18 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
+import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
+import {
+  readReviewComments,
+  writeReviewComments,
+  appendReviewComment,
+  resolveComment,
+  deriveVerdictFromComments,
+  reviewCommentsPath,
+  isSafeCycleId,
+  REVIEW_COMMENTS_MAX,
+} from '../orchestrator/review-comments.ts';
+import lockfile from 'proper-lockfile';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
@@ -59,6 +71,7 @@ import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
+import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -131,6 +144,14 @@ type TailState = {
 
 export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
+  // F1: a stable identity for this bridge process, captured once at startup
+  // and served from GET /api/health, so a second `forge studio` can recognise
+  // a healthy forge bridge and ATTACH read-only instead of killing it.
+  const identity: BridgeIdentity = {
+    service: 'forge-bridge',
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  };
   const port = opts.port ?? 0; // 0 = OS-assigned
   // getPaths takes the QUEUE ROOT, not the forge root — _queue/ is a
   // child of forgeRoot.
@@ -361,6 +382,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
+      identity,
       scanCycles,
       liveness: computeLiveness,
       logsRoot,
@@ -450,6 +472,8 @@ type LivenessReport = {
 };
 
 type HttpContext = {
+  /** F1 — this bridge process's identity, served from GET /api/health. */
+  identity: BridgeIdentity;
   scanCycles: () => { live: Cycle[]; recent: Cycle[] };
   /** Feature #8 — daemon-stall liveness across in-flight cycles. */
   liveness: () => LivenessReport;
@@ -479,6 +503,39 @@ function contentTypeFor(filename: string): string {
   return filename.toLowerCase().endsWith('.html')
     ? 'text/html; charset=utf-8'
     : 'text/plain; charset=utf-8';
+}
+
+/** True when `v` is a `{given, when, then}` shape (all string fields present). */
+function isAcShape(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.given === 'string' && typeof o.when === 'string' && typeof o.then === 'string';
+}
+
+/**
+ * Atomically read-modify-write the review-comment sidecar for a cycle under a
+ * proper-lockfile guard (mirrors applyReviewVerdict). The sidecar file is
+ * created empty first so the lock has a target even on the first comment.
+ * `mutate` is a pure transform; the write persists its result.
+ */
+async function withReviewCommentLock(
+  logsRoot: string,
+  cycleId: string,
+  mutate: (sidecar: ReturnType<typeof readReviewComments>) => ReturnType<typeof readReviewComments>,
+): Promise<ReturnType<typeof readReviewComments>> {
+  // Ensure the sidecar exists so proper-lockfile has a target (writeReviewComments
+  // throws on a traversal cycleId — that propagates as a 500, never a write).
+  if (!existsSync(reviewCommentsPath(logsRoot, cycleId))) {
+    writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
+  }
+  const release = await lockfile.lock(reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  try {
+    const next = mutate(readReviewComments(logsRoot, cycleId));
+    writeReviewComments(logsRoot, cycleId, next);
+    return next;
+  } finally {
+    try { await release(); } catch { /* ignore */ }
+  }
 }
 
 async function handleHttp(
@@ -513,8 +570,10 @@ async function handleHttp(
   }
 
   if (method === 'GET' && url === '/api/health') {
-    res.writeHead(200, { 'content-type': 'text/plain' });
-    res.end('ok');
+    // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
+    // healthy forge bridge from a stale/foreign listener and attach instead of
+    // killing it. Probes still treat any 200 as "up", so readiness is unchanged.
+    sendJson(res, 200, ctx.identity, origin);
     return;
   }
   if (method === 'GET' && url === '/api/cycles') {
@@ -750,6 +809,85 @@ async function handleHttp(
       sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+
+  // Start development (S7 / DEC-3) — the roadmap "start development" button.
+  // Repoints the initiative's manifest at the forge-develop flow and makes it
+  // claimable (the real enqueue behind the develop trigger). The global CSRF
+  // guard above (x-forge-csrf) already gates this POST.
+  if (method === 'POST' && url === '/api/develop/start') {
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const initiativeId = typeof body['initiativeId'] === 'string' ? body['initiativeId'] : '';
+      if (!initiativeId) {
+        sendJson(res, 400, { error: 'initiativeId required' }, origin);
+        return;
+      }
+      const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
+      if (result.status === 'not-found') {
+        sendJson(res, 404, result, origin);
+        return;
+      }
+      if (result.status === 'already-developing') {
+        sendJson(res, 409, result, origin);
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...result }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
+  // comments. GET reads them + the derived verdict; POST appends one; POST
+  // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
+  // read-modify-write is atomic per cycle). Verdict derivation is over the set:
+  // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
+  if (method === 'GET' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
+    const sidecar = readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
+      const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
+      if (readReviewComments(ctx.logsRoot, cycleId).comments.length >= REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
+        return;
+      }
+      const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+      );
+      sendJson(res, 200, {
+        ...result,
+        comment: result.comments[result.comments.length - 1],
+        derivedVerdict: deriveVerdictFromComments(result.comments),
+      }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
   }

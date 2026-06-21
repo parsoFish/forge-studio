@@ -103,8 +103,10 @@ function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
  * @param initiativeId     - used for the spin-guard (log once per id)
  * @param projectRepoPath  - absolute path to the managed project repo
  * @param forgeRoot        - the forge install root (for skills/ + studio/flows/)
- * @param flowYamlPath     - absolute path to the flow definition to validate
- *                           (defaults to forge-cycle/flow.yaml)
+ * @param flowYamlPath     - absolute path to the flow definition the manifest's
+ *                           `flow_id` resolves to. REQUIRED: S8/DEC-3 retired the
+ *                           forge-cycle default, so a manifest that names no flow
+ *                           is unclaimable (refused, terminal).
  */
 export function validateClaimable(
   initiativeId: string,
@@ -115,9 +117,18 @@ export function validateClaimable(
   // -------------------------------------------------------------------
   // 1. Flow validity (terminal) — structural, needs code/config change
   // -------------------------------------------------------------------
-  const resolvedFlowPath =
-    flowYamlPath ??
-    resolve(forgeRoot, 'studio', 'flows', 'forge-cycle', 'flow.yaml');
+  // S8/DEC-3: no default flow. A manifest with no flow_id (so the caller passes
+  // no path) cannot be routed — refuse terminally rather than fall back.
+  if (!flowYamlPath) {
+    return {
+      ok: false,
+      reason:
+        'manifest names no flow_id — claim refused (the forge-cycle default was retired in S8/DEC-3; ' +
+        'set flow_id to an existing flow, e.g. forge-architect / forge-develop / forge-reflect)',
+      terminal: true,
+    };
+  }
+  const resolvedFlowPath = flowYamlPath;
 
   let flowVersion: number;
   try {

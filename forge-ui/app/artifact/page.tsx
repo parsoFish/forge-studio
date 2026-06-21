@@ -46,6 +46,7 @@ import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/arti
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
 import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
+import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
 import { fetchRun, type Run } from '@/lib/studio-client';
@@ -99,6 +100,14 @@ function resolveMode(
 ): 'gate' | 'view' {
   if (modeParam === 'gate' || modeParam === 'view') return modeParam;
   if (!run) return 'view';
+  // verdict is never written to artifactsReady in gate mode by deriveArtifacts
+  // (it writes 'view' only once the verdict file exists). Resolve gate from the
+  // run status directly: a gated or active run with no verdict yet is the gate.
+  if (type === 'verdict') {
+    const verdictReady = run.artifactsReady['verdict' as keyof typeof run.artifactsReady];
+    if (!verdictReady && (run.status === 'gated' || run.status === 'active')) return 'gate';
+    return 'view';
+  }
   const readyKey = type === 'workitems' ? 'work-items' : type;
   const ready = run.artifactsReady[readyKey as keyof typeof run.artifactsReady];
   return ready === 'gate' ? 'gate' : 'view';
@@ -180,10 +189,23 @@ async function fetchArtifactDoc(
     }
 
     if (type === 'plan') {
-      // Try fetching plan.json first; fall back to PLAN.md existence check
+      // PRIMARY: structured plan.json
       const planJson = await fetchJsonArtifact<PlanDoc>(runId, 'plan.json');
       if (planJson) return { type: 'plan', doc: planJson };
-      // No structured plan JSON — return empty so the renderer shows fallback
+      // SECONDARY: PLAN.md text fallback — the architect writes PLAN.md; only
+      // PLAN.html is snapshotted into artifacts/ (run-model-derive.ts:439).
+      // Fetch the raw markdown and surface it as a minimal PlanDoc so the
+      // chip is selectable and the content is readable without the PLAN.html viewer.
+      try {
+        const base = await resolveBridgeUrl();
+        if (base) {
+          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
+          if (res.ok) {
+            const text = await res.text();
+            if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
+          }
+        }
+      } catch { /* best-effort */ }
       return { type: 'empty' };
     }
 
@@ -237,6 +259,35 @@ function parsePrDescription(text: string): PrDoc {
     }
   }
   return { title: title || undefined, body };
+}
+
+// Minimal PLAN.md → PlanDoc converter: pulls the title from the first heading
+// and treats top-level bullet lines as scope items. Used when only PLAN.md is
+// present (no plan.json) so the plan chip is selectable and the text is visible.
+function parsePlanMd(text: string): PlanDoc {
+  const lines = text.split('\n');
+  let title: string | undefined;
+  let goal: string | undefined;
+  const scope: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!title && trimmed.startsWith('#')) {
+      title = trimmed.replace(/^#+\s*/, '');
+      continue;
+    }
+    // First non-heading paragraph as the goal text
+    if (!goal && trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('-') && !trimmed.startsWith('*')) {
+      goal = trimmed;
+      continue;
+    }
+    // Top-level bullets as scope items
+    if ((trimmed.startsWith('- ') || trimmed.startsWith('* ')) && scope.length < 20) {
+      scope.push(trimmed.slice(2).trim());
+    }
+  }
+
+  return { title, goal: goal ?? title, scope: scope.length > 0 ? scope : undefined };
 }
 
 // ---------------------------------------------------------------------------
@@ -624,29 +675,44 @@ function ArtifactPageInner() {
                   yet — we're authoring it). */}
               {type === 'verdict' && isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* Demo evidence panel — mirrors /review/[cycleId] layout */}
                   {demoModel ? (
-                    <DemoComparison model={demoModel} cycleId={runId} />
+                    <>
+                      {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
+                      <DemoComparison model={demoModel} cycleId={runId} />
+                      {/* DEC-5: the comment-on-page visual review IS the verdict — markdown
+                          narrative + per-region slider/JSON-diff + anchored comments derive
+                          approve/send-back. Replaces the textarea form; still emits the
+                          verdict-form data-* contract. */}
+                      <DemoReviewSurface
+                        model={demoModel}
+                        cycleId={runId}
+                        initiativeId={run?.initiativeId ?? runId}
+                        onSubmitted={(kind) => {
+                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                        }}
+                      />
+                    </>
                   ) : (
-                    <div style={{
-                      border: '1px solid var(--line)',
-                      borderRadius: 8,
-                      padding: '14px 18px',
-                      background: 'var(--panel)',
-                      fontSize: 13,
-                      color: 'var(--dim)',
-                    }}>
-                      No structured demo (<code>demo.json</code>) filed for this run yet.
-                    </div>
+                    <>
+                      <div style={{
+                        border: '1px solid var(--line)',
+                        borderRadius: 8,
+                        padding: '14px 18px',
+                        background: 'var(--panel)',
+                        fontSize: 13,
+                        color: 'var(--dim)',
+                      }}>
+                        No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
+                      </div>
+                      {/* No-demo fallback: the plain verdict form (same data-* contract). */}
+                      <ReviewVerdictForm
+                        initiativeId={run?.initiativeId ?? runId}
+                        onSubmitted={(kind) => {
+                          setGateState(kind === 'approve' ? 'approved' : 'sent-back');
+                        }}
+                      />
+                    </>
                   )}
-
-                  {/* Verdict form — harness asserts data-component="verdict-form" + data-action=* */}
-                  <ReviewVerdictForm
-                    initiativeId={run?.initiativeId ?? runId}
-                    onSubmitted={(kind) => {
-                      setGateState(kind === 'approve' ? 'approved' : 'sent-back');
-                    }}
-                  />
 
                   {/* Approval payoff — surface the final human moment (reflect).
                       Re-homed from the retired /review screen; points at the
@@ -752,12 +818,14 @@ function ArtifactPageInner() {
                       <PrRenderer doc={artifact.doc.prDoc} />
                     </div>
                   )}
-                  {/* Demo evidence (primary) */}
-                  {artifact.doc.demoModel ? (
-                    <div data-section="demo-evaluation">
-                      <DemoComparison model={artifact.doc.demoModel} cycleId={runId} />
-                    </div>
-                  ) : artifact.doc.prDoc ? null : null}
+                  {/* Demo evidence: rendered WITHOUT data-section="demo-evaluation" here
+                      to ensure exactly one [data-section="demo-evaluation"] exists per page.
+                      The canonical demo-evaluation section lives on type=demo.
+                      FLAG: this duplication may be fully subsumed by F4/F5 (demo
+                      consolidation — demo.json/DEMO.md/DEMO.html triple → single markdown). */}
+                  {artifact.doc.demoModel && (
+                    <DemoComparison model={artifact.doc.demoModel} cycleId={runId} />
+                  )}
                 </div>
               )}
 

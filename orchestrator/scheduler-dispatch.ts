@@ -34,10 +34,13 @@ export type DispatchOutcome = {
    *   - 'failed'  → moved to `_queue/failed/` (terminal)
    *   - 'pending' → F-27 auto-retry: moved back to `_queue/pending/` with
    *                 retry_count incremented and previous_failure_modes appended
-   *   - null      → no move (success paths handled by cycle.ts; or no-op when
-   *                 the manifest isn't in in-flight/)
+   *   - 'ready-for-review' → S9: a closure-less flow (forge-architect) ended
+   *                 ready-for-review with the manifest still in in-flight/; moved
+   *                 it so the architect→develop hand-off can claim it.
+   *   - null      → no move (the develop flow's closure already moved it; or a
+   *                 no-op when the manifest isn't in in-flight/)
    */
-  moved: 'failed' | 'pending' | null;
+  moved: 'failed' | 'pending' | 'ready-for-review' | null;
   notified: NotifyEvent['type'];
   /** F-27: surfaced for tests + telemetry. Null for success paths. */
   retry_decision?: AutoRetryDecision | null;
@@ -94,12 +97,28 @@ export async function dispatchTerminalStatus(
       return { moved: null, notified: 'review-ready' };
     }
     case 'ready-for-review': {
+      // Most flows reach here AFTER their closure node already moved the manifest
+      // in-flight → ready-for-review (closure.ts owns that success move). But a flow
+      // with NO review/closure node — the forge-architect decompose flow (S9) — ends
+      // `ready-for-review` (the default outcome) with the manifest still stranded in
+      // in-flight/. Move it here as an idempotent safety net so the architect→develop
+      // hand-off (enqueueDevelopRun) claims it instead of refusing on a phantom
+      // in-flight cycle. A no-op when closure already moved it (not in in-flight/).
+      let moved: 'ready-for-review' | null = null;
+      if (existsSync(join(paths.inFlight, filename))) {
+        try {
+          moveTo(filename, 'ready-for-review', paths);
+          moved = 'ready-for-review';
+        } catch {
+          /* concurrent move; non-fatal */
+        }
+      }
       await notifyFn({
         type: 'review-ready',
         title: `Ready for review: ${manifest.initiativeId}`,
         body: `${manifest.project} — see ${result.log_path}`,
       });
-      return { moved: null, notified: 'review-ready' };
+      return { moved, notified: 'review-ready' };
     }
     case 'failed': {
       // F-27: bounded auto-retry. Read the failure_classification event from

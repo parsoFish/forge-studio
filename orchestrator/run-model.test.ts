@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { aggregateRun, listRuns, buildNodeMapping } from './run-model.ts';
+import { aggregateRun, listRuns, buildNodeMapping, computeFlowLineage } from './run-model.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, 'run-model.fixtures');
@@ -120,9 +120,13 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     const initId = 'INIT-2026-05-31-task-group-unit-tests';
     const cycleId = '2026-05-30T22-45-07_INIT-2026-05-31-task-group-unit-tests';
 
-    // Write manifest in ready-for-review (cycle ended at closure → gated)
+    // Write manifest in ready-for-review (cycle ended at closure → gated).
+    // The real betterado task-group cycle's events, relabelled onto forge-develop
+    // (S8/DEC-3 retired the forge-cycle default; S9 retired the release-refine flow —
+    // the develop flow is the build spine every manifest now names).
     const manifestPath = writeManifest(root, 'ready-for-review', initId, {
       cycle_id: cycleId,
+      flow_id: 'forge-develop',
     });
 
     // Copy fixture events.jsonl
@@ -147,7 +151,7 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     assert.equal(run.id, cycleId);
     assert.equal(run.initiativeId, initId);
     assert.equal(run.origin, 'architect');
-    assert.equal(run.flowId, 'forge-cycle');
+    assert.equal(run.flowId, 'forge-develop');
 
     // Gate
     assert.equal(run.gate, 'review', 'gate node should be review');
@@ -518,7 +522,6 @@ test('aggregateRun: gateChecks parsed from unifier.gate.sub-check events', () =>
       ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
       ev('unifier', 'start'),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'initiative_gate', pass: true, detail: 'All tests pass' }),
-      ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'demo_runs_clean', pass: true, detail: 'Demo OK' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'pr_self_contained', pass: false, detail: 'Missing demo.json' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'branches_in_sync', pass: true, detail: 'In sync' }),
       ev('unifier', 'log', 'unifier.gate.sub-check', { check_id: 'incomplete_delivery', pass: true, detail: 'Complete' }),
@@ -531,7 +534,7 @@ test('aggregateRun: gateChecks parsed from unifier.gate.sub-check events', () =>
 
     const checks = run.phaseMeta['unifier']?.gateChecks;
     assert.ok(Array.isArray(checks), 'gateChecks should be array');
-    assert.equal(checks?.length, 5, 'should have 5 gate checks');
+    assert.equal(checks?.length, 4, 'should have 4 gate checks');
 
     const failing = checks?.find((c) => c.id === 'pr_self_contained');
     assert.equal(failing?.pass, false);
@@ -740,12 +743,13 @@ test('buildNodeMapping: missing studio/ falls back to hardcoded table; aggregate
   }
 });
 
-test('ADR 028 / J5: a run carries the flow_id from its manifest (else forge-cycle)', () => {
+test('ADR 028 / J5: a run carries the flow_id from its manifest (else unknown, post-S8)', () => {
   const root = makeTmp();
   try {
-    // Legacy manifest (no flow_id) → forge-cycle default.
+    // Pre-S8 manifest (no flow_id) → 'unknown' (the forge-cycle default was
+    // retired in S8/DEC-3; an unknowable archival flow is labelled honestly).
     const legacyPath = writeManifest(root, 'pending', 'INIT-2026-01-01-legacy');
-    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: legacyPath, nowMs: Date.now() }).flowId, 'forge-cycle');
+    assert.equal(aggregateRun({ root, queueState: 'pending', manifestPath: legacyPath, nowMs: Date.now() }).flowId, 'unknown');
 
     // Manifest with flow_id → the run surfaces under that flow.
     const authoredPath = writeManifest(root, 'pending', 'INIT-2026-01-01-authored', { flow_id: 'my-first-flow' });
@@ -813,4 +817,56 @@ test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named node
   } finally {
     cleanup(root);
   }
+});
+
+// ---------------------------------------------------------------------------
+// S9: flow lineage — a threaded spine run surfaces under every flow it traversed
+// ---------------------------------------------------------------------------
+
+test('computeFlowLineage: a threaded spine run surfaces under all three spine flows', () => {
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-reflect', new Set(['reflect'])],
+  ]);
+  // The manifest's flow_id is forge-develop (repointed at the hand-off), but the run
+  // executed architect+pm (architect stage) and reflect (post-merge) too.
+  const lineage = computeFlowLineage(
+    ['architect', 'pm', 'dev', 'unifier', 'review', 'reflect'],
+    'forge-develop',
+    flowNodeSets,
+  );
+  assert.deepEqual(lineage, ['forge-architect', 'forge-develop', 'forge-reflect']);
+});
+
+test('computeFlowLineage: a run that only executed develop-flow phases carries just forge-develop', () => {
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-reflect', new Set(['reflect'])],
+  ]);
+  const lineage = computeFlowLineage(['dev', 'unifier', 'review'], 'forge-develop', flowNodeSets);
+  assert.deepEqual(lineage, ['forge-develop']);
+});
+
+test('computeFlowLineage: the manifest flow is always included even if its nodes had no events yet', () => {
+  const flowNodeSets = new Map([['forge-develop', new Set(['dev', 'unifier', 'review'])]]);
+  const lineage = computeFlowLineage([], 'forge-develop', flowNodeSets);
+  assert.deepEqual(lineage, ['forge-develop']);
+});
+
+test('computeFlowLineage: a copy/subset flow (same node ids) never falsely claims the run', () => {
+  // The e2e author-from-scratch demo builds forge-develop-scratch as a PARITY copy
+  // of forge-develop (same dev/unifier/review node ids). It must NOT show the
+  // threaded run via lineage (it was never traversed) — so it stays a genuinely
+  // run-less flow for the start-run CTA.
+  const flowNodeSets = new Map([
+    ['forge-architect', new Set(['architect', 'pm'])],
+    ['forge-develop', new Set(['dev', 'unifier', 'review'])],
+    ['forge-develop-scratch', new Set(['dev', 'unifier', 'review'])],
+  ]);
+  const lineage = computeFlowLineage(['architect', 'pm', 'dev', 'unifier', 'review'], 'forge-develop', flowNodeSets);
+  assert.ok(lineage.includes('forge-develop'), 'manifest flow included');
+  assert.ok(lineage.includes('forge-architect'), 'architect stage (distinct nodes) included');
+  assert.ok(!lineage.includes('forge-develop-scratch'), 'a subset/copy flow must NOT claim the run');
 });

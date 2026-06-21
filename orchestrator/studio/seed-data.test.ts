@@ -18,24 +18,9 @@ import { MODEL_BY_TIER } from '../phase-agent.ts';
 const ROOT = process.cwd();
 
 // ---------------------------------------------------------------------------
-// forge-cycle flow
+// seed flows (forge-cycle retired in S8/DEC-3 — see the forge-reflect test below
+// + the forge-develop / forge-architect coverage in flow-runner.test.ts)
 // ---------------------------------------------------------------------------
-
-test('forge-cycle flow loads and validates clean', () => {
-  const flowPath = join(ROOT, 'studio/flows/forge-cycle/flow.yaml');
-  const agents = listAgentDefinitions(join(ROOT, 'skills'));
-  const agentMap = new Map(agents.map((a) => [a.slug, a]));
-
-  const flow = loadFlowDefinition(flowPath);
-  const findings = validateFlow(flow, agentMap);
-  const errors = findings.filter((f) => f.level === 'error');
-
-  assert.deepEqual(
-    errors,
-    [],
-    `forge-cycle flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // catalog
@@ -179,27 +164,27 @@ test('brain-ingest agent loads and validateAgent returns zero errors', () => {
 });
 
 // ---------------------------------------------------------------------------
-// knowledge-ingest flow (M3-5: new seed flow)
+// forge-reflect flow (S8: the third flow that replaces the forge-cycle monolith)
 // ---------------------------------------------------------------------------
 
-test('knowledge-ingest flow loads and validateFlow returns zero errors', () => {
-  const flowPath = join(ROOT, 'studio/flows/knowledge-ingest/flow.yaml');
+test('forge-reflect flow loads and validateFlow returns zero errors', () => {
+  const flowPath = join(ROOT, 'studio/flows/forge-reflect/flow.yaml');
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const agentMap = new Map(agents.map((a) => [a.slug, a]));
 
   const flow = loadFlowDefinition(flowPath);
 
-  assert.strictEqual(flow.id, 'knowledge-ingest');
-  assert.strictEqual(flow.disposable, true, 'knowledge-ingest must be disposable:true (zero-gate rule)');
-  assert.ok(flow.nodes.some((n) => n.agent === 'brain-ingest'), 'must have a brain-ingest node');
-  assert.strictEqual(flow.edges.length, 0, 'knowledge-ingest has no edges (single-node flow)');
-  assert.deepEqual(flow.triggers, [], 'knowledge-ingest has no triggers');
+  assert.strictEqual(flow.id, 'forge-reflect');
+  assert.strictEqual(flow.disposable, true, 'forge-reflect must be disposable:true (zero-gate rule)');
+  assert.ok(flow.nodes.some((n) => n.agent === 'reflector'), 'must have a reflector node');
+  assert.strictEqual(flow.edges.length, 0, 'forge-reflect has no edges (single-node, merge-triggered flow)');
+  assert.deepEqual(flow.triggers, [], 'forge-reflect has no flow-engine triggers (merge-triggered via finalize-merged)');
 
   const findings = validateFlow(flow, agentMap);
   const errors = findings.filter((f) => f.level === 'error');
   assert.deepEqual(
     errors,
     [],
-    `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+    `forge-reflect flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
 });

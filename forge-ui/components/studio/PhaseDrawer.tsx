@@ -431,47 +431,6 @@ function DrawerBody({
         );
       })()}
 
-      {/* ---- GATE SUB-CHECKS ---- */}
-      {meta?.gateChecks && meta.gateChecks.length > 0 && (
-        <DrawerSection title="Gate sub-checks">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {meta.gateChecks.map((check) => (
-              <div
-                key={check.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 12,
-                  padding: '5px 10px',
-                  borderRadius: 5,
-                  background: 'var(--panel-2)',
-                  borderLeft: `2px solid ${check.pass ? 'var(--green)' : 'var(--red)'}`,
-                  color: check.pass ? 'inherit' : 'var(--red)',
-                }}
-              >
-                <span style={{ fontSize: 13, flexShrink: 0 }}>
-                  {check.pass ? '✓' : '✗'}
-                </span>
-                <span>{check.id.replace(/_/g, ' ')}</span>
-                {check.detail && (
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
-                      color: 'var(--faint)',
-                      marginLeft: 'auto',
-                    }}
-                  >
-                    {check.detail}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </DrawerSection>
-      )}
-
       {/* ---- ARTIFACTS ---- */}
       {artifactEntries.length > 0 && (
         <DrawerSection title="Artifacts">
@@ -491,7 +450,8 @@ function DrawerBody({
       {/* Resume / Start live on the monitor itself (data-action="start-run" /
           "resume-run") — no duplicate placeholder controls in the drawer. */}
 
-      {/* ---- PHASE LOG ---- */}
+      {/* ---- PHASE LOG ---- (precedes gate sub-checks so it is always reachable
+          without scrolling past a potentially long gate-check list) */}
       <DrawerSection title="Phase log" flex>
         <div
           style={{
@@ -542,6 +502,55 @@ function DrawerBody({
           )}
         </div>
       </DrawerSection>
+
+      {/* ---- GATE SUB-CHECKS ---- (capped to avoid pushing the log off-screen) */}
+      {meta?.gateChecks && meta.gateChecks.length > 0 && (
+        <DrawerSection title="Gate sub-checks">
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 5,
+              maxHeight: 220,
+              overflowY: 'auto',
+            }}
+          >
+            {meta.gateChecks.map((check) => (
+              <div
+                key={check.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  padding: '5px 10px',
+                  borderRadius: 5,
+                  background: 'var(--panel-2)',
+                  borderLeft: `2px solid ${check.pass ? 'var(--green)' : 'var(--red)'}`,
+                  color: check.pass ? 'inherit' : 'var(--red)',
+                }}
+              >
+                <span style={{ fontSize: 13, flexShrink: 0 }}>
+                  {check.pass ? '✓' : '✗'}
+                </span>
+                <span>{check.id.replace(/_/g, ' ')}</span>
+                {check.detail && (
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--faint)',
+                      marginLeft: 'auto',
+                    }}
+                  >
+                    {check.detail}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </DrawerSection>
+      )}
     </div>
   );
 }

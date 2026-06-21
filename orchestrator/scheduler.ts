@@ -10,7 +10,7 @@
  * and exits — used in tests and for one-shot runs.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ import {
 import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingUnifierItems } from './drain-unifier-items.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
@@ -536,6 +537,15 @@ async function runRecoverySweep(
   }
 }
 
+/** True iff `dir` exists and contains at least one entry (a directory artifact). */
+function nonEmptyDir(dir: string): boolean {
+  try {
+    return existsSync(dir) && readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function runOne(
   manifestPath: string,
   filename: string,
@@ -559,11 +569,14 @@ async function runOne(
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
 
     // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
+    // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
+    // a manifest with no flow_id is refused by validateClaimable.
     const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
     const claimCheck = validateClaimable(
       manifest.initiativeId,
       manifest.projectRepoPath,
       forgeRoot,
+      manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
       // Emit a structured claim.refused event to the initiative's log dir
@@ -604,20 +617,29 @@ async function runOne(
 
     const branch = `forge/${manifest.initiativeId}`;
     const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
-    // ADR 019: on a resume reuse the preserved worktree (it already holds the
-    // per-WI commits) rather than `worktree.add` — adding onto an already-
-    // checked-out path fails ("already exists"). If the worktree was GC'd, fall
-    // through to `worktree.add`, which re-checks-out the surviving branch (the
-    // per-WI commits are durable on the ref).
-    // A unifier resume must REUSE the preserved worktree (the per-WI commits +
-    // the gitignored `.forge/work-items/` + `.forge/unifier-items/` live there);
-    // falling through to `worktree.add` re-checks-out the branch and WIPES those
-    // untracked specs at claim time.
-    const liveWorktree =
-      manifest.resumeFrom === 'unifier' &&
-      worktree.list(manifest.projectRepoPath).some((w) => resolve(w.path) === expectedWtPath);
-    if (liveWorktree) {
-      if (tee) console.log(`[serve] resume-from-unifier: reusing preserved worktree ${expectedWtPath}`);
+    // ADR 019 + S9: reuse a PRESERVED worktree rather than `worktree.add`, which
+    // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
+    // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
+    // cases need the preserved tree:
+    //   - resume-from-unifier (ADR-019): the drain runs against the per-WI commits.
+    //   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle parked
+    //     at ready-for-review with pm's `.forge/work-items/`; the develop run's
+    //     dev node consumes them. `resume_from` is cleared on the hand-off, so this
+    //     case is detected by the preserved work-items, not the resume marker.
+    // A fresh cycle (no preserved worktree) falls through to `worktree.add`.
+    const worktreePresent = worktree
+      .list(manifest.projectRepoPath)
+      .some((w) => resolve(w.path) === expectedWtPath);
+    const handoffWorkItemsPresent =
+      worktreePresent && nonEmptyDir(resolve(expectedWtPath, '.forge', 'work-items'));
+    const strategy = worktree.decideWorktreeStrategy({
+      resumeFromUnifier: manifest.resumeFrom === 'unifier',
+      worktreePresent,
+      handoffWorkItemsPresent,
+    });
+    if (strategy === 'reuse') {
+      const why = manifest.resumeFrom === 'unifier' ? 'resume-from-unifier' : 'architect→develop hand-off';
+      if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
       wtHandle = worktree.add({
@@ -743,6 +765,8 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
+  /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
+  flowId?: string;
   /**
    * ADR 019 (amended by ADR 026): resume the cycle against the preserved
    * worktree — 'unifier' skips PM + the per-WI dev-loop and runs only the
@@ -757,6 +781,7 @@ function parseManifest(path: string): ParsedManifest {
     initiativeId: m.initiative_id,
     project: m.project,
     projectRepoPath: m.project_repo_path || resolve('projects', m.project),
+    flowId: m.flow_id,
     resumeFrom: m.resume_from,
   };
 }

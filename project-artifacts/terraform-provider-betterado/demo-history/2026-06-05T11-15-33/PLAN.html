@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLAN — 2026-06-05T11-15-33 — terraform-provider-betterado</title>
+<style>
+  /* Unified with the forge-ui dark stage. Dark-only (the app has no light mode). */
+  :root {
+    --bg: #0a0e14;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #21262d;
+    --accent: #1f6feb;
+    --user: #2ea043;
+    --warn: #d29922;
+    --code-bg: #0a0f16;
+    --card-bg: #11161d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 4rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    max-width: 1180px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* ── Typography ── */
+  h1 { font-size: 1.75rem; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.1rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.005em;
+       text-transform: uppercase; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; font-size: 0.72rem; }
+  h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p { margin: 0.5rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.79rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+  ul, ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+  /* ── Badges & chips ── */
+  .badge {
+    display: inline-block;
+    background: var(--code-bg);
+    color: var(--muted);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  }
+  .chip {
+    display: inline-block;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+  }
+  .chip strong { color: var(--fg); }
+  .dep-chip { border-color: var(--warn); color: var(--warn); }
+  /* ── Notice ── */
+  .notice {
+    background: var(--card-bg);
+    border-left: 3px solid var(--accent);
+    padding: 0.65rem 1rem;
+    margin: 0.75rem 0 1.5rem;
+    border-radius: 3px;
+    font-size: 0.88rem;
+  }
+  /* ── Plan header ── */
+  .plan-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .plan-header .vision-block { flex: 1 1 55%; min-width: 260px; }
+  .plan-header .stats-block {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    min-width: 80px;
+  }
+  .stat-card .num { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .stat-card .lbl { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.2rem; }
+  .plan-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+  .plan-meta code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+  /* ── Initiative cards ── */
+  .init-cards { display: grid; gap: 1.25rem; }
+  .init-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--card-accent, var(--accent));
+    border-radius: 6px;
+    padding: 1rem 1.15rem 0.75rem;
+  }
+  .init-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .init-title-block { display: flex; flex-direction: column; gap: 0.25rem; }
+  .init-title { font-size: 1.05rem; font-weight: 600; }
+  .init-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding-top: 0.1rem; }
+  /* ── AC list ── */
+  .ac-list-wrap {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin: 0.5rem 0 0.85rem;
+    overflow-x: auto;
+  }
+  .ac-list-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+  /* ── AC table ── */
+  .ac-table { width: 100%; border-collapse: collapse; margin: 0 0 0.75rem; font-size: 0.83rem; }
+  .ac-table th { font-weight: 600; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.3rem 0.65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  .ac-table td { padding: 0.35rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  /* ── Tables (general) ── */
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+  th, td { padding: 0.45rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 0.88rem; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  /* ── Body drawer ── */
+  .body-drawer {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.4rem 0.75rem;
+  }
+  .body-drawer summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); padding: 0.2rem 0; }
+  .body-drawer[open] summary { margin-bottom: 0.5rem; }
+  /* ── Design decision cards ── */
+  .decisions { display: grid; gap: 1.25rem; }
+  .escalation {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .escalation .q { font-weight: 600; margin-bottom: 0.65rem; font-size: 0.95rem; }
+  .escalation .critic-chip {
+    display: inline-block;
+    font-size: 0.67rem;
+    background: var(--accent);
+    color: white;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    margin-right: 0.45rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .escalation .options {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  .escalation .option {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.83rem;
+  }
+  .escalation .option .opt-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+  .escalation .option .label { font-weight: 700; font-size: 0.88rem; }
+  .escalation .option .rationale { color: var(--muted); font-size: 0.82rem; }
+  .escalation .option .tradeoffs { list-style: none; padding: 0; margin: 0.55rem 0 0; font-size: 0.77rem; display: grid; gap: 0.15rem; }
+  .escalation .option .tradeoffs .pro::before { content: '✓'; color: #2ea043; margin-right: 0.3rem; }
+  .escalation .option .tradeoffs .con::before { content: '✕'; color: #cf222e; margin-right: 0.3rem; }
+  .escalation .option .opt-visual { margin-top: 0.6rem; }
+  .escalation .option .opt-visual iframe.mockup { width: 100%; height: 168px; border: 1px solid var(--border); border-radius: 5px; background: #0d1117; display: block; }
+  .escalation .option .opt-visual pre.code,
+  .escalation .option .opt-visual pre.diagram {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.55rem 0.65rem; font-size: 0.72rem; line-height: 1.4; overflow: auto; max-height: 190px; margin: 0;
+  }
+  .escalation .option .opt-visual .cap { color: var(--muted); font-size: 0.7rem; font-style: italic; margin-top: 0.3rem; }
+  /* ── Council accordions ── */
+  details.council-critic {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    margin: 0.4rem 0;
+  }
+  details.council-critic summary { cursor: pointer; font-weight: 500; font-size: 0.88rem; padding: 0.25rem 0; }
+  details.council-critic[open] summary { margin-bottom: 0.5rem; }
+  /* ── Brain context ── */
+  .brain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.3rem; }
+  .brain-list li { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid #d2a8ff; border-radius: 4px; padding: 0.35rem 0.75rem; font-size: 0.83rem; }
+  .brain-list li code { color: #d2a8ff; }
+  /* ── Footprint bar ── */
+  .footprint { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
+  .footprint .bar { display: flex; width: 100%; height: 1.5rem; border-radius: 3px; overflow: hidden; margin: 0.5rem 0; background: var(--code-bg); }
+  .footprint .seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 0.7rem; font-weight: 500; text-shadow: 0 0 2px rgba(0,0,0,.5); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 0.25rem; }
+  .footprint .summary { color: var(--muted); font-size: 0.83rem; margin-top: 0.25rem; }
+  .footprint .info { color: var(--muted); font-size: 0.78rem; font-style: italic; margin-top: 0.45rem; }
+  /* ── Misc ── */
+  .empty { color: var(--muted); font-style: italic; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0 1.25rem; }
+  .footer { color: var(--muted); font-size: 0.78rem; }
+  .footer code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+  <!-- ── 1. HEADER ── -->
+  <div class="plan-header">
+    <div class="vision-block">
+      <h1>Architect plan</h1>
+      <p style="color: var(--fg); font-size: 1rem; margin: 0.35rem 0 0.6rem; line-height: 1.5">Feature-complete declarative Azure DevOps Release surface for terraform-provider-betterado. INIT-1 completes release_definition (acceptance-fix + gates/triggers/parallel/agentless schema parity), then INIT-2 adds release_folder, INIT-3 adds release data sources, INIT-4 adds release_definition_permissions, and INIT-5 (spike-gated) may add environment templates. Serial chain via depends_on avoids provider.go registry merge conflicts — forge&#39;s #1 historical failure mode. Done = INIT-1–4 merged CI-green + INIT-5 either merged or spike-parked with documented rationale.</p>
+      <div class="plan-meta">
+        Session <code>2026-06-05T11-15-33</code>
+        · Project <code>terraform-provider-betterado</code>
+        · Repo <code>/home/parso/forge/projects/terraform-provider-betterado</code>
+      </div>
+    </div>
+    <div class="stats-block">
+      <div class="stat-card"><div class="num">5</div><div class="lbl">initiatives</div></div>
+      <div class="stat-card"><div class="num">34</div><div class="lbl">total budget</div></div>
+      
+      <div class="stat-card" style="border-color: var(--warn)"><div class="num" style="color: var(--warn)">11</div><div class="lbl">decisions</div></div>
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>Read-only viewer.</strong> Review on the
+    <code>/architect/2026-06-05T11-15-33</code> screen in the forge UI —
+    approve, revise, or reject there. Your selections on design decisions are
+    applied at approval.
+  </div>
+
+  <!-- ── 2. INITIATIVE CARDS ── -->
+  <h2>Proposed initiatives</h2>
+  <div class="init-cards">
+<div class="init-card" data-initiative-id="INIT-2026-06-05-complete-release-definition" style="--card-accent: hsl(0, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-05-complete-release-definition</span>
+      <span class="init-title">Complete betterado_release_definition (feature-complete + acceptance-green)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>12</strong></span>
+      <span class="chip">cap <strong>$8</strong></span>
+      
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Goal
+
+`betterado_release_definition` reaches ADO REST API 7.2 feature parity and all its tests (unit + acceptance) pass against live Azure DevOps.
+
+## Background
+
+The resource exists with 11 passing gomock unit tests, but its 6 acceptance tests fail live (`VS402982` — stage-level `retention_policy` now required; `VS402877` — pre/post approvals now required). Schema gaps remain: deployment gates, definition triggers, parallel execution, and agentless phase input.
+
+**CRITICAL:** `resource_release_definition.go` is a ~1618-LOC god-file. The PM must size WIs to minimise collision risk within the file.
+
+## Acceptance criteria
+
+**Given** the existing `betterado_release_definition` resource with failing acceptance tests and incomplete schema,
+**When** acceptance tests are refreshed with required `retention_policy` and `pre_deploy_approval` blocks, AND deployment gates (`pre_deployment_gates`/`post_deployment_gates` with `gatesOptions`: isEnabled/timeout/samplingInterval/stabilizationTime/minimumSuccessDuration), definition triggers (CD artifact trigger + schedule trigger), parallel execution (`deployment_input.parallel_execution`: none/multiConfiguration/multiMachine), and agentless phase (`runOnServer` deployment-input variant) are implemented,
+**Then** the new schema round-trips (expand/flatten gomock unit tests pass), a release definition exercising gates + CD trigger + parallel phase + agentless phase applies/reads-back/destroys cleanly against live ADO, and the full project CI gate (`go test -mod=vendor -tags all -count=1 -run TestReleaseDefinition ./azuredevops/internal/service/release/`) is green.
+
+## Notes for PM
+
+- Acceptance-test refresh is the foundation — later initiatives&#39; acceptance tests depend on this pattern working.
+- Gates/triggers/parallel/agentless are schema-additive; each can be a separate WI scoped to its expand/flatten + unit test.
+- Live ADO creds available via `secrets.env`; use `TF_ACC=1` for acceptance tests.
+- Gate pattern: `-tags all -count=1 -run &lt;Prefix&gt;` scoped to new tests.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-05-release-folder" style="--card-accent: hsl(67, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-05-release-folder</span>
+      <span class="init-title">betterado_release_folder resource</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>4</strong></span>
+      <span class="chip">cap <strong>$2.5</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-05-complete-release-definition</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Goal
+
+Manage Azure DevOps Release folder hierarchy as Terraform desired-state.
+
+## Background
+
+Release definitions live in folders (`/` by default). The ADO REST API exposes `/release/folders` with CreateFolder/UpdateFolder/DeleteFolder/GetFolders — already mocked in `MockReleaseClient`. This is a small, additive CRUD resource.
+
+## Acceptance criteria
+
+**Given** no `betterado_release_folder` resource exists,
+**When** the resource is implemented with fields `project_id`, `path`, `description`, registered in `provider.go`, and documented with an example,
+**Then** create a folder at a path, read it back, update its description, destroy it — all pass against live ADO; 5 canonical gomock unit tests (expand/flatten roundtrip, create-error, read-404-clears-id, update-args, delete-error) pass; CI gate is green.
+
+## Notes for PM
+
+- Use the `CreateFolder` POST variant (PUT `Create` is deprecated).
+- Adds one line to `provider.go` resource registry — the reason for the serial chain.
+- Gate: `go test -mod=vendor -tags all -count=1 -run TestReleaseFolder ./azuredevops/internal/service/release/`.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-05-release-data-sources" style="--card-accent: hsl(134, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-05-release-data-sources</span>
+      <span class="init-title">Release data sources (data.betterado_release_definition + data.betterado_release_definitions)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>4</strong></span>
+      <span class="chip">cap <strong>$2.5</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-05-release-folder</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Goal
+
+Look up release pipelines by id/name and list them for cross-referencing in Terraform configs.
+
+## Background
+
+Terraform users need to reference existing release definitions (e.g., to set permissions or wire artifacts). The SDK already exposes `GetReleaseDefinition` (by id) and `GetReleaseDefinitions` (list with filters).
+
+## Acceptance criteria
+
+**Given** no release data sources exist,
+**When** `data.betterado_release_definition` (by id or name via `GetReleaseDefinition`) and `data.betterado_release_definitions` (list via `GetReleaseDefinitions`) are implemented, registered in the data-source map in `provider.go`, and documented with examples,
+**Then** both data sources resolve a known definition&#39;s attributes against live ADO; unit tests cover the read path + not-found error path; CI gate is green.
+
+## Notes for PM
+
+- Adds two lines to `provider.go` data-source registry.
+- Data sources are read-only — simpler than resources (no create/update/delete).
+- Gate: `go test -mod=vendor -tags all -count=1 -run &#39;TestDataReleaseDefinition|TestDataReleaseDefinitions&#39; ./azuredevops/internal/service/release/`.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-05-release-definition-permissions" style="--card-accent: hsl(201, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-05-release-definition-permissions</span>
+      <span class="init-title">betterado_release_definition_permissions resource</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>6</strong></span>
+      <span class="chip">cap <strong>$4</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-05-release-data-sources</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Goal
+
+Assign permissions on release definitions as Terraform desired-state.
+
+## Background
+
+The provider already has the `ReleaseManagement` (project-level) and `ReleaseManagement2` (definition-level) security namespaces registered, plus an existing permissions scaffolding pattern (see `resource_git_permissions.go`). The two namespaces have different token patterns — confirming the token format against live ADO is the first risk to retire.
+
+## Acceptance criteria
+
+**Given** no release permissions resource exists and the token format for release permissions is unconfirmed,
+**When** the release permission token format is confirmed against live ADO (first WI), AND `betterado_release_definition_permissions` is implemented mirroring the existing `*_permissions` pattern, registered in `provider.go`, and documented with an example,
+**Then** assign + read + remove a permission on a release definition passes against live ADO; unit tests cover the token-derivation logic; CI gate is green.
+
+## Notes for PM
+
+- **First WI must be spike: confirm token format** — the two namespaces (`ReleaseManagement` vs `ReleaseManagement2`) have different token patterns. Confirm empirically before building.
+- Follow the pattern in `resource_git_permissions.go`.
+- Gate: `go test -mod=vendor -tags all -count=1 -run TestReleaseDefinitionPermissions ./azuredevops/internal/service/release/`.</pre>
+  </details>
+</div>
+<div class="init-card" data-initiative-id="INIT-2026-06-05-environment-templates-spike" style="--card-accent: hsl(268, 55%, 50%)">
+  <div class="init-header">
+    <div class="init-title-block">
+      <span class="init-id badge">INIT-2026-06-05-environment-templates-spike</span>
+      <span class="init-title">Release environment templates (spike-gated)</span>
+    </div>
+    <div class="init-chips">
+      <span class="chip">budget <strong>8</strong></span>
+      <span class="chip">cap <strong>$5</strong></span>
+      <span class="chip dep-chip">after INIT-2026-06-05-release-definition-permissions</span>
+    </div>
+  </div>
+  <div class="ac-list-wrap">
+    <div class="ac-list-title">Acceptance criteria</div>
+    <table class="ac-table">
+      <thead><tr><th>#</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr></tbody>
+    </table>
+  </div>
+  <details class="body-drawer">
+    <summary>Manifest body</summary>
+    <pre>## Goal
+
+Manage reusable stage/environment templates as Terraform desired-state — **if** the platform supports it through the provider&#39;s client.
+
+## Background
+
+Environment templates are stage blueprints users create once and reuse across release definitions. The ADO REST API has `…/release/definitions/environmenttemplates`. Whether the vendored `microsoft/azure-devops-go-api` v7 exposes this endpoint (or whether a raw-HTTP path via `azuredevops.Connection` is viable) is unknown.
+
+## Acceptance criteria
+
+### Spike (gate — first WI)
+
+**Given** uncertainty about SDK/API support for environment templates,
+**When** the vendored SDK is inspected for the environmenttemplates endpoint AND (if absent) a raw-HTTP probe via `azuredevops.Connection` is attempted,
+**Then** a documented feasibility verdict + chosen client path is recorded. If neither is viable, STOP and park the resource with the finding — do NOT vendor-patch.
+
+### Build (only if spike passes)
+
+**Given** a viable client path confirmed by the spike,
+**When** `betterado_release_definition_environment_template` (create/read/delete — templates are immutable, no update) is implemented, registered in `provider.go`, and documented with an example,
+**Then** create a template, read it back, delete it — all pass against live ADO; expand/flatten unit tests pass; CI gate is green.
+
+## Notes for PM
+
+- **Spike-first, stop-on-fail.** Do NOT proceed to build if the spike fails — record the finding and close the initiative as parked.
+- Templates are immutable: create + read + delete only (no update).
+- This is the one genuine unknown in the roadmap; the spike de-risks before build cost.
+- Gate (if build proceeds): `go test -mod=vendor -tags all -count=1 -run TestReleaseDefinitionEnvironmentTemplate ./azuredevops/internal/service/release/`.</pre>
+  </details>
+</div>
+  </div>
+
+  <!-- ── 3. DESIGN DECISIONS (comparative cards) ── -->
+  
+  <h2>Design decisions <span class="badge">11 unresolved</span></h2>
+  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.85rem">
+    The council surfaced the following taste decisions. Options are shown side-by-side
+    with pros/cons and visual mockups where available. Resolve each one on the
+    <code>/architect</code> plan gate; your selection is applied at approval.
+  </p>
+  <div class="decisions" data-section="design-decisions-preview" data-readonly="true" data-decision-count="11">
+    <div class="escalation" data-decision="0" data-escalation-id="esc-0" data-escalation-question="The initiative chains 5 sub-initiatives serially to avoid provider.go merge conflicts. Is this the right tradeoff between risk mitigation and delivery velocity?">
+      <div class="q"><span class="critic-chip">CEO</span>The initiative chains 5 sub-initiatives serially to avoid provider.go merge conflicts. Is this the right tradeoff between risk mitigation and delivery velocity?</div>
+      <div class="options">
+      <div class="option" data-option-label="Keep serial chain (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">Keep serial chain (Recommended)</span></div>
+        <div class="rationale">The PM explicitly calls out &#39;provider.go registry merge conflicts — forge&#39;s #1 historical failure mode.&#39; Given this is a documented pain point with historical data, the serial dependency is a proven risk mitigation. The chain is logical (foundation → additive features → cross-cutting concerns → spike), and each initiative is independently valuable.</div>
+        <ul class="tradeoffs"><li class="pro">Eliminates the #1 historical failure mode</li><li class="pro">Each initiative can be tested/merged independently</li><li class="pro">Clear progress checkpoints for stakeholders</li><li class="pro">No wasted work from merge conflicts</li><li class="con">Slower time-to-complete for full vision (all 5 done)</li><li class="con">Blocks parallel contribution if multiple devs available</li><li class="con">Later initiatives wait even if technically ready</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+    INIT1[INIT-1: Core Fix] --&gt;|provider.go +1 line| INIT2[INIT-2: Folders]
+    INIT2 --&gt;|provider.go +1 line| INIT3[INIT-3: Data Sources]
+    INIT3 --&gt;|provider.go +2 lines| INIT4[INIT-4: Permissions]
+    INIT4 --&gt;|provider.go +1 line| INIT5[INIT-5: Templates?]
+    
+    style INIT1 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT2 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT3 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT4 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT5 fill:#8b949e,stroke:#c9d1d9,color:#fff</pre><div class="cap">Serial chain: Each initiative adds 1-2 lines to provider.go registry</div></div>
+      </div>
+      <div class="option" data-option-label="Batch provider.go changes" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">Batch provider.go changes</span></div>
+        <div class="rationale">Treat provider.go registry as pure mechanical overhead. Do INIT-1 (the foundation), then run INIT-2/3/4 in parallel with a final &#39;registry PR&#39; that adds all 4 lines at once. INIT-5 stays gated behind the spike regardless.</div>
+        <ul class="tradeoffs"><li class="pro">INIT-2/3/4 can proceed in parallel (faster if multiple devs)</li><li class="pro">Still avoids merge conflicts (batched at end)</li><li class="pro">INIT-1 foundation completes first (correct dependency)</li><li class="con">Introduces coordination overhead (who owns the registry PR?)</li><li class="con">Can&#39;t merge/release INIT-2/3/4 independently</li><li class="con">If one of 2/3/4 fails, blocks the others from shipping</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+    INIT1[INIT-1: Core Fix] --&gt; PARALLEL{Parallel Work}
+    PARALLEL --&gt; INIT2[INIT-2: Folders]
+    PARALLEL --&gt; INIT3[INIT-3: Data Sources]
+    PARALLEL --&gt; INIT4[INIT-4: Permissions]
+    INIT2 --&gt; REGISTRY[Registry PR: +4 lines]
+    INIT3 --&gt; REGISTRY
+    INIT4 --&gt; REGISTRY
+    REGISTRY --&gt; INIT5[INIT-5: Templates?]
+    
+    style INIT1 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT2 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT3 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT4 fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style REGISTRY fill:#f85149,stroke:#c9d1d9,color:#fff
+    style INIT5 fill:#8b949e,stroke:#c9d1d9,color:#fff</pre><div class="cap">Parallel middle, batched registry update</div></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="1" data-escalation-id="esc-1" data-escalation-question="INIT-1 is the largest initiative (~4 schema additions to a 1618-LOC god-file) but framed as a single unit. Should it remain monolithic or be split?">
+      <div class="q"><span class="critic-chip">CEO</span>INIT-1 is the largest initiative (~4 schema additions to a 1618-LOC god-file) but framed as a single unit. Should it remain monolithic or be split?</div>
+      <div class="options">
+      <div class="option" data-option-label="Keep INIT-1 monolithic" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">Keep INIT-1 monolithic</span></div>
+        <div class="rationale">The PM already flagged the god-file collision risk and said &#39;size WIs to minimise collision risk within the file.&#39; The 4 schema additions (gates/triggers/parallel/agentless) are described as independently testable. Splitting INIT-1 into 4 sub-initiatives (INIT-1a/b/c/d) would reduce per-WI risk and allow incremental progress.</div>
+        <ul class="tradeoffs"><li class="pro">One acceptance-test foundation, one CI gate pass</li><li class="pro">Simpler mental model (1 initiative = 1 resource complete)</li><li class="pro">Avoids splitting an already-defined scope</li><li class="con">Largest blast radius if acceptance-test foundation is wrong</li><li class="con">Hard to parallelize work within INIT-1</li><li class="con">Gates/triggers/parallel/agentless could each take 1-2 days — that&#39;s 4-8 days of non-releasable WIP</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+    INIT1[INIT-1: Acceptance + 4 schema adds] --&gt; |All-or-nothing| DONE1[CI Green]
+    DONE1 --&gt; INIT2[INIT-2: Folders]
+    
+    style INIT1 fill:#f85149,stroke:#c9d1d9,color:#fff
+    style DONE1 fill:#1f6feb,stroke:#c9d1d9,color:#fff</pre><div class="cap">Monolithic INIT-1: high risk, delayed feedback</div></div>
+      </div>
+      <div class="option" data-option-label="Split INIT-1 into foundation + 4 additive WIs (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">Split INIT-1 into foundation + 4 additive WIs (Recommended)</span></div>
+        <div class="rationale">INIT-1a = acceptance-test refresh (the foundation). INIT-1b/c/d/e = gates, triggers, parallel, agentless (each with expand/flatten + unit test). The PM already noted &#39;each can be a separate WI scoped to its expand/flatten + unit test.&#39; This matches the stated collision-mitigation goal and allows incremental merges.</div>
+        <ul class="tradeoffs"><li class="pro">Foundation (1a) merges first — de-risks the rest</li><li class="pro">Each schema add (1b/c/d/e) is independently releasable</li><li class="pro">Reduces god-file collision risk (PM&#39;s stated concern)</li><li class="pro">Matches the PM&#39;s own note about separate WIs</li><li class="con">5 PRs instead of 1 for INIT-1 (more overhead)</li><li class="con">Must coordinate that 1a is done before 1b/c/d/e start</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+    INIT1A[INIT-1a: Acceptance Fix] --&gt; PARALLEL{Additive Schemas}
+    PARALLEL --&gt; INIT1B[INIT-1b: Gates]
+    PARALLEL --&gt; INIT1C[INIT-1c: Triggers]
+    PARALLEL --&gt; INIT1D[INIT-1d: Parallel Exec]
+    PARALLEL --&gt; INIT1E[INIT-1e: Agentless]
+    INIT1B --&gt; DONE1[INIT-1 Complete]
+    INIT1C --&gt; DONE1
+    INIT1D --&gt; DONE1
+    INIT1E --&gt; DONE1
+    
+    style INIT1A fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT1B fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT1C fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT1D fill:#1f6feb,stroke:#c9d1d9,color:#fff
+    style INIT1E fill:#1f6feb,stroke:#c9d1d9,color:#fff</pre><div class="cap">Split INIT-1: foundation first, then parallel additive work</div></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="2" data-escalation-id="esc-2" data-escalation-question="INIT-1 is a ~1618-LOC god-file with 4 additive schema features. Should we split it into 5 sequential work items (acceptance-fix foundation + 4 parallel schema additions) or keep it as one atomic feature set?">
+      <div class="q"><span class="critic-chip">eng</span>INIT-1 is a ~1618-LOC god-file with 4 additive schema features. Should we split it into 5 sequential work items (acceptance-fix foundation + 4 parallel schema additions) or keep it as one atomic feature set?</div>
+      <div class="options">
+      <div class="option" data-option-label="5 sequential WIs: acceptance-fix → gates → triggers → parallel → agentless (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">5 sequential WIs: acceptance-fix → gates → triggers → parallel → agentless (Recommended)</span></div>
+        <div class="rationale">Each WI touches different schema sections of the god-file with clear expand/flatten test boundaries. Foundation WI (acceptance-fix) unblocks the pattern; remaining 4 can be parallel-tracked once foundation merges. Reduces blast radius per PR to ~200-300 LOC changes.</div>
+        <ul class="tradeoffs"><li class="pro">Each PR is reviewable in &lt;30min (vs 2hr monolith)</li><li class="pro">Failed CI isolated to one schema addition</li><li class="pro">Can ship partial value (gates alone unlock security workflows)</li><li class="pro">Merge conflicts constrained to schema block boundaries</li><li class="con">5 PRs vs 1 (overhead: 5 CI runs, 5 reviews)</li><li class="con">User sees incremental schema rollout across 5 releases</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+  A[INIT-1.1: Acceptance fix&lt;br/&gt;retention_policy + approvals&lt;br/&gt;LOC: ~150] --&gt; B[INIT-1.2: Gates schema&lt;br/&gt;pre/post_deployment_gates&lt;br/&gt;LOC: ~300]
+  A --&gt; C[INIT-1.3: Triggers schema&lt;br/&gt;CD + schedule&lt;br/&gt;LOC: ~250]
+  A --&gt; D[INIT-1.4: Parallel execution&lt;br/&gt;deployment_input variants&lt;br/&gt;LOC: ~200]
+  A --&gt; E[INIT-1.5: Agentless phase&lt;br/&gt;runOnServer input&lt;br/&gt;LOC: ~180]
+  B --&gt; F[INIT-1 complete]
+  C --&gt; F
+  D --&gt; F
+  E --&gt; F
+  style A fill:#1f6feb
+  style F fill:#238636</pre></div>
+      </div>
+      <div class="option" data-option-label="1 atomic WI: all schema additions in single PR" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">1 atomic WI: all schema additions in single PR</span></div>
+        <div class="rationale">Treats gates/triggers/parallel/agentless as a cohesive &#39;ADO 7.2 parity&#39; unit. One comprehensive test suite, one acceptance-test refresh, one CI gate. Users get complete feature set atomically.</div>
+        <ul class="tradeoffs"><li class="pro">Single coherent PR story (no incremental schema churn)</li><li class="pro">One acceptance-test refresh covers all features</li><li class="pro">Users never see partial 7.2 parity</li><li class="con">~1200 LOC PR (4-6hr review time)</li><li class="con">Any CI failure blocks entire feature set</li><li class="con">Merge conflict in god-file risks entire PR rebase</li><li class="con">Cannot ship partial value (e.g., gates-only for security team)</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph TD
+  A[INIT-1: ADO 7.2 parity&lt;br/&gt;acceptance-fix + gates + triggers + parallel + agentless&lt;br/&gt;LOC: ~1200] --&gt; B[INIT-1 complete]
+  style A fill:#f85149
+  style B fill:#238636</pre></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="3" data-escalation-id="esc-3" data-escalation-question="Acceptance criteria use &#39;full project CI gate&#39; as pass condition. Should we make test scope explicit per WI or keep the global gate?">
+      <div class="q"><span class="critic-chip">eng</span>Acceptance criteria use &#39;full project CI gate&#39; as pass condition. Should we make test scope explicit per WI or keep the global gate?</div>
+      <div class="options">
+      <div class="option" data-option-label="Scoped gates per WI: -run TestReleaseDefinition_Gates (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Scoped gates per WI: -run TestReleaseDefinition_Gates (Recommended)</span></div>
+        <div class="rationale">Each WI runs only its new tests + smoke tests for regressions. Faster feedback (30s vs 3min), clearer blame when red. PM can verify each WI independently without waiting for unrelated test flake.</div>
+        <ul class="tradeoffs"><li class="pro">Fast CI feedback loop per feature (&lt;1min)</li><li class="pro">Test failure blame is unambiguous</li><li class="pro">Can merge WI even if unrelated tests flake</li><li class="con">Must define test scope per WI (adds 1 line to AC)</li><li class="con">Risk: scoped test passes but breaks unrelated test (caught in final integration gate)</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="bash"><code># INIT-1.2 (Gates) CI gate
+go test -mod=vendor -tags all -count=1 \
+  -run &#39;TestReleaseDefinition_(Expand|Flatten).*Gates|TestAccReleaseDefinition_Gates&#39; \
+  ./azuredevops/internal/service/release/
+
+# vs global gate (all WIs)
+go test -mod=vendor -tags all -count=1 \
+  -run TestReleaseDefinition \
+  ./azuredevops/internal/service/release/</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Global gate for all: -run TestReleaseDefinition (all tests)" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Global gate for all: -run TestReleaseDefinition (all tests)</span></div>
+        <div class="rationale">Every WI must pass the full test suite before merge. Guarantees no regressions, simplifies AC (same gate everywhere). Higher confidence per merge.</div>
+        <ul class="tradeoffs"><li class="pro">Zero risk of breaking unrelated tests</li><li class="pro">Simple AC: same gate for all WIs</li><li class="con">Slow CI (3min per WI vs 30s scoped)</li><li class="con">Unrelated test flake blocks unrelated WI merge</li><li class="con">Hard to diagnose: &#39;which of my 4 schema changes broke TestReleaseDefinition_Artifacts?&#39;</li></ul>
+        
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="4" data-escalation-id="esc-4" data-escalation-question="INIT-4 says &#39;confirm token format against live ADO (first WI)&#39; but the spike WI isn&#39;t explicitly broken out. Should token-format confirmation be a separate spike WI or inlined into the build WI?">
+      <div class="q"><span class="critic-chip">eng</span>INIT-4 says &#39;confirm token format against live ADO (first WI)&#39; but the spike WI isn&#39;t explicitly broken out. Should token-format confirmation be a separate spike WI or inlined into the build WI?</div>
+      <div class="options">
+      <div class="option" data-option-label="Separate spike WI: INIT-4.1 (token probe) → INIT-4.2 (build permissions) (Recommended)" data-option-visual-kind="diagram">
+        <div class="opt-head"><span class="label">Separate spike WI: INIT-4.1 (token probe) → INIT-4.2 (build permissions) (Recommended)</span></div>
+        <div class="rationale">Spike is 30min of empirical testing (create definition → query security namespace → log token). If wrong namespace, pivot without throwaway code. Build WI can proceed confidently with confirmed token pattern.</div>
+        <ul class="tradeoffs"><li class="pro">Fail fast: 30min spike vs 4hr build-then-discover-wrong-namespace</li><li class="pro">Build WI has zero unknowns (token pattern is input)</li><li class="pro">Spike output is reusable doc for future permission resources</li><li class="con">Adds 1 WI to the plan (but it&#39;s tiny: 30min)</li></ul>
+        <div class="opt-visual"><pre class="diagram">graph LR
+  A[INIT-4.1 SPIKE&lt;br/&gt;Confirm token format&lt;br/&gt;30min: probe live ADO&lt;br/&gt;Output: token pattern doc] --&gt; B[INIT-4.2 BUILD&lt;br/&gt;Implement permissions resource&lt;br/&gt;Input: confirmed token pattern&lt;br/&gt;4hr]
+  style A fill:#9e6a03
+  style B fill:#1f6feb</pre></div>
+      </div>
+      <div class="option" data-option-label="Inline spike into build WI: INIT-4 does probe + build" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Inline spike into build WI: INIT-4 does probe + build</span></div>
+        <div class="rationale">Single WI: probe token format, then immediately build with confirmed pattern. Reduces WI overhead.</div>
+        <ul class="tradeoffs"><li class="pro">One WI instead of two</li><li class="pro">No handoff: same dev probes and builds</li><li class="con">If token probe reveals blocker (e.g., namespace unsupported), 4hr build estimate wasted on planning</li><li class="con">WI completion criteria unclear: &#39;probe done&#39; or &#39;build done&#39;?</li><li class="con">Cannot parallelize: another dev can&#39;t start build while spike runs</li></ul>
+        
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="5" data-escalation-id="esc-5" data-escalation-question="How should deployment gates be structured in the HCL schema?">
+      <div class="q"><span class="critic-chip">design</span>How should deployment gates be structured in the HCL schema?</div>
+      <div class="options">
+      <div class="option" data-option-label="Nested block pattern (matches approvals)" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Nested block pattern (matches approvals)</span></div>
+        <div class="rationale">Use `gates_options {}` nested block for gate-level config, consistent with existing `pre_deploy_approvals` structure. Maintains pattern consistency and clear separation between gate-level options and individual gates.</div>
+        <ul class="tradeoffs"><li class="pro">Maintains consistency with pre_deploy_approvals/post_deploy_approvals pattern</li><li class="pro">Clear separation between gate-level config and individual gates</li><li class="pro">Follows Terraform best practice for complex nested resources</li><li class="pro">Easier to extend if ADO adds more gate-level options</li><li class="con">Slightly more verbose for simple single-gate scenarios</li><li class="con">Extra nesting level for gates_options</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>environment {
+  name = &quot;Production&quot;
+  rank = 2
+
+  pre_deploy_approvals {
+    approval {
+      is_automated = false
+      approver_id  = &quot;user-guid&quot;
+    }
+    timeout_in_minutes = 1440
+  }
+
+  pre_deployment_gates {
+    gates_options {
+      timeout                  = 5
+      sampling_interval        = 60
+      minimum_success_duration = 300
+      stabilization_time       = 120
+    }
+
+    gate {
+      type = &quot;health_check&quot;
+      # gate-specific config
+    }
+  }
+
+  deploy_phase {
+    name = &quot;Deploy&quot;
+    # ...
+  }
+}</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Flat block pattern" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Flat block pattern</span></div>
+        <div class="rationale">Put gate-level options (timeout, sampling_interval, etc.) directly in `pre_deployment_gates {}` block without nested gates_options. Simpler for users with basic gates, but breaks consistency with approval pattern.</div>
+        <ul class="tradeoffs"><li class="pro">Less nesting, cleaner HCL for simple cases</li><li class="pro">Fewer blocks to understand for basic configs</li><li class="con">Breaks consistency with pre_deploy_approvals pattern</li><li class="con">Harder to extend if ADO adds more gate-level options</li><li class="con">May confuse users switching between approvals and gates</li><li class="con">No clear namespace separation for gate-level vs individual gate fields</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>environment {
+  name = &quot;Production&quot;
+  rank = 2
+
+  pre_deploy_approvals {
+    approval {
+      is_automated = false
+      approver_id  = &quot;user-guid&quot;
+    }
+    timeout_in_minutes = 1440
+  }
+
+  pre_deployment_gates {
+    timeout                  = 5
+    sampling_interval        = 60
+    minimum_success_duration = 300
+    stabilization_time       = 120
+
+    gate {
+      type = &quot;health_check&quot;
+      # gate-specific config
+    }
+  }
+
+  deploy_phase {
+    name = &quot;Deploy&quot;
+    # ...
+  }
+}</code></pre></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="6" data-escalation-id="esc-6" data-escalation-question="Where should definition-level triggers (artifact/schedule) be placed in the schema?">
+      <div class="q"><span class="critic-chip">design</span>Where should definition-level triggers (artifact/schedule) be placed in the schema?</div>
+      <div class="options">
+      <div class="option" data-option-label="Grouped under triggers container" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Grouped under triggers container</span></div>
+        <div class="rationale">Create a top-level `triggers {}` block that contains `artifact_trigger` and `schedule_trigger` sub-blocks. Provides logical grouping for all trigger types, cleaner top-level schema, and easier documentation/discovery.</div>
+        <ul class="tradeoffs"><li class="pro">Logical grouping - all triggers in one discoverable section</li><li class="pro">Easier to document (single &#39;Triggers&#39; section vs scattered blocks)</li><li class="pro">Cleaner top-level schema (fewer root blocks)</li><li class="pro">Natural nesting point if ADO adds more trigger types</li><li class="pro">Users can see all trigger config in one place</li><li class="con">Adds one extra nesting level compared to top-level blocks</li><li class="con">Slightly deviates from environment/variable/artifact pattern</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>resource &quot;betterado_release_definition&quot; &quot;pipeline&quot; {
+  project_id          = &quot;00000000-0000-0000-0000-000000000000&quot;
+  name                = &quot;Production Pipeline&quot;
+  release_name_format = &quot;Release-$(rev:r)&quot;
+
+  triggers {
+    artifact_trigger {
+      artifact_alias = &quot;_MyBuild&quot;
+      enabled        = true
+      trigger_type   = &quot;continuousDeployment&quot;
+    }
+
+    schedule_trigger {
+      schedule = &quot;0 2 * * Mon-Fri&quot;
+      enabled  = true
+      timezone = &quot;UTC&quot;
+    }
+  }
+
+  environment {
+    name = &quot;Production&quot;
+    rank = 1
+    # ...
+  }
+}</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Top-level trigger blocks" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Top-level trigger blocks</span></div>
+        <div class="rationale">Each trigger type (artifact_trigger, schedule_trigger) as a separate top-level repeatable block, consistent with existing `environment`, `variable`, `artifact` patterns. No grouping container.</div>
+        <ul class="tradeoffs"><li class="pro">Follows established provider pattern (environment, variable, artifact all top-level)</li><li class="pro">No extra nesting for simple configs</li><li class="pro">Each trigger type is a distinct, discoverable block name</li><li class="con">If ADO adds many trigger types, top-level namespace gets crowded</li><li class="con">No logical grouping - triggers scattered among other top-level blocks</li><li class="con">Harder to scan HCL to find &#39;all trigger config&#39;</li><li class="con">Documentation must explain each trigger type separately</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>resource &quot;betterado_release_definition&quot; &quot;pipeline&quot; {
+  project_id          = &quot;00000000-0000-0000-0000-000000000000&quot;
+  name                = &quot;Production Pipeline&quot;
+  release_name_format = &quot;Release-$(rev:r)&quot;
+
+  artifact_trigger {
+    artifact_alias = &quot;_MyBuild&quot;
+    enabled        = true
+    trigger_type   = &quot;continuousDeployment&quot;
+  }
+
+  schedule_trigger {
+    schedule = &quot;0 2 * * Mon-Fri&quot;
+    enabled  = true
+    timezone = &quot;UTC&quot;
+  }
+
+  environment {
+    name = &quot;Production&quot;
+    rank = 1
+    # ...
+  }
+}</code></pre></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="7" data-escalation-id="esc-7" data-escalation-question="How should enum values be cased for new fields like parallel_execution?">
+      <div class="q"><span class="critic-chip">design</span>How should enum values be cased for new fields like parallel_execution?</div>
+      <div class="options">
+      <div class="option" data-option-label="Preserve ADO camelCase" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Preserve ADO camelCase</span></div>
+        <div class="rationale">Keep Azure DevOps API enum values as-is (multiConfiguration, multiMachine, etc.). The existing provider already uses camelCase for phase_type (agentBasedDeployment). Maintains consistency with established pattern and provides zero-translation mapping to API.</div>
+        <ul class="tradeoffs"><li class="pro">Consistent with existing phase_type field (uses agentBasedDeployment)</li><li class="pro">Zero translation - users can copy values from ADO REST API docs</li><li class="pro">Fewer expand/flatten edge cases</li><li class="pro">Clear 1:1 mapping to API values</li><li class="con">Breaks Terraform/HCL snake_case convention</li><li class="con">Inconsistent if other providers normalize enums</li><li class="con">Users must remember &#39;these specific fields use camelCase&#39;</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>deploy_phase {
+  name       = &quot;Parallel Deploy&quot;
+  phase_type = &quot;agentBasedDeployment&quot;  # existing field uses camelCase
+  rank       = 1
+
+  deployment_input {
+    queue_id           = 1
+    parallel_execution = &quot;multiConfiguration&quot;  # ADO native value
+    # OR
+    # parallel_execution = &quot;multiMachine&quot;
+    # parallel_execution = &quot;none&quot;
+  }
+
+  workflow_task {
+    task_id = &quot;...&quot;
+    version = &quot;2.*&quot;
+    name    = &quot;Deploy Task&quot;
+  }
+}</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Normalize to snake_case" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Normalize to snake_case</span></div>
+        <div class="rationale">Convert ADO camelCase enums to Terraform-idiomatic snake_case (multi_configuration, multi_machine). Requires expand/flatten translation logic but makes HCL more consistent with Terraform ecosystem conventions.</div>
+        <ul class="tradeoffs"><li class="pro">Idiomatic Terraform - matches HCL style guides and Go conventions</li><li class="pro">Consistent if provider normalizes all enums</li><li class="pro">Users don&#39;t need to remember &#39;this field is special&#39;</li><li class="con">Requires expand/flatten translation for every enum value</li><li class="con">Breaks consistency with existing phase_type field (would need migration)</li><li class="con">Users copying from ADO docs must mentally translate values</li><li class="con">If phase_type stays camelCase, creates internal inconsistency</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="hcl"><code>deploy_phase {
+  name       = &quot;Parallel Deploy&quot;
+  phase_type = &quot;agentBasedDeployment&quot;  # existing - would stay camelCase?
+  rank       = 1
+
+  deployment_input {
+    queue_id           = 1
+    parallel_execution = &quot;multi_configuration&quot;  # normalized snake_case
+    # OR
+    # parallel_execution = &quot;multi_machine&quot;
+    # parallel_execution = &quot;none&quot;
+  }
+
+  workflow_task {
+    task_id = &quot;...&quot;
+    version = &quot;2.*&quot;
+    name    = &quot;Deploy Task&quot;
+  }
+}
+
+# NOTE: Creates inconsistency unless phase_type also normalized
+# (which would be a breaking change)</code></pre></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="8" data-escalation-id="esc-8" data-escalation-question="Should INIT-1 include refactoring the 1,617-LOC god-file?">
+      <div class="q"><span class="critic-chip">dx</span>Should INIT-1 include refactoring the 1,617-LOC god-file?</div>
+      <div class="options">
+      <div class="option" data-option-label="Defer refactoring (accept growth) (Recommended)" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Defer refactoring (accept growth) (Recommended)</span></div>
+        <div class="rationale">Ship feature parity first; refactoring is a separate initiative. The resource will grow to ~2,000 LOC, but delivery is predictable and low-risk.</div>
+        <ul class="tradeoffs"><li class="pro">Faster delivery (no refactoring tax)</li><li class="pro">Lower risk (no behavior changes from restructuring)</li><li class="pro">Clear scope boundary (feature work only)</li><li class="con">File will grow to ~2,000+ LOC</li><li class="con">Harder to maintain long-term</li><li class="con">Increasing merge conflict surface area</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Current structure (1,617 LOC, will grow to ~2,000)
+// resource_release_definition.go
+func ResourceReleaseDefinition() *schema.Resource {
+  // Lines 1-441: Schema definition
+  // Lines 443-564: Helper schemas
+  // Lines 568-676: CRUD operations
+  // Lines 680-1051: Expand functions (inline)
+  // Lines 1055-1617: Flatten functions (inline)
+  // + ~400 LOC: New gates/triggers/parallel/agentless
+}
+
+// All logic stays in one file
+// Fast to ship, technical debt grows</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Refactor before adding schemas" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Refactor before adding schemas</span></div>
+        <div class="rationale">Stop the bleeding; extract expand/flatten to helper modules first, following the git_permissions pattern (146 LOC via delegation).</div>
+        <ul class="tradeoffs"><li class="pro">Healthier long-term maintenance</li><li class="pro">New schemas added to clean structure</li><li class="pro">Follows existing permissions pattern</li><li class="con">2-3x longer timeline for INIT-1</li><li class="con">Refactoring risk (behavior preservation testing)</li><li class="con">Blocks dependent initiatives longer</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Refactored structure
+// resource_release_definition.go (reduced to ~400 LOC)
+func ResourceReleaseDefinition() *schema.Resource {
+  // Schema definition + CRUD operations only
+}
+
+// release_definition_expand.go (~600 LOC)
+func expandReleaseDefinition(d *schema.ResourceData) {...}
+func expandEnvironments(envs []interface{}) {...}
+
+// release_definition_flatten.go (~600 LOC)
+func flattenReleaseDefinition(def *release.ReleaseDefinition) {...}
+func flattenEnvironments(envs []release.Environment) {...}
+
+// Cleaner structure, 2-3x implementation time</code></pre></div>
+      </div>
+      <div class="option" data-option-label="Hybrid - extract only new schema logic" data-option-visual-kind="code">
+        <div class="opt-head"><span class="label">Hybrid - extract only new schema logic</span></div>
+        <div class="rationale">New schemas (gates/triggers/parallel/agentless) go into separate helper files; leave existing code untouched. Incremental improvement without full rewrite.</div>
+        <ul class="tradeoffs"><li class="pro">Incremental improvement without full rewrite</li><li class="pro">Establishes pattern for future additions</li><li class="pro">Lower risk than full refactor</li><li class="con">Inconsistent structure (old inline, new extracted)</li><li class="con">God-file still exists for legacy schemas</li><li class="con">Partial solution to the problem</li></ul>
+        <div class="opt-visual"><pre class="code" data-lang="go"><code>// Hybrid structure
+// resource_release_definition.go (stays at 1,617 LOC)
+// - Existing expand/flatten stay inline
+
+// release_definition_gates.go (new, ~150 LOC)
+func expandDeploymentGates(gates []interface{}) {...}
+func flattenDeploymentGates(gates *release.GatesOptions) {...}
+
+// release_definition_triggers.go (new, ~100 LOC)
+func expandDefinitionTriggers(triggers []interface{}) {...}
+func flattenDefinitionTriggers(triggers []release.Trigger) {...}
+
+// Mixed approach: old stays messy, new is clean
+// Establishes pattern for future work</code></pre></div>
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="9" data-escalation-id="esc-9" data-escalation-question="How should provider handle ADO API breaking changes (retention_policy now required)?">
+      <div class="q"><span class="critic-chip">dx</span>How should provider handle ADO API breaking changes (retention_policy now required)?</div>
+      <div class="options">
+      <div class="option" data-option-label="Keep schema optional, let ADO validate (Recommended)" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Keep schema optional, let ADO validate (Recommended)</span></div>
+        <div class="rationale">Provider schema reflects &#39;possible&#39; fields; API validates &#39;required&#39;. No provider-side breaking change. Runtime errors guide users to fix.</div>
+        <ul class="tradeoffs"><li class="pro">No provider-side breaking change</li><li class="pro">Works if ADO changes requirements again</li><li class="pro">Runtime errors guide users to fix</li><li class="con">Error messages are ADO&#39;s (less helpful: &#39;VS402982&#39;)</li><li class="con">Users discover issues at apply-time, not plan-time</li></ul>
+        
+      </div>
+      <div class="option" data-option-label="Make fields required in provider schema" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Make fields required in provider schema</span></div>
+        <div class="rationale">Fail-fast at plan-time with Terraform validation. Better error messages, but requires provider major version bump (breaking change).</div>
+        <ul class="tradeoffs"><li class="pro">Better error messages (Terraform&#39;s validation)</li><li class="pro">Catches issues before API calls</li><li class="pro">Schema matches ADO&#39;s current reality</li><li class="con">Provider-side breaking change (major version bump)</li><li class="con">If ADO reverts, provider must update again</li><li class="con">Migration pain for existing configs</li></ul>
+        
+      </div>
+      <div class="option" data-option-label="Add deprecation warnings, phase in over releases" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Add deprecation warnings, phase in over releases</span></div>
+        <div class="rationale">Gentle migration path via warnings → errors. Users have time to migrate, but delays full API 7.2 compliance by 2+ release cycles.</div>
+        <ul class="tradeoffs"><li class="pro">Users have time to migrate</li><li class="pro">Clear communication of change</li><li class="pro">Standard Terraform pattern</li><li class="con">2+ release cycles to complete</li><li class="con">Complexity of dual validation paths</li><li class="con">Delays full API 7.2 compliance</li></ul>
+        
+      </div>
+      </div>
+    </div>
+    <div class="escalation" data-decision="10" data-escalation-id="esc-10" data-escalation-question="Should INIT-5 (environment templates) remain spike-gated?">
+      <div class="q"><span class="critic-chip">dx</span>Should INIT-5 (environment templates) remain spike-gated?</div>
+      <div class="options">
+      <div class="option" data-option-label="Quick validation (2 hours), then proceed (Recommended)" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Quick validation (2 hours), then proceed (Recommended)</span></div>
+        <div class="rationale">Inspect forked SDK for endpoint existence; if present, skip spike and implement. Minimal time investment with high confidence.</div>
+        <ul class="tradeoffs"><li class="pro">Minimal time investment</li><li class="pro">High confidence before WI planning</li><li class="pro">Keeps spike lightweight</li><li class="con">Still requires validation step</li><li class="con">Slightly more overhead than direct implementation</li></ul>
+        
+      </div>
+      <div class="option" data-option-label="Keep spike gate (low-confidence assumption)" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Keep spike gate (low-confidence assumption)</span></div>
+        <div class="rationale">SDK fork may not have endpoint; verify before committing to build. Standard risk mitigation, but adds overhead.</div>
+        <ul class="tradeoffs"><li class="pro">Protects against wasted implementation effort</li><li class="pro">Validates SDK coverage empirically</li><li class="pro">Standard risk mitigation for unknowns</li><li class="con">Adds overhead (~0.5-1 day spike)</li><li class="con">May delay initiative if spike shows blockers</li></ul>
+        
+      </div>
+      <div class="option" data-option-label="Remove spike, plan implementation directly" data-option-visual-kind="none">
+        <div class="opt-head"><span class="label">Remove spike, plan implementation directly</span></div>
+        <div class="rationale">Forked SDK likely has same endpoints as upstream; API documented. Fastest path, but risk of mid-implementation blocker.</div>
+        <ul class="tradeoffs"><li class="pro">Faster path to delivery</li><li class="pro">One less decision gate</li><li class="pro">Simpler initiative structure</li><li class="con">Risk of discovering blocker mid-implementation</li><li class="con">May need to park feature if SDK doesn&#39;t support</li></ul>
+        
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. BRAIN CONTEXT ── -->
+  <h2>Brain context</h2>
+  <ul class="brain-list">
+    <li><code>/home/mccollj/Projects/forge/projects/terraform-provider-betterado/brain/profile.md</code> — consulted during architect draft</li>
+    <li><code>/home/mccollj/Projects/forge/brain/cycles/themes/spec-driven-work-items.md</code> — consulted during architect draft</li>
+    <li><code>/home/mccollj/Projects/forge/brain/cycles/themes/dependency-ordered-work.md</code> — consulted during architect draft</li>
+    <li><code>/home/mccollj/Projects/forge/brain/cycles/themes/squash-merge-stacked-prs.md</code> — consulted during architect draft</li>
+    <li><code>/home/mccollj/Projects/forge/brain/cycles/themes/merge-boundary-stacked-initiative-failure.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/profile.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/dependency-ordered-work.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/squash-merge-stacked-prs.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/merge-boundary-stacked-initiative-failure.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/spec-driven-work-items.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-05-31-forge-onboarding-findings.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/projects/terraform-provider-betterado/brain/themes/2026-05-31-release-definition-unit-test-substrate.md</code> — consulted during architect draft</li>
+    <li><code>/home/parso/forge/brain/cycles/themes/layered-merge-order.md</code> — consulted during architect draft</li>
+  </ul>
+
+  <!-- ── 5. COUNCIL TRANSCRIPT (collapsed) ── -->
+  <h2>Council transcript</h2>
+  <p style="color: var(--muted); font-size: 0.83rem; margin-bottom: 0.6rem">Total cost <code>$2.8229</code></p>
+  
+  <details class="council-critic">
+    <summary>CEO critic — <code>$0.2972</code></summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>vision-clarity</code> — Vision says &#39;INIT-1 completes release_definition (acceptance-fix + gates/triggers/parallel/agentless schema parity)&#39; but the phrase &#39;schema parity&#39; is vague — parity with what? The goal later clarifies &#39;ADO REST API 7.2 feature parity.&#39;. <em>Applied:</em> Replace &#39;schema parity&#39; with &#39;ADO REST API 7.2 feature parity&#39; in vision statement for consistency.</li><li><code>done-definition-ambiguity</code> — Vision says &#39;Done = INIT-1–4 merged CI-green + INIT-5 either merged or spike-parked with documented rationale&#39; but doesn&#39;t define what &#39;CI-green&#39; means (unit tests? acceptance tests? full suite?).. <em>Applied:</em> Define &#39;CI-green&#39; as &#39;all unit + acceptance tests passing per the initiative&#39;s gate command&#39; in vision.</li><li><code>init5-spike-gate-missing</code> — INIT-5 has a spike-first requirement (&#39;Spike-first, stop-on-fail&#39;) but the vision doesn&#39;t clarify whether INIT-5 is optional or required for &#39;Done.&#39; If the spike fails, is the overall initiative complete or incomplete?. <em>Applied:</em> Clarify in vision: &#39;INIT-5 is optional; Done = INIT-1–4 merged + INIT-5 spike completed (build only if feasible).&#39;</li><li><code>init1-acceptance-criteria-test-scope</code> — INIT-1 acceptance criteria says &#39;the full project CI gate … is green&#39; but earlier notes say &#39;Gate pattern: -tags all -count=1 -run &lt;Prefix&gt; scoped to new tests.&#39; These conflict — is the gate scoped to new tests or the full project?. <em>Applied:</em> Change INIT-1 gate to &#39;scoped to TestReleaseDefinition* prefix&#39; (consistent with INIT-2/3/4/5 pattern).</li><li><code>init4-two-namespaces-confusion</code> — INIT-4 background mentions &#39;ReleaseManagement (project-level) and ReleaseManagement2 (definition-level)&#39; but doesn&#39;t clarify if the resource needs to handle BOTH or just ReleaseManagement2. The title says &#39;release_definition_permissions&#39; which implies definition-level only.. <em>Applied:</em> Clarify scope: &#39;betterado_release_definition_permissions uses ReleaseManagement2 namespace (definition-level); project-level ReleaseManagement out of scope.&#39;</li></ul>
+    <h3>Escalations</h3><div class="decisions"><div class="escalation"><div class="q">The initiative chains 5 sub-initiatives serially to avoid provider.go merge conflicts. Is this the right tradeoff between risk mitigation and delivery velocity?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Keep serial chain (Recommended)</span></div><div class="rationale">The PM explicitly calls out &#39;provider.go registry merge conflicts — forge&#39;s #1 historical failure mode.&#39; Given this is a documented pain point with historical data, the serial dependency is a proven risk mitigation. The chain is logical (foundation → additive features → cross-cutting concerns → spike), and each initiative is independently valuable.</div></div><div class="option"><div class="opt-head"><span class="label">Batch provider.go changes</span></div><div class="rationale">Treat provider.go registry as pure mechanical overhead. Do INIT-1 (the foundation), then run INIT-2/3/4 in parallel with a final &#39;registry PR&#39; that adds all 4 lines at once. INIT-5 stays gated behind the spike regardless.</div></div></div></div><div class="escalation"><div class="q">INIT-1 is the largest initiative (~4 schema additions to a 1618-LOC god-file) but framed as a single unit. Should it remain monolithic or be split?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Keep INIT-1 monolithic</span></div><div class="rationale">The PM already flagged the god-file collision risk and said &#39;size WIs to minimise collision risk within the file.&#39; The 4 schema additions (gates/triggers/parallel/agentless) are described as independently testable. Splitting INIT-1 into 4 sub-initiatives (INIT-1a/b/c/d) would reduce per-WI risk and allow incremental progress.</div></div><div class="option"><div class="opt-head"><span class="label">Split INIT-1 into foundation + 4 additive WIs (Recommended)</span></div><div class="rationale">INIT-1a = acceptance-test refresh (the foundation). INIT-1b/c/d/e = gates, triggers, parallel, agentless (each with expand/flatten + unit test). The PM already noted &#39;each can be a separate WI scoped to its expand/flatten + unit test.&#39; This matches the stated collision-mitigation goal and allows incremental merges.</div></div></div></div></div>
+  </details>
+  <details class="council-critic">
+    <summary>Eng critic — <code>$0.2823</code></summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>init-2-depends-missing</code> — INIT-2 (release_folder) has no explicit depends_on despite PM note &#39;serial chain via depends_on avoids provider.go registry merge conflicts&#39;. <em>Applied:</em> Add &#39;depends_on: INIT-1&#39; to INIT-2 (release_folder must merge after release_definition acceptance tests pass)</li><li><code>init-3-depends-missing</code> — INIT-3 (data sources) has no explicit depends_on — but data sources reference release definitions, so logically blocked by INIT-1 completion. <em>Applied:</em> Add &#39;depends_on: INIT-1&#39; to INIT-3 (data sources need stable release_definition schema to reference)</li><li><code>init-4-depends-missing</code> — INIT-4 (permissions) has no explicit depends_on — but permissions apply to release definitions, blocked by INIT-1. <em>Applied:</em> Add &#39;depends_on: INIT-1&#39; to INIT-4 (permissions resource needs stable release_definition to apply ACLs to)</li><li><code>init-5-depends-missing</code> — INIT-5 (environment templates) has no explicit depends_on — templates are used BY release definitions, blocked by INIT-1. <em>Applied:</em> Add &#39;depends_on: INIT-1&#39; to INIT-5 (templates are consumed by release_definition; must merge after INIT-1)</li><li><code>init-1-ac-verifier-ambiguous</code> — INIT-1 AC says &#39;the full project CI gate is green&#39; but doesn&#39;t specify WHO runs it (orchestrator? dev?) or WHEN (pre-merge? post-merge?). <em>Applied:</em> Rewrite AC final clause: &#39;THEN … AND `make test-release` (which runs the CI gate) passes in CI pre-merge&#39;</li><li><code>init-2-ac-verifier-ambiguous</code> — INIT-2 AC says &#39;5 canonical gomock unit tests pass&#39; but doesn&#39;t name them — PM can&#39;t verify completeness. <em>Applied:</em> Enumerate in AC: &#39;THEN … AND unit tests pass: TestReleaseFolderResource_ExpandFlatten, TestReleaseFolderResource_CreateError, TestReleaseFolderResource_Read404, TestReleaseFolderResource_Update, TestReleaseFolderResource_DeleteError&#39;</li><li><code>init-3-ac-no-notfound-test</code> — INIT-3 AC says &#39;unit tests cover read path + not-found error path&#39; but doesn&#39;t require acceptance test for not-found (only &#39;resolve a known definition&#39;). <em>Applied:</em> Add to AC: &#39;AND acceptance test for nonexistent definition returns clear error (not Terraform crash)&#39;</li><li><code>init-4-ac-remove-vs-revoke</code> — INIT-4 AC says &#39;assign + read + remove a permission&#39; — &#39;remove&#39; is ambiguous (delete resource? revoke ACL?). <em>Applied:</em> Clarify AC: &#39;assign (apply), read (refresh), update (change permission bits), destroy (remove ACL) pass against live ADO&#39;</li><li><code>init-5-spike-ac-missing-stop-condition</code> — INIT-5 spike AC says &#39;STOP and park&#39; but doesn&#39;t define what &#39;park&#39; means (close initiative? doc in README? GitHub issue?). <em>Applied:</em> Add to spike AC: &#39;THEN … record finding in docs/architecture/decisions/005-release-templates-not-viable.md and close INIT-5 as wontfix&#39;</li><li><code>no-rollback-init-1</code> — INIT-1 adds required fields (retention_policy, pre_deploy_approval) — existing definitions WITHOUT these will break on refresh. No rollback/migration path stated.. <em>Applied:</em> Add to INIT-1 notes: &#39;Migration: existing release_definition resources missing retention_policy will fail plan with actionable error. User must add block. No auto-migration (ADO API has no default retention—user intent required).&#39;</li><li><code>no-rollback-init-2</code> — INIT-2 (release_folder) is a new resource — but if a folder is deleted in Terraform, does ADO cascade-delete definitions inside it? Rollback risk unstated.. <em>Applied:</em> Add to INIT-2 notes: &#39;Rollback: deleting a folder via Terraform will FAIL if definitions exist inside it (ADO API constraint). Acceptance test must verify folder-delete-with-children returns clear error.&#39;</li><li><code>no-rollback-init-4</code> — INIT-4 (permissions) touches ACLs — revoking a permission could lock out the service principal running Terraform. Rollback risk unstated.. <em>Applied:</em> Add to INIT-4 notes: &#39;Rollback: if the Terraform service principal revokes its own ManagePermissions bit, subsequent applies will 403. Acceptance test must use a separate test identity (not the apply identity) as the permission subject.&#39;</li><li><code>init-1-3-files-violated</code> — INIT-1 (god-file) will touch resource_release_definition.go (~1618 LOC), resource_release_definition_test.go, and schema_release.go — likely &gt;3 files if acceptance tests are separate. <em>Applied:</em> Split INIT-1 into per-feature WIs (see escalation 1) so each WI touches ≤3 files (schema_release.go + resource_release_definition.go + focused test file)</li></ul>
+    <h3>Escalations</h3><div class="decisions"><div class="escalation"><div class="q">INIT-1 is a ~1618-LOC god-file with 4 additive schema features. Should we split it into 5 sequential work items (acceptance-fix foundation + 4 parallel schema additions) or keep it as one atomic feature set?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">5 sequential WIs: acceptance-fix → gates → triggers → parallel → agentless (Recommended)</span></div><div class="rationale">Each WI touches different schema sections of the god-file with clear expand/flatten test boundaries. Foundation WI (acceptance-fix) unblocks the pattern; remaining 4 can be parallel-tracked once foundation merges. Reduces blast radius per PR to ~200-300 LOC changes.</div></div><div class="option"><div class="opt-head"><span class="label">1 atomic WI: all schema additions in single PR</span></div><div class="rationale">Treats gates/triggers/parallel/agentless as a cohesive &#39;ADO 7.2 parity&#39; unit. One comprehensive test suite, one acceptance-test refresh, one CI gate. Users get complete feature set atomically.</div></div></div></div><div class="escalation"><div class="q">Acceptance criteria use &#39;full project CI gate&#39; as pass condition. Should we make test scope explicit per WI or keep the global gate?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Scoped gates per WI: -run TestReleaseDefinition_Gates (Recommended)</span></div><div class="rationale">Each WI runs only its new tests + smoke tests for regressions. Faster feedback (30s vs 3min), clearer blame when red. PM can verify each WI independently without waiting for unrelated test flake.</div></div><div class="option"><div class="opt-head"><span class="label">Global gate for all: -run TestReleaseDefinition (all tests)</span></div><div class="rationale">Every WI must pass the full test suite before merge. Guarantees no regressions, simplifies AC (same gate everywhere). Higher confidence per merge.</div></div></div></div><div class="escalation"><div class="q">INIT-4 says &#39;confirm token format against live ADO (first WI)&#39; but the spike WI isn&#39;t explicitly broken out. Should token-format confirmation be a separate spike WI or inlined into the build WI?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Separate spike WI: INIT-4.1 (token probe) → INIT-4.2 (build permissions) (Recommended)</span></div><div class="rationale">Spike is 30min of empirical testing (create definition → query security namespace → log token). If wrong namespace, pivot without throwaway code. Build WI can proceed confidently with confirmed token pattern.</div></div><div class="option"><div class="opt-head"><span class="label">Inline spike into build WI: INIT-4 does probe + build</span></div><div class="rationale">Single WI: probe token format, then immediately build with confirmed pattern. Reduces WI overhead.</div></div></div></div></div>
+  </details>
+  <details class="council-critic">
+    <summary>Design critic — <code>$1.1163</code></summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>data-source-docs</code> — INIT-3 missing data source documentation requirements. <em>Applied:</em> Added WI requirement: Create /docs/data-sources/release_definition.md and release_definitions.md following resource doc structure (Example Usage → Args → Attributes)</li><li><code>permissions-naming</code> — INIT-4 unclear if two permission resources needed (project-level vs definition-level namespaces). <em>Applied:</em> Added clarification to INIT-4 acceptance criteria: Confirm if ReleaseManagement (project) and ReleaseManagement2 (definition) require separate resources; split WI if needed</li><li><code>folder-import</code> — INIT-2 release_folder missing import support pattern. <em>Applied:</em> Added to INIT-2 acceptance criteria: Implement import using tfhelper.ImportProjectQualifiedResource() and document PROJECT_ID/FOLDER_ID pattern</li><li><code>retention-docs</code> — retention_policy docs say Optional but API now requires it. <em>Applied:</em> Added to INIT-1: Update /docs/resources/release_definition.md line 191 to mark retention_policy as (Required) with note about API 7.2+ enforcement</li><li><code>gate-validation</code> — Gates timeout field needs validation (must exceed sampling_interval). <em>Applied:</em> Added to INIT-1 acceptance criteria: Implement ValidateFunc ensuring timeout &gt; sampling_interval to prevent invalid gate configurations</li><li><code>cron-validation</code> — Schedule trigger needs cron expression validation at plan time. <em>Applied:</em> Added to INIT-1 acceptance criteria: Implement ValidateFunc for schedule_trigger cron expressions to fail fast on invalid schedules</li></ul>
+    <h3>Escalations</h3><div class="decisions"><div class="escalation"><div class="q">How should deployment gates be structured in the HCL schema?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Nested block pattern (matches approvals)</span></div><div class="rationale">Use `gates_options {}` nested block for gate-level config, consistent with existing `pre_deploy_approvals` structure. Maintains pattern consistency and clear separation between gate-level options and individual gates.</div></div><div class="option"><div class="opt-head"><span class="label">Flat block pattern</span></div><div class="rationale">Put gate-level options (timeout, sampling_interval, etc.) directly in `pre_deployment_gates {}` block without nested gates_options. Simpler for users with basic gates, but breaks consistency with approval pattern.</div></div></div></div><div class="escalation"><div class="q">Where should definition-level triggers (artifact/schedule) be placed in the schema?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Grouped under triggers container</span></div><div class="rationale">Create a top-level `triggers {}` block that contains `artifact_trigger` and `schedule_trigger` sub-blocks. Provides logical grouping for all trigger types, cleaner top-level schema, and easier documentation/discovery.</div></div><div class="option"><div class="opt-head"><span class="label">Top-level trigger blocks</span></div><div class="rationale">Each trigger type (artifact_trigger, schedule_trigger) as a separate top-level repeatable block, consistent with existing `environment`, `variable`, `artifact` patterns. No grouping container.</div></div></div></div><div class="escalation"><div class="q">How should enum values be cased for new fields like parallel_execution?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Preserve ADO camelCase</span></div><div class="rationale">Keep Azure DevOps API enum values as-is (multiConfiguration, multiMachine, etc.). The existing provider already uses camelCase for phase_type (agentBasedDeployment). Maintains consistency with established pattern and provides zero-translation mapping to API.</div></div><div class="option"><div class="opt-head"><span class="label">Normalize to snake_case</span></div><div class="rationale">Convert ADO camelCase enums to Terraform-idiomatic snake_case (multi_configuration, multi_machine). Requires expand/flatten translation logic but makes HCL more consistent with Terraform ecosystem conventions.</div></div></div></div></div>
+  </details>
+  <details class="council-critic">
+    <summary>DX critic — <code>$1.1271</code></summary>
+    <h3>Flags (auto-resolved)</h3><ul><li><code>F1</code> — Serial chain is unnecessary - all initiatives register different resource names. <em>Applied:</em> Document that parallel execution is safe; use branch-per-initiative + CI gating instead of serial dependency</li><li><code>F2</code> — Acceptance test failures are data issues, not schema gaps. <em>Applied:</em> Clarify that INIT-1 acceptance refresh is test-data fix (add valid retention_policy + approver blocks to fixtures), not schema implementation</li><li><code>F3</code> — INIT-1 WI scoping mixes refactoring with feature work. <em>Applied:</em> Split INIT-1 into two phases: (a) acceptance-fix + existing unit tests green; (b) additive schema work with per-schema unit tests</li><li><code>F4</code> — Missing rollback/deprecation strategy for API breaking changes. <em>Applied:</em> Document that ADO API compatibility is provider&#39;s contract; consider migration guide if changing field requirements</li><li><code>F5</code> — INIT-4 permissions token format positioned as high-risk spike. <em>Applied:</em> Clarify token-format validation is low-risk (follows git_permissions pattern); expect ~1 hour validation, not multi-day investigation</li></ul>
+    <h3>Escalations</h3><div class="decisions"><div class="escalation"><div class="q">Should INIT-1 include refactoring the 1,617-LOC god-file?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Defer refactoring (accept growth) (Recommended)</span></div><div class="rationale">Ship feature parity first; refactoring is a separate initiative. The resource will grow to ~2,000 LOC, but delivery is predictable and low-risk.</div></div><div class="option"><div class="opt-head"><span class="label">Refactor before adding schemas</span></div><div class="rationale">Stop the bleeding; extract expand/flatten to helper modules first, following the git_permissions pattern (146 LOC via delegation).</div></div><div class="option"><div class="opt-head"><span class="label">Hybrid - extract only new schema logic</span></div><div class="rationale">New schemas (gates/triggers/parallel/agentless) go into separate helper files; leave existing code untouched. Incremental improvement without full rewrite.</div></div></div></div><div class="escalation"><div class="q">How should provider handle ADO API breaking changes (retention_policy now required)?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Keep schema optional, let ADO validate (Recommended)</span></div><div class="rationale">Provider schema reflects &#39;possible&#39; fields; API validates &#39;required&#39;. No provider-side breaking change. Runtime errors guide users to fix.</div></div><div class="option"><div class="opt-head"><span class="label">Make fields required in provider schema</span></div><div class="rationale">Fail-fast at plan-time with Terraform validation. Better error messages, but requires provider major version bump (breaking change).</div></div><div class="option"><div class="opt-head"><span class="label">Add deprecation warnings, phase in over releases</span></div><div class="rationale">Gentle migration path via warnings → errors. Users have time to migrate, but delays full API 7.2 compliance by 2+ release cycles.</div></div></div></div><div class="escalation"><div class="q">Should INIT-5 (environment templates) remain spike-gated?</div><div class="options"><div class="option"><div class="opt-head"><span class="label">Quick validation (2 hours), then proceed (Recommended)</span></div><div class="rationale">Inspect forked SDK for endpoint existence; if present, skip spike and implement. Minimal time investment with high confidence.</div></div><div class="option"><div class="opt-head"><span class="label">Keep spike gate (low-confidence assumption)</span></div><div class="rationale">SDK fork may not have endpoint; verify before committing to build. Standard risk mitigation, but adds overhead.</div></div><div class="option"><div class="opt-head"><span class="label">Remove spike, plan implementation directly</span></div><div class="rationale">Forked SDK likely has same endpoints as upstream; API documented. Fastest path, but risk of mid-implementation blocker.</div></div></div></div></div>
+  </details>
+
+  <!-- ── 6. AGGREGATE FOOTPRINT (C19 informational) ── -->
+  <h2>Aggregate footprint <span class="badge">informational</span></h2>
+  <div class="footprint">
+    <div class="summary">5 initiatives · total iteration budget <strong>34</strong></div>
+    <div class="bar" role="img" aria-label="Iteration budget split across proposed initiatives">
+      <div class="seg" style="flex: 12; background: hsl(0, 55%, 50%);" title="INIT-2026-06-05-complete-release-definition — 12 iterations">complete-release-definition</div>
+      <div class="seg" style="flex: 4; background: hsl(67, 55%, 50%);" title="INIT-2026-06-05-release-folder — 4 iterations">release-folder</div>
+      <div class="seg" style="flex: 4; background: hsl(134, 55%, 50%);" title="INIT-2026-06-05-release-data-sources — 4 iterations">release-data-sources</div>
+      <div class="seg" style="flex: 6; background: hsl(201, 55%, 50%);" title="INIT-2026-06-05-release-definition-permissions — 6 iterations">release-definition-permissions</div>
+      <div class="seg" style="flex: 8; background: hsl(268, 55%, 50%);" title="INIT-2026-06-05-environment-templates-spike — 8 iterations">environment-templates-spike</div>
+    </div>
+    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+  </div>
+
+  <!-- ── 7. OPERATOR BRIEF + INTERVIEW ── -->
+  <h2>Operator brief + interview</h2>
+  <p class="empty">No interview rounds — operator drafted directly.</p>
+
+  <hr>
+  <div class="footer">
+    Generated by the architect runner on 2026-06-05T11:26:13.962Z.
+    Reviewed + approved on the <code>/architect/2026-06-05T11-15-33</code> screen.
+  </div>
+</body>
+</html>

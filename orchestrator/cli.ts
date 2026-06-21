@@ -129,7 +129,7 @@ Usage:
                                           failed/ and cleans up. Accepts INIT-…, handle proj#N, alias, or substring.
   forge report <cycle-id> [--regenerate]  Print (or regenerate) the human-facing cycle report
   forge demo render <initiative-id> [--dir <demoDir>]
-                                          Render DEMO.md/DEMO.html from demo.json (unifier-authored)
+                                          Render DEMO.md from demo.json (unifier-authored)
   forge demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]
                                           Capture before/after screenshots and back-fill demo.json
   forge brain index [--scope <project>]   Emit the brain navigation indexes as a single blob (cache-friendly prefix for prompts)
@@ -605,7 +605,7 @@ function flagValue(rest: string[], flag: string): string | undefined {
 }
 
 async function cmdDemo(rest: string[]): Promise<void> {
-  // ADR 021: `forge demo render <init>` derives DEMO.md + DEMO.html from the
+  // ADR 021 / F4: `forge demo render <init>` derives the single DEMO.md from the
   // unifier-authored `demo/<init>/demo.json`. Run from the worktree root (or
   // pass --dir). The unifier authors demo.json once and runs this to emit the
   // committed derived artifacts.
@@ -625,7 +625,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const { renderDemoBundle } = await import('../cli/demo-model.ts');
     // worktree root lets the bundle back-fill any live evidence the acceptance
     // test persisted under <worktree>/.forge/live-evidence/.
-    const res = renderDemoBundle(demoDir, new Date().toISOString(), worktreeRoot);
+    const res = renderDemoBundle(demoDir, worktreeRoot);
     if (!res.ok) {
       console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
       for (const e of res.errors) console.error(`  - ${e}`);
@@ -668,8 +668,8 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
       writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
-      const r = renderDemoBundle(demoDir, new Date().toISOString(), projectRepoPath);
-      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md/DEMO.html' : 'render failed: ' + r.errors.join('; ')}`);
+      const r = renderDemoBundle(demoDir, projectRepoPath);
+      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
       console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
     }
@@ -859,26 +859,33 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
   const opts: {
     bridgeOnly?: boolean; bridgePort?: number; uiPort?: number;
     noOpen?: boolean; readyFile?: string;
+    noTakeover?: boolean; forceTakeover?: boolean;
   } = {};
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
     if (a === '--bridge-only') opts.bridgeOnly = true;
     else if (a === '--no-open') opts.noOpen = true;
+    else if (a === '--attach' || a === '--no-takeover') opts.noTakeover = true;
+    else if (a === '--force-takeover') opts.forceTakeover = true;
     else if (a === '--bridge-port') opts.bridgePort = parsePortFlag(rest[++i], '--bridge-port');
     else if (a === '--ui-port') opts.uiPort = parsePortFlag(rest[++i], '--ui-port');
     else if (a === '--ready-file') opts.readyFile = rest[++i];
     else if (a === '--help' || a === '-h') {
-      console.log(`forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+      console.log(`forge studio [--bridge-only] [--no-open] [--attach|--no-takeover] [--force-takeover] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
   Bring up the forge operator UI at http://localhost:4124 (foreground; Ctrl-C quits).
   Awaits a health probe on the bridge then the UI before opening the browser,
   then emits a deterministic 'forge-studio-ready {json}' line on stdout.
-  Re-runs take over any prior forge process on the fixed ports so a pinned
-  browser tab auto-reconnects via WebSocket backoff.
-    --bridge-only  Run only the WebSocket bridge (no Next.js dev server).
-    --no-open      Skip launching the browser.
-    --bridge-port  HTTP/WS port for the bridge (default: 4123).
-    --ui-port      Port for the Next.js dev server (default: 4124).
-    --ready-file   Atomically write the ready-info JSON to this path on readiness.`);
+  By default a second \`forge studio\` ATTACHES read-only to a healthy running
+  bridge (the agent's session stays alive); only a free/stale/foreign port is
+  taken over so a pinned browser tab auto-reconnects via WebSocket backoff.
+    --bridge-only    Run only the WebSocket bridge (no Next.js dev server).
+    --no-open        Skip launching the browser.
+    --attach         Attach read-only to a running bridge; never take it over
+    --no-takeover    (alias of --attach) — error if none is healthy.
+    --force-takeover Replace a running bridge even if it is healthy (escape hatch).
+    --bridge-port    HTTP/WS port for the bridge (default: 4123).
+    --ui-port        Port for the Next.js dev server (default: 4124).
+    --ready-file     Atomically write the ready-info JSON to this path on readiness.`);
       return;
     } else {
       console.error(`forge studio: unknown option ${a}`);

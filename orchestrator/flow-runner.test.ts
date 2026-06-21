@@ -9,10 +9,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { runFlow, forgeCycleFlowPath, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
@@ -274,56 +272,125 @@ describe('flow-runner reflect skipped when not merged', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4: REAL forge-cycle.yaml loaded from disk → real sequence from mock deps
+// (S9 removed the "real full-sequence flow" test that loaded forge-cycle-with-review:
+// that monolith seed was retired with the 3-flow split. The full executor sequence is
+// covered by the synthetic makeForgeCycleFlow tests above; the real spine seeds —
+// forge-architect (architect+pm) and forge-develop (dev→unifier→review) — are loaded
+// and asserted in the tests below.)
+
+// ---------------------------------------------------------------------------
+// Test 5: forge-architect flow — 2-node (architect + pm), no dev/review/reflect
 // ---------------------------------------------------------------------------
 
-describe('flow-runner with real forge-cycle.yaml', () => {
-  it('loads the real forge-cycle flow and produces the real executor sequence', async () => {
-    const flowPath = forgeCycleFlowPath();
+describe('flow-runner with real forge-architect.yaml', () => {
+  it('loads the forge-architect flow and finalizes after pm — no dev, unifier, review, or reflect', async () => {
+    const flowPath = flowPathForId('forge-architect');
     const flow = loadFlowDefinition(flowPath);
 
-    assert.strictEqual(flow.id, 'forge-cycle', 'flow id must be forge-cycle');
-    assert.ok(flow.nodes.length >= 5, 'forge-cycle must have at least 5 nodes');
+    assert.strictEqual(flow.id, 'forge-architect', 'flow id must be forge-architect');
+    assert.strictEqual(flow.nodes.length, 2, 'forge-architect must have exactly 2 nodes (architect + pm)');
+    assert.ok(
+      flow.nodes.some((n) => n.gate === 'plan'),
+      'forge-architect must have an architect node with gate:plan',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'project-manager'),
+      'forge-architect must have a pm node',
+    );
+    assert.ok(
+      !flow.nodes.some((n) => n.agent === 'developer-ralph'),
+      'forge-architect must NOT have a dev node',
+    );
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
     const input = makeInput();
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    const result = await runFlow({ flow, input, logger, deps });
 
-    // Must produce the full sequence — proving the real definition is correct.
-    // The architect node is a silent marker: no dep call, so it does NOT appear here.
-    assert.deepEqual(tracker.calls, [
-      'runProjectManager',
-      'runDeveloperLoop',
-      'runUnifier',
-      'openPrInline',
-      'runClosure',
-      'runReflector',
-    ], 'real forge-cycle.yaml must produce the full executor sequence in order (architect node is a silent marker)');
-    assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep on real flow');
+    // Architect is a silent marker; pm runs; no dev/unifier/review/reflect.
+    assert.deepEqual(tracker.calls, ['runProjectManager'],
+      'forge-architect: only runProjectManager must be called (architect is a silent marker, no dev/unifier/review/reflect)');
+
+    // Outcome: ready-for-review (the review gate never ran, so the cycle parks here).
+    // reflectionStatus + lintStatus are skipped because their nodes are absent.
+    assert.strictEqual(result.cycleOutcome, 'ready-for-review',
+      'forge-architect must finalize with ready-for-review (no review node ran)');
+    assert.strictEqual(result.reflectionStatus, 'skipped',
+      'reflectionStatus must be skipped when no reflect node is in the flow');
+    assert.strictEqual(result.lintStatus, 'skipped',
+      'lintStatus must be skipped when no reflect node is in the flow');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 5b: forge-develop flow — 3-node (dev + unifier + review), no architect/pm/reflect
+// ---------------------------------------------------------------------------
+
+describe('flow-runner with real forge-develop.yaml', () => {
+  it('loads the forge-develop flow and runs dev → unifier → review — no architect, pm, or reflect', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    assert.strictEqual(flow.id, 'forge-develop', 'flow id must be forge-develop');
+    assert.strictEqual(flow.nodes.length, 3, 'forge-develop must have exactly 3 nodes (dev + unifier + review)');
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'developer-ralph'),
+      'forge-develop must have a dev node (developer-ralph)',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'developer-unifier' && n.resumable === true),
+      'forge-develop must have a resumable unifier node',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.gate === 'verdict'),
+      'forge-develop must have a review node with gate:verdict (the human gate — zero-gate flows are rejected)',
+    );
+    assert.ok(
+      !flow.nodes.some((n) => n.agent === 'project-manager' || n.gate === 'plan' || n.agent === 'reflector'),
+      'forge-develop must NOT have pm, architect, or reflect nodes (DEC-3 carve)',
+    );
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const input = makeInput();
+    const logger = makeLogger();
+
+    const result = await runFlow({ flow, input, logger, deps });
+
+    // Dev-loop + unifier + review (openPr → closure) run; pm/architect/reflect do not.
+    assert.deepEqual(tracker.calls, ['runDeveloperLoop', 'runUnifier', 'openPrInline', 'runClosure'],
+      'forge-develop: dev → unifier → review(openPr→closure) only — no pm/architect/reflect');
+
+    // Closure confirmed a merge in the mock, but there is no reflect node, so
+    // reflection never runs — the develop flow ends at the merged PR (S8 adds reflect).
+    assert.strictEqual(result.reflectionStatus, 'skipped',
+      'reflectionStatus must be skipped — forge-develop has no reflect node (S8 carves it)');
   });
 
-  it('loads the real forge-cycle flow and skips pm on unifier resume', async () => {
-    const flowPath = forgeCycleFlowPath();
+  it('forge-develop resumes the unifier in place (ADR-026 drain) — skips the per-WI dev work but keeps the spine', async () => {
+    const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
+    // A send-back drain re-claims the manifest with resumeFrom:'unifier'.
     const input = makeInput({ resumeFrom: 'unifier' });
     const logger = makeLogger();
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.ok(!tracker.calls.includes('runProjectManager'));
-    assert.ok(tracker.calls.includes('runDeveloperLoop'));
-    assert.ok(tracker.calls.includes('runUnifier'));
+    // The dev node still runs (it self-no-ops the per-WI loop on resume but emits
+    // the phase-boundary events); the unifier + review spine re-runs in place.
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on resume)');
+    assert.ok(tracker.calls.includes('runUnifier'), 'unifier re-runs the pending UWIs on resume');
+    assert.ok(tracker.calls.includes('openPrInline'), 'review re-opens/updates the PR on resume');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Test 5: Wedge-kill race — raceWithWedge integration
+// Test 6: Wedge-kill race — raceWithWedge integration
 // ---------------------------------------------------------------------------
 
 /** Minimal flow with just pm node — keeps wedge-kill tests focused. */
@@ -519,8 +586,8 @@ describe('flow-runner trigger firing', () => {
     assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when triggers is empty');
   });
 
-  it('flow with trigger {on:complete, flow:knowledge-ingest} → enqueueFlowRun called on terminal success', async () => {
-    const flow = makeTriggerFlow([{ on: 'complete', flow: 'knowledge-ingest' }]);
+  it('flow with trigger {on:complete, flow:forge-reflect} → enqueueFlowRun called on terminal success', async () => {
+    const flow = makeTriggerFlow([{ on: 'complete', flow: 'forge-reflect' }]);
     const enqueueCalls: Array<{ flowId: string; opts: { origin: string; triggeredBy: string } }> = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -539,13 +606,13 @@ describe('flow-runner trigger firing', () => {
     await runFlow({ flow, input, logger, deps });
 
     assert.equal(enqueueCalls.length, 1, 'enqueueFlowRun must be called exactly once');
-    assert.equal(enqueueCalls[0].flowId, 'knowledge-ingest');
+    assert.equal(enqueueCalls[0].flowId, 'forge-reflect');
     assert.equal(enqueueCalls[0].opts.origin, 'trigger');
     assert.equal(enqueueCalls[0].opts.triggeredBy, 'trigger-test');
   });
 
   it('flow with trigger → enqueueFlowRun NOT called on executor failure (triggers fire only on terminal success)', async () => {
-    const flow = makeTriggerFlow([{ on: 'complete', flow: 'knowledge-ingest' }]);
+    const flow = makeTriggerFlow([{ on: 'complete', flow: 'forge-reflect' }]);
     const enqueueCalls: string[] = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -571,7 +638,7 @@ describe('flow-runner trigger firing', () => {
 
   it('flow with multiple triggers → enqueueFlowRun called for each complete trigger', async () => {
     const flow = makeTriggerFlow([
-      { on: 'complete', flow: 'knowledge-ingest' },
+      { on: 'complete', flow: 'forge-reflect' },
       { on: 'complete', flow: 'other-flow' },
     ]);
     const enqueueCalls: string[] = [];
@@ -591,79 +658,48 @@ describe('flow-runner trigger firing', () => {
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.deepEqual(enqueueCalls.sort(), ['knowledge-ingest', 'other-flow'].sort());
+    assert.deepEqual(enqueueCalls.sort(), ['forge-reflect', 'other-flow'].sort());
   });
 });
 
 // ---------------------------------------------------------------------------
-// Test 7: knowledge-ingest flow — non-cycle flow walks end-to-end (M3-5)
+// Test 7: a single-node flow with an unknown (non-phase) agent → graceful skip.
+// (M3-5 behaviour; previously fixtured on the forge-reflect seed, retired in
+// the spine cleanup — now a SYNTHETIC flow so it depends on no shippable flow.)
 // ---------------------------------------------------------------------------
 
-describe('knowledge-ingest flow — non-cycle DAG walk', () => {
-  /** Load the real knowledge-ingest/flow.yaml. */
-  function knowledgeIngestFlowPath(): string {
-    // Resolved relative to this test file's location (orchestrator/) → ../studio/flows/
-    return resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'studio',
-      'flows',
-      'knowledge-ingest',
-      'flow.yaml',
-    );
+describe('single-node flow with an unknown agent — graceful skip', () => {
+  /** Synthetic disposable single-node flow whose agent is not a phase kind
+   *  (brain-ingest), so resolveNodeKind() → 'unknown' → execUnknown skip. */
+  function makeUnknownAgentFlow(): FlowDefinition {
+    return {
+      id: 'unknown-agent-flow',
+      name: 'Unknown Agent Flow',
+      version: 1,
+      goal: 'A disposable single-node flow whose agent is not a phase kind.',
+      project: null,
+      kb: null,
+      costCeilingUsd: 0,
+      origin: 'seed',
+      disposable: true,
+      nodes: [{ id: 'ingest', agent: 'brain-ingest' }],
+      edges: [],
+      triggers: [],
+      path: '/fake/unknown-agent-flow.yaml',
+    };
   }
 
-  it('knowledge-ingest/flow.yaml loads with correct shape', async () => {
-    const flowPath = knowledgeIngestFlowPath();
-    const flow = loadFlowDefinition(flowPath);
-
-    assert.strictEqual(flow.id, 'knowledge-ingest');
-    assert.strictEqual(flow.disposable, true, 'knowledge-ingest must be disposable:true (zero-gate rule)');
-    assert.ok(flow.nodes.some((n) => n.agent === 'brain-ingest'), 'must have a brain-ingest node');
-    assert.strictEqual(flow.edges.length, 0, 'knowledge-ingest has no edges (single-node flow)');
-  });
-
-  it('validateFlow(knowledge-ingest, agents) returns zero errors', async () => {
-    const flowPath = knowledgeIngestFlowPath();
-    const flow = loadFlowDefinition(flowPath);
-
-    // Load agents (same pattern as seed-data.test.ts)
-    const { listAgentDefinitions } = await import('./studio/registry.ts');
-    const { validateFlow: vf } = await import('./studio/validate.ts');
-    const agents = listAgentDefinitions(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'skills'));
-    const agentMap = new Map(agents.map((a) => [a.slug, a]));
-
-    const findings = vf(flow, agentMap);
-    const errors = findings.filter((f) => f.level === 'error');
-
-    assert.deepEqual(
-      errors,
-      [],
-      `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
-    );
-  });
-
-  it('runFlow(knowledge-ingest) with a mock brain-ingest executor dispatches the ingest node', async () => {
-    const flowPath = knowledgeIngestFlowPath();
-    const flow = loadFlowDefinition(flowPath);
-
-    // The knowledge-ingest flow has a single 'ingest' node with agent:'brain-ingest'.
-    // flow-runner classifyNode() falls to 'unknown' for brain-ingest (it's not one of the
-    // hardcoded forge-cycle slugs). The unknown handler logs the skip and continues —
-    // this is the correct M3 behaviour: the flow walks without error, emitting a
-    // flow-runner.unknown-node-skipped event for the ingest node.
-    //
-    // A real brain-ingest executor would be wired in M4 when the executor registry is
-    // generalised. For M3 the structural proof is: runFlow completes without throwing
-    // and the ingest node is recorded as visited.
-
+  it('runFlow dispatches the unknown node as a graceful skip + completes', async () => {
+    const flow = makeUnknownAgentFlow();
+    // brain-ingest is not a phase kind → resolveNodeKind() = 'unknown' → execUnknown
+    // logs flow-runner.unknown-node-skipped and continues; runFlow completes without throwing.
     const input = makeInput();
     const logger = makeLogger();
     const enqueueCalls: string[] = [];
 
     const deps: Partial<FlowRunnerDeps> = {
       enqueueFlowRun: (flowId, _opts) => { enqueueCalls.push(flowId); },
-      // No other deps needed — single node, no forge-cycle executors involved.
+      // No other deps needed — single node, no cycle executors involved.
       commitDevLoopBoundary: () => { /* no-op */ },
       enforceDevLoopCloseInvariant: () => { /* no-op */ },
       assertNonEmptyDelivery: () => { /* no-op */ },
@@ -671,24 +707,21 @@ describe('knowledge-ingest flow — non-cycle DAG walk', () => {
       rebaseForResume: () => { /* no-op */ },
     };
 
-    // Must complete without throwing — the unknown-node handler is a graceful skip.
     const result = await runFlow({ flow, input, logger, deps });
 
-    // The flow has no gate/closure → cycleOutcome stays at its initial 'ready-for-review'.
+    // No gate/closure → cycleOutcome stays at its initial 'ready-for-review'.
     assert.strictEqual(result.cycleOutcome, 'ready-for-review');
 
-    // The ingest node must have been visited: a flow-runner.unknown-node-skipped event
-    // must appear in the logger (the brain-ingest slug is not a hardcoded forge-cycle slug).
     const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string; metadata?: Record<string, unknown> }>;
     const unknownSkipEvents = events.filter(
       (e) => e.message === 'flow-runner.unknown-node-skipped' && e.metadata?.['node_id'] === 'ingest',
     );
     assert.ok(
       unknownSkipEvents.length >= 1,
-      'flow-runner must emit a flow-runner.unknown-node-skipped event for the brain-ingest ingest node',
+      'an unknown (non-phase) agent node must be a graceful flow-runner.unknown-node-skipped',
     );
 
-    // No triggers on knowledge-ingest → enqueue not called.
+    // No triggers → enqueue not called.
     assert.deepEqual(enqueueCalls, []);
   });
 });

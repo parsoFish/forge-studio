@@ -1,0 +1,34 @@
+id: forge-reflect
+name: Forge Reflect
+version: 1
+goal: Capture the merged initiative's retrospective into the central forge-owned brain — repeated actions, roadblocks hit, and operator notes.
+project: null
+kb: cycles
+costCeilingUsd: 3
+origin: seed
+# disposable:true — a single-agent, human-gate-free flow. Bounded by
+# costCeilingUsd, so it is exempt from the zero-gate unattended-spend guard
+# (the same exemption disposable utility flows use). NOTE: this is the FLOW's
+# disposable flag (a studio/lint concern); it is independent of the *initiative
+# manifest's* `disposable`, which is what reflector.ts checks to skip a throwaway
+# cycle's reflection. finalize-merged runs the reflector against the merged
+# initiative's manifest, so real (non-disposable) initiatives still reflect.
+disposable: true
+# DEC-3 (S8): the third and final flow that replaces the forge-cycle monolith.
+# forge-architect decomposes; forge-develop builds → reviews → merges; this flow
+# captures the brain. DEC-2: a reflect run threads the SAME initiativeId + cycle_id
+# the architect/develop flows used, so the reflector aggregates the WHOLE
+# initiative from the shared _logs/<cycleId> (architect + develop phases land in
+# one cycle log), not just the closing cycle.
+#
+# MERGE-TRIGGERED, NOT flow-engine-triggered. The flow-engine `triggers:` field
+# fires on a flow's terminal SUCCESS — but forge-develop terminates at
+# `ready-for-review` (PR open), BEFORE the operator merges. The real merge signal
+# is async + post-run, so reflect is driven by orchestrator/finalize-merged.ts:
+# once a merged PR is confirmed it runs closure → runReflector against this flow's
+# single node. `reflect` is the flow's entry node, so it carries no inbound edge
+# (the lint rule only requires inbound artifacts for fanOut nodes).
+nodes:
+  - { id: reflect, agent: reflector }
+edges: []
+triggers: []

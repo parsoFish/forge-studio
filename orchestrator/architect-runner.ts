@@ -62,6 +62,7 @@ import { loadBrainIndex } from '../cli/brain-index.ts';
 import {
   serializeManifest,
   parseManifest,
+  mintAndPersistManifestCycleId,
   type InitiativeManifest,
 } from './manifest.ts';
 import { promoteManifests } from './promote-manifests.ts';
@@ -764,6 +765,16 @@ async function runFinalizeStep(args: {
   const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
+
+  // DEC-2 (S6): thread the initiativeId+cycleId lineage at finalize time so that
+  // when the Develop flow later claims this manifest it reuses the SAME
+  // `_logs/<cycleId>` dir instead of minting a sibling. One cycleId ⇒ one event
+  // log ⇒ cost/roadmap/metrics roll up as one unit. Idempotent + best-effort.
+  for (let i = 0; i < writtenManifestPaths.length; i++) {
+    const initId = writtenInitiativeIds[i];
+    if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
+  }
+
   writeStatus(paths.sessionDir, { ...status, phase: 'committed' });
 
   logger.emit({
@@ -793,6 +804,10 @@ async function runFinalizeStep(args: {
 // Manifest construction
 // ---------------------------------------------------------------------------
 
+/** The seed flow an architect handoff runs under (S8/DEC-3 — architect → pm
+ *  decompose). The develop build is enqueued separately onto forge-develop. */
+const ARCHITECT_FLOW_ID = 'forge-architect';
+
 function buildManifest(
   d: DraftInitiative,
   status: ArchitectStatus,
@@ -820,6 +835,12 @@ function buildManifest(
     cost_budget_usd: d.cost_budget_usd > 0 ? d.cost_budget_usd : 5,
     phase: 'pending',
     origin: 'architect',
+    // S8/DEC-3: route the architect's handoff to the forge-architect flow
+    // (architect → pm decompose). forge-cycle was retired, so a manifest with no
+    // flow_id would now throw in runCycle. After the operator approves the PLAN
+    // and presses start-development, enqueue-develop-run repoints this to
+    // forge-develop for the build (DEC-2 keeps the threaded cycle_id).
+    flow_id: ARCHITECT_FLOW_ID,
     body: d.body,
     ...(dependsOnInitiatives.length > 0 ? { depends_on_initiatives: dependsOnInitiatives } : {}),
   };

@@ -5,9 +5,30 @@ All notable changes to Forge are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — productionisation
+## [Unreleased]
 
-This entry covers the **productionisation pass**: a release final-loop, disk-based
+## [0.1.1] - 2026-06-21
+
+## [0.1.0] - 2026-06-21
+
+Forge Studio adopts **0.x pre-release versioning**: minor/patch bumps land as work
+ships; **v1.0.0 is reserved for the first releasable cut** (operator-gated). This
+0.1.0 line consolidates the Studio-era pre-release work — S8 (the Forge Reflect
+flow + retirement of the forge-cycle monolith), M7/M8 (Studio consolidation +
+extension seams), and the productionisation pass.
+
+### S8 — Forge Reflect flow + monolith retirement
+
+- **Forge Reflect** — the third seed flow (`studio/flows/forge-reflect`): a deep
+  retrospective (repeated actions, roadblocks, operator notes) that writes the
+  central forge-owned project brain post-merge (via `finalize-merged`).
+- **forge-cycle monolith retired** ([DEC-3]). The 3-flow set
+  (forge-architect → forge-develop → forge-reflect) replaces it; there is no
+  default flow and no fallback — every manifest names its flow.
+
+### Productionisation pass
+
+This covers the **productionisation pass**: a release final-loop, disk-based
 project auto-discovery, a creds-free reference project, and a hard cull of removed
 seams (Zep, graphify) and stale framing (forge-v2).
 
@@ -46,9 +67,9 @@ seams (Zep, graphify) and stale framing (forge-v2).
 - **ADRs consolidated to current state.**
 - **Docs split into public (operators) vs internal (contributors).**
 
-## [Unreleased] — 0.x (Studio era)
+### Studio era (M7 consolidation + M8 seams)
 
-This entry covers the **M7 consolidation** (Forge Studio became the one product)
+This covers the **M7 consolidation** (Forge Studio became the one product)
 and the **M8 seams** (modularity-as-subsumption: every extension point now has a
 real data-table dispatch and a second, gated implementation behind it).
 
@@ -113,4 +134,7 @@ real data-table dispatch and a second, gated implementation behind it).
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
-[Unreleased]: https://github.com/Parso/forge/compare/main...HEAD
+[Unreleased]: https://github.com/Parso/forge/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Parso/forge/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/Parso/forge/releases/tag/v0.1.0
+[DEC-3]: docs/decisions/

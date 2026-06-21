@@ -52,9 +52,8 @@ test('buildUnifierSystemPrompt: contains all key invariants', () => {
   assert.ok(sys.includes('initiative'), 'should reference initiative scope');
   assert.ok(sys.includes('Ralph'), 'should reference Ralph loop discipline');
 
-  // 4 composed-gate awareness rules
+  // 4-gate composed-gate awareness (demo_runs_clean removed)
   assert.ok(sys.includes('initiative_gate'), 'must reference initiative_gate');
-  assert.ok(sys.includes('demo_runs_clean'), 'must reference demo_runs_clean');
   assert.ok(sys.includes('pr_self_contained'), 'must reference pr_self_contained');
   assert.ok(sys.includes('branches_in_sync'), 'must reference branches_in_sync');
 
@@ -102,7 +101,6 @@ test('renderUnifierUserPrompt: is dynamic-only (no static Ralph discipline repet
     workItemSpecs: ['.forge/work-items/WI-1.md'],
     iteration: 1,
     iterationBudget: 5,
-    demoShape: 'harness',
     qualityGateCmd: ['npm', 'test'],
   });
   // The static Ralph discipline header must NOT be duplicated in the user prompt
@@ -120,27 +118,27 @@ test('renderUnifierUserPrompt: initial-prep mode references manifest + WIs', () 
     workItemSpecs: ['.forge/work-items/WI-1.md', '.forge/work-items/WI-2.md'],
     iteration: 1,
     iterationBudget: 3,
-    demoShape: 'browser',
     qualityGateCmd: ['npm', 'test'],
   });
-  for (const s of ['INIT-2026-05-23-test', '.forge/manifest.md', 'WI-1', 'WI-2', 'browser', 'npm test']) {
+  for (const s of ['INIT-2026-05-23-test', '.forge/manifest.md', 'WI-1', 'WI-2', 'npm test']) {
     assert.ok(prompt.includes(s), `missing: ${s}`);
   }
   assert.ok(!prompt.includes('send-back'), 'initial-prep mode does not mention send-back');
 });
 
-test('renderUnifierUserPrompt: demo shape "none" omits demo runtime instruction', () => {
-  const promptNone = renderUnifierUserPrompt({
+test('renderUnifierUserPrompt: demo instruction references generated demo machinery', () => {
+  const prompt = renderUnifierUserPrompt({
     initiativeId: 'X',
     manifestRelPath: '.forge/manifest.md',
     workItemSpecs: [],
     iteration: 1,
     iterationBudget: 3,
-    demoShape: 'none',
     qualityGateCmd: ['true'],
   });
-  assert.ok(promptNone.includes('rationale block'));
-  assert.ok(!promptNone.toLowerCase().includes('playwright'));
+  assert.ok(
+    prompt.includes('generated demo machinery') || prompt.includes('skills/demo/SKILL.md'),
+    'prompt should reference generated demo machinery or SKILL.md',
+  );
 });
 
 test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () => {
@@ -157,7 +155,6 @@ test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () =>
       manifestRelPath: '.forge/manifest.md',
       worktreePath: root,
       iterationBudget: 3,
-      demoShape: 'artifact',
       qualityGateCmd: ['npm', 'test'],
     });
     assert.ok(existsSync(out.promptPath));
@@ -184,14 +181,13 @@ test('prepareUnifierWorkspace: resolves the artifactRoot-aware demo dir into the
     // agent writes where the snapshot + gate + `forge demo render` expect it.
     writeFileSync(
       join(root, '.forge', 'project.json'),
-      JSON.stringify({ artifactRoot: 'forge', demo: { shape: 'none' }, quality_gate_cmd: ['true'] }),
+      JSON.stringify({ artifactRoot: 'forge', quality_gate_cmd: ['true'] }),
     );
     const out = prepareUnifierWorkspace({
       initiativeId: 'INIT-x',
       manifestRelPath: '.forge/manifest.md',
       worktreePath: root,
       iterationBudget: 3,
-      demoShape: 'harness',
       qualityGateCmd: ['npm', 'test'],
     });
     const prompt = readFileSync(out.promptPath, 'utf8');
@@ -209,7 +205,6 @@ test('renderUnifierUserPrompt: includes project demo process when demoProcess pr
     workItemSpecs: [],
     iteration: 1,
     iterationBudget: 3,
-    demoShape: 'harness',
     qualityGateCmd: ['npm', 'test'],
     demoProcess: [
       { kind: 'capture', text: 'Screenshot of live resource' },
@@ -228,7 +223,6 @@ test('renderUnifierUserPrompt: includes project skills when skills provided', ()
     workItemSpecs: [],
     iteration: 1,
     iterationBudget: 3,
-    demoShape: 'harness',
     qualityGateCmd: ['npm', 'test'],
     skills: ['tdd-workflow', 'backend-patterns'],
   });
@@ -244,7 +238,6 @@ test('renderUnifierUserPrompt: no project demo/skills blocks when fields absent'
     workItemSpecs: [],
     iteration: 1,
     iterationBudget: 3,
-    demoShape: 'harness',
     qualityGateCmd: ['npm', 'test'],
   });
   assert.ok(!prompt.includes('## Project demo process'), 'should not include demo process when absent');

@@ -100,6 +100,30 @@ test('dispatchTerminalStatus: ready-for-review → no move, notify "review-ready
   }
 });
 
+test('dispatchTerminalStatus: ready-for-review with the manifest STILL in in-flight (closure-less flow, e.g. forge-architect) → moved to ready-for-review/', async () => {
+  // S9: a flow with NO review/closure node — the forge-architect decompose flow
+  // — ends `ready-for-review` (the default outcome) but nothing moved its manifest
+  // out of in-flight/ (closure owns that move in the develop flow). Dispatch must
+  // move it as an idempotent safety net so the architect→develop hand-off
+  // (enqueueDevelopRun) can claim it instead of seeing an orphaned in-flight cycle.
+  const { dir, paths } = setupQueue();
+  try {
+    writeFileSync(join(paths.inFlight, 'INIT-test.md'), 'manifest');
+    const calls: NotifyEvent[] = [];
+    const out = await dispatchTerminalStatus(makeInput('ready-for-review'), {
+      paths,
+      notifyFn: async (e) => { calls.push(e); },
+    });
+
+    assert.equal(out.moved, 'ready-for-review');
+    assert.equal(out.notified, 'review-ready');
+    assert.ok(existsSync(join(paths.readyForReview, 'INIT-test.md')), 'manifest moved to ready-for-review/');
+    assert.ok(!existsSync(join(paths.inFlight, 'INIT-test.md')), 'manifest no longer in in-flight/');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('dispatchTerminalStatus: pr-open → no move (reviewer moved to ready-for-review/), notify "review-ready", NOT failed', async () => {
   // Phase 6 / G9: the review gate passed and the demo-embedded PR is open
   // awaiting the operator's merge. The reviewer already moved the manifest

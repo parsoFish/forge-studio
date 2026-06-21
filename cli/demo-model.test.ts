@@ -1,7 +1,8 @@
 /**
- * Tests for the unified structured demo model (ADR 021 / REV-4) — the schema
- * validator + the derived DEMO.md / DEMO.html renderers. Covers the new rich
- * structured sections: summary, apiDiff, testEvidence, filesChanged.
+ * Tests for the unified structured demo model (ADR 021 / REV-4 / F4) — the
+ * schema validator + the derived DEMO.md renderer (the single demo OUTPUT;
+ * DEMO.html was retired in F4). Covers the rich structured sections: summary,
+ * apiDiff, testEvidence, filesChanged.
  */
 
 import { test } from 'node:test';
@@ -13,13 +14,12 @@ import { join } from 'node:path';
 
 import {
   validateDemoModel,
+  coerceDemoModel,
   renderDemoMarkdown,
-  renderDemoHtml,
   renderDemoBundle,
   mergeCapturedMedia,
   collectLiveEvidence,
   mergeLiveEvidence,
-  toComparisonModel,
   type DemoModel,
 } from './demo-model.ts';
 
@@ -70,6 +70,46 @@ function richModel(): DemoModel {
     ],
   };
 }
+
+// ── coerceDemoModel — forgiving normalize (testEvidence object → array) ─────
+
+test('coerceDemoModel: testEvidence object map → TestResultRow[] (the gitpulse wedge)', () => {
+  const raw = {
+    ...validModel(),
+    testEvidence: {
+      qualityGate: 'npm test → 16/16 pass',
+      churnSuite: 'node --test test/churn.test.ts → 8/8 pass',
+      brokenSuite: 'window.test.ts → 2 failed',
+    },
+  };
+  const { model, changed } = coerceDemoModel(raw);
+  assert.equal(changed, true, 'an object testEvidence must be coerced');
+  const te = (model as DemoModel).testEvidence!;
+  assert.ok(Array.isArray(te), 'coerced testEvidence is an array');
+  assert.equal(te.length, 3);
+  assert.deepEqual(te[0], { name: 'qualityGate', result: 'pass', delta: 'npm test → 16/16 pass' });
+  assert.equal(te[2].result, 'fail', 'a value mentioning "failed" infers result=fail');
+  // The coerced model must now pass schema validation (the whole point).
+  assert.deepEqual(validateDemoModel(model), []);
+});
+
+test('coerceDemoModel: an already-array testEvidence is unchanged', () => {
+  const raw = richModel();
+  const { model, changed } = coerceDemoModel(raw);
+  assert.equal(changed, false);
+  assert.deepEqual(model, raw);
+});
+
+test('coerceDemoModel: object rows that already carry {result} are preserved', () => {
+  const raw = { ...validModel(), testEvidence: { unit: { result: 'skip', delta: '+0' } } };
+  const { model } = coerceDemoModel(raw);
+  assert.deepEqual((model as DemoModel).testEvidence, [{ name: 'unit', result: 'skip', delta: '+0' }]);
+});
+
+test('validateDemoModel: a non-array testEvidence error names the expected shape', () => {
+  const errs = validateDemoModel({ ...validModel(), testEvidence: { a: 'b' } });
+  assert.ok(errs.some((e) => e.includes('testEvidence must be an array') && e.includes('name')), errs.join('; '));
+});
 
 // ── Validation — required core ────────────────────────────────────────────
 
@@ -206,43 +246,26 @@ test('renderDemoMarkdown: renders a harness metric table when present', () => {
   assert.match(md, /\| fps \| 30 \| 60 \| \+100\.0% \| diverged \|/);
 });
 
-// ── renderDemoHtml ────────────────────────────────────────────────────────
-
-test('renderDemoHtml: produces self-contained HTML carrying the essence', () => {
-  const html = renderDemoHtml(validModel(), '2026-05-30T00:00:00.000Z');
-  assert.match(html, /<!doctype html>/i);
-  assert.match(html, /follows the OS by default/);
-});
-
-test('renderDemoHtml: rich sections appear in HTML output', () => {
-  const html = renderDemoHtml(richModel(), '2026-05-30T00:00:00.000Z');
-  assert.match(html, /id="summary"/);
-  assert.match(html, /id="api-diff"/);
-  assert.match(html, /id="test-evidence"/);
-  assert.match(html, /id="files-changed"/);
-});
-
 // ── renderDemoBundle ──────────────────────────────────────────────────────
 
-test('renderDemoBundle: valid demo.json → writes derived DEMO.md + DEMO.html', () => {
+test('renderDemoBundle: valid demo.json → writes ONLY DEMO.md (DEMO.html retired in F4)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
   writeFileSync(join(dir, 'demo.json'), JSON.stringify(richModel()));
-  const res = renderDemoBundle(dir, '2026-05-30T00:00:00.000Z');
+  const res = renderDemoBundle(dir);
   assert.equal(res.ok, true);
   assert.deepEqual(res.errors, []);
+  assert.deepEqual(res.wrote, [join(dir, 'DEMO.md')], 'bundle writes only DEMO.md');
   assert.ok(existsSync(join(dir, 'DEMO.md')));
-  assert.ok(existsSync(join(dir, 'DEMO.html')));
+  assert.ok(!existsSync(join(dir, 'DEMO.html')), 'DEMO.html must not be generated');
   const md = readFileSync(join(dir, 'DEMO.md'), 'utf8');
   assert.match(md, /Dark mode toggle/);
   assert.match(md, /Summary/);
-  const html = readFileSync(join(dir, 'DEMO.html'), 'utf8');
-  assert.match(html, /id="api-diff"/);
 });
 
 test('renderDemoBundle: invalid demo.json → errors, writes nothing', () => {
   const dir = mkdtempSync(join(tmpdir(), 'demo-bundle-'));
   writeFileSync(join(dir, 'demo.json'), JSON.stringify({ title: 'x' }));
-  const res = renderDemoBundle(dir, 'T');
+  const res = renderDemoBundle(dir);
   assert.equal(res.ok, false);
   assert.ok(res.errors.length > 0);
   assert.ok(!existsSync(join(dir, 'DEMO.md')));
@@ -367,42 +390,15 @@ test('renderDemoMarkdown: strips AGENT.md / PROMPT.md / fix_plan.md from diffSta
   assert.match(md, /src\/theme\.ts/);
 });
 
-// ── toComparisonModel ─────────────────────────────────────────────────────
+// ── renderDemoMarkdown: scratch-file stripping ────────────────────────────
 
-test('toComparisonModel: fills render-only defaults (build ok, refs)', () => {
-  const cm = toComparisonModel({ ...validModel(), baseRef: undefined, changedRef: undefined }, 'T');
-  assert.equal(cm.generatedAt, 'T');
-  assert.equal(cm.baselineBuild.ok, true);
-  assert.equal(cm.baseRef, 'main');
-  assert.equal(cm.changedRef, 'HEAD');
-  assert.equal(cm.checkpoints[0].kind, 'screenshot');
-});
-
-test('toComparisonModel: passes through rich sections to comparison model', () => {
-  const cm = toComparisonModel(richModel(), 'T');
-  assert.ok(cm.summary?.bullets.length === 2);
-  assert.equal(cm.summary?.prUrl, 'https://github.com/org/repo/pull/99');
-  assert.equal(cm.apiDiff?.length, 1);
-  assert.equal(cm.testEvidence?.length, 1);
-  assert.equal(cm.filesChanged?.length, 2);
-});
-
-test('toComparisonModel: passes through usage_example + impact', () => {
-  const m = validModel();
-  m.usage_example = 'resource "betterado_task_group" "x" {}';
-  m.impact = ['Enables provisioning.'];
-  const cm = toComparisonModel(m, 'T');
-  assert.equal(cm.usage_example, 'resource "betterado_task_group" "x" {}');
-  assert.deepEqual(cm.impact, ['Enables provisioning.']);
-});
-
-test('toComparisonModel: strips scratch files from diffStat', () => {
+test('renderDemoMarkdown: strips scratch files from the diffStat', () => {
   const m = validModel();
   m.diffStat = ' src/main.ts | 10 +\n AGENT.md | 3 +\n fix_plan.md | 2 +';
-  const cm = toComparisonModel(m, 'T');
-  assert.ok(!cm.diffStat?.includes('AGENT.md'));
-  assert.ok(!cm.diffStat?.includes('fix_plan.md'));
-  assert.ok(cm.diffStat?.includes('src/main.ts'));
+  const md = renderDemoMarkdown(m);
+  assert.ok(!md.includes('AGENT.md'));
+  assert.ok(!md.includes('fix_plan.md'));
+  assert.ok(md.includes('src/main.ts'));
 });
 
 // ── acEvaluations — validation ────────────────────────────────────────────
@@ -456,16 +452,6 @@ test('validateDemoModel: rejects acEvaluations entry with blank evidence', () =>
   ];
   const errs = validateDemoModel(m);
   assert.ok(errs.some((e) => e.includes('acEvaluations[0].evidence')));
-});
-
-test('toComparisonModel: passes through acEvaluations', () => {
-  const m = validModel();
-  m.acEvaluations = [
-    { criterion: 'GIVEN X WHEN Y THEN Z', verdict: 'met', evidence: 'Test passes.' },
-  ];
-  const cm = toComparisonModel(m, 'T');
-  assert.equal(cm.acEvaluations?.length, 1);
-  assert.equal(cm.acEvaluations?.[0].verdict, 'met');
 });
 
 test('renderDemoMarkdown: renders acEvaluations section when present', () => {

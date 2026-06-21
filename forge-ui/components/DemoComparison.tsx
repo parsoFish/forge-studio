@@ -5,10 +5,11 @@ import { resolveBridgeUrl } from '@/lib/bridge-client';
 import type { DemoModel, DemoModelCheckpoint, DemoHarnessMetricRow, DemoAcEvaluation } from '@/lib/bridge-client';
 
 /**
- * ADR 021 — renders the unifier-authored structured `demo.json` natively (the
- * in-UI equivalent of `renderComparisonHtml`). The schema this renders IS the
- * contract the unifier fills, which is what makes demos consistent. Forge dark
- * theme; mirrors the plan screen's "rich artifact on its own page" treatment.
+ * ADR 021 — renders the unifier-authored structured `demo.json` natively (this
+ * IS the demo review surface; F4 retired the parallel DEMO.html). The schema
+ * this renders IS the contract the unifier fills, which is what makes demos
+ * consistent. Forge dark theme; mirrors the plan screen's "rich artifact on its
+ * own page" treatment.
  *
  * Renders ALL sections: summary (with PR link), apiDiff before/after,
  * testEvidence pass/fail table, filesChanged annotated list, checkpoints,
@@ -159,7 +160,7 @@ export function DemoComparison({ model, cycleId }: { model: DemoModel; cycleId?:
         </div>
       )}
 
-      {/* Checkpoints — shape-aware heading mirrors the derived DEMO.html so the
+      {/* Checkpoints — shape-aware heading mirrors the derived DEMO.md so the
           in-UI demo and the PR artifact present the same section structure. */}
       {(model.checkpoints?.length ?? 0) > 0 && (
         <div data-section="demo-checkpoints">
@@ -233,7 +234,7 @@ function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element 
 }
 
 /** Shape-aware checkpoints heading — mirrors cli/demo-model.ts so the in-UI demo
- *  and the derived DEMO.html present the same section structure (no phantom label). */
+ *  and the derived DEMO.md present the same section structure (no phantom label). */
 function checkpointsHeading(checkpoints: DemoModelCheckpoint[]): string {
   if (checkpoints.some((c) => c.kind === 'screenshot' || c.kind === 'video')) return 'Visual Changes';
   if (checkpoints.length > 0 && checkpoints.every((c) => c.kind === 'harness')) return 'Test Evidence';

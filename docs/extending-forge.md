@@ -216,7 +216,7 @@ return new FilesystemKbBackend(forgeRoot, kbId);
 
 **Schema:** `orchestrator/studio/types.ts` (`FlowDefinition`)
 **Validator:** `orchestrator/studio/validate.ts` (run via `forge studio lint`)
-**Seed flows:** `studio/flows/forge-cycle/flow.yaml`, `studio/flows/knowledge-ingest/flow.yaml`
+**Seed flows:** `studio/flows/forge-develop/flow.yaml`, `studio/flows/forge-reflect/flow.yaml`
 
 A flow is a `flow.yaml` file under `studio/flows/<flow-id>/`:
 

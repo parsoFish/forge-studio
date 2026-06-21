@@ -65,7 +65,7 @@ export {
 } from './cycle-helpers.ts';
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
-import { runFlow, forgeCycleFlowPath, flowPathForId } from './flow-runner.ts';
+import { runFlow, flowPathForId } from './flow-runner.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
@@ -218,29 +218,27 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   try {
     if (!input.dryRun) {
       // ADR-028 M3-2: delegate the phase sequence to flow-runner.
-      // Route to the flow the initiative manifest names (`flow_id`); default to
-      // forge-cycle. A named-but-missing flow file falls back to forge-cycle with
-      // a logged warning so a bad id can't strand a cycle. The outer scaffolding
-      // (cycleId, logger, cycle.start/end, failure classification, snapshot,
-      // report) stays here in runCycle.
+      // Route to the flow the initiative manifest names (`flow_id`). S8/DEC-3
+      // retired the forge-cycle monolith — there is NO default flow and NO
+      // fallback (forge principles forbid coexistence/fallbacks). Every manifest
+      // must name an existing flow: forge-architect (decompose), forge-develop
+      // (build → review → merge), forge-reflect (retrospective). A
+      // missing or unknown flow_id is a terminal, loud error — never silently
+      // routed to a stand-in. The outer scaffolding (cycleId, logger,
+      // cycle.start/end, failure classification, snapshot, report) stays here.
       const flowId = readManifestFlowId(input.manifestPath);
-      let flowPath = forgeCycleFlowPath();
-      if (flowId && flowId !== 'forge-cycle') {
-        const candidate = flowPathForId(flowId);
-        if (existsSync(candidate)) {
-          flowPath = candidate;
-        } else {
-          logger.emit({
-            initiative_id: input.initiativeId,
-            phase: 'orchestrator',
-            skill: 'cycle',
-            event_type: 'log',
-            input_refs: [input.manifestPath],
-            output_refs: [],
-            message: 'cycle.flow-id-missing-fallback',
-            metadata: { flow_id: flowId, fallback: 'forge-cycle' },
-          });
-        }
+      if (!flowId) {
+        throw new Error(
+          `manifest ${input.manifestPath} has no flow_id — the forge-cycle default was retired in S8 (DEC-3); ` +
+            `every initiative manifest must name an existing flow (e.g. forge-architect / forge-develop / forge-reflect).`,
+        );
+      }
+      const flowPath = flowPathForId(flowId);
+      if (!existsSync(flowPath)) {
+        throw new Error(
+          `flow_id "${flowId}" names a flow that does not exist at ${flowPath} — no fallback (S8/DEC-3). ` +
+            `Fix the manifest's flow_id or add the flow under studio/flows/.`,
+        );
       }
       const flow = loadFlowDefinition(flowPath);
       const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
@@ -351,7 +349,7 @@ export async function snapshotCycleArtefacts(
   // artifactRoot-resolved demo dir (legacy `demo/<initiativeId>/`, or
   // `<artifactRoot>/history/<initiativeId>/demo` when the project gathers its
   // committed artifacts under a sub-root — e.g. betterado's `forge/`). It holds
-  // demo.json + derived DEMO.md/DEMO.html + any media. Mirror it into
+  // demo.json + derived DEMO.md + any media. Mirror it into
   // _logs/<cycleId>/artifacts/ so the bridge can serve it to the in-UI review
   // screen (`/api/artifact/<cycleId>/<file>`).
   // (Previously copied a stale `.forge/demos/` path into `_logs/<cycleId>/demo/`,

@@ -35,13 +35,9 @@ Once all per-WI Ralphs have run, take the **whole initiative branch** and prove 
    - This directory must be **tracked** (committed on the branch). The unifier is the only sub-phase that writes to a tracked path.
    - `demo.json` is the **single source of truth** — schema-validated by the `pr_self_contained` gate (`validateDemoModel`). Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 `checkpoints[]` entry (`label` + `caption`, plus `beforeNote`/`afterNote` describing before-vs-after **behaviour**, never "what is broken").
    - **MUST populate `acEvaluations[]`** — one entry per acceptance criterion (from each WI's `acceptance_criteria` array) with `verdict` (`met`/`partial`/`missed`) and concrete `evidence` (a test name + result, an API response, a measured value — never "see code"). Powers the foregrounded "Intent & Outcome" section at the top of the review demo. Never write "tests pass" without naming the specific test. Example: `{ "criterion": "GIVEN X WHEN Y THEN Z", "verdict": "met", "evidence": "test 'X WHEN Y THEN Z' → pass (node:test 42/42 green)" }`.
-   - Run `forge demo render <initiative-id>` to derive `DEMO.md` + `DEMO.html` from `demo.json`, then commit all three. **Never hand-write DEMO.md** — derived, so PR artifact and in-UI render never drift.
+   - Run `forge demo render <initiative-id>` to derive the **single** `DEMO.md` from `demo.json` (F4: `DEMO.html` is retired — the in-UI review page renders `demo.json` + `DEMO.md` natively), then commit **both** (`demo.json` + `DEMO.md`). **Never hand-write `DEMO.md`** — derived, so the PR artifact and the in-UI render never drift.
    - **Check for a `demo.skill` in `.forge/project.json`** before authoring `demo.json`. If present, `Read` that skill file — it specifies the project-specific evidence hierarchy (e.g. betterado's `ado-demo` skill: `terraform apply` → API GET → portal screenshot → `terraform destroy`). For new/changed resources, **attempt live-capability evidence first**; fall back to harness-only if credentials absent, documenting the fallback in `essence`.
-   - The project's `demo.shape` in `.forge/project.json` decides HOW you fill checkpoints:
-     - **browser** — fill checkpoints + invoke `forge demo capture <initiative-id>` for before/after images.
-     - **harness** — `kind: 'harness'` checkpoint with `metrics[]` (before/after + parity; vocabulary: `match | within | diverged | incomplete`). Author `testEvidence[]` table. No screenshots (no UI). For new-capability initiatives, also author `usage_example` (fenced HCL/CLI/API block) and `impact` (string[] bullets).
-     - **cli-diff** / **artifact** — before/after notes (no media required).
-     - **none** — single rationale checkpoint (caption + afterNote).
+   - The project's `demoProcess` steps in `.forge/project.json` (if present) are the executed demo — follow them: `capture` steps record evidence, `verify` steps assert it, `present` steps surface it in the PR.
 4. **Write the PR body** at `.forge/pr-description.md`:
    - Sections: `## Why` (non-empty), `## What`, `## How`.
    - **Do NOT add a `## Demo` section.** The orchestrator appends the canonical demo block at PR-open; a hand-authored `## Demo` heading will be stripped.
@@ -80,14 +76,13 @@ A UWI carries a `kind`:
 
 ## Outputs (per iteration)
 
-- `<worktree>/<demo-dir>/demo.json` (tracked; the artifactRoot-resolved demo dir named in PROMPT.md) — structured source; `DEMO.md` + `DEMO.html` derived via `forge demo render`.
+- `<worktree>/<demo-dir>/demo.json` (tracked; the artifactRoot-resolved demo dir named in PROMPT.md) — structured source; the single `DEMO.md` derived via `forge demo render` (F4: no `DEMO.html`).
 - `<worktree>/.forge/pr-description.md` — read by review phase for `gh pr create --body-file`.
 - One conventional-commits commit on the initiative branch (if changes were made).
 - `AGENT.md` updated with what was tried this iteration.
 
 Composed gates checked by the orchestrator after each iteration:
 - `initiative_gate` — project quality-gate against branch tip.
-- `demo_runs_clean` — `demo.command` exits 0; excused when `demo.shape: "none"`.
 - `pr_self_contained` — the demo dir's `demo.json` (the artifactRoot-resolved path named in PROMPT.md) exists + validates (ADR 021); `.forge/pr-description.md` has substantive `## Why` / `## What` / `## How` sections (NO `## Demo`).
 - `branches_in_sync` — `origin/<branch>` == local HEAD; `main` == merge-base.
 - `incomplete_delivery` — every WI's declared `creates[]` paths appear in the branch diff.
@@ -100,7 +95,7 @@ All gates must pass for a `packaging` UWI to exit clean (a `code-fix` UWI exits 
 
 You are inside a **Ralph loop** on the initiative branch AFTER all per-WI Ralphs have completed. Each call is **one iteration**. Loop state via three worktree files read at iteration start:
 
-- **`PROMPT.md`** — per-iteration brief (initiative ID, manifest path, demo shape, iteration counter) for the ONE UWI you are running now.
+- **`PROMPT.md`** — per-iteration brief (initiative ID, manifest path, iteration counter) for the ONE UWI you are running now.
 - **`AGENT.md`** — institutional memory. Read first, update last.
 - **`fix_plan.md`** — checklist of initiative-level ACs. Tick items as you prove each against branch tip.
 

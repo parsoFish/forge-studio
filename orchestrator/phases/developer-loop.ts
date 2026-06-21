@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -51,7 +51,7 @@ import {
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
-import { validateDemoModel } from '../../cli/demo-model.ts';
+import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -1168,8 +1168,7 @@ export async function runUnifier(
   parentEventId: string,
 ): Promise<{ succeeded: boolean; failureClass: string | null }> {
   // Load the project config (mandatory per CONTRACTS.md C1 + council 04 F8).
-  // The config tells the unifier which demo.shape to author and which
-  // quality_gate_cmd to run.
+  // The config provides quality_gate_cmd and demoProcess for the unifier.
   let projectConfig: ProjectConfig | null = null;
   try {
     projectConfig = loadProjectConfig(input.projectRepoPath);
@@ -1189,7 +1188,6 @@ export async function runUnifier(
     // failure event below when it tries to use the demo command.
   }
 
-  const demoShape = projectConfig?.demo.shape ?? 'none';
   const qualityGateCmd =
     projectConfig?.quality_gate_cmd ??
     input.qualityGateCmd ??
@@ -1237,7 +1235,6 @@ export async function runUnifier(
     output_refs: [],
     message: 'unifier.start',
     metadata: {
-      demo_shape: demoShape,
       iteration_cap: iterationCap,
       pending_uwis: pending.map((p) => p.work_item_id),
       // ADR 024 seam observability: the agent + tier the orchestrator spawned.
@@ -1249,13 +1246,7 @@ export async function runUnifier(
 
   // Run each pending UWI in dependency order (mirrors the dev-loop per-WI loop).
   const uwiDir = unifierItemsDir(input.worktreePath);
-  const uwiOutcomes: Array<{
-    id: string;
-    status: WorkItem['status'];
-    result: LoopResult | null;
-    failureClass: string | null;
-    runnerError: string | null;
-  }> = [];
+  const uwiOutcomes: UnifierItemOutcome[] = [];
   for (const uwi of pending) {
     const uwiPath = resolve(uwiDir, `${uwi.work_item_id}.md`);
     if (prerequisiteFailed(uwi, uwiOutcomes)) {
@@ -1271,28 +1262,53 @@ export async function runUnifier(
         message: 'unifier.uwi-skipped',
         metadata: { work_item_id: uwi.work_item_id, reason: 'prerequisite-failed' },
       });
-      uwiOutcomes.push({ id: uwi.work_item_id, status: 'failed', result: null, failureClass: 'dev-loop-unifier-gate-failed', runnerError: null });
+      uwiOutcomes.push({ id: uwi.work_item_id, status: 'failed', result: null, failureClass: 'dev-loop-unifier-gate-failed', runnerError: null, crashed: false });
       continue;
     }
-    const itemOutcome = await runUnifierItem({
-      uwi,
-      input,
-      logger,
-      startEventId: start.event_id,
-      demoShape,
-      qualityGateCmd,
-      demoCommand: projectConfig?.demo.command,
-      demoProcess: projectConfig?.demoProcess,
-      skills: projectConfig?.skills,
-      changelogPath: projectConfig?.releaseProcess?.changelogPath,
-      unifierSdkId,
-      devRoleSdkId,
-    });
-    writeWorkItemStatus(uwiPath, itemOutcome.status);
+    const runOnce = (): Promise<UnifierItemOutcome> =>
+      runUnifierItem({
+        uwi,
+        input,
+        logger,
+        startEventId: start.event_id,
+        qualityGateCmd,
+        demoProcess: projectConfig?.demoProcess,
+        skills: projectConfig?.skills,
+        changelogPath: projectConfig?.releaseProcess?.changelogPath,
+        unifierSdkId,
+        devRoleSdkId,
+      });
+    // #1 (F-44 parity for the unifier): retry a transient agent-process CRASH
+    // inline (a fresh runUnifierItem re-spawns the agent) with backoff, up to
+    // DEV_AGENT_CRASH_MAX_RETRIES — the SAME bound the per-WI dev-loop already
+    // uses. A gate FAILURE is NOT retried (deterministic + operator-deferred).
+    // Observed: the unifier SDK process exiting 1 at iteration 0 right after a
+    // multi-WI burst (gitpulse, 2026-06-21) — the dev-loop had this guard, the
+    // unifier did not.
+    let itemOutcome = await runOnce();
+    for (let attempt = 1; itemOutcome.crashed && attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [uwiPath],
+        output_refs: [],
+        message: 'unifier.crash-retry',
+        metadata: { work_item_id: uwi.work_item_id, attempt, max_retries: DEV_AGENT_CRASH_MAX_RETRIES, runner_error: itemOutcome.runnerError },
+      });
+      await sleep(DEV_AGENT_CRASH_BACKOFF_MS);
+      itemOutcome = await runOnce();
+    }
+    // #2: a still-crashed UWI persists as re-runnable `pending` (so a later
+    // resume-from-unifier re-drains it) rather than operator-deferred `failed`.
+    // A real gate failure persists as `failed` (deferred to the operator).
+    writeWorkItemStatus(uwiPath, itemOutcome.crashed ? 'pending' : itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
-    // Stop the batch on the first failure — a failed concern UWI must not let a
-    // later re-prep UWI re-package over a broken state.
-    if (itemOutcome.status === 'failed') break;
+    // Stop the batch on the first non-complete outcome — a failed/crashed concern
+    // UWI must not let a later re-prep UWI re-package over a broken state.
+    if (itemOutcome.status !== 'complete') break;
   }
 
   // Push once more at unifier close, then assert sync. The unifier may have
@@ -1348,7 +1364,6 @@ export async function runUnifier(
       status: succeeded ? 'complete' : (repResult?.status ?? 'crashed'),
       iterations: totalIterations,
       stop_reason: repResult?.stop_reason ?? (succeeded ? 'complete' : 'crashed'),
-      demo_shape: demoShape,
       runner_error: firstFailure?.runnerError ?? null,
       failure_class: failureClass,
       uwis_run: uwiOutcomes.map((o) => ({ id: o.id, status: o.status })),
@@ -1372,9 +1387,7 @@ type UnifierItemArgs = {
   input: CycleInput;
   logger: EventLogger;
   startEventId: string;
-  demoShape: import('../project-config.ts').DemoShape;
   qualityGateCmd: string[];
-  demoCommand: string[] | undefined;
   /** Project's typed demo steps (M2). Threaded into prepareUnifierWorkspace. */
   demoProcess?: Array<{ kind: string; text: string }>;
   /** Project's bound skill slugs (M2). Threaded into prepareUnifierWorkspace. */
@@ -1386,7 +1399,21 @@ type UnifierItemArgs = {
   /** ADR 029: resolved runtime sdk for a code-fix UWI (dev-role inside the unifier). */
   devRoleSdkId: string;
 };
-type UnifierItemOutcome = { id: string; status: WorkItem['status']; result: LoopResult | null; failureClass: string | null; runnerError: string | null };
+type UnifierItemOutcome = {
+  id: string;
+  status: WorkItem['status'];
+  result: LoopResult | null;
+  failureClass: string | null;
+  runnerError: string | null;
+  /**
+   * True when the UWI did not finish because the agent PROCESS crashed/threw
+   * (runnerError set), as opposed to running to completion and failing its
+   * composed gate. A crash is transient + incomplete, so the drain retries it
+   * inline and (if still crashing) persists the UWI as re-runnable `pending` —
+   * NOT operator-deferred `failed` (which is reserved for a real gate failure).
+   */
+  crashed: boolean;
+};
 
 async function runUnifierItem(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
   // Wipe per-UWI scratch (PROMPT.md / AGENT.md / fix_plan.md) so this UWI's
@@ -1451,21 +1478,28 @@ function unifierIterationHandler(
   };
 }
 
-function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runnerError: string | null): UnifierItemOutcome {
+export function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null, runnerError: string | null): UnifierItemOutcome {
   const status: WorkItem['status'] = loopResult?.status === 'complete' && runnerError === null ? 'complete' : 'failed';
+  // Distinguish a PROCESS crash (the agent threw/exited before producing a clean
+  // gate verdict — runnerError set, or the loop reports a crashed status) from a
+  // GATE failure (the agent ran to completion but its output failed the composed
+  // gate). The former is transient/incomplete (retry inline; resume re-drains);
+  // the latter is operator-deferred. A complete run is never a crash.
+  const crashed = status !== 'complete' && (runnerError !== null || loopResult === null);
   return {
     id: uwi.work_item_id,
     status,
     result: loopResult,
-    failureClass: status === 'complete' ? null : 'dev-loop-unifier-gate-failed',
+    failureClass: status === 'complete' ? null : crashed ? 'dev-loop-unifier-crashed' : 'dev-loop-unifier-gate-failed',
     runnerError,
+    crashed,
   };
 }
 
-/** The packaging role: unify, author demo/PR, prove the 5-gate composed unifier
+/** The packaging role: unify, author demo/PR, prove the 4-gate composed unifier
  *  gate. UWI-1, the terminal re-prep, and demo/doc tweaks. */
 async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome> {
-  const { uwi, input, logger, startEventId, demoShape, qualityGateCmd, demoCommand } = args;
+  const { uwi, input, logger, startEventId, qualityGateCmd } = args;
 
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
@@ -1476,7 +1510,6 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     manifestRelPath: input.manifestPath,
     worktreePath: input.worktreePath,
     iterationBudget: itemCap,
-    demoShape,
     qualityGateCmd: itemGateCmd,
     demoProcess: args.demoProcess,
     skills: args.skills,
@@ -1511,19 +1544,16 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     args.unifierSdkId,
   );
 
-  // Composed quality gate per plan 04 (5 gates after Wave B):
+  // Composed quality gate (4 gates after Wave B):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
-  //   2. demo_runs_clean (demo.command exits 0 — excused for shape "none")
-  //   3. pr_self_contained (demo.json valid + pr-description.md present)
-  //   4. branches_in_sync (assertLocalRemoteSynced doesn't throw)
-  //   5. incomplete_delivery (every WI's creates[] paths in diff)
+  //   2. pr_self_contained (demo.json valid + pr-description.md present)
+  //   3. branches_in_sync (assertLocalRemoteSynced doesn't throw)
+  //   4. incomplete_delivery (every WI's creates[] paths in diff)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
       worktreePath: input.worktreePath,
       initiativeId: input.initiativeId,
       qualityGateCmd: itemGateCmd,
-      demoShape,
-      demoCommand,
       logger,
       initiativeIdForEvent: input.initiativeId,
       parentEventId: startEventId,
@@ -1676,8 +1706,6 @@ type ComposedUnifierGateInput = {
   worktreePath: string;
   initiativeId: string;
   qualityGateCmd: string[];
-  demoShape: import('../project-config.ts').DemoShape;
-  demoCommand: string[] | undefined;
   logger: EventLogger;
   initiativeIdForEvent: string;
   parentEventId: string;
@@ -1694,18 +1722,17 @@ type ComposedUnifierGateInput = {
 };
 
 /**
- * Five-gate composed check the unifier must clear to exit clean:
+ * Four-gate composed check the unifier must clear to exit clean:
  *   1. initiative_gate — project quality_gate_cmd against branch tip.
- *   2. demo_runs_clean — demo.command exits 0 (excused for shape "none").
- *   3. pr_self_contained — demo.json valid + pr-description.md present.
- *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw.
- *   5. incomplete_delivery — every WI's declared `creates[]` paths are
+ *   2. pr_self_contained — demo.json valid + pr-description.md present.
+ *   3. branches_in_sync — assertLocalRemoteSynced doesn't throw.
+ *   4. incomplete_delivery — every WI's declared `creates[]` paths are
  *      present in `git diff --name-only main...HEAD`. Fails the cycle
  *      before a PR opens when a WI's declared outputs were silently
  *      never written (the INIT-2 release_folder WI-3 scenario).
  *      WIs with empty `creates` are exempt.
  *
- * Returns true ONLY when all five pass. Emits a classified event on each
+ * Returns true ONLY when all four pass. Emits a classified event on each
  * sub-gate failure so the operator sees exactly which gate blocked.
  */
 
@@ -1728,11 +1755,11 @@ export function prBodyHasGitTruthSections(body: string): boolean {
 }
 
 export async function composedUnifierGate(input: ComposedUnifierGateInput): Promise<boolean> {
-  const { worktreePath, qualityGateCmd, demoShape, demoCommand, logger, demoDir } = input;
+  const { worktreePath, qualityGateCmd, logger, demoDir } = input;
 
   // Local helper: emit one structured sub-check observation (always — pass OR fail).
   // This is ADDITIVE: existing failure events below are untouched.
-  type CheckId = 'initiative_gate' | 'demo_runs_clean' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
+  type CheckId = 'initiative_gate' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
   const emitSubCheck = (checkId: CheckId, pass: boolean, detail: string): void => {
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
@@ -1778,45 +1805,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('initiative_gate', true, `gate command exited 0 (${qualityGateCmd.join(' ')})`);
 
-  // 2. demo_runs_clean — excused for shape "none"
-  if (demoShape !== 'none' && demoCommand && demoCommand.length > 0) {
-    const demoGate = runShellGate(worktreePath, demoCommand);
-    if (!demoGate.passed) {
-      emitSubCheck(
-        'demo_runs_clean',
-        false,
-        demoGate.errored
-          ? `demo command errored: ${demoGate.stderr.slice(-400)}`
-          : `demo command failed (exit non-zero): ${demoGate.stderr.slice(-400)}`,
-      );
-      logger.emit({
-        initiative_id: input.initiativeIdForEvent,
-        parent_event_id: input.parentEventId,
-        phase: 'unifier',
-        skill: 'developer-unifier',
-        event_type: 'error',
-        input_refs: [worktreePath],
-        output_refs: [],
-        message: demoGate.errored ? 'unifier.gate.errored' : 'unifier.gate.demo-failed',
-        metadata: {
-          failure_class: demoGate.errored ? 'dev-loop-unifier-gate-errored' : 'dev-loop-unifier-demo-failed',
-          command: demoCommand,
-          ...(demoGate.errored ? { gate_errored: true } : {}),
-          gate_stderr_tail: demoGate.stderr.slice(-2000),
-        },
-      });
-      return false;
-    }
-    emitSubCheck('demo_runs_clean', true, `demo command exited 0 (${demoCommand.join(' ')})`);
-  } else {
-    emitSubCheck(
-      'demo_runs_clean',
-      true,
-      demoShape === 'none' ? 'demo shape none — excused' : 'demo command not configured — excused',
-    );
-  }
-
-  // 3. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
+  // 2. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
   //    is derived. The gate validates demo.json against the schema — the
   //    structural check that fixes free-form demo inconsistency.)
   const demoJsonPath = join(worktreePath, demoDir, 'demo.json');
@@ -1824,7 +1813,27 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   let demoErrors: string[] = ['demo.json missing'];
   if (existsSync(demoJsonPath)) {
     try {
-      demoErrors = validateDemoModel(JSON.parse(readFileSync(demoJsonPath, 'utf8')));
+      const parsed = JSON.parse(readFileSync(demoJsonPath, 'utf8'));
+      // Forgiving normalize: coerce a common shape mistake (e.g. testEvidence
+      // authored as an object map instead of an array) into the schema shape and
+      // PERSIST it, so a single authoring slip can't wedge the unifier loop. The
+      // coerced form is what the PR carries + validates.
+      const { model, changed } = coerceDemoModel(parsed);
+      if (changed) {
+        writeFileSync(demoJsonPath, `${JSON.stringify(model, null, 2)}\n`);
+        logger.emit({
+          initiative_id: input.initiativeIdForEvent,
+          parent_event_id: input.parentEventId,
+          phase: 'unifier',
+          skill: 'developer-unifier',
+          event_type: 'log',
+          input_refs: [demoJsonPath],
+          output_refs: [demoJsonPath],
+          message: 'unifier.demo-json-normalized',
+          metadata: { detail: 'coerced demo.json into the schema shape before validation' },
+        });
+      }
+      demoErrors = validateDemoModel(model);
     } catch (err) {
       demoErrors = [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`];
     }
@@ -1867,7 +1876,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
 
-  // 4. branches_in_sync
+  // 3. branches_in_sync
   try {
     assertLocalRemoteSynced(worktreePath);
   } catch (err) {
@@ -1891,7 +1900,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
 
-  // 5. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
+  // 4. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
   //    `creates[]` paths must appear in `git diff --name-only main...HEAD`.
   //    WIs with empty `creates` are exempt. This catches the INIT-2
   //    release_folder scenario: WI-3 was skipped (gate-too-loose misfire)

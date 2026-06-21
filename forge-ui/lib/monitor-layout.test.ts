@@ -270,6 +270,36 @@ test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps); pulse f
 });
 
 // ---------------------------------------------------------------------------
+// hexBounds — tight bounding box over topologyHexes (fix 1)
+// ---------------------------------------------------------------------------
+
+test('buildMonitorLayout: hexBounds wraps topologyHexes tightly', () => {
+  const layout = buildMonitorLayout(makeFlow(), makeRun());
+  const { hexBounds, topologyHexes } = layout;
+  expect(hexBounds).toBeDefined();
+
+  const xs = topologyHexes.map((h) => h.x);
+  const ys = topologyHexes.map((h) => h.y);
+  expect(hexBounds.minX).toBe(Math.min(...xs));
+  expect(hexBounds.maxX).toBe(Math.max(...xs));
+  expect(hexBounds.minY).toBe(Math.min(...ys));
+  expect(hexBounds.maxY).toBe(Math.max(...ys));
+});
+
+test('buildMonitorLayout: hexBounds is zeroed when there are no hexes', () => {
+  const emptyFlow = {
+    id: 'empty',
+    name: 'Empty',
+    goal: '',
+    nodes: [],
+    edges: [],
+    triggers: [],
+  } as unknown as Flow;
+  const layout = buildMonitorLayout(emptyFlow, null);
+  expect(layout.hexBounds).toEqual({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
+});
+
+// ---------------------------------------------------------------------------
 // null run + empty flow
 // ---------------------------------------------------------------------------
 
@@ -288,4 +318,55 @@ test('buildMonitorLayout: gated/failed node flags propagate to the phase hex', (
   const unifier = layout.topologyHexes.find((h) => h.nodeId === 'unifier');
   expect(review?.isGated).toBe(true);
   expect(unifier?.isFailed).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// S9: run-driven WI fan-out (the forge-develop dev node carries no fanOut flag)
+// ---------------------------------------------------------------------------
+
+test('buildMonitorLayout: the dev node fans out RUN-DRIVEN when it has no fanOut flag (S9 develop slice)', () => {
+  // The forge-develop `dev` node is the flow's entry node, so the lint rule forbids
+  // an authoring `fanOut` flag — but the dev-loop still fanned out at runtime. The
+  // monitor identifies the dev-loop node by its agent (developer-ralph) and expands
+  // it from run.workItems.
+  const developFlow: Flow = {
+    id: 'forge-develop', name: 'Forge Develop', goal: 'build',
+    nodes: [
+      { id: 'dev', agent: 'developer-ralph' }, // NO fanOut flag
+      { id: 'unifier', agent: 'developer-unifier' },
+      { id: 'review', gate: 'verdict' },
+    ],
+    edges: [
+      { from: 'dev', to: 'unifier', artifact: 'wi-branches' },
+      { from: 'unifier', to: 'review', artifact: 'pr' },
+    ],
+    triggers: [],
+  };
+  const run = makeRun({
+    flowId: 'forge-develop',
+    phases: { dev: 'complete', unifier: 'complete', review: 'complete' },
+    workItems: [
+      { id: 'WI-1', status: 'complete' }, { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'complete' }, { id: 'WI-4', status: 'complete' },
+    ],
+  });
+  const layout = buildMonitorLayout(developFlow, run);
+  expect(layout.topologyHexes.filter((h) => h.hexKind === 'wi').map((h) => h.wiId)).toEqual(['WI-1', 'WI-2', 'WI-3', 'WI-4']);
+  expect(layout.topologyHexes.filter((h) => h.hexKind === 'phase').map((h) => h.nodeId)).toEqual(['unifier', 'review']);
+  expect(layout.fanOutAggregate?.nodeId).toBe('dev');
+});
+
+test('buildMonitorLayout: a flow with no dev-loop node never fans out, even with run.workItems (S9 architect slice)', () => {
+  // /flows/forge-architect renders the SAME threaded run (via lineage), but its nodes
+  // are architect+pm — no dev-loop node, so no WI fan-out here.
+  const architectFlow: Flow = {
+    id: 'forge-architect', name: 'Forge Architect', goal: 'decompose',
+    nodes: [ { id: 'architect', agent: 'architect' }, { id: 'pm', agent: 'project-manager' } ],
+    edges: [ { from: 'architect', to: 'pm', artifact: 'plan' } ],
+    triggers: [],
+  };
+  const run = makeRun({ phases: { architect: 'complete', pm: 'complete' }, workItems: [ { id: 'WI-1', status: 'complete' } ] });
+  const layout = buildMonitorLayout(architectFlow, run);
+  expect(layout.topologyHexes.filter((h) => h.hexKind === 'wi')).toHaveLength(0);
+  expect(layout.topologyHexes.map((h) => h.nodeId)).toEqual(['architect', 'pm']);
 });

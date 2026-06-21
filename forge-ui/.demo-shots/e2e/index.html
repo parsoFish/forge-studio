@@ -4,7 +4,7 @@ h1{letter-spacing:.4px}video{width:100%;border:1px solid #30363d;border-radius:8
 figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{line-height:1.8}</style></head>
 <body><h1>forge — Forge Studio operator journey</h1>
-<p>Author a flow · run it · swap its engine. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded 2026-06-19T03:08:15.946Z.</p>
+<p>Author a flow · run it · swap its engine. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded 2026-06-21T03:11:09.943Z.</p>
 <h2>video</h2><video src="video/journey.webm" controls autoplay muted loop></video>
 <h2>frames</h2><figure><img src="frames/01-a1-0-title.png" loading="lazy"/><figcaption><code>01-a1-0-title.png</code> — Title — "Forge Studio: author a flow, run it, swap its engine"</figcaption></figure>
 <figure><img src="frames/02-a1-1-library.png" loading="lazy"/><figcaption><code>02-a1-1-library.png</code> — A1 — Studio library: flows/agents/projects/KBs as data + operator pulse</figcaption></figure>
@@ -17,8 +17,8 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <figure><img src="frames/09-j4-0-onboard-form.png" loading="lazy"/><figcaption><code>09-j4-0-onboard-form.png</code> — J4 — onboard a project: required fields only (quality gate, north star)</figcaption></figure>
 <figure><img src="frames/10-j4-1-project-readiness.png" loading="lazy"/><figcaption><code>10-j4-1-project-readiness.png</code> — J4 — onboarded project: contract readiness reflects the hard fields</figcaption></figure>
 <figure><img src="frames/11-j5-0-authored-run.png" loading="lazy"/><figcaption><code>11-j5-0-authored-run.png</code> — J5 — the authored flow, given work, runs plan → dev → review to the verdict gate</figcaption></figure>
-<figure><img src="frames/12-a2-0-scratch-monitor.png" loading="lazy"/><figcaption><code>12-a2-0-scratch-monitor.png</code> — A2 — authored forge-cycle-scratch: lint green, parity with seed, runnable by the engine</figcaption></figure>
-<figure><img src="frames/13-a2-1-scratch-build.png" loading="lazy"/><figcaption><code>13-a2-1-scratch-build.png</code> — A2 — BUILD canvas: the authored cycle (6 nodes) on the ReactFlow canvas, palette + goal field</figcaption></figure>
+<figure><img src="frames/12-a2-0-scratch-monitor.png" loading="lazy"/><figcaption><code>12-a2-0-scratch-monitor.png</code> — A2 — authored forge-develop-scratch: lint green, parity with seed, runnable by the engine</figcaption></figure>
+<figure><img src="frames/13-a2-1-scratch-build.png" loading="lazy"/><figcaption><code>13-a2-1-scratch-build.png</code> — A2 — BUILD canvas: the authored cycle (3 nodes) on the ReactFlow canvas, palette + goal field</figcaption></figure>
 <figure><img src="frames/14-a3-0-agent-builder.png" loading="lazy"/><figcaption><code>14-a3-0-agent-builder.png</code> — A3 — agent builder: catalog, drop zones, runtime, readiness panel</figcaption></figure>
 <figure><img src="frames/15-a3-1-agent-dirty.png" loading="lazy"/><figcaption><code>15-a3-1-agent-dirty.png</code> — A3 — data-dirty flips on edit (discarded, no save — seed SKILL.md immutable)</figcaption></figure>
 <figure><img src="frames/16-a4-0-project-builder.png" loading="lazy"/><figcaption><code>16-a4-0-project-builder.png</code> — A4 — project builder: north star, demo timeline, skills, contract readiness</figcaption></figure>
@@ -49,23 +49,28 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{li
 <figure><img src="frames/41-r3-4b-unifier-green.png" loading="lazy"/><figcaption><code>41-r3-4b-unifier-green.png</code> — R3 — unifier (own node) greens after authoring the demo</figcaption></figure>
 <figure><img src="frames/42-r3-5-cost-rollup.png" loading="lazy"/><figcaption><code>42-r3-5-cost-rollup.png</code> — R3 — cost rollup across the spine (Studio monitor)</figcaption></figure>
 <figure><img src="frames/43-r4-0-review-partial.png" loading="lazy"/><figcaption><code>43-r4-0-review-partial.png</code> — R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)</figcaption></figure>
-<figure><img src="frames/44-r4-1-send-back.png" loading="lazy"/><figcaption><code>44-r4-1-send-back.png</code> — R4 — operator sends back with a new G/W/T criterion (--write is byte-identical on every run)</figcaption></figure>
-<figure><img src="frames/45-r4-2-rerun.png" loading="lazy"/><figcaption><code>45-r4-2-rerun.png</code> — R4 (fast-forward) — dev-loop reran on the new criterion; back to "Review →"</figcaption></figure>
-<figure><img src="frames/46-r4-3-rereview-met.png" loading="lazy"/><figcaption><code>46-r4-3-rereview-met.png</code> — R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)</figcaption></figure>
-<figure><img src="frames/47-r4-4-approve.png" loading="lazy"/><figcaption><code>47-r4-4-approve.png</code> — R4 — operator approves (human decision #2 complete)</figcaption></figure>
-<figure><img src="frames/48-r4-4b-reflect-link.png" loading="lazy"/><figcaption><code>48-r4-4b-reflect-link.png</code> — R4 — merged; "Reflect on this cycle →" surfaces the final human moment</figcaption></figure>
-<figure><img src="frames/49-r4-4c-spine-complete.png" loading="lazy"/><figcaption><code>49-r4-4c-spine-complete.png</code> — R4 — completed spine: every phase green with its cost pill</figcaption></figure>
-<figure><img src="frames/50-r5-0-reflect-page.png" loading="lazy"/><figcaption><code>50-r5-0-reflect-page.png</code> — R5 — reflection screen: WI-sizing question + freeform observation</figcaption></figure>
-<figure><img src="frames/51-r5-0b-reflected.png" loading="lazy"/><figcaption><code>51-r5-0b-reflected.png</code> — R5 — feedback captured; reflector folds it into the brain</figcaption></figure>
-<figure><img src="frames/52-s1-0-monitor.png" loading="lazy"/><figcaption><code>52-s1-0-monitor.png</code> — S1 — flow monitor: run rail + topology (≥5 phase hexes + WI hexes)</figcaption></figure>
-<figure><img src="frames/53-s1-0b-monitor-drawer.png" loading="lazy"/><figcaption><code>53-s1-0b-monitor-drawer.png</code> — S1 — phase drawer open: gate sub-checks + phase log visible</figcaption></figure>
-<figure><img src="frames/54-s1-1-start-run.png" loading="lazy"/><figcaption><code>54-s1-1-start-run.png</code> — S1 — engine: Start Run CTA enabled on a flow with no runs</figcaption></figure>
-<figure><img src="frames/55-s1-2-gate-control.png" loading="lazy"/><figcaption><code>55-s1-2-gate-control.png</code> — S1 — engine: gated run parked, cost metered against the flow ceiling</figcaption></figure>
-<figure><img src="frames/56-s2-0-sdk-picker.png" loading="lazy"/><figcaption><code>56-s2-0-sdk-picker.png</code> — S2 — adapter seam: claude selectable; codex/gemini disabled (registry-driven)</figcaption></figure>
-<figure><img src="frames/57-s2-1-range-chips.png" loading="lazy"/><figcaption><code>57-s2-1-range-chips.png</code> — S2 — range mode: 2 Claude tier chip(s) selected; routes to the cheapest capable tier first</figcaption></figure>
-<figure><img src="frames/58-s2-2-yaml-range.png" loading="lazy"/><figcaption><code>58-s2-2-yaml-range.png</code> — S2 — YAML preview shows strategy: range (authored in UI; no Save — seed SKILL.md immutable)</figcaption></figure>
-<figure><img src="frames/59-s3-0-kb-graph.png" loading="lazy"/><figcaption><code>59-s3-0-kb-graph.png</code> — S3 — /knowledge?id=cycles: force-graph rendered (104 nodes, real cycles brain)</figcaption></figure>
-<figure><img src="frames/60-s3-0b-kb-node-article.png" loading="lazy"/><figcaption><code>60-s3-0b-kb-node-article.png</code> — S3 — theme node clicked: NODE ARTICLE panel visible</figcaption></figure>
-<figure><img src="frames/61-s3-1-guidance-typed.png" loading="lazy"/><figcaption><code>61-s3-1-guidance-typed.png</code> — S3 — guidance text typed into the HUMAN GUIDANCE panel</figcaption></figure>
-<figure><img src="frames/62-s3-1b-guidance-pinned.png" loading="lazy"/><figcaption><code>62-s3-1b-guidance-pinned.png</code> — S3 — guidance pinned: data-guidance-pinned="true", guidance node in graph</figcaption></figure>
-<figure><img src="frames/63-end-card.png" loading="lazy"/><figcaption><code>63-end-card.png</code> — End card — "Author a flow. Run it. Swap its engine."</figcaption></figure></body></html>
+<figure><img src="frames/44-r4-0b-slider.png" loading="lazy"/><figcaption><code>44-r4-0b-slider.png</code> — R4 — before/after image-comparison slider for the TOC region</figcaption></figure>
+<figure><img src="frames/45-r4-1-comment.png" loading="lazy"/><figcaption><code>45-r4-1-comment.png</code> — R4 — a blocking comment anchored to AC-2 (the send-back, on the page)</figcaption></figure>
+<figure><img src="frames/46-r4-1b-send-back.png" loading="lazy"/><figcaption><code>46-r4-1b-send-back.png</code> — R4 — the comment persists; the derived verdict is "send back"</figcaption></figure>
+<figure><img src="frames/47-r4-2-rerun.png" loading="lazy"/><figcaption><code>47-r4-2-rerun.png</code> — R4 (fast-forward) — dev-loop reran on the new criterion; back to "Review →"</figcaption></figure>
+<figure><img src="frames/48-r4-3-rereview-met.png" loading="lazy"/><figcaption><code>48-r4-3-rereview-met.png</code> — R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)</figcaption></figure>
+<figure><img src="frames/49-r4-4-approve.png" loading="lazy"/><figcaption><code>49-r4-4-approve.png</code> — R4 — operator approves (human decision #2 complete)</figcaption></figure>
+<figure><img src="frames/50-r4-4b-reflect-link.png" loading="lazy"/><figcaption><code>50-r4-4b-reflect-link.png</code> — R4 — merged; "Reflect on this cycle →" surfaces the final human moment</figcaption></figure>
+<figure><img src="frames/51-r4-4c-spine-complete.png" loading="lazy"/><figcaption><code>51-r4-4c-spine-complete.png</code> — R4 — completed spine: every phase green with its cost pill</figcaption></figure>
+<figure><img src="frames/52-r5-0-reflect-page.png" loading="lazy"/><figcaption><code>52-r5-0-reflect-page.png</code> — R5 — reflection screen: WI-sizing + repeated-actions/roadblocks + general-notes (the S8 deeper retro)</figcaption></figure>
+<figure><img src="frames/53-r5-0b-reflected.png" loading="lazy"/><figcaption><code>53-r5-0b-reflected.png</code> — R5 — feedback captured; reflector folds it into the brain</figcaption></figure>
+<figure><img src="frames/54-r6-0-roadmap-tab.png" loading="lazy"/><figcaption><code>54-r6-0-roadmap-tab.png</code> — R6 — per-project Roadmap tab: initiative spine + work items</figcaption></figure>
+<figure><img src="frames/55-r6-1-start-development.png" loading="lazy"/><figcaption><code>55-r6-1-start-development.png</code> — R6 — the "start development" trigger on a pending initiative</figcaption></figure>
+<figure><img src="frames/56-r6-1b-development-started.png" loading="lazy"/><figcaption><code>56-r6-1b-development-started.png</code> — R6 — development started: the unifier will open a PR for review</figcaption></figure>
+<figure><img src="frames/57-s1-0-monitor.png" loading="lazy"/><figcaption><code>57-s1-0-monitor.png</code> — S1 — flow monitor: run rail + topology (≥5 phase hexes + WI hexes)</figcaption></figure>
+<figure><img src="frames/58-s1-0b-monitor-drawer.png" loading="lazy"/><figcaption><code>58-s1-0b-monitor-drawer.png</code> — S1 — phase drawer open: gate sub-checks + phase log visible</figcaption></figure>
+<figure><img src="frames/59-s1-1-start-run.png" loading="lazy"/><figcaption><code>59-s1-1-start-run.png</code> — S1 — engine: Start Run CTA enabled on a flow with no runs</figcaption></figure>
+<figure><img src="frames/60-s1-2-gate-control.png" loading="lazy"/><figcaption><code>60-s1-2-gate-control.png</code> — S1 — engine: gated run parked, cost metered against the flow ceiling</figcaption></figure>
+<figure><img src="frames/61-s2-0-sdk-picker.png" loading="lazy"/><figcaption><code>61-s2-0-sdk-picker.png</code> — S2 — adapter seam: claude selectable; codex/gemini disabled (registry-driven)</figcaption></figure>
+<figure><img src="frames/62-s2-1-range-chips.png" loading="lazy"/><figcaption><code>62-s2-1-range-chips.png</code> — S2 — range mode: 2 Claude tier chip(s) selected; routes to the cheapest capable tier first</figcaption></figure>
+<figure><img src="frames/63-s2-2-yaml-range.png" loading="lazy"/><figcaption><code>63-s2-2-yaml-range.png</code> — S2 — YAML preview shows strategy: range (authored in UI; no Save — seed SKILL.md immutable)</figcaption></figure>
+<figure><img src="frames/64-s3-0-kb-graph.png" loading="lazy"/><figcaption><code>64-s3-0-kb-graph.png</code> — S3 — /knowledge?id=cycles: force-graph rendered (116 nodes, real cycles brain)</figcaption></figure>
+<figure><img src="frames/65-s3-0b-kb-node-article.png" loading="lazy"/><figcaption><code>65-s3-0b-kb-node-article.png</code> — S3 — theme node clicked: NODE ARTICLE panel visible</figcaption></figure>
+<figure><img src="frames/66-s3-1-guidance-typed.png" loading="lazy"/><figcaption><code>66-s3-1-guidance-typed.png</code> — S3 — guidance text typed into the HUMAN GUIDANCE panel</figcaption></figure>
+<figure><img src="frames/67-s3-1b-guidance-pinned.png" loading="lazy"/><figcaption><code>67-s3-1b-guidance-pinned.png</code> — S3 — guidance pinned: data-guidance-pinned="true", guidance node in graph</figcaption></figure>
+<figure><img src="frames/68-end-card.png" loading="lazy"/><figcaption><code>68-end-card.png</code> — End card — "Author a flow. Run it. Swap its engine."</figcaption></figure></body></html>

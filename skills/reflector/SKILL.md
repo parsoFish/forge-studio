@@ -1,6 +1,6 @@
 ---
 name: reflector
-description: Run a structured retrospective at the end of a merged cycle (agentic self-reflection + agent-prompted user questions + pure user feedback) and write the findings into the brain.
+description: Run a deep structured retrospective at the end of a merged initiative — repeated actions, roadblocks hit, and operator notes (agentic self-reflection + agent-prompted user questions + pure user feedback) — and write the findings into the central forge-owned brain.
 phase: reflector
 surface: both
 purpose: Run the end-of-cycle retrospective and write durable findings into the brain.
@@ -24,7 +24,7 @@ budgets: {}
 
 ## Single responsibility
 
-Close the learning loop. After an initiative is merged, run the four-stage retro (per [`docs/phases/reflection.md`](../../docs/phases/reflection.md)) and write findings into the brain by **direct file writes** — theme markdown files under `projects/<project>/brain/themes/` plus a cycle archive under `brain/cycles/_raw/<cycle-id>.md`.
+Close the learning loop. After an initiative is merged, run the four-stage retro (per [`docs/phases/reflection.md`](../../docs/phases/reflection.md)) and write findings into the brain by **direct file writes** — theme markdown files under `brain/projects/<project>/themes/` plus a cycle archive under `brain/cycles/_raw/<cycle-id>.md`.
 
 ## Operator handoff (the reflection human moment)
 
@@ -36,7 +36,7 @@ The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders th
 
 ## Required first action
 
-Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `projects/<project>/brain/...` paths — at minimum `projects/<project>/brain/profile.md` and any prior `projects/<project>/brain/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
+Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `brain/projects/<project>/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
 
 ## Inputs
 
@@ -48,7 +48,7 @@ Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`G
 ## Outputs
 
 - `_logs/<cycle-id>/retro.md` — three sections: `## Self-reflection`, `## User questions`, `## User feedback`.
-- Theme pages in `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category` (`pattern` | `antipattern` | `decision` | `operation` | `reference`), `created_at`, `updated_at`. Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`.
+- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category` (`pattern` | `antipattern` | `decision` | `operation` | `reference`), `created_at`, `updated_at`. Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`.
 - `brain/cycles/_raw/<cycle-id>.md` (cycle log archived). Required frontmatter (write these placeholder values exactly — the orchestrator post-processes to compute `retention` and populate `cited_by`; do NOT compute these yourself):
   ```yaml
   ---
@@ -85,25 +85,38 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 1 — Agentic self-reflection (unattended)
 
+> **Scope: the WHOLE initiative, not just the closing cycle (DEC-2).** The three flows
+> (forge-architect → forge-develop → forge-reflect) thread ONE `cycle_id`, so
+> `events.jsonl` holds the architect/PM decompose, the dev-loop build, the unifier, and
+> the review for the entire initiative. Reflect across all of it.
+
 1. **Brain query first.**
 2. Read the full event log. Compute: iterations per WI/feature/initiative; cost by phase/skill/model; wedge events, recovery events, brain-gap counts, send-back rounds.
-3. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
+3. **Repeated actions** — find actions the agents took **more than once** across the
+   initiative (re-running the same gate, re-editing the same file, re-opening a PR,
+   re-deriving the same fact, retrying the same command). A repeated action is a signal of
+   a missing tool, a stale convention, or an unclear spec — name each one with its count.
+4. **Roadblocks / wedges** — find where the cycle stalled, wedged (`wedge` events), burnt
+   tokens with no tool progress, hit a rate limit, or needed a recovery/resume. For each,
+   capture what unblocked it (or that it stayed blocked).
+5. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
    - **Delivery truth = the `dev-loop.delivered` event (git diff-stat) + the merged tree, NOT per-WI status counts.** Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
-4. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving.
+6. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving. Lead with the **repeated actions** and **roadblocks** found in 3-4 (or `_(none observed)_` for either).
 
 ### Stage 2 — Agent-prompted user questions (file-based handoff)
 
 **Do NOT call `AskUserQuestion`.** Write questions to `user-questions.md` only; the orchestrator derives `user-questions.json` post-exit.
 
 5. From Stage 1, identify items you cannot resolve from established principles + brain knowledge. These become user questions.
-6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md` (`## N. <header>` per question).
+6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md` (`## N. <header>` per question). Each question is a `## N. <header>` heading, a one-line body, then (optionally) a markdown bullet list of choices — the orchestrator renders a bullet list as radio options and a question with no bullets as a freeform textarea.
 
-   **Guaranteed seed questions** — always include these three unless literally zero deliverables:
-   1. "Was the work-item decomposition the right size?" (too-few, right-sized, or too-many?)
-   2. "Did the implementation match the design intent?" (exact match, minor, or significant divergence?)
-   3. "Did the cycle stay aligned with the initiative's original goals?" (yes, partial drift, or scope creep?)
+   **Guaranteed seed questions** — always include these four unless literally zero deliverables:
+   1. "Was the work-item decomposition the right size?" (bullets: too-few, right-sized, too-many)
+   2. "Did the implementation match the design intent and stay on the initiative's goals?" (bullets: exact match, minor divergence, scope drift)
+   3. **Repeated actions / roadblocks** — surface the specific repeated actions + roadblocks you found in Stage 1 and ask which is worth a forge fix or a new tool (bullets drawn from the actual findings, e.g. the most-repeated action, the worst wedge, "none — leave as-is").
+   4. **General notes** — a freeform question (NO bullet list) inviting any other operator notes on this initiative.
 
-   Add project-grounded follow-ups beyond these (cap at 4 total).
+   Replace a seed with a sharper project-grounded follow-up only when Stage 1 gives a more pointed version of the same question; keep #4 freeform. Cap at 4 total.
 
 7. Capture user answers (from `user-feedback.md` in stage 3) as Section 2 of `retro.md`.
 
@@ -115,7 +128,7 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 ### Stage 4 — Brain writes (unattended)
 
 10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**:
-    - Lesson about **this project** (code, conventions, domain, a bug) → `projects/<project>/brain/themes/<YYYY-MM-DD>-<slug>.md`.
+    - Lesson about **this project** (code, conventions, domain, a bug) → `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`.
     - Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → `brain/cycles/themes/<YYYY-MM-DD>-<slug>.md`. Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge lesson, NOT Brain 3.
     - Required frontmatter + `## Sources` listing ≥1 path resolving to the cycle log or archive.
 11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full provenance frontmatter.

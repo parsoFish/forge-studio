@@ -91,8 +91,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         const found = flows.find((f) => f.id === id) ?? null;
         setFlow(found);
         setAllFlows(flows);
-        setFlowsWithRuns(new Set(everyRun.map((r) => r.flowId)));
-        const allRuns = everyRun.filter((r) => r.flowId === id);
+        // A threaded spine run surfaces under every flow in its lineage
+        // (architect→develop→reflect), so each flow's RUNS rail + monitor shows it.
+        setFlowsWithRuns(new Set(everyRun.flatMap((r) => (r.flowLineage?.length ? r.flowLineage : [r.flowId]))));
+        const allRuns = everyRun.filter((r) => r.flowId === id || (r.flowLineage ?? []).includes(id));
         setRuns(allRuns);
 
         // If preserving a run selection pick by id, else pick the default
@@ -364,9 +366,14 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-              {/* M1: filter to flows that have runs (current flow always included). */}
+              {/* The monitor flow selector lists EVERY flow that actually exists
+                  (same source as the BUILD tab), annotating which have runs — not
+                  just flows-with-runs, which left the selector stale/absent. The
+                  current flow is always present (it's in allFlows). */}
               {(() => {
-                const candidates = allFlows.filter((f) => flowsWithRuns.has(f.id) || f.id === id);
+                const candidates = allFlows.some((f) => f.id === id)
+                  ? allFlows
+                  : [...allFlows, ...(flow ? [flow] : [])];
                 if (candidates.length <= 1) {
                   return (
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
@@ -561,7 +568,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Summary strip */}
               <MonitorSummary run={activeRun} flow={flow ?? EMPTY_FLOW} />
 
-              {/* Topology canvas */}
+              {/* Topology canvas — each flow's monitor renders its OWN nodes
+                  (Model B). A threaded spine run surfaces under all three flows via
+                  its derived flowLineage, so /flows/forge-architect shows architect+pm,
+                  /flows/forge-develop shows dev[+WI fan-out]+unifier+review, etc. */}
               {flow ? (
                 <FlowTopology
                   flow={flow}

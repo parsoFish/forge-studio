@@ -182,6 +182,40 @@ export async function fetchWorkItem(cycleId: string, wiId: string): Promise<Work
   );
 }
 
+// ---- Per-project roadmap (S6) -----------------------------------------------
+
+export type RoadmapWorkItem = {
+  id: string;
+  title: string;
+  dependsOn: string[];
+};
+
+export type RoadmapInitiative = {
+  initiativeId: string;
+  title: string;
+  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  dependsOnInitiatives: string[];
+  workItems?: RoadmapWorkItem[];
+};
+
+export type ProjectRoadmap = {
+  projectId: string;
+  initiatives: RoadmapInitiative[];
+};
+
+/**
+ * Fetch the per-project roadmap (S6 DEC-3): all initiatives for this project
+ * across all queue states, each with nested WI sub-graph when decomposed.
+ * Returns null when the bridge is offline or the project is unknown.
+ */
+export async function fetchRoadmap(projectId: string): Promise<ProjectRoadmap | null> {
+  const body = await bridgeGet<{ roadmap: ProjectRoadmap } | null>(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/roadmap`,
+    null,
+  );
+  return body?.roadmap ?? null;
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;
@@ -246,6 +280,32 @@ export type VerdictSubmission =
 
 export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/verdict', input);
+}
+
+// ---- Start development (S7 / DEC-3) --------------------------------------
+
+export type StartDevelopmentResult = {
+  ok: boolean;
+  error?: string;
+  status?: 'enqueued' | 'not-found' | 'already-developing';
+  cycleId?: string;
+  flowId?: string;
+};
+
+/**
+ * Trigger the forge-develop flow for a decomposed initiative (the roadmap
+ * "start development" button). Repoints the manifest at forge-develop +
+ * threads its cycle_id, then the scheduler claims it.
+ */
+export async function startDevelopment(initiativeId: string): Promise<StartDevelopmentResult> {
+  const r = await bridgePost('/api/develop/start', { initiativeId });
+  return {
+    ok: r.ok,
+    error: r.error,
+    status: r.data?.status as StartDevelopmentResult['status'],
+    cycleId: r.data?.cycleId as string | undefined,
+    flowId: r.data?.flowId as string | undefined,
+  };
 }
 
 // ---- Structured demo (ADR 021) ------------------------------------------

@@ -4,15 +4,16 @@
  *   node scripts/e2e-journey.mjs   (npm run ui:journey)
  *
  * STORY: "Forge Studio — author a flow, run it, swap its engine."
- *   Post-M8 the platform is the hero, not one linear cycle. The forge cycle is
- *   just ONE flow definition (studio/flows/forge-cycle/flow.yaml) interpreted by
- *   the node-executor registry (ADR-028). The journey proves the three things the
+ *   Post-M8 the platform is the hero, not one linear cycle. The forge cycle is now
+ *   the 3-flow set (forge-architect → forge-develop → forge-reflect; the forge-cycle
+ *   monolith was retired in S8/DEC-3) — flow definitions interpreted by the
+ *   node-executor registry (ADR-028). The journey proves the three things the
  *   platform now does, in order:
  *
  *   ACT 1 — AUTHOR   everything in Studio is data you can edit
  *     · library (/) — flows / agents / projects / KBs as cards + operator pulse
- *     · BUILD THE FORGE CYCLE FROM SCRATCH — author forge-cycle-scratch as a flow
- *       definition (6 agents, 5 artifact edges, 2 gates), validate it with
+ *     · BUILD THE DEVELOP FLOW FROM SCRATCH — author forge-develop-scratch as a flow
+ *       definition (3 nodes, 2 artifact edges, 1 gate), validate it with
  *       `forge studio lint`, prove structural parity with the production seed, and
  *       render it live in the flow builder. The hardcoded cycle is subsumed by data.
  *     · agent builder (/agents/project-manager) — composition + runtime + budgets
@@ -22,7 +23,7 @@
  *   ACT 2 — RUN   the cycle as the proof case, grounded on a REAL mdtoc feature
  *     · idea (/architect/new) → interview (P1 stall / P2 free-text / P3 activity / P4 cost)
  *     · PLAN gate (/artifact ...type=plan&mode=gate) — send-back → revise → approve
- *     · autonomous build on /flows/forge-cycle — PM decomposes → WIs fan off dev →
+ *     · autonomous build on /flows/forge-develop — PM decomposes → WIs fan off dev →
  *       TDD red → grind → gate.pass (dependency-ordered) → unifier on its OWN hex
  *       authors the mdtoc demo (captured CLI read-back evidence)
  *     · verdict gate — per-AC evaluated demo (AC-2 PARTIAL) → operator authors a new
@@ -49,7 +50,7 @@
  *
  * Output: forge-ui/.demo-shots/e2e/{video/journey.webm, frames/*.png, index.html}.
  * Cleans up all seeded state (architect session, cycle logs, queue manifests,
- * the forge-cycle-scratch flow, any _guidance/*.md) in the finally block.
+ * the forge-develop-scratch flow, any _guidance/*.md) in the finally block.
  */
 import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
@@ -120,25 +121,24 @@ const TOC_SENTINEL = 'sentinel-7f3a9c';
 // data (ADR-028) — `forge studio lint` validates it and it is structurally
 // identical to the production seed. Written before the bridge boots so the UI can
 // load it; removed in the finally block.
-const SCRATCH_FLOW = 'forge-cycle-scratch';
+// S8/DEC-3: the forge-cycle monolith was retired; the AUTHOR proof re-anchors on
+// forge-develop — the build flow of the 3-flow set — rebuilt from scratch as data
+// and proven structurally identical to the shipped seed.
+const SCRATCH_FLOW = 'forge-develop-scratch';
 const SCRATCH_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', SCRATCH_FLOW);
-const SEED_FLOW_PATH = join(FORGE_ROOT, 'studio', 'flows', 'forge-cycle', 'flow.yaml');
-/** The explicit, from-scratch authoring spec (NOT a copy of the seed file). */
+const SEED_FLOW_PATH = join(FORGE_ROOT, 'studio', 'flows', 'forge-develop', 'flow.yaml');
+/** The explicit, from-scratch authoring spec (NOT a copy of the seed file).
+ *  Mirrors forge-develop: dev (entry, no fanOut) → unifier (resumable) → review
+ *  (verdict gate). 3 nodes, 2 edges, 1 gate. */
 const SCRATCH_SPEC = {
   nodes: [
-    { id: 'architect', agent: 'architect', gate: 'plan' },
-    { id: 'pm', agent: 'project-manager' },
-    { id: 'dev', agent: 'developer-ralph', fanOut: 'work-items' },
+    { id: 'dev', agent: 'developer-ralph' },
     { id: 'unifier', agent: 'developer-unifier', resumable: true },
     { id: 'review', gate: 'verdict' },
-    { id: 'reflect', agent: 'reflector' },
   ],
   edges: [
-    { from: 'architect', to: 'pm', artifact: 'plan' },
-    { from: 'pm', to: 'dev', artifact: 'work-items' },
     { from: 'dev', to: 'unifier', artifact: 'wi-branches' },
     { from: 'unifier', to: 'review', artifact: 'pr' },
-    { from: 'review', to: 'reflect', artifact: 'verdict' },
   ],
 };
 function inlineYaml(obj) {
@@ -150,9 +150,9 @@ function writeScratchFlow() {
   mkdirSync(SCRATCH_FLOW_DIR, { recursive: true });
   const lines = [
     `id: ${SCRATCH_FLOW}`,
-    'name: Forge Cycle (authored from scratch)',
+    'name: Forge Develop (authored from scratch)',
     'version: 1',
-    'goal: Author-from-scratch proof — the forge cycle rebuilt as a flow definition.',
+    'goal: Author-from-scratch proof — the forge-develop build flow rebuilt as a flow definition.',
     'project: null',
     'kb: cycles',
     'costCeilingUsd: 25',
@@ -411,6 +411,13 @@ function writePlan(sid, round) {
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
     'origin: architect',
+    // S9/DEC-3: the RUN demonstration drives the 3-stage spine. The manifest names
+    // forge-develop (the build flow the hand-off repoints onto); the seeded events
+    // span architect→pm→dev[fanOut]→unifier→review→reflect under ONE cycle_id, so
+    // run-model derives a flowLineage of [forge-architect, forge-develop,
+    // forge-reflect] (DEC-2). Under Model B each flow's monitor renders its OWN
+    // slice, and the threaded run surfaces under all three.
+    'flow_id: forge-develop',
     `architect_session_id: ${sid}`,
     `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
     `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
@@ -457,6 +464,44 @@ function moveManifest(from, to) {
     }
   }
   throw new Error(`moveManifest: ${INIT}.md not found in any queue dir (wanted ${from} → ${to})`);
+}
+
+/**
+ * S7: seed a live worktree + stamp `worktree_path` onto the manifest so the
+ * comment-derived send-back genuinely appends a UWI in place (ADR-026), rather
+ * than 409'ing with no worktree. Returns the worktree path.
+ */
+function seedReviewWorktree() {
+  const wt = join(FORGE_ROOT, '_worktrees', INIT);
+  mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+  mkdirSync(join(wt, '.forge', 'unifier-items'), { recursive: true });
+  writeFileSync(join(wt, 'package.json'), JSON.stringify({ name: 'mdtoc-review-wt', private: true }, null, 2));
+  // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes, so a
+  // review send-back appends UWI-2 (depends_on:[UWI-1]) rather than a self-cyclic UWI-1.
+  const uwi1 = {
+    work_item_id: 'UWI-1', initiative_id: INIT, status: 'pending', depends_on: [],
+    acceptance_criteria: [{
+      given: 'every dev work item is committed on the initiative branch',
+      when: 'the unifier integrates the branch into one cohesive, self-contained PR',
+      then: 'the quality gate passes against branch tip and demo.json + .forge/pr-description.md exist',
+    }],
+    files_in_scope: ['.forge/pr-description.md', `demo/${INIT}/demo.json`],
+    quality_gate_cmd: ['npm', 'test'], kind: 'packaging', estimated_iterations: 1,
+  };
+  writeFileSync(join(wt, '.forge', 'unifier-items', 'UWI-1.md'),
+    `---\n${yaml.dump(uwi1)}---\n\n# UWI-1 — unify & prep the PR (seeded for the review demo).\n`);
+  for (const q of ['ready-for-review', 'in-flight', 'pending']) {
+    const p = join(QDIR(q), `${INIT}.md`);
+    if (existsSync(p)) {
+      let txt = readFileSync(p, 'utf8');
+      if (!/^worktree_path:/m.test(txt)) {
+        txt = txt.replace(/^phase:.*$/m, (m) => `${m}\nworktree_path: ${wt}`);
+        writeFileSync(p, txt);
+      }
+      break;
+    }
+  }
+  return wt;
 }
 
 function writeDemoJson(revision) {
@@ -506,6 +551,16 @@ function writeDemoJson(revision) {
       { name: 'acceptance: --write read-back vs test/fixtures/release-notes.md', result: 'pass' },
     ],
     checkpoints: [
+      // S7 visual review: a before/after screenshot checkpoint drives the
+      // img-comparison-slider on the interactive review page (data: URIs so the
+      // UI renders them directly — no remote fetch).
+      { label: 'README TOC region — before vs after --write', kind: 'screenshot',
+        caption: 'The embedded TOC region: empty markers before, the generated table after `mdtoc --write`.',
+        beforeNote: 'Markers present, no TOC between them.',
+        afterNote: 'Generated TOC injected between the markers; surrounding prose untouched.',
+        beforeImage: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#161b22"/><text x="16" y="40" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- toc --&gt;</text><text x="16" y="64" fill="#6e7681" font-family="monospace" font-size="13">(empty)</text><text x="16" y="88" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- /toc --&gt;</text><text x="16" y="160" fill="#d29922" font-family="sans-serif" font-size="12">before</text></svg>'),
+        afterImage: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#0d1117"/><text x="16" y="40" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- toc --&gt;</text><text x="16" y="62" fill="#58a6ff" font-family="monospace" font-size="12">- [Intro](#intro)</text><text x="16" y="80" fill="#58a6ff" font-family="monospace" font-size="12">- [Usage](#usage)</text><text x="16" y="100" fill="#8b949e" font-family="monospace" font-size="13">&lt;!-- /toc --&gt;</text><text x="16" y="160" fill="#3fb950" font-family="sans-serif" font-size="12">after</text></svg>'),
+      },
       { label: 'Unit suite — injectToc_ReplacesMarkerRegion + injectToc_IsIdempotent', kind: 'harness',
         caption: 'marker-region slice replaces only the TOC; a second --write is byte-identical',
         metrics: [
@@ -532,9 +587,36 @@ function writeDemoJson(revision) {
       'Idempotent --write is safe to wire into CI (a future --check mode can fail when the embedded TOC drifts).',
     ],
   }, null, 2));
+
+  // F4 single DEMO.md — the human/PR-facing markdown the S7 review page renders
+  // (markdown-it → sandbox iframe). Derived from demo.json by `forge demo render`
+  // in a real cycle; seeded here so the interactive review reads true.
+  writeFileSync(join(artifacts, 'DEMO.md'), [
+    `# mdtoc: \`--write\` in-place TOC injection${revision > 1 ? ' (round ' + revision + ')' : ''}`,
+    '',
+    '> Adds a `--write` mode that inserts or refreshes the generated table of contents between',
+    '> `<!-- toc -->` / `<!-- /toc -->` markers, idempotently.',
+    '',
+    '## Intent & Outcome',
+    '',
+    '| # | Acceptance criterion | Verdict |',
+    '| - | -------------------- | ------- |',
+    '| 1 | `--write` replaces only the marker region; acceptance reads back the built CLI | **met** |',
+    `| 2 | re-running \`--write\` on a current doc produces no diff | **${revision > 1 ? 'met' : 'partial'}** |`,
+    '',
+    '## Usage',
+    '',
+    '```bash',
+    'mdtoc --write README.md   # injects the TOC between the markers',
+    'mdtoc --write README.md   # idempotent — no diff on the second run',
+    '```',
+  ].join('\n'));
 }
 
-/** Reflector stage-2 emit: operator-facing questions for the reflect screen. */
+/** Reflector stage-2 emit: operator-facing questions for the reflect screen.
+ *  S8: the deeper retrospective — beyond WI sizing, the reflector now surfaces
+ *  repeated actions / roadblocks it found in the cycle log + a general-notes
+ *  freeform, all rendered through the same user-questions → ReflectionGate pipe. */
 function writeReflectionQuestions() {
   mkdirSync(CYCLE_LOG, { recursive: true });
   writeFileSync(join(CYCLE_LOG, 'user-questions.json'), JSON.stringify([
@@ -547,6 +629,20 @@ function writeReflectionQuestions() {
         { label: 'Too large', description: 'Should have been split further.' },
       ],
     },
+    {
+      question: 'Repeated actions / roadblocks: the dev-loop re-ran the acceptance read-back 3× while tuning the marker regex. Worth a forge fix or a new tool?',
+      header: 'Roadblocks',
+      options: [
+        { label: 'New tool', description: 'A marker-aware fixture helper would have avoided the repeated read-back churn.' },
+        { label: 'Leave as-is', description: 'Three iterations is acceptable for a behaviour change like this.' },
+        { label: 'Forge fix', description: 'The acceptance gate should cache the build between read-backs.' },
+      ],
+    },
+    {
+      question: 'Any other notes on this initiative? (free-form)',
+      header: 'Notes',
+      options: [],
+    },
   ], null, 2));
 }
 
@@ -555,9 +651,12 @@ function writeReflectionQuestions() {
 async function startWatch() {
   // M7-7: spawn the canonical `forge studio` launcher and detect readiness via
   // its deterministic 'forge-studio-ready {json}' stdout line (no log scraping).
+  // F1: `--force-takeover` so the harness always binds its OWN fresh bridge — a
+  // leftover bridge from a crashed prior run must be replaced, not attached to
+  // (the attach path is read-only and never emits the ready signal).
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open', '--force-takeover'],
       { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let buf = '';
@@ -613,7 +712,7 @@ const { failures, check, countAtLeast, expectPhaseCost, expectHexOpensDrawer } =
 
 /** Navigate to a Studio flow monitor and wait until it is ready with the cycle's
  *  run selected. The monitor refetches the run model from the bridge on load. */
-async function openStudioMonitor(page, watch, flowId = 'forge-cycle', runId = CYCLE_ID) {
+async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = CYCLE_ID) {
   await page.goto(watch.uiUrl + `/flows/${flowId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1117,12 +1216,12 @@ async function main() {
     // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
     cleanFirstFlowRun();
 
-    // ── A2: BUILD THE FORGE CYCLE FROM SCRATCH ────────────────────────────────
-    // The headline new beat. We authored forge-cycle-scratch as a flow definition
-    // (6 agents, 5 edges, 2 gates). Prove: (1) `forge studio lint` validates it,
+    // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH ─────────────────────────
+    // The headline new beat. We authored forge-develop-scratch as a flow definition
+    // (3 nodes, 2 edges, 1 gate). Prove: (1) `forge studio lint` validates it,
     // (2) it is structurally identical to the production seed (subsumption), (3)
     // the flow builder renders it live, (4) the engine can run it (data-can-start).
-    console.log('\n[A2] Build the forge cycle from scratch (flow-as-data)');
+    console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
 
     // (1) `forge studio lint` validates the authored flow — the platform's own gate.
     let lintOk = false;
@@ -1134,15 +1233,15 @@ async function main() {
     } catch (e) {
       console.error(`  [studio lint] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
     }
-    check(lintOk, 'author-from-scratch: `forge studio lint` validates the authored forge-cycle-scratch flow (exit 0)');
+    check(lintOk, 'author-from-scratch: `forge studio lint` validates the authored forge-develop-scratch flow (exit 0)');
 
-    // (2) Structural parity with the production seed — the subsumption proof.
+    // (2) Structural parity with the production seed (forge-develop) — the subsumption proof.
     const seedStruct = parseFlowStructure(readFileSync(SEED_FLOW_PATH, 'utf8'));
     const scratchStruct = parseFlowStructure(readFileSync(join(SCRATCH_FLOW_DIR, 'flow.yaml'), 'utf8'));
     check(JSON.stringify(scratchStruct.nodeIds) === JSON.stringify(seedStruct.nodeIds),
       `author-from-scratch: node set matches the seed (${scratchStruct.nodeIds.join(',')})`);
-    check(scratchStruct.gates.architect === 'plan' && scratchStruct.gates.review === 'verdict',
-      'author-from-scratch: gates land on architect=plan + review=verdict (matches the seed)');
+    check(scratchStruct.gates.review === 'verdict',
+      'author-from-scratch: the review gate lands on verdict (matches the forge-develop seed)');
     check(scratchStruct.edgeCount === seedStruct.edgeCount,
       `author-from-scratch: edge count matches the seed (${scratchStruct.edgeCount})`);
 
@@ -1159,13 +1258,13 @@ async function main() {
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
       check(false, `author-from-scratch: flow-monitor ready (got "${pr}")`);
     }
-    await caption(page, 'The forge cycle, rebuilt from scratch — six agents, five artifacts, two gates. The platform validates it and it is identical to the production seed.');
+    await caption(page, 'The forge-develop build flow, rebuilt from scratch — dev → unifier → review, one verdict gate. The platform validates it and it is identical to the production seed.');
     await sleep(ACT);
     // (4) The engine can run it — start-run is enabled (no runs yet on this flow).
     const canStart = await page.evaluate(() =>
       document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
     check(canStart === 'true', `author-from-scratch: engine can run the authored flow (data-can-start="true", got "${canStart}")`);
-    await frame(page, 'a2-0-scratch-monitor', 'A2 — authored forge-cycle-scratch: lint green, parity with seed, runnable by the engine');
+    await frame(page, 'a2-0-scratch-monitor', 'A2 — authored forge-develop-scratch: lint green, parity with seed, runnable by the engine');
 
     // Open the BUILD tab to show the authored topology on the canvas.
     const buildTabBtn = page.locator('button.tab').filter({ hasText: 'BUILD' }).first();
@@ -1188,14 +1287,14 @@ async function main() {
     // ReactFlow hydrates after the tab switch — poll for the node count rather
     // than a fixed sleep (the canvas can render a tick late under load).
     await page.waitForFunction(
-      () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 6,
+      () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
       null, { timeout: 15000 },
     ).catch(() => {});
     const nodeCount = await page.evaluate(() => {
       const el = document.querySelector('[data-node-count]');
       return el ? parseInt(el.getAttribute('data-node-count') ?? '0', 10) : -1;
     });
-    check(nodeCount >= 6, `author-from-scratch: BUILD canvas renders ≥6 nodes for the authored flow (got ${nodeCount})`);
+    check(nodeCount >= 3, `author-from-scratch: BUILD canvas renders ≥3 nodes for the authored forge-develop-scratch flow (got ${nodeCount})`);
     await countAtLeast(page, '[data-flow-node]', 1, 'author-from-scratch: ≥1 [data-flow-node] rendered in BUILD canvas');
     const palettePresent = await page.evaluate(() => document.querySelector('[data-component="agent-palette"]') !== null);
     check(palettePresent, 'author-from-scratch: [data-component="agent-palette"] present (drag more agents in)');
@@ -1602,21 +1701,31 @@ async function main() {
     ).catch(() => {});
     await sleep(ACT);
     await frame(page, 'r2-2b-monitor-landing', 'R2 — "Watch it build →" lands on the Studio flow monitor');
-    await openStudioMonitor(page, watch);
-    await frame(page, 'r2-2c-monitor-live', 'R2 — flow monitor shows the cycle live (run rail + topology)');
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: pipeline spine shows ≥5 phase hexes');
+    await openStudioMonitor(page, watch); // forge-develop — the build slice (Model B)
+    await frame(page, 'r2-2c-monitor-live', 'R2 — Forge Develop monitor shows the build slice live (run rail + topology)');
+    // Model B: /flows/forge-develop renders ONLY the develop slice (dev→unifier→review,
+    // the dev node fanning out into per-WI hexes). It does NOT show architect/pm/reflect.
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'monitor: forge-develop slice shows its phase hexes (unifier/review)');
+    // P4: the architect ran in the architect FLOW — assert its real cost on the
+    // forge-architect slice (the threaded run surfaces there via flowLineage).
+    await openStudioMonitor(page, watch, 'forge-architect');
     try {
       await page.waitForFunction(
         () => (parseFloat(document.querySelector('[data-mon-node][data-node-id="architect"]')
           ?.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0,
         null, { timeout: 12000 },
       );
-      check(true, 'P4: architect hex carries real cost (data-phase-cost-usd > 0)');
+      check(true, 'P4: architect hex (on /flows/forge-architect) carries real cost (data-phase-cost-usd > 0)');
     } catch {
       const costVal = await page.evaluate(() =>
         document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-phase-cost-usd') ?? '(absent)');
       check(false, `P4: architect hex carries real cost (got "${costVal}")`);
     }
+    check(
+      await page.evaluate(() => document.querySelector('[data-mon-node][data-node-id="pm"]') !== null),
+      'monitor: forge-architect slice shows the pm hex (architect+pm, not the develop nodes)',
+    );
+    await openStudioMonitor(page, watch); // back to forge-develop for the build beat
 
     // ── R3.0: PM decomposes ACs into work items ───────────────────────────────
     console.log('\n[R3.0] PM decomposes ACs into work items');
@@ -1741,13 +1850,18 @@ async function main() {
     const REVIEW_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=gate`;
     const REFLECT_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=reflection&mode=view`;
 
-    // ── R4.0: Review — per-AC evaluated demo (PARTIAL) ────────────────────────
-    console.log('\n[R4.0] Review — per-AC demo (PARTIAL)');
+    // S7: seed a live worktree so the comment-derived send-back genuinely
+    // appends a UWI in place (ADR-026), not a 409.
+    const REVIEW_WT = seedReviewWorktree();
+
+    // ── R4.0: Review — the comment-on-page visual demo (DEC-5) ─────────────────
+    console.log('\n[R4.0] Review — comment-on-page visual demo (PARTIAL)');
     await sleep(ACT);
     await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
     await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
-    await caption(page, 'Approve on evidence — the captured CLI read-back proves --write injects the TOC. AC-2 is only PARTIAL (a trailing newline drifts on the 2nd write).');
+    await page.waitForSelector('[data-component="demo-review-surface"]', { timeout: 15000 });
+    await caption(page, 'The interactive review page: the rendered DEMO.md, a before/after slider, and per-region comments that ARE the verdict.');
     await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
     await sleep(READ);
     await frame(page, 'r4-0-review-partial', 'R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)');
@@ -1756,28 +1870,64 @@ async function main() {
       await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count() > 0,
       'an AC reads PARTIAL on round 1 — the gap the operator sends back on',
     );
-
-    // ── R4.1: Send-back authoring a NEW acceptance criterion ──────────────────
-    console.log('\n[R4.1] Send-back — operator authors a new G/W/T AC');
-    await caption(page, 'The operator authors a new acceptance criterion — inside the review loop.');
-    await page.locator('[data-component="verdict-form"] input[type="radio"]').nth(1).check();
-    const verdictTextarea = page.locator('[data-component="verdict-form"] textarea');
-    if (await verdictTextarea.count() > 0) {
-      await verdictTextarea.click();
-      await verdictTextarea.pressSequentially(
-        'Close — but a second --write on an already-current doc must be byte-identical (no diff) before this merges.',
-        { delay: 18 },
-      );
-    }
+    // DEC-5 surfaces: rendered DEMO.md iframe, per-region anchors, the before/after slider.
+    check(await page.locator('[data-demo-markdown]').count() > 0, 'review page renders DEMO.md in a sandboxed iframe');
+    await countAtLeast(page, '[data-demo-region]', 2, 'review page anchors per-demo-region comment targets');
+    await page.locator('[data-evidence="before-after-slider"]').first().scrollIntoViewIfNeeded().catch(() => {});
     await sleep(THINK);
-    const acGiven = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(0);
-    const acWhen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(1);
-    const acThen  = page.locator('[data-component="verdict-form"] [data-section="acceptance-criteria"] input').nth(2);
-    if (await acGiven.count() > 0) { await acGiven.click(); await acGiven.pressSequentially('a Markdown file whose embedded TOC is already current', { delay: 18 }); await sleep(THINK); }
-    if (await acWhen.count()  > 0) { await acWhen.click();  await acWhen.pressSequentially('mdtoc --write is run on it twice in a row', { delay: 18 }); await sleep(THINK); }
-    if (await acThen.count()  > 0) { await acThen.click();  await acThen.pressSequentially('the file is byte-identical after each run — no trailing-newline drift', { delay: 18 }); await sleep(THINK); }
-    await frame(page, 'r4-1-send-back', 'R4 — operator sends back with a new G/W/T criterion (--write is byte-identical on every run)');
-    await page.locator('[data-action="send-back"]').click();
+    await frame(page, 'r4-0b-slider', 'R4 — before/after image-comparison slider for the TOC region');
+    check(await page.locator('[data-evidence="before-after-slider"]').count() > 0, 'review page shows a before/after img-comparison-slider');
+
+    // ── R4.1: Send-back via an anchored blocking comment (DEC-5) ───────────────
+    console.log('\n[R4.1] Send-back — operator anchors a blocking comment to AC-2');
+    await caption(page, 'The operator comments directly on AC-2 — a blocking comment IS a send-back.');
+    const ac2 = page.locator('[data-demo-region="ac-2"]');
+    await ac2.scrollIntoViewIfNeeded().catch(() => {});
+    await ac2.locator('[data-action="comment-region"]').click();
+    await sleep(THINK);
+    const commentBody = ac2.locator('[data-field="comment-body"]');
+    await commentBody.click();
+    await commentBody.pressSequentially(
+      'A second --write on an already-current doc must be byte-identical (no trailing-newline drift) before this merges.',
+      { delay: 16 },
+    );
+    await sleep(THINK);
+    await frame(page, 'r4-1-comment', 'R4 — a blocking comment anchored to AC-2 (the send-back, on the page)');
+    await ac2.locator('[data-action="add-comment"]').click();
+    await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 8000 });
+    check(await ac2.locator('[data-comment-id]').count() > 0, 'the anchored comment renders under its region');
+    // The verdict is DERIVED — a blocking comment flips the bar to send-back.
+    await page.waitForFunction(
+      () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'send-back',
+      null, { timeout: 8000 },
+    ).catch(() => {});
+    check(
+      await page.locator('[data-component="verdict-form"][data-form-kind="send-back"]').count() > 0,
+      'the blocking comment derives a send-back verdict',
+    );
+
+    // Persistence: a reload must still show the anchored comment (sidecar-backed).
+    await page.goto(REVIEW_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 });
+    await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 12000 });
+    check(
+      await page.locator('[data-demo-region="ac-2"] [data-comment-id]').count() > 0,
+      'the anchored comment PERSISTS across a reload (review-comments sidecar)',
+    );
+    await frame(page, 'r4-1b-send-back', 'R4 — the comment persists; the derived verdict is "send back"');
+    await page.locator('[data-component="verdict-form"] [data-action="send-back"]').click();
+    // A 200 (the form reaches "submitted") means applyReviewVerdict appended the
+    // UWI in place — ADR-026, same cycle, no requeue.
+    await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
+    const sbState = await page.locator('[data-component="verdict-form"]').getAttribute('data-form-state');
+    const sbErr = await page.locator('[data-component="verdict-form"]').getAttribute('data-submit-error');
+    check(sbState === 'submitted', `send-back submitted (ADR-026 in-place append) — state=${sbState}${sbErr ? ` err=${sbErr}` : ''}`);
+    // Belt-and-braces: the UWI landed in the SAME cycle's worktree (no sibling).
+    check(
+      existsSync(join(REVIEW_WT, '.forge', 'unifier-items')) &&
+        readdirSync(join(REVIEW_WT, '.forge', 'unifier-items')).some((f) => f.startsWith('UWI-')),
+      'send-back appended a UWI into the SAME cycle worktree (ADR-026 in place, no new cycle)',
+    );
     await sleep(ACT);
 
     // ── R4.2: Dev-loop reruns on feedback (fast-forward) ──────────────────────
@@ -1814,20 +1964,26 @@ async function main() {
     check(partialCount === 0, `re-review: partial AC count == 0 after dev-loop rerun (got ${partialCount})`);
     await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
 
+    // The blocking comment from R4.1 persists across the round — resolving it is
+    // what flips the DERIVED verdict from send-back back to approve.
+    const ac2b = page.locator('[data-demo-region="ac-2"]');
+    await ac2b.scrollIntoViewIfNeeded().catch(() => {});
+    await ac2b.locator('[data-action="resolve-comment"]').first().click().catch(() => {});
+    await page.waitForFunction(
+      () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'approve',
+      null, { timeout: 8000 },
+    ).catch(() => {});
+    check(
+      await page.locator('[data-component="verdict-form"][data-form-kind="approve"]').count() > 0,
+      'resolving the blocking comment flips the derived verdict to approve',
+    );
+
     // ── R4.4: Approve & merge → completed spine ───────────────────────────────
     console.log('\n[R4.4] Approve & merge → completed spine');
-    await caption(page, 'Six phases, every one accountable.');
-    const lgtmTextarea = page.locator('[data-component="verdict-form"] textarea');
-    if (await lgtmTextarea.count() > 0) {
-      await lgtmTextarea.click();
-      await lgtmTextarea.pressSequentially(
-        'LGTM — --write injects the TOC, the captured CLI read-back matches, and a second --write is now byte-identical. All ACs met.',
-        { delay: 18 },
-      );
-    }
+    await caption(page, 'Comment resolved → the page derives "approve". Six phases, every one accountable.');
     await sleep(ACT);
     await frame(page, 'r4-4-approve', 'R4 — operator approves (human decision #2 complete)');
-    await page.locator('[data-action="approve-and-merge"]').click();
+    await page.locator('[data-component="verdict-form"] [data-action="approve-and-merge"]').click();
     await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
     await paced([
       () => cycleEvent('review-loop', 'end', 'review-loop end — operator approved', { cost_usd: 0.21 }),
@@ -1880,9 +2036,22 @@ async function main() {
     await page.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
     await page.waitForSelector('[data-section="reflect-questions"]', { timeout: 15000 }).catch(() => {});
     await sleep(READ);
-    await frame(page, 'r5-0-reflect-page', 'R5 — reflection screen: WI-sizing question + freeform observation');
-    await page.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
+    await frame(page, 'r5-0-reflect-page', 'R5 — reflection screen: WI-sizing + repeated-actions/roadblocks + general-notes (the S8 deeper retro)');
+    // Answer every question (S8 deeper retro: WI-sizing + repeated-actions/roadblocks
+    // option questions, plus a per-question general-notes freeform) so allAnswered
+    // is satisfied and the submit enables.
+    const optionFieldsets = page.locator('[data-question-mode="options"]');
+    const nOpt = await optionFieldsets.count();
+    for (let i = 0; i < nOpt; i++) {
+      await optionFieldsets.nth(i).locator('input[type="radio"]').first().check().catch(() => {});
+    }
+    const freeformQs = page.locator('[data-question-mode="freeform"] [data-question-freeform]');
+    const nFf = await freeformQs.count();
+    for (let i = 0; i < nFf; i++) {
+      await freeformQs.nth(i).fill('A marker-aware fixture helper would have saved the repeated acceptance read-backs.').catch(() => {});
+    }
     await sleep(THINK);
+    // The bottom "anything else" freeform (separate from the questions) — extra colour.
     const freeformLocator = page.locator('[data-field="freeform"]');
     if (await freeformLocator.count() > 0) {
       await freeformLocator.click();
@@ -1900,7 +2069,9 @@ async function main() {
     ], WORK);
     await sleep(ACT);
     await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain');
-    await openStudioMonitor(page, watch);
+    // Model B: the reflect node lives on the forge-reflect flow; the threaded run
+    // surfaces there via flowLineage (it ran a reflection phase).
+    await openStudioMonitor(page, watch, 'forge-reflect');
     await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
     await sleep(ACT);
     try {
@@ -1908,12 +2079,118 @@ async function main() {
         () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
         null, { timeout: 12000 },
       );
-      check(true, 'reflection node greened after tuning feedback (Studio monitor)');
+      check(true, 'reflection node greened after tuning feedback (/flows/forge-reflect slice)');
     } catch {
       const reflStatus = await page.evaluate(() =>
         document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') ?? '(absent)');
       check(false, `reflection node greened after tuning feedback (got "${reflStatus}")`);
     }
+
+    // ── R6: Per-project Roadmap tab (S6 DEC-3) ───────────────────────────────
+    // The manifest is now in done/; seed a minimal work-items-snapshot so the
+    // roadmap endpoint returns initiatives + WIs, then verify the tab renders them.
+    console.log('\n[R6] Per-project Roadmap tab');
+    const wiSnapshotDir = join(CYCLE_LOG, 'work-items-snapshot');
+    const ROADMAP_SEEDED_WI = join(wiSnapshotDir, 'WI-1.md');
+    let roadmapSeeded = false;
+    try {
+      mkdirSync(wiSnapshotDir, { recursive: true });
+      writeFileSync(ROADMAP_SEEDED_WI, [
+        '---',
+        `work_item_id: WI-1`,
+        `initiative_id: ${INIT}`,
+        'status: complete',
+        'depends_on: []',
+        'acceptance_criteria: []',
+        'files_in_scope: []',
+        'estimated_iterations: 1',
+        '---',
+        '',
+        '## Add --write mode',
+        '',
+        'Implement in-place TOC injection with idempotency.',
+      ].join('\n'));
+      roadmapSeeded = true;
+    } catch {
+      check(false, 'roadmap: seeded WI snapshot for roadmap assertion');
+    }
+    // S7 / DEC-3: seed a SECOND, decomposed-but-not-yet-developing initiative
+    // (pending) so the roadmap shows the "start development" trigger. A real
+    // develop run (dev→unifier→review) is the scheduler's job — exercised by the
+    // operator-gated verify:cycle; here we prove the trigger flips the manifest
+    // onto the forge-develop flow.
+    const INIT_DEV = `INIT-${DATE}-e2e-develop-trigger`;
+    const DEV_CYCLE_ID = `${STAMP}_${INIT_DEV}`;
+    mkdirSync(QDIR('pending'), { recursive: true });
+    writeFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), [
+      '---', `initiative_id: ${INIT_DEV}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
+      'origin: architect', `cycle_id: ${DEV_CYCLE_ID}`,
+      '---', '', '# mdtoc — `--check` mode (CI drift guard)', '',
+      'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',
+    ].join('\n'));
+
+    await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+    } catch { /* soft: continue to check tab */ }
+    // Click the Roadmap tab.
+    const roadmapTab = page.locator('button[data-tab="roadmap"]');
+    if (await roadmapTab.count() > 0) {
+      await roadmapTab.click();
+      await sleep(1500); // allow bridge fetch to settle
+      await caption(page, 'Per-project Roadmap — initiatives ordered by dependency level, with nested WI sub-graphs.');
+      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: initiative spine + work items');
+      const roadmapSection = await page.evaluate(() =>
+        document.querySelector('[data-section="project-roadmap"]') !== null);
+      check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
+      const initCount = await page.evaluate(() =>
+        document.querySelectorAll('[data-initiative-id]').length);
+      check(initCount >= 1, `roadmap: ≥1 [data-initiative-id] present (got ${initCount})`);
+      if (roadmapSeeded) {
+        const wiCount = await page.evaluate(() =>
+          document.querySelectorAll('[data-work-item-id]').length);
+        check(wiCount >= 1, `roadmap: ≥1 [data-work-item-id] present (got ${wiCount})`);
+      }
+    } else {
+      check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
+    }
+
+    // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
+    console.log('\n[R6.1] Start development trigger (DEC-3)');
+    // The card div is uniquely identified by data-develop-state (the button also
+    // carries data-initiative-id, so select the div explicitly to avoid a match clash).
+    const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`);
+    const startBtn = devCard.locator('[data-action="start-development"]');
+    if (await startBtn.count() > 0) {
+      check(
+        await devCard.getAttribute('data-initiative-status') === 'pending',
+        'roadmap: the decomposed initiative is pending (develop-able)',
+      );
+      await devCard.scrollIntoViewIfNeeded().catch(() => {});
+      await caption(page, 'A decomposed initiative offers "Start development" — it runs the Forge Develop flow.');
+      await frame(page, 'r6-1-start-development', 'R6 — the "start development" trigger on a pending initiative');
+      await startBtn.click();
+      await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});
+      const devState = await devCard.getAttribute('data-develop-state');
+      check(devState === 'started', `start-development enqueues the develop run (data-develop-state=${devState})`);
+      await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review');
+      // The manifest is now claimable on the forge-develop flow, threading its cycle_id.
+      const devManifest = readFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), 'utf8');
+      check(/^flow_id:\s*forge-develop\s*$/m.test(devManifest), 'start-development repoints the manifest at the forge-develop flow');
+      check(devManifest.includes(DEV_CYCLE_ID), 'the develop run threads the architect-minted cycle_id (DEC-2)');
+    } else {
+      check(false, `roadmap: [data-action="start-development"] present on the pending initiative ${INIT_DEV}`);
+    }
+
+    // Clean up the seeded WI snapshot (the manifest in done/ is cleaned in the finally block).
+    if (roadmapSeeded) {
+      try { rmSync(ROADMAP_SEEDED_WI, { force: true }); } catch { /* */ }
+    }
+    try { rmSync(join(QDIR('pending'), `${INIT_DEV}.md`), { force: true }); } catch { /* */ }
 
     // ════════════════════════════════════════════════════════════════════════
     // ACT 3 — SWAP. The seams — the platform is modular, not hardcoded.
@@ -1940,6 +2217,11 @@ async function main() {
     writeFileSync(join(QDIR('ready-for-review'), `${INIT2}.md`), [
       '---', `initiative_id: ${INIT2}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
       `created_at: '${new Date().toISOString()}'`, `cycle_id: ${CYCLE_ID2}`,
+      // S9/DEC-3: the gated demo run names forge-develop (the build flow). Its events
+      // span architect→pm→dev→unifier→review (gated — no reflect yet), so its
+      // flowLineage is [forge-architect, forge-develop] and the S1 monitor deep-dive
+      // renders the develop slice (WI fan-out + unifier + review) under Model B.
+      'flow_id: forge-develop',
       'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review', 'origin: architect',
       '---', '', '# Studio demo — gated run for the flow-engine controls', '',
       'Add a --check mode to mdtoc that exits non-zero when the embedded TOC is stale.',
@@ -1973,11 +2255,16 @@ async function main() {
     writeFileSync(join(artifacts2, 'demo.json'), JSON.stringify({
       title: 'Studio demo — gated run', project: PROJECT, initiativeId: INIT2,
     }, null, 2));
-    writeFileSync(join(artifacts2, 'DEMO.html'), '<html><body>demo</body></html>');
+    // F4: the single DEMO.md (DEMO.html is retired — the review page renders markdown).
+    writeFileSync(join(artifacts2, 'DEMO.md'), '# Studio demo — gated run\n\n> A gated run for the flow-engine controls.\n');
 
-    // ── S1.0: Flow monitor deep-dive (drawer / gate sub-checks / tail) ────────
-    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-cycle');
-    await page.goto(watch.uiUrl + '/flows/forge-cycle', { waitUntil: 'domcontentloaded' });
+    // ── S1.0: Flow monitor deep-dive (Model B develop slice + lineage) ────────
+    // S9/DEC-3 + Model B: each flow's monitor shows ONLY its own hexes; the ONE
+    // threaded run surfaces under all three spine flows via its flowLineage. Deep-dive
+    // the develop slice (the dev node fans out into per-WI hexes → unifier → review),
+    // then prove the SAME run also renders its architect slice under forge-architect.
+    console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)');
+    await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1989,13 +2276,14 @@ async function main() {
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(no data-page=flow-monitor)');
       check(false, `monitor: data-page-ready (got "${pr}")`);
     }
-    await caption(page, 'The flow monitor — live topology of every agent phase, with phase logs and gate sub-checks. Pan + zoom the hex graph.');
+    await caption(page, 'The Forge Develop monitor — its own slice of the threaded run: the dev-loop fans out into per-WI hexes, then unifier + review. Pan + zoom the hex graph.');
     await sleep(ACT);
     await countAtLeast(page, '[data-run-id]', 1, 'monitor: run rail shows ≥1 [data-run-id]');
-    await countAtLeast(page, '[data-mon-node]', 6, 'monitor: topology renders ≥6 [data-mon-node] hexes');
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'monitor: ≥5 deterministic per-phase hexes');
+    await countAtLeast(page, '[data-mon-node]', 4, 'monitor: develop slice renders ≥4 [data-mon-node] hexes (WI fan-out + unifier + review)');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'monitor: the dev node fans out into ≥2 per-WI hexes (run-driven)');
+    await countAtLeast(page, '[data-mon-node][data-node-id="unifier"]', 1, 'monitor: develop slice shows the unifier phase hex');
     await sleep(READ);
-    await frame(page, 's1-0-monitor', 'S1 — flow monitor: run rail + topology (≥5 phase hexes + WI hexes)');
+    await frame(page, 's1-0-monitor', 'S1 — Forge Develop slice: WI fan-out + unifier + review');
     const unifierHex = page.locator('[data-node-id="unifier"]').first();
     let drawerOpened = false;
     if ((await unifierHex.count()) > 0) {
@@ -2042,19 +2330,23 @@ async function main() {
     });
     check(tailCount !== null, `monitor: [data-tail-count] attribute present (got ${tailCount})`);
 
-    // ── S1.1: Engine control — start-run CTA (knowledge-ingest, no runs) ───────
-    console.log('\n[S1.1] Engine — start-run CTA (knowledge-ingest, no runs)');
-    await page.goto(watch.uiUrl + '/flows/knowledge-ingest', { waitUntil: 'domcontentloaded' });
+    // ── S1.1: Engine control — start-run CTA (a genuinely run-less flow) ───────
+    // Model B: every spine flow now shows the threaded run via flowLineage, so the
+    // run-less flow for the start-run CTA is the author-from-scratch SCRATCH_FLOW
+    // (forge-develop-scratch) — a parity copy that was never run, and which the
+    // lineage logic correctly excludes (its nodes are a subset of forge-develop's).
+    console.log(`\n[S1.1] Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`);
+    await page.goto(watch.uiUrl + `/flows/${SCRATCH_FLOW}`, { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
         null, { timeout: 20000 },
       );
-      check(true, 'engine: flow-monitor ready for knowledge-ingest');
+      check(true, `engine: flow-monitor ready for ${SCRATCH_FLOW}`);
     } catch {
       const pr = await page.evaluate(() =>
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
-      check(false, `engine: flow-monitor ready for knowledge-ingest (got "${pr}")`);
+      check(false, `engine: flow-monitor ready for ${SCRATCH_FLOW} (got "${pr}")`);
     }
     await caption(page, 'The engine runs any flow — Start Run launches a planned flow directly from the UI.');
     await sleep(ACT);
@@ -2070,7 +2362,7 @@ async function main() {
 
     // ── S1.2: Engine control — gate + cost-ceiling on the gated run ───────────
     console.log('\n[S1.2] Engine — gate control + cost on the gated run');
-    await openStudioMonitor(page, watch, 'forge-cycle', CYCLE_ID2);
+    await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
     await caption(page, 'A gated run parks for you — "Open gate →" links straight to the verdict. Cost is metered against the flow ceiling.');
     await sleep(ACT);
     try {
@@ -2085,6 +2377,12 @@ async function main() {
       check(false, `engine: seeded run gated (got "${got}")`);
     }
     await expectPhaseCost(page, 'engine: gated run shows accrued per-phase cost (metered vs ceiling)');
+
+    // F2: monitor-artifacts pill row — at least one [data-artifact-pill] chip
+    // (demo.json is seeded for CYCLE_ID2, so the demo chip must be present).
+    const monArtifactCount = await page.evaluate(() =>
+      document.querySelectorAll('[data-section="monitor-artifacts"] [data-artifact-pill]').length);
+    check(monArtifactCount >= 1, `monitor: [data-section="monitor-artifacts"] has ≥1 chip (got ${monArtifactCount})`);
     await frame(page, 's1-2-gate-control', 'S1 — engine: gated run parked, cost metered against the flow ceiling');
 
     // ── S2: Runtime-adapter seam (ADR-029) — registry-driven SDK picker + range
@@ -2357,9 +2655,13 @@ async function main() {
     cleanFirstProject();
     cleanFirstFlowRun();
     rmSync(CYCLE_LOG, { recursive: true, force: true });
+    // S7: the seeded review worktree + the develop-trigger initiative (INIT_DEV).
+    try { rmSync(join(FORGE_ROOT, '_worktrees', INIT), { recursive: true, force: true }); } catch { /* */ }
     for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
       try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
       try { rmSync(join(QDIR(q), `${INIT}.verdict-response.md`), { force: true }); } catch { /* */ }
+      try { rmSync(join(QDIR(q), `${INIT}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
+      try { rmSync(join(QDIR(q), `INIT-${DATE}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
     }
     // ACT 3 studio cleanup (gated/ceiling/failed synthetic runs)
     try {

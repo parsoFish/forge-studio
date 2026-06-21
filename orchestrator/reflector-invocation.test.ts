@@ -176,3 +176,43 @@ test('renderReflectorUserPrompt: is compact (no huge static blocks)', () => {
   // A pure dynamic brief should be well under 5 KB.
   assert.ok(prompt.length < 5000, `user prompt is too large (${prompt.length} chars) — static prose may have leaked in`);
 });
+
+// ---------------------------------------------------------------------------
+// S8 — deeper retrospective (repeated actions / roadblocks / operator notes)
+// and full-initiative aggregation (DEC-2)
+// ---------------------------------------------------------------------------
+
+test('renderReflectorUserPrompt: surfaces repeated actions, roadblocks, and a general-notes freeform', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT).toLowerCase();
+  assert.ok(prompt.includes('repeated action'), 'Stage 1/2 must ask for repeated actions');
+  assert.ok(prompt.includes('roadblock') || prompt.includes('wedge'), 'must ask for roadblocks/wedges');
+  assert.ok(prompt.includes('general notes') || prompt.includes('freeform'), 'must offer a general-notes freeform question');
+});
+
+test('renderReflectorUserPrompt: scopes reflection to the whole initiative (DEC-2 threaded cycle_id)', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT).toLowerCase();
+  assert.ok(prompt.includes('initiative'), 'must mention the initiative scope');
+  assert.ok(
+    prompt.includes('whole initiative') || prompt.includes('entire initiative') || prompt.includes('one cycle_id'),
+    'must state reflection spans the whole initiative, not just the closing cycle',
+  );
+});
+
+test('reflector SKILL contract (system prompt) writes the CENTRAL forge-owned brain, not the old in-repo path', () => {
+  const { dir, cleanup } = makeFakeBrainCwd();
+  try {
+    const sys = buildReflectorSystemPrompt(dir);
+    // F3/ADR-035: project themes are central under brain/projects/<name>/themes.
+    assert.ok(sys.includes('brain/projects/<project>/themes'), 'should point themes at the central brain/projects/<project>/themes/');
+    // The retired ADR-018 in-repo path must be gone everywhere in the contract.
+    assert.ok(
+      !sys.includes('projects/<project>/brain/'),
+      'must not reference the retired in-repo path projects/<project>/brain/ (ADR-035)',
+    );
+    // The deeper retro is part of the durable contract too.
+    assert.ok(sys.toLowerCase().includes('repeated action'), 'contract should cover repeated actions');
+    assert.ok(sys.toLowerCase().includes('roadblock') || sys.toLowerCase().includes('wedge'), 'contract should cover roadblocks');
+  } finally {
+    cleanup();
+  }
+});

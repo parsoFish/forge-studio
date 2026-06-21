@@ -1,21 +1,19 @@
 /**
  * Per-project configuration loader. Implements CONTRACTS.md C1 + C2 + C26 +
- * C27 + C28: each managed project declares its demo shape, quality gate,
- * optional holistic metrics, and optional parameter-sweep plug-in points in
+ * C27 + C28: each managed project declares its quality gate, optional holistic
+ * metrics, and optional parameter-sweep plug-in points in
  * `<project-root>/.forge/project.json`.
  *
  * The loader is **fail-closed** per council 04 F8 + plan 04 Open Q4: any
- * malformed file (missing required block, bad shape value, malformed JSON)
- * throws so the scheduler refuses to schedule the initiative. The only
- * non-throwing outcome on parse failure is "file does not exist" — in which
- * case the loader returns `null` and the caller decides whether the absence
- * is acceptable (S4 caller in the live cycle refuses; the bench tests
- * exercise both branches).
+ * malformed file (malformed JSON, missing required fields) throws so the
+ * scheduler refuses to schedule the initiative. The only non-throwing outcome
+ * on parse failure is "file does not exist" — in which case the loader returns
+ * `null` and the caller decides whether the absence is acceptable (S4 caller
+ * in the live cycle refuses; the bench tests exercise both branches).
  *
  * The schema lives in `docs/schemas/project-config.schema.json`. The loader's
- * hand-rolled validator below is the source of truth for *behavioural*
- * checks (shape enum, preview_command required when browser, etc.); the
- * JSON-schema file is the operator-facing reference.
+ * hand-rolled validator below is the source of truth for *behavioural* checks;
+ * the JSON-schema file is the operator-facing reference.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -46,35 +44,6 @@ export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
  * sidecar can stand alone.
  */
 export const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
-
-export type DemoShape =
-  | 'browser'
-  | 'harness'
-  | 'cli-diff'
-  | 'artifact'
-  | 'live-external'
-  | 'none';
-
-export const DEMO_SHAPES: ReadonlySet<DemoShape> = new Set<DemoShape>([
-  'browser',
-  'harness',
-  'cli-diff',
-  'artifact',
-  'live-external',
-  'none',
-]);
-
-export type DemoConfig = {
-  shape: DemoShape;
-  /** Argv-style demo command. Required when shape != 'none'. */
-  command?: string[];
-  /** Output directory relative to worktree root. Default: `demo/<initiative-id>/`. */
-  output?: string;
-  /** Git ref / branch the unifier diffs against for before/after captures. Default `main`. */
-  baseline?: string;
-  /** Required for shape: 'browser' — the dev/preview server command. */
-  preview_command?: string[];
-};
 
 export type MetricsConfig = {
   /** Argv-style command emitting one or more scalar metrics on stdout. */
@@ -131,7 +100,6 @@ export type AcceptanceGateConfig = {
 };
 
 export type ProjectConfig = {
-  demo: DemoConfig;
   quality_gate_cmd: string[];
   /**
    * The project's FULL CI verification — the operator-configured gate that
@@ -191,14 +159,15 @@ export type ProjectConfig = {
   /** KB id bound to this project, or null to explicitly leave unbound. */
   kb?: string | null;
   /**
-   * Project-root-relative subdirectory under which a project's COMMITTED forge
-   * artifacts live: its Brain 3 (`<artifactRoot>/brain/`) and its development
-   * history (`<artifactRoot>/history/<initiative-id>/`). Default `"."` keeps the
-   * legacy layout (`brain/` directly at the project root) so existing managed
-   * projects are unaffected; a project that wants a single visible home for its
-   * forge artifacts sets e.g. `"forge"`. Only affects committed artifacts —
-   * runtime/session scratch (`_architect/`, worktree `demo/<id>/`, `.forge/`)
-   * is unchanged. Validated as a clean relative path (no leading `/`, no `..`).
+   * Project-root-relative subdirectory under which a project's in-repo forge
+   * MACHINERY lives (e.g. `"forge"` → `forge/skills/`). Since ADR 035, Brain 3,
+   * development history, and the contract are **forge-owned and central** (in the
+   * forge repo, not here) — `artifactRoot` no longer governs them. It now only
+   * scopes the in-repo demo the unifier authors into the PR (`projectDemoRelDir`
+   * → `<artifactRoot>/history/<id>/demo`) and where the project keeps committed
+   * demo machinery. Default `"."` keeps the legacy in-root demo layout. Runtime
+   * scratch (`_architect/`, worktree `demo/<id>/`, `.forge/`) is unchanged.
+   * Validated as a clean relative path (no leading `/`, no `..`).
    */
   artifactRoot?: string;
   /**
@@ -210,32 +179,6 @@ export type ProjectConfig = {
    */
   releaseProcess?: ReleaseConfig;
 };
-
-/**
- * E2: the `demoProcess` (typed steps) and the `demo` block (`demo.shape`) are
- * two faces of ONE declaration — `demoProcess` is the executed demo, `demo.shape`
- * is the evidence floor. They must be coherent. The one structural incoherence
- * we can check without running the demo: a `demoProcess` that declares a
- * `capture` step under `demo.shape: "none"` — `none` means "no observable
- * surface", so there is nothing for the capture step to record into. Returns a
- * human-readable warning string when incoherent, or `null` when coherent (or
- * when `demoProcess` is absent — a project may declare only the legacy `demo`
- * block). Advisory: surfaced by `forge preflight`, never a hard blocker.
- */
-export function demoProcessCoherenceWarning(cfg: ProjectConfig): string | null {
-  const steps = cfg.demoProcess;
-  if (!steps || steps.length === 0) return null;
-  const hasCapture = steps.some((s) => s.kind === 'capture');
-  if (hasCapture && cfg.demo.shape === 'none') {
-    return (
-      'demoProcess declares a `capture` step but demo.shape is "none" — "none" has ' +
-      'no observable surface, so there is nothing to capture into. Either set a ' +
-      'demo.shape that can carry the captured evidence (e.g. harness, live-external, ' +
-      'browser, cli-diff, artifact) or drop the capture step. Advisory.'
-    );
-  }
-  return null;
-}
 
 /**
  * Load and validate `<projectRoot>/.forge/project.json`. Returns `null` if
@@ -305,37 +248,6 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   }
   const obj = raw as Record<string, unknown>;
 
-  if (typeof obj.demo !== 'object' || obj.demo === null) {
-    throw new Error('project-config: missing required `demo` block');
-  }
-  const demoIn = obj.demo as Record<string, unknown>;
-  const shape = demoIn.shape;
-  if (typeof shape !== 'string' || !DEMO_SHAPES.has(shape as DemoShape)) {
-    throw new Error(
-      `project-config: demo.shape must be one of ${[...DEMO_SHAPES].join(' | ')} (got ${JSON.stringify(shape)})`,
-    );
-  }
-  const command = optionalArgv(demoIn.command, 'demo.command');
-  if (shape !== 'none' && !command) {
-    throw new Error(`project-config: demo.command is required when demo.shape != "none"`);
-  }
-  const preview_command = optionalArgv(demoIn.preview_command, 'demo.preview_command');
-  if (shape === 'browser' && !preview_command) {
-    throw new Error(
-      'project-config: demo.preview_command is required when demo.shape = "browser"',
-    );
-  }
-  const output = optionalString(demoIn.output, 'demo.output');
-  const baseline = optionalString(demoIn.baseline, 'demo.baseline');
-
-  const demo: DemoConfig = {
-    shape: shape as DemoShape,
-    ...(command ? { command } : {}),
-    ...(output ? { output } : {}),
-    ...(baseline ? { baseline } : {}),
-    ...(preview_command ? { preview_command } : {}),
-  };
-
   const quality_gate_cmd = optionalArgv(obj.quality_gate_cmd, 'quality_gate_cmd');
   if (!quality_gate_cmd) {
     throw new Error('project-config: missing required `quality_gate_cmd` (argv)');
@@ -368,7 +280,6 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const releaseProcess = parseReleaseProcess(obj.releaseProcess);
 
   return {
-    demo,
     quality_gate_cmd,
     ...(ci_gate ? { ci_gate } : {}),
     ...(ci_fix_cmd ? { ci_fix_cmd } : {}),

@@ -446,7 +446,13 @@ export async function handleStudioWriteRoutes(
       }
       writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
 
-      sendJson(res, 200, { ok: true, id }, origin);
+      // F5: when demoProcess was in the save body, signal that the demo-design
+      // skill should be run to generate per-project demo machinery. The UI
+      // surfaces this as data-demo-design-state="needed" on the project page
+      // so the operator can trigger: `forge run skill demo-design --project <id>`.
+      const demoDesignNeeded = Array.isArray(b['demoProcess']);
+
+      sendJson(res, 200, { ok: true, id, ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -557,12 +563,11 @@ export async function handleStudioWriteRoutes(
       }
 
       // 8. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
-      // The predicate `r.flowId === id` is correct. It is fully effective today
-      // because run-model stamps every run with flowId = 'forge-cycle' (the only
-      // flow the scheduler runs). When multi-flow scheduling lands, run-model must
-      // derive the real flowId from the manifest/flow that spawned each run (see
-      // FLOW_ID note in run-model.ts) — until then, non-forge-cycle flows would
-      // not be locked (latent gap; no such flows exist today).
+      // The predicate `r.flowId === id` is correct: since S8/DEC-3 run-model stamps
+      // each run with the flowId its manifest names (forge-architect / forge-develop
+      // / forge-reflect), so a run of THIS flow is locked while in flight.
+      // Pre-S8 manifests with no flow_id stamp as 'unknown' (never matches a real
+      // editable flow id) — correct, an unknowable archival flow is not editable.
       const activeRun = listRuns(ctx.forgeRoot, Date.now()).find(
         (r) => r.flowId === id && r.status === 'active',
       );

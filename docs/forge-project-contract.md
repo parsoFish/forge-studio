@@ -326,18 +326,9 @@ declaration**, not two competing fields:
   `verify` steps name the assertion that makes the evidence non-trivial (forge
   runs the step and encodes its concrete result), `present` steps say how it is
   surfaced. This is the primary declaration.
-- **`demo.shape`** (the `demo` block: `shape` / `command` / `preview_command`) is
-  the **evidence floor** — the minimum a `demo.json` must carry for that project
-  form (`harness` ⇒ a metrics + `testEvidence[]` table; `live-external` ⇒ a
-  checkpoint carrying a real `liveEvidence.url`; `browser` ⇒ captured before/after
-  screenshots; etc.). It is checked structurally by preflight.
-
-**The unifier/demo skill derives the executed demo from `demoProcess` and lets
-`demo.shape` set the floor.** The two must be coherent: a `demoProcess` with a
-`capture` step requires a `demo.shape` that can carry captured evidence — a
-`capture`-bearing process under `demo.shape: "none"` is **flagged by `forge
-preflight`** (the DEMO clause; advisory), since `none` has no surface to capture
-into.
+**The unifier/demo skill derives the executed demo from `demoProcess`.** A
+`demoProcess` must include at least one `capture` step and one `verify` step —
+checked by preflight (advisory).
 
 The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
@@ -441,7 +432,7 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
 | C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
-| DEMO | `forge preflight` — advisory | `demo.shape` + `demo.command` structural validation + `demoProcess`↔`demo.shape` coherence (capture step ⇏ shape "none") |
+| DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/themes/` path-existence scan |
 
@@ -471,7 +462,7 @@ flow-ready — the flow engine will not accept it.
 | C7 | `acceptance_gate: { match: "acceptancetests", required: true, requires_env: ["TF_ACC"] }`. `ci_gate_unset_env: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
-| DEMO | `demo.shape: "live-external"` — real ADO REST round-trip evidence (`liveEvidence.url`); `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; falls back to the harness floor when creds are absent |
+| DEMO | `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; requires real ADO REST round-trip evidence (API GET response) when creds are present |
 
 ---
 

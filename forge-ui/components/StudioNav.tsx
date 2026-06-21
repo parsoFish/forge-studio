@@ -8,8 +8,8 @@ import { usePathname } from 'next/navigation';
  *
  * Every nav item is a live link (the builders all ship — ADR-033):
  *   Library   → /
- *   Flows     → /flows/forge-cycle  (the always-present seed flow; the library
- *               flows section is the full browser)
+ *   Flows     → /flows/forge-develop  (a present seed flow; the library
+ *               flows section is the full browser, the monitor selector lists all)
  *   Agents    → /agents/new
  *   Projects  → /projects
  *   Knowledge → /knowledge
@@ -21,7 +21,7 @@ type NavItem = { label: string; href: string; id: string };
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Library', href: '/', id: 'library' },
-  { label: 'Flows', href: '/flows/forge-cycle', id: 'flows' },
+  { label: 'Flows', href: '/flows/forge-develop', id: 'flows' },
   { label: 'Agents', href: '/agents/new', id: 'agents' },
   { label: 'Projects', href: '/projects', id: 'projects' },
   { label: 'Knowledge', href: '/knowledge', id: 'knowledge' },

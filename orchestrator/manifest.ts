@@ -129,10 +129,13 @@ export type InitiativeManifest = {
    */
   cycle_id?: string;
   /**
-   * The Studio flow this initiative runs under (ADR-028 / J5). When present, the
-   * run-model associates the run with this flow so it surfaces under
-   * `/flows/<flow_id>` in the monitor. Absent ⇒ the historical default
-   * `forge-cycle` (every legacy manifest), so existing behaviour is unchanged.
+   * The Studio flow this initiative runs under (ADR-028 / J5). The run-model
+   * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
+   * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
+   * default: every NEW manifest names a flow (architect → forge-architect,
+   * develop → forge-develop, reflect → forge-reflect), and runCycle
+   * throws on a missing/unknown flow_id (no fallback). Only historical `done/`
+   * manifests may lack it; they are never re-run.
    */
   flow_id?: string;
   /**
@@ -368,8 +371,10 @@ export function readManifestCycleId(manifestPath: string): string | null {
 
 /**
  * ADR 028 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
- * the cycle should run. Returns `null` when absent/unparseable so the caller
- * defaults to `forge-cycle`. Never throws — flow selection must not break a cycle.
+ * the cycle should run. Returns `null` when absent/unparseable. Never throws
+ * (the parse must not crash the caller) — but post-S8/DEC-3 a `null` flow_id is a
+ * terminal error in runCycle (the forge-cycle default was retired; there is no
+ * fallback), so the caller decides, not this reader.
  */
 export function readManifestFlowId(manifestPath: string): string | null {
   try {
@@ -395,6 +400,25 @@ export function readManifestCostCeiling(manifestPath: string): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * DEC-2 (S6 3-flow split): generate a fresh cycle id for an initiative and
+ * persist it onto the manifest at architect-finalize time so the Develop flow
+ * later picks up the SAME id rather than minting a sibling. This threads the
+ * initiativeId+cycleId lineage across the architect→develop→reflect split so
+ * cost, status, and WI hexes all roll up under one `_logs/<cycleId>` dir.
+ *
+ * Returns the minted cycleId (or the already-present one, idempotent).
+ * Best-effort: never throws.
+ */
+export function mintAndPersistManifestCycleId(manifestPath: string, initiativeId: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const cycleId = `${ts}_${initiativeId}`;
+  persistManifestCycleId(manifestPath, cycleId);
+  // Re-read to return whatever is on disk (may differ if idempotent no-op fired).
+  const onDisk = readManifestCycleId(manifestPath);
+  return onDisk ?? cycleId;
 }
 
 /**
