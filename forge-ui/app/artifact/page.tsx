@@ -66,6 +66,9 @@ type PrArtifactDoc = {
 
 type ArtifactDoc =
   | { type: 'plan';       doc: PlanDoc }
+  // Only the RENDERED PLAN.html was snapshotted into the cycle artifacts/ (no
+  // structured plan.json / PLAN.md) — show it in a sandboxed iframe.
+  | { type: 'plan-html';  url: string }
   | { type: 'workitems';  doc: WorkItemEntry[] }
   | { type: 'pr';         doc: PrArtifactDoc }
   | { type: 'demo';       doc: DemoModel }
@@ -78,7 +81,7 @@ type ArtifactDoc =
 // ---------------------------------------------------------------------------
 
 const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
-  plan:       { title: 'Architect Plan',  filename: 'PLAN.md' },
+  plan:       { title: 'Architect Plan',  filename: 'PLAN.html' },
   workitems:  { title: 'Work Items',      filename: 'work-items/*.md' },
   pr:         { title: 'Pull Request',    filename: 'PR' },
   demo:       { title: 'Demo Evidence',   filename: 'demo-evidence/' },
@@ -204,6 +207,12 @@ async function fetchArtifactDoc(
             const text = await res.text();
             if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
           }
+          // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
+          // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
+          // iframe so the plan is actually viewable post-cycle, not "not produced".
+          const htmlUrl = `${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
+          const htmlRes = await fetch(htmlUrl);
+          if (htmlRes.ok) return { type: 'plan-html', url: htmlUrl };
         }
       } catch { /* best-effort */ }
       return { type: 'empty' };
@@ -794,6 +803,25 @@ function ArtifactPageInner() {
                   gateMode={isGateMode}
                   onDecisionsResolved={(resolved) => {
                     setDecisionsResolved(resolved);
+                  }}
+                />
+              )}
+
+              {/* Rendered PLAN.html (the snapshotted plan artifact) in a locked-down
+                  sandbox iframe — the post-cycle read-only plan view. */}
+              {artifact && artifact.type === 'plan-html' && (
+                <iframe
+                  src={artifact.url}
+                  sandbox=""
+                  data-plan-iframe
+                  data-plan-html
+                  title="PLAN"
+                  style={{
+                    width: '100%',
+                    height: '72vh',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius)',
+                    background: '#fff',
                   }}
                 />
               )}

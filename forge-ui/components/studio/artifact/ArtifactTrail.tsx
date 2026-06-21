@@ -7,7 +7,7 @@ export type ArtifactKey = 'plan' | 'workitems' | 'pr' | 'demo' | 'verdict' | 're
 export type ArtifactsReady = Partial<Record<ArtifactKey, 'view' | 'gate'>>;
 
 const TRAIL: { key: ArtifactKey; label: string }[] = [
-  { key: 'plan',       label: 'PLAN.md' },
+  { key: 'plan',       label: 'PLAN.html' },
   { key: 'workitems',  label: 'work-items/' },
   { key: 'pr',         label: 'PR' },
   { key: 'demo',       label: 'demo-evidence/' },

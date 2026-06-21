@@ -24,6 +24,11 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   (`/api/studio/flows`); an old cycle on a retired flow (`release-refine`,
   `forge-cycle-with-review`) degrades to the dashboard cascade `/` instead of
   linking to a now-deleted `/flows/<id>`.
+- **The PLAN artifact actually renders.** Only the rendered `PLAN.html` is
+  snapshotted into a cycle's `artifacts/` (no `plan.json` / `PLAN.md`), so the
+  `type=plan` view always fell through to "Artifact not yet produced". It now
+  falls back to showing `PLAN.html` in a locked-down (`sandbox=""`) iframe, and
+  the plan chip/badge is relabeled `PLAN.html` to match the real artifact.
 
 ## [0.2.0] - 2026-06-21
 
