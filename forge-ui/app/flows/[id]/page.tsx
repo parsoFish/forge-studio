@@ -364,9 +364,14 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-              {/* M1: filter to flows that have runs (current flow always included). */}
+              {/* The monitor flow selector lists EVERY flow that actually exists
+                  (same source as the BUILD tab), annotating which have runs — not
+                  just flows-with-runs, which left the selector stale/absent. The
+                  current flow is always present (it's in allFlows). */}
               {(() => {
-                const candidates = allFlows.filter((f) => flowsWithRuns.has(f.id) || f.id === id);
+                const candidates = allFlows.some((f) => f.id === id)
+                  ? allFlows
+                  : [...allFlows, ...(flow ? [flow] : [])];
                 if (candidates.length <= 1) {
                   return (
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>

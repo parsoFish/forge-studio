@@ -169,7 +169,7 @@ export default function ArchitectInterviewPage({
                 <span style={{ fontSize: 13, color: 'var(--green)' }}>
                   Approved — manifests queued; the autonomous loop is building it now.
                 </span>
-                <Link href="/flows/forge-cycle" data-action="watch-it-build" style={btnLinkStyle}>
+                <Link href="/flows/forge-develop" data-action="watch-it-build" style={btnLinkStyle}>
                   Watch it build →
                 </Link>
               </div>

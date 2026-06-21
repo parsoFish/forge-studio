@@ -80,7 +80,7 @@ export function ArchitectPlanGate({
             Approved — manifests queued; the autonomous loop is building it now.
           </span>
           <Link
-            href="/flows/forge-cycle"
+            href="/flows/forge-develop"
             data-action="watch-it-build"
             style={{
               flex: '0 0 auto',
