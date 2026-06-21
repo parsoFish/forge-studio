@@ -7,6 +7,22 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+### Knowledge graph — real force-directed layout (d3)
+
+- **The KB graph now uses `d3-force` + `d3-zoom`/`d3-drag`** instead of a
+  hand-rolled spring integrator and custom pan/zoom. This fixes three things:
+  - **Pan/zoom no longer freezes.** The old wheel handler closed over a stale
+    `vp` snapshot while `vpRef` was reassigned underneath it, so once the settle
+    loop stopped re-rendering, panning/zooming drifted (the buttons, which read
+    the ref directly, kept working — the exact reported symptom). d3-zoom owns
+    the viewport transform imperatively, no stale closures.
+  - **Layout is deterministic.** The seed positions are derived from each node's
+    layer + order (no `Math.random`), so a graph lays out identically every load.
+  - **Dragging a node pulls its neighbours.** A drag fixes the node and reheats
+    the simulation, so linked nodes stretch toward it and re-settle (drop to pin;
+    double-click to release). New `d3-force`/`d3-zoom`/`d3-selection`/`d3-drag`
+    dependencies.
+
 ### Demo + artifact polish (post-S9 refinements)
 
 - **Demos show REAL captured CLI output, not prose.** `forge demo capture` now runs

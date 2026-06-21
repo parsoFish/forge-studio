@@ -2574,7 +2574,9 @@ async function main() {
     if (kbPageReady) {
       const themeNode = page.locator('[data-layer="theme"]').first();
       if ((await themeNode.count()) > 0) {
-        await themeNode.click({ force: true, timeout: 5000 }).catch(() => {});
+        // Click the node's hit-circle: its centre is collision-free, whereas the
+        // <g> bbox centre is pushed by the label into empty/overlapped space.
+        await themeNode.locator('[data-hit]').click({ force: true, timeout: 5000 }).catch(() => {});
         try {
           await page.waitForFunction(
             () => (document.querySelector('#kb-svg')?.getAttribute('data-selected-node') ?? '') !== '',

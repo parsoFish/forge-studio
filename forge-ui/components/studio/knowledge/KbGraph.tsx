@@ -1,17 +1,19 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { select } from 'd3-selection';
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom';
+import { drag as d3drag, type D3DragEvent } from 'd3-drag';
+
 import type { KbGraph as KbGraphData } from '@/lib/studio-client';
 import {
-  buildSimState, useForceSim, hexPoints,
-  LAYOUT_PRESETS, type LayoutPreset, type SimNode, type SimEdge,
+  buildSimData, useForceSim, hexPoints, LAYER_RADIUS,
+  LAYOUT_PRESETS, type LayoutPreset, type SimNode, type SimLink,
 } from './useForceSim';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const LAYER_RADIUS: Record<string, number> = { index: 28, theme: 18, guidance: 12, raw: 8 };
-
-function nodeRadius(layer: string): number { return LAYER_RADIUS[layer] ?? 8; }
+function nodeRadius(layer: string): number { return LAYER_RADIUS[layer as keyof typeof LAYER_RADIUS] ?? 8; }
 
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
@@ -23,7 +25,7 @@ function readStoredPreset(kbId: string): LayoutPreset {
   try {
     const raw = window.localStorage.getItem(LAYOUT_STORAGE_PREFIX + kbId);
     if (raw === 'compact' || raw === 'balanced' || raw === 'spread') return raw;
-  } catch { /* localStorage unavailable — fall through to default */ }
+  } catch { /* localStorage unavailable */ }
   return 'balanced';
 }
 
@@ -40,190 +42,147 @@ interface Props {
 
 export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
   const svgRef      = useRef<SVGSVGElement | null>(null);
+  const viewportRef = useRef<SVGGElement | null>(null);
   const nodesRef    = useRef<SimNode[]>([]);
-  const edgesRef    = useRef<SimEdge[]>([]);
-  const hoveredRef  = useRef<string | null>(null);
+  const linksRef    = useRef<SimLink[]>([]);
+  const zoomRef     = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [, forceRender] = useState(0);
 
-  // viewport pan/zoom
-  const vpRef  = useRef({ x: 0, y: 0, scale: 1 });
-  const panRef = useRef<{ startX: number; startY: number } | null>(null);
-
-  // layout density preset (persisted per-KB in localStorage)
   const [layoutPreset, setLayoutPreset] = useState<LayoutPreset>('balanced');
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
-  // tooltip
-  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const onTick = useCallback(() => { forceRender((n) => n + 1); }, []);
+  const { start: simStart, stop: simStop, reheat, simRef } = useForceSim(onTick);
 
   // ── On KB change: load the persisted density preset ───────────────────────
-  useEffect(() => {
-    setLayoutPreset(readStoredPreset(kbId));
-  }, [kbId]);
+  useEffect(() => { setLayoutPreset(readStoredPreset(kbId)); }, [kbId]);
 
-  // ── On graph data / preset change: rebuild sim ────────────────────────────
+  // ── On graph data / preset change: (re)build + start the d3-force sim ──────
   useEffect(() => {
     const svg = svgRef.current;
-    const W   = svg?.clientWidth  ?? 700;
-    const H   = svg?.clientHeight ?? 500;
-    const forces = LAYOUT_PRESETS[layoutPreset];
-    const { simNodes, simEdges } = buildSimState(graph.nodes, graph.edges, W, H, forces);
+    const W = svg?.clientWidth || 700;
+    const H = svg?.clientHeight || 500;
+    const { simNodes, simLinks } = buildSimData(graph.nodes, graph.edges, W, H);
     nodesRef.current = simNodes;
-    edgesRef.current = simEdges;
-    vpRef.current    = { x: 0, y: 0, scale: 1 };
-    hoveredRef.current = null;
+    linksRef.current = simLinks;
+    setHoveredNode(null);
     forceRender((n) => n + 1);
-    simStart(simNodes, simEdges, W / 2, H / 2, forces);
+    simStart(simNodes, simLinks, W, H, LAYOUT_PRESETS[layoutPreset]);
+    return () => simStop();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kbId, graph, layoutPreset]);
 
-  // ── rAF settle animation ───────────────────────────────────────────────────
-  const onFrame = useCallback((nodes: SimNode[], edges: SimEdge[]) => {
-    nodesRef.current = nodes;
-    edgesRef.current = edges;
-    forceRender((n) => n + 1);
-  }, []);
-
-  const { start: simStart, stop: simStop } = useForceSim(onFrame);
-
-  useEffect(() => () => simStop(), [simStop]);
-
-  // ── Viewport transform string ──────────────────────────────────────────────
-  const vp = vpRef.current;
-  const vpTransform = `translate(${vp.x},${vp.y}) scale(${vp.scale})`;
-
-  const applyViewport = () => {
-    const g = svgRef.current?.querySelector<SVGGElement>('#kb-svg-viewport');
-    if (g) g.setAttribute('transform', vpTransform);
-  };
-
-  // ── Wheel zoom ────────────────────────────────────────────────────────────
+  // ── Pan/zoom — d3-zoom owns the viewport transform (imperative, no stale
+  //    closures). The zoom ignores pointer-downs that land on a node (those
+  //    start a node-drag instead); wheel + background-drag pan/zoom. ──────────
   useEffect(() => {
     const svg = svgRef.current;
-    if (!svg) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect   = svg.getBoundingClientRect();
-      const mx     = e.clientX - rect.left;
-      const my     = e.clientY - rect.top;
-      const delta  = e.deltaY > 0 ? 0.88 : 1.14;
-      const newScale = Math.min(Math.max(vp.scale * delta, 0.2), 4);
-      vpRef.current = {
-        x: mx - (mx - vp.x) * (newScale / vp.scale),
-        y: my - (my - vp.y) * (newScale / vp.scale),
-        scale: newScale,
-      };
-      applyViewport();
-    };
-    svg.addEventListener('wheel', onWheel, { passive: false });
-    return () => svg.removeEventListener('wheel', onWheel);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const g = viewportRef.current;
+    if (!svg || !g) return;
+    const sel = select(svg);
+    const zoomBehavior = d3zoom<SVGSVGElement, unknown>()
+      .scaleExtent([ZOOM_MIN, ZOOM_MAX])
+      .filter((event: Event) => {
+        const t = event.target as Element;
+        if (t.closest?.('[data-node-id]')) return false; // node → drag, not pan
+        if (event.type === 'dblclick') return false;       // keep dblclick for unpin
+        return !(event as MouseEvent).ctrlKey || event.type === 'wheel';
+      })
+      .on('zoom', (event) => { g.setAttribute('transform', event.transform.toString()); });
+    sel.call(zoomBehavior);
+    sel.on('dblclick.zoom', null);
+    zoomRef.current = zoomBehavior;
+    return () => { sel.on('.zoom', null); };
   }, []);
 
-  // ── Pan events ────────────────────────────────────────────────────────────
-  const onSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    const target = e.target as Element;
-    if (target.closest('[data-node-id]')) return;
-    panRef.current = { startX: e.clientX - vp.x, startY: e.clientY - vp.y };
-  };
-
+  // ── Node drag — d3-drag fixes the node (fx/fy) and reheats the sim, so the
+  //    dragged node's neighbours pull/stretch toward it and re-settle. A press
+  //    with no movement is a select; double-click releases (unpins) a node. ──
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!panRef.current) return;
-      vpRef.current = { ...vpRef.current, x: e.clientX - panRef.current.startX, y: e.clientY - panRef.current.startY };
-      applyViewport();
-    };
-    const onUp = () => { panRef.current = null; };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    const g = viewportRef.current;
+    if (!g) return;
+    let moved = false;
+    const dragBehavior = d3drag<SVGGElement, unknown>()
+      .container(() => g)
+      .clickDistance(4) // ≤4px of travel still counts as a click (selection via onClick)
+      .filter((event: Event) => !!(event.target as Element).closest?.('[data-node-id]'))
+      .subject((event: D3DragEvent<SVGGElement, unknown, SimNode>) => {
+        const el = (event.sourceEvent.target as Element).closest('[data-node-id]');
+        const id = el?.getAttribute('data-node-id');
+        return nodesRef.current.find((n) => n.id === id) as SimNode;
+      })
+      .on('start', (event: D3DragEvent<SVGGElement, unknown, SimNode>) => {
+        moved = false;
+        const d = event.subject;
+        if (!d) return;
+        simRef.current?.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on('drag', (event: D3DragEvent<SVGGElement, unknown, SimNode>) => {
+        const d = event.subject;
+        if (!d) return;
+        moved = true;
+        d.fx = event.x; d.fy = event.y;
+      })
+      .on('end', (event: D3DragEvent<SVGGElement, unknown, SimNode>) => {
+        const d = event.subject;
+        if (!d) return;
+        simRef.current?.alphaTarget(0);
+        if (moved) {
+          d.pinned = true; // keep it where dropped; neighbours settle around it
+        } else {
+          d.fx = null; d.fy = null; // a click must not pin — selection is via onClick
+        }
+        forceRender((n) => n + 1);
+      });
+    select(g).call(dragBehavior);
+    return () => { select(g).on('.drag', null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Node drag + click ─────────────────────────────────────────────────────
-  const attachNodeHandlers = (node: SimNode, idx: number) => {
-    let isDragging = false;
-    let dragStart: { mx: number; my: number; nx: number; ny: number } | null = null;
+  // Double-click a pinned node to release it back into the simulation.
+  const releaseNode = useCallback((id: string) => {
+    const d = nodesRef.current.find((n) => n.id === id);
+    if (!d) return;
+    d.fx = null; d.fy = null; d.pinned = false;
+    reheat(0.4);
+  }, [reheat]);
 
-    return {
-      onMouseDown: (e: React.MouseEvent) => {
-        e.stopPropagation();
-        isDragging = false;
-        dragStart  = { mx: e.clientX, my: e.clientY, nx: node.x, ny: node.y };
+  // ── Zoom controls (reuse the d3-zoom behaviour) ────────────────────────────
+  const zoomBy = useCallback((factor: number) => {
+    const svg = svgRef.current;
+    if (!svg || !zoomRef.current) return;
+    select(svg).transition().duration(160).call(zoomRef.current.scaleBy, factor);
+  }, []);
 
-        const onMove = (ev: MouseEvent) => {
-          if (!dragStart) return;
-          const dx = (ev.clientX - dragStart.mx) / vp.scale;
-          const dy = (ev.clientY - dragStart.my) / vp.scale;
-          if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) isDragging = true;
-          if (isDragging) {
-            const ns = nodesRef.current;
-            ns[idx].x = dragStart.nx + dx;
-            ns[idx].y = dragStart.ny + dy;
-            ns[idx].pinned = true;
-            forceRender((n) => n + 1);
-          }
-        };
-        const onUp = () => {
-          window.removeEventListener('mousemove', onMove);
-          window.removeEventListener('mouseup', onUp);
-          if (!isDragging) onSelectNode(node.id);
-          dragStart = null;
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-      },
-    };
-  };
+  const fitView = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg || !zoomRef.current) return;
+    select(svg).transition().duration(220).call(zoomRef.current.transform, zoomIdentity);
+  }, []);
 
-  // ── Hover adjacency ───────────────────────────────────────────────────────
+  // ── Layout density preset (persisted per-KB; sim rebuilds via the effect) ──
+  const changePreset = useCallback((preset: LayoutPreset) => {
+    setLayoutPreset(preset);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(LAYOUT_STORAGE_PREFIX + kbId, preset); } catch { /* */ }
+    }
+  }, [kbId]);
+
+  // ── Hover adjacency ────────────────────────────────────────────────────────
   const getNeighbours = (id: string): Set<string> => {
     const s = new Set([id]);
-    for (const e of edgesRef.current) {
+    for (const e of linksRef.current) {
       if (e.fromId === id) s.add(e.toId);
-      if (e.toId   === id) s.add(e.fromId);
+      if (e.toId === id) s.add(e.fromId);
     }
     return s;
   };
 
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-
-  // ── Zoom controls — reuse the same vpRef + applyViewport seam as wheel/pan ──
-  // Buttons zoom about the SVG centre (the wheel zooms about the cursor).
-  const zoomBy = useCallback((factor: number) => {
-    const svg = svgRef.current;
-    const rect = svg?.getBoundingClientRect();
-    const cx = rect ? rect.width  / 2 : 0;
-    const cy = rect ? rect.height / 2 : 0;
-    const v = vpRef.current;
-    const newScale = Math.min(Math.max(v.scale * factor, ZOOM_MIN), ZOOM_MAX);
-    vpRef.current = {
-      x: cx - (cx - v.x) * (newScale / v.scale),
-      y: cy - (cy - v.y) * (newScale / v.scale),
-      scale: newScale,
-    };
-    forceRender((n) => n + 1);
-  }, []);
-
-  // Reset/fit — recentre to the identity viewport (sim already normalises to fit).
-  const fitView = useCallback(() => {
-    vpRef.current = { x: 0, y: 0, scale: 1 };
-    forceRender((n) => n + 1);
-  }, []);
-
-  // ── Layout density — change preset, persist per-KB, sim rebuilds via effect ──
-  const changePreset = useCallback((preset: LayoutPreset) => {
-    setLayoutPreset(preset);
-    if (typeof window !== 'undefined') {
-      try { window.localStorage.setItem(LAYOUT_STORAGE_PREFIX + kbId, preset); }
-      catch { /* localStorage unavailable — preset still applies for this session */ }
-    }
-  }, [kbId]);
-
   // ── Render ─────────────────────────────────────────────────────────────────
   const simNodes = nodesRef.current;
-  const simEdges = edgesRef.current;
+  const simLinks = linksRef.current;
   const neighbours = hoveredNode ? getNeighbours(hoveredNode) : null;
-
   const nodeCount = graph.nodes.length;
   const edgeCount = graph.edges.length;
 
@@ -239,8 +198,7 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         data-node-count={nodeCount}
         data-edge-count={edgeCount}
         data-selected-node={selectedNodeId ?? ''}
-        style={{ flex: 1, width: '100%', height: '100%', cursor: 'grab', display: 'block' }}
-        onMouseDown={onSvgMouseDown}
+        style={{ flex: 1, width: '100%', height: '100%', cursor: 'grab', display: 'block', touchAction: 'none' }}
       >
         <defs>
           <filter id="glow-green">
@@ -256,12 +214,12 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
           </marker>
         </defs>
 
-        <g id="kb-svg-viewport" transform={vpTransform}>
+        <g id="kb-svg-viewport" ref={viewportRef}>
           {/* Edges */}
           <g id="svg-edges">
-            {simEdges.map((e) => {
-              const a = simNodes[e.from]; const b = simNodes[e.to];
-              if (!a || !b) return null;
+            {simLinks.map((e) => {
+              const a = e.source as SimNode; const b = e.target as SimNode;
+              if (!a || !b || typeof a.x !== 'number' || typeof b.x !== 'number') return null;
               const fromIndex = a.layer === 'index';
               return (
                 <line
@@ -279,26 +237,27 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
 
           {/* Nodes */}
           <g id="svg-nodes">
-            {simNodes.map((n, idx) => {
+            {simNodes.map((n) => {
               const r   = nodeRadius(n.layer);
               const sel = n.id === selectedNodeId;
               const opacity = neighbours ? (neighbours.has(n.id) ? 1 : 0.25) : 1;
-              const handlers = attachNodeHandlers(n, idx);
-
               return (
                 <g
                   key={n.id}
                   data-node-id={n.id}
                   data-layer={n.layer}
-                  style={{ cursor: 'pointer', opacity }}
-                  {...handlers}
+                  data-pinned={n.pinned ? 'true' : 'false'}
+                  style={{ cursor: 'grab', opacity }}
+                  onClick={() => onSelectNode(n.id)}
                   onMouseEnter={() => setHoveredNode(n.id)}
                   onMouseLeave={() => setHoveredNode(null)}
+                  onDoubleClick={(e) => { e.stopPropagation(); releaseNode(n.id); }}
                 >
                   {n.layer === 'guidance' && <GuidanceNode n={n} r={r} sel={sel} />}
                   {n.layer === 'index'    && <IndexNode    n={n} r={r} sel={sel} />}
                   {n.layer === 'theme'    && <ThemeNode    n={n} r={r} sel={sel} />}
                   {n.layer === 'raw'      && <RawNode      n={n} r={r} sel={sel} hoveredNode={hoveredNode} />}
+                  {n.pinned && <circle cx={n.x} cy={n.y} r={r + 3} fill="none" stroke="var(--amber)" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />}
 
                   {/* invisible hit area */}
                   <circle cx={n.x} cy={n.y} r={Math.max(r + 8, 16)} fill="transparent" data-hit="true" />
@@ -314,12 +273,12 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         data-component="topology-controls"
         style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
       >
-        <CtrlButton label="+" title="Zoom in"     onClick={() => zoomBy(1.2)}     dataAction="kb-zoom-in" />
-        <CtrlButton label="−" title="Zoom out"    onClick={() => zoomBy(1 / 1.2)} dataAction="kb-zoom-out" />
+        <CtrlButton label="+" title="Zoom in"     onClick={() => zoomBy(1.25)}    dataAction="kb-zoom-in" />
+        <CtrlButton label="−" title="Zoom out"    onClick={() => zoomBy(1 / 1.25)} dataAction="kb-zoom-out" />
         <CtrlButton label="⤢" title="Reset / fit" onClick={fitView}               dataAction="kb-fit" />
       </div>
 
-      {/* Layout density presets (below the zoom controls) */}
+      {/* Layout density presets (top-left) */}
       <div
         data-component="kb-layout-controls"
         data-layout-preset={layoutPreset}
@@ -356,7 +315,7 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         ))}
       </div>
 
-      {/* Affordance hint — surfaces the hidden wheel/drag/pin interactions */}
+      {/* Affordance hint */}
       <div
         data-component="kb-affordance-hint"
         style={{
@@ -365,7 +324,7 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
           pointerEvents: 'none', userSelect: 'none',
         }}
       >
-        scroll to zoom · drag to pan · drag a node to pin
+        scroll to zoom · drag background to pan · drag a node to reposition (neighbours follow) · double-click to release
       </div>
 
       {/* Tooltip for raw/guidance nodes */}
@@ -373,7 +332,7 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         const n = simNodes.find((s) => s.id === hoveredNode);
         if (!n || (n.layer !== 'raw' && n.layer !== 'guidance')) return null;
         return (
-          <div ref={tooltipRef} style={{
+          <div style={{
             position: 'absolute', top: 8, left: 8,
             background: 'var(--panel-2)', border: '1px solid var(--line-2)',
             borderRadius: 'var(--radius-sm)', padding: '5px 10px',
@@ -421,19 +380,9 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
   );
 }
 
-// ── Control button (matches FlowTopology's ZoomButton style) ──────────────────
+// ── Control button ────────────────────────────────────────────────────────────
 
-function CtrlButton({
-  label,
-  title,
-  onClick,
-  dataAction,
-}: {
-  label: string;
-  title: string;
-  onClick: () => void;
-  dataAction: string;
-}) {
+function CtrlButton({ label, title, onClick, dataAction }: { label: string; title: string; onClick: () => void; dataAction: string }) {
   return (
     <button
       type="button"
@@ -442,18 +391,9 @@ function CtrlButton({
       data-action={dataAction}
       onClick={onClick}
       style={{
-        width: 26,
-        height: 26,
-        background: 'var(--panel)',
-        color: 'var(--text)',
-        border: '1px solid var(--line)',
-        borderRadius: 4,
-        cursor: 'pointer',
-        fontSize: 14,
-        lineHeight: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: 26, height: 26, background: 'var(--panel)', color: 'var(--text)',
+        border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer',
+        fontSize: 14, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       {label}
@@ -467,22 +407,13 @@ function IndexNode({ n, r, sel }: { n: SimNode; r: number; sel: boolean }) {
   return (
     <>
       {sel && (
-        <polygon
-          points={hexPoints(n.x, n.y, r + 7)}
-          fill="none" stroke="var(--ember)" strokeWidth="2" opacity="0.9"
-        />
+        <polygon points={hexPoints(n.x, n.y, r + 7)} fill="none" stroke="var(--ember)" strokeWidth="2" opacity="0.9" />
       )}
-      <polygon
-        points={hexPoints(n.x, n.y, r)}
-        fill="rgba(74,222,128,0.15)" stroke="var(--c-kb)" strokeWidth="2"
-        filter="url(#glow-green)"
-      />
-      <text x={n.x} y={n.y + 4} textAnchor="middle" fontSize="9" fill="var(--c-kb)"
-        fontWeight="700" fontFamily="var(--font-display)" letterSpacing="0.08em">
+      <polygon points={hexPoints(n.x, n.y, r)} fill="rgba(74,222,128,0.15)" stroke="var(--c-kb)" strokeWidth="2" filter="url(#glow-green)" />
+      <text x={n.x} y={n.y + 4} textAnchor="middle" fontSize="9" fill="var(--c-kb)" fontWeight="700" fontFamily="var(--font-display)" letterSpacing="0.08em">
         INDEX
       </text>
-      <text x={n.x} y={n.y + r + 16} textAnchor="middle" fontSize="11" fill="var(--c-kb)"
-        fontWeight="600" fontFamily="var(--font-display)">
+      <text x={n.x} y={n.y + r + 16} textAnchor="middle" fontSize="11" fill="var(--c-kb)" fontWeight="600" fontFamily="var(--font-display)">
         {n.title.length > 22 ? n.title.slice(0, 20) + '…' : n.title}
       </text>
     </>
@@ -492,12 +423,9 @@ function IndexNode({ n, r, sel }: { n: SimNode; r: number; sel: boolean }) {
 function ThemeNode({ n, r, sel }: { n: SimNode; r: number; sel: boolean }) {
   return (
     <>
-      {sel && (
-        <circle cx={n.x} cy={n.y} r={r + 6} fill="none" stroke="var(--ember)" strokeWidth="2"/>
-      )}
+      {sel && (<circle cx={n.x} cy={n.y} r={r + 6} fill="none" stroke="var(--ember)" strokeWidth="2"/>)}
       <circle cx={n.x} cy={n.y} r={r} fill="rgba(92,200,255,0.1)" stroke="var(--steel)" strokeWidth="1.5"/>
-      <text x={n.x} y={n.y + r + 14} textAnchor="middle" fontSize="11.5" fill="var(--text)"
-        fontFamily="var(--font-body)">
+      <text x={n.x} y={n.y + r + 14} textAnchor="middle" fontSize="11.5" fill="var(--text)" fontFamily="var(--font-body)">
         {n.title.length > 22 ? n.title.slice(0, 20) + '…' : n.title}
       </text>
     </>
@@ -507,14 +435,10 @@ function ThemeNode({ n, r, sel }: { n: SimNode; r: number; sel: boolean }) {
 function RawNode({ n, r, sel, hoveredNode }: { n: SimNode; r: number; sel: boolean; hoveredNode: string | null }) {
   return (
     <>
-      {sel && (
-        <circle cx={n.x} cy={n.y} r={r + 5} fill="none" stroke="var(--ember)" strokeWidth="1.5"/>
-      )}
+      {sel && (<circle cx={n.x} cy={n.y} r={r + 5} fill="none" stroke="var(--ember)" strokeWidth="1.5"/>)}
       <circle cx={n.x} cy={n.y} r={r} fill="var(--faint)" opacity="0.45"/>
-      {/* label on hover only */}
       {hoveredNode === n.id && (
-        <text x={n.x} y={n.y + r + 12} textAnchor="middle" fontSize="10" fill="var(--faint)"
-          fontFamily="var(--font-mono)">
+        <text x={n.x} y={n.y + r + 12} textAnchor="middle" fontSize="10" fill="var(--faint)" fontFamily="var(--font-mono)">
           {n.title.length > 18 ? n.title.slice(0, 16) + '…' : n.title}
         </text>
       )}
@@ -528,12 +452,9 @@ function GuidanceNode({ n, r, sel }: { n: SimNode; r: number; sel: boolean }) {
     <>
       <polygon
         points={`${n.x},${n.y - size} ${n.x + size},${n.y} ${n.x},${n.y + size} ${n.x - size},${n.y}`}
-        fill="rgba(251,191,36,0.18)"
-        stroke={sel ? 'var(--ember)' : 'var(--amber)'}
-        strokeWidth="1.5" strokeDasharray="3 2"
+        fill="rgba(251,191,36,0.18)" stroke={sel ? 'var(--ember)' : 'var(--amber)'} strokeWidth="1.5" strokeDasharray="3 2"
       />
-      <text x={n.x} y={n.y + r * 2 + 6} textAnchor="middle" fontSize="10" fill="var(--amber)"
-        fontFamily="var(--font-mono)">
+      <text x={n.x} y={n.y + r * 2 + 6} textAnchor="middle" fontSize="10" fill="var(--amber)" fontFamily="var(--font-mono)">
         ⊕ guidance
       </text>
     </>
