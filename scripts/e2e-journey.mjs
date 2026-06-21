@@ -2157,7 +2157,7 @@ async function main() {
     if (await roadmapTab.count() > 0) {
       await roadmapTab.click();
       await sleep(1500); // allow bridge fetch to settle
-      await caption(page, 'Per-project Roadmap — initiatives ordered by dependency level, with nested WI sub-graphs.');
+      await caption(page, 'Per-project Roadmap — a serpentine timeline of the project’s progression over time, with the initiative cards below.');
       await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: initiative spine + work items');
       const roadmapSection = await page.evaluate(() =>
         document.querySelector('[data-section="project-roadmap"]') !== null);

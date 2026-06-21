@@ -42,6 +42,13 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   The hold on `complete` is now bounded by staleness (`WEDGE_THRESHOLD_MS`): a
   cycle quiet past the wedge threshold trusts its `done/` placement and reports
   `complete`, while a genuinely-live cycle mid-reflection still shows `active`.
+- **Per-project Roadmap is now a serpentine timeline over time.** The project
+  Roadmap tab replaces the dependency-level card grid with a winding S-curve
+  arrow (`SerpentineTimeline`): initiatives ordered chronologically (oldest →
+  arrowhead "NOW"), each a status-coloured node branching off the spine, with
+  dotted arcs for inter-initiative dependencies. The chronological initiative
+  cards (work items + start-development) remain below as the detail/action
+  strip. New `data-roadmap-timeline` / `data-roadmap-node` hooks.
 
 ## [0.2.0] - 2026-06-21
 
