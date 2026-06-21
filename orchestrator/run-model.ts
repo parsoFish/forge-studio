@@ -254,19 +254,25 @@ export function computeFlowLineage(
   flowNodeSets: Map<string, Set<string>>,
 ): string[] {
   const ran = new Set(phaseNodeIds);
-  const ownNodes = flowNodeSets.get(manifestFlowId) ?? new Set<string>();
+  // Count how many flows each node id appears in, so we can key lineage off nodes
+  // GLOBALLY UNIQUE to a flow.
+  const nodeFlowCount = new Map<string, number>();
+  for (const nodeIds of flowNodeSets.values()) {
+    for (const nid of nodeIds) nodeFlowCount.set(nid, (nodeFlowCount.get(nid) ?? 0) + 1);
+  }
   const lineage: string[] = [];
   for (const [flowId, nodeIds] of flowNodeSets) {
     if (flowId === manifestFlowId) { lineage.push(flowId); continue; }
-    // Include another flow only if the run executed a node THIS flow has that the
-    // manifest's own flow does NOT — so a copy/subset flow (e.g. a parity scratch
-    // flow with the same node ids) never falsely claims the run, while the genuine
-    // spine stages (architect's architect+pm, reflect's reflect) still do.
-    let hasDistinctRanNode = false;
+    // Include another flow only if the run executed a node UNIQUE to it (present in
+    // exactly one flow). The spine stages own unique nodes (architect+pm, reflect),
+    // so they join the lineage; a parity copy/subset flow (e.g. forge-develop-scratch,
+    // whose dev/unifier/review are shared with forge-develop) owns no unique node, so
+    // it never falsely claims a run.
+    let hasUniqueRanNode = false;
     for (const nid of nodeIds) {
-      if (ran.has(nid) && !ownNodes.has(nid)) { hasDistinctRanNode = true; break; }
+      if (ran.has(nid) && nodeFlowCount.get(nid) === 1) { hasUniqueRanNode = true; break; }
     }
-    if (hasDistinctRanNode) lineage.push(flowId);
+    if (hasUniqueRanNode) lineage.push(flowId);
   }
   if (manifestFlowId !== FALLBACK_FLOW_ID && !lineage.includes(manifestFlowId)) lineage.push(manifestFlowId);
   return lineage;

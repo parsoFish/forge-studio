@@ -2015,8 +2015,23 @@ async function main() {
         document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
       check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
     }
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'completed cycle still shows ≥5 phase hexes');
-    await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
+    // Model B: the completed spine is split across the 3 flow monitors. This develop
+    // slice shows the dev fan-out (≥2 WI hexes) + unifier + review.
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (unifier+review)');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'completed develop slice shows the dev fan-out (≥2 WI hexes)');
+    await expectPhaseCost(page, 'completed develop slice shows accrued per-phase cost');
+    // The SAME threaded run renders its architect slice under forge-architect
+    // (flowLineage) — Model B proof. (The reflect slice is verified at R5, once the
+    // reflection phase has actually run.)
+    await openStudioMonitor(page, watch, 'forge-architect');
+    check(
+      await page.evaluate(() =>
+        document.querySelector('[data-mon-node][data-node-id="architect"]') !== null &&
+        document.querySelector('[data-mon-node][data-node-id="pm"]') !== null &&
+        document.querySelector('[data-mon-node][data-node-id="dev"]') === null),
+      'Model B: /flows/forge-architect renders the architect slice (architect+pm, not dev) of the threaded run',
+    );
+    await openStudioMonitor(page, watch); // back to the develop slice
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
@@ -2231,10 +2246,13 @@ async function main() {
     studioEvent('architect', 'end', 'architect.end', { cost_usd: 0.22 });
     studioEvent('project-manager', 'start', 'pm phase start');
     studioEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2' } });
     studioEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.15 });
     studioEvent('developer-loop', 'start', 'dev-loop start');
     studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-1' } });
     studioEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-2' } });
+    studioEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } });
     studioEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.48 });
     studioEvent('unifier', 'start', 'unifier.start', { skill: 'developer-unifier' });
     for (const [checkId, pass, detail] of [
