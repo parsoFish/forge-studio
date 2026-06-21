@@ -14,15 +14,17 @@
  *   forge brain index|lint                  brain-integrity gate (mirrors studio lint)
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serve } from './scheduler.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
 import { runStudioLint } from '../cli/studio-lint.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { runArchitectTurn } from './architect-runner.ts';
+import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -33,6 +35,10 @@ const cmd = args[0];
 // silently miss the real one. The forge root is the parent of `orchestrator/`
 // where this file sits.
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
+// Capture the caller's CWD BEFORE chdir to FORGE_ROOT. `forge demo render` (run by
+// the developer-unifier agent from its worktree) resolves a relative demo dir against
+// this, not the forge install root.
+const INVOCATION_CWD = process.cwd();
 process.chdir(FORGE_ROOT);
 
 (async () => {
@@ -47,24 +53,29 @@ process.chdir(FORGE_ROOT);
       return cmdInit();
     case 'studio':
       return await cmdStudio(args.slice(1));
-    // S9/DEC-6: the operator cycle-management + recovery verbs (cycle, enqueue,
-    // metrics, preflight, review --inspect/--abandon, report, log, demo, requeue)
-    // were RETIRED from the CLI — the UI/bridge is the sole operator surface. Their
-    // replacements are the bridge recovery routes (GET /api/recovery/:id, POST
-    // /api/recovery/:id/{abandon,requeue}, POST /api/initiatives) + the run-detail
-    // UI (cost/events/artifacts). They now fall through to the unknown-command path.
+    // S9/DEC-6: the OPERATOR cycle-management + recovery verbs (cycle, enqueue,
+    // metrics, review --inspect/--abandon, report, log, requeue) were RETIRED — the
+    // UI/bridge is the sole operator surface. Their replacements are the bridge
+    // recovery routes (GET /api/recovery/:id, POST /api/recovery/:id/{abandon,requeue},
+    // POST /api/initiatives) + the run-detail UI. They fall through to unknown-command.
     //
     // The following stay dispatchable but HIDDEN from `forge --help` — they are
-    // INTERNAL spawn targets or dev/CI gates, not operator commands:
+    // INTERNAL spawn targets or AGENT/dev tools, NOT operator commands:
     //   serve     — the scheduler daemon (spawnServeDetached + the harnesses spawn it)
     //   architect — `architect run <sid>`, spawned by the bridge per operator turn
     //   brain     — `brain lint`/`brain index` brain-integrity gate (mirrors studio lint)
+    //   demo      — `demo render`, run by the developer-unifier agent every cycle
+    //   preflight — the C1–C9 contract check, run by the forge-onboard-project skill
     case 'serve':
       return await cmdServe(args.slice(1));
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'brain':
       return cmdBrain(args.slice(1));
+    case 'demo':
+      return await cmdDemo(args.slice(1));
+    case 'preflight':
+      return cmdPreflight(args.slice(1));
     case '--help':
     case '-h':
     case undefined:
@@ -94,9 +105,9 @@ Usage:
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
 
 S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
-recovery (cycle / enqueue / metrics / preflight / review / report / log / demo / requeue)
-now live in the UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id,
-/api/initiatives). Run \`forge studio\` and drive everything from the browser.
+recovery (cycle / enqueue / metrics / review / report / log / requeue) now live in the
+UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
+Run \`forge studio\` and drive everything from the browser.
 
 For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
   );
@@ -468,3 +479,133 @@ function findSessionProject(sessionId: string): string | null {
   }
   return null;
 }
+
+// ── demo + preflight: agent/dev tools, hidden from operator help (S9/DEC-6).
+// The developer-unifier agent runs `forge demo render` every cycle to derive
+// DEMO.md from demo.json; the forge-onboard-project skill runs `forge preflight`.
+// They are NOT operator cycle-management, so they stay dispatchable.
+function flagValue(rest: string[], flag: string): string | undefined {
+  const i = rest.indexOf(flag);
+  if (i < 0) return undefined;
+  const v = rest[i + 1];
+  // A flag immediately followed by another --flag (or nothing) means the
+  // value was omitted — treat as absent rather than silently consuming the
+  // next flag's name as the value.
+  if (v === undefined || v.startsWith('--')) {
+    console.error(`forge demo: ${flag} expects a value`);
+    process.exit(2);
+  }
+  return v;
+}
+
+async function cmdDemo(rest: string[]): Promise<void> {
+  // ADR 021 / F4: `forge demo render <init>` derives the single DEMO.md from the
+  // unifier-authored `demo/<init>/demo.json`. Run from the worktree root (or
+  // pass --dir). The unifier authors demo.json once and runs this to emit the
+  // committed derived artifacts.
+  if (rest[0] === 'render') {
+    const initiativeId = rest[1];
+    if (!initiativeId) {
+      console.error('forge demo render: usage: demo render <initiative-id> [--dir <demoDir>]');
+      process.exit(2);
+    }
+    // Resolve the demo dir against the caller's worktree (INVOCATION_CWD), honouring
+    // the project's artifactRoot (legacy `demo/<id>` or `<artifactRoot>/history/<id>/demo`).
+    // An explicit --dir overrides; otherwise the worktree root is INVOCATION_CWD.
+    const dirFlag = flagValue(rest, '--dir');
+    const artifactRoot = readArtifactRoot(INVOCATION_CWD);
+    const demoDir = dirFlag ?? resolve(INVOCATION_CWD, projectDemoRelDir(initiativeId, artifactRoot));
+    const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
+    const { renderDemoBundle } = await import('../cli/demo-model.ts');
+    // worktree root lets the bundle back-fill any live evidence the acceptance
+    // test persisted under <worktree>/.forge/live-evidence/.
+    const res = renderDemoBundle(demoDir, worktreeRoot);
+    if (!res.ok) {
+      console.error(`forge demo render: invalid demo.json in ${demoDir}:`);
+      for (const e of res.errors) console.error(`  - ${e}`);
+      process.exit(1);
+    }
+    for (const p of res.wrote) console.log(`wrote ${p}`);
+    return;
+  }
+
+  // ADR 021: `forge demo capture <init>` is the media-capture skill's engine —
+  // it runs the two-worktree + Playwright before/after capture and back-fills
+  // the captured images into the unifier's demo.json, then re-renders the
+  // bundle. Best-effort: any failure leaves demo.json notes-only and exits 0
+  // (capture must never fail a cycle).
+  if (rest[0] === 'capture') {
+    const initiativeId = rest[1];
+    if (!initiativeId) {
+      console.error('forge demo capture: usage: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
+      process.exit(2);
+    }
+    const projectArg = flagValue(rest, '--project');
+    const projectRepoPath = projectArg ? resolve('projects', projectArg) : INVOCATION_CWD;
+    const dirFlag = flagValue(rest, '--dir');
+    const artifactRoot = readArtifactRoot(projectRepoPath);
+    const demoDir = dirFlag ?? resolve(projectRepoPath, projectDemoRelDir(initiativeId, artifactRoot));
+    const jsonPath = join(demoDir, 'demo.json');
+    if (!existsSync(jsonPath)) {
+      console.error(`forge demo capture: ${jsonPath} not found — author demo.json first. Skipping (best-effort).`);
+      return;
+    }
+    const baseRef = flagValue(rest, '--base') ?? 'main';
+    const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
+    try {
+      const { captureCheckpoints } = await import('../cli/demo.ts');
+      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle } = await import('../cli/demo-model.ts');
+      const bundleDir = join(demoDir, '.capture');
+      const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
+      const labels = (demoJson?.checkpoints ?? []).map((c: { label?: string }) => c.label).filter(Boolean) as string[];
+      await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, build: true });
+      const captured = collectCapturedMedia(bundleDir);
+      const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
+      writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
+      const r = renderDemoBundle(demoDir, projectRepoPath);
+      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
+    } catch (err) {
+      console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
+    }
+    return; // never a hard failure
+  }
+
+  console.error('forge demo: usage: demo render <initiative-id> [--dir <demoDir>]');
+  console.error('       or: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
+  process.exit(2);
+}
+
+/**
+ * US-4.1 / ADR-017: check the C1–C6 forge↔project contract. The argument
+ * is a project name (resolved under `projects/<name>/`) or an explicit
+ * path. Prints a per-clause PASS/FAIL/WARN report and exits non-zero iff a
+ * HARD clause (C1/C2/C4) fails — so an unattended caller can gate on it.
+ */
+function cmdPreflight(rest: string[]): void {
+  const target = rest[0];
+  if (!target) {
+    console.error('forge preflight: missing <project>');
+    console.error('Usage: forge preflight <project-name | path>');
+    process.exit(2);
+  }
+  // Accept either an explicit path or a managed-project name.
+  const asPath = resolve(target);
+  const asManaged = resolve('projects', target);
+  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory()
+    ? asPath
+    : asManaged;
+  if (!existsSync(projectDir)) {
+    console.error(`forge preflight: project directory not found: ${projectDir}`);
+    console.error('Pass a directory under projects/ or an absolute path.');
+    process.exit(2);
+  }
+  const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT });
+  console.log(formatPreflightReport(report));
+  // CON-5: write the verdict event as JSONL so callers can audit preflight outcomes.
+  const verdictLogDir = join(FORGE_ROOT, '_logs', 'preflight');
+  mkdirSync(verdictLogDir, { recursive: true });
+  appendFileSync(join(verdictLogDir, 'verdicts.jsonl'), JSON.stringify(buildVerdictEvent(report)) + '\n');
+  // Hard-clause failure ⇒ forge declines (non-zero so callers can gate).
+  process.exit(report.ok ? 0 : 1);
+}
+

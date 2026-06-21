@@ -42,8 +42,22 @@ function runForge(args: string[]): Run {
 // M7-5 lifecycle verbs + the S9/DEC-6 retired operator cycle-management/recovery verbs.
 const REMOVED = [
   'start', 'stop', 'pause', 'resume', 'status',
-  'cycle', 'enqueue', 'metrics', 'preflight', 'review', 'report', 'log', 'demo', 'requeue',
+  'cycle', 'enqueue', 'metrics', 'review', 'report', 'log', 'requeue',
 ];
+
+// demo + preflight are AGENT/dev tools (the developer-unifier runs `forge demo
+// render` every cycle; the onboarding skill runs `forge preflight`), so they stay
+// dispatchable + hidden from help — NOT retired.
+const KEPT_HIDDEN = [
+  { cmd: 'demo', usage: /forge demo: (subcommands|usage)/ },
+  { cmd: 'preflight', usage: /forge preflight/ },
+];
+for (const { cmd } of KEPT_HIDDEN) {
+  test(`kept (hidden): 'forge ${cmd}' still dispatches (agent/dev tool, not unknown)`, () => {
+    const r = runForge([cmd]);
+    assert.doesNotMatch(r.stderr, /unknown command:/, `'${cmd}' should dispatch: ${r.stderr}`);
+  });
+}
 
 for (const cmd of REMOVED) {
   test(`retired: 'forge ${cmd}' hits the unknown-command path`, () => {
