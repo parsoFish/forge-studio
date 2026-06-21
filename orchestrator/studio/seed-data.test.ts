@@ -164,32 +164,6 @@ test('brain-ingest agent loads and validateAgent returns zero errors', () => {
 });
 
 // ---------------------------------------------------------------------------
-// knowledge-ingest flow (M3-5: new seed flow)
-// ---------------------------------------------------------------------------
-
-test('knowledge-ingest flow loads and validateFlow returns zero errors', () => {
-  const flowPath = join(ROOT, 'studio/flows/knowledge-ingest/flow.yaml');
-  const agents = listAgentDefinitions(join(ROOT, 'skills'));
-  const agentMap = new Map(agents.map((a) => [a.slug, a]));
-
-  const flow = loadFlowDefinition(flowPath);
-
-  assert.strictEqual(flow.id, 'knowledge-ingest');
-  assert.strictEqual(flow.disposable, true, 'knowledge-ingest must be disposable:true (zero-gate rule)');
-  assert.ok(flow.nodes.some((n) => n.agent === 'brain-ingest'), 'must have a brain-ingest node');
-  assert.strictEqual(flow.edges.length, 0, 'knowledge-ingest has no edges (single-node flow)');
-  assert.deepEqual(flow.triggers, [], 'knowledge-ingest has no triggers');
-
-  const findings = validateFlow(flow, agentMap);
-  const errors = findings.filter((f) => f.level === 'error');
-  assert.deepEqual(
-    errors,
-    [],
-    `knowledge-ingest flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
-  );
-});
-
-// ---------------------------------------------------------------------------
 // forge-reflect flow (S8: the third flow that replaces the forge-cycle monolith)
 // ---------------------------------------------------------------------------
 

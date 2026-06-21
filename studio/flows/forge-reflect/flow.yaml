@@ -6,9 +6,9 @@ project: null
 kb: cycles
 costCeilingUsd: 3
 origin: seed
-# disposable:true — a single-agent, human-gate-free flow (like knowledge-ingest /
-# security-scan, which also write durable brain). Bounded by costCeilingUsd, so it
-# is exempt from the zero-gate unattended-spend guard. NOTE: this is the FLOW's
+# disposable:true — a single-agent, human-gate-free flow. Bounded by
+# costCeilingUsd, so it is exempt from the zero-gate unattended-spend guard
+# (the same exemption disposable utility flows use). NOTE: this is the FLOW's
 # disposable flag (a studio/lint concern); it is independent of the *initiative
 # manifest's* `disposable`, which is what reflector.ts checks to skip a throwaway
 # cycle's reflection. finalize-merged runs the reflector against the merged
@@ -27,8 +27,7 @@ disposable: true
 # is async + post-run, so reflect is driven by orchestrator/finalize-merged.ts:
 # once a merged PR is confirmed it runs closure → runReflector against this flow's
 # single node. `reflect` is the flow's entry node, so it carries no inbound edge
-# (the lint rule only requires inbound artifacts for fanOut nodes — see
-# knowledge-ingest / security-scan, the other single-node seeds).
+# (the lint rule only requires inbound artifacts for fanOut nodes).
 nodes:
   - { id: reflect, agent: reflector }
 edges: []

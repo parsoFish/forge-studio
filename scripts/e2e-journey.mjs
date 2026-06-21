@@ -2315,19 +2315,19 @@ async function main() {
     });
     check(tailCount !== null, `monitor: [data-tail-count] attribute present (got ${tailCount})`);
 
-    // ── S1.1: Engine control — start-run CTA (knowledge-ingest, no runs) ───────
-    console.log('\n[S1.1] Engine — start-run CTA (knowledge-ingest, no runs)');
-    await page.goto(watch.uiUrl + '/flows/knowledge-ingest', { waitUntil: 'domcontentloaded' });
+    // ── S1.1: Engine control — start-run CTA (forge-reflect, no runs) ──────────
+    console.log('\n[S1.1] Engine — start-run CTA (forge-reflect, no runs)');
+    await page.goto(watch.uiUrl + '/flows/forge-reflect', { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
         null, { timeout: 20000 },
       );
-      check(true, 'engine: flow-monitor ready for knowledge-ingest');
+      check(true, 'engine: flow-monitor ready for forge-reflect');
     } catch {
       const pr = await page.evaluate(() =>
         document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
-      check(false, `engine: flow-monitor ready for knowledge-ingest (got "${pr}")`);
+      check(false, `engine: flow-monitor ready for forge-reflect (got "${pr}")`);
     }
     await caption(page, 'The engine runs any flow — Start Run launches a planned flow directly from the UI.');
     await sleep(ACT);
