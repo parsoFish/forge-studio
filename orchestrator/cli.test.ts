@@ -1,23 +1,24 @@
 /**
- * CLI dispatch surface — M7-5 (ADR-031) "collapse forge to its runtime spine".
+ * CLI dispatch surface — S9/DEC-6 "the CLI is retired as the operator surface".
  *
- * The Studio UI bridge is the operator API now, so the operator-facing
- * scheduler-lifecycle + force-approve CLI commands were removed:
- *   start · stop · pause · resume · status · review --approve
+ * The Studio UI bridge is the SOLE operator interaction point now. M7-5 already
+ * removed the scheduler-lifecycle verbs (start/stop/pause/resume/status); S9
+ * additionally retires the operator cycle-management + recovery verbs
+ * (cycle · enqueue · metrics · preflight · review · report · log · demo · requeue) —
+ * their replacements are the bridge routes (POST /api/runs, /api/verdict,
+ * /api/recovery/:id, /api/initiatives) + the run-detail UI.
  *
- * These tests pin the trimmed surface in place:
- *   - removed commands now hit the unknown-command path (exit 1, stderr
- *     "unknown command: <cmd>") so a future refactor can't silently re-add a
- *     dead dispatch branch,
- *   - the runtime spine (serve/cycle/enqueue/preflight/review/log/requeue/
- *     studio/brain/demo/architect) still dispatches (no "unknown command"),
- *   - `forge --help` no longer advertises the removed commands, and never
- *     advertises the internalised `architect run`.
+ * These tests pin the trimmed surface:
+ *   - every retired command hits the unknown-command path (exit 1) so a refactor
+ *     can't silently re-add a dead dispatch branch,
+ *   - the surviving dispatchable commands (studio lint, architect, brain) still
+ *     dispatch (no "unknown command"),
+ *   - `forge --help` advertises ONLY init/studio/studio lint, never the retired
+ *     verbs nor the internalised `architect run`.
  *
- * We spawn the real CLI entrypoint (the dispatch switch only exists there).
- * To keep the suite hermetic + side-effect-free we only exercise commands
- * with a fast, no-op argless failure path (missing-arg → exit 2) — never
- * `serve`/`studio` (which would start a long-lived process).
+ * We spawn the real CLI entrypoint (the dispatch switch only exists there) and only
+ * exercise commands with a fast, no-op failure path — never serve/studio/init
+ * (long-lived or side-effecting).
  */
 
 import { test } from 'node:test';
@@ -38,13 +39,16 @@ function runForge(args: string[]): Run {
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-const REMOVED = ['start', 'stop', 'pause', 'resume', 'status'];
+// M7-5 lifecycle verbs + the S9/DEC-6 retired operator cycle-management/recovery verbs.
+const REMOVED = [
+  'start', 'stop', 'pause', 'resume', 'status',
+  'cycle', 'enqueue', 'metrics', 'preflight', 'review', 'report', 'log', 'demo', 'requeue',
+];
 
 for (const cmd of REMOVED) {
-  test(`removed: 'forge ${cmd}' hits the unknown-command path`, () => {
+  test(`retired: 'forge ${cmd}' hits the unknown-command path`, () => {
     const r = runForge([cmd]);
-    // default case: console.error('unknown command: …') then exit 1.
-    assert.equal(r.status, 1, `expected exit 1 for removed '${cmd}', got ${r.status}`);
+    assert.equal(r.status, 1, `expected exit 1 for retired '${cmd}', got ${r.status}`);
     assert.match(
       r.stderr,
       new RegExp(`unknown command: ${cmd}`),
@@ -53,37 +57,16 @@ for (const cmd of REMOVED) {
   });
 }
 
-// Kept commands: must NOT hit the unknown-command path. We use the argless
-// missing-arg failure (exit 2) as a hermetic "it dispatched" signal — the
-// command body ran far enough to validate its own args.
-const KEPT_ARGLESS: Array<{ cmd: string; expectExit: number }> = [
-  { cmd: 'cycle', expectExit: 2 }, // 'forge cycle: missing <initiative-id>'
-  { cmd: 'review', expectExit: 2 }, // 'forge review: missing <initiative-id-or-handle>'
-  { cmd: 'requeue', expectExit: 2 }, // requeue usage → exit 2 with no init
-  { cmd: 'report', expectExit: 2 }, // 'forge report: missing <cycle-id>'
-  { cmd: 'preflight', expectExit: 2 }, // preflight requires <project>
-];
+// Surviving dispatchable commands must NOT hit the unknown-command path. The
+// argless missing-arg failure (exit 2) is a hermetic "it dispatched" signal.
+test("kept: 'forge brain' (dev/CI integrity gate) still dispatches", () => {
+  const r = runForge(['brain']);
+  assert.doesNotMatch(r.stderr, /unknown command:/, r.stderr);
+  assert.match(r.stderr, /forge brain: subcommands/);
+  assert.equal(r.status, 2);
+});
 
-for (const { cmd, expectExit } of KEPT_ARGLESS) {
-  test(`kept: 'forge ${cmd}' still dispatches (no unknown-command)`, () => {
-    const r = runForge([cmd]);
-    assert.doesNotMatch(
-      r.stderr,
-      /unknown command:/,
-      `'${cmd}' should dispatch, but hit unknown-command: ${r.stderr}`,
-    );
-    assert.equal(
-      r.status,
-      expectExit,
-      `expected exit ${expectExit} for kept '${cmd}', got ${r.status} (stderr: ${r.stderr})`,
-    );
-  });
-}
-
-test("kept: 'forge architect' (internalised) still dispatches", () => {
-  // architect run is hidden from help but MUST stay dispatchable for the
-  // bridge's spawnArchitectTurn. Bare 'architect' prints its subcommand usage
-  // (exit 2) — crucially NOT the unknown-command path.
+test("kept: 'forge architect' (internal, bridge-spawned) still dispatches", () => {
   const r = runForge(['architect']);
   assert.doesNotMatch(r.stderr, /unknown command:/, r.stderr);
   assert.match(r.stderr, /forge architect: subcommands/);
@@ -91,30 +74,27 @@ test("kept: 'forge architect' (internalised) still dispatches", () => {
 });
 
 test("kept: 'forge studio lint' still dispatches", () => {
-  // studio lint is a real, terminating command (no long-lived process). It
-  // validates the studio defs and exits 0/non-zero — either way it dispatched.
   const r = runForge(['studio', 'lint']);
   assert.doesNotMatch(r.stderr, /unknown command:/, r.stderr);
 });
 
-test('help: lists the runtime spine, not the removed lifecycle commands', () => {
+test('help: advertises only init/studio/studio lint, not the retired verbs', () => {
   const r = runForge(['--help']);
   assert.equal(r.status, 0);
   const help = r.stdout;
-  // Removed commands are gone from the help surface.
+  // Retired verbs are gone from the operator help surface.
   for (const cmd of REMOVED) {
     assert.doesNotMatch(
       help,
       new RegExp(`forge ${cmd}\\b`),
-      `help should not advertise removed 'forge ${cmd}'`,
+      `help should not advertise retired 'forge ${cmd}'`,
     );
   }
-  // Internalised architect run is not advertised.
+  // Internalised architect run + the dev brain gate are not advertised.
   assert.doesNotMatch(help, /forge architect run/, 'architect run must be hidden from help');
-  // review --approve is gone; --inspect/--abandon recovery remains.
-  assert.doesNotMatch(help, /--approve/, 'review --approve must be gone from help');
-  // Runtime spine is still advertised.
-  for (const kept of ['forge serve', 'forge cycle', 'forge enqueue', 'forge studio', 'forge requeue', 'forge review']) {
-    assert.match(help, new RegExp(kept.replace(/ /g, ' ')), `help should advertise '${kept}'`);
+  // The surviving operator surface IS advertised.
+  for (const kept of ['forge init', 'forge studio']) {
+    assert.match(help, new RegExp(kept), `help should advertise '${kept}'`);
   }
+  assert.match(help, /forge studio lint/, 'help should advertise the studio lint gate');
 });
