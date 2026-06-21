@@ -1,60 +1,67 @@
 #!/usr/bin/env node
 /**
- * verify-cycle — forge's REAL-CAPABILITY regression harness (ADR 022).
+ * verify-cycle — forge's REAL-CAPABILITY regression harness (ADR 022, S9 spine).
  *
- * Runs a real forge cycle end-to-end against a managed project and asserts
+ * Drives the REAL 3-stage SDLC spine end-to-end via the bridge API and asserts
  * real-cycle OUTCOMES — not synthetic rubrics — then records the run and writes a
- * pass/fail verdict. Two grounds:
- *   - mdtoc (default): forge's creds-free out-of-the-box reference project (a
- *     dependency-light markdown-TOC CLI) — cheap, repeatable, no credentials,
- *     the routine engine regression.
- *   - the betterado terraform provider (--project terraform-provider-betterado):
- *     the LIVE-ADO tier — a real release-definition feature stood up against a
- *     real Azure DevOps org, the richest proof of forge's actual capability.
+ * pass/fail verdict. S9/DEC-3 retired the collapsed single-run flows
+ * (release-refine / forge-cycle); this harness now exercises the spine the way an
+ * operator does, through the bridge, threading ONE cycle_id across all three
+ * stages (DEC-2):
  *
- * The four gate assertions (ADR 022 §1):
- *   1. the cycle reached merge (finalStatus `done`);
+ *   1. forge-architect — POST /api/architect/start with the initiative idea, then
+ *      auto-answer each interview round (/api/architect/answer) until the plan is
+ *      drafted, then approve the PLAN GATE (/api/plan-verdict). The architect
+ *      promotes a manifest (flow_id: forge-architect, cycle_id minted) to
+ *      _queue/pending. `forge serve --once` then runs the architect flow (pm
+ *      decomposes the initiative into work items).
+ *   2. forge-develop — POST /api/develop/start hands the initiative off to the
+ *      develop flow (same cycle_id; reuses the architect worktree + its work
+ *      items). `forge serve --once` runs dev → unifier → review, parking at
+ *      ready-for-review (the VERDICT GATE). Approve via /api/verdict; the bridge
+ *      merges the PR and fires finalize.
+ *   3. forge-reflect — finalize (in the bridge process) runs the reflector, which
+ *      writes the central project brain. The harness WAITS for `reflector.end`
+ *      before teardown (the prior harness killed the bridge mid-reflect).
+ *
+ * The gate assertions (ADR 022 §1 + S9):
+ *   1. the cycle reached merge (finalStatus `done` / manifest in _queue/done/);
  *   2. the dev-loop completed N/N work items (no complete:0 / failed);
  *   3. the project's own tests are green post-merge (its .forge quality gate, else
  *      npm test);
- *   4. total cycle cost is under the declared ceiling.
+ *   4. total cycle cost is under the declared ceiling;
+ *   5. reflect wrote a central project-brain theme this run
+ *      (brain/projects/<project>/themes/, mtime within the run).
  * Plus, for live-resource projects (and any run with --require-live-evidence):
- *   5. the merged cycle's demo carries LIVE evidence — a real REST GET checkpoint
- *      (liveEvidence.url + expectedFields), not a test-name table (the
- *      demos-are-visual-evidence policy).
+ *   6. the merged cycle's demo carries LIVE evidence — a real REST GET checkpoint.
  *
  * Usage:
- *   node scripts/verify-cycle.mjs <initiative-id> [options]
+ *   node scripts/verify-cycle.mjs <run-handle> --project <name> [--idea-file <path>] [options]
+ *
+ * The <run-handle> names the recording output dir. The REAL initiativeId is minted
+ * by the architect and discovered after the plan gate. The idea comes from
+ * --idea-file, else the body of the corpus manifest at _queue/done/<run-handle>.md.
  *
  * Options:
- *   --tier routine|release  routine (default): reset the harness repo to
- *                           --base-sha and re-run one corpus initiative.
- *                           release: greenfield — drive the 5-initiative
- *                           ROADMAP by invoking the runner per initiative in
- *                           order against an empty repo.
+ *   --project <name>        managed project to run against (default mdtoc; NEVER
+ *                           run against mdtoc when it is committed inside forge —
+ *                           use gitpulse, an independent repo). betterado is the
+ *                           live-ADO tier.
+ *   --idea-file <path>      the initiative idea fed to the architect (forge-root
+ *                           relative). Falls back to the corpus manifest body.
  *   --base-sha <sha>        base commit to reset the harness repo to (routine).
- *   --cost-ceiling <usd>    fail the gate above this total cost (default 25;
- *                           default 40 when --send-back is set, to accommodate
- *                           the extra unifier pass).
- *   --project <name>        managed project to run against (default mdtoc;
- *                           terraform-provider-betterado for the live-ADO tier).
+ *   --cost-ceiling <usd>    fail the gate above this total cost (default scales
+ *                           with project + send-back; the 3-stage spine costs more
+ *                           than a single collapsed run, so the default is higher).
  *   --require-live-evidence force the live-demo-evidence gate on (default: on for
  *                           known live-resource projects). --no-live-evidence opts out.
  *   --force-reset           allow resetting a repo with uncommitted changes.
- *   --send-back             after the cycle first reaches ready-for-review, POST a
- *                           real send-back verdict to /api/verdict, re-run forge
- *                           serve --once to drain the re-queued UWIs through the
- *                           unifier, then fall through to the existing auto-approve
- *                           path so the run still reaches `done` and the gate passes.
- *                           Captures decision-review-evaluation, decision-send-back,
- *                           and decision-re-review frames around the send-back pass.
+ *   --send-back             after develop first reaches ready-for-review, POST a
+ *                           real send-back verdict, re-serve to drain the re-queued
+ *                           UWIs, then fall through to auto-approve.
  *
- * The manifest is staged from the corpus (_queue/done/) into _queue/pending/
- * if not already pending. Tiered + manual-gate per ADR 022. It auto-approves at
- * ready-for-review and captures closure + reflection through `cycle.end`.
- *
- * Output: forge-ui/.demo-shots/verify/<initiative-id>/ (video, frames,
- * index.html, summary.json with the verdict). Exits non-zero if the gate fails.
+ * Output: forge-ui/.demo-shots/verify/<run-handle>/ (video, frames, index.html,
+ * summary.json with the verdict). Exits non-zero if the gate fails.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -67,26 +74,31 @@ import { sleep } from './lib/journey-assertions.mjs';
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const argv = process.argv.slice(2);
-const initiativeId = argv.find((a) => !a.startsWith('--'));
-if (!initiativeId) {
-  console.error('usage: node scripts/verify-cycle.mjs <initiative-id> [--tier routine|release] [--base-sha <sha>] [--cost-ceiling <usd>] [--project <name>] [--require-live-evidence|--no-live-evidence] [--force-reset] [--send-back]');
+// The positional arg is the RUN HANDLE — it names the recording output dir and is
+// the default idea source (the corpus manifest body). The REAL initiativeId is
+// minted by the architect and discovered after the plan gate.
+const RUN_HANDLE = argv.find((a) => !a.startsWith('--'));
+if (!RUN_HANDLE) {
+  console.error('usage: node scripts/verify-cycle.mjs <run-handle> --project <name> [--idea-file <path>] [--base-sha <sha>] [--cost-ceiling <usd>] [--require-live-evidence|--no-live-evidence] [--force-reset] [--send-back]');
   process.exit(1);
 }
 function flag(name, def) {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : def;
 }
-const TIER = flag('tier', 'routine');
 const BASE_SHA = flag('base-sha', null);
 const SEND_BACK = argv.includes('--send-back');
 const PROJECT = flag('project', 'mdtoc');
+const IDEA_FILE = flag('idea-file', null);
 // Live-resource projects (e.g. the betterado terraform provider stands up real
 // Azure DevOps resources) run longer + cost more than the creds-free default
-// mdtoc reference project, so they get a higher default ceiling — still overridable.
+// mdtoc/gitpulse reference projects, so they get a higher default ceiling.
 const LIVE_PROJECTS = new Set(['terraform-provider-betterado']);
 const IS_LIVE_PROJECT = LIVE_PROJECTS.has(PROJECT);
-// --send-back adds an extra unifier pass; live projects add live-infra cost.
-const _ceilingDefault = IS_LIVE_PROJECT ? (SEND_BACK ? 80 : 60) : (SEND_BACK ? 40 : 25);
+// The 3-stage spine (real architect interview + draft, pm, dev fan-out, unifier,
+// review, reflect) costs more than the old single collapsed run — bump the
+// defaults. --send-back adds an extra unifier pass; live projects add infra cost.
+const _ceilingDefault = IS_LIVE_PROJECT ? (SEND_BACK ? 90 : 70) : (SEND_BACK ? 50 : 35);
 const COST_CEILING = parseFloat(flag('cost-ceiling', String(_ceilingDefault))) || _ceilingDefault;
 // The live-demo-evidence gate: on by default for live-resource projects; force
 // with --require-live-evidence, opt out with --no-live-evidence.
@@ -94,7 +106,7 @@ const REQUIRE_LIVE_EVIDENCE =
   argv.includes('--require-live-evidence') || (IS_LIVE_PROJECT && !argv.includes('--no-live-evidence'));
 const FORCE_RESET = argv.includes('--force-reset');
 
-const OUT_DIR = join(FORGE_ROOT, 'forge-ui/.demo-shots/verify', initiativeId);
+const OUT_DIR = join(FORGE_ROOT, 'forge-ui/.demo-shots/verify', RUN_HANDLE);
 const VIDEO_DIR = join(OUT_DIR, 'video');
 const FRAMES_DIR = join(OUT_DIR, 'frames');
 
@@ -130,68 +142,71 @@ function git(repoPath, args) {
   return { ok: r.status === 0, stdout: (r.stdout ?? '').trim(), stderr: (r.stderr ?? '').trim() };
 }
 
-/** The harness project's repo path — from the manifest's project_repo_path, else projects/<PROJECT>. */
+/** The harness project's repo path — projects/<PROJECT> (an independent repo for
+ *  gitpulse; the betterado provider lives under the same projects/ root). */
 function projectRepoPath() {
-  for (const q of ['pending', 'done', 'in-flight', 'ready-for-review', 'failed']) {
-    const p = join(FORGE_ROOT, '_queue', q, `${initiativeId}.md`);
-    if (existsSync(p)) {
-      const m = readFileSync(p, 'utf8').match(/project_repo_path:\s*(.+)/);
-      if (m) return resolve(FORGE_ROOT, m[1].trim());
-    }
-  }
   return join(FORGE_ROOT, 'projects', PROJECT);
 }
 
-/** Stage the initiative manifest from the corpus (_queue/done/) into pending/. */
-function stageManifest() {
-  const pending = join(FORGE_ROOT, '_queue', 'pending', `${initiativeId}.md`);
-  if (existsSync(pending)) { log('manifest already in _queue/pending/'); return true; }
-  const done = join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`);
-  if (!existsSync(done)) {
-    log(`manifest not in pending/ or done/ — stage ${initiativeId}.md first`);
-    return false;
-  }
-  mkdirSync(dirname(pending), { recursive: true });
-  // Reset the lifecycle fields for a fresh run; the rest of the corpus manifest is reused as-is.
-  // Strip the stale cycle_id too (ADR-026 mechanism B persisted it on the original run): if it
-  // survives, the bridge reports the OLD id and findCycleIdForInitiative locks onto it, so the
-  // post-serve status query returns null and auto-approve never fires (a false gate FAIL). With it
-  // removed, serve assigns + persists a fresh cycle_id the bridge reports consistently.
-  // Strip resume_from too: a corpus manifest that originally ran with an ADR-019/026 unifier
-  // resume persists `resume_from: unifier`. On a fresh re-stage the scheduler would read it
-  // (scheduler.ts → cycle resumeFrom), skip the architect+PM, and run the dev-loop against an
-  // empty `.forge/work-items` ("no work items found") — a false gate FAIL at $0. A fresh run
-  // must re-decompose from scratch, so the resume marker is cleared here.
-  const body = readFileSync(done, 'utf8')
-    .replace(/^phase:.*$/m, 'phase: pending')
-    .replace(/^cycle_id:.*$\n?/m, '')
-    .replace(/^resume_from:.*$\n?/m, '');
-  writeFileSync(pending, body);
-  log(`staged corpus manifest → _queue/pending/${initiativeId}.md`);
-  return true;
+/** Read one frontmatter scalar field from a manifest's raw text. */
+function manifestField(raw, key) {
+  const m = raw.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
+  return m ? m[1].trim() : null;
 }
 
-/** Remove residue from a PRIOR verify run of THIS initiative so the bridge tracks only the
- *  fresh cycle and re-runs start clean. A stale `_logs/<stamp>_<id>` dir made
- *  findCycleIdForInitiative lock onto an old cycle (→ null status, no auto-approve); a preserved
- *  worktree or a non-terminal queue copy from a failed/pr-open run would also collide. `_logs` and
- *  `_worktrees` are gitignored runtime; the corpus manifest in `done/` is left untouched (stageManifest
- *  re-copies it into `pending/`). */
-function cleanPriorRunState(initiativeId, repoPath) {
-  const logsRoot = join(FORGE_ROOT, '_logs');
-  if (existsSync(logsRoot)) {
-    for (const name of readdirSync(logsRoot)) {
-      if (name === initiativeId || name.endsWith(`_${initiativeId}`)) {
-        rmSync(join(logsRoot, name), { recursive: true, force: true });
+/** Strip YAML frontmatter and return the manifest body (the initiative idea). */
+function manifestBody(raw) {
+  const parts = raw.split(/^---\s*$/m);
+  return parts.length >= 3 ? parts.slice(2).join('---').trim() : raw.trim();
+}
+
+/** Resolve the idea text the architect interviews on: --idea-file, else the body
+ *  of the corpus manifest at _queue/done/<run-handle>.md. */
+function resolveIdea() {
+  if (IDEA_FILE) {
+    const p = resolve(FORGE_ROOT, IDEA_FILE);
+    if (!existsSync(p)) { log(`--idea-file not found: ${p}`); return null; }
+    return readFileSync(p, 'utf8').trim();
+  }
+  const done = join(FORGE_ROOT, '_queue', 'done', `${RUN_HANDLE}.md`);
+  if (existsSync(done)) return manifestBody(readFileSync(done, 'utf8'));
+  log(`no --idea-file and no corpus manifest at _queue/done/${RUN_HANDLE}.md — provide an idea`);
+  return null;
+}
+
+/** Clean prior run state for a project so a fresh spine run starts clean: remove
+ *  the project's non-terminal queue manifests + their preserved worktrees + stale
+ *  `_logs` dirs + stale architect sessions. The corpus `done/` archive is left
+ *  intact. Scoped to PROJECT (the verify ground has no other in-flight work), so a
+ *  stale architect worktree can't be reused by the S9 hand-off logic. */
+function cleanProjectRunState(project, repoPath) {
+  const ids = new Set();
+  for (const q of ['pending', 'in-flight', 'failed', 'ready-for-review']) {
+    const dir = join(FORGE_ROOT, '_queue', q);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.md')) continue;
+      const raw = readFileSync(join(dir, f), 'utf8');
+      if (manifestField(raw, 'project') === project) {
+        ids.add(f.replace(/\.md$/, ''));
+        rmSync(join(dir, f), { force: true });
       }
     }
   }
-  rmSync(join(FORGE_ROOT, '_worktrees', initiativeId), { recursive: true, force: true });
-  if (existsSync(join(repoPath, '.git'))) git(repoPath, ['worktree', 'prune']);
-  for (const q of ['pending', 'in-flight', 'failed', 'ready-for-review']) {
-    rmSync(join(FORGE_ROOT, '_queue', q, `${initiativeId}.md`), { force: true });
+  const logsRoot = join(FORGE_ROOT, '_logs');
+  for (const id of ids) {
+    rmSync(join(FORGE_ROOT, '_worktrees', id), { recursive: true, force: true });
+    if (existsSync(logsRoot)) {
+      for (const name of readdirSync(logsRoot)) {
+        if (name === id || name.endsWith(`_${id}`)) rmSync(join(logsRoot, name), { recursive: true, force: true });
+      }
+    }
   }
-  log(`cleaned prior-run residue for ${initiativeId} (stale logs / worktree / non-terminal queue copies)`);
+  // Drop stale architect sessions so the fresh interview starts clean.
+  const archRoot = join(repoPath, '_architect');
+  rmSync(archRoot, { recursive: true, force: true });
+  if (existsSync(join(repoPath, '.git'))) git(repoPath, ['worktree', 'prune']);
+  log(`cleaned prior run state for project ${project} (${ids.size} non-terminal manifest(s) + worktrees + stale logs + architect sessions)`);
 }
 
 /** Routine tier: hard-reset the harness repo to BASE_SHA (guarded against a dirty tree). */
@@ -323,10 +338,27 @@ function releaseEvidence(repoPath, cycleId, releaseProcess) {
   return { present: true, reason: `finalised changelog + release.json (version ${version ?? 'n/a'})` };
 }
 
-/** The ADR 022 gate: four binary, outcome-only assertions (plus a live-evidence
- *  check for live-resource projects, plus a release-evidence check when the
- *  project declares `releaseProcess`). */
-function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
+/** Reflect-writes-central-brain gate (S8/F3/ADR-035): the reflector writes the
+ *  project brain to brain/projects/<project>/themes/. A merged spine run must touch
+ *  (create or update) at least one theme there during this run (mtime ≥ runStartMs).
+ *  This is the property the old harness left unproven — it killed the bridge before
+ *  reflector.end. */
+function reflectWroteBrainTheme(project, runStartMs) {
+  const dir = join(FORGE_ROOT, 'brain', 'projects', project, 'themes');
+  if (!existsSync(dir)) return { present: false, reason: `no central themes dir ${dir}` };
+  const touched = readdirSync(dir)
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => ({ f, mtime: statSync(join(dir, f)).mtimeMs }))
+    .filter((x) => x.mtime >= runStartMs)
+    .sort((a, b) => b.mtime - a.mtime);
+  if (touched.length) return { present: true, reason: `${touched.length} theme(s) written this run (e.g. ${touched[0].f})` };
+  return { present: false, reason: `no theme in ${dir} written/updated since run start` };
+}
+
+/** The ADR 022 + S9 gate: outcome-only assertions (merge / dev-loop / tests / cost
+ *  / reflect-writes-brain), plus a live-evidence check for live-resource projects
+ *  and a release-evidence check when the project declares `releaseProcess`. */
+function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project, runStartMs }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
   const checks = [
@@ -338,6 +370,9 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId }) {
     { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? `${tests.label} passed` : `${tests.label} FAILED`) : 'no test command — skipped' },
     { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
   ];
+  // S9: the reflect stage (3rd spine flow) must write the central project brain.
+  const rb = reflectWroteBrainTheme(project, runStartMs);
+  checks.push({ name: 'reflect wrote central project brain', pass: rb.present, detail: rb.reason });
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
   if (REQUIRE_LIVE_EVIDENCE) {
@@ -435,30 +470,6 @@ function startServe() {
   );
 }
 
-async function findCycleIdForInitiative(bridgeUrl, initiativeId, deadlineMs) {
-  while (Date.now() < deadlineMs) {
-    try {
-      const res = await fetch(`${bridgeUrl}/api/cycles`);
-      if (res.ok) {
-        const body = await res.json();
-        // cascade-v4 #6: pick the NEWEST cycle for the initiative, not the first
-        // match. A resume/retry leaves the prior stopped cycle in `recent`; a
-        // plain .find() over [...live, ...recent] grabbed that stale one and the
-        // harness then tracked the wrong cycle. Prefer a live (currently-running)
-        // cycle; otherwise the most-recently-started finished one.
-        const byNewest = (arr) =>
-          [...arr]
-            .filter((c) => c.initiativeId === initiativeId)
-            .sort((a, b) => String(b.startedAt ?? '').localeCompare(String(a.startedAt ?? '')))[0];
-        const match = byNewest(body.live ?? []) ?? byNewest(body.recent ?? []);
-        if (match) return match.cycleId;
-      }
-    } catch { /* */ }
-    await sleep(1000);
-  }
-  return null;
-}
-
 async function captureFrame(page, name) {
   const seq = String((captureFrame._n = (captureFrame._n ?? 0) + 1)).padStart(2, '0');
   const path = join(FRAMES_DIR, `${seq}-${name}.png`);
@@ -542,43 +553,6 @@ async function autoApprove(bridgeUrl, initiativeId) {
 }
 
 /**
- * captureDecisionPmWorkItems — poll until at least one [data-wi-hex] has
- * appeared for the focused cycle (the PM has materialised work items), then
- * capture a named frame. Bounded at 3 min so a slow PM never hangs the run.
- */
-async function captureDecisionPmWorkItems(page) {
-  try {
-    await page.waitForFunction(
-      () => document.querySelectorAll('[data-wi-hex]').length >= 1,
-      undefined,
-      { timeout: 3 * 60_000 },
-    );
-  } catch {
-    log('decision-pm-work-items: [data-wi-hex] not present within 3 min — capturing anyway');
-  }
-  await captureFrame(page, 'decision-pm-work-items');
-}
-
-/**
- * captureDecisionCostAndTokens — poll (bounded at ~60 s) until any
- * [data-phase-hex] reports a non-zero data-phase-cost-usd, then frame it.
- * Highlights live cost + tokens as the dev-loop is in progress.
- */
-async function captureDecisionCostAndTokens(page) {
-  try {
-    await page.waitForFunction(
-      () => [...document.querySelectorAll('[data-phase-hex]')]
-        .some((e) => (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
-      undefined,
-      { timeout: 60_000 },
-    );
-  } catch {
-    log('decision-cost-and-tokens: no phase-hex with cost > 0 within 60 s — capturing anyway');
-  }
-  await captureFrame(page, 'decision-cost-and-tokens');
-}
-
-/**
  * captureDecisionReviewEvaluation — navigate to the unified review gate
  * (/artifact?run=<cycleId>&type=verdict&mode=gate, M7-3/ADR-031), wait for the
  * demo-comparison and demo-evaluation sections, then frame.
@@ -650,21 +624,10 @@ async function cycleEventCountFromLog(cycleId) {
   } catch { return 0; }
 }
 
-async function logHasCycleEnd(cycleId) {
-  const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
-  try {
-    const raw = readFileSync(logFile, 'utf8');
-    for (const line of raw.split('\n')) {
-      if (line.includes('"phase":"orchestrator"') && line.includes('"event_type":"end"')) return true;
-    }
-    return false;
-  } catch { return false; }
-}
-
 function writeIndexHtml() {
   const frames = readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.png')).sort();
   const rows = frames.map((f) => `<figure><img src="frames/${f}" loading="lazy"/><figcaption><code>${f}</code></figcaption></figure>`).join('\n');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>forge verify cycle — ${initiativeId}</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>forge verify cycle — ${RUN_HANDLE}</title>
 <style>
   body{background:#0d1117;color:#e6edf3;font:14px ui-sans-serif,system-ui,sans-serif;margin:32px auto;max-width:1640px;padding:0 24px}
   h1,h2{letter-spacing:.4px}
@@ -675,7 +638,7 @@ function writeIndexHtml() {
   code{color:#d2a8ff}
 </style></head><body>
 <h1>forge — verification cycle recording</h1>
-<p><code>${initiativeId}</code></p>
+<p><code>${RUN_HANDLE}</code></p>
 <h2>video</h2>
 <video src="cycle.webm" controls autoplay muted loop></video>
 <h2>frames</h2>
@@ -684,25 +647,194 @@ ${rows}
   writeFileSync(join(OUT_DIR, 'index.html'), html);
 }
 
+// ---- S9 spine drive: architect → develop → reflect via the bridge ----------
+
+/** POST JSON to the bridge with the anti-CSRF header; returns { ok, status, body }. */
+async function bridgePost(bridgeUrl, path, payload) {
+  try {
+    const res = await fetch(`${bridgeUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(payload),
+    });
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON */ }
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return { ok: false, status: 0, body: { error: err.message } };
+  }
+}
+
+function readJsonFileSafe(path) {
+  try { return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null; } catch { return null; }
+}
+
+/** Discover the architect-promoted initiative for a project: the newest manifest
+ *  in _queue/pending with flow_id: forge-architect. Returns { initiativeId, cycleId }. */
+function discoverPromotedInitiative(project) {
+  const dir = join(FORGE_ROOT, '_queue', 'pending');
+  if (!existsSync(dir)) return null;
+  const cands = readdirSync(dir)
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => ({ id: f.replace(/\.md$/, ''), raw: readFileSync(join(dir, f), 'utf8') }))
+    .filter((x) => manifestField(x.raw, 'project') === project && manifestField(x.raw, 'flow_id') === 'forge-architect')
+    .map((x) => ({ initiativeId: x.id, cycleId: manifestField(x.raw, 'cycle_id'), createdAt: manifestField(x.raw, 'created_at') ?? '' }))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return cands[0] ?? null;
+}
+
+/**
+ * Stage 1 — drive the REAL interactive architect through the bridge: start the
+ * session with the initiative idea, auto-answer each interview round, then approve
+ * the PLAN GATE. Returns the discovered { initiativeId, sessionId, cycleId }.
+ */
+async function driveArchitect(page, watch, { project, idea, repoPath }) {
+  log('stage 1/3 — architect: POST /api/architect/start…');
+  const start = await bridgePost(watch.bridgeUrl, '/api/architect/start', {
+    project,
+    idea,
+    projectRepoPath: repoPath,
+  });
+  if (!start.ok || !start.body?.sessionId) {
+    throw new Error(`architect start failed (${start.status}): ${JSON.stringify(start.body)}`);
+  }
+  const sessionId = start.body.sessionId;
+  const sessionDir = join(repoPath, '_architect', sessionId);
+  log(`architect session ${sessionId}`);
+
+  // Best-effort: focus the dedicated architect screen for the frame gallery.
+  try {
+    await page.goto(`${watch.uiUrl}/architect/${encodeURIComponent(sessionId)}`, { waitUntil: 'domcontentloaded' });
+  } catch { /* */ }
+
+  const deadline = Date.now() + 25 * 60_000; // generous — the architect runs the real SDK
+  let answeredRounds = new Set();
+  let sawInterview = false;
+  while (Date.now() < deadline) {
+    const status = readJsonFileSafe(join(sessionDir, 'status.json'));
+    const phase = status?.phase;
+    if (phase === 'awaiting-verdict') { log('architect drafted a PLAN — at the plan gate'); break; }
+    if (phase === 'rejected') throw new Error('architect session was rejected');
+    if (phase === 'awaiting-answers' && !answeredRounds.has(status.round)) {
+      const qs = readJsonFileSafe(join(sessionDir, 'questions.json')) ?? [];
+      const answers = (Array.isArray(qs) ? qs : []).map((q) => ({
+        question: q.question,
+        // Pick the first offered option, else a converge-fast freeform answer.
+        answer: q.options?.[0]?.label ?? 'Use your best judgment; proceed with the simplest robust approach that satisfies the constraints.',
+      }));
+      log(`architect interview round ${status.round}: answering ${answers.length} question(s)`);
+      const ans = await bridgePost(watch.bridgeUrl, '/api/architect/answer', { project, sessionId, answers });
+      if (!ans.ok) log(`architect answer rejected (${ans.status}): ${JSON.stringify(ans.body)}`);
+      answeredRounds.add(status.round);
+      if (!sawInterview) { sawInterview = true; await captureFrame(page, 'architect-interview'); }
+    }
+    await sleep(4000);
+  }
+  await captureFrame(page, 'architect-awaiting-verdict');
+
+  // Approve the PLAN GATE.
+  log('approving the plan gate (POST /api/plan-verdict approve)…');
+  const verdict = await bridgePost(watch.bridgeUrl, '/api/plan-verdict', {
+    project,
+    sessionId,
+    kind: 'approve',
+    rationale: 'auto-approved by scripts/verify-cycle.mjs (spine verification — plan gate)',
+  });
+  if (!verdict.ok) throw new Error(`plan-verdict approve failed (${verdict.status}): ${JSON.stringify(verdict.body)}`);
+
+  // The approve spawns a finalize turn (async) that promotes manifests → committed.
+  let committed = false;
+  while (Date.now() < deadline) {
+    const status = readJsonFileSafe(join(sessionDir, 'status.json'));
+    if (status?.phase === 'committed') { committed = true; break; }
+    if (status?.phase === 'rejected') throw new Error('architect session rejected during finalize');
+    await sleep(3000);
+  }
+  if (!committed) throw new Error('architect never reached committed after plan approval');
+
+  const init = discoverPromotedInitiative(project);
+  if (!init) throw new Error(`no architect-promoted manifest found in _queue/pending for ${project}`);
+  if (!init.cycleId) throw new Error(`promoted manifest ${init.initiativeId} has no cycle_id (DEC-2 threading broken)`);
+  log(`architect promoted ${init.initiativeId} (cycle_id ${init.cycleId})`);
+  await captureFrame(page, 'plan-approved');
+  return { initiativeId: init.initiativeId, sessionId, cycleId: init.cycleId };
+}
+
+/** Stage 2 hand-off — POST /api/develop/start to repoint the initiative onto
+ *  forge-develop (same cycle_id, reusing the architect worktree + work items). */
+async function handoffToDevelop(bridgeUrl, initiativeId) {
+  log(`hand-off — POST /api/develop/start ${initiativeId}…`);
+  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeId });
+  if (!r.ok) throw new Error(`develop start failed (${r.status}): ${JSON.stringify(r.body)}`);
+  log(`develop run enqueued (cycle_id ${r.body?.cycleId ?? '?'})`);
+  return r.body;
+}
+
+/** Spawn `forge serve --once` for one spine stage, capturing phase-transition
+ *  frames while it runs, and resolve when it exits. */
+async function runServeStage(page, label) {
+  log(`spawning forge serve --once (${label})…`);
+  const serve = startServe();
+  serve.stdout.on('data', (d) => process.stdout.write(d));
+  serve.stderr.on('data', (d) => process.stderr.write(d));
+  const EXITED = Symbol('serve-exited');
+  const end = new Promise((res) => serve.on('exit', () => res(EXITED)));
+  const seen = new Map();
+  const poll = (async () => {
+    while (true) {
+      const r = await Promise.race([end, sleep(2000)]);
+      if (r === EXITED) break;
+      try {
+        const states = await getPhaseStates(page);
+        for (const [phase, status] of Object.entries(states)) {
+          if (seen.get(phase) !== status) {
+            seen.set(phase, status);
+            await captureFrame(page, `${label}-${phase}-${status}`);
+          }
+        }
+      } catch { /* */ }
+    }
+  })();
+  await end;
+  await poll;
+  log(`serve --once (${label}) exited`);
+}
+
+/** Wait for the reflector to FINISH (reflector.end in the cycle log). The bridge
+ *  fires finalize→reflect detached after the verdict approve; the old harness tore
+ *  the bridge down ~3s later, killing reflect mid-start. Bounded; returns true on
+ *  reflector.end seen. */
+async function waitForReflectorEnd(cycleId, deadlineMs) {
+  const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
+  let sawStart = false;
+  while (Date.now() < deadlineMs) {
+    try {
+      for (const line of readFileSync(logFile, 'utf8').split('\n')) {
+        if (!line.includes('"skill":"reflector"')) continue;
+        if (!sawStart && line.includes('"event_type":"start"')) { sawStart = true; log('reflector.start seen — waiting for reflector.end…'); }
+        if (line.includes('"event_type":"end"')) { log('reflector.end seen — reflection complete'); return true; }
+      }
+    } catch { /* log not yet present */ }
+    await sleep(3000);
+  }
+  log('reflector.end not seen before deadline');
+  return false;
+}
+
 async function main() {
+  const runStartMs = Date.now();
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(VIDEO_DIR, { recursive: true });
   mkdirSync(FRAMES_DIR, { recursive: true });
 
-  // ADR 022 pre-run: stage the corpus manifest + reset the repo per tier.
-  log(`tier=${TIER} project=${PROJECT} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
+  // Pre-run: resolve the idea, clean prior state, reset the repo (routine).
+  log(`spine drive · project=${PROJECT} handle=${RUN_HANDLE} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
   const repoPath = projectRepoPath();
-  cleanPriorRunState(initiativeId, repoPath);
-  if (!stageManifest()) process.exit(1);
-  if (TIER === 'routine') {
-    if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
-    else { log('routine tier without --base-sha: running against the current repo state'); }
-  } else if (TIER === 'release') {
-    const roadmap = IS_LIVE_PROJECT
-      ? 'docs/planning/2026-06-03-betterado-release-roadmap.md'
-      : 'projects/mdtoc/roadmap.md';
-    log(`release tier: greenfield rebuild — drive the roadmap by invoking the runner per initiative in order (${roadmap}).`);
-  }
+  const idea = resolveIdea();
+  if (!idea) process.exit(1);
+  cleanProjectRunState(PROJECT, repoPath);
+  if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
+  else { log('no --base-sha: running against the current repo state'); }
 
   log('starting forge watch…');
   const watch = await startWatch();
@@ -724,229 +856,79 @@ async function main() {
   ).catch(() => log('page-ready timed out'));
   await captureFrame(page, 'initial-load');
 
-  log('spawning forge serve --once…');
-  const serve = startServe();
-  serve.stdout.on('data', (d) => process.stdout.write(d));
-  serve.stderr.on('data', (d) => process.stderr.write(d));
-
-  // 2026-05-26 fix: attach the exit listener IMMEDIATELY after spawn,
-  // not after the cycle-claim await. Previously the listener was
-  // attached AFTER `findCycleIdForInitiative` resolved; if the cycle
-  // failed fast (e.g. malformed manifest causes serve to exit with
-  // code 1 in <1s), the exit event fired before any listener saw it
-  // and the phase-poll loop later stalled forever waiting for
-  // SERVE_EXITED.
-  const SERVE_EXITED = Symbol('serve-exited');
-  const serveEnd = new Promise((res) => serve.on('exit', () => res(SERVE_EXITED)));
-
-  log('waiting for cycle to appear on bridge…');
-  const cycleId = await findCycleIdForInitiative(watch.bridgeUrl, initiativeId, Date.now() + 60_000);
-  if (!cycleId) {
-    log('cycle never appeared — bailing');
-    await captureFrame(page, 'cycle-never-claimed');
-    await browser.close();
-    await stopWatch(watch.proc);
-    process.exit(1);
-  }
-  log(`cycle id: ${cycleId}`);
+  // ===== STAGE 1: architect (interview + plan gate) → forge-architect serve =====
+  const { initiativeId, cycleId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
+  // Serve the architect flow (pm decomposes the initiative into work items).
+  await runServeStage(page, 'architect');
+  // Focus the threaded cycle in the dashboard for the frame gallery.
   try {
-    await page.waitForSelector(`[data-cycle-id="${cycleId}"]`, { timeout: 15000 });
+    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector(`[data-cycle-id="${cycleId}"]`, { timeout: 10000 });
     await page.locator(`[data-cycle-id="${cycleId}"]`).first().click();
-    await page.waitForFunction(
-      (id) => document.querySelector('main')?.getAttribute('data-active-cycle-id') === id,
-      cycleId,
-      { timeout: 5000 },
-    ).catch(() => { /* */ });
-    await captureFrame(page, 'cycle-focused');
-  } catch (err) {
-    log(`click failed: ${err.message}`);
-  }
+    await captureFrame(page, 'decision-pm-work-items');
+  } catch (err) { log(`cycle focus failed: ${err.message}`); }
 
-  // Phase-1 capture: while `serve --once` is running. Exits when the
-  // cycle hits a terminal phase for the autonomous part (pr-open,
-  // failed, etc.) — serve exits at that point.
-  //
-  // 2026-05-25/26 fix: previously used Promise.race + a falsy check
-  // (broke on exit code 0) AND attached the exit listener after
-  // findCycleIdForInitiative (broke on fail-fast cycles). Now uses a
-  // sentinel object AND attaches the listener immediately after spawn
-  // (see SERVE_EXITED above).
-  const seenPhase = new Map();
-  const phasePoll = (async () => {
-    // Named decision-point frame — PM work items: fire a one-shot capture once
-    // [data-wi-hex] appears (the PM has broken the initiative into WIs). We race
-    // it against the serve-exited sentinel so a fast-exiting serve never hangs.
-    let pmFrameFired = false;
-    while (true) {
-      const r = await Promise.race([serveEnd, sleep(2000)]);
-      if (r === SERVE_EXITED) break;
-      try {
-        const states = await getPhaseStates(page);
-        for (const [phase, status] of Object.entries(states)) {
-          const prev = seenPhase.get(phase);
-          if (prev !== status) {
-            seenPhase.set(phase, status);
-            await captureFrame(page, `${phase}-${status}`);
-          }
-        }
-        // One-shot: capture the PM work-item decision frame as soon as WI hexes appear.
-        if (!pmFrameFired) {
-          const wiCount = await page.evaluate(
-            () => document.querySelectorAll('[data-wi-hex]').length,
-          ).catch(() => 0);
-          if (wiCount >= 1) {
-            pmFrameFired = true;
-            await captureFrame(page, 'decision-pm-work-items');
-          }
-        }
-      } catch { /* */ }
-    }
-    // If serve exited before the PM frame fired, capture anyway (the PM may have
-    // emitted WI hexes just before exit).
-    if (!pmFrameFired) {
-      try {
-        const wiCount = await page.evaluate(
-          () => document.querySelectorAll('[data-wi-hex]').length,
-        ).catch(() => 0);
-        if (wiCount >= 1) await captureFrame(page, 'decision-pm-work-items');
-        else log('decision-pm-work-items: no [data-wi-hex] found — skipping frame');
-      } catch { /* */ }
-    }
-  })();
+  // ===== STAGE 2: hand-off → forge-develop serve → verdict gate =====
+  await handoffToDevelop(watch.bridgeUrl, initiativeId);
+  await runServeStage(page, 'develop');
 
-  // Named decision-point frame — cost + tokens: race a parallel poll that fires
-  // once any phase-hex reports cost > 0.  Runs concurrently with phasePoll so it
-  // captures mid-dev-loop without blocking phase-state captures.
-  const costTokenPoll = (async () => {
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      const r = await Promise.race([serveEnd, sleep(3000)]);
-      try {
-        const hasCost = await page.evaluate(
-          () => [...document.querySelectorAll('[data-phase-hex]')]
-            .some((e) => (parseFloat(e.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0),
-        ).catch(() => false);
-        if (hasCost) {
-          await captureFrame(page, 'decision-cost-and-tokens');
-          return;
-        }
-      } catch { /* */ }
-      if (r === SERVE_EXITED) break;
-    }
-    // Capture at deadline/exit regardless so the frame gallery has an entry.
-    try { await captureFrame(page, 'decision-cost-and-tokens'); } catch { /* */ }
-  })();
-
-  await serveEnd;
-  await Promise.all([phasePoll, costTokenPoll]);
-  log('serve --once exited');
-
-  // What state did the cycle reach?
   await sleep(2000);
-  const status = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
-  log(`cycle status after serve exit: ${status}`);
-  await captureFrame(page, `after-serve-${status ?? 'unknown'}`);
+  let status = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
+  log(`develop status after serve exit: ${status}`);
+  await captureFrame(page, `after-develop-${status ?? 'unknown'}`);
 
-  // ---- send-back pass (only when --send-back is set) ----------------------
-  // This block runs BEFORE the auto-approve so it can exercise the full
-  // ADR 026 drain path.  After the send-back the manifest is back in
-  // ready-for-review and the existing auto-approve picks it up normally.
+  // Optional send-back pass (exercises the ADR-026 in-place drain) before approve.
   if (status === 'ready-for-review' && SEND_BACK) {
-    log('--send-back set: capturing review evaluation frame…');
-    // Decision frame: navigate to /review/<cycleId>, capture the demo with
-    // per-AC evaluated output before touching the verdict form.
     await captureDecisionReviewEvaluation(page, watch.uiUrl, cycleId);
-
-    // POST the send-back verdict.
     log('posting send-back verdict to /api/verdict…');
     const sendBackOk = await postSendBack(watch.bridgeUrl, initiativeId);
-
     if (sendBackOk) {
       await captureFrame(page, 'decision-send-back');
-
-      // Re-run serve --once to drain the ready-for-review manifest (the appended
-      // UWIs) through the unifier (ADR 026: runFinalizeSweep + runDrainSweep at
-      // startup claims the manifest and re-runs via runCycle(resumeFrom:unifier)).
-      log('re-running forge serve --once to drain the send-back UWIs…');
-      const serve2 = startServe();
-      serve2.stdout.on('data', (d) => process.stdout.write(d));
-      serve2.stderr.on('data', (d) => process.stderr.write(d));
-      const SERVE2_EXITED = Symbol('serve2-exited');
-      const serve2End = new Promise((res) => serve2.on('exit', () => res(SERVE2_EXITED)));
-
-      // Phase-poll during the re-run (same pattern as primary serve).
-      const serve2PhasePoll = (async () => {
-        while (true) {
-          const r = await Promise.race([serve2End, sleep(2000)]);
-          if (r === SERVE2_EXITED) break;
-          try {
-            const states = await getPhaseStates(page);
-            for (const [phase, st] of Object.entries(states)) {
-              const prev = seenPhase.get(phase);
-              if (prev !== st) {
-                seenPhase.set(phase, st);
-                await captureFrame(page, `sendback-${phase}-${st}`);
-              }
-            }
-          } catch { /* */ }
-        }
-      })();
-
-      await serve2End;
-      await serve2PhasePoll;
-      log('send-back serve --once exited');
-
-      // Navigate to the unified review gate again to capture the unifier's re-run output.
+      await runServeStage(page, 'sendback-drain');
       await sleep(2000);
       try {
         await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
           .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
-      } catch (err) {
-        log(`decision-re-review: navigation error — ${err.message}`);
-      }
+      } catch (err) { log(`decision-re-review: navigation error — ${err.message}`); }
       await captureFrame(page, 'decision-re-review');
-
-      // Return to the dashboard so the auto-approve path works cleanly.
-      try {
-        await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
-      } catch { /* best-effort */ }
+      try { await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }); } catch { /* */ }
+      status = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
     } else {
       log('send-back was skipped (POST failed); continuing to auto-approve');
     }
-  } else if (status === 'ready-for-review' && !SEND_BACK) {
-    // Only navigate to the review page when not in send-back mode; in send-back
-    // mode we already captured decision-review-evaluation above.
-    // (No action needed here — auto-approve follows directly.)
   }
 
-  // ---- auto-approve path: if ready-for-review, kick the approve + capture
-  // closure + reflection.
+  // ===== STAGE 3: approve the VERDICT GATE → merge → finalize → reflect =====
   if (status === 'ready-for-review') {
     const ok = await autoApprove(watch.bridgeUrl, initiativeId);
     if (ok) {
-      log('waiting for closure + reflection to complete…');
-      const deadline = Date.now() + 10 * 60_000; // 10 min cap
+      // The bridge merged the PR and fired finalize (→ reflect) DETACHED in its
+      // own process. Wait for reflector.end specifically — the old harness waited
+      // on the develop cycle's orchestrator.end (already emitted at ready-for-review)
+      // and tore the bridge down mid-reflect, leaving the central brain unwritten.
+      log('verdict approved — waiting for finalize + reflector.end (S9: bridge runs reflect detached)…');
+      const reflectDeadline = Date.now() + 12 * 60_000;
       let lastEventCount = 0;
-      while (Date.now() < deadline) {
-        const ended = await logHasCycleEnd(cycleId);
-        if (ended) {
-          log('cycle.end emitted by orchestrator — reflection complete');
-          break;
+      const reflected = (async () => {
+        // Capture progress frames while we wait.
+        while (Date.now() < reflectDeadline) {
+          const count = await cycleEventCountFromLog(cycleId);
+          if (count > lastEventCount + 4) {
+            lastEventCount = count;
+            await captureFrame(page, `post-approve-events-${count}`);
+          }
+          await sleep(3000);
         }
-        // Capture frame whenever the event count grows substantially.
-        const count = await cycleEventCountFromLog(cycleId);
-        if (count > lastEventCount + 4) {
-          lastEventCount = count;
-          await captureFrame(page, `post-approve-events-${count}`);
-        }
-        await sleep(3000);
-      }
-      await sleep(3000);
+      })();
+      await waitForReflectorEnd(cycleId, reflectDeadline);
+      // Stop the frame poller (deadline already reached or reflect done).
+      await Promise.race([reflected, sleep(100)]);
+      await sleep(2000);
       await captureFrame(page, 'final-state');
     }
   } else {
-    log(`cycle reached non-ready-for-review state (${status}) — no auto-approve`);
+    log(`develop reached non-ready-for-review state (${status}) — no auto-approve`);
   }
 
   // Capture the video path BEFORE closing.
@@ -971,21 +953,21 @@ async function main() {
   writeIndexHtml();
   log(`index → ${join(OUT_DIR, 'index.html')}`);
 
-  // ---- ADR 022 gate: outcome assertions ----
+  // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
   const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
   const finalEvents = await cycleEventCountFromLog(cycleId);
   const cost = sumCycleCost(cycleId);
-  const { checks, wi } = assessOutcomes({ finalStatus, cost, repoPath, cycleId });
+  const { checks, wi } = assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project: PROJECT, runStartMs });
   const gatePassed = checks.every((c) => c.pass);
 
-  log(`--- verdict (${TIER} tier) ---`);
+  log('--- verdict (3-stage spine) ---');
   for (const c of checks) log(`  ${c.pass ? '✓' : '✗'} ${c.name} — ${c.detail}`);
 
   const summary = {
+    runHandle: RUN_HANDLE,
     initiativeId,
     cycleId,
     project: PROJECT,
-    tier: TIER,
     baseSha: BASE_SHA,
     finalStatus,
     totalEvents: finalEvents,
