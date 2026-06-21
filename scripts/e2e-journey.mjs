@@ -1306,7 +1306,7 @@ async function main() {
     // The new OOTB agent library (L1-A) is draggable from the palette (#10) — the
     // author can compose the freshly-seeded agents into a flow from scratch.
     const ootbChips = await page.evaluate(() => {
-      const want = ['code-reviewer', 'security-auditor', 'web-scraper'];
+      const want = ['code-reviewer', 'developer-ralph', 'project-manager'];
       const present = new Set(
         Array.from(document.querySelectorAll('[data-palette-chip="agent"]')).map((el) =>
           el.getAttribute('data-chip-ref'),

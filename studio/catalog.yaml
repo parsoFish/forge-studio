@@ -80,7 +80,7 @@ community-skills:
     source: https://github.com/travisvn/awesome-claude-skills
     category: review
     tier: sonnet
-    composedBy: [security-auditor, developer-unifier]
+    composedBy: [developer-unifier]
     desc: Static-analysis security audit (CodeQL/Semgrep patterns).
   - id: skill-creator
     name: Skill Creator
