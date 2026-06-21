@@ -7,6 +7,8 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-21
+
 ## [0.1.0] - 2026-06-21
 
 Forge Studio adopts **0.x pre-release versioning**: minor/patch bumps land as work
@@ -132,6 +134,7 @@ real data-table dispatch and a second, gated implementation behind it).
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
-[Unreleased]: https://github.com/Parso/forge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Parso/forge/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Parso/forge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Parso/forge/releases/tag/v0.1.0
 [DEC-3]: docs/decisions/
