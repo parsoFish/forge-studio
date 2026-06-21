@@ -36,6 +36,12 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   collapsible section with a chevron + run-count badge — minimise the COMPLETE
   pile to keep the rail navigable. New `data-run-group` / `data-group-collapsed`
   / `data-group-count` hooks + a `data-action="toggle-run-group"` control.
+- **Merged cycles no longer strand as "active".** A cycle that merged (reached
+  `_queue/done/`) but whose reflector started and never emitted `end` (crashed /
+  interrupted) was reported `active` forever by the run-model reconciliation.
+  The hold on `complete` is now bounded by staleness (`WEDGE_THRESHOLD_MS`): a
+  cycle quiet past the wedge threshold trusts its `done/` placement and reports
+  `complete`, while a genuinely-live cycle mid-reflection still shows `active`.
 
 ## [0.2.0] - 2026-06-21
 

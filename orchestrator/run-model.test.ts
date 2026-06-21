@@ -434,6 +434,70 @@ test('aggregateRun: complete — status complete, artifactsReady view mode', () 
 });
 
 // ---------------------------------------------------------------------------
+// Reconciliation staleness: a done/ manifest whose reflector started but never
+// emitted `end` must NOT be stranded 'active' forever. Hold 'active' only while
+// the cycle is still live (recent events); once it has been quiet past the
+// wedge threshold, trust the done/ placement and report 'complete'.
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: done + reflector start-no-end, STALE (quiet > wedge) → complete (not stranded active)', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-stale-reflect';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-stale-reflect';
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    const nowMs = Date.parse('2026-01-01T10:00:00Z');
+    const oldIso = new Date(nowMs - 60 * 60 * 1000).toISOString(); // 60 min ago (> 30 min wedge)
+    const at = { started_at: oldIso };
+
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }, at),
+      ev('architect', 'start', undefined, undefined, at), ev('architect', 'end', undefined, undefined, at),
+      ev('project-manager', 'start', undefined, undefined, at), ev('project-manager', 'end', undefined, undefined, at),
+      ev('developer-loop', 'start', undefined, undefined, at),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1', status: 'complete' }, at),
+      ev('developer-loop', 'end', undefined, undefined, at),
+      ev('unifier', 'start', undefined, undefined, at), ev('unifier', 'end', undefined, undefined, at),
+      ev('review-loop', 'start', undefined, undefined, at), ev('review-loop', 'end', undefined, undefined, at),
+      ev('closure', 'start', undefined, undefined, at), ev('closure', 'end', undefined, undefined, at),
+      // reflector STARTED but never ended (crashed / interrupted), then went quiet.
+      ev('reflection', 'start', 'reflector.start', undefined, at),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
+    assert.equal(run.phases['reflect'], 'active', 'reflect node still active (started, never ended)');
+    assert.equal(run.status, 'complete', 'a long-quiet merged (done/) cycle reports complete, not stranded active');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('aggregateRun: done + reflector start-no-end, RECENT (still live) → active (anti-flash preserved)', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-live-reflect';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-live-reflect';
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    const nowMs = Date.parse('2026-01-01T10:00:00Z');
+    const recentIso = new Date(nowMs - 60 * 1000).toISOString(); // 1 min ago (< 30 min wedge)
+    const at = { started_at: recentIso };
+
+    writeCycleLog(root, cycleId, [
+      ev('closure', 'start', undefined, undefined, at), ev('closure', 'end', undefined, undefined, at),
+      ev('reflection', 'start', 'reflector.start', undefined, at),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
+    assert.equal(run.phases['reflect'], 'active');
+    assert.equal(run.status, 'active', 'a cycle still actively reflecting holds active until reflector.end (or it goes stale)');
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Synthetic: failed (failure_classification event)
 // ---------------------------------------------------------------------------
 

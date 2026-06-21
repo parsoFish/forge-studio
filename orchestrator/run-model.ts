@@ -37,6 +37,7 @@ import {
   deriveArtifacts,
   findGateNote,
   findFailure,
+  WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 
 // ---------------------------------------------------------------------------
@@ -433,12 +434,24 @@ function buildRun(args: {
   // hex is still gated/active. Hold 'complete' until the terminal node (reflect
   // when present, else review) has actually resolved. Flows without a review
   // node are unaffected (terminalNode undefined ⇒ no change).
+  // ...but bound that hold by staleness: a merged cycle whose reflector started
+  // and never emitted `end` (crashed / interrupted) would otherwise be stranded
+  // 'active' forever. Once the cycle has been quiet longer than the wedge
+  // threshold it is no longer live — trust the done/ placement and report
+  // 'complete'. A genuinely-live cycle still mid-reflection has recent events
+  // and keeps showing 'active'.
   const terminalNode = phases['reflect'] ?? phases['review'];
+  const lastEventMs = events.reduce((max, e) => {
+    const t = Date.parse(e.started_at);
+    return Number.isNaN(t) ? max : Math.max(max, t);
+  }, 0);
+  const isStale = lastEventMs > 0 && nowMs - lastEventMs > WEDGE_THRESHOLD_MS;
   const reconciledStatus: RunStatus =
     runStatus === 'complete' &&
     terminalNode !== undefined &&
     terminalNode !== 'complete' &&
-    terminalNode !== 'failed'
+    terminalNode !== 'failed' &&
+    !isStale
       ? 'active'
       : runStatus;
 
