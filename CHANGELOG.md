@@ -7,6 +7,8 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-22
+
 ### Knowledge graph — real force-directed layout (d3)
 
 - **The KB graph now uses `d3-force` + `d3-zoom`/`d3-drag`** instead of a
