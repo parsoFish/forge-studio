@@ -33,6 +33,7 @@ const ROUTES = [
   { path: '/knowledge/new', name: 'knowledge base (new)' },
   { path: '/skills/new', name: 'skill builder (new)' },
   { path: '/architect/new', name: 'architect launcher' },
+  { path: '/recovery', name: 'recovery (DEC-6 operator surface)' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

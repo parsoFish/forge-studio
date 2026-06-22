@@ -11,6 +11,7 @@ import {
 import { fetchRoadmap, startDevelopment, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
+import { SerpentineTimeline } from '@/components/studio/SerpentineTimeline';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -480,6 +481,9 @@ const STATUS_COLOURS: Record<string, string> = {
 };
 
 function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: ProjectRoadmap | null }) {
+  // Node selected in the serpentine timeline → highlight + scroll to its card.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   if (!roadmap) {
     return (
       <div
@@ -506,42 +510,49 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
     );
   }
 
-  // Topological level ordering for the initiative spine.
+  // Dependency depth is still surfaced (data-dep-count) for tooling, but the
+  // roadmap is now laid out over TIME by the serpentine timeline (which orders
+  // its own nodes chronologically). The detail card pops off the selected dot.
   const initLevels = topoLevels(
     initiatives,
     (i) => i.initiativeId,
     (i) => i.dependsOnInitiatives,
   );
 
+  // Toggle the selected dot; clicking the open one again (or × / Escape) closes.
+  const handleSelect = (initiativeId: string): void =>
+    setSelectedId((prev) => (prev === initiativeId ? null : initiativeId));
+
   return (
     <div
       data-section="project-roadmap"
       data-project-id={projectId}
       data-dep-count={String(initLevels.maxLevel)}
-      style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24 }}
+      style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
-      {Array.from({ length: initLevels.maxLevel + 1 }, (_, lvl) => {
-        const levelInits = initLevels.byLevel.get(lvl) ?? [];
-        return (
-          <div key={lvl} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {lvl === 0 ? null : (
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', paddingLeft: 4 }}>
-                Level {lvl}
-              </div>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {levelInits.map((init) => (
-                <InitiativeCard key={init.initiativeId} initiative={init} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      {/* The roadmap-over-time: a serpentine arrow, oldest → newest. Clicking a
+          dot pops that initiative's detail card up off the dot. */}
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 16px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
+          Progression over time
+          <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
+            click a dot for detail
+          </span>
+        </div>
+        <SerpentineTimeline
+          initiatives={initiatives}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onClose={() => setSelectedId(null)}
+          renderCard={(init) => <InitiativeCard initiative={init} selected />}
+        />
+      </div>
+
     </div>
   );
 }
 
-function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
+function InitiativeCard({ initiative, selected = false }: { initiative: RoadmapInitiative; selected?: boolean }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
   const router = useRouter();
@@ -577,13 +588,15 @@ function InitiativeCard({ initiative }: { initiative: RoadmapInitiative }) {
       data-develop-state={develop}
       style={{
         background: 'var(--panel)',
-        border: `1px solid var(--line)`,
+        border: `1px solid ${selected ? colour : 'var(--line)'}`,
         borderTop: `3px solid ${colour}`,
         borderRadius: 'var(--radius)',
         padding: '14px 16px',
         minWidth: 260, maxWidth: 380,
         display: 'flex', flexDirection: 'column', gap: 10,
         position: 'relative',
+        boxShadow: selected ? `0 0 0 2px ${colour}55` : 'none',
+        transition: 'box-shadow 0.15s, border-color 0.15s',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>

@@ -121,10 +121,8 @@ test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB libr
       // WS-A: the release-finalizer is a phase agent (full studio frontmatter,
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
-      'security-auditor',
-      'web-scraper',
     ],
-    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 8-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

@@ -80,13 +80,21 @@ what the code actually exposes. Use this decision tree:
      (provision → GET → idempotency-replan → destroy, with portal screenshot
      opportunistically when a portal URL can be derived).
 
-4. **Default: JSON-diff / notes-only evidence**
-   The project has no UI surface, no measurement command, and no live external
-   calls — or the operator's `demoProcess` only uses `verify` and `present` steps
-   with no external dependency.
-   → Evidence form: **JSON-diff or notes-only** (run the quality gate, capture
-     its output + `git diff --stat`, write a checkpoint with `beforeNote` /
-     `afterNote`).
+4. **Is it a CLI / command-line tool whose stdout shows the change?**
+   Look for: a `bin` entry in package.json, a `cli.ts`/`main.go` entrypoint, a
+   `present`/`capture` step in `demoProcess` that runs the tool. The change is visible
+   by running a command and reading the output (a new column, a new flag, new rows).
+   → Evidence form is **captured CLI output**: each checkpoint sets `command` to the
+     exact argv whose stdout IS the evidence; `forge demo capture` runs it on `main`
+     (before) AND the branch HEAD (after) and back-fills the REAL terminal output,
+     shown side-by-side. STRONGLY preferred over prose notes for any CLI tool — show
+     the actual output, do not describe it.
+
+5. **Default: notes-only evidence**
+   No UI surface, no measurement command, no live external calls, and no runnable
+   command whose output shows the change (e.g. a pure library/type/internal change).
+   → Evidence form: **notes-only** (run the quality gate, capture its output +
+     `git diff --stat`, write a checkpoint with a concise `beforeNote` / `afterNote`).
 
 **Never hard-code project types.** A project whose `package.json` has a `preview`
 script AND calls a REST API can have BOTH browser screenshots AND live evidence.

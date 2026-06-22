@@ -1,44 +1,74 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+/**
+ * KB-graph layout engine — d3-force.
+ *
+ * Replaces the hand-rolled spring/repulsion integrator. d3-force is the
+ * battle-tested force-directed layout: forceLink (springs along edges),
+ * forceManyBody (n-body repulsion via a Barnes-Hut quadtree), forceCenter +
+ * forceX/Y (gravity), forceCollide (no overlap). Initial positions are seeded
+ * DETERMINISTICALLY by layer (no Math.random), so the same graph lays out the
+ * same way every load. The simulation runs continuously and cools on its own
+ * (alpha decay); dragging a node fixes it (fx/fy) and reheats the sim so its
+ * neighbours pull/stretch toward it, then re-settle.
+ */
+
+import { useCallback, useRef } from 'react';
+import {
+  forceSimulation,
+  forceLink,
+  forceManyBody,
+  forceCenter,
+  forceCollide,
+  forceX,
+  forceY,
+  type Simulation,
+  type ForceLink,
+} from 'd3-force';
+
 import type { KbNode, KbEdge } from '@/lib/studio-client';
 
-// ── Physics constants for the knowledge-graph force simulation ──
-const K_SPRING   = 0.04;
-const REST_LEN   = 160;
-const REPULSION  = 6000;
-const DAMPING    = 0.82;
-const CENTER_F   = 0.012;
-const SETTLE_TICKS = 180;
+export type KbLayer = 'index' | 'theme' | 'raw' | 'guidance';
 
-// Layout density — the two constants the operator can tune (REST_LEN / REPULSION).
-// Defaults equal the constants above, so callers that pass nothing are unaffected.
-export type LayoutForces = { restLen: number; repulsion: number };
+export const LAYER_RADIUS: Record<KbLayer, number> = { index: 28, theme: 18, guidance: 12, raw: 8 };
 
-export const DEFAULT_FORCES: LayoutForces = { restLen: REST_LEN, repulsion: REPULSION };
-
-// Operator-selectable density presets. 'balanced' is the default (current values),
-// so the graph looks unchanged until the operator picks compact/spread.
-export type LayoutPreset = 'compact' | 'balanced' | 'spread';
-
-export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutForces> = {
-  compact:  { restLen: REST_LEN * 0.6, repulsion: REPULSION * 0.6 },
-  balanced: { restLen: REST_LEN,       repulsion: REPULSION },
-  spread:   { restLen: REST_LEN * 1.6, repulsion: REPULSION * 1.8 },
-};
-
+// d3-force node — d3 mutates x/y/vx/vy in place and honours fx/fy (a fixed/pinned
+// coordinate). `pinned` is our own flag for styling a dropped node.
 export type SimNode = {
   id: string;
   title: string;
-  layer: 'index' | 'theme' | 'raw' | 'guidance';
+  layer: KbLayer;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  pinned: boolean;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
+  pinned?: boolean;
+  index?: number;
 };
 
-export type SimEdge = { from: number; to: number; fromId: string; toId: string };
+// d3 link — source/target start as ids and are resolved to node refs by forceLink.
+export type SimLink = {
+  source: string | SimNode;
+  target: string | SimNode;
+  fromId: string;
+  toId: string;
+};
+
+export type KbSimulation = Simulation<SimNode, SimLink>;
+
+// Layout density — link rest length + n-body charge. The operator picks a preset.
+export type LayoutForces = { linkDistance: number; charge: number };
+export type LayoutPreset = 'compact' | 'balanced' | 'spread';
+
+export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutForces> = {
+  compact:  { linkDistance: 70,  charge: -200 },
+  balanced: { linkDistance: 120, charge: -360 },
+  spread:   { linkDistance: 200, charge: -680 },
+};
+
+export const DEFAULT_FORCES: LayoutForces = LAYOUT_PRESETS.balanced;
 
 function hexPoints(cx: number, cy: number, r: number): string {
   const pts: string[] = [];
@@ -49,157 +79,96 @@ function hexPoints(cx: number, cy: number, r: number): string {
   return pts.join(' ');
 }
 
-function tick(nodes: SimNode[], edges: SimEdge[], cx: number, cy: number, forces: LayoutForces = DEFAULT_FORCES): void {
-  // reset velocities for unpinned
-  for (const n of nodes) {
-    if (!n.pinned) { n.vx = 0; n.vy = 0; }
-  }
-
-  // repulsion between all pairs
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i]; const b = nodes[j];
-      const dx = (b.x - a.x) || 0.1;
-      const dy = (b.y - a.y) || 0.1;
-      const dist2 = dx * dx + dy * dy;
-      const dist  = Math.sqrt(dist2) || 1;
-      const force = forces.repulsion / dist2;
-      const fx = (dx / dist) * force;
-      const fy = (dy / dist) * force;
-      if (!a.pinned) { a.vx -= fx; a.vy -= fy; }
-      if (!b.pinned) { b.vx += fx; b.vy += fy; }
-    }
-  }
-
-  // spring along edges
-  for (const e of edges) {
-    const a = nodes[e.from]; const b = nodes[e.to];
-    if (!a || !b) continue;
-    const dx = b.x - a.x; const dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const delta = (dist - forces.restLen) * K_SPRING;
-    const fx = (dx / dist) * delta;
-    const fy = (dy / dist) * delta;
-    if (!a.pinned) { a.vx += fx; a.vy += fy; }
-    if (!b.pinned) { b.vx -= fx; b.vy -= fy; }
-  }
-
-  // center pull + integrate
-  for (const n of nodes) {
-    if (n.pinned) continue;
-    n.vx += (cx - n.x) * CENTER_F;
-    n.vy += (cy - n.y) * CENTER_F;
-    n.vx *= DAMPING;
-    n.vy *= DAMPING;
-    n.x  += n.vx;
-    n.y  += n.vy;
-  }
-}
-
-function normalise(nodes: SimNode[], W: number, H: number): void {
-  if (!nodes.length) return;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const n of nodes) {
-    if (n.x < minX) minX = n.x;
-    if (n.x > maxX) maxX = n.x;
-    if (n.y < minY) minY = n.y;
-    if (n.y > maxY) maxY = n.y;
-  }
-  const bboxW = maxX - minX || 1;
-  const bboxH = maxY - minY || 1;
-  const scale = Math.min((W * 0.80) / bboxW, (H * 0.80) / bboxH, 1.8);
-  const cx = W / 2; const cy = H / 2;
-  for (const n of nodes) {
-    n.x = cx + (n.x - (minX + bboxW / 2)) * scale;
-    n.y = cy + (n.y - (minY + bboxH / 2)) * scale;
-  }
-}
-
-export function buildSimState(
+/**
+ * Build the d3 node/link arrays with DETERMINISTIC seed positions (index at the
+ * centre, themes on an inner ring, guidance just outside, raw on an outer ring —
+ * ordered by their position in the data, no randomness). d3-force then relaxes
+ * from these seeds, so the result is stable across reloads.
+ */
+export function buildSimData(
   nodes: KbNode[],
   edges: KbEdge[],
   W: number,
   H: number,
-  forces: LayoutForces = DEFAULT_FORCES,
-): { simNodes: SimNode[]; simEdges: SimEdge[] } {
-  const cx = W / 2; const cy = H / 2;
+): { simNodes: SimNode[]; simLinks: SimLink[] } {
+  const cx = W / 2;
+  const cy = H / 2;
   const themes = nodes.filter((n) => n.layer === 'theme');
-  const raws   = nodes.filter((n) => n.layer === 'raw');
+  const raws = nodes.filter((n) => n.layer === 'raw');
+  const guidances = nodes.filter((n) => n.layer === 'guidance');
 
   const simNodes: SimNode[] = nodes.map((n) => {
-    let x: number; let y: number;
-    if (n.layer === 'index') {
-      x = cx; y = cy;
-    } else if (n.layer === 'theme') {
-      const i     = themes.indexOf(n);
-      const angle = (i / Math.max(themes.length, 1)) * Math.PI * 2 - Math.PI / 2;
-      x = cx + Math.cos(angle) * 150;
-      y = cy + Math.sin(angle) * 130;
-    } else {
-      const i     = raws.indexOf(n);
-      const angle = (i / Math.max(raws.length, 1)) * Math.PI * 2 + 0.4;
-      x = cx + Math.cos(angle) * 260;
-      y = cy + Math.sin(angle) * 220;
+    let x = cx;
+    let y = cy;
+    if (n.layer === 'theme') {
+      const i = themes.indexOf(n);
+      const a = (i / Math.max(themes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+      x = cx + Math.cos(a) * 150;
+      y = cy + Math.sin(a) * 130;
+    } else if (n.layer === 'guidance') {
+      const i = guidances.indexOf(n);
+      const a = (i / Math.max(guidances.length, 1)) * Math.PI * 2 + 0.8;
+      x = cx + Math.cos(a) * 200;
+      y = cy + Math.sin(a) * 175;
+    } else if (n.layer === 'raw') {
+      const i = raws.indexOf(n);
+      const a = (i / Math.max(raws.length, 1)) * Math.PI * 2 + 0.4;
+      x = cx + Math.cos(a) * 270;
+      y = cy + Math.sin(a) * 230;
     }
-    x += (Math.random() - 0.5) * 60;
-    y += (Math.random() - 0.5) * 60;
-    return { id: n.id, title: n.title, layer: n.layer, x, y, vx: 0, vy: 0, pinned: false };
+    return { id: n.id, title: n.title, layer: n.layer as KbLayer, x, y };
   });
 
-  const simEdges: SimEdge[] = edges
-    .map((e) => {
-      const fi = simNodes.findIndex((n) => n.id === e.from);
-      const ti = simNodes.findIndex((n) => n.id === e.to);
-      if (fi < 0 || ti < 0) return null;
-      return { from: fi, to: ti, fromId: e.from, toId: e.to };
-    })
-    .filter((e): e is SimEdge => e !== null);
+  const ids = new Set(simNodes.map((n) => n.id));
+  const simLinks: SimLink[] = edges
+    .filter((e) => ids.has(e.from) && ids.has(e.to))
+    .map((e) => ({ source: e.from, target: e.to, fromId: e.from, toId: e.to }));
 
-  // run settle ticks off-screen
-  for (let i = 0; i < SETTLE_TICKS; i++) tick(simNodes, simEdges, cx, cy, forces);
-  normalise(simNodes, W, H);
-
-  return { simNodes, simEdges };
+  return { simNodes, simLinks };
 }
 
-// ── rAF-based animation hook ──────────────────────────────────────────────────
+// ── Simulation hook ───────────────────────────────────────────────────────────
 
-export function useForceSim(
-  onFrame: (nodes: SimNode[], edges: SimEdge[]) => void,
-) {
-  const rafRef  = useRef<number | null>(null);
-  const stateRef = useRef<{ nodes: SimNode[]; edges: SimEdge[]; cx: number; cy: number; forces: LayoutForces } | null>(null);
-  const tickRef  = useRef(0);
+export function useForceSim(onTick: () => void) {
+  const simRef = useRef<KbSimulation | null>(null);
 
   const stop = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
+    simRef.current?.stop();
+    simRef.current = null;
   }, []);
 
   const start = useCallback(
-    (nodes: SimNode[], edges: SimEdge[], cx: number, cy: number, forces: LayoutForces = DEFAULT_FORCES) => {
-      stop();
-      stateRef.current = { nodes, edges, cx, cy, forces };
-      tickRef.current  = 0;
-
-      const step = () => {
-        const s = stateRef.current;
-        if (!s) return;
-        tick(s.nodes, s.edges, s.cx, s.cy, s.forces);
-        tickRef.current++;
-        onFrame(s.nodes, s.edges);
-        if (tickRef.current < 80) rafRef.current = requestAnimationFrame(step);
-        else rafRef.current = null;
-      };
-      rafRef.current = requestAnimationFrame(step);
+    (simNodes: SimNode[], simLinks: SimLink[], W: number, H: number, forces: LayoutForces) => {
+      simRef.current?.stop();
+      const sim = forceSimulation<SimNode>(simNodes)
+        .force(
+          'link',
+          forceLink<SimNode, SimLink>(simLinks)
+            .id((d) => d.id)
+            .distance(forces.linkDistance)
+            .strength(0.35),
+        )
+        .force('charge', forceManyBody<SimNode>().strength(forces.charge).distanceMax(520))
+        .force('center', forceCenter<SimNode>(W / 2, H / 2).strength(0.6))
+        .force('x', forceX<SimNode>(W / 2).strength(0.03))
+        .force('y', forceY<SimNode>(H / 2).strength(0.03))
+        .force('collide', forceCollide<SimNode>().radius((d) => LAYER_RADIUS[d.layer] + 7).strength(0.85))
+        .alpha(1)
+        .alphaDecay(0.028)
+        .on('tick', onTick);
+      simRef.current = sim;
+      return sim;
     },
-    [stop, onFrame],
+    [onTick],
   );
 
-  return { start, stop };
+  /** Reheat the running simulation (e.g. after a drag) so it re-settles. */
+  const reheat = useCallback((alpha = 0.5) => {
+    simRef.current?.alpha(alpha).restart();
+  }, []);
+
+  return { start, stop, reheat, simRef };
 }
 
-// ── Re-export helper so KbGraph can compute hex points ───────────────────────
 export { hexPoints };
+export type { ForceLink };

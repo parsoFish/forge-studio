@@ -126,13 +126,12 @@ Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
 across parallel work items.
 
-You can also drive a cycle from the CLI for recovery/CI:
-
-```bash
-forge serve [--once]            # run the unattended scheduler
-forge enqueue <id> "<spec>"     # drop an initiative into the queue directly
-forge cycle <init-id>           # run one initiative end-to-end in the foreground
-```
+S9/DEC-6: the **UI is the sole operator surface** — author + run a cycle, review/approve,
+and recover stuck initiatives all from `forge studio` (the Recovery screen replaces
+`forge review`/`forge requeue`; new runs go through the architect flow or `POST
+/api/initiatives`). The only operator CLI verbs left are `forge init`, `forge studio`,
+and `forge studio lint`. The scheduler daemon (`forge serve`) is still spawnable for
+CI/headless use but is no longer an operator command.
 
 ---
 

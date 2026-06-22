@@ -7,6 +7,98 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-22
+
+### Knowledge graph — real force-directed layout (d3)
+
+- **The KB graph now uses `d3-force` + `d3-zoom`/`d3-drag`** instead of a
+  hand-rolled spring integrator and custom pan/zoom. This fixes three things:
+  - **Pan/zoom no longer freezes.** The old wheel handler closed over a stale
+    `vp` snapshot while `vpRef` was reassigned underneath it, so once the settle
+    loop stopped re-rendering, panning/zooming drifted (the buttons, which read
+    the ref directly, kept working — the exact reported symptom). d3-zoom owns
+    the viewport transform imperatively, no stale closures.
+  - **Layout is deterministic.** The seed positions are derived from each node's
+    layer + order (no `Math.random`), so a graph lays out identically every load.
+  - **Dragging a node pulls its neighbours.** A drag fixes the node and reheats
+    the simulation, so linked nodes stretch toward it and re-settle (drop to pin;
+    double-click to release). New `d3-force`/`d3-zoom`/`d3-selection`/`d3-drag`
+    dependencies.
+
+### Demo + artifact polish (post-S9 refinements)
+
+- **Demos show REAL captured CLI output, not prose.** `forge demo capture` now runs
+  a checkpoint's `command` argv in both the before (main) and after (branch HEAD)
+  worktrees and back-fills the actual terminal stdout/stderr, rendered side-by-side
+  in the demo — replacing hand-written "before/after" notes for CLI tools.
+- **PR artifact "Why/What/How" renders as markdown.** The PR-description body on the
+  artifact page is now rendered (markdown-it + DOMPurify) instead of shown as literal
+  `##`/`**` text. A bare `## Why` section heading is no longer mis-parsed as the PR title.
+- **Demo evidence de-duplicated from the PR view.** The `DemoComparison` block was
+  removed from the `type=pr` artifact view — the same evidence already lives on the
+  `type=demo` and verdict-gate views, so the PR page now carries only the PR itself.
+- **"Back to monitor" no longer 404s on retired flows.** The artifact page's
+  breadcrumb + back link now validate the run's `flow_id` against the live flow set
+  (`/api/studio/flows`); an old cycle on a retired flow (`release-refine`,
+  `forge-cycle-with-review`) degrades to the dashboard cascade `/` instead of
+  linking to a now-deleted `/flows/<id>`.
+- **The PLAN artifact actually renders.** Only the rendered `PLAN.html` is
+  snapshotted into a cycle's `artifacts/` (no `plan.json` / `PLAN.md`), so the
+  `type=plan` view always fell through to "Artifact not yet produced". It now
+  falls back to showing `PLAN.html` in a locked-down (`sandbox=""`) iframe, and
+  the plan chip/badge is relabeled `PLAN.html` to match the real artifact.
+- **The flow-monitor run rail no longer grows the page forever.** The monitor
+  shell is now a fixed-height (`100vh`) app shell, so the left run rail scrolls
+  internally instead of stacking initiatives off the bottom of the page. Each
+  status group (NEEDS YOU / ACTIVE / FAILED / QUEUED / COMPLETE) is now a
+  collapsible section with a chevron + run-count badge — minimise the COMPLETE
+  pile to keep the rail navigable. New `data-run-group` / `data-group-collapsed`
+  / `data-group-count` hooks + a `data-action="toggle-run-group"` control.
+- **Merged cycles no longer strand as "active".** A cycle that merged (reached
+  `_queue/done/`) but whose reflector started and never emitted `end` (crashed /
+  interrupted) was reported `active` forever by the run-model reconciliation.
+  The hold on `complete` is now bounded by staleness (`WEDGE_THRESHOLD_MS`): a
+  cycle quiet past the wedge threshold trusts its `done/` placement and reports
+  `complete`, while a genuinely-live cycle mid-reflection still shows `active`.
+- **Per-project Roadmap is now a serpentine timeline over time.** The project
+  Roadmap tab replaces the dependency-level card grid with a winding S-curve
+  arrow (`SerpentineTimeline`): initiatives ordered chronologically (oldest →
+  arrowhead "NOW"), each a status-coloured node branching off the spine, with
+  dotted arcs for inter-initiative dependencies. Clicking a dot pops that
+  initiative's detail card (work items + start-development) up off the dot — a
+  connector-stubbed popover anchored to its point on the timeline — instead of
+  a separate card grid; Escape / × / re-click dismisses it. New
+  `data-roadmap-timeline` / `data-roadmap-node` / `data-roadmap-popover` hooks.
+
+## [0.2.0] - 2026-06-21
+
+S9 — **the 3-stage spine is the REAL runtime + the CLI is retired as the operator
+surface**. (Reconciles the stray 0.1.1 self-release back into a clean lockstep bump.)
+
+### Added
+- **Spine as the runtime.** The `forge-architect → [plan gate] → forge-develop →
+  [verdict gate] → merge → forge-reflect` spine now runs end-to-end on real cycles
+  (proven on the gitpulse verify ground). `scripts/verify-cycle.mjs` drives the spine
+  via the bridge API as three gated runs threading one cycle_id (DEC-2), and now WAITS
+  for `reflector.end` so reflect-writes-central-brain is asserted.
+- **Per-flow spine observability (Model B).** Each flow's monitor renders its OWN slice;
+  a threaded run surfaces under all three flows via a derived `flowLineage` (keyed off
+  globally-unique nodes). WI fan-out on the develop `dev` node is now run-driven.
+- **DEC-6 recovery surface.** Bridge routes `GET /api/recovery/:id`,
+  `POST /api/recovery/:id/{abandon,requeue}`, `POST /api/initiatives` + a `/recovery`
+  UI screen replace the retired `forge review --inspect/--abandon` + `forge requeue`.
+
+### Changed / Fixed
+- The architect→develop hand-off reuses the preserved worktree (work-items survive);
+  a closure-less `ready-for-review` cycle is moved out of in-flight by the scheduler.
+
+### Removed
+- The `release-refine` + `forge-cycle-with-review` legacy flows; the flow-less
+  `web-scraper` + `security-auditor` agents.
+- The operator CLI surface (cycle / enqueue / metrics / review / report / log / requeue) —
+  `forge studio` is the sole operator surface. `serve` / `architect` / `brain` / `demo` /
+  `preflight` stay dispatchable but hidden (internal spawn targets + agent/dev tools).
+
 ## [0.1.1] - 2026-06-21
 
 ## [0.1.0] - 2026-06-21

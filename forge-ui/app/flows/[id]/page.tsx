@@ -316,7 +316,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       data-run-count={runs.length}
       data-can-start={flow ? 'true' : 'false'}
       data-active-tab={tab}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+      style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <StudioNav />
 

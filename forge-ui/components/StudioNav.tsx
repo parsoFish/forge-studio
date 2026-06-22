@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Agents', href: '/agents/new', id: 'agents' },
   { label: 'Projects', href: '/projects', id: 'projects' },
   { label: 'Knowledge', href: '/knowledge', id: 'knowledge' },
+  { label: 'Recovery', href: '/recovery', id: 'recovery' },
 ];
 
 export function StudioNav() {
@@ -36,6 +37,7 @@ export function StudioNav() {
     if (item.id === 'agents')    return pathname.startsWith('/agents');
     if (item.id === 'projects')  return pathname.startsWith('/projects');
     if (item.id === 'knowledge') return pathname.startsWith('/knowledge');
+    if (item.id === 'recovery')  return pathname.startsWith('/recovery');
     return pathname.startsWith(item.href);
   }
 

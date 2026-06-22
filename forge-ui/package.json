@@ -1,6 +1,6 @@
 {
   "name": "forge-ui",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "description": "Forge operator UI — Next.js app served by `forge watch`. Read-only in M2-A; intervention forms land in M2-C.",
@@ -11,6 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "d3-drag": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
     "dompurify": "^3.4.11",
     "img-comparison-slider": "^8.0.7",
     "jsondiffpatch": "^0.7.6",
@@ -22,6 +26,10 @@
     "reactflow": "^11.11.4"
   },
   "devDependencies": {
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-zoom": "^3.0.8",
     "@types/dompurify": "^3.0.5",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.0.0",

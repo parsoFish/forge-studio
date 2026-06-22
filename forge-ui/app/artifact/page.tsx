@@ -49,7 +49,7 @@ import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
-import { fetchRun, type Run } from '@/lib/studio-client';
+import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 
@@ -66,6 +66,9 @@ type PrArtifactDoc = {
 
 type ArtifactDoc =
   | { type: 'plan';       doc: PlanDoc }
+  // Only the RENDERED PLAN.html was snapshotted into the cycle artifacts/ (no
+  // structured plan.json / PLAN.md) — show it in a sandboxed iframe.
+  | { type: 'plan-html';  url: string }
   | { type: 'workitems';  doc: WorkItemEntry[] }
   | { type: 'pr';         doc: PrArtifactDoc }
   | { type: 'demo';       doc: DemoModel }
@@ -78,7 +81,7 @@ type ArtifactDoc =
 // ---------------------------------------------------------------------------
 
 const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
-  plan:       { title: 'Architect Plan',  filename: 'PLAN.md' },
+  plan:       { title: 'Architect Plan',  filename: 'PLAN.html' },
   workitems:  { title: 'Work Items',      filename: 'work-items/*.md' },
   pr:         { title: 'Pull Request',    filename: 'PR' },
   demo:       { title: 'Demo Evidence',   filename: 'demo-evidence/' },
@@ -204,6 +207,12 @@ async function fetchArtifactDoc(
             const text = await res.text();
             if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
           }
+          // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
+          // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
+          // iframe so the plan is actually viewable post-cycle, not "not produced".
+          const htmlUrl = `${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
+          const htmlRes = await fetch(htmlUrl);
+          if (htmlRes.ok) return { type: 'plan-html', url: htmlUrl };
         }
       } catch { /* best-effort */ }
       return { type: 'empty' };
@@ -245,18 +254,21 @@ function extractTitle(body: string): string {
 }
 
 function parsePrDescription(text: string): PrDoc {
-  // Extract key fields from a GitHub PR description markdown
-  // Heuristic: look for title on first heading, body is the rest
+  // Only a LEVEL-1 heading (`# Title`) is the PR title; level-2+ SECTION headings
+  // (`## Why`, `## What`) stay in the body so they render as sections, not get
+  // swallowed as a bogus "Why" title. The unifier's pr-description.md is
+  // section-structured (no top-level title), so the whole text is the body.
   const lines = text.split('\n');
   let title = '';
   let body = text;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (!title && line.startsWith('#')) {
+    if (/^#\s+/.test(line)) {
       title = line.replace(/^#+\s*/, '');
       body = lines.slice(i + 1).join('\n').trim();
       break;
     }
+    if (line && !line.startsWith('#')) break; // first real content — no title heading
   }
   return { title: title || undefined, body };
 }
@@ -334,9 +346,8 @@ const PHASE_FOR_TYPE: Record<ArtifactKey, string> = {
   reflection: 'Reflector',
 };
 
-function EmptyState({ type, flowId }: { type: ArtifactKey; flowId?: string }) {
+function EmptyState({ type, backHref }: { type: ArtifactKey; backHref: string }) {
   const phase = PHASE_FOR_TYPE[type];
-  const backHref = flowId ? `/flows/${encodeURIComponent(flowId)}` : '/';
   return (
     <div style={{
       display: 'flex',
@@ -399,6 +410,9 @@ function ArtifactPageInner() {
   const type: ArtifactKey = isValidType(typeRaw) ? typeRaw : 'plan';
 
   const [run,        setRun]        = useState<Run | null>(null);
+  // Live flow ids — used to avoid linking "back to monitor" at a retired flow
+  // (release-refine / forge-cycle-with-review would 404). null = not loaded yet.
+  const [liveFlowIds, setLiveFlowIds] = useState<Set<string> | null>(null);
   const [artifact,   setArtifact]   = useState<ArtifactDoc | null>(null);
   const [verdictDoc, setVerdictDoc] = useState<VerdictDoc | null>(null);
   // For verdict gate-mode: the demo evidence shown above the verdict form
@@ -433,9 +447,10 @@ function ArtifactPageInner() {
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     if (!runId) { setReady(true); return; }
     try {
-      const [fetchedRun] = await Promise.all([fetchRun(runId)]);
+      const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
       setRun(fetchedRun);
+      setLiveFlowIds(new Set(flows.map((f) => f.id)));
 
       // Resolve the effective mode from the explicit param + the freshly
       // fetched run (NOT the derived `mode` render value, which is stale on the
@@ -511,11 +526,14 @@ function ArtifactPageInner() {
     }
   }, [type, artifact]);
 
-  // Back-to-monitor link
+  // Back-to-monitor link. Only deep-link to /flows/<id> when that flow STILL
+  // EXISTS — retired flows (release-refine, forge-cycle-with-review) would 404.
+  // Until the live flow set has loaded (null), trust flowId; once loaded,
+  // degrade a retired flow to the dashboard cascade '/', which aggregates the
+  // cycle regardless of flow.
   const flowId = run?.flowId;
-  const monitorHref = flowId
-    ? `/flows/${encodeURIComponent(flowId)}`
-    : '/';
+  const flowIsLive = !!flowId && (liveFlowIds === null || liveFlowIds.has(flowId));
+  const monitorHref = flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/';
 
   // Status pill
   const statusPill = run?.status ?? null;
@@ -774,7 +792,7 @@ function ArtifactPageInner() {
                     send back below.
                   </div>
                 ) : (
-                  <EmptyState type={type} flowId={flowId} />
+                  <EmptyState type={type} backHref={monitorHref} />
                 )
               )}
 
@@ -785,6 +803,25 @@ function ArtifactPageInner() {
                   gateMode={isGateMode}
                   onDecisionsResolved={(resolved) => {
                     setDecisionsResolved(resolved);
+                  }}
+                />
+              )}
+
+              {/* Rendered PLAN.html (the snapshotted plan artifact) in a locked-down
+                  sandbox iframe — the post-cycle read-only plan view. */}
+              {artifact && artifact.type === 'plan-html' && (
+                <iframe
+                  src={artifact.url}
+                  sandbox=""
+                  data-plan-iframe
+                  data-plan-html
+                  title="PLAN"
+                  style={{
+                    width: '100%',
+                    height: '72vh',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius)',
+                    background: '#fff',
                   }}
                 />
               )}
@@ -818,14 +855,10 @@ function ArtifactPageInner() {
                       <PrRenderer doc={artifact.doc.prDoc} />
                     </div>
                   )}
-                  {/* Demo evidence: rendered WITHOUT data-section="demo-evaluation" here
-                      to ensure exactly one [data-section="demo-evaluation"] exists per page.
-                      The canonical demo-evaluation section lives on type=demo.
-                      FLAG: this duplication may be fully subsumed by F4/F5 (demo
-                      consolidation — demo.json/DEMO.md/DEMO.html triple → single markdown). */}
-                  {artifact.doc.demoModel && (
-                    <DemoComparison model={artifact.doc.demoModel} cycleId={runId} />
-                  )}
+                  {/* S9 refinement: the demo evidence is NOT duplicated here — the PR
+                      artifact (above) already carries the same content, and the canonical
+                      demo evidence lives on the demo-evidence artifact (type=demo) + the
+                      review gate (type=verdict&mode=gate). */}
                 </div>
               )}
 

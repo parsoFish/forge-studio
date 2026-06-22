@@ -227,6 +227,38 @@ export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
   return bridgeGet<CostSummary | null>(`/api/cost/${encodeURIComponent(cycleId)}`, null);
 }
 
+// ---- Recovery surface (DEC-6 — replaces forge review/requeue/abandon CLI) ----
+
+export type RecoveryInspect = {
+  found: boolean;
+  initiativeId: string;
+  state?: 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
+  worktree?: string | null;
+  worktreeExists?: boolean;
+  branch?: string;
+  commits?: string[];
+  diffStat?: string;
+  prDraftChars?: number;
+};
+
+/** Inspect a stuck cycle (read-only): worktree / branch / commits / diff / PR draft. */
+export async function fetchRecovery(initiativeId: string): Promise<RecoveryInspect | null> {
+  return bridgeGet<RecoveryInspect | null>(`/api/recovery/${encodeURIComponent(initiativeId)}`, null);
+}
+
+/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-unifier). */
+export async function recoveryRequeue(
+  initiativeId: string,
+  opts: { resetRetries?: boolean; resumeFromUnifier?: boolean } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/requeue`, opts);
+}
+
+/** Abandon a stuck initiative: move to failed/ + clean its worktree + branch. */
+export async function recoveryAbandon(initiativeId: string): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/abandon`);
+}
+
 // ---- Daemon-stall liveness (Feature #8) ----------------------------------
 
 export type LivenessReport = {
@@ -325,6 +357,11 @@ export type DemoModelCheckpoint = {
   caption: string;
   beforeNote?: string;
   afterNote?: string;
+  // CLI/output checkpoint — real captured stdout (before on baseRef, after on the
+  // branch HEAD), shown side-by-side as terminal output instead of a prose note.
+  command?: string;
+  beforeOutput?: string | null;
+  afterOutput?: string | null;
   metrics?: DemoHarnessMetricRow[];
   beforeImage?: string | null;
   afterImage?: string | null;

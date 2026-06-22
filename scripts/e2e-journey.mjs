@@ -1306,7 +1306,7 @@ async function main() {
     // The new OOTB agent library (L1-A) is draggable from the palette (#10) — the
     // author can compose the freshly-seeded agents into a flow from scratch.
     const ootbChips = await page.evaluate(() => {
-      const want = ['code-reviewer', 'security-auditor', 'web-scraper'];
+      const want = ['code-reviewer', 'developer-ralph', 'project-manager'];
       const present = new Set(
         Array.from(document.querySelectorAll('[data-palette-chip="agent"]')).map((el) =>
           el.getAttribute('data-chip-ref'),
@@ -2015,8 +2015,23 @@ async function main() {
         document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
       check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
     }
-    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 5, 'completed cycle still shows ≥5 phase hexes');
-    await expectPhaseCost(page, 'completed cycle shows accrued per-phase cost');
+    // Model B: the completed spine is split across the 3 flow monitors. This develop
+    // slice shows the dev fan-out (≥2 WI hexes) + unifier + review.
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (unifier+review)');
+    await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'completed develop slice shows the dev fan-out (≥2 WI hexes)');
+    await expectPhaseCost(page, 'completed develop slice shows accrued per-phase cost');
+    // The SAME threaded run renders its architect slice under forge-architect
+    // (flowLineage) — Model B proof. (The reflect slice is verified at R5, once the
+    // reflection phase has actually run.)
+    await openStudioMonitor(page, watch, 'forge-architect');
+    check(
+      await page.evaluate(() =>
+        document.querySelector('[data-mon-node][data-node-id="architect"]') !== null &&
+        document.querySelector('[data-mon-node][data-node-id="pm"]') !== null &&
+        document.querySelector('[data-mon-node][data-node-id="dev"]') === null),
+      'Model B: /flows/forge-architect renders the architect slice (architect+pm, not dev) of the threaded run',
+    );
+    await openStudioMonitor(page, watch); // back to the develop slice
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
@@ -2142,18 +2157,25 @@ async function main() {
     if (await roadmapTab.count() > 0) {
       await roadmapTab.click();
       await sleep(1500); // allow bridge fetch to settle
-      await caption(page, 'Per-project Roadmap — initiatives ordered by dependency level, with nested WI sub-graphs.');
-      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: initiative spine + work items');
+      await caption(page, 'Per-project Roadmap — a serpentine timeline of the project’s progression over time; click a dot to pop its detail card.');
+      await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time');
       const roadmapSection = await page.evaluate(() =>
         document.querySelector('[data-section="project-roadmap"]') !== null);
       check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
       const initCount = await page.evaluate(() =>
-        document.querySelectorAll('[data-initiative-id]').length);
-      check(initCount >= 1, `roadmap: ≥1 [data-initiative-id] present (got ${initCount})`);
+        document.querySelectorAll('[data-roadmap-node]').length);
+      check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the timeline (got ${initCount})`);
       if (roadmapSeeded) {
+        // The detail card pops OFF the dot now — click the seeded initiative's
+        // node, then assert its card (with WIs) appears in the popover.
+        await page.locator(`[data-roadmap-node][data-initiative-id="${INIT}"]`).first().click().catch(() => {});
+        await sleep(500);
         const wiCount = await page.evaluate(() =>
-          document.querySelectorAll('[data-work-item-id]').length);
-        check(wiCount >= 1, `roadmap: ≥1 [data-work-item-id] present (got ${wiCount})`);
+          document.querySelectorAll('[data-roadmap-popover] [data-work-item-id]').length);
+        check(wiCount >= 1, `roadmap: clicking a dot pops its card with ≥1 [data-work-item-id] (got ${wiCount})`);
+        await frame(page, 'r6-0b-popover', 'R6 — clicking an initiative dot pops its detail card up off the timeline');
+        await page.keyboard.press('Escape'); // dismiss before selecting the next node
+        await sleep(300);
       }
     } else {
       check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
@@ -2161,6 +2183,9 @@ async function main() {
 
     // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
     console.log('\n[R6.1] Start development trigger (DEC-3)');
+    // The card pops off the dot — click the pending initiative's node to reveal it.
+    await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"]`).first().click().catch(() => {});
+    await sleep(500);
     // The card div is uniquely identified by data-develop-state (the button also
     // carries data-initiative-id, so select the div explicitly to avoid a match clash).
     const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`);
@@ -2231,10 +2256,13 @@ async function main() {
     studioEvent('architect', 'end', 'architect.end', { cost_usd: 0.22 });
     studioEvent('project-manager', 'start', 'pm phase start');
     studioEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2' } });
     studioEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.15 });
     studioEvent('developer-loop', 'start', 'dev-loop start');
     studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-1' } });
     studioEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } });
+    studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-2' } });
+    studioEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } });
     studioEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.48 });
     studioEvent('unifier', 'start', 'unifier.start', { skill: 'developer-unifier' });
     for (const [checkId, pass, detail] of [
@@ -2546,7 +2574,9 @@ async function main() {
     if (kbPageReady) {
       const themeNode = page.locator('[data-layer="theme"]').first();
       if ((await themeNode.count()) > 0) {
-        await themeNode.click({ force: true, timeout: 5000 }).catch(() => {});
+        // Click the node's hit-circle: its centre is collision-free, whereas the
+        // <g> bbox centre is pushed by the label into empty/overlapped space.
+        await themeNode.locator('[data-hit]').click({ force: true, timeout: 5000 }).catch(() => {});
         try {
           await page.waitForFunction(
             () => (document.querySelector('#kb-svg')?.getAttribute('data-selected-node') ?? '') !== '',
@@ -2612,6 +2642,28 @@ async function main() {
     }
     await frame(page, 's3-1b-guidance-pinned', 'S3 — guidance pinned: data-guidance-pinned="true", guidance node in graph');
     await sleep(READ);
+
+    // ── S4: Recovery surface (DEC-6 — the CLI recovery verbs moved to the UI) ──
+    console.log('\n[S4] Recovery surface — the operator surface for stuck cycles (DEC-6)');
+    await caption(page, 'forge review/requeue/abandon left the CLI (DEC-6) — recovery is a UI screen over the bridge routes.');
+    await page.goto(watch.uiUrl + '/recovery', { waitUntil: 'domcontentloaded' });
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="recovery"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 },
+      );
+      check(true, 'recovery: [data-page="recovery"][data-page-ready="true"] renders (DEC-6 operator surface)');
+    } catch {
+      const pr = await page.evaluate(() => document.querySelector('[data-page="recovery"]')?.getAttribute('data-page-ready') ?? '(absent)');
+      check(false, `recovery: data-page-ready (got "${pr}")`);
+    }
+    // The list OR the empty-state renders (both are valid — depends on queue state).
+    const recoverySurface = await page.evaluate(() =>
+      document.querySelector('[data-section="recovery-list"]') !== null ||
+      document.querySelector('[data-section="recovery-empty"]') !== null);
+    check(recoverySurface, 'recovery: the recoverable-list or empty-state section renders');
+    await sleep(ACT);
+    await frame(page, 's4-recovery', 'S4 — Recovery: inspect/requeue/abandon a stuck cycle, all in the UI (CLI retired)');
 
     // ── End card ──────────────────────────────────────────────────────────────
     console.log('\n[end] End card');

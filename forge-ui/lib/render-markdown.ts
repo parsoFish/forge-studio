@@ -32,14 +32,29 @@ const DOC_CSS = `
     padding: 2px 14px; color: #8b949e; } img { max-width: 100%; }
 `;
 
-/** Render markdown to a full sanitized HTML document string for an iframe srcDoc. */
-export function renderDemoMarkdownDoc(markdown: string): string {
-  if (typeof window === 'undefined') return '';
-  const body = DOMPurify.sanitize(md.render(markdown ?? ''), {
+/** Sanitize the markdown-it output to a safe HTML fragment (shared by both renders). */
+function sanitizedHtml(markdown: string): string {
+  return DOMPurify.sanitize(md.render(markdown ?? ''), {
     // No scripts, no event handlers, no foreign markup — prose + tables + code only.
     USE_PROFILES: { html: true },
     FORBID_TAGS: ['style', 'form', 'input', 'iframe', 'object', 'embed'],
     FORBID_ATTR: ['style', 'srcset'],
   });
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${DOC_CSS}</style></head><body>${body}</body></html>`;
+}
+
+/** Render markdown to a full sanitized HTML document string for an iframe srcDoc. */
+export function renderDemoMarkdownDoc(markdown: string): string {
+  if (typeof window === 'undefined') return '';
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${DOC_CSS}</style></head><body>${sanitizedHtml(markdown)}</body></html>`;
+}
+
+/**
+ * Render markdown to a sanitized HTML FRAGMENT for inline use (dangerouslySetInnerHTML),
+ * e.g. the PR-description body on the artifact page. Browser-only (DOMPurify needs a
+ * DOM) — returns '' during SSR; the caller renders it after hydration. Style the host
+ * element's descendants (headings/lists/code) yourself — no doc-level CSS here.
+ */
+export function renderMarkdownInline(markdown: string): string {
+  if (typeof window === 'undefined') return '';
+  return sanitizedHtml(markdown);
 }
