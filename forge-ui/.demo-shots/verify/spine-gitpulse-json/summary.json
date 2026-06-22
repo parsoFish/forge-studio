@@ -1,0 +1,51 @@
+{
+  "runHandle": "spine-gitpulse-json",
+  "initiativeId": "INIT-2026-06-21-json-output-flag",
+  "cycleId": "2026-06-21T08-01-50_INIT-2026-06-21-json-output-flag",
+  "project": "gitpulse",
+  "baseSha": null,
+  "finalStatus": null,
+  "totalEvents": 361,
+  "costUsd": 9.2638,
+  "costCeilingUsd": 35,
+  "workItems": {
+    "total": 2,
+    "complete": 2,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "manifest in _queue/done/ (merged; bridge status unread post-merge)"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "2/2 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$9.26 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": true,
+      "detail": "2 theme(s) written this run (e.g. 2026-06-21-gitignored-scratch-files-recurrence.md)"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.4.0)"
+    }
+  ],
+  "gate": "pass",
+  "framesCaptured": 7,
+  "completedAt": "2026-06-21T08:23:13.589Z"
+}
