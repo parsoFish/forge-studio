@@ -3,6 +3,10 @@ name: brain-fix
 description: Apply a single targeted fix to one brain theme file to clear a specific lint finding emitted by forge brain lint.
 phase: reflection
 surface: unattended
+# Internal/system agent — dispatched by the bridge for lint-resolution, never
+# composed into a flow. `library: false` keeps it out of the Studio agent roster
+# while retaining the runtime spec deriveAgentSpec needs.
+library: false
 purpose: Resolve one agent-tier brain-lint finding via a minimal, surgical edit to the named file.
 composition:
   skills: []
