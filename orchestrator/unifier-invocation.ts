@@ -163,11 +163,12 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       '1. **Read AGENT.md and fix_plan.md.**',
       '2. **Read each WI spec** to know the union of files_in_scope (your scope ceiling).',
       `3. **Run the quality gate**: \`${input.qualityGateCmd.join(' ')}\`. If red, fix within scope.`,
-      `4. **Produce the demo** under \`${demoDir}/\`: run the project's generated demo machinery (from the project's \`<artifactRoot>/skills/\` dir — F5 generates it from the project's demoProcess). Author \`${demoDir}/demo.json\` (populate \`acEvaluations[]\`, one per AC) + run \`forge demo render <initiative-id>\` to derive the **single** \`DEMO.md\` (no \`DEMO.html\` — the interactive review page renders this demo). See \`skills/demo/SKILL.md\` for the full demo contract.`,
-      '5. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
-      '6. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
-      '7. **Push** the branch so `origin/<branch>` == local HEAD.',
-      '8. **Update AGENT.md** with what you did this iteration.',
+      `4. **Author the demo** under \`${demoDir}/\`: run the project's generated demo machinery (from the project's \`<artifactRoot>/skills/\` dir — F5 generates it from the project's demoProcess). Write \`${demoDir}/demo.json\` (populate \`acEvaluations[]\`, one per AC). **For every behavioural checkpoint set \`command\` to the EXACT argv whose stdout IS the evidence** (e.g. the built CLI invocation, the gate command) and leave \`beforeOutput\`/\`afterOutput\` empty — \`beforeNote\`/\`afterNote\` prose is a one-line caption/last resort, never a substitute for real output when a command can produce it.`,
+      `5. **Capture REAL before/after evidence + render**: run \`forge demo capture <initiative-id>\` — forge runs each checkpoint's \`command\` on \`main\` AND on the branch HEAD and back-fills the actual terminal output the review page renders side-by-side. Then run \`forge demo render <initiative-id>\` to derive the **single** \`DEMO.md\` (no \`DEMO.html\`). **A demo whose checkpoints carry only prose notes is NOT acceptable visual verification when a command could have produced the evidence.** See \`skills/demo/SKILL.md\` for the full contract.`,
+      '6. **Write `.forge/pr-description.md`** — substantive Why/What/How sections. Anchor on `git diff --name-only main...HEAD` to list ONLY files that ACTUALLY appear in the diff. The orchestrator appends the `## Demo` section; do not add one yourself.',
+      '7. **Commit** as `feat(<initiative-id>): unify and demo`. Skip the commit if no changes were made.',
+      '8. **Push** the branch so `origin/<branch>` == local HEAD.',
+      '9. **Update AGENT.md** with what you did this iteration.',
     ].join('\n'),
     '',
     '## Constraints',
@@ -188,8 +189,9 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
   const projectDemoBlock = input.demoProcess && input.demoProcess.length > 0
     ? '\n\n## Project demo process (the executed demo — drives demo.json)\n\n' +
       'These typed steps ARE the demo this project runs:\n' +
-      '- **capture** → record this before/after evidence as a checkpoint (and, for a ' +
-      'visual shape, the image).\n' +
+      '- **capture** → record this before/after evidence as a checkpoint **with a `command`** ' +
+      '(the exact argv whose stdout is the evidence) so `forge demo capture` back-fills the REAL ' +
+      'before(main)/after(HEAD) output; for a visual shape, the image.\n' +
       '- **verify** → run the named assertion; encode its concrete result ' +
       '(test name + pass/fail, API response, measured value) as `acEvaluations`/`testEvidence`. ' +
       '`testEvidence` MUST be a JSON ARRAY of `{ name, result: "pass"|"fail"|"skip", delta? }` ' +

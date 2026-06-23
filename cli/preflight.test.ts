@@ -54,6 +54,9 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
       ],
     }),
   );
+  // DEC-4: the generated demo-design skill at the fixed scorecard path.
+  mkdirSync(join(dir, '.forge', 'skills', 'demo-design'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'skills', 'demo-design', 'SKILL.md'), '# demo-design\n');
   // A GitHub remote (C6) — set on a real git repo so `git remote get-url` works.
   execFileSync('git', ['-C', dir, 'init', '-q', '-b', 'main']);
   execFileSync('git', ['-C', dir, 'remote', 'add', 'origin', 'https://github.com/acme/x.git']);
@@ -78,7 +81,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'ARTIFACTS'] as ClauseId[]) {
+    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -382,6 +385,49 @@ test('DEMO (ADVISORY): demoProcess with capture + verify passes', () => {
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'DEMO').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO-SKILL (ADVISORY): demoProcess declared but no .forge/skills/demo-design/SKILL.md warns, ok stays true', () => {
+  const p = happyProject();
+  try {
+    // happyProject ships the skill — remove it to simulate a project that was
+    // never run through the demo-design generator.
+    rmSync(join(p.dir, '.forge', 'skills', 'demo-design'), { recursive: true, force: true });
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO-SKILL');
+    assert.equal(c.pass, false);
+    assert.equal(c.hard, false);
+    assert.equal(r.ok, true, 'advisory DEMO-SKILL must not flip ok');
+    assert.match(c.detail, /demo-design/);
+    assert.match(c.detail, /run the demo-design generator/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO-SKILL (ADVISORY): present skill passes', () => {
+  const p = happyProject();
+  try {
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'DEMO-SKILL').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO-SKILL (N/A): no demoProcess → not applicable, passes (no double-warn with DEMO)', () => {
+  const p = happyProject();
+  try {
+    rmSync(join(p.dir, '.forge', 'skills', 'demo-design'), { recursive: true, force: true });
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ quality_gate_cmd: ['vitest', 'run'] }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'DEMO-SKILL').pass, true);
   } finally {
     p.cleanup();
   }

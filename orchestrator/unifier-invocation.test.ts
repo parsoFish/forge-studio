@@ -141,6 +141,21 @@ test('renderUnifierUserPrompt: demo instruction references generated demo machin
   );
 });
 
+test('renderUnifierUserPrompt: demo instruction requires real captured output (command + forge demo capture)', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'X',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: [],
+    iteration: 1,
+    iterationBudget: 3,
+    qualityGateCmd: ['true'],
+  });
+  // The capture path (real before/after stdout) must be named, not just render —
+  // prose-only checkpoints were the gitpulse demo-visual-verification gap.
+  assert.ok(prompt.includes('forge demo capture'), 'prompt must instruct `forge demo capture`');
+  assert.ok(prompt.includes('`command`'), 'prompt must name the checkpoint `command` field');
+});
+
 test('prepareUnifierWorkspace: stamps PROMPT.md / AGENT.md / fix_plan.md', () => {
   const root = newTempDir();
   try {

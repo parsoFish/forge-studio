@@ -32,7 +32,7 @@ import {
 } from '../orchestrator/project-config.ts';
 import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
-export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -138,6 +138,7 @@ export function runPreflight(
     checkC6(dir),
     checkC8(dir),
     checkDemo(dir),
+    checkDemoSkill(dir),
     checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
@@ -447,6 +448,48 @@ function checkDemo(dir: string): ClauseResult {
     return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Run the demo-design skill to generate demo machinery. Advisory.` };
   }
   return { ...base, pass: true, detail: `demoProcess has ${steps.length} step(s) including capture + verify` };
+}
+
+// --- DEMO-SKILL: the GENERATED demo-design machinery exists (ADVISORY, DEC-4) ---
+
+/** The fixed path DEC-4 names for a project's generated demo-design skill, so a
+ *  scorecard can verify it deterministically. */
+const DEMO_SKILL_REL = join('.forge', 'skills', 'demo-design', 'SKILL.md');
+
+/**
+ * DEC-4: every project that declares a demoProcess should also carry a GENERATED
+ * `.forge/skills/demo-design/SKILL.md` (the per-project demo machinery the unifier
+ * follows). checkDemo only validates the demoProcess SHAPE; this verifies the
+ * skill was actually generated. Advisory: not applicable until a demoProcess is
+ * declared (checkDemo owns that case — no double-warn).
+ */
+function checkDemoSkill(dir: string): ClauseResult {
+  const base = {
+    clause: 'DEMO-SKILL' as const,
+    title: `Generated demo-design skill present (${DEMO_SKILL_REL})`,
+    hard: false,
+  };
+  let cfg: ReturnType<typeof loadProjectConfig> | null = null;
+  try {
+    cfg = loadProjectConfig(dir);
+  } catch {
+    cfg = null;
+  }
+  const steps = cfg?.demoProcess ?? [];
+  if (steps.length === 0) {
+    // No demoProcess yet → the demo-design generator is not applicable; checkDemo
+    // already warns about the missing demoProcess.
+    return { ...base, pass: true, detail: 'no demoProcess declared yet — demo-design generator not applicable' };
+  }
+  if (!existsSync(join(dir, DEMO_SKILL_REL))) {
+    const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
+    return {
+      ...base,
+      pass: false,
+      detail: `project "${name}" declares a demoProcess but has no ${DEMO_SKILL_REL} — run the demo-design generator (\`forge run skill demo-design --project ${name}\`) to generate the per-project demo machinery. Advisory.`,
+    };
+  }
+  return { ...base, pass: true, detail: `${DEMO_SKILL_REL} present (generated demo machinery)` };
 }
 
 // --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---

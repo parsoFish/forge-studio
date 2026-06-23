@@ -1,6 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import type { KbNodeArticle } from '@/lib/studio-client';
+import { renderMarkdownInline } from '@/lib/render-markdown';
 
 // Badge class per layer
 const LAYER_BADGE: Record<string, string> = {
@@ -18,33 +21,40 @@ const LAYER_LABEL: Record<string, string> = {
 };
 
 // ── Wiki-link resolution ──────────────────────────────────────────────────────
-// Transforms [[slug]] patterns into clickable spans with data-target
+// Rewrite [[slug]] → a real markdown link `[slug](#kbnode-slug)` BEFORE markdown
+// render, so markdown-it keeps it and a delegated click handler turns it back into
+// an onJump(slug). Colon-free href so DOMPurify keeps it as a same-page fragment.
 
-function resolveWikiLinks(body: string, onJump: (id: string) => void): React.ReactNode[] {
-  const parts = body.split(/(\[\[.*?\]\])/g);
-  return parts.map((part, i) => {
-    const match = part.match(/^\[\[(.*?)\]\]$/);
-    if (match) {
-      const slug = match[1];
-      return (
-        <span
-          key={i}
-          className="wiki-link"
-          data-target={slug}
-          style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--c-kb)',
-            cursor: 'pointer',
-          }}
-          onClick={() => onJump(slug)}
-        >
-          {part}
-        </span>
-      );
-    }
-    // plain text — split on newlines to render paragraphs
-    return <span key={i}>{part}</span>;
+const WIKINODE_HREF_PREFIX = '#kbnode-';
+
+function preprocessWikiLinks(body: string): string {
+  return body.replace(/\[\[([^\]]+)\]\]/g, (_m, slug: string) => {
+    const s = slug.trim();
+    return `[${s}](${WIKINODE_HREF_PREFIX}${s})`;
   });
 }
+
+// Scoped styling for the rendered article body (renderMarkdownInline returns an
+// unstyled fragment — style the host's descendants ourselves; see render-markdown.ts).
+const KB_ARTICLE_CSS = `
+  .kb-article-body { font-size: 13px; line-height: 1.65; color: var(--dim); }
+  .kb-article-body > :first-child { margin-top: 0; }
+  .kb-article-body h1, .kb-article-body h2, .kb-article-body h3 {
+    color: var(--text); line-height: 1.3; margin: 1.1em 0 .45em; font-family: var(--font-display); }
+  .kb-article-body h1 { font-size: 1.25em; } .kb-article-body h2 { font-size: 1.12em; }
+  .kb-article-body h3 { font-size: 1em; }
+  .kb-article-body p { margin: .5em 0; } .kb-article-body ul, .kb-article-body ol { margin: .5em 0; padding-left: 1.3em; }
+  .kb-article-body li { margin: .2em 0; }
+  .kb-article-body code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 12px; }
+  .kb-article-body pre { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px;
+    padding: 10px; overflow: auto; } .kb-article-body pre code { background: none; padding: 0; }
+  .kb-article-body table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .kb-article-body th, .kb-article-body td { border: 1px solid var(--line-2); padding: 4px 8px; text-align: left; }
+  .kb-article-body blockquote { border-left: 3px solid var(--line-2); margin: .5em 0; padding: 2px 12px; color: var(--faint); }
+  .kb-article-body a[href^="${WIKINODE_HREF_PREFIX}"] { color: var(--c-kb); font-family: var(--font-mono); cursor: pointer; }
+  .kb-article-body a { color: var(--c-kb); }
+`;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -55,6 +65,24 @@ interface Props {
 }
 
 export function NodeArticle({ article, loading, onJump }: Props) {
+  // renderMarkdownInline is browser-only (DOMPurify needs a DOM) — render after
+  // hydration via state, like PrRenderer. Hooks must run before the early returns.
+  const body = article?.body ?? '';
+  const [bodyHtml, setBodyHtml] = useState('');
+  useEffect(() => {
+    setBodyHtml(body ? renderMarkdownInline(preprocessWikiLinks(body)) : '');
+  }, [body]);
+
+  // Delegate clicks on rewritten [[wikilink]] anchors back to onJump.
+  const handleBodyClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    const anchor = (e.target as HTMLElement).closest(`a[href^="${WIKINODE_HREF_PREFIX}"]`);
+    if (!anchor) return;
+    e.preventDefault();
+    const href = anchor.getAttribute('href') ?? '';
+    const slug = href.slice(WIKINODE_HREF_PREFIX.length);
+    if (slug) onJump(slug);
+  };
+
   if (!article && !loading) {
     return (
       <div className="article-panel" style={{ borderBottom: '1px solid var(--line)' }}>
@@ -174,13 +202,20 @@ export function NodeArticle({ article, loading, onJump }: Props) {
           </div>
         )}
 
-        {/* Body */}
-        <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--dim)' }}>
-          {a.body
-            ? resolveWikiLinks(a.body, onJump)
-            : <span style={{ fontStyle: 'italic' }}>No article content yet. The next ingest pass will populate this node.</span>
-          }
-        </div>
+        {/* Body — rendered markdown (markdown-it + DOMPurify), wiki-links preserved */}
+        <style>{KB_ARTICLE_CSS}</style>
+        {a.body ? (
+          <div
+            className="kb-article-body"
+            data-node-article-body
+            onClick={handleBodyClick}
+            dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          />
+        ) : (
+          <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--dim)' }}>
+            <span style={{ fontStyle: 'italic' }}>No article content yet. The next ingest pass will populate this node.</span>
+          </div>
+        )}
       </div>
     </div>
   );

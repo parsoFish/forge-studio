@@ -21,6 +21,8 @@ import { execSync } from 'node:child_process';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
+import { resolveKbBrainDir } from './brain-paths.ts';
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -70,12 +72,15 @@ const RAW_NODE_CAP = 80;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the absolute path to the kb's brain directory. */
+/** Resolve the absolute path to the kb's brain directory. Supports top-level
+ *  brains (brain/<id>) AND central per-project brains (brain/projects/<id>,
+ *  ADR 035) via the shared resolver in brain-paths. */
 function resolveKbDir(forgeRoot: string, kbId: string): string {
-  const brainRoot = resolve(forgeRoot, 'brain');
-  const kbDir = join(brainRoot, kbId);
-  if (!existsSync(join(kbDir, 'kb.yaml'))) {
-    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
+  const kbDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!kbDir) {
+    throw new Error(
+      `Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`,
+    );
   }
   return kbDir;
 }

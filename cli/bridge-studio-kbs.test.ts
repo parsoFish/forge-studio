@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
+import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -160,4 +161,89 @@ test('GET /api/studio/kbs/resolve-node/:nodeId: invalid node id → 400', async 
   const { status, json } = await get('/api/studio/kbs/resolve-node/.hidden');
   assert.equal(status, 400, JSON.stringify(json));
   assert.ok(typeof json['error'] === 'string');
+});
+
+// The Knowledge "Lint" button POSTs op=lint; the response MUST carry ok:true so
+// the UI's studioPost (which gated success on data.ok) renders findings instead of
+// "failed" (the reported bug — lint always showed failed despite running).
+test('POST /api/studio/kbs/:id/maintenance op=lint → 200 ok:true with findings array', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'lint' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true, 'lint response must carry ok:true');
+  assert.equal(json['op'], 'lint');
+  assert.ok(Array.isArray(json['findings']), 'findings must be an array');
+  assert.equal(typeof json['total'], 'number');
+});
+
+test('POST /api/studio/kbs/:id/maintenance op=index → 200 ok:true', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'index' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+});
+
+test('POST /api/studio/kbs/:id/maintenance op=bogus → 400', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'bogus' });
+  assert.equal(status, 400);
+});
+
+// Guided lint-resolution ops (Phase 2/3/4 bridge surface).
+test('op=lint returns resolution counts', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'lint' });
+  assert.equal(status, 200, JSON.stringify(json));
+  const counts = json['counts'] as Record<string, number>;
+  assert.ok(counts && typeof counts.auto === 'number' && typeof counts.agent === 'number' && typeof counts.user === 'number', 'counts present');
+});
+
+test('op=fix-auto returns the applied/skipped/remaining/counts shape', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-auto' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.ok(Array.isArray(json['applied']), 'applied[]');
+  assert.ok(Array.isArray(json['skipped']), 'skipped[]');
+  assert.ok(Array.isArray(json['remaining']), 'remaining[]');
+  assert.ok(json['counts'], 'counts');
+});
+
+test('op=fix-agent rejects a missing file (400)', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-agent', check: 'checkSourceLinks', kind: 'links.broken' });
+  assert.equal(status, 400);
+});
+
+test('op=fix-agent rejects a file outside brain/ (path-guard, 400)', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-agent', file: '/etc/passwd', check: 'x', kind: 'y' });
+  assert.equal(status, 400);
+});
+
+test('GET fix-agent/:runId for an unknown run → running', async () => {
+  const { status, json } = await get('/api/studio/kbs/cycles/fix-agent/nonexistent-run-123');
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['state'], 'running');
+});
+
+// ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
+// must surface them alongside the top-level brains so they appear in Studio's KB
+// list/graph (previously only direct subdirs of brain/ were scanned).
+test('loadKbDescriptors: includes central per-project brains under brain/projects/', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-descriptors-'));
+  try {
+    // Top-level brain
+    mkdirSync(join(root, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(root, 'brain', 'cycles', 'kb.yaml'), CYCLES_KB_YAML);
+    // Central per-project brain with two themes
+    const proj = join(root, 'brain', 'projects', 'gitpulse');
+    mkdirSync(join(proj, 'themes'), { recursive: true });
+    writeFileSync(join(proj, 'kb.yaml'), 'id: gitpulse\nname: gitpulse (project)\nscope: project\ndesc: Per-project brain.\nbackend: filesystem\n');
+    writeFileSync(join(proj, 'themes', 'a.md'), '# A\n');
+    writeFileSync(join(proj, 'themes', 'b.md'), '# B\n');
+
+    const kbs = loadKbDescriptors(root);
+    const ids = kbs.map((k) => k.id);
+    assert.ok(ids.includes('cycles'), `expected top-level cycles, got ${JSON.stringify(ids)}`);
+    assert.ok(ids.includes('gitpulse'), `expected per-project gitpulse, got ${JSON.stringify(ids)}`);
+    const gp = kbs.find((k) => k.id === 'gitpulse');
+    assert.equal(gp?.scope, 'project');
+    assert.equal(gp?.counts.themes, 2, 'gitpulse theme count should reflect its themes/ dir');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

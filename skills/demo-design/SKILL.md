@@ -103,13 +103,15 @@ Follow the evidence.
 ## Step 3 — Generate the demo machinery
 
 Based on the assessed evidence form, generate the appropriate files under
-`<artifactRoot>/skills/<slug>/` in the project repo. The slug should be
-descriptive: `demo-runner`, `live-demo`, `ui-demo`, etc. — NOT `ado-demo`
-unless this is the betterado project.
+`.forge/skills/demo-design/` in the project repo. **The slug is FIXED to
+`demo-design` and the path is FIXED to `.forge/skills/demo-design/SKILL.md`** (DEC-4)
+— a deterministic location so `forge preflight`'s `DEMO-SKILL` clause can verify the
+machinery was generated. (Do NOT use a descriptive slug or write under
+`<artifactRoot>/skills/` — that older convention left the output path unverifiable.)
 
 ### What to generate (one or more of)
 
-#### A. A project skill (`<artifactRoot>/skills/<slug>/SKILL.md`)
+#### A. A project skill (`.forge/skills/demo-design/SKILL.md`)
 A Claude Code skill the unifier agent loads to produce `demo.json`. It must:
 - State the evidence form and why (from Step 2 reasoning).
 - Give the concrete commands the unifier runs (e.g. `go test -run TestAcc -v ./...`).
@@ -157,7 +159,7 @@ Run `forge demo render <initiative-id>` after writing demo.json to derive DEMO.m
 
 ### Where to write the generated files
 
-- Project-owned skill: `<project-root>/<artifactRoot>/skills/<slug>/SKILL.md`
+- Project-owned skill (FIXED path, DEC-4): `<project-root>/.forge/skills/demo-design/SKILL.md`
 - CI step (if generated): `<project-root>/.github/workflows/demo.yml`
 - Test hook (if generated): alongside the project's existing tests, in the same
   directory as the tests referenced in `demoProcess` verify steps.
@@ -166,12 +168,12 @@ Commit all generated files into the project repo (not forge's repo).
 
 ## Step 4 — Update the project config
 
-After generating the skill, add the skill slug to `skills` in
+After generating the skill, add `demo-design` to `skills` in
 `.forge/project.json` so the unifier agent composes it automatically:
 
 ```json
 {
-  "skills": ["<generated-slug>"]
+  "skills": ["demo-design"]
 }
 ```
 
@@ -203,11 +205,11 @@ screenshot → clean destroy).
 
 ## Done when
 
-- The generated skill exists at `<artifactRoot>/skills/<slug>/SKILL.md` in the
-  project repo, committed.
+- The generated skill exists at the FIXED `.forge/skills/demo-design/SKILL.md` in
+  the project repo, committed.
 - The evidence form is documented in the generated skill with the reasoning.
 - The `demoProcess` steps are encoded in the generated skill as the execution
   contract.
-- The skill slug is listed in `.forge/project.json` `skills`.
-- `forge preflight <project>` DEMO clause passes.
+- `demo-design` is listed in `.forge/project.json` `skills`.
+- `forge preflight <project>` reports BOTH the `DEMO` and `DEMO-SKILL` clauses ✓.
 - The operator understands what the generated skill will do on the first cycle.

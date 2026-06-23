@@ -1,10 +1,20 @@
 # ADR 035 — Forge-owned central per-project artifacts
 
-**Status:** Accepted
+**Status:** Accepted — **amended 2026-06-23 (the `project-artifacts/` half retired; see [Amendment](#amendment-2026-06-23--project-artifacts-half-retired)).**
 **Date:** 2026-06-20
 **Supersedes:** [ADR 018](./018-three-brain-model.md) (Brain 3 location only — the
 three-brain *scoping* model stands; only *where Brain 3 lives* is reversed).
 **Amends:** [ADR 010](./010-brain-first.md) (the Brain 3 read-policy paths).
+
+> **Amendment (2026-06-23):** Only the **Brain 3 centralization** below shipped and
+> is load-bearing. The **`project-artifacts/<name>/` half — central `demo-history/`
+> + `contract.json` SSOT — was specified here but never wired** (`projectArtifactsDir`
+> / `projectHistoryDir` / `projectContractPath` had zero callers; no cycle ever wrote
+> there; no project accumulated central history after the one-time migration). It has
+> been removed as dead code. Cycle plan/demo/verdict artifacts live under
+> `_logs/<cycleId>/artifacts/`; `.forge/project.json` is the contract source (not a
+> thin pointer to a central SSOT). Read the `project-artifacts/` parts below as
+> historical. The full reasoning is in the [Amendment](#amendment-2026-06-23--project-artifacts-half-retired) section.
 
 ## Context
 
@@ -131,6 +141,32 @@ principles forbid coexistence). Existing per-project artifacts are relocated:
 - A migration script (`scripts/migrate-central-artifacts.mjs`) performs the moves
   idempotently and is re-runnable; it logs every move and is the helper F4 reuses
   for the betterado demo-tree collapse.
+
+## Amendment (2026-06-23) — `project-artifacts/` half retired
+
+The Brain 3 centralization (`brain/projects/<name>/themes/`) shipped, works, and is
+now also surfaced in Studio's KB graph. The **`project-artifacts/` half never did**:
+
+- `projectArtifactsDir` / `projectHistoryDir` / `projectContractPath` (the helpers
+  this ADR introduced) were **never called** by any cycle phase — `snapshotCycleArtefacts`
+  only ever copied the demo/plan/verdict bundle into `_logs/<cycleId>/artifacts/`.
+- Consequently **no project accumulated a single `demo-history/` entry** after the
+  one-time migration; the only content under `project-artifacts/` was the migrated
+  back-history, which nothing read (no UI, no phase).
+- `contract.json` (the supposed SSOT) was **never written** — `.forge/project.json`
+  remained the de-facto contract source the whole time.
+
+Carrying a dead "SSOT" + dead helpers + an orphaned tracked tree is worse than not
+having them (it implies a guarantee forge doesn't keep). So the
+`project-artifacts/` tree, the three helpers, and the one-time migration script
+(`scripts/migrate-central-artifacts.mjs`) are **deleted**. A regression test in
+`brain-paths.test.ts` asserts the helpers do not return. Cycle artifacts remain in
+`_logs/<cycleId>/artifacts/`; `.forge/project.json` is the contract source.
+
+If durable per-project history is wanted later, re-introduce it **with a real writer
+wired into the post-merge close-out** (and a test that proves a cycle populates it) —
+not as an unenforced path helper. (Recover the deleted back-history from forge git
+history / the `artifacts-pre-central` tag if ever needed.)
 
 ## References
 

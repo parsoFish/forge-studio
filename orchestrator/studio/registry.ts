@@ -132,7 +132,16 @@ export function isStudioAgent(skillMdPath: string): boolean {
   try {
     const raw = readFileSync(skillMdPath, 'utf8');
     const { data } = matter(raw);
-    return data != null && typeof data === 'object' && 'runtime' in data;
+    // A studio (library) agent has a `runtime` block — UNLESS it opts out with
+    // `library: false`. Internal/system agents (e.g. brain-fix, dispatched by
+    // the bridge, never composed into a flow) set that flag so they keep a
+    // runtime spec for deriveAgentSpec but stay out of the composable roster.
+    return (
+      data != null &&
+      typeof data === 'object' &&
+      'runtime' in data &&
+      (data as Record<string, unknown>).library !== false
+    );
   } catch {
     return false;
   }
