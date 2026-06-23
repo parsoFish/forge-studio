@@ -192,18 +192,22 @@ export async function captureCheckpoints(
       [changedWt, afterDir, 'after'],
     ] as const) {
       const status = buildTree(wt.path, input.build ?? false);
-      if (!status.ok) continue;
       const captured = side === 'before' ? capturedBefore : capturedAfter;
 
       // CLI/output checkpoints: run the command in this worktree, capture stdout.
+      // INDEPENDENT of the build result (best-effort): the command captures its own
+      // stdout/stderr, so a build or runtime error IS honest before/after evidence,
+      // and a committed/emitted `dist/` frequently runs even when a fresh type-check
+      // fails. Skipping all capture on an imperfect build was silently producing
+      // prose-only demos with no visual verification.
       for (const { label, command } of input.checkpointCommands ?? []) {
         const out = captureCommandOutput(wt.path, command);
         writeFileSync(join(capDir, `${label}.out`), out);
         captured.push(label);
       }
 
-      // Screenshot checkpoints (browser): build + serve + screenshot per label.
-      if (input.checkpointLabels.length > 0) {
+      // Screenshot checkpoints (browser) DO need a working build + a live server.
+      if (status.ok && input.checkpointLabels.length > 0) {
         const server = await startServer(wt.path);
         if (!server) continue;
         try {
