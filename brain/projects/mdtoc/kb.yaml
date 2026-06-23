@@ -1,0 +1,5 @@
+id: mdtoc
+name: mdtoc (project)
+scope: project
+desc: Per-project brain for mdtoc — themes the reflector distils from each mdtoc cycle (ADR 035, central forge-owned).
+backend: filesystem

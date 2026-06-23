@@ -58,30 +58,36 @@ function countLayerFiles(dir: string): number {
   }
 }
 
-/**
- * Walk brain/ for kb.yaml files and enrich each with layer counts.
- * Looks for kb.yaml in every direct sub-directory of brain/.
- */
-function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
-  const brainRoot = join(resolve(forgeRoot), 'brain');
-  if (!existsSync(brainRoot)) return [];
-
-  let dirs: string[];
+/** Sub-directory names of a dir (empty on any error). */
+function subDirs(dir: string): string[] {
+  if (!existsSync(dir)) return [];
   try {
-    dirs = readdirSync(brainRoot, { withFileTypes: true })
+    return readdirSync(dir, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name);
   } catch {
     return [];
   }
+}
+
+/**
+ * Walk brain/ for kb.yaml files and enrich each with layer counts.
+ *
+ * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
+ * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
+ * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
+ * are invisible in Studio's KB graph even though the reflector writes to them.
+ */
+export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
+  const brainRoot = join(resolve(forgeRoot), 'brain');
+  if (!existsSync(brainRoot)) return [];
 
   const result: KbWithCounts[] = [];
-  for (const d of dirs) {
-    const kbYamlPath = join(brainRoot, d, 'kb.yaml');
-    if (!existsSync(kbYamlPath)) continue;
+  const pushFrom = (kbDir: string): void => {
+    const kbYamlPath = join(kbDir, 'kb.yaml');
+    if (!existsSync(kbYamlPath)) return;
     try {
       const kb = loadKbDescriptor(kbYamlPath);
-      const kbDir = join(brainRoot, d);
       const counts = {
         index: existsSync(join(kbDir, 'INDEX.md')) ? 1 : 0,
         themes: countLayerFiles(join(kbDir, 'themes')),
@@ -91,7 +97,14 @@ function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
     } catch {
       // Skip unreadable kb.yaml
     }
-  }
+  };
+
+  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
+  // own, so it is naturally skipped here).
+  for (const d of subDirs(brainRoot)) pushFrom(join(brainRoot, d));
+  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035).
+  const projectsRoot = join(brainRoot, 'projects');
+  for (const d of subDirs(projectsRoot)) pushFrom(join(projectsRoot, d));
 
   return result;
 }

@@ -47,6 +47,14 @@ test('buildKbGraph(cycles) — theme nodes have title + category', () => {
   }
 });
 
+// ADR 035: per-project brains live at brain/projects/<id>/. The kbId resolver
+// falls back there, so a project kbId (no top-level brain/<id>) resolves + graphs.
+test('buildKbGraph(gitpulse) — central per-project brain resolves via the projects fallback', () => {
+  const graph = buildKbGraph(FORGE_ROOT, 'gitpulse');
+  const themeNodes = graph.nodes.filter((n) => n.layer === 'theme');
+  assert.ok(themeNodes.length > 0, `expected gitpulse project brain to have theme nodes, got ${themeNodes.length}`);
+});
+
 test('buildKbGraph(cycles) — includes raw nodes (capped at 80)', () => {
   const graph = buildKbGraph(FORGE_ROOT, 'cycles');
   const rawNodes = graph.nodes.filter((n) => n.layer === 'raw');

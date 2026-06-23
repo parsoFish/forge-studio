@@ -70,6 +70,26 @@ export function projectThemesDir(forgeRoot: string, projectName: string): string
 }
 
 /**
+ * Resolve a kbId to its on-disk brain directory, supporting BOTH top-level
+ * brains (`brain/<id>` — e.g. `cycles`, `forge-dev`) AND central per-project
+ * brains (`brain/projects/<id>` — ADR 035). The id stays flat + URL-safe (no
+ * slash, so the Studio `/api/studio/kbs/:id` routes are unaffected): it is tried
+ * at `brain/<id>` first, then falls back to `brain/projects/<id>`. Returns the
+ * directory that actually carries a `kb.yaml`, or `null` if neither does.
+ *
+ * This is what makes per-project brains (gitpulse, mdtoc, …) reachable in
+ * Studio's KB graph — every KB resolver routes through here so the fallback is a
+ * one-place change.
+ */
+export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | null {
+  const direct = resolve(forgeRoot, 'brain', kbId);
+  if (existsSync(resolve(direct, 'kb.yaml'))) return direct;
+  const project = projectBrainDir(forgeRoot, kbId);
+  if (existsSync(resolve(project, 'kb.yaml'))) return project;
+  return null;
+}
+
+/**
  * Central archived development/demo-history dir for one initiative (ADR 035):
  * `project-artifacts/<name>/demo-history/<initiativeId>/`. The post-merge
  * close-out writes the plan / demo / verdict bundle here so forge carries a

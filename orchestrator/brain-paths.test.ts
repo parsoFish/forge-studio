@@ -22,6 +22,7 @@ import {
   projectContractPath,
   projectDemoRelDir,
   readArtifactRoot,
+  resolveKbBrainDir,
 } from './brain-paths.ts';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,60 @@ test('projectThemesDir: central brain/projects/<name>/themes', () => {
   const forgeRoot = '/srv/forge';
   const result = projectThemesDir(forgeRoot, 'my-project');
   assert.equal(result, resolve(forgeRoot, 'brain', 'projects', 'my-project', 'themes'));
+});
+
+// ---------------------------------------------------------------------------
+// resolveKbBrainDir — kbId → brain dir, with the project-brain fallback (ADR 035)
+// ---------------------------------------------------------------------------
+
+test('resolveKbBrainDir: top-level brain/<id> with a kb.yaml resolves directly', () => {
+  const forgeRoot = newTempDir();
+  try {
+    const dir = join(forgeRoot, 'brain', 'cycles');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'kb.yaml'), 'id: cycles\n');
+    assert.equal(resolveKbBrainDir(forgeRoot, 'cycles'), dir);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveKbBrainDir: a per-project brain resolves via the brain/projects/<id> fallback', () => {
+  const forgeRoot = newTempDir();
+  try {
+    const dir = join(forgeRoot, 'brain', 'projects', 'gitpulse');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'kb.yaml'), 'id: gitpulse\n');
+    // No brain/gitpulse — only brain/projects/gitpulse exists.
+    assert.equal(resolveKbBrainDir(forgeRoot, 'gitpulse'), dir);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveKbBrainDir: unknown kbId (no kb.yaml either place) → null', () => {
+  const forgeRoot = newTempDir();
+  try {
+    mkdirSync(join(forgeRoot, 'brain'), { recursive: true });
+    assert.equal(resolveKbBrainDir(forgeRoot, 'nope'), null);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveKbBrainDir: top-level brain wins over a same-named project brain', () => {
+  const forgeRoot = newTempDir();
+  try {
+    const top = join(forgeRoot, 'brain', 'shared');
+    const proj = join(forgeRoot, 'brain', 'projects', 'shared');
+    mkdirSync(top, { recursive: true });
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(join(top, 'kb.yaml'), 'id: shared\n');
+    writeFileSync(join(proj, 'kb.yaml'), 'id: shared\n');
+    assert.equal(resolveKbBrainDir(forgeRoot, 'shared'), top);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

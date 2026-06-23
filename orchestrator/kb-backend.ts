@@ -16,8 +16,7 @@
  * operations that `kb-graph.ts` provides.
  */
 
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolveKbBrainDir } from './brain-paths.ts';
 
 import {
   buildKbGraph,
@@ -118,9 +117,10 @@ export class FilesystemKbBackend implements KbBackend {
  * `brain/<kbId>/kb.yaml`) — same contract as the underlying functions.
  */
 export function getKbBackend(forgeRoot: string, kbId: string): KbBackend {
-  const kbYamlPath = join(resolve(forgeRoot, 'brain', kbId), 'kb.yaml');
-  if (!existsSync(kbYamlPath)) {
-    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml found`);
+  if (!resolveKbBrainDir(forgeRoot, kbId)) {
+    throw new Error(
+      `Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`,
+    );
   }
   return new FilesystemKbBackend(forgeRoot, kbId);
 }

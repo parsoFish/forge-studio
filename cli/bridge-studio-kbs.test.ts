@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
+import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -160,4 +161,32 @@ test('GET /api/studio/kbs/resolve-node/:nodeId: invalid node id → 400', async 
   const { status, json } = await get('/api/studio/kbs/resolve-node/.hidden');
   assert.equal(status, 400, JSON.stringify(json));
   assert.ok(typeof json['error'] === 'string');
+});
+
+// ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
+// must surface them alongside the top-level brains so they appear in Studio's KB
+// list/graph (previously only direct subdirs of brain/ were scanned).
+test('loadKbDescriptors: includes central per-project brains under brain/projects/', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-descriptors-'));
+  try {
+    // Top-level brain
+    mkdirSync(join(root, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(root, 'brain', 'cycles', 'kb.yaml'), CYCLES_KB_YAML);
+    // Central per-project brain with two themes
+    const proj = join(root, 'brain', 'projects', 'gitpulse');
+    mkdirSync(join(proj, 'themes'), { recursive: true });
+    writeFileSync(join(proj, 'kb.yaml'), 'id: gitpulse\nname: gitpulse (project)\nscope: project\ndesc: Per-project brain.\nbackend: filesystem\n');
+    writeFileSync(join(proj, 'themes', 'a.md'), '# A\n');
+    writeFileSync(join(proj, 'themes', 'b.md'), '# B\n');
+
+    const kbs = loadKbDescriptors(root);
+    const ids = kbs.map((k) => k.id);
+    assert.ok(ids.includes('cycles'), `expected top-level cycles, got ${JSON.stringify(ids)}`);
+    assert.ok(ids.includes('gitpulse'), `expected per-project gitpulse, got ${JSON.stringify(ids)}`);
+    const gp = kbs.find((k) => k.id === 'gitpulse');
+    assert.equal(gp?.scope, 'project');
+    assert.equal(gp?.counts.themes, 2, 'gitpulse theme count should reflect its themes/ dir');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
