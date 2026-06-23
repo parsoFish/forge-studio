@@ -33,23 +33,45 @@ export type RerunInput = {
   queueRoot?: string;
 };
 
+const QUEUE_STATES = ['done', 'ready-for-review', 'in-flight', 'failed'] as const;
+
+/**
+ * The manifest is named by INITIATIVE id, but a cycleId is usually the timestamped
+ * log-dir name `<ts>_<initiativeId>`. Recover the initiativeId from the cycle's
+ * event log (`initiative_id` field), falling back to stripping a leading
+ * timestamp prefix. Returns the cycleId unchanged when it already is the id.
+ */
+export function resolveInitiativeId(cycleId: string, logsRoot: string): string {
+  const eventsPath = resolve(logsRoot, cycleId, 'events.jsonl');
+  if (existsSync(eventsPath)) {
+    try {
+      const firstLine = readFileSync(eventsPath, 'utf8').split('\n').find((l) => l.trim());
+      if (firstLine) {
+        const ev = JSON.parse(firstLine) as { initiative_id?: string };
+        if (ev.initiative_id) return ev.initiative_id;
+      }
+    } catch {
+      // fall through to the prefix-strip heuristic
+    }
+  }
+  const underscore = cycleId.indexOf('_');
+  return underscore >= 0 ? cycleId.slice(underscore + 1) : cycleId;
+}
+
 export async function rerunReflector(input: RerunInput): Promise<void> {
   const logsRoot = input.logsRoot ? resolve(input.logsRoot) : resolve(FORGE_ROOT, '_logs');
   const queueRoot = input.queueRoot ? resolve(input.queueRoot) : resolve(FORGE_ROOT, '_queue');
 
-  // The cycleId IS the initiativeId in production cycles (see logging.ts +
-  // reviewer manifest move semantics). Locate the manifest across the
-  // terminal states.
-  const candidates = [
-    resolve(queueRoot, 'done', `${input.cycleId}.md`),
-    resolve(queueRoot, 'ready-for-review', `${input.cycleId}.md`),
-    resolve(queueRoot, 'in-flight', `${input.cycleId}.md`),
-    resolve(queueRoot, 'failed', `${input.cycleId}.md`),
-  ];
+  // Locate the manifest across the terminal states. The cycleId is often the
+  // timestamped log-dir name (`<ts>_<initiativeId>`); the manifest is named by
+  // initiativeId — so try BOTH the cycleId and the recovered initiativeId.
+  const initiativeId = resolveInitiativeId(input.cycleId, logsRoot);
+  const ids = initiativeId === input.cycleId ? [input.cycleId] : [input.cycleId, initiativeId];
+  const candidates = ids.flatMap((id) => QUEUE_STATES.map((s) => resolve(queueRoot, s, `${id}.md`)));
   const manifestPath = candidates.find((p) => existsSync(p));
   if (!manifestPath) {
     throw new Error(
-      `rerun: no manifest for cycle ${input.cycleId} in ${queueRoot} (tried done/ready-for-review/in-flight/failed)`,
+      `rerun: no manifest for cycle ${input.cycleId} (initiative ${initiativeId}) in ${queueRoot} (tried done/ready-for-review/in-flight/failed)`,
     );
   }
 
