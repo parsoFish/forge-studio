@@ -121,6 +121,29 @@ test('reconcileReflectFeedback: reruns only cycles whose feedback out-dates the 
   }
 });
 
+test('reconcileReflectFeedback: skips feedback older than the recovery window (no boot flood)', async () => {
+  const logsRoot = mkdtempSync(join(tmpdir(), 'reconcile-logs-'));
+  try {
+    const now = Date.parse('2026-06-24T00:00:00Z');
+    // recent: feedback 1 day old → eligible
+    writeCycle(logsRoot, 'recent', { feedback: true, feedbackMs: Date.parse('2026-06-23T00:00:00Z'), endIso: null });
+    // stale: feedback 18 days old (the betterado-flood case) → skipped
+    writeCycle(logsRoot, 'stale', { feedback: true, feedbackMs: Date.parse('2026-06-06T00:00:00Z'), endIso: null });
+
+    const calls: string[] = [];
+    const reran = await reconcileReflectFeedback({
+      logsRoot,
+      queueRoot: join(logsRoot, '_queue'),
+      now,
+      rerunReflector: async ({ cycleId }) => { calls.push(cycleId); },
+    });
+    assert.deepEqual(reran, ['recent'], 'only recent feedback re-runs');
+    assert.deepEqual(calls, ['recent']);
+  } finally {
+    rmSync(logsRoot, { recursive: true, force: true });
+  }
+});
+
 test('reconcileReflectFeedback: a throwing rerun is logged-and-skipped, the pass continues', async () => {
   const logsRoot = mkdtempSync(join(tmpdir(), 'reconcile-logs-'));
   try {

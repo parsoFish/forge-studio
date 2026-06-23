@@ -66,10 +66,21 @@ export function lastReflectorEndMs(eventsPath: string): number | null {
   return latest;
 }
 
+/** Default recovery window — only feedback this recent is reconciled at boot.
+ *  The boot pass is a safety net for feedback that landed while the bridge was
+ *  briefly DOWN, not a reason to re-run reflectors on months-old cycles (which
+ *  would flood the brain + spend on a fresh machine). Older feedback is the
+ *  operator's deliberate `forge reflect --rerun` call, not an automatic one. */
+export const RECONCILE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type ReconcileDeps = {
   logsRoot: string;
   queueRoot: string;
   rerunReflector: RerunReflectorFn;
+  /** Only reconcile feedback newer than this many ms (default 7 days). */
+  maxAgeMs?: number;
+  /** Wall-clock now, ms (test seam; defaults to Date.now()). */
+  now?: number;
   /** Test seam — defaults to the real cycle dirs under logsRoot (skips `_…`). */
   listCycleDirs?: () => string[];
   /** Optional sink for fired/skipped lines (defaults to silent). */
@@ -78,13 +89,15 @@ export type ReconcileDeps = {
 
 /**
  * Re-run the reflector for every cycle whose user-feedback.md out-dates its last
- * reflector.end. Log-and-continue per cycle — an orphaned manifest makes
- * rerunReflector throw, which skips that one cycle without aborting the pass.
- * Returns the cycleIds it re-ran (for telemetry/tests).
+ * reflector.end AND landed within the recovery window. Log-and-continue per cycle
+ * — an orphaned manifest makes rerunReflector throw, which skips that one cycle
+ * without aborting the pass. Returns the cycleIds it re-ran (for telemetry/tests).
  */
 export async function reconcileReflectFeedback(deps: ReconcileDeps): Promise<string[]> {
   const { logsRoot, queueRoot, rerunReflector } = deps;
   const log = deps.log ?? (() => {});
+  const maxAgeMs = deps.maxAgeMs ?? RECONCILE_MAX_AGE_MS;
+  const now = deps.now ?? Date.now();
   const cycleDirs = deps.listCycleDirs
     ? deps.listCycleDirs()
     : existsSync(logsRoot)
@@ -103,12 +116,14 @@ export async function reconcileReflectFeedback(deps: ReconcileDeps): Promise<str
     } catch {
       continue;
     }
+    // Only recent feedback — old feedback is recovered deliberately, not at boot.
+    if (now - feedbackMs > maxAgeMs) continue;
     const endMs = lastReflectorEndMs(join(logsRoot, cycleId, 'events.jsonl'));
     if (!needsReflectRerun(feedbackMs, endMs)) continue;
     try {
       await rerunReflector({ cycleId, logsRoot, queueRoot });
       reran.push(cycleId);
-      log(`reflect-reconcile: re-ran reflector for ${cycleId} (feedback newer than last reflector.end)`);
+      log(`reflect-reconcile: re-ran reflector for ${cycleId} (recent feedback newer than last reflector.end)`);
     } catch (err) {
       log(`reflect-reconcile: skipped ${cycleId} — ${err instanceof Error ? err.message : String(err)}`);
     }

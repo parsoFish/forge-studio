@@ -184,15 +184,19 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     opts.rerunReflector ??
     ((input) => import('../orchestrator/forge-reflect-rerun.ts').then((m) => m.rerunReflector(input)));
   // Recover feedback that landed while the bridge was down (or whose live rerun
-  // was lost to a restart): re-run the reflector for any cycle whose
+  // was lost to a restart): re-run the reflector for any cycle whose RECENT
   // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
-  // blocks the server coming up.
-  void reconcileReflectFeedback({
-    logsRoot,
-    queueRoot: queuePaths.root,
-    rerunReflector: rerunReflectorFn,
-    log: (msg) => console.error(`[bridge] ${msg}`),
-  }).catch((err) => console.error(`[bridge] reflect reconcile failed: ${String(err)}`));
+  // blocks the server coming up. Skipped in no-spawn mode (seeded e2e/journey
+  // runs set FORGE_ARCHITECT_NO_SPAWN=1; the reconcile spawns reflectors, so it
+  // honours the same guard as spawnArchitectTurn — no surprise agent runs there).
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
+    void reconcileReflectFeedback({
+      logsRoot,
+      queueRoot: queuePaths.root,
+      rerunReflector: rerunReflectorFn,
+      log: (msg) => console.error(`[bridge] ${msg}`),
+    }).catch((err) => console.error(`[bridge] reflect reconcile failed: ${String(err)}`));
+  }
 
   const clients = new Set<WebSocket>();
   const tails = new Map<string, TailState>();
