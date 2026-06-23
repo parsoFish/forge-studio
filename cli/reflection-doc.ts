@@ -128,7 +128,14 @@ function extractLessons(sections: Section[], slugs: string[]): ReflectionLesson[
       continue;
     }
 
-    // "### Patterns observed" / "### Observations" — body contains multiple entries
+    // Current format (reflector SKILL Stage-1): "### Patterns / antipatterns"
+    // with "- **label**: detail" bullets — the core lesson carrier.
+    if (/patterns?\s*\/\s*antipatterns?|^antipatterns?$/i.test(s.heading)) {
+      for (const e of extractBoldLabelBullets(s.body)) add(e);
+      continue;
+    }
+
+    // Legacy "### Patterns observed" / "### Observations" — body has inline entries
     if (isPatternContainerHeading(s.heading)) {
       const entries = extractInlinePatternEntries(s.body);
       for (const e of entries) add(e);
@@ -180,6 +187,27 @@ function extractInlinePatternEntries(body: string): string[] {
   const lessonRe = /\*\*Lesson\*\*:\s*(.+?)(?:\n\n|\n(?=\s*\n)|\n(?=#{2,})|$)/gs;
   while ((m = lessonRe.exec(body)) !== null) {
     const text = m[1].replace(/\s+/g, ' ').trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+/**
+ * Scan a body for the CURRENT retro bullet form — a bold-labelled list item:
+ *   "- **Excellent TDD execution**: each WI followed red→green …"
+ *   "1. **`git add` retry antipattern**: occurred in all 4 WIs …"
+ * (the reflector SKILL Stage-1 format: `### Repeated actions` / `### Roadblocks
+ * / wedges` / `### Patterns / antipatterns` with `- **label**: detail` bullets).
+ * Returns "label — detail" (or just the label when there is no detail).
+ */
+function extractBoldLabelBullets(body: string): string[] {
+  const out: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const m = line.match(/^\s*(?:[-*]|\d+\.)\s+\*\*(.+?)\*\*\s*[:—–-]?\s*(.*)$/);
+    if (!m) continue;
+    const label = m[1].replace(/`/g, '').trim();
+    const detail = m[2].replace(/`/g, '').trim();
+    const text = detail ? `${label} — ${detail}` : label;
     if (text) out.push(text);
   }
   return out;
@@ -245,6 +273,14 @@ function extractFriction(sections: Section[]): string[] {
   }
 
   for (const s of sections) {
+    // Current format (reflector SKILL Stage-1): "### Repeated actions" and
+    // "### Roadblocks / wedges" — wasteful repeats + stalls, both friction. Their
+    // bullets use the "- **label**: detail" form ("_(none observed)_" yields none).
+    if (/repeated\s+actions|roadblocks|wedges/i.test(s.heading)) {
+      for (const e of extractBoldLabelBullets(s.body)) add(e);
+      continue;
+    }
+
     // Sections that explicitly describe friction
     if (/friction|antipattern|AP\d+/i.test(s.heading) && isPatternHeading(s.heading)) {
       const label = cleanPatternLabel(s.heading);

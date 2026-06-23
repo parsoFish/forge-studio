@@ -374,3 +374,45 @@ Some prose without any matching slug.
       'target must be undefined or a string');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Current reflector format (SKILL Stage-1): ### Repeated actions / Roadblocks /
+// Patterns / antipatterns with "- **label**: detail" bullets. Previously these
+// matched no recognizer, so reflection.json collapsed to {} (the gitpulse defect).
+// ---------------------------------------------------------------------------
+
+test('parseRetroMd: current format — Patterns/antipatterns bullets → lessons, Repeated/Roadblocks → friction', () => {
+  const raw = `
+## Self-reflection
+
+### Repeated actions
+
+1. **\`git add\` without -f retry**: occurred in all 4 WIs — wasted git invocations. Third cycle running.
+
+### Roadblocks / wedges
+
+_(none observed)_ — zero wedge events this cycle.
+
+### Patterns / antipatterns
+
+- **Excellent TDD execution**: each WI followed red→green perfectly.
+- **Cost over budget**: ~$5.17 against a $4 budget.
+
+## User questions
+
+_(none)_
+`;
+  const doc = parseRetroMd(raw, []);
+  // The whole doc must NOT collapse to {} — the gitpulse symptom.
+  assert.ok(
+    doc.lessons || doc.friction || doc.wentWell,
+    'reflection doc must be non-empty for the current retro format',
+  );
+  const lessonText = (doc.lessons ?? []).map((l) => l.text).join(' | ');
+  assert.match(lessonText, /Excellent TDD execution/, 'patterns bullet → lesson');
+  assert.match(lessonText, /Cost over budget/, 'second patterns bullet → lesson');
+  const frictionText = (doc.friction ?? []).join(' | ');
+  assert.match(frictionText, /git add.*without -f retry/, 'repeated action → friction');
+  // "_(none observed)_" must NOT produce a phantom friction entry.
+  assert.ok(!/none observed/i.test(frictionText), 'a "(none observed)" roadblock yields no friction item');
+});
