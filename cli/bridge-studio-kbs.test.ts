@@ -163,6 +163,29 @@ test('GET /api/studio/kbs/resolve-node/:nodeId: invalid node id → 400', async 
   assert.ok(typeof json['error'] === 'string');
 });
 
+// The Knowledge "Lint" button POSTs op=lint; the response MUST carry ok:true so
+// the UI's studioPost (which gated success on data.ok) renders findings instead of
+// "failed" (the reported bug — lint always showed failed despite running).
+test('POST /api/studio/kbs/:id/maintenance op=lint → 200 ok:true with findings array', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'lint' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true, 'lint response must carry ok:true');
+  assert.equal(json['op'], 'lint');
+  assert.ok(Array.isArray(json['findings']), 'findings must be an array');
+  assert.equal(typeof json['total'], 'number');
+});
+
+test('POST /api/studio/kbs/:id/maintenance op=index → 200 ok:true', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'index' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+});
+
+test('POST /api/studio/kbs/:id/maintenance op=bogus → 400', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'bogus' });
+  assert.equal(status, 400);
+});
+
 // ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
 // must surface them alongside the top-level brains so they appear in Studio's KB
 // list/graph (previously only direct subdirs of brain/ were scanned).

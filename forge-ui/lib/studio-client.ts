@@ -245,7 +245,9 @@ async function studioPut(
     });
     const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
     if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-    return { ok: !!data.ok, data };
+    // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
+    // (e.g. the lint maintenance op) is success — not a silent failure.
+    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
   } catch (err) {
     return { ok: false, error: String(err) };
   }
@@ -265,7 +267,9 @@ async function studioPost(
     });
     const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
     if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-    return { ok: !!data.ok, data };
+    // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
+    // (e.g. the lint maintenance op) is success — not a silent failure.
+    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
   } catch (err) {
     return { ok: false, error: String(err) };
   }

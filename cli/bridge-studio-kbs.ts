@@ -630,7 +630,9 @@ export async function handleStudioKbRoutes(
         const brainDir = `brain/${kbId}`;
         const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
         const scoped = findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
-        sendJson(res, 200, { op: 'lint', findings: scoped, total: findings.length }, origin);
+        // `ok: true` so the UI's studioPost (which gates success on data.ok, like
+        // the sibling `index` op) treats a successful lint as success, not failure.
+        sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length }, origin);
         return true;
       }
       if (op === 'index') {
