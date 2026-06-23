@@ -7,6 +7,46 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-24
+
+### Knowledge base — guided lint resolution
+
+- **New "RESOLVE LINT" panel on the Knowledge page.** Lint findings are now
+  classified into three resolution tiers and the operator works through them:
+  - **AUTO** — one click applies deterministic fixers (insert/dedupe a category-
+    index link line, clamp/stamp frontmatter dates, git-mv mis-routed themes).
+    This wires the long-dead `brain lint --fix` stub for the first time.
+  - **AGENT** — one click dispatches a surgical `brain-fix` haiku Read+Edit turn
+    per finding, each verified by re-linting the file.
+  - **USER** — walks each decision one at a time; the operator's answer drives an
+    agent turn that applies it, then re-lints to confirm.
+- **Per-project brains are visible in Studio's KB graph** (gitpulse, mdtoc,
+  betterado, trafficGame) — the resolver/scanner now recurse into
+  `brain/projects/<id>/`.
+- **KB node articles render markdown** (markdown-it + DOMPurify), `[[wikilinks]]`
+  preserved as jumps; the brain **Lint button** reports findings instead of always
+  "failed".
+
+### Reflection
+
+- **Operator feedback auto-re-runs the reflector** so a late note is distilled
+  into the brain — reliably (fixed the manifest-id resolution that silently
+  no-op'd every rerun), and bounded (recent-feedback-only boot reconcile, skipped
+  in no-spawn runs) so it never floods.
+
+### Demo + contract
+
+- **Demos capture REAL before/after CLI output** even when a fresh build is
+  imperfect (the capture no longer skips on a non-green build).
+- **`forge preflight` gains a `DEMO-SKILL` clause** flagging a project that
+  declares a demoProcess but lacks the generated `.forge/skills/demo-design/`
+  machinery; onboarding + the generator pin that fixed path.
+
+### Cleanup
+
+- Removed the never-wired central `project-artifacts/` demo-history + contract
+  scheme (dead code; ADR 035 amended), guarded against return.
+
 ## [0.3.0] - 2026-06-22
 
 ### Knowledge graph — real force-directed layout (d3)
