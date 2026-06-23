@@ -29,6 +29,7 @@ import { dirname, join, relative, resolve, basename, sep } from 'node:path';
 import matter from 'gray-matter';
 
 import { cyclesRawDir } from '../orchestrator/brain-paths.ts';
+import { applyAutoFixes } from './brain-fix-auto.ts';
 
 // ---------- types ----------
 
@@ -903,13 +904,14 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     );
   }
 
-  // --fix mode: apply auto-fixes for safe categories.
+  // --fix mode: apply the deterministic AUTO-tier fixers, then re-lint so the
+  // returned findings + exitCode reflect what remains (agent/user tiers).
   if (opts.fix) {
-    // Currently we do not auto-rewrite categories (Tier B per the standing
-    // destructive-instruction rule). The only auto-fix kind we ship is
-    // INDEX.md regeneration, which is a separate CLI surface
-    // (`forge brain index --write`). Document and leave as a no-op stub so
-    // operator-confirm remains the gating step.
+    const auto = findings.filter((f) => f.resolution === 'auto');
+    if (auto.length > 0) {
+      applyAutoFixes(opts.cwd, auto);
+      return runBrainLint({ ...opts, fix: false });
+    }
   }
 
   const hasError = findings.some((f) => f.category === 'error');
