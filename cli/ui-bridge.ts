@@ -75,6 +75,7 @@ import { mergePullRequest } from '../orchestrator/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
+import { reconcileReflectFeedback, type RerunReflectorFn } from './reflect-reconcile.ts';
 import {
   listArchitectSessions,
   readStatus,
@@ -134,6 +135,13 @@ export type BridgeOptions = {
    * log-and-continue (a failure never blocks the merge).
    */
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /**
+   * D — injectable for tests; defaults to the real `rerunReflector` from
+   * orchestrator/forge-reflect-rerun.ts. Fired (non-blocking) when operator
+   * reflection feedback is submitted, and at startup for any cycle whose
+   * feedback out-dates its last reflector.end.
+   */
+  rerunReflector?: RerunReflectorFn;
 };
 
 type TailState = {
@@ -170,6 +178,21 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       const logger = createLogger(input.cycleId, logsRoot);
       return runReleaseFinalize(input, logger);
     });
+  // D — auto-rerun the reflector on operator feedback. Default delegates to the
+  // real helper; the POST handler + startup reconcile both call this.
+  const rerunReflectorFn: RerunReflectorFn =
+    opts.rerunReflector ??
+    ((input) => import('../orchestrator/forge-reflect-rerun.ts').then((m) => m.rerunReflector(input)));
+  // Recover feedback that landed while the bridge was down (or whose live rerun
+  // was lost to a restart): re-run the reflector for any cycle whose
+  // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
+  // blocks the server coming up.
+  void reconcileReflectFeedback({
+    logsRoot,
+    queueRoot: queuePaths.root,
+    rerunReflector: rerunReflectorFn,
+    log: (msg) => console.error(`[bridge] ${msg}`),
+  }).catch((err) => console.error(`[bridge] reflect reconcile failed: ${String(err)}`));
 
   const clients = new Set<WebSocket>();
   const tails = new Map<string, TailState>();
@@ -398,6 +421,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
+      rerunReflector: rerunReflectorFn,
     });
   });
   const wss = new WebSocketServer({ server: http, path: '/ws' });
@@ -495,6 +519,8 @@ type HttpContext = {
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /** WS-A — finalise the release on the PR branch before merge (opt-in; log-and-continue). */
   runReleaseFinalize: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
+  rerunReflector: RerunReflectorFn;
 };
 
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
@@ -1183,16 +1209,37 @@ async function handleReflect(
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
       sendJson(res, 200, { ok: true }, origin);
-      // Parity with `forge reflect --rerun`: the reflector ingests the feedback
-      // file on rerun. Detached (don't block the HTTP response on a full
-      // reflector pass) + log-and-continue, so the UI owns reflection
-      // end-to-end without the operator touching the CLI.
-      void import('../orchestrator/forge-reflect-rerun.ts')
-        .then(({ rerunReflector }) =>
-          rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot }),
+      // D — auto-rerun the reflector so the feedback is distilled into retro.md +
+      // brain themes. Detached (don't block the HTTP response on a full reflector
+      // pass), but observable: success AND failure emit an event into the cycle's
+      // events.jsonl (not console), so a lost rerun is visible and the startup
+      // reconcile can recover it. The UI owns reflection without the CLI.
+      const reflectLogger = createLogger(cycleId, ctx.logsRoot);
+      ctx
+        .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
+        .then(() =>
+          reflectLogger.emit({
+            initiative_id: cycleId,
+            phase: 'reflection',
+            skill: 'bridge',
+            event_type: 'log',
+            input_refs: [join(dir, 'user-feedback.md')],
+            output_refs: [],
+            message: 'bridge.reflect-rerun-fired',
+            metadata: { trigger: 'feedback-submit' },
+          }),
         )
         .catch((err) =>
-          console.error(`[bridge] reflect rerun failed for ${cycleId}: ${String(err)}`),
+          reflectLogger.emit({
+            initiative_id: cycleId,
+            phase: 'reflection',
+            skill: 'bridge',
+            event_type: 'log',
+            input_refs: [],
+            output_refs: [],
+            message: 'bridge.reflect-rerun-failed',
+            metadata: { error: String(err) },
+          }),
         );
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
