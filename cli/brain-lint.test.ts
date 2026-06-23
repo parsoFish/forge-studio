@@ -28,6 +28,9 @@ import {
   checkSourceLinks,
   checkStaleness,
   runBrainLint,
+  classifyFinding,
+  resolutionCounts,
+  type Finding,
 } from './brain-lint.ts';
 
 // ---------- fixture builder ----------
@@ -121,6 +124,65 @@ function cleanup(root: string): void {
 }
 
 // ---------- checkFrontmatter ----------
+
+// ---------- classification (resolution tier) ----------
+
+const cf = (check: string, message: string): Finding => ({ category: 'error', file: '/x.md', message, check });
+
+test('classifyFinding: AUTO tier — deterministic fixes', () => {
+  assert.equal(classifyFinding(cf('checkIndexSync', 'not listed in category index: brain/cycles/patterns.md')).resolution, 'auto');
+  assert.equal(classifyFinding(cf('checkIndexSync', 'listed 2 times in category index: x')).resolution, 'auto');
+  assert.equal(classifyFinding(cf('checkOrphans', 'orphan: not linked from INDEX.md')).resolution, 'auto');
+  assert.equal(classifyFinding(cf('checkCategoryScope', 'category "pattern" belongs in brain/cycles/themes/')).resolution, 'auto');
+  assert.equal(classifyFinding(cf('checkFrontmatter', 'created_at > updated_at')).resolution, 'auto');
+  assert.equal(classifyFinding(cf('checkFrontmatter', 'missing required frontmatter field: updated_at')).resolution, 'auto');
+});
+
+test('classifyFinding: AGENT tier — LLM-resolvable, carries a fixHint', () => {
+  for (const m of [
+    ['checkFrontmatter', 'missing required frontmatter field: description'],
+    ['checkFrontmatter', 'unparseable frontmatter (gray-matter failed)'],
+    ['checkSourceLinks', 'broken wikilink: [[foo-bar]]'],
+    ['checkSourceLinks', 'broken link: ../x.md'],
+    ['checkStaleness', 'stale citation (missing): orchestrator/gone.ts'],
+    ['checkLengthSoftCap', 'theme too long: 142 body lines (hard cap 100)'],
+    ['checkIndexSync', 'category index missing: brain/cycles/patterns.md'],
+  ] as const) {
+    const r = classifyFinding(cf(m[0], m[1]));
+    assert.equal(r.resolution, 'agent', `${m[1]} → agent`);
+    assert.ok(r.fixHint && r.fixHint.length > 0, `${m[1]} should carry a fixHint`);
+  }
+});
+
+test('classifyFinding: USER tier — needs a human decision', () => {
+  assert.equal(classifyFinding(cf('checkFrontmatter', 'category "bug" not in whitelist {pattern|...}')).resolution, 'user');
+  assert.equal(classifyFinding(cf('checkContradictions', 'possible contradiction with x (3 keyword overlaps)')).resolution, 'user');
+  assert.equal(classifyFinding(cf('checkCleanupCandidates', 'cleanup: tier-C (load-bearing — never auto)')).resolution, 'user');
+  assert.equal(classifyFinding(cf('checkCleanupCandidates', 'cleanup: tier-B (routine, > 30 days old)')).resolution, 'user');
+});
+
+test('classifyFinding: unknown check → user (fail-safe, never silent auto-edit)', () => {
+  assert.equal(classifyFinding(cf('checkNewThing', 'whatever')).resolution, 'user');
+  assert.equal(classifyFinding(cf('checkNewThing', 'whatever')).kind, 'unknown');
+});
+
+test('resolutionCounts: tallies by tier (classifies unstamped findings)', () => {
+  const counts = resolutionCounts([
+    cf('checkOrphans', 'orphan: x'),
+    cf('checkSourceLinks', 'broken wikilink: [[y]]'),
+    cf('checkContradictions', 'possible contradiction with z'),
+  ]);
+  assert.deepEqual(counts, { auto: 1, agent: 1, user: 1 });
+});
+
+test('runBrainLint stamps every finding with kind + resolution', () => {
+  // Reuse a fixture that produces findings: a theme missing from its index.
+  const r = runBrainLint({ cwd: process.cwd(), scope: 'full' });
+  for (const f of r.findings) {
+    assert.ok(f.kind, `finding has a kind: ${f.message}`);
+    assert.ok(f.resolution, `finding has a resolution: ${f.message}`);
+  }
+});
 
 test('checkFrontmatter: clean theme produces no findings', () => {
   const root = buildBrainFixture({

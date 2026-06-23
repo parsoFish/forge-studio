@@ -34,12 +34,27 @@ import { cyclesRawDir } from '../orchestrator/brain-paths.ts';
 
 export type FindingCategory = 'auto-fix' | 'flag' | 'error';
 
+/**
+ * Resolution tier — WHO clears a finding, orthogonal to `category` (severity):
+ *   - `auto`  — a deterministic fixer (regenerate index, clamp dates, git-mv). No LLM.
+ *   - `agent` — an LLM can resolve it unattended (infer a description, repoint a link).
+ *   - `user`  — needs a human decision (which of a contradicting pair, archive-or-keep).
+ * The guided lint-resolution UI dispatches on this tier.
+ */
+export type Resolution = 'auto' | 'agent' | 'user';
+
 export type Finding = {
   category: FindingCategory;
   file: string; // absolute path
   message: string;
   /** Optional check name for grouping in output. */
   check?: string;
+  /** Stable discriminator slug (e.g. `index.not-listed`), stamped by classifyFinding. */
+  kind?: string;
+  /** Resolution tier, stamped by classifyFinding. */
+  resolution?: Resolution;
+  /** Agent-tier only: a targeted instruction for the fix turn. */
+  fixHint?: string;
 };
 
 export type Scope =
@@ -740,6 +755,73 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- classification (resolution tier) ----------
+
+/**
+ * Classify a raw finding into a stable `kind` slug + a `resolution` tier (and,
+ * for agent-tier findings, a targeted `fixHint`). Keyed on (check, message
+ * discriminator) — NOT check alone, because checkFrontmatter + checkIndexSync
+ * each span multiple tiers depending on which branch fired (a missing-date field
+ * is `auto`, a missing-description field is `agent`, a bad category is `user`).
+ *
+ * Pure + the single source of truth for the AUTO/AGENT/USER split the
+ * lint-resolution UI dispatches on. Unknown findings default to `user` (safest —
+ * surfaces for a human rather than silently auto-editing the brain).
+ */
+export function classifyFinding(f: Finding): { kind: string; resolution: Resolution; fixHint?: string } {
+  const msg = f.message;
+  switch (f.check) {
+    case 'checkFrontmatter':
+      if (/unparseable/.test(msg)) return { kind: 'frontmatter.unparseable', resolution: 'agent', fixHint: 'Re-author the YAML frontmatter block from the theme body (title, description, category, created_at, updated_at).' };
+      if (/missing required frontmatter field: (created_at|updated_at)/.test(msg)) return { kind: 'frontmatter.missing-date', resolution: 'auto' };
+      if (/missing required frontmatter field:/.test(msg)) return { kind: 'frontmatter.missing-field', resolution: 'agent', fixHint: 'Infer the missing field (title/description) from the theme body and add it to the frontmatter.' };
+      if (/not in whitelist/.test(msg)) return { kind: 'frontmatter.bad-category', resolution: 'user' };
+      if (/created_at > updated_at/.test(msg)) return { kind: 'frontmatter.date-order', resolution: 'auto' };
+      return { kind: 'frontmatter.other', resolution: 'user' };
+    case 'checkIndexSync':
+      if (/category index missing/.test(msg)) return { kind: 'index.missing', resolution: 'agent', fixHint: 'Create the missing category index file with a heading and a link to each theme of this category.' };
+      if (/not listed/.test(msg)) return { kind: 'index.not-listed', resolution: 'auto' };
+      if (/listed \d+ times/.test(msg)) return { kind: 'index.duplicate', resolution: 'auto' };
+      return { kind: 'index.other', resolution: 'auto' };
+    case 'checkSourceLinks':
+      if (/broken wikilink/.test(msg)) return { kind: 'links.broken-wikilink', resolution: 'agent', fixHint: 'Repoint the [[wikilink]] to the correct existing theme slug; if no unambiguous match exists, report unresolved.' };
+      return { kind: 'links.broken', resolution: 'agent', fixHint: 'Repoint the broken relative link to the moved file; if no unambiguous target exists, report unresolved.' };
+    case 'checkStaleness':
+      return { kind: 'staleness.missing', resolution: 'agent', fixHint: 'Repoint the stale cited path to where the file moved; if the cited thing is genuinely gone, report unresolved so the operator can decide.' };
+    case 'checkOrphans':
+      return { kind: 'orphan', resolution: 'auto' };
+    case 'checkLengthSoftCap':
+      if (/hard cap/.test(msg)) return { kind: 'length.hard-cap', resolution: 'agent', fixHint: 'Condense the theme under 100 body lines (tighten prose; do not drop load-bearing facts).' };
+      return { kind: 'length.soft-cap', resolution: 'agent', fixHint: 'Condense the theme toward 60 body lines without losing substance.' };
+    case 'checkContradictions':
+      return { kind: 'contradiction', resolution: 'user' };
+    case 'checkCategoryScope':
+      return { kind: 'category.mis-routed', resolution: 'auto' };
+    case 'checkCleanupCandidates':
+      if (/tier-C|load-bearing/.test(msg)) return { kind: 'cleanup.load-bearing', resolution: 'user' };
+      if (/tier-B/.test(msg)) return { kind: 'cleanup.routine', resolution: 'user' };
+      return { kind: 'cleanup.untriaged', resolution: 'user' };
+    default:
+      return { kind: 'unknown', resolution: 'user' };
+  }
+}
+
+/** Stamp `kind` + `resolution` (+ `fixHint`) onto a finding via classifyFinding. */
+export function classify(f: Finding): Finding {
+  const { kind, resolution, fixHint } = classifyFinding(f);
+  return { ...f, kind, resolution, fixHint };
+}
+
+/** Tally findings by resolution tier — drives the lint-resolution UI's stage counts. */
+export function resolutionCounts(findings: Finding[]): { auto: number; agent: number; user: number } {
+  const counts = { auto: 0, agent: 0, user: 0 };
+  for (const f of findings) {
+    const r = f.resolution ?? classifyFinding(f).resolution;
+    counts[r] += 1;
+  }
+  return counts;
+}
+
 // ---------- runBrainLint ----------
 
 function filterFindingsByScope(
@@ -812,7 +894,7 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...(opts.scope === 'cleanup-dry-run' ? checkCleanupCandidates(opts.cwd) : []),
   ];
 
-  let findings = filterFindingsByScope(allFindings, opts);
+  let findings = filterFindingsByScope(allFindings, opts).map(classify);
 
   // cleanup-dry-run never errors — it is inventory.
   if (opts.scope === 'cleanup-dry-run') {
