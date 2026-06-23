@@ -15,15 +15,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  projectArtifactsDir,
   projectBrainDir,
   projectThemesDir,
-  projectHistoryDir,
-  projectContractPath,
   projectDemoRelDir,
   readArtifactRoot,
   resolveKbBrainDir,
 } from './brain-paths.ts';
+import * as brainPaths from './brain-paths.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -38,16 +36,6 @@ function writeProjectJson(projectRoot: string, contents: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'project.json'), contents);
 }
-
-// ---------------------------------------------------------------------------
-// projectArtifactsDir — central forge-owned artifacts home (ADR 035)
-// ---------------------------------------------------------------------------
-
-test('projectArtifactsDir: central project-artifacts/<name> under the forge root', () => {
-  const forgeRoot = '/srv/forge';
-  const result = projectArtifactsDir(forgeRoot, 'my-project');
-  assert.equal(result, resolve(forgeRoot, 'project-artifacts', 'my-project'));
-});
 
 // ---------------------------------------------------------------------------
 // projectBrainDir — Brain 3, central in the brain wiki (ADR 035)
@@ -124,26 +112,17 @@ test('resolveKbBrainDir: top-level brain wins over a same-named project brain', 
 });
 
 // ---------------------------------------------------------------------------
-// projectHistoryDir — central archived history per initiative (ADR 035)
+// Central demo-history / contract SSOT was specified by ADR 035 but never wired
+// (zero callers) — removed. Guard against the dead scheme silently returning.
 // ---------------------------------------------------------------------------
 
-test('projectHistoryDir: central project-artifacts/<name>/demo-history/<initiativeId>', () => {
-  const forgeRoot = '/srv/forge';
-  const result = projectHistoryDir(forgeRoot, 'my-project', 'INIT-001');
-  assert.equal(
-    result,
-    resolve(forgeRoot, 'project-artifacts', 'my-project', 'demo-history', 'INIT-001'),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// projectContractPath — central SSOT for the resolved contract (ADR 035)
-// ---------------------------------------------------------------------------
-
-test('projectContractPath: central project-artifacts/<name>/contract.json', () => {
-  const forgeRoot = '/srv/forge';
-  const result = projectContractPath(forgeRoot, 'my-project');
-  assert.equal(result, resolve(forgeRoot, 'project-artifacts', 'my-project', 'contract.json'));
+test('brain-paths: the never-wired central-artifacts helpers stay deleted', () => {
+  for (const dead of ['projectArtifactsDir', 'projectHistoryDir', 'projectContractPath']) {
+    assert.ok(
+      !(dead in brainPaths),
+      `${dead} was dead code (no callers) — do not re-add it; cycle artifacts live in _logs/<cycle>/artifacts/`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

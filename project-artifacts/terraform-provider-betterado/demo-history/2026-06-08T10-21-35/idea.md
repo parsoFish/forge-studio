@@ -1,1 +1,0 @@
-We've done quite a lot of work around adding the release resource and sub components so far. I want the next phase to perform an evaluation on the possible CRUD operations available on classic releases, outline the remaining configurations we have not yet implemented, and building out a plan for moving the release resource to feature complete.

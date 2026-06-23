@@ -46,16 +46,6 @@ export function cycleArchiveRelPath(cycleId: string): string {
 }
 
 /**
- * Central forge-owned artifacts home for a managed project (ADR 035):
- * `project-artifacts/<name>/`. Holds the archived development/demo history and
- * the resolved contract. Forge-owned + committed with forge's history — NOT in
- * the managed project's repo.
- */
-export function projectArtifactsDir(forgeRoot: string, projectName: string): string {
-  return resolve(forgeRoot, 'project-artifacts', projectName);
-}
-
-/**
  * Brain 3 (project) — the project's brain root, CENTRAL in the forge brain wiki
  * at `brain/projects/<name>/` (ADR 035, reversing ADR 018's in-repo location so
  * the reflector can write it post-merge without an open project worktree).
@@ -89,27 +79,6 @@ export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | nul
   return null;
 }
 
-/**
- * Central archived development/demo-history dir for one initiative (ADR 035):
- * `project-artifacts/<name>/demo-history/<initiativeId>/`. The post-merge
- * close-out writes the plan / demo / verdict bundle here so forge carries a
- * browsable record of how each initiative was built, without committing into
- * the project repo.
- */
-export function projectHistoryDir(
-  forgeRoot: string,
-  projectName: string,
-  initiativeId: string,
-): string {
-  return resolve(projectArtifactsDir(forgeRoot, projectName), 'demo-history', initiativeId);
-}
-
-/** Central SSOT path for a managed project's resolved forge↔project contract
- *  (ADR 035): `project-artifacts/<name>/contract.json`. The in-repo
- *  `.forge/project.json` stays only as the thin discovery pointer. */
-export function projectContractPath(forgeRoot: string, projectName: string): string {
-  return resolve(projectArtifactsDir(forgeRoot, projectName), 'contract.json');
-}
 
 /**
  * The worktree-relative demo directory for one initiative, resolved against the
