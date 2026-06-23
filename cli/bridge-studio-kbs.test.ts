@@ -186,6 +186,40 @@ test('POST /api/studio/kbs/:id/maintenance op=bogus → 400', async () => {
   assert.equal(status, 400);
 });
 
+// Guided lint-resolution ops (Phase 2/3/4 bridge surface).
+test('op=lint returns resolution counts', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'lint' });
+  assert.equal(status, 200, JSON.stringify(json));
+  const counts = json['counts'] as Record<string, number>;
+  assert.ok(counts && typeof counts.auto === 'number' && typeof counts.agent === 'number' && typeof counts.user === 'number', 'counts present');
+});
+
+test('op=fix-auto returns the applied/skipped/remaining/counts shape', async () => {
+  const { status, json } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-auto' });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.ok(Array.isArray(json['applied']), 'applied[]');
+  assert.ok(Array.isArray(json['skipped']), 'skipped[]');
+  assert.ok(Array.isArray(json['remaining']), 'remaining[]');
+  assert.ok(json['counts'], 'counts');
+});
+
+test('op=fix-agent rejects a missing file (400)', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-agent', check: 'checkSourceLinks', kind: 'links.broken' });
+  assert.equal(status, 400);
+});
+
+test('op=fix-agent rejects a file outside brain/ (path-guard, 400)', async () => {
+  const { status } = await post('/api/studio/kbs/cycles/maintenance', { op: 'fix-agent', file: '/etc/passwd', check: 'x', kind: 'y' });
+  assert.equal(status, 400);
+});
+
+test('GET fix-agent/:runId for an unknown run → running', async () => {
+  const { status, json } = await get('/api/studio/kbs/cycles/fix-agent/nonexistent-run-123');
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['state'], 'running');
+});
+
 // ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
 // must surface them alongside the top-level brains so they appear in Studio's KB
 // list/graph (previously only direct subdirs of brain/ were scanned).

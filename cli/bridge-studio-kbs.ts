@@ -18,14 +18,16 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
 import yaml from 'js-yaml';
 
 import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
-import { runBrainLint } from './brain-lint.ts';
+import { runBrainLint, resolutionCounts, type Finding } from './brain-lint.ts';
+import { applyAutoFixes } from './brain-fix-auto.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import {
   sendJson,
@@ -33,6 +35,7 @@ import {
   sanitizeError,
   readJson,
   pathOnly,
+  SAFE_ID_RE,
   type StudioContext,
 } from './bridge-studio.ts';
 
@@ -107,6 +110,59 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
   for (const d of subDirs(projectsRoot)) pushFrom(join(projectsRoot, d));
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Lint-resolution helpers (the guided-resolution UI)
+// ---------------------------------------------------------------------------
+
+/** Keep only findings whose file belongs to this kb's brain dir (matches the
+ *  lint route's historical filter; the kbId substring also covers the central
+ *  per-project path brain/projects/<kbId>/). */
+function scopeFindingsToKb(findings: Finding[], kbId: string): Finding[] {
+  const brainDir = `brain/${kbId}`;
+  return findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
+}
+
+/** Spawn ONE detached `forge brain fix` agent turn; events stream to
+ *  _logs/_brainfix-<runId>/events.jsonl. Mirrors spawnArchitectTurn. */
+function spawnBrainFix(
+  forgeRoot: string,
+  p: { kbId: string; file: string; check: string; kind: string; fixHint?: string; message: string; runId: string },
+): void {
+  const logDir = join(forgeRoot, '_logs', `_brainfix-${p.runId}`);
+  mkdirSync(logDir, { recursive: true });
+  const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+  const argv = [
+    '--experimental-strip-types', 'orchestrator/cli.ts', 'brain', 'fix',
+    '--kb', p.kbId, '--file', p.file, '--check', p.check, '--kind', p.kind,
+    '--run-id', p.runId, '--message', p.message,
+  ];
+  if (p.fixHint) argv.push('--hint', p.fixHint);
+  const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
+  closeSync(stderrFd);
+  proc.unref();
+}
+
+/** Read a brain-fix run's terminal state from its event log. */
+function readBrainFixState(forgeRoot: string, runId: string): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean } {
+  const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
+  if (!existsSync(evPath)) return { state: 'running', cleared: false };
+  let raw: string;
+  try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
+  for (const line of raw.split('\n').reverse()) {
+    if (!line.trim()) continue;
+    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean } };
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
+      const cleared = ev.metadata?.cleared === true;
+      return { state: cleared ? 'cleared' : 'not-cleared', cleared };
+    }
+    if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') {
+      return { state: 'failed', cleared: false };
+    }
+  }
+  return { state: 'running', cleared: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +672,15 @@ export async function handleStudioKbRoutes(
     return true;
   }
 
+  // ---- GET /api/studio/kbs/:id/fix-agent/:runId — agent-fix run state ----
+  const fixStatusMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/fix-agent\/([^/]+)$/);
+  if (fixStatusMatch && method === 'GET') {
+    const runId = decodeURIComponent(fixStatusMatch[2]);
+    if (!SAFE_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
+    sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
+    return true;
+  }
+
   // ---- POST /api/studio/kbs/:id/maintenance (K3) — manual brain maintenance --
   const maintMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/maintenance$/);
   if (maintMatch && method === 'POST') {
@@ -627,12 +692,43 @@ export async function handleStudioKbRoutes(
       const op = (body as Record<string, unknown>)?.['op'];
 
       if (op === 'lint') {
-        const brainDir = `brain/${kbId}`;
         const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
-        const scoped = findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
+        const scoped = scopeFindingsToKb(findings, kbId);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.
-        sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length }, origin);
+        sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length, counts: resolutionCounts(scoped) }, origin);
+        return true;
+      }
+      if (op === 'fix-auto') {
+        // Apply every deterministic AUTO-tier fix for this kb, then re-lint.
+        const before = scopeFindingsToKb(runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' }).findings, kbId);
+        const result = applyAutoFixes(ctx.forgeRoot, before.filter((f) => f.resolution === 'auto'));
+        const after = scopeFindingsToKb(runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' }).findings, kbId);
+        sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, remaining: after, counts: resolutionCounts(after) }, origin);
+        return true;
+      }
+      if (op === 'fix-agent') {
+        // Dispatch ONE agent-tier fix turn. Body carries the finding + (for a
+        // user-decided finding) the operator's decision folded into fixHint.
+        const b = body as Record<string, unknown>;
+        const file = typeof b.file === 'string' ? b.file : '';
+        const check = typeof b.check === 'string' ? b.check : '';
+        const kind = typeof b.kind === 'string' ? b.kind : '';
+        const fixHint = typeof b.fixHint === 'string' ? b.fixHint : undefined;
+        const message = typeof b.message === 'string' ? b.message : '';
+        if (!file || !check || !kind) { sendJson(res, 400, { error: 'fix-agent requires file, check, kind' }, origin); return true; }
+        // Path-guard: the target file MUST be under brain/ (no traversal).
+        const abs = resolve(file);
+        if (abs !== file || !abs.startsWith(resolve(ctx.forgeRoot, 'brain') + sep)) {
+          sendJson(res, 400, { error: 'file must be an absolute path under brain/' }, origin); return true;
+        }
+        const runId = `${kbId}-${Date.now().toString(36)}`;
+        try {
+          spawnBrainFix(ctx.forgeRoot, { kbId, file: abs, check, kind, fixHint, message, runId });
+        } catch (err) {
+          sendJson(res, 500, { error: `failed to dispatch agent fix: ${sanitizeError(err)}` }, origin); return true;
+        }
+        sendJson(res, 200, { op: 'fix-agent', ok: true, runId }, origin);
         return true;
       }
       if (op === 'index') {
@@ -640,7 +736,7 @@ export async function handleStudioKbRoutes(
         sendJson(res, 200, { op: 'index', ok: true, result }, origin);
         return true;
       }
-      sendJson(res, 400, { error: 'op must be one of: lint | index' }, origin);
+      sendJson(res, 400, { error: 'op must be one of: lint | fix-auto | fix-agent | index' }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

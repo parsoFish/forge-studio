@@ -71,7 +71,7 @@ process.chdir(FORGE_ROOT);
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'brain':
-      return cmdBrain(args.slice(1));
+      return await cmdBrain(args.slice(1));
     case 'demo':
       return await cmdDemo(args.slice(1));
     case 'preflight':
@@ -188,12 +188,47 @@ function printLatestReportHint(): void {
   console.log(`   View: forge report ${newest.cycleId}`);
 }
 
-function cmdBrain(rest: string[]): void {
+function cmdBrain(rest: string[]): void | Promise<void> {
   const sub = rest[0];
   if (sub === 'index') return cmdBrainIndex(rest.slice(1));
   if (sub === 'lint') return cmdBrainLint(rest.slice(1));
-  console.error('forge brain: subcommands: index | lint');
+  if (sub === 'fix') return cmdBrainFix(rest.slice(1));
+  console.error('forge brain: subcommands: index | lint | fix');
   process.exit(2);
+}
+
+/**
+ * `forge brain fix --kb <id> --file <abs> --check <c> --kind <k> [--hint <h>] [--message <m>] [--run-id <id>]`
+ * Runs ONE agent-tier brain-fix turn (the detached child the bridge spawns for
+ * the lint-resolution UI's "Fix with agent"). Streams to _logs/_brainfix-<runId>/.
+ */
+async function cmdBrainFix(rest: string[]): Promise<void> {
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(`--${name}`);
+    return i >= 0 ? rest[i + 1] : undefined;
+  };
+  const kb = flag('kb');
+  const file = flag('file');
+  const check = flag('check');
+  const kind = flag('kind');
+  if (!kb || !file || !check || !kind) {
+    console.error('forge brain fix: requires --kb --file --check --kind [--hint --message --run-id]');
+    process.exit(2);
+    return;
+  }
+  const runId = flag('run-id') ?? `manual-${kind}`;
+  const { runBrainFixTurn } = await import('./brain-fix-runner.ts');
+  const r = await runBrainFixTurn({
+    runId,
+    kbId: kb,
+    file,
+    check,
+    kind,
+    fixHint: flag('hint'),
+    message: flag('message') ?? '',
+    forgeRoot: FORGE_ROOT,
+  });
+  console.log(`brain-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${kind} ${file}`);
 }
 
 function cmdBrainIndex(rest: string[]): void {
