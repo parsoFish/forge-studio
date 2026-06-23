@@ -117,10 +117,14 @@ actual code, assesses the right evidence form (portal/browser screenshot
 opportunistically when a renderable surface exists, harness metrics when a
 measurement command exists, live external API round-trip when the code calls a
 live system, JSON-diff/notes-only by default), and **generates** the per-project
-demo machinery (`<artifactRoot>/skills/<slug>/SKILL.md`) committed into the
-project repo. Ensure a valid prior state (baseline doesn't error). The generated
-skill encodes the exhaustive discipline for live-external projects (every option
-exercised, round-trip proof, idempotency gate, clean destroy).
+demo machinery committed into the project repo. **Write it to the FIXED path
+`.forge/skills/demo-design/SKILL.md`** (slug pinned to `demo-design`, not a
+descriptive name) so the scorecard can verify it deterministically — `forge
+preflight` has a `DEMO-SKILL` clause that WARNs until this file exists. Ensure a
+valid prior state (baseline doesn't error). The generated skill encodes the
+exhaustive discipline for live-external projects (every option exercised,
+round-trip proof, idempotency gate, clean destroy). **Confirm `forge preflight
+<project>` reports `DEMO-SKILL` ✓ before considering onboarding done.**
 
 ### Step 11 — External-resource model (C7, only if needed)
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)

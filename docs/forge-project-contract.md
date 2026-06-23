@@ -108,8 +108,8 @@ only to explicitly leave unbound when Brain 3 doesn't exist yet).
 
 These clauses are checked by `forge preflight <project>`. Hard clauses
 (C1/C2/C4) fail the preflight (non-zero exit); advisory clauses
-(C3/C5/C6/C8/DEMO/ARTIFACTS/BRAIN) surface as warnings that never flip the
-verdict.
+(C3/C5/C6/C8/DEMO/DEMO-SKILL/ARTIFACTS/BRAIN) surface as warnings that never flip
+the verdict.
 
 ### C1 — A truthful, discriminating done-signal *(HARD)*
 
@@ -333,6 +333,20 @@ checked by preflight (advisory).
 The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
 response, rendered page screenshot, plan output) — not a table of test names.
+
+---
+
+### DEMO-SKILL — The generated demo-design machinery exists *(advisory)*
+
+`DEMO` checks the demoProcess *shape*; `DEMO-SKILL` checks the demoProcess was
+actually *realised*. DEC-4: a project that declares a `demoProcess` should carry a
+**generated demo-design skill at the fixed path `.forge/skills/demo-design/SKILL.md`**
+(produced by the `demo-design` skill from the project's `demoProcess` + code — it
+encodes the concrete capture commands the unifier runs each cycle). The fixed slug
++ path make this verifiable: `forge preflight` WARNs (`DEMO-SKILL`) when a project
+declares a demoProcess but lacks the generated skill, and onboarding (Step 10)
+generates it. Not applicable (passes) until a `demoProcess` is declared — `DEMO`
+owns that case, so there is no double-warn.
 
 ---
 
