@@ -9,6 +9,7 @@ import { KbGraph } from '@/components/studio/knowledge/KbGraph';
 import { NodeArticle } from '@/components/studio/knowledge/NodeArticle';
 import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
+import { LintResolutionPanel } from '@/components/studio/knowledge/LintResolutionPanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 
 // ── Scope badge class ─────────────────────────────────────────────────────────
@@ -260,6 +261,9 @@ function KnowledgePageInner() {
             loading={articleLoading}
             onJump={handleJump}
           />
+          {currentId && (
+            <LintResolutionPanel kbId={currentId} onChanged={handlePinned} />
+          )}
           <GuidancePanel
             selectedArticle={article}
             kbId={currentId}

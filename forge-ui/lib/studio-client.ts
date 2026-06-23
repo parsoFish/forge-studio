@@ -483,6 +483,85 @@ export async function runKbMaintenance(
   return { ok: r.ok, error: r.error, data: r.data };
 }
 
+// --- Guided lint-resolution (the Knowledge page resolver) ---
+
+export type LintFinding = {
+  category: 'error' | 'flag' | 'auto-fix';
+  file: string;
+  message: string;
+  check?: string;
+  kind?: string;
+  resolution?: 'auto' | 'agent' | 'user';
+  fixHint?: string;
+};
+export type ResolutionCounts = { auto: number; agent: number; user: number };
+const ZERO_COUNTS: ResolutionCounts = { auto: 0, agent: 0, user: 0 };
+
+/** Run lint for a kb → classified findings + per-tier counts. */
+export async function lintKb(
+  id: string,
+): Promise<{ ok: boolean; error?: string; findings: LintFinding[]; counts: ResolutionCounts }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op: 'lint' });
+  return {
+    ok: r.ok,
+    error: r.error,
+    findings: (r.data?.findings as LintFinding[]) ?? [],
+    counts: (r.data?.counts as ResolutionCounts) ?? ZERO_COUNTS,
+  };
+}
+
+/** Apply every deterministic AUTO-tier fix, then re-lint. */
+export async function fixAutoKb(
+  id: string,
+): Promise<{ ok: boolean; error?: string; applied: Array<{ kind: string; file: string; detail: string }>; skipped: Array<{ kind: string; file: string; reason: string }>; remaining: LintFinding[]; counts: ResolutionCounts }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op: 'fix-auto' });
+  return {
+    ok: r.ok,
+    error: r.error,
+    applied: (r.data?.applied as Array<{ kind: string; file: string; detail: string }>) ?? [],
+    skipped: (r.data?.skipped as Array<{ kind: string; file: string; reason: string }>) ?? [],
+    remaining: (r.data?.remaining as LintFinding[]) ?? [],
+    counts: (r.data?.counts as ResolutionCounts) ?? ZERO_COUNTS,
+  };
+}
+
+/** Dispatch ONE agent-tier fix turn. `fixHint` carries the operator's decision
+ *  for a user-tier finding (else the finding's own default hint). */
+export async function dispatchAgentFix(
+  id: string,
+  finding: { file: string; check: string; kind: string; fixHint?: string; message?: string },
+): Promise<{ ok: boolean; error?: string; runId?: string }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, {
+    op: 'fix-agent',
+    file: finding.file,
+    check: finding.check,
+    kind: finding.kind,
+    fixHint: finding.fixHint,
+    message: finding.message ?? '',
+  });
+  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+}
+
+/** Poll a dispatched agent-fix run's state. */
+export async function getAgentFixStatus(
+  id: string,
+  runId: string,
+): Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, state: 'running', cleared: false };
+  try {
+    const res = await fetch(`${base}/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`);
+    const data = (await res.json()) as { state?: string; cleared?: boolean };
+    return {
+      ok: res.ok,
+      state: (data.state as 'running' | 'cleared' | 'not-cleared' | 'failed') ?? 'running',
+      cleared: data.cleared === true,
+    };
+  } catch {
+    return { ok: false, state: 'running', cleared: false };
+  }
+}
+
 /** A preflight clause the onboarded project still fails (surfaced to the UI). */
 export type FailingClause = { id: string; title: string; detail: string };
 
