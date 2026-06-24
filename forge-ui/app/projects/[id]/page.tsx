@@ -233,7 +233,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
             <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
-            <Instructions value={instructions} onChange={(v) => { setInstructions(v); markDirty(); }} />
+            <Instructions project={id} value={instructions} onChange={(v) => { setInstructions(v); markDirty(); }} />
             <DemoTimeline steps={demoSteps} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
           </div>

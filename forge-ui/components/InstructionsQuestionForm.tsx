@@ -1,0 +1,157 @@
+'use client';
+
+import { useState } from 'react';
+
+import { answerInstructions, type ArchitectQuestion } from '@/lib/bridge-client';
+
+/**
+ * Stage A — renders the instructions-creator's file-handoff interview round
+ * (`questions.json`, the same `StructuredQuestion` shape the architect uses) as
+ * one option-group per question. Every question must be answered before submit;
+ * answers POST back to `/api/instructions/answer`, which appends the round and
+ * spawns the next runner turn.
+ *
+ * Mirrors {@link ArchitectQuestionForm} exactly (free-text override included);
+ * only the submit fn (`answerInstructions`) and the outer section name differ.
+ * The per-question / per-option data-* anchors are kept identical so the same
+ * harness can drive both forms.
+ */
+export function InstructionsQuestionForm({
+  project,
+  sessionId,
+  round,
+  questions,
+}: {
+  project: string;
+  sessionId: string;
+  round: number;
+  questions: ArchitectQuestion[];
+}) {
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  const [freeText, setFreeText] = useState<Record<number, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /** Resolved answer for a question: free-text wins if non-empty, else radio. */
+  function resolvedAnswer(i: number): string {
+    return (freeText[i] ?? '').trim() || choices[i] || '';
+  }
+
+  const allAnswered = questions.length > 0 && questions.every((_, i) => resolvedAnswer(i) !== '');
+
+  async function onSubmit(): Promise<void> {
+    if (!allAnswered || submitting) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const answers = questions.map((q, i) => ({ question: q.question, answer: resolvedAnswer(i) }));
+      const res = await answerInstructions({ project, sessionId, answers });
+      if (!res.ok) setError(res.error ?? 'failed to submit answers');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      data-section="instructions-interview"
+      data-architect-round={round}
+      data-questions-answered={allAnswered ? 'true' : 'false'}
+      style={{ border: '1px solid #30363d', borderRadius: 10, padding: 16, background: '#0d1117' }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3', marginBottom: 12 }}>
+        Instructions interview — round {round}
+      </div>
+      {questions.map((q, i) => {
+        const answered = resolvedAnswer(i) !== '';
+        return (
+          <fieldset
+            key={i}
+            data-question-index={i}
+            data-question-resolved={answered ? 'true' : 'false'}
+            style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
+          >
+            <legend style={{ fontSize: 13, color: '#e6edf3', marginBottom: 6, padding: 0 }}>
+              {q.question}
+            </legend>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(q.options ?? []).map((opt) => {
+                const selected = choices[i] === opt.label && (freeText[i] ?? '').trim() === '';
+                return (
+                  <label
+                    key={opt.label}
+                    data-option-label={opt.label}
+                    data-option-selected={selected ? 'true' : 'false'}
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'flex-start',
+                      border: `1px solid ${selected ? '#1f6feb' : '#30363d'}`,
+                      borderRadius: 6,
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      background: selected ? '#0d2440' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name={`q-${i}`}
+                      checked={selected}
+                      onChange={() => {
+                        setChoices((c) => ({ ...c, [i]: opt.label }));
+                        setFreeText((ft) => ({ ...ft, [i]: '' }));
+                      }}
+                      style={{ marginTop: 2 }}
+                    />
+                    <span>
+                      <span style={{ fontSize: 13, color: '#e6edf3', fontWeight: 500 }}>{opt.label}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: '#8b949e' }}>{opt.description}</span>
+                    </span>
+                  </label>
+                );
+              })}
+              <textarea
+                data-question-freetext={i}
+                value={freeText[i] ?? ''}
+                onChange={(e) => setFreeText((ft) => ({ ...ft, [i]: e.target.value }))}
+                placeholder="Or answer in your own words…"
+                rows={2}
+                style={{
+                  marginTop: 4,
+                  width: '100%',
+                  background: '#161b22',
+                  border: `1px solid ${(freeText[i] ?? '').trim() ? '#1f6feb' : '#30363d'}`,
+                  borderRadius: 6,
+                  color: '#e6edf3',
+                  fontSize: 13,
+                  padding: '6px 10px',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </fieldset>
+        );
+      })}
+      {error && (
+        <div style={{ color: '#f85149', fontSize: 12, marginBottom: 8 }}>{error}</div>
+      )}
+      <button
+        onClick={() => void onSubmit()}
+        disabled={!allAnswered || submitting}
+        data-action="submit-answers"
+        style={{
+          background: allAnswered && !submitting ? '#238636' : '#21262d',
+          color: allAnswered && !submitting ? '#fff' : '#8b949e',
+          border: '1px solid #30363d',
+          borderRadius: 6,
+          padding: '6px 14px',
+          fontSize: 13,
+          cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed',
+        }}
+      >
+        {submitting ? 'Submitting…' : 'Submit answers'}
+      </button>
+    </div>
+  );
+}
