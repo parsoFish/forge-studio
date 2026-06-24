@@ -144,6 +144,82 @@ export async function runStructuredTurn<T>(args: {
   return { output, reads };
 }
 
+/**
+ * Run one NON-structured agent turn with write tools — the brain-fix / demo-builder
+ * shape (the agent edits files via its tool stream, there is no structured result).
+ * Streams tool_use to `onToolUse`, throttles `onHeartbeat`, forwards reasoning text
+ * to `onText`, and returns the turn's total cost. Read-only vs write is decided by
+ * the caller's `allowedTools` (the runner verifies the agent's file output itself).
+ */
+export async function runAgentTurn(args: {
+  queryFn: QueryFn;
+  prompt: string;
+  /** Working directory for the agent (e.g. the project repo it edits). */
+  cwd: string;
+  model: string;
+  allowedTools: readonly string[];
+  disallowedTools?: readonly string[];
+  maxTurns?: number;
+  onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
+  onText?: (text: string) => void;
+  label?: string;
+}): Promise<{ costUsd: number }> {
+  const abortController = new AbortController();
+  const options: Record<string, unknown> = {
+    cwd: args.cwd,
+    model: args.model,
+    permissionMode: 'acceptEdits',
+    allowedTools: args.allowedTools,
+    disallowedTools: args.disallowedTools ?? [],
+    maxTurns: args.maxTurns ?? 16,
+    abortController,
+  };
+
+  let costUsd = 0;
+  let toolSeq = 0;
+  let lastHeartbeatMs = 0;
+
+  for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
+    label: args.label ?? 'agent-turn',
+    abortController,
+  })) {
+    if (args.onHeartbeat) {
+      const now = Date.now();
+      if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
+        args.onHeartbeat();
+        lastHeartbeatMs = now;
+      }
+    }
+    if (typeof msg !== 'object' || msg === null) continue;
+    const m = msg as {
+      type?: string;
+      total_cost_usd?: number;
+      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
+    };
+    if (m.type === 'assistant') {
+      if (args.onToolUse) {
+        const details = extractLiveToolDetails(m.message, toolSeq);
+        for (const d of details) args.onToolUse(d);
+        toolSeq += details.length;
+      }
+      if (args.onText) {
+        for (const block of m.message?.content ?? []) {
+          if (block?.type === 'text' && typeof block.text === 'string') {
+            const trimmed = block.text.trim();
+            if (trimmed) args.onText(trimmed);
+          }
+        }
+      }
+      continue;
+    }
+    if (m.type !== 'result') continue;
+    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+    break;
+  }
+  return { costUsd };
+}
+
 /** Parse a ```json fenced block (or the raw text) as JSON; null on any failure. */
 export function parseFencedJson<T>(text: string): T | null {
   if (!text) return null;

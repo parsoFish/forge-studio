@@ -1,0 +1,102 @@
+/*
+ * forge-demo.css — the canonical base stylesheet for an agent-generated project
+ * DEMO.html (Stage B, demo-builder).
+ *
+ * The demo-builder agent INLINES this into the `<style>` block of the
+ * self-contained DEMO.html it generates, then layers project-specific styles on
+ * top. Self-contained-by-inlining is deliberate: the demo is served into a
+ * sandboxed iframe (`sandbox=""`, mirroring PLAN.html), which blocks external
+ * stylesheet loads — so the page must carry everything it needs. Keeping the
+ * Forge palette + base layout here (one source) means every project's demo reads
+ * as Forge even though its content is bespoke.
+ *
+ * Palette is the same dark "forge stage" PLAN.html uses, so demos and plans sit
+ * in one visual language.
+ */
+
+:root {
+  --bg: #0a0e14;
+  --fg: #e6edf3;
+  --muted: #8b949e;
+  --border: #21262d;
+  --accent: #1f6feb;
+  --ok: #2ea043;
+  --warn: #d29922;
+  --code-bg: #0a0f16;
+  --card-bg: #11161d;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 2rem 1.5rem 4rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+  line-height: 1.55;
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+h1 { font-size: 1.75rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+h2 {
+  margin: 2.25rem 0 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent); }
+
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+pre {
+  background: var(--code-bg);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.79rem;
+  line-height: 1.45;
+  margin: 0;
+  border: 1px solid var(--border);
+}
+
+/* A demo "card" — the workhorse container for a checkpoint / capability panel. */
+.demo-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+/* before/after comparison grid */
+.demo-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.demo-compare > div { min-width: 0; }
+
+.chip {
+  display: inline-block;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+.chip strong { color: var(--fg); }
+
+.badge-ok { color: var(--ok); }
+.badge-warn { color: var(--warn); }
+
+/* the demo header band */
+.demo-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+.demo-head .essence { color: var(--muted); font-size: 0.95rem; }
