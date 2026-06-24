@@ -75,7 +75,7 @@ export function LintResolutionPanel({ kbId, onChanged }: { kbId: string; onChang
     const r = await fixAutoKb(kbId);
     setBusy(null);
     if (!r.ok) { setMsg(r.error ?? 'auto-fix failed'); return; }
-    setMsg(`applied ${r.applied.length} auto-fix(es)${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}`);
+    setMsg(`applied ${r.applied.length} auto-fix(es) over ${r.rounds} round${r.rounds === 1 ? '' : 's'}${r.skipped.length ? `, ${r.skipped.length} skipped` : ''}`);
     setFindings(r.remaining); setCounts(r.counts);
     onChanged?.();
   }

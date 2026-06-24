@@ -26,8 +26,7 @@ import yaml from 'js-yaml';
 import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
-import { runBrainLint, resolutionCounts, type Finding } from './brain-lint.ts';
-import { applyAutoFixes } from './brain-fix-auto.ts';
+import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import {
   sendJson,
@@ -700,11 +699,13 @@ export async function handleStudioKbRoutes(
         return true;
       }
       if (op === 'fix-auto') {
-        // Apply every deterministic AUTO-tier fix for this kb, then re-lint.
-        const before = scopeFindingsToKb(runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' }).findings, kbId);
-        const result = applyAutoFixes(ctx.forgeRoot, before.filter((f) => f.resolution === 'auto'));
-        const after = scopeFindingsToKb(runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' }).findings, kbId);
-        sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, remaining: after, counts: resolutionCounts(after) }, origin);
+        // Apply every deterministic AUTO-tier fix for this kb to a FIXED POINT —
+        // one click drains the whole auto tier (re-lints between rounds), no
+        // repeat clicks. Scoped to this kb's findings.
+        const brainDir = `brain/${kbId}`;
+        const inKb = (f: Finding): boolean => !f.file || f.file.includes(brainDir) || f.file.includes(kbId);
+        const result = applyAutoFixesUntilStable(ctx.forgeRoot, { filter: inKb });
+        sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, rounds: result.rounds, remaining: result.remaining, counts: resolutionCounts(result.remaining) }, origin);
         return true;
       }
       if (op === 'fix-agent') {
