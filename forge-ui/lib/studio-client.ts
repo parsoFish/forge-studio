@@ -137,6 +137,9 @@ export type Project = {
   name: string;
   northStar?: string;
   instructions?: string;
+  /** Source of `instructions`: the agent-instruction file (single source) or the
+   *  legacy project.json field. When file-bound the editor is read-only. */
+  instructionsSource?: 'AGENTS.md' | 'CLAUDE.md' | 'project.json';
   demoProcess?: DemoStep[];
   skills: string[];
   kb?: string;

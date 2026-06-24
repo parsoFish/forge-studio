@@ -144,7 +144,8 @@ export function DemoReview({
           title="DEMO"
           style={{
             width: '100%',
-            height: 520,
+            height: 'min(78vh, 900px)',
+            minHeight: 560,
             border: '1px solid var(--line)',
             borderRadius: 8,
             background: '#fff',

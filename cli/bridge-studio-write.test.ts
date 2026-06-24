@@ -338,6 +338,31 @@ test('PUT /api/studio/projects/write-project updates skills field', async () => 
   assert.deepEqual(written['skills'], ['tdd-workflow', 'backend-patterns', 'coding-standards']);
 });
 
+// AGENTS.md single-source guard (Stage A): when an AGENTS.md exists, the editor
+// save must NOT write a divergent `instructions` copy into project.json — the
+// file is the single source. Other fields still save.
+test('PUT /api/studio/projects/write-project does NOT overwrite instructions when an AGENTS.md exists', async () => {
+  writeFileSync(join(projectDir, '.forge', 'project.json'), makeProjectJson());
+  const agentsPath = join(projectDir, 'AGENTS.md');
+  writeFileSync(agentsPath, '# AGENTS\n\nThe real single source of instructions.');
+  try {
+    const res = await putJson(`${bridgeUrl}/api/studio/projects/write-project`, {
+      northStar: 'Edited north star.',
+      instructions: 'DIVERGENT COPY THAT MUST BE DROPPED',
+    });
+    assert.equal(res.status, 200);
+    const written = JSON.parse(readFileSync(join(projectDir, '.forge', 'project.json'), 'utf8')) as Record<string, unknown>;
+    // The unrelated field saved…
+    assert.equal(written['northStar'], 'Edited north star.');
+    // …but the instructions field was NOT overwritten with the divergent copy
+    // (it keeps whatever was there; the AGENTS.md remains the source of truth).
+    assert.notEqual(written['instructions'], 'DIVERGENT COPY THAT MUST BE DROPPED');
+    assert.equal(written['instructions'], 'Always write tests first.');
+  } finally {
+    rmSync(agentsPath, { force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // PUT /api/studio/projects/:id — unknown id → 404
 // ---------------------------------------------------------------------------

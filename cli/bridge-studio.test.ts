@@ -278,6 +278,18 @@ before(async () => {
   // -- projects/bare-project/ exists but has no .forge/project.json --
   mkdirSync(join(forgeRoot, 'projects', 'bare-project'), { recursive: true });
 
+  // -- projects/agents-project/ has project.json AND an AGENTS.md — the AGENTS.md
+  //    is the single source of instructions (Stage A), overriding project.json. --
+  mkdirSync(join(forgeRoot, 'projects', 'agents-project', '.forge'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'projects', 'agents-project', '.forge', 'project.json'),
+    JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'stale json instructions' }),
+  );
+  writeFileSync(
+    join(forgeRoot, 'projects', 'agents-project', 'AGENTS.md'),
+    '# Real AGENTS\n\nBuild: npm run build',
+  );
+
   // -- brain/forge-dev/kb.yaml + themes/ --
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', 'themes'), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), makeKbYaml('forge-dev', 'Forge Engineering'));
@@ -465,6 +477,26 @@ test('GET /api/studio/projects tolerates project without project.json', async ()
   assert.ok(bare, 'bare-project must appear in list');
   assert.equal(bare!.instructions, undefined, 'instructions must be absent when no project.json');
   assert.equal(bare!.skills, undefined, 'skills must be absent when no project.json');
+});
+
+test('GET /api/studio/projects sources instructions from AGENTS.md (single source) over project.json', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/projects`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    projects: Array<{ id: string; instructions?: string; instructionsSource?: string }>;
+  };
+  const proj = body.projects.find((p) => p.id === 'agents-project');
+  assert.ok(proj, 'agents-project must appear in list');
+  assert.match(proj!.instructions ?? '', /Real AGENTS/, 'instructions come from AGENTS.md, not project.json');
+  assert.doesNotMatch(proj!.instructions ?? '', /stale json/, 'the stale project.json instructions must be overridden');
+  assert.equal(proj!.instructionsSource, 'AGENTS.md');
+});
+
+test('GET /api/studio/projects marks project.json instructions as the legacy source when no AGENTS.md', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const body = (await res.json()) as { projects: Array<{ id: string; instructionsSource?: string }> };
+  const proj = body.projects.find((p) => p.id === 'test-project');
+  assert.equal(proj!.instructionsSource, 'project.json');
 });
 
 // ---------------------------------------------------------------------------

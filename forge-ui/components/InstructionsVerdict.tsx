@@ -120,7 +120,7 @@ export function InstructionsVerdict({
       <div
         data-section="instructions-draft"
         style={{
-          maxHeight: 420,
+          maxHeight: 'min(64vh, 760px)',
           overflowY: 'auto',
           background: '#010409',
           border: '1px solid #30363d',

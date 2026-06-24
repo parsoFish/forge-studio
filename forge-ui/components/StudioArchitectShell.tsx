@@ -18,6 +18,7 @@ export function StudioArchitectShell({
   title,
   idLabel,
   mainData,
+  maxWidth = 1100,
   children,
 }: {
   dataPage: string;
@@ -25,6 +26,9 @@ export function StudioArchitectShell({
   title: string;
   idLabel?: string;
   mainData?: Record<string, string>;
+  /** Content column cap (px). Wider surfaces (the demo iframe, the AGENTS.md
+   *  draft) pass a larger value so they use the screen rather than a 1100px slot. */
+  maxWidth?: number;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -36,7 +40,7 @@ export function StudioArchitectShell({
     >
       <StudioNav />
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 28px 56px' }}>
+      <div style={{ maxWidth, margin: '0 auto', padding: '0 28px 56px' }}>
         {/* Breadcrumb — keeps the operator inside Studio chrome (no /dashboard link). */}
         <div
           style={{

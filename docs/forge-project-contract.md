@@ -340,16 +340,20 @@ The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
 response, rendered page screenshot, plan output) — not a table of test names.
 
-**Demo deliverable — agent-built HTML, not a fixed JSON schema (Stage B).** The
-demo's *deliverable form* is a rich, self-contained **`.forge/demo/DEMO.html`**
-the Studio **demo-builder** authors per project (Forge-styled, grounded in real
-project output), together with the in-repo machinery under `.forge/demo/` that
-reproduces it. The operator builds it interactively — guidance prompt + the
-`demoProcess` above → generate → review the rendered page → feedback → lock for
-reproducibility. This replaces the rigid `demo.json` contract (whose fixed shape
-was a recurring wedge): the demo is bespoke HTML, the `demoProcess` is still the
-declaration of *what* to capture/verify, and the locked machinery is what later
-cycles re-render.
+**Demo deliverable — an agent-built, per-initiative demo skill, not a fixed JSON
+schema (Stage B).** The Studio **demo-builder** authors the project's reusable
+**demo-generation skill** at `.forge/skills/demo-design/SKILL.md` (the same slug
+the DEMO-SKILL clause checks) — the machinery that, for each completed
+**initiative**, renders a rich, self-contained, Forge-styled HTML demo of *that
+initiative's changes* (before/after of its diff, with real captured output). It is
+NOT a generic current-state showcase: the unit of a demo is "what this initiative
+changed". The operator builds the skill interactively — look-and-feel prompt + the
+`demoProcess` above → the agent authors the skill and renders a real **sample**
+(`.forge/demo/DEMO.html`) from a representative recent change → review → feedback →
+lock for reproducibility. This replaces the rigid `demo.json` contract (whose fixed
+shape was a recurring wedge): demos are bespoke HTML the project's own skill emits,
+`demoProcess` is still the declaration of *what* to capture/verify, and the locked
+skill is what later cycles run per merged initiative.
 
 ---
 

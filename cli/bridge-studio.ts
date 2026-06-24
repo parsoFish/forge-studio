@@ -42,6 +42,7 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
+import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
 import { getPaths } from '../orchestrator/queue.ts';
@@ -249,6 +250,10 @@ type ProjectWithMeta = {
   northStar?: string;
   kb?: string;
   instructions?: string;
+  /** Where `instructions` came from: the agent-instruction file (single source —
+   *  `AGENTS.md`, or legacy `CLAUDE.md`) or the legacy project.json field. Drives
+   *  the read-only (file-bound) vs editable (json) UI binding. */
+  instructionsSource?: 'AGENTS.md' | 'CLAUDE.md' | 'project.json';
   skills?: string[];
   demoProcess?: Array<{ kind: string; text: string }>;
 };
@@ -264,6 +269,15 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 
   return discovered.map((ref) => {
     const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
+    // Instructions are single-sourced from the project's AGENTS.md (Stage A):
+    // when it exists, its content IS the instructions and the UI binds read-only
+    // to it. Read it BEFORE the no-config early-return — an AGENTS.md can precede
+    // a full `.forge/project.json` (so a half-onboarded project still surfaces it).
+    const agentFile = readAgentInstructionsFile(ref.absPath);
+    if (agentFile) {
+      result.instructions = agentFile.content;
+      result.instructionsSource = agentFile.file as 'AGENTS.md' | 'CLAUDE.md';
+    }
     if (!ref.hasConfig) return result;
     const projectJsonPath = join(ref.absPath, '.forge', 'project.json');
     try {
@@ -271,7 +285,12 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
       if (typeof raw.kb === 'string') result.kb = raw.kb;
-      if (typeof raw.instructions === 'string') result.instructions = raw.instructions;
+      // Only fall back to the legacy project.json `instructions` field when no
+      // agent-instruction file exists (the agent file always wins — single source).
+      if (!agentFile && typeof raw.instructions === 'string') {
+        result.instructions = raw.instructions;
+        result.instructionsSource = 'project.json';
+      }
       if (Array.isArray(raw.skills) && raw.skills.every((s) => typeof s === 'string')) {
         result.skills = raw.skills as string[];
       }

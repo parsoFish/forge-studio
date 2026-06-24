@@ -76,6 +76,7 @@ export default function InstructionsInterviewPage({
       ready={loaded}
       title="instructions"
       idLabel={sessionId}
+      maxWidth={1320}
       mainData={{ 'data-session-id': sessionId, 'data-instructions-phase': session?.phase ?? '' }}
     >
       {!loaded ? (

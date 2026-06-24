@@ -50,6 +50,10 @@ export const DEMO_BUILDER_MODEL = modelForSpec(demoBuilderAgentSpec);
 // ---------------------------------------------------------------------------
 
 export const DEMO_REL_DIR = '.forge/demo';
+/** The reusable per-initiative-change demo generator the agent authors. Same slug
+ *  + path the existing demo-design machinery / preflight DEMO-SKILL clause use. */
+export const DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md';
+/** The reviewable sample the generator renders from a representative real change. */
 export const DEMO_HTML_REL_PATH = '.forge/demo/DEMO.html';
 export const DEMO_LOCK_REL_PATH = '.forge/demo/demo.lock.json';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
@@ -189,25 +193,29 @@ async function runGenerateStep(args: {
   const prompt = [
     skill,
     '',
-    '## Your task this turn: generate the demo',
+    '## Your task this turn: build the demo skill + render a sample',
     '',
     `Project: ${status.project}`,
     `Project repo (your working directory): ${status.project_repo_path}`,
     '',
     'Operator look-and-feel guidance:',
-    status.prompt || '_(none — choose a clean, faithful showcase)_',
+    status.prompt || '_(none — choose a clean, faithful before/after treatment)_',
     '',
-    'Configured demo process (capture / verify / present steps):',
+    'Configured demo process (capture / verify / present steps to bake into the skill):',
     demoProcess,
-    ...(feedback ? ['', 'Operator feedback on the previous demo (apply it):', feedback] : []),
+    ...(feedback ? ['', 'Operator feedback on the previous sample (apply it):', feedback] : []),
     '',
-    '## Forge demo base stylesheet — inline this verbatim into DEMO.html, then layer project styles',
+    '## Forge demo base stylesheet — the demo skill must inline this verbatim into the HTML it generates',
     '```css',
     baseCss,
     '```',
     '',
-    `Write the machinery under ${DEMO_REL_DIR}/ and the self-contained page to ${DEMO_HTML_REL_PATH}. ` +
-      'Ground every result in REAL output (run the project). Stop when DEMO.html exists.',
+    'Deliver BOTH:',
+    `1. ${DEMO_SKILL_REL_PATH} — the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES.`,
+    `2. ${DEMO_HTML_REL_PATH} — a real sample produced by running that generator against a representative recent change ` +
+      '(use `git log`/`git diff` to pick one; render a genuine before/after with REAL output on both sides — never fabricate).',
+    '',
+    `Scope the demo to what a change introduced, not the whole project. Stop when both ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
   ].join('\n');
 
   const { costUsd } = await runAgentTurn({
@@ -225,21 +233,26 @@ async function runGenerateStep(args: {
   });
 
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-  if (!existsSync(demoPath)) {
+  const skillPath = join(status.project_repo_path, DEMO_SKILL_REL_PATH);
+  const missing = [
+    !existsSync(skillPath) ? DEMO_SKILL_REL_PATH : null,
+    !existsSync(demoPath) ? DEMO_HTML_REL_PATH : null,
+  ].filter(Boolean);
+  if (missing.length > 0) {
     throw new Error(
-      `demo-builder runner: the agent turn ended without producing ${DEMO_HTML_REL_PATH} — re-run to retry, or refine the guidance / feedback.`,
+      `demo-builder runner: the agent turn ended without producing ${missing.join(' + ')} — re-run to retry, or refine the guidance / feedback.`,
     );
   }
 
   writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [], output_refs: [demoPath], cost_usd: costUsd,
+    event_type: 'log', input_refs: [], output_refs: [skillPath, demoPath], cost_usd: costUsd,
     message: `demo-generated (iteration ${status.iteration}, awaiting operator review)`,
     metadata: { session_id: input.sessionId, iteration: status.iteration },
   });
 
-  return { phase: 'awaiting-review', wrote: [demoPath], demoPath };
+  return { phase: 'awaiting-review', wrote: [skillPath, demoPath], demoPath };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,12 +273,16 @@ function runLockStep(args: {
       `demo-builder runner: cannot lock — no ${DEMO_HTML_REL_PATH} in the repo. Generate a demo before locking.`,
     );
   }
+  const skillPath = join(status.project_repo_path, DEMO_SKILL_REL_PATH);
   const lockPath = join(status.project_repo_path, DEMO_LOCK_REL_PATH);
   const lock = {
     session_id: status.session_id,
     project: status.project,
     prompt: status.prompt,
     iterations: status.iteration,
+    // The locked, reproducible generator — future cycles run it per completed
+    // initiative to render a before/after demo of that initiative's changes.
+    demo_skill: existsSync(skillPath) ? DEMO_SKILL_REL_PATH : null,
     demo_html: DEMO_HTML_REL_PATH,
     locked_at: status.updated_at,
   };
@@ -296,7 +313,7 @@ function describeDemoProcess(projectRepoPath: string): string {
   } catch {
     steps = undefined;
   }
-  if (!steps || steps.length === 0) return '_(no demo process configured — showcase the project\'s headline capability)_';
+  if (!steps || steps.length === 0) return '_(no demo process configured — design the skill around a representative initiative\'s before/after changes; ground the sample in a real recent change)_';
   return steps.map((s, i) => `${i + 1}. [${s.kind}] ${s.text}`).join('\n');
 }
 

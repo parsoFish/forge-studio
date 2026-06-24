@@ -31,7 +31,7 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
-import { validateProjectConfig } from '../orchestrator/project-config.ts';
+import { validateProjectConfig, readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
@@ -425,7 +425,14 @@ export async function handleStudioWriteRoutes(
       const merged: Record<string, unknown> = { ...existingRaw };
       if (typeof b['name'] === 'string') merged['name'] = b['name'];
       if (typeof b['northStar'] === 'string') merged['northStar'] = b['northStar'];
-      if (typeof b['instructions'] === 'string') merged['instructions'] = b['instructions'];
+      // AGENTS.md single-source (Stage A): when the project has an agent-instruction
+      // file (AGENTS.md / CLAUDE.md), that file IS the instructions — never write a
+      // divergent copy into project.json from the editor save (the UI binds the
+      // panel read-only to AGENTS.md, but guard here too so any caller is safe).
+      const hasAgentFile = readAgentInstructionsFile(projectRoot) !== null;
+      if (!hasAgentFile && typeof b['instructions'] === 'string') {
+        merged['instructions'] = b['instructions'];
+      }
       if (Array.isArray(b['demoProcess'])) merged['demoProcess'] = b['demoProcess'];
       if (Array.isArray(b['skills'])) merged['skills'] = b['skills'];
       // kb can be string or null

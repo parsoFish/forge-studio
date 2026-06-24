@@ -16,6 +16,7 @@ import {
   demoBuilderAgentSpec,
   DEMO_BUILDER_MODEL,
   DEMO_HTML_REL_PATH,
+  DEMO_SKILL_REL_PATH,
   DEMO_LOCK_REL_PATH,
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
@@ -24,16 +25,31 @@ import { createLogger } from './logging.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 
-/** A queryFn that simulates the agent writing DEMO.html into its cwd (the repo). */
+/** A queryFn simulating the agent writing BOTH the reusable demo-design skill and
+ *  the sample DEMO.html into its cwd (the project repo). */
 function makeWritingQueryFn(capture?: (prompt: string) => void): QueryFn {
   return ({ prompt, options }) => {
     capture?.(prompt);
     const cwd = (options?.cwd as string) ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
-      const demoDir = join(cwd, '.forge', 'demo');
-      mkdirSync(demoDir, { recursive: true });
-      writeFileSync(join(demoDir, 'DEMO.html'), '<!DOCTYPE html><html><body>demo</body></html>');
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
+      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design\n\nRender before/after HTML of an initiative\'s changes.');
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>before/after sample</body></html>');
       yield { type: 'result', total_cost_usd: 0.05 };
+    }
+    return gen();
+  };
+}
+
+/** A queryFn that writes ONLY the sample (missing the reusable skill). */
+function makeSampleOnlyQueryFn(): QueryFn {
+  return ({ options }) => {
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
+      yield { type: 'result', total_cost_usd: 0 };
     }
     return gen();
   };
@@ -84,22 +100,31 @@ function setup(overrides?: Partial<DemoBuilderStatus>): {
 
 const logger = (logsRoot: string, sid: string) => createLogger(`_demo-${sid}`, logsRoot);
 
-test('generating → agent produces DEMO.html → awaiting-review', async () => {
+test('generating → agent produces the demo skill + sample → awaiting-review', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'awaiting-review');
-  assert.ok(existsSync(join(repoPath, DEMO_HTML_REL_PATH)));
+  assert.ok(existsSync(join(repoPath, DEMO_SKILL_REL_PATH)), 'reusable demo-design skill authored');
+  assert.ok(existsSync(join(repoPath, DEMO_HTML_REL_PATH)), 'sample DEMO.html rendered');
   assert.equal(result.demoPath, join(repoPath, DEMO_HTML_REL_PATH));
   assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'awaiting-review');
 });
 
-test('generating but no DEMO.html produced → throws a clear, recoverable error', async () => {
+test('generating but neither file produced → throws a clear, recoverable error', async () => {
   const { projectRoot, logsRoot, sessionId } = setup();
   await assert.rejects(
     () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
     /without producing .*DEMO\.html/,
+  );
+});
+
+test('generating with the sample but NOT the reusable demo skill → throws (skill is required)', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  await assert.rejects(
+    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeSampleOnlyQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    /demo-design\/SKILL\.md/,
   );
 });
 
@@ -114,12 +139,19 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   assert.match(captured, /dark and minimal/, 'look-and-feel guidance injected');
   assert.match(captured, /drop the footer/, 'feedback injected');
   assert.match(captured, /--bg: #0a0e14/, 'forge demo base CSS inlined into the prompt');
+  // Re-orientation (Fix 3): the task is a reusable per-initiative-change demo
+  // skill + a real sample, NOT a generic current-state showcase.
+  assert.match(captured, /demo-design\/SKILL\.md/, 'directs authoring the reusable demo skill');
+  assert.match(captured, /INITIATIVE'S CHANGES|before\/after/i, 'scopes the demo to an initiative\'s changes');
+  assert.match(captured, /git (log|diff)/i, 'directs sampling from a real recent change');
 });
 
 test('locking → writes demo.lock.json + status locked', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'locking', iteration: 3 });
-  // A prior generate left DEMO.html in the repo.
+  // A prior generate left the reusable skill + the sample in the repo.
   mkdirSync(join(repoPath, '.forge', 'demo'), { recursive: true });
+  mkdirSync(join(repoPath, '.forge', 'skills', 'demo-design'), { recursive: true });
+  writeFileSync(join(repoPath, DEMO_SKILL_REL_PATH), '# demo-design');
   writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>demo</body></html>');
 
   const result = await runDemoBuilderTurn({
@@ -131,6 +163,7 @@ test('locking → writes demo.lock.json + status locked', async () => {
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
   assert.equal(lock.iterations, 3);
   assert.equal(lock.demo_html, DEMO_HTML_REL_PATH);
+  assert.equal(lock.demo_skill, DEMO_SKILL_REL_PATH, 'lock records the reusable generator');
   assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locked');
 });
 

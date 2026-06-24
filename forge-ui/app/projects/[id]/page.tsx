@@ -46,6 +46,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [instructionsSource, setInstructionsSource] = useState<'AGENTS.md' | 'CLAUDE.md' | 'project.json' | undefined>(undefined);
   const [skills, setSkills] = useState<string[]>([]);
   const [kb, setKb] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -66,6 +67,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         setName(p.name ?? '');
         setNorthStar(p.northStar ?? '');
         setInstructions(p.instructions ?? '');
+        setInstructionsSource(p.instructionsSource);
         if (Array.isArray(p.demoProcess)) {
           setDemoSteps(p.demoProcess);
         } else {
@@ -233,7 +235,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
             <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
-            <Instructions project={id} value={instructions} onChange={(v) => { setInstructions(v); markDirty(); }} />
+            <Instructions project={id} value={instructions} source={instructionsSource} onChange={(v) => { setInstructions(v); markDirty(); }} />
             <DemoTimeline project={id} steps={demoSteps} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
           </div>

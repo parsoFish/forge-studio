@@ -95,6 +95,7 @@ export default function DemoBuilderPage({
       ready={loaded}
       title="demo"
       idLabel={sessionId}
+      maxWidth={1480}
       mainData={{ 'data-session-id': sessionId, 'data-demo-phase': session?.phase ?? '' }}
     >
       {!loaded ? (
