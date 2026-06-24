@@ -52,7 +52,8 @@ export type BridgeMessage =
   | { type: 'event'; cycleId: string; event: EventLogEntry }
   | { type: 'cycle-list-changed' }
   | { type: 'architect-list-changed' }
-  | { type: 'instructions-list-changed' };
+  | { type: 'instructions-list-changed' }
+  | { type: 'demo-list-changed' };
 
 // `daemon-stalled` (Feature #8): the bridge is reachable but the scheduler
 // daemon's heartbeats have gone stale past a generous threshold — the daemon
@@ -569,6 +570,72 @@ export async function instructionsVerdict(input: {
   feedback?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/instructions/verdict', input);
+}
+
+// ---- Demo-builder (Stage B) ----------------------------------------------
+//
+// Mirrors the instructions client: an operator-driven, file-checkpointed runner
+// that authors a managed project's DEMO.html (generate → review → lock). The
+// DEMO.html lives in the project repo (.forge/demo/), served via `demoUrl`.
+
+export type DemoBuilderPhase =
+  | 'generating'
+  | 'awaiting-review'
+  | 'locking'
+  | 'locked'
+  | 'abandoned';
+
+export type DemoSessionSummary = {
+  sessionId: string;
+  project: string;
+  projectRepoPath: string;
+  phase: DemoBuilderPhase;
+  iteration: number;
+  prompt: string;
+  /** Bridge-relative URL to the generated DEMO.html, or null until generated. */
+  demoUrl: string | null;
+  /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
+   *  Use this to detect a stalled runner. */
+  staleMs?: number;
+};
+
+export async function listDemoSessions(): Promise<DemoSessionSummary[]> {
+  const body = await bridgeGet<{ sessions: DemoSessionSummary[] }>(
+    '/api/demo-builder/sessions',
+    { sessions: [] },
+  );
+  return body.sessions ?? [];
+}
+
+export async function startDemoBuilder(input: {
+  project: string;
+  prompt: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/demo-builder/start', input);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+}
+
+export async function demoBuilderFeedback(input: {
+  project: string;
+  sessionId: string;
+  feedback: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/demo-builder/feedback', input);
+}
+
+export async function demoBuilderLock(input: {
+  project: string;
+  sessionId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/demo-builder/lock', input);
+}
+
+export async function demoBuilderAbandon(input: {
+  project: string;
+  sessionId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/demo-builder/abandon', input);
 }
 
 // ---- Run + gate write endpoints (M3-4) ----------------------------------

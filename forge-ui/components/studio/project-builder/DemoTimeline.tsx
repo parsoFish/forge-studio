@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { DemoStep } from '@/lib/studio-client';
+import { startDemoBuilder } from '@/lib/bridge-client';
 
 const KIND_META: Record<string, { icon: string; label: string }> = {
   capture: { icon: '📸', label: 'Capture' },
@@ -29,10 +31,29 @@ function attachUids(steps: DemoStep[]): StepWithUid[] {
   return steps.map((s) => ({ ...s, uid: nextUid() }));
 }
 
-export function DemoTimeline({ steps, onChange }: { steps: DemoStep[]; onChange: (s: DemoStep[]) => void }) {
+export function DemoTimeline({ project, steps, onChange }: { project: string; steps: DemoStep[]; onChange: (s: DemoStep[]) => void }) {
+  const router = useRouter();
   const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const prevStepsRef = useRef(steps);
+
+  async function onLaunchDemoBuilder(): Promise<void> {
+    if (launching) return;
+    setLaunchError(null);
+    setLaunching(true);
+    try {
+      const res = await startDemoBuilder({ project, prompt: '' });
+      if (!res.ok || !res.sessionId) {
+        setLaunchError(res.error ?? 'failed to start the demo agent');
+        return;
+      }
+      router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+    } finally {
+      setLaunching(false);
+    }
+  }
 
   // Sync incoming steps → internal when the parent replaces the array
   // (e.g. on initial data load). Don't re-sync on every render — only when
@@ -75,9 +96,29 @@ export function DemoTimeline({ steps, onChange }: { steps: DemoStep[]; onChange:
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Demo Process <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
       </div>
+
+      <div
+        data-section="demo-source"
+        style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 10 }}
+      >
+        The demo is now an agent-built, reproducible <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>DEMO.html</code> — the demo agent generates it from the steps below, then you review and lock it in.
+      </div>
+
       <div className="panel">
         <div className="panel-head"><span>Acceptable proof-of-work for this project</span></div>
         <div className="panel-body">
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-action="launch-demo-builder"
+            onClick={() => void onLaunchDemoBuilder()}
+            disabled={launching}
+            style={{ alignSelf: 'flex-start', marginBottom: 14, opacity: launching ? 0.6 : 1 }}
+          >
+            {launching ? 'Starting…' : '✦ Build the demo with the agent'}
+          </button>
+          {launchError && <div style={{ fontSize: 11.5, color: 'var(--red, #f85149)', marginBottom: 14 }}>{launchError}</div>}
+
           <div style={{ fontSize: 12, color: 'var(--amber)', fontStyle: 'italic', padding: '7px 12px', background: 'rgba(251,191,36,.06)', border: '1px solid rgba(251,191,36,.2)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
             ⚠ Demos show the ACTUAL resource — a passing-test table is not a demo.
           </div>

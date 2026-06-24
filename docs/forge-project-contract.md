@@ -340,6 +340,17 @@ The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
 response, rendered page screenshot, plan output) — not a table of test names.
 
+**Demo deliverable — agent-built HTML, not a fixed JSON schema (Stage B).** The
+demo's *deliverable form* is a rich, self-contained **`.forge/demo/DEMO.html`**
+the Studio **demo-builder** authors per project (Forge-styled, grounded in real
+project output), together with the in-repo machinery under `.forge/demo/` that
+reproduces it. The operator builds it interactively — guidance prompt + the
+`demoProcess` above → generate → review the rendered page → feedback → lock for
+reproducibility. This replaces the rigid `demo.json` contract (whose fixed shape
+was a recurring wedge): the demo is bespoke HTML, the `demoProcess` is still the
+declaration of *what* to capture/verify, and the locked machinery is what later
+cycles re-render.
+
 ---
 
 ### DEMO-SKILL — The generated demo-design machinery exists *(advisory)*

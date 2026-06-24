@@ -89,6 +89,11 @@ import {
   type InstructionsStatus,
 } from '../orchestrator/instructions-runner.ts';
 import {
+  demoSessionDir,
+  DEMO_HTML_REL_PATH,
+  type DemoBuilderStatus,
+} from '../orchestrator/demo-builder-runner.ts';
+import {
   readSessionStatus,
   writeSessionStatus,
   type InterviewQuestion,
@@ -124,7 +129,10 @@ type WsOutbound =
   | { type: 'architect-list-changed' }
   // Stage A — an instructions-creator session changed (started, new questions,
   // draft ready, committed). The UI re-fetches `/api/instructions/sessions`.
-  | { type: 'instructions-list-changed' };
+  | { type: 'instructions-list-changed' }
+  // Stage B — a demo-builder session changed (started, regenerated, awaiting
+  // review, locked, abandoned). The UI re-fetches `/api/demo-builder/sessions`.
+  | { type: 'demo-list-changed' };
 
 export type BridgeOptions = {
   forgeRoot: string;
@@ -216,6 +224,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const queueWatchers: FSWatcher[] = [];
   const architectWatchers: FSWatcher[] = [];
   const instructionsWatchers: FSWatcher[] = [];
+  const demoWatchers: FSWatcher[] = [];
 
   const broadcast = (msg: WsOutbound): void => {
     const payload = JSON.stringify(msg);
@@ -450,6 +459,34 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     }
   };
 
+  // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
+  // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
+  // Mirrors `watchInstructions`.
+  const watchDemo = (): void => {
+    if (!existsSync(projectsRoot)) return;
+    let projects: string[];
+    try { projects = readdirSync(projectsRoot); } catch { return; }
+    for (const name of projects) {
+      const demoDir = join(projectsRoot, name, '_demo');
+      if (!existsSync(demoDir)) continue;
+      try {
+        const w = fsWatch(demoDir, { persistent: false, recursive: true }, () => {
+          broadcast({ type: 'demo-list-changed' });
+        });
+        demoWatchers.push(w);
+      } catch {
+        // recursive watch unsupported — fall back to a non-recursive watch on
+        // the _demo dir (catches new sessions; the UI re-fetches anyway).
+        try {
+          const w = fsWatch(demoDir, { persistent: false }, () => {
+            broadcast({ type: 'demo-list-changed' });
+          });
+          demoWatchers.push(w);
+        } catch { /* fs.watch unavailable */ }
+      }
+    }
+  };
+
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
       identity,
@@ -468,6 +505,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // Stage A — live-tail an instructions session's event log. The runner
       // writes to `_logs/_instructions-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
       ensureInstructionsTail: (sessionId: string) => ensureTailFor(`_instructions-${sessionId}`),
+      broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
+      // Stage B — live-tail a demo-builder session's event log. The runner
+      // writes to `_logs/_demo-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
+      ensureDemoTail: (sessionId: string) => ensureTailFor(`_demo-${sessionId}`),
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -515,11 +556,13 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   watchQueue();
   watchArchitect();
   watchInstructions();
+  watchDemo();
 
   const close = async (): Promise<void> => {
     for (const w of queueWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of architectWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of instructionsWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const w of demoWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const t of tails.values()) { if (t.timer) clearInterval(t.timer); }
     tails.clear();
     for (const ws of clients) { try { ws.close(); } catch { /* ignore */ } }
@@ -570,6 +613,11 @@ type HttpContext = {
   broadcastInstructionsChanged: () => void;
   /** Start (idempotently) live-tailing an instructions session's event log. */
   ensureInstructionsTail: (sessionId: string) => void;
+  /** Broadcast a `demo-list-changed` WS message (fsWatch may miss same-tick
+   *  writes; the routes call this after they mutate session state). */
+  broadcastDemoChanged: () => void;
+  /** Start (idempotently) live-tailing a demo-builder session's event log. */
+  ensureDemoTail: (sessionId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -823,6 +871,8 @@ async function handleHttp(
   if (await handleArchitect(req, res, ctx, url, method)) return;
   // ---- Instructions-creator (Stage A) -----------------------------------
   if (await handleInstructions(req, res, ctx, url, method)) return;
+  // ---- Demo-builder (Stage B) -------------------------------------------
+  if (await handleDemoBuilder(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
@@ -1464,6 +1514,260 @@ async function handleInstructions(
       }
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---- Demo-builder routes (Stage B) ----------------------------------------
+//
+// Mirrors the instructions routes: an operator-driven, file-checkpointed runner
+// that authors a managed project's DEMO.html (generate → review → lock). Unlike
+// instructions (whose output lives in the session dir), the demo-builder agent
+// writes DEMO.html into the PROJECT REPO under .forge/demo/ — so the file route
+// serves from `project_repo_path`, not the session dir. The bridge spawns one
+// CLI turn per operator action.
+
+/** Spawn one demo-builder-runner turn as a detached child. Mirrors
+ *  `spawnInstructionsTurn` exactly; honours the same `FORGE_ARCHITECT_NO_SPAWN`
+ *  env guard the harness sets. Stderr is captured to
+ *  `_logs/_demo-<sid>/stderr.log` for diagnosability. */
+function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  try {
+    const logDir = join(forgeRoot, '_logs', `_demo-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(
+      process.execPath,
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'demo-builder', 'run', sessionId, '--project', project],
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
+    );
+    closeSync(stderrFd);
+    proc.unref();
+  } catch { /* best-effort */ }
+}
+
+/** Discover every demo-builder session under `projects/<name>/_demo/<sid>/`
+ *  — used by the bridge's `GET /api/demo-builder/sessions`. Best-effort; never
+ *  throws on a malformed dir. Mirrors `listInstructionsSessions`. */
+function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
+  const out: DemoBuilderStatus[] = [];
+  if (!existsSync(projectsRoot)) return out;
+  let projects: string[];
+  try { projects = readdirSync(projectsRoot); } catch { return out; }
+  for (const project of projects) {
+    const demoDir = join(projectsRoot, project, '_demo');
+    if (!existsSync(demoDir)) continue;
+    let sids: string[];
+    try {
+      sids = readdirSync(demoDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch { continue; }
+    for (const sid of sids) {
+      if (sid.startsWith('_')) continue; // skip _archived/
+      const status = readSessionStatus<DemoBuilderStatus>(demoSessionDir(join(projectsRoot, project), sid));
+      if (status) out.push(status);
+    }
+  }
+  return out;
+}
+
+/** Returns true if the request was a demo-builder route (and was handled). */
+async function handleDemoBuilder(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  const origin = allowedOrigin(req);
+
+  // GET /api/demo-builder/sessions — list every session with its current state.
+  if (method === 'GET' && url === '/api/demo-builder/sessions') {
+    const statuses = listDemoSessions(ctx.projectsRoot);
+    // Live-tail each non-terminal session's log so the dedicated screen's hex
+    // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
+    for (const s of statuses) {
+      if (s.phase !== 'locked' && s.phase !== 'abandoned') ctx.ensureDemoTail(s.session_id);
+    }
+    const sessions = statuses.map((s) => {
+      // DEMO.html lives in the PROJECT REPO under .forge/demo/, not the session dir.
+      const demoUrl = existsSync(join(s.project_repo_path, DEMO_HTML_REL_PATH))
+        ? `/api/demo-builder/demo/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}`
+        : null;
+
+      // staleMs: ms since the last sign of life — heartbeat mtime if present,
+      // else the status.json updated_at timestamp.
+      const heartbeatPath = join(ctx.logsRoot, `_demo-${s.session_id}`, '.heartbeat');
+      let staleMs: number;
+      if (existsSync(heartbeatPath)) {
+        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
+      } else {
+        const parsedAt = Date.parse(s.updated_at);
+        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
+      }
+
+      return {
+        sessionId: s.session_id,
+        project: s.project,
+        projectRepoPath: s.project_repo_path,
+        phase: s.phase,
+        iteration: s.iteration,
+        prompt: s.prompt,
+        demoUrl,
+        staleMs,
+      };
+    });
+    sendJson(res, 200, { sessions }, origin);
+    return true;
+  }
+
+  // GET /api/demo-builder/demo/<project>/<sid> — serve the session's DEMO.html
+  // from the PROJECT REPO (.forge/demo/DEMO.html), with a path-escape guard.
+  // Reads status.json to resolve project_repo_path. (Unlike the instructions
+  // /file route, the served file lives in the repo, NOT the session dir.)
+  if (method === 'GET' && url.startsWith('/api/demo-builder/demo/')) {
+    const rest = url.slice('/api/demo-builder/demo/'.length).split('/').map(decodeURIComponent);
+    const [project, sessionId] = rest;
+    if (!project || !sessionId) {
+      sendJson(res, 400, { error: 'expected /api/demo-builder/demo/<project>/<sid>' }, origin);
+      return true;
+    }
+    const status = readSessionStatus<DemoBuilderStatus>(
+      demoSessionDir(join(ctx.projectsRoot, project), sessionId),
+    );
+    if (!status) {
+      sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
+      return true;
+    }
+    const base = join(status.project_repo_path, '.forge', 'demo') + sep;
+    const requested = join(status.project_repo_path, DEMO_HTML_REL_PATH);
+    if (!requested.startsWith(base)) {
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
+      return true;
+    }
+    if (!existsSync(requested)) {
+      sendJson(res, 404, { error: 'DEMO.html not found', project, sessionId }, origin);
+      return true;
+    }
+    try {
+      res.writeHead(200, {
+        'content-type': contentTypeFor('DEMO.html'),
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
+      });
+      res.end(readFileSync(requested, 'utf8'));
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/demo-builder/start {project, prompt, projectRepoPath?} — create a
+  // new session and kick off the first generate turn.
+  if (method === 'POST' && url === '/api/demo-builder/start') {
+    try {
+      const body = (await readJson(req)) as { project?: string; prompt?: string; projectRepoPath?: string };
+      if (!body.project) {
+        sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      const sessionId = newArchitectSessionId();
+      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), sessionId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'prompt.md'), body.prompt ?? '');
+      writeSessionStatus<DemoBuilderStatus>(dir, {
+        session_id: sessionId,
+        project: body.project,
+        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
+        phase: 'generating',
+        iteration: 1,
+        prompt: body.prompt ?? '',
+        updated_at: new Date().toISOString(),
+      });
+      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, sessionId);
+      ctx.broadcastDemoChanged();
+      sendJson(res, 200, { ok: true, sessionId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/demo-builder/feedback {project, sessionId, feedback} — record the
+  // operator's feedback + re-generate (iteration + 1).
+  if (method === 'POST' && url === '/api/demo-builder/feedback') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; feedback?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      writeFileSync(join(dir, 'feedback.md'), body.feedback ?? '');
+      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: status.iteration + 1 });
+      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastDemoChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/demo-builder/lock {project, sessionId} — lock the current demo in.
+  if (method === 'POST' && url === '/api/demo-builder/lock') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
+      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastDemoChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/demo-builder/abandon {project, sessionId} — abandon the session.
+  if (method === 'POST' && url === '/api/demo-builder/abandon') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'abandoned' });
+      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);

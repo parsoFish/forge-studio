@@ -25,6 +25,7 @@ import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { runArchitectTurn } from './architect-runner.ts';
 import { runInstructionsTurn } from './instructions-runner.ts';
+import { runDemoBuilderTurn } from './demo-builder-runner.ts';
 import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
 
 const args = process.argv.slice(2);
@@ -65,6 +66,7 @@ process.chdir(FORGE_ROOT);
     //   serve        — the scheduler daemon (spawnServeDetached + the harnesses spawn it)
     //   architect    — `architect run <sid>`, spawned by the bridge per operator turn
     //   instructions — `instructions run <sid> --project <name>`, spawned by the bridge per operator turn
+    //   demo-builder — `demo-builder run <sid> --project <name>`, spawned by the bridge per operator turn
     //   brain        — `brain lint`/`brain index` brain-integrity gate (mirrors studio lint)
     //   demo      — `demo render`, run by the developer-unifier agent every cycle
     //   preflight — the C1–C9 contract check, run by the forge-onboard-project skill
@@ -74,6 +76,8 @@ process.chdir(FORGE_ROOT);
       return await cmdArchitect(args.slice(1));
     case 'instructions':
       return await cmdInstructions(args.slice(1));
+    case 'demo-builder':
+      return await cmdDemoBuilder(args.slice(1));
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'demo':
@@ -539,6 +543,56 @@ async function cmdInstructionsRun(rest: string[]): Promise<void> {
   }
   if (result.draftPath) console.log(`  DRAFT: ${result.draftPath}`);
   if (result.agentsPath) console.log(`  AGENTS.md: ${result.agentsPath}`);
+}
+
+// ---------------------------------------------------------------------------
+// forge demo-builder run <session-id> --project <name>
+//
+// Stage B (mirrors `forge instructions run`): the demo-builder runs in the forge
+// UI as an operator-driven, file-checkpointed runner that authors a managed
+// project's DEMO.html. The bridge spawns `forge demo-builder run` per operator
+// turn (generate → review → lock). INTERNAL command — hidden from `forge --help`,
+// never invoked by hand, but kept dispatchable for the bridge's
+// spawnDemoBuilderTurn. Do NOT delete the function or its dispatch case.
+//
+// Like instructions, `--project <name>` is REQUIRED — demo-builder sessions are
+// always scoped to a named managed project (no session auto-discovery).
+// ---------------------------------------------------------------------------
+
+async function cmdDemoBuilder(rest: string[]): Promise<void> {
+  const sub = rest[0];
+  if (sub === 'run') return await cmdDemoBuilderRun(rest.slice(1));
+  console.error('forge demo-builder: subcommands: run <session-id> --project <name>');
+  console.error('  forge demo-builder run <session-id> --project <name>');
+  console.error('  (the demo-builder runs in the forge UI — the bridge spawns this per turn)');
+  process.exit(2);
+}
+
+async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
+  const sessionId = rest[0];
+  if (!sessionId) {
+    console.error('forge demo-builder run: missing <session-id>');
+    console.error('Usage: forge demo-builder run <session-id> --project <name>');
+    process.exit(2);
+  }
+  const projectIdx = rest.indexOf('--project');
+  const projectArg = projectIdx >= 0 ? rest[projectIdx + 1] : undefined;
+  if (!projectArg) {
+    console.error('forge demo-builder run: --project <name> is required');
+    console.error('Usage: forge demo-builder run <session-id> --project <name>');
+    process.exit(2);
+  }
+
+  const projectRoot = resolve('projects', projectArg);
+  if (!existsSync(projectRoot)) {
+    console.error(`forge demo-builder run: project root not found: ${projectRoot}`);
+    process.exit(2);
+  }
+
+  const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT });
+  console.log(`demo-builder turn complete — phase=${result.phase}`);
+  if (result.demoPath) console.log(`  DEMO: ${result.demoPath}`);
+  if (result.lockPath) console.log(`  LOCK: ${result.lockPath}`);
 }
 
 /**
