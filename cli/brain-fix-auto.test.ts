@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runBrainLint } from './brain-lint.ts';
+import { runBrainLint, applyAutoFixesUntilStable } from './brain-lint.ts';
 import { applyAutoFixes } from './brain-fix-auto.ts';
 
 function brain(): string {
@@ -101,6 +101,36 @@ test('applyAutoFixes: index.duplicate — dedupes to a single entry', () => {
     assert.ok(findings.some((x) => x.kind === 'index.duplicate'), 'precondition: duplicate finding');
     applyAutoFixes(root, findings);
     assert.ok(!lintKinds(root).includes('index.duplicate'), 're-lint: duplicate cleared');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('applyAutoFixesUntilStable: drains ALL auto findings in one call, idempotent', () => {
+  const root = brain();
+  try {
+    // Two themes, neither indexed; one also has a reversed date pair. Multiple
+    // auto findings up front → one call must resolve them all (the operator's
+    // intent: "apply fixes" = drain the tier, not one layer).
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'a.md'),
+      theme({ title: 'A', description: 'a', category: 'pattern', created_at: '2026-06-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    );
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'b.md'),
+      theme({ title: 'B', description: 'b', category: 'antipattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    );
+    const beforeAuto = runBrainLint({ cwd: root, scope: 'full' }).findings.filter((f) => f.resolution === 'auto');
+    assert.ok(beforeAuto.length >= 2, `precondition: ≥2 auto findings, got ${beforeAuto.length}`);
+
+    const r = applyAutoFixesUntilStable(root);
+    assert.ok(r.rounds >= 1, 'ran at least one round');
+    const remainingAuto = r.remaining.filter((f) => f.resolution === 'auto');
+    assert.equal(remainingAuto.length, 0, `all auto findings drained, ${remainingAuto.length} left`);
+
+    // Idempotent: a second call applies nothing.
+    const r2 = applyAutoFixesUntilStable(root);
+    assert.equal(r2.applied.length, 0, 'second call is a no-op');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

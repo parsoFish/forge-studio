@@ -513,13 +513,14 @@ export async function lintKb(
 /** Apply every deterministic AUTO-tier fix, then re-lint. */
 export async function fixAutoKb(
   id: string,
-): Promise<{ ok: boolean; error?: string; applied: Array<{ kind: string; file: string; detail: string }>; skipped: Array<{ kind: string; file: string; reason: string }>; remaining: LintFinding[]; counts: ResolutionCounts }> {
+): Promise<{ ok: boolean; error?: string; applied: Array<{ kind: string; file: string; detail: string }>; skipped: Array<{ kind: string; file: string; reason: string }>; rounds: number; remaining: LintFinding[]; counts: ResolutionCounts }> {
   const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op: 'fix-auto' });
   return {
     ok: r.ok,
     error: r.error,
     applied: (r.data?.applied as Array<{ kind: string; file: string; detail: string }>) ?? [],
     skipped: (r.data?.skipped as Array<{ kind: string; file: string; reason: string }>) ?? [],
+    rounds: typeof r.data?.rounds === 'number' ? r.data.rounds : 1,
     remaining: (r.data?.remaining as LintFinding[]) ?? [],
     counts: (r.data?.counts as ResolutionCounts) ?? ZERO_COUNTS,
   };

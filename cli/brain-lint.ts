@@ -904,18 +904,62 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     );
   }
 
-  // --fix mode: apply the deterministic AUTO-tier fixers, then re-lint so the
-  // returned findings + exitCode reflect what remains (agent/user tiers).
+  // --fix mode: apply the deterministic AUTO-tier fixers to a FIXED POINT (one
+  // fix can surface the next — e.g. a git-mv then needs an index re-link), then
+  // re-lint so the returned findings + exitCode reflect what remains (agent/user).
   if (opts.fix) {
-    const auto = findings.filter((f) => f.resolution === 'auto');
-    if (auto.length > 0) {
-      applyAutoFixes(opts.cwd, auto);
-      return runBrainLint({ ...opts, fix: false });
-    }
+    applyAutoFixesUntilStable(opts.cwd);
+    return runBrainLint({ ...opts, fix: false });
   }
 
   const hasError = findings.some((f) => f.category === 'error');
   return { findings, exitCode: hasError ? 1 : 0 };
+}
+
+// ---------- applyAutoFixesUntilStable ----------
+
+export type AutoFixStableResult = {
+  applied: Array<{ kind: string; file: string; detail: string }>;
+  skipped: Array<{ kind: string; file: string; reason: string }>;
+  /** How many apply rounds ran before reaching a fixed point. */
+  rounds: number;
+  /** Classified findings after the loop (agent/user + any un-applyable auto). */
+  remaining: Finding[];
+};
+
+/**
+ * Apply the deterministic AUTO-tier fixers REPEATEDLY until no auto findings
+ * remain or a round makes no progress (capped at maxRounds). Re-lints between
+ * rounds because one fix surfaces the next — git-mv'ing a mis-routed theme then
+ * leaves it unlinked (index.not-listed), etc. The operator's intent when they
+ * ask to apply fixes is "resolve them", not "resolve one layer" — so this drains
+ * the whole auto tier in a single call instead of needing repeat runs.
+ *
+ * `filter` scopes which findings are eligible (e.g. one kb); defaults to all.
+ */
+export function applyAutoFixesUntilStable(
+  forgeRoot: string,
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean } = {},
+): AutoFixStableResult {
+  const maxRounds = opts.maxRounds ?? 12;
+  const filter = opts.filter ?? (() => true);
+  const applied: AutoFixStableResult['applied'] = [];
+  const skipped: AutoFixStableResult['skipped'] = [];
+  let rounds = 0;
+  let remaining = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
+  while (rounds < maxRounds) {
+    const auto = remaining.filter((f) => f.resolution === 'auto');
+    if (auto.length === 0) break;
+    const r = applyAutoFixes(forgeRoot, auto);
+    rounds += 1;
+    applied.push(...r.applied);
+    skipped.push(...r.skipped);
+    // No progress this round (everything skipped, e.g. a dirty worktree blocks a
+    // git-mv) → stop rather than spin to the cap.
+    if (r.applied.length === 0) break;
+    remaining = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
+  }
+  return { applied, skipped, rounds, remaining };
 }
 
 // ---------- pretty-print ----------
