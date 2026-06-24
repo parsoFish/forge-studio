@@ -252,17 +252,23 @@ create/update); non-default fixture values for every field under test (see C9).
 
 ### C8 — Human-authored agent-instruction file *(advisory)*
 
-An `AGENTS.md` or `CLAUDE.md` at the project root with exact shell invocations
-for build/test/lint near the top, and any locked-core mandates. Forge must never
-create or overwrite this file.
+An `AGENTS.md` (the canonical single source; legacy projects may keep a
+`CLAUDE.md`) at the project root with exact shell invocations for build/test/lint
+near the top, and any locked-core mandates. Forge never creates or overwrites this
+file *unattended*. The Studio **instructions-creator** may draft it through an
+operator-confirmed interview — the human approves before it is written and owns the
+result. The Studio `instructions` surface binds to this one file (it is read from
+AGENTS.md, not stored separately), so there is exactly one set of instructions.
 
 Research grounding: human-authored minimal context files yield ~4 pp
 task-completion uplift; auto-generated ones yield –2 % to –3 % and +20–23 %
-inference cost. Keep under 200 lines; place load-bearing rules at the top.
+inference cost. The operator-confirmed interview preserves human ownership — the
+uplift comes from a human-vetted file, which the confirm-gate guarantees. Keep
+under 200 lines; place load-bearing rules at the top.
 
 The per-cycle forge scratchpad `AGENT.md` (written by forge during the dev-loop)
-is distinct from `AGENTS.md`/`CLAUDE.md` (operator-authored). The scratchpad must
-be gitignored (C2); the instruction file must be present and human-authored (C8).
+is distinct from `AGENTS.md`/`CLAUDE.md` (operator-owned). The scratchpad must
+be gitignored (C2); the instruction file must be present and operator-owned (C8).
 
 ---
 

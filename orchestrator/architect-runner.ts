@@ -43,11 +43,10 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const HEARTBEAT_THROTTLE_MS = 2000;
-
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
-export type QueryFn = (params: { prompt: string; options?: Record<string, unknown> }) => AsyncIterable<unknown>;
+import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
+export type { QueryFn };
 
 import {
   writePlanDoc,
@@ -66,9 +65,8 @@ import {
   type InitiativeManifest,
 } from './manifest.ts';
 import { promoteManifests } from './promote-manifests.ts';
-import { withIdleDeadline } from './stream-deadline.ts';
 import { createLogger, type EventLogger } from './logging.ts';
-import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
+import { makeToolEventSink } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
@@ -866,114 +864,33 @@ type StructuredResult<T> = {
   brainReads: string[];
 };
 
+/**
+ * Architect-local thin wrapper over the shared `runStructuredTurn` (ADR 020 spine
+ * extracted to interactive-session.ts). It binds the architect's model + tool
+ * allow-list (derived from skills/architect/SKILL.md, ADR-024) and narrows the
+ * generic `reads` down to the `brain/` paths the PLAN's brain-context section
+ * needs (ARCH-1). Callsites keep their `{ output, brainReads }` shape.
+ */
 async function runStructured<T>(args: {
   queryFn: QueryFn;
   prompt: string;
   schema: unknown;
   onToolUse?: (d: ToolUseLiveDetail) => void;
-  /** Called at most once per HEARTBEAT_THROTTLE_MS during the SDK stream. */
   onHeartbeat?: () => void;
-  /**
-   * Called for each non-empty assistant text block (reasoning). The caller
-   * can forward these to the event log so the operator sees the architect's
-   * reasoning stream in the activity panel.
-   */
   onText?: (text: string) => void;
 }): Promise<StructuredResult<T>> {
-  const options: Record<string, unknown> = {
-    // Read-only is enforced by the allowedTools whitelist (no Write/Edit/etc.) —
-    // NOT by plan mode. F-W5-1 (2026-05-30, surfaced by the claude-harness UI
-    // validation run) had TWO root causes:
-    //  1. `outputFormat` was passed the BARE JSON schema. The SDK expects
-    //     `{ type: 'json_schema', schema }` (entrypoints/sdk/coreTypes — OutputFormat),
-    //     so the malformed value silently disabled structured output: the result
-    //     never carried `structured_output`, runStructured returned null, the
-    //     interview fell through with empty questions, and the draft threw
-    //     "draft step returned no initiatives".
-    //  2. `permissionMode: 'plan'` made the agent end the turn via `ExitPlanMode`
-    //     (presenting a prose plan) instead of emitting structured output — a
-    //     direct contradiction with wanting a structured result.
-    // Both are fixed here: wrap the schema correctly and drop plan mode. The read
-    // toolset still produces the tool_use stream the architect hex shows.
+  const { output, reads } = await runStructuredTurn<T>({
+    queryFn: args.queryFn,
+    prompt: args.prompt,
+    schema: args.schema,
     model: ARCHITECT_MODEL,
     allowedTools: architectAgentSpec.allowedTools,
-    outputFormat: { type: 'json_schema', schema: args.schema },
-    // No maxTurns: the architect is operator-driven + interactive (unlike the
-    // autonomous PM/dev/reflector phases, which cap for cost/safety). Its research +
-    // draft turns run until they emit the structured output — a cap here only risks
-    // ending a turn mid-research with no result. withIdleDeadline still aborts a true stall.
-  };
-  // Idle-deadline (#6-extend, 2026-06-01): the architect's structured interview /
-  // draft SDK calls were the one stream loop not yet guarded — a usage-limit
-  // stall here would hang the architect turn forever. Abort + throw on a stall.
-  const abortController = new AbortController();
-  options.abortController = abortController;
-  let structured: T | null = null;
-  let rawText = '';
-  let toolSeq = 0;
-  const brainReads: string[] = [];
-  let lastHeartbeatMs = 0;
-  for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
+    onToolUse: args.onToolUse,
+    onHeartbeat: args.onHeartbeat,
+    onText: args.onText,
     label: 'architect-structured',
-    abortController,
-  })) {
-    // Throttled heartbeat — signals liveness to the UI stale-checker.
-    if (args.onHeartbeat) {
-      const now = Date.now();
-      if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
-        args.onHeartbeat();
-        lastHeartbeatMs = now;
-      }
-    }
-    const m = msg as {
-      type?: string;
-      structured_output?: unknown;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
-    };
-    if (m.type === 'assistant') {
-      // Stream tool_use blocks to the sink (drives the live architect hex).
-      if (args.onToolUse) {
-        const details = extractLiveToolDetails(m.message, toolSeq);
-        for (const d of details) args.onToolUse(d);
-        toolSeq += details.length;
-      }
-      for (const block of m.message?.content ?? []) {
-        if (block?.type === 'tool_use' && block.name === 'Read') {
-          // Collect brain/ reads for brain_context population (ARCH-1).
-          const inp = block.input as { file_path?: string } | undefined;
-          if (inp?.file_path && inp.file_path.includes('brain/')) {
-            brainReads.push(inp.file_path);
-          }
-        }
-        if (block?.type === 'text' && typeof block.text === 'string') {
-          rawText += (rawText ? '\n' : '') + block.text;
-          const trimmed = block.text.trim();
-          if (trimmed && args.onText) {
-            args.onText(trimmed);
-          }
-        }
-      }
-      continue;
-    }
-    if (m.type !== 'result') continue;
-    if (m.structured_output && typeof m.structured_output === 'object') {
-      structured = m.structured_output as T;
-    }
-    break;
-  }
-  const output = structured ?? parseFencedJson<T>(rawText);
-  return { output, brainReads };
-}
-
-function parseFencedJson<T>(text: string): T | null {
-  if (!text) return null;
-  const m = /```json\s*([\s\S]*?)```/i.exec(text);
-  const raw = m ? m[1] : text;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  });
+  return { output, brainReads: reads.filter((p) => p.includes('brain/')) };
 }
 
 // ---------------------------------------------------------------------------

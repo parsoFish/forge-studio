@@ -45,6 +45,15 @@ export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
  */
 export const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
 
+/**
+ * The project's agent-instruction file candidates, in precedence order. AGENTS.md
+ * is the canonical single source (Stage A); CLAUDE.md is accepted for legacy
+ * projects. When one exists, its content IS the project's `instructions` — the
+ * Studio `instructions` surface, `forge preflight` C8, and the instructions-creator
+ * all bind to this one file rather than a separate stored string.
+ */
+export const AGENT_INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'] as const;
+
 export type MetricsConfig = {
   /** Argv-style command emitting one or more scalar metrics on stdout. */
   command: string[];
@@ -214,7 +223,40 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
       if (sidecar) obj.quality_gate_cmd = sidecar;
     }
   }
-  return validateProjectConfig(parsed);
+  const config = validateProjectConfig(parsed);
+  // AGENTS.md single-source binding (Stage A): a managed project's instructions
+  // live in ONE place — its agent-instruction file (AGENTS.md, or legacy
+  // CLAUDE.md). When that file exists it IS the instructions; the optional
+  // `instructions` field in project.json is a legacy fallback used only when no
+  // such file is present. This keeps the Studio `instructions` surface bound to
+  // the same file `forge preflight` C8 checks and the instructions-creator writes.
+  const agentFile = readAgentInstructionsFile(projectRoot);
+  if (agentFile) {
+    return { ...config, instructions: agentFile.content };
+  }
+  return config;
+}
+
+/**
+ * Read the project's canonical agent-instruction file (AGENTS.md preferred, else
+ * legacy CLAUDE.md). Returns `{ file, content }` with the trimmed content, or
+ * `null` when neither exists or the content is empty. Best-effort — an unreadable
+ * file is treated as absent.
+ */
+export function readAgentInstructionsFile(
+  projectRoot: string,
+): { file: string; content: string } | null {
+  for (const file of AGENT_INSTRUCTION_FILES) {
+    const p = join(projectRoot, file);
+    if (!existsSync(p)) continue;
+    try {
+      const content = readFileSync(p, 'utf8').trim();
+      if (content) return { file, content };
+    } catch {
+      /* treat unreadable as absent */
+    }
+  }
+  return null;
 }
 
 /**

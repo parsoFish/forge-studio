@@ -51,7 +51,8 @@ export type BridgeMessage =
   | { type: 'snapshot'; cycles: CycleListSnapshot }
   | { type: 'event'; cycleId: string; event: EventLogEntry }
   | { type: 'cycle-list-changed' }
-  | { type: 'architect-list-changed' };
+  | { type: 'architect-list-changed' }
+  | { type: 'instructions-list-changed' };
 
 // `daemon-stalled` (Feature #8): the bridge is reachable but the scheduler
 // daemon's heartbeats have gone stale past a generous threshold — the daemon
@@ -503,6 +504,71 @@ export type PlanVerdict = {
 
 export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/plan-verdict', input);
+}
+
+// ---- Instructions-creator (Stage A) --------------------------------------
+//
+// Mirrors the architect client: an operator-driven, file-checkpointed runner
+// that authors a managed project's AGENTS.md (interview → draft → verdict →
+// finalize).
+
+export type InstructionsPhase =
+  | 'interviewing'
+  | 'awaiting-answers'
+  | 'drafting'
+  | 'awaiting-verdict'
+  | 'finalizing'
+  | 'committed'
+  | 'rejected';
+
+export type InstructionsSessionSummary = {
+  sessionId: string;
+  project: string;
+  projectRepoPath: string;
+  phase: InstructionsPhase;
+  round: number;
+  prompt: string;
+  questions: ArchitectQuestion[] | null;
+  /** Bridge-relative URL to the pending AGENTS.draft.md, or null until drafted. */
+  draftUrl: string | null;
+  /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
+   *  Use this to detect a stalled runner. */
+  staleMs?: number;
+};
+
+export async function listInstructionsSessions(): Promise<InstructionsSessionSummary[]> {
+  const body = await bridgeGet<{ sessions: InstructionsSessionSummary[] }>(
+    '/api/instructions/sessions',
+    { sessions: [] },
+  );
+  return body.sessions ?? [];
+}
+
+export async function startInstructions(input: {
+  project: string;
+  prompt: string;
+  projectRepoPath?: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/instructions/start', input);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+}
+
+export async function answerInstructions(input: {
+  project: string;
+  sessionId: string;
+  answers: { question: string; answer: string }[];
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/instructions/answer', input);
+}
+
+export async function instructionsVerdict(input: {
+  project: string;
+  sessionId: string;
+  kind: 'approve' | 'revise' | 'reject';
+  feedback?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/instructions/verdict', input);
 }
 
 // ---- Run + gate write endpoints (M3-4) ----------------------------------

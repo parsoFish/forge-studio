@@ -83,6 +83,16 @@ import {
   type ArchitectStatus,
   type ArchitectQuestion,
 } from '../orchestrator/architect-runner.ts';
+import {
+  instructionsSessionDir,
+  DRAFT_FILENAME,
+  type InstructionsStatus,
+} from '../orchestrator/instructions-runner.ts';
+import {
+  readSessionStatus,
+  writeSessionStatus,
+  type InterviewQuestion,
+} from '../orchestrator/interactive-session.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -111,7 +121,10 @@ type WsOutbound =
   | { type: 'cycle-list-changed' }
   // ADR 020 — an architect session changed (started, new questions, plan ready,
   // committed). The UI re-fetches `/api/architect/sessions`.
-  | { type: 'architect-list-changed' };
+  | { type: 'architect-list-changed' }
+  // Stage A — an instructions-creator session changed (started, new questions,
+  // draft ready, committed). The UI re-fetches `/api/instructions/sessions`.
+  | { type: 'instructions-list-changed' };
 
 export type BridgeOptions = {
   forgeRoot: string;
@@ -202,6 +215,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const tails = new Map<string, TailState>();
   const queueWatchers: FSWatcher[] = [];
   const architectWatchers: FSWatcher[] = [];
+  const instructionsWatchers: FSWatcher[] = [];
 
   const broadcast = (msg: WsOutbound): void => {
     const payload = JSON.stringify(msg);
@@ -408,6 +422,34 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     }
   };
 
+  // Stage A — watch each project's `_instructions/` dir so the runner's
+  // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
+  // signal to the UI. Mirrors `watchArchitect`.
+  const watchInstructions = (): void => {
+    if (!existsSync(projectsRoot)) return;
+    let projects: string[];
+    try { projects = readdirSync(projectsRoot); } catch { return; }
+    for (const name of projects) {
+      const instrDir = join(projectsRoot, name, '_instructions');
+      if (!existsSync(instrDir)) continue;
+      try {
+        const w = fsWatch(instrDir, { persistent: false, recursive: true }, () => {
+          broadcast({ type: 'instructions-list-changed' });
+        });
+        instructionsWatchers.push(w);
+      } catch {
+        // recursive watch unsupported — fall back to a non-recursive watch on
+        // the _instructions dir (catches new sessions; the UI re-fetches anyway).
+        try {
+          const w = fsWatch(instrDir, { persistent: false }, () => {
+            broadcast({ type: 'instructions-list-changed' });
+          });
+          instructionsWatchers.push(w);
+        } catch { /* fs.watch unavailable */ }
+      }
+    }
+  };
+
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
       identity,
@@ -422,6 +464,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // bursts stream to the dedicated screen's hex. The runner writes to
       // `_logs/_architect-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
       ensureArchitectTail: (sessionId: string) => ensureTailFor(`_architect-${sessionId}`),
+      broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
+      // Stage A — live-tail an instructions session's event log. The runner
+      // writes to `_logs/_instructions-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
+      ensureInstructionsTail: (sessionId: string) => ensureTailFor(`_instructions-${sessionId}`),
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -468,10 +514,12 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // 'connection' handler); at startup we only wire the cheap fs.watch signals.
   watchQueue();
   watchArchitect();
+  watchInstructions();
 
   const close = async (): Promise<void> => {
     for (const w of queueWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of architectWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const w of instructionsWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const t of tails.values()) { if (t.timer) clearInterval(t.timer); }
     tails.clear();
     for (const ws of clients) { try { ws.close(); } catch { /* ignore */ } }
@@ -517,6 +565,11 @@ type HttpContext = {
   /** Start (idempotently) live-tailing an architect session's event log so its
    *  tool_use bursts stream to the dedicated screen. */
   ensureArchitectTail: (sessionId: string) => void;
+  /** Broadcast an `instructions-list-changed` WS message (fsWatch may miss
+   *  same-tick writes; the routes call this after they mutate session state). */
+  broadcastInstructionsChanged: () => void;
+  /** Start (idempotently) live-tailing an instructions session's event log. */
+  ensureInstructionsTail: (sessionId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -768,6 +821,8 @@ async function handleHttp(
 
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
+  // ---- Instructions-creator (Stage A) -----------------------------------
+  if (await handleInstructions(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
@@ -1167,6 +1222,251 @@ async function handleArchitect(
       });
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---- Instructions-creator routes (Stage A) --------------------------------
+//
+// Mirrors the architect routes: an operator-driven, file-checkpointed runner
+// that authors a managed project's AGENTS.md (interview → draft → verdict →
+// finalize). The bridge spawns one CLI turn per operator action.
+
+/** Spawn one instructions-runner turn as a detached child. Mirrors
+ *  `spawnArchitectTurn` exactly; honours the same `FORGE_ARCHITECT_NO_SPAWN`
+ *  env guard the harness sets. Stderr is captured to
+ *  `_logs/_instructions-<sid>/stderr.log` for diagnosability. */
+function spawnInstructionsTurn(forgeRoot: string, project: string, sessionId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  try {
+    const logDir = join(forgeRoot, '_logs', `_instructions-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(
+      process.execPath,
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'instructions', 'run', sessionId, '--project', project],
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
+    );
+    closeSync(stderrFd);
+    proc.unref();
+  } catch { /* best-effort */ }
+}
+
+/** Discover every instructions session under `projects/<name>/_instructions/<sid>/`
+ *  — used by the bridge's `GET /api/instructions/sessions`. Best-effort; never
+ *  throws on a malformed dir. Mirrors architect-runner's `listArchitectSessions`,
+ *  kept local to the bridge (not added to the runner). */
+function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
+  const out: InstructionsStatus[] = [];
+  if (!existsSync(projectsRoot)) return out;
+  let projects: string[];
+  try { projects = readdirSync(projectsRoot); } catch { return out; }
+  for (const project of projects) {
+    const instrDir = join(projectsRoot, project, '_instructions');
+    if (!existsSync(instrDir)) continue;
+    let sids: string[];
+    try {
+      sids = readdirSync(instrDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch { continue; }
+    for (const sid of sids) {
+      if (sid.startsWith('_')) continue; // skip _archived/
+      const status = readSessionStatus<InstructionsStatus>(instructionsSessionDir(join(projectsRoot, project), sid));
+      if (status) out.push(status);
+    }
+  }
+  return out;
+}
+
+/** Returns true if the request was an instructions route (and was handled). */
+async function handleInstructions(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  const origin = allowedOrigin(req);
+
+  // GET /api/instructions/sessions — list every session with its current state.
+  if (method === 'GET' && url === '/api/instructions/sessions') {
+    const statuses = listInstructionsSessions(ctx.projectsRoot);
+    // Live-tail each non-terminal session's log so the dedicated screen's hex
+    // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
+    for (const s of statuses) {
+      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureInstructionsTail(s.session_id);
+    }
+    const sessions = statuses.map((s) => {
+      const dir = instructionsSessionDir(join(ctx.projectsRoot, s.project), s.session_id);
+      const questions =
+        s.phase === 'awaiting-answers'
+          ? readJsonFile<InterviewQuestion[]>(join(dir, 'questions.json'))
+          : null;
+      const draftUrl = existsSync(join(dir, DRAFT_FILENAME))
+        ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
+        : null;
+
+      // staleMs: ms since the last sign of life — heartbeat mtime if present,
+      // else the status.json updated_at timestamp.
+      const heartbeatPath = join(ctx.logsRoot, `_instructions-${s.session_id}`, '.heartbeat');
+      let staleMs: number;
+      if (existsSync(heartbeatPath)) {
+        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
+      } else {
+        const parsedAt = Date.parse(s.updated_at);
+        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
+      }
+
+      return {
+        sessionId: s.session_id,
+        project: s.project,
+        projectRepoPath: s.project_repo_path,
+        phase: s.phase,
+        round: s.round,
+        prompt: s.prompt,
+        questions,
+        draftUrl,
+        staleMs,
+      };
+    });
+    sendJson(res, 200, { sessions }, origin);
+    return true;
+  }
+
+  // GET /api/instructions/file/<project>/<sid>/<filename> — serve a session-dir
+  // file (AGENTS.draft.md etc.) with a path-escape guard + content-type sniff.
+  if (method === 'GET' && url.startsWith('/api/instructions/file/')) {
+    const rest = url.slice('/api/instructions/file/'.length).split('/').map(decodeURIComponent);
+    const [project, sessionId, ...fileParts] = rest;
+    const filename = fileParts.join('/');
+    if (!project || !sessionId || !filename) {
+      sendJson(res, 400, { error: 'expected /api/instructions/file/<project>/<sid>/<filename>' }, origin);
+      return true;
+    }
+    const base = instructionsSessionDir(join(ctx.projectsRoot, project), sessionId) + sep;
+    const requested = join(instructionsSessionDir(join(ctx.projectsRoot, project), sessionId), filename);
+    if (!requested.startsWith(base)) {
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
+      return true;
+    }
+    if (!existsSync(requested)) {
+      sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
+      return true;
+    }
+    try {
+      res.writeHead(200, {
+        'content-type': contentTypeFor(filename),
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
+      });
+      res.end(readFileSync(requested, 'utf8'));
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/instructions/start {project, prompt, projectRepoPath?} — create a
+  // new session and kick off the first interview turn.
+  if (method === 'POST' && url === '/api/instructions/start') {
+    try {
+      const body = (await readJson(req)) as { project?: string; prompt?: string; projectRepoPath?: string };
+      if (!body.project || !body.prompt) {
+        sendJson(res, 400, { error: 'project and prompt are required' }, origin);
+        return true;
+      }
+      const sessionId = newArchitectSessionId();
+      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), sessionId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'prompt.md'), body.prompt);
+      writeSessionStatus<InstructionsStatus>(dir, {
+        session_id: sessionId,
+        project: body.project,
+        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
+        phase: 'interviewing',
+        round: 1,
+        prompt: body.prompt,
+        updated_at: new Date().toISOString(),
+      });
+      spawnInstructionsTurn(ctx.forgeRoot, body.project, sessionId);
+      ctx.broadcastInstructionsChanged();
+      sendJson(res, 200, { ok: true, sessionId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/instructions/answer {project, sessionId, answers} — append an
+  // interview round and re-spawn a turn.
+  if (method === 'POST' && url === '/api/instructions/answer') {
+    try {
+      const body = (await readJson(req)) as {
+        project?: string;
+        sessionId?: string;
+        answers?: { question: string; answer: string }[];
+      };
+      if (!body.project || !body.sessionId || !Array.isArray(body.answers)) {
+        sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
+        return true;
+      }
+      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<InstructionsStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const answersPath = join(dir, 'answers.json');
+      const prior = readJsonFile<{ round: number; answers: unknown[] }[]>(answersPath) ?? [];
+      const round = prior.length + 1;
+      writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
+      writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: round + 1 });
+      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastInstructionsChanged();
+      sendJson(res, 200, { ok: true, round }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/instructions/verdict {project, sessionId, kind, feedback?} —
+  // approve → finalizing; revise → write feedback.md + drafting; reject → rejected.
+  if (method === 'POST' && url === '/api/instructions/verdict') {
+    try {
+      const body = (await readJson(req)) as {
+        project?: string;
+        sessionId?: string;
+        kind?: 'approve' | 'revise' | 'reject';
+        feedback?: string;
+      };
+      if (!body.project || !body.sessionId || !body.kind) {
+        sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
+        return true;
+      }
+      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<InstructionsStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      if (body.kind === 'approve') {
+        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'finalizing' });
+      } else if (body.kind === 'revise') {
+        writeFileSync(join(dir, 'feedback.md'), body.feedback ?? '');
+        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'drafting' });
+      } else {
+        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'rejected' });
+      }
+      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastInstructionsChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
   }

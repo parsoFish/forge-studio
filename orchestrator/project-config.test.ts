@@ -16,6 +16,8 @@ import {
   loadProjectConfig,
   PROJECT_CONFIG_REL_PATH,
   validateProjectConfig,
+  readAgentInstructionsFile,
+  AGENT_INSTRUCTION_FILES,
 } from './project-config.ts';
 
 function newTempDir(): string {
@@ -759,4 +761,68 @@ test('validateProjectConfig: full valid config WITH releaseProcess round-trips a
   assert.equal(cfg.releaseProcess.versionFile, 'package.json');
   assert.equal(cfg.releaseProcess.docsDir, 'docs');
   assert.equal(cfg.releaseProcess.changelogPath, undefined);
+});
+
+// ----- AGENTS.md single-source binding (Stage A) -----
+
+test('AGENT_INSTRUCTION_FILES prefers AGENTS.md over CLAUDE.md', () => {
+  assert.deepEqual([...AGENT_INSTRUCTION_FILES], ['AGENTS.md', 'CLAUDE.md']);
+});
+
+test('readAgentInstructionsFile reads AGENTS.md (preferred) and trims', () => {
+  const root = newTempDir();
+  try {
+    writeFileSync(join(root, 'AGENTS.md'), '\n# Agents\n\nBuild: npm test\n\n');
+    const got = readAgentInstructionsFile(root);
+    assert.equal(got?.file, 'AGENTS.md');
+    assert.equal(got?.content, '# Agents\n\nBuild: npm test');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readAgentInstructionsFile falls back to CLAUDE.md when AGENTS.md absent', () => {
+  const root = newTempDir();
+  try {
+    writeFileSync(join(root, 'CLAUDE.md'), '# Legacy instructions');
+    const got = readAgentInstructionsFile(root);
+    assert.equal(got?.file, 'CLAUDE.md');
+    assert.equal(got?.content, '# Legacy instructions');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readAgentInstructionsFile returns null when neither file exists or content is empty', () => {
+  const root = newTempDir();
+  try {
+    assert.equal(readAgentInstructionsFile(root), null);
+    writeFileSync(join(root, 'AGENTS.md'), '   \n  ');
+    assert.equal(readAgentInstructionsFile(root), null, 'empty/whitespace file is treated as absent');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: AGENTS.md is the single source — its content overrides project.json instructions', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'stale json instructions' }));
+    writeFileSync(join(root, 'AGENTS.md'), '# Real instructions\n\nNever touch dist/.');
+    const cfg = loadProjectConfig(root);
+    assert.equal(cfg?.instructions, '# Real instructions\n\nNever touch dist/.');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: project.json instructions is the legacy fallback when no AGENTS.md/CLAUDE.md', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'json fallback' }));
+    const cfg = loadProjectConfig(root);
+    assert.equal(cfg?.instructions, 'json fallback');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

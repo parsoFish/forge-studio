@@ -95,10 +95,13 @@ wrong brain misleads the planner worse than an absent one. The profile is the
 queryable structure the PM/architect reads first.
 
 ### Step 8 — Untouchables, merge model, instruction file (C5/C6/C8)
-A human-authored `AGENTS.md`/`CLAUDE.md` at the project root with **exact build/
-test/lint invocations near the top** + positive directives + the skill paths + the
-history convention. Forge must never auto-author it. Confirm a GitHub remote and
-that PRs won't need to stack.
+An operator-owned `AGENTS.md` (canonical single source; legacy projects may keep a
+`CLAUDE.md`) at the project root with **exact build/test/lint invocations near the
+top** + positive directives + the skill paths + the history convention. Forge never
+auto-authors it *unattended* — the Studio **instructions-creator** drafts it through
+an operator-confirmed interview (the human approves before it is written and owns
+the result; the Studio `instructions` field binds to this one file). Confirm a
+GitHub remote and that PRs won't need to stack.
 
 ### Step 9 — Committed development-history convention
 Every initiative leaves a browsable record at
