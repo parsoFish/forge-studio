@@ -81,3 +81,13 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`2026-06-20-ralph-crash-with-committed-delivery`](./themes/2026-06-20-ralph-crash-with-committed-delivery.md) — WI-6 ralph crashed (exit code 1) mid-iteration but its git commits had already landed; dev-loop.delivered captured the work; per-WI status:failed was stale — the diff was authoritative.
+
+- [`2026-06-18-capstone-flow-as-data-live-gate`](./themes/2026-06-18-capstone-flow-as-data-live-gate.md) — The betterado capstone proved forge can author a flow as Studio data and run real live work to merged PRs; the live-acceptance gate is the load-bearing quality mechanism; gap-bugs cluster at API-shape boundaries.
+
+- [`2026-06-12-manifest-regrounding-annotation-as-operator-override`](./themes/2026-06-12-manifest-regrounding-annotation-as-operator-override.md) — An operator-written "Re-grounding — READ FIRST" prose block in the manifest is an effective override surface; PM reads it on retry and produces correct decomposition. Requeue is the recovery path when the first run ignores it.
+
+- [`2026-06-07-unifier-non-fast-forward-recovery`](./themes/2026-06-07-unifier-non-fast-forward-recovery.md) — When ralph emits dev-loop.branch-push-failed (remote branch ahead), the unifier is invoked as the recovery mechanism, rebases the branch, and pushes successfully in 1 iteration — the designed recovery path works.

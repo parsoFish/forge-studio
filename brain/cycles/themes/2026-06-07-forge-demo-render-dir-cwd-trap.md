@@ -1,6 +1,6 @@
 ---
 title: forge demo render resolves demo.json from forge binary's cwd, not the caller's cwd — --dir required in unifier context
-description: forge demo render without --dir resolves demo.json relative to the forge binary's process cwd (forge root), not the invoker's cwd. When the unifier's cwd is a worktree, the command silently finds the wrong demo.json or none. Fix: always pass --dir <absolute-worktree>/demo/<initiative-id>.
+description: "forge demo render without --dir resolves demo.json relative to the forge binary's process cwd (forge root), not the invoker's cwd. When the unifier's cwd is a worktree, the command silently finds the wrong demo.json or none. Fix: always pass --dir <absolute-worktree>/demo/<initiative-id>."
 category: antipattern
 created_at: '2026-06-07'
 updated_at: '2026-06-07'

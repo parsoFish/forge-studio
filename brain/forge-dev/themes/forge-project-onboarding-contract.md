@@ -64,28 +64,14 @@ trafficGame today; C6 is not met by forge.
 
 ## Deepened 2026-05-31 (betterado onboarding run)
 
-Onboarding a *different* project form (a Go infra provider with live external
-resources) showed the six clauses were directionally right but under-specified.
-The conceptual, project-type-agnostic articulation now lives in
-[`docs/forge-project-contract.md`](../../../docs/forge-project-contract.md); deltas:
+Onboarding a Go infra provider showed the contract was directionally sound but
+under-specified. See [`docs/forge-project-contract.md`](../../../docs/forge-project-contract.md) for the project-type-agnostic articulation; key deltas:
 
-- **C1 is about *discrimination*, not just speed.** The gate is forge's only
-  done-oracle: it must FAIL before the work exists and PASS only on real work.
-  Three silent-failure modes hit this run: *hollow* (green at iter-0 →
-  `gate-too-loose`), *false-pass* (exit 0 without running the new work), and
-  *poisoned* (a test-less sibling's "no tests to run" line fails a multi-target
-  run). Rule: scope the gate to the unit of change.
-- **C2 generalises to PR *hermeticity*.** `git add -A` + any un-ignored build
-  artifact (a renamed binary → a 35 MB blob) or generated output pollutes the PR.
-  Ignore anything a build/tool writes into the tree; force-track config in ignored
-  dirs.
-- **New C7 — external-resource model**: a creds-free in-loop gate + an isolated,
-  self-cleaning live confirmation layer; creds out-of-band; API responses are the
-  machine evidence.
+- **C1 is about *discrimination*.** The gate must FAIL before work exists and PASS only on real work. Scope the gate to the unit of change.
+- **C2 generalises to *hermeticity*.** Ignore anything build/tools write into the tree; force-track config in ignored dirs.
+- **New C7 — external-resource model**: creds-free in-loop gate + isolated self-cleaning live confirmation; API responses are machine evidence.
 
-The deepened C1/C2 facets and all of C7 are **not yet machine-checked** by
-`forge preflight` — see [`docs/known-gaps.md`](../../../docs/known-gaps.md)
-§2026-05-31. (C6 is now satisfied post-Phase-6 — operator merges, no auto-merge.)
+C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/known-gaps.md`](../../../docs/known-gaps.md) §2026-05-31). C6 is now satisfied post-Phase-6.
 
 ## Sources
 

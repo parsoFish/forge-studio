@@ -22,35 +22,15 @@ source_dates:
   - 2026-05-24
 ---
 
-## The trap
+## The problem
 
-The operator runs forge in WSL2 and opens forge-ui in their Windows
-browser. Forge has two processes:
+Forge runs in WSL2 with a dev server (port 4124) and WebSocket bridge
+(port 4123), both binding to `0.0.0.0`. From the Windows browser:
+`http://localhost:*` works via WSL2's auto-port-forwarding, but
+`http://127.0.0.1:*` fails — 127.0.0.1 is the Windows loopback, not WSL.
 
-- Next.js dev server on port 4124
-- WebSocket bridge on port 4123
-
-Both bind to `0.0.0.0` (all interfaces) inside WSL. From the Windows
-browser:
-
-- `http://localhost:4124` works — WSL2's auto-port-forwarding sees the
-  bind on the WSL side and exposes it on the Windows side at
-  `localhost:4124`.
-- `http://localhost:4123` works for the same reason.
-- `http://127.0.0.1:4123` **fails** — 127.0.0.1 from the Windows browser
-  means the Windows loopback, not the WSL host. Nothing's listening on
-  Windows.
-
-## The forge-ui bug
-
-The Next.js API route `/api/forge-config` originally returned the
-absolute bridge URL `http://127.0.0.1:4123`. The route reads
-`process.env.FORGE_BRIDGE_URL` which the watch process sets — and from
-the watch process's POV (inside WSL), 127.0.0.1 is correct. But the
-browser is in Windows-land and the URL is meaningless there.
-
-Symptom: page hung on "bridge ○ reconnecting" forever; HTTP fetches +
-WebSocket all silently failed.
+The old API route `/api/forge-config` returned `http://127.0.0.1:4123`,
+correct inside WSL but meaningless in the browser. Result: "bridge ○ reconnecting" forever.
 
 ## The fix
 
@@ -75,18 +55,13 @@ SSH `LocalForward`, etc.).
 
 ## Generalises beyond WSL
 
-The pattern is "give the browser the discriminator it needs, let it build the
-URL from its own origin." Same trick covers reverse proxies (return a service
-name, client hits `/foo/...` on the same origin), subdomain routing, and tunnels
-— any time the browser's hostname differs from what the dev process sees locally.
+"Give the browser the discriminator it needs; let it build the URL from its own
+origin." Covers reverse proxies, subdomain routing, and tunnels.
 
 ## Diagnostic surface
 
-When the bridge URL goes wrong the operator sees the connection-state badge
-turn red (`● open` → `○ no-bridge` / `◌ reconnecting`) and a monospace footer
-showing the resolved bridge URL the browser is trying — copy/paste-able into a
-new tab to confirm reachability. Also on `data-bridge-url` on the root `<main>`
-(see [[dom-as-metrics-for-headless-driven-uis]]) for headless probes.
+Badge turns red and footer shows the resolved bridge URL (copy/paste-able).
+Also available on `data-bridge-url` on the root `<main>` (see [[dom-as-metrics-for-headless-driven-uis]]) for headless probes.
 
 ## See also
 

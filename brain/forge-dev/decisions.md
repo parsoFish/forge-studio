@@ -23,3 +23,7 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`2026-06-06-ralph-scratch-leak-pre-pr-strip`](./themes/2026-06-06-ralph-scratch-leak-pre-pr-strip.md) — PROMPT.md / AGENT.md / fix_plan.md are stamped at the WORKTREE ROOT (the dev agent references them by relative path), NOT under the gitignored .forge/ dir. So autoCommitWorktreeIfDirty's `git add -A` and the agent's own commits sweep them onto the initiative branch, where they leak into the PR and re-introduce the C2 (scratch-hygiene) contract violation on main after merge — across the whole betterADO release chain this forced a manual `git rm --cached AGENT.md fix_plan.md` before EVERY merge. Fix (pr.ts b53dfda): stripForgeScratchFromBranch now also drops the root Ralph scratch trio at the same pre-PR boundary it strips `.forge/`, BASE-GUARDED — it only removes copies this cycle introduced (tracked on the branch but absent from the base ref), so a project that legitimately ships an AGENT.md keeps it in its PR. A project .gitignore covering the trio prevents the `git add -A` path at source; the strip is the belt-and-braces for the agent's own/forced adds and for projects without that ignore.

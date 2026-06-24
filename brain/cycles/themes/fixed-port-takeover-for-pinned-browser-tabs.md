@@ -47,32 +47,18 @@ backoff loop in [`bridge-client.ts`](../../../forge-ui/lib/bridge-client.ts).
 
 ## Why takeover-by-default is safe (for this tool)
 
-The risk: killing some unrelated process that happens to be on 4123 or
-4124. Mitigations:
+The risk: killing an unrelated process on 4123 or 4124. Mitigations:
+(1) Ports chosen outside common dev-server defaults (3000/5173/8080), so collisions are rare.
+(2) Clear log: `[forge studio] bridge: taking over port 4123 from 2 existing process(es)`.
+(3) Override flags `--bridge-port` / `--ui-port` route around unwanted conflicts.
 
-1. The default ports are deliberately outside common dev-server
-   defaults so collisions are rare.
-2. The operator gets a clear log line:
-   `[forge studio] bridge: taking over port 4123 from 2 existing process(es)`.
-3. The override flags `--bridge-port` / `--ui-port` route around any
-   conflict the operator wants to preserve.
-
-For a personal dev tool this is the right trade-off; for anything
-shared, takeover would need to identify "is this my forge process"
-before killing.
+For a personal dev tool this is the right trade-off; shared tools would need to identify "is this my forge process" before killing.
 
 ## The startup race that bit us first
 
-A subtle bug fell out of the work: `http.listen(port, '0.0.0.0')` is
-async — `server.address()` returns `null` until the `'listening'` event
-fires. Calling `address()` immediately after `listen()` was sometimes
-returning the unbound `port: 0`, which the bridge then logged as
-"bridge at http://127.0.0.1:0" — and the API route that propagates the
-port to the browser saw `0` and gave up.
+`http.listen()` is async: calling `server.address()` immediately returns `null` or unbound `port: 0` until the `'listening'` event fires. This caused the bridge to log "bridge at http://127.0.0.1:0" and fail to propagate the port to the browser.
 
-Fix: `await new Promise((resolve, reject) => { http.once('listening',
-resolve); http.once('error', reject); http.listen(port, '0.0.0.0'); })`
-before reading `address()`. `startBridge()` became async.
+Fix: wrap `http.listen()` in a Promise that waits for the `'listening'` event before reading `address()`. `startBridge()` is now async.
 
 ## Related: WSL2 + Windows browser
 

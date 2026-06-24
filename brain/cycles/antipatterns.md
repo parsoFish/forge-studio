@@ -35,3 +35,39 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`2026-06-07-forge-demo-render-dir-cwd-trap`](./themes/2026-06-07-forge-demo-render-dir-cwd-trap.md)
+
+- [`2026-06-22-demo-capture-missing-from-unifier-prompt`](./themes/2026-06-22-demo-capture-missing-from-unifier-prompt.md) — The unifier-invocation prompt only says `forge demo render` — never `forge demo capture`. A secondary bug causes captureCheckpoints to skip ALL capture when the fresh-worktree build is non-zero, so demos fall back to prose beforeNote/afterNote instead of real CLI output.
+
+- [`2026-06-21-unifier-demo-render-discovery`](./themes/2026-06-21-unifier-demo-render-discovery.md) — The unifier skill spends significant tokens probing forge internals to find the demo render sub-command or its --dir flag convention; it falls back to manual file copy after failing to invoke it correctly.
+
+- [`2026-06-20-unifier-pr-description-restore-loop`](./themes/2026-06-20-unifier-pr-description-restore-loop.md) — The automated chore:drop-forge-scratch commit stripped .forge/pr-description.md on each iteration, causing the unifier to spend 12 iterations restoring it rather than doing substantive work.
+
+- [`2026-06-20-pm-must-grep-test-name-before-gate`](./themes/2026-06-20-pm-must-grep-test-name-before-gate.md) — PM invented a plausible but nonexistent test name in quality_gate_cmd; forge no-work guard fired 5 times; pipeline dead-ended. Operator confirmed this should be a hard brain constraint, not just manifest guidance.
+
+- [`2026-06-20-pm-invented-test-name-gate-failure`](./themes/2026-06-20-pm-invented-test-name-gate-failure.md) — The PM invented TestProvider_HasCorrectResources as the quality_gate_cmd for a provider-registration WI. The test does not exist; go test returned [no tests to run] every iteration; the no-work guard fired 5 times and exhausted the iteration budget.
+
+- [`2026-06-20-pm-acceptance-gate-misfires-on-scoped-docs-initiatives`](./themes/2026-06-20-pm-acceptance-gate-misfires-on-scoped-docs-initiatives.md) — Blanket 'must include TF_ACC acceptance WI' rule causes 4+ PM retries when the initiative explicitly scopes out live acceptance testing (e.g. docs/examples-only changes).
+
+- [`2026-06-19-unifier-cwd-forge-root-exploration`](./themes/2026-06-19-unifier-cwd-forge-root-exploration.md) — When unifier runs with cwd at forge root rather than the worktree, it reads wrong AGENT.md/fix_plan.md paths and burns ~30 tool calls probing forge CLI internals (forge demo render, orchestrator structure) before finding what it needs.
+
+- [`2026-06-16-unifier-demo-render-undiscoverable`](./themes/2026-06-16-unifier-demo-render-undiscoverable.md) — Unifier spent ~40 Bash calls finding the correct forge demo render invocation and demo.json schema because PROMPT.md/AGENT.md in the worktree don't document it — a recurring friction cost.
+
+- [`2026-06-12-pm-ignores-manifest-regrounding-annotation`](./themes/2026-06-12-pm-ignores-manifest-regrounding-annotation.md) — PM decomposed WIs using already-passing test names as gates despite an operator re-grounding annotation explicitly warning that would cause gate-too-loose; 0/3 WIs completed and the entire dev-loop failed.
+
+- [`2026-06-12-annotate-manifest-folded-scalar-doubling`](./themes/2026-06-12-annotate-manifest-folded-scalar-doubling.md) — Long manifest values (worktree_path ≥ ~80 chars) serialize as folded `>-` two-line scalars; annotateManifest's single-line regex replace left the continuation line behind, so the manifest re-parsed with the value doubled ("path path") and `forge review --approve` refused with "worktree missing". Fixed 2026-06-12 (scheduler.ts, commit 20092e9).
+
+- [`2026-06-11-unifier-wedge-33hr-no-tool-progress`](./themes/2026-06-11-unifier-wedge-33hr-no-tool-progress.md) — Second unifier invocation (UWI-2) stalled with tool_use_count frozen at 16 from 2026-06-08T12:08 to 2026-06-09T21:29 (~33 hours), heartbeating every 15s, then crashed "exited code 1" — worktree blocked for the full duration.
+
+- [`2026-06-08-dev-loop-zero-brain-reads-persistent`](./themes/2026-06-08-dev-loop-zero-brain-reads-persistent.md) — Across multiple cycles, dev-loop (developer-ralph) agents show brainReads:0 while PM agents read 3-5 brain pages. Work items are the only context the dev-loop agents receive; brain knowledge present in the PM phase does not carry forward to the dev-loop phase.
+
+- [`2026-06-07-resume-needs-rebase-concurrent-merge`](./themes/2026-06-07-resume-needs-rebase-concurrent-merge.md) — An initiative that stalls in queue accumulates conflict risk; when another initiative merges to main during the stall, the queued branch cannot auto-rebase on resume and is classified terminal/non-recoverable.
+
+- [`2026-06-06-unifier-forge-cli-cwd-confusion`](./themes/2026-06-06-unifier-forge-cli-cwd-confusion.md) — The unifier runs inside the project worktree but forge CLI commands (e.g. `forge demo render`) must be invoked from the forge root — the unifier wastes Bash calls probing the wrong cwd before resolving.
+
+- [`2026-06-06-live-acc-gate-misses-lint-ci-gate-net`](./themes/2026-06-06-live-acc-gate-misses-lint-ci-gate-net.md) — For a live-acceptance work item, the per-WI quality_gate_cmd is the acceptance test (e.g. `go test -tags all -run TestX ./acceptancetests/`), which does NOT run the project linter. So the dev-loop can mark a WI `complete` while its code is golangci-lint-red — the standing AC tells the agent "CI-equivalent must pass" but nothing ENFORCES it at the per-WI gate. The cycle-level CI DELIVERY GATE (`make test && golangci-lint run ./... && make terrafmt-check`, with TF_ACC stripped) catches it and CORRECTLY refuses to open the PR — same "gate != project CI" class as the 2026-05-31/06-02 findings, now in the live-acc-WI guise. Recovery that works: hand-fix the lint, then `forge requeue --resume-from=unifier` → re-runs the unifier + CI gate (now green) + opens the PR, WITHOUT discarding the dev-loop's delivery (resume-don't-discard). The shared-acceptance-fixture cycle validated the full operator journey end-to-end this way (architect council → PLAN gate → PM → dev-loop → unifier → CI gate BLOCKS → resume → review → merge). Direction: run the project linter INSIDE the dev-loop for live-acc WIs (append it to the composed per-WI gate, or a changed-files lint sub-check at dev-loop close) so a lint-red WI can't reach `complete` and fail only at the end.
+
+- [`2026-06-05-forge-demo-render-cwd-sensitivity`](./themes/2026-06-05-forge-demo-render-cwd-sensitivity.md) — The unifier's `forge demo render <id>` call fails silently when cwd is not the worktree root containing `demo/<id>/demo.json`; requires explicit `--dir <abs-path>` to resolve correctly.

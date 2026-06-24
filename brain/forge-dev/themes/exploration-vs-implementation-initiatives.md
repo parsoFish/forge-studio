@@ -26,15 +26,7 @@ related_themes:
 
 # Exploration vs implementation initiatives
 
-The forge pipeline (architect → PM → dev-loop → review → reflect) is shaped for
-**implementation initiatives**: a manifest describes features with acceptance
-criteria; the PM breaks them into file-scoped WIs; the dev-loop writes code that
-passes the ACs; the reviewer verifies the diff matches the spec.
-
-The trafficGame collision/elevation arc (PR #57) was **scientific exploration**.
-The "spec" wasn't "implement function X"; it was "find a map design that hits the
-highest throughput at zero severe overlaps" — the discovery WAS the AC. That's
-why it ran conversationally: the pipeline has no shape for it.
+The forge pipeline is shaped for **implementation initiatives**: manifest → file-scoped WIs → code passes ACs → diff matches spec. The trafficGame arc (PR #57) was **scientific exploration**: "find a map design that hits highest throughput" — discovery IS the AC. The pipeline has no shape for it.
 
 ## How exploration initiatives differ
 
@@ -47,54 +39,28 @@ why it ran conversationally: the pipeline has no shape for it.
 | Reviewer focus | Diff matches spec | Score-delta vs locks; visual confirmation |
 | Reflection | What went wrong with spec / code | What the deltas suggest for next ideation |
 
-Implementation initiatives are **closed** (the spec finitely defines "done");
-exploration initiatives are **open** ("done" = "no obvious further improvement at
-the current budget" plus a recorded score).
+Implementation initiatives are **closed**; exploration initiatives are **open** ("done" when no obvious improvement remains at current budget).
 
 ## What a forge exploration cycle would look like
 
-- **Architect** emits a `type: exploration` manifest carrying a `metric_command`,
-  `locked_baselines` (file + value + tolerance), a `parameter_space`, a
-  `hypothesis` (from the brain), and a budget — not an implementation spec.
-- **PM** decomposes the parameter space into sweep-batch WIs: coarse sweep → fine
-  sweep around the peak → locked-baseline regression check → screenshot +
-  frontier-doc update.
-- **Dev-loop** *runs the provided sweep command* and writes the result to the
-  WI's output artifact — it does NOT write code. The metric is the gate; the
-  quality gate runs once at the end. Code changes are a separate prior
-  implementation initiative the exploration consumes.
-- **Reviewer** compares score-deltas against the locked baselines (±tolerance),
-  eyeballs the screenshots, updates the frontier doc, and approves iff
-  champion-improved AND baselines-held AND flow-is-clean. The PR-comment loop
-  fits: operator sees numbers + screenshot, approves or asks for a direction.
+- **Architect** emits `type: exploration` manifest: `metric_command`, `locked_baselines`, `parameter_space`, `hypothesis`, budget.
+- **PM** decomposes parameter space into sweep-batch WIs: coarse → fine sweep → regression check → screenshots.
+- **Dev-loop** runs the sweep command (no code writing). Metric is the gate.
+- **Reviewer** compares score-deltas vs baselines, eyeballs screenshots, approves iff champion-improved AND baselines-held.
 
 (The concrete manifest + WI-list shapes live in the cycle archive cited below.)
 
 ## Operator load vs what a cycle would automate
 
-The operator's load-bearing work was **hypothesis-formation**, **naming the
-failure mode**, and **pivoting between theories** — all needing operator + brain
-context. The automatable bulk was the 30+ sweep runs, the per-change regression
-check, the screenshot capture, the doc updates, and the PR description. A cycle
-wouldn't remove the operator — it would reduce them to **hypothesis + approval**.
+Operator's load-bearing work: **hypothesis-formation, naming failure modes, pivoting theories**. Automatable: 30+ sweeps, regression checks, screenshots, doc updates. A cycle reduces operator load to **hypothesis + approval**.
 
 ## When this isn't yet ready
 
-The shape requires (none huge alone, together a second operational mode): C7
-holistic metrics onboarded ([holistic-metrics-onboarding](./holistic-metrics-onboarding.md)),
-a parametric-design-search harness ([parametric-design-search](../../cycles/themes/parametric-design-search.md)),
-an architect that reads brain themes for prior hypotheses, a PM that accepts a
-`type: exploration` manifest and emits sweep-batch WIs, and a reviewer that
-accepts a "score-delta + visual confirmation" verdict shape.
+Requires: C7 holistic metrics ([holistic-metrics-onboarding](./holistic-metrics-onboarding.md)), parametric-design-search harness ([parametric-design-search](../../cycles/themes/parametric-design-search.md)), architect reading brain themes, PM accepting `type: exploration`, reviewer accepting score-delta verdicts.
 
 ## Why this matters
 
-A lot of real engineering is exploration — tuning, optimisation, A/B design
-searches, calibration. If forge can only run implementation cycles, every
-exploration arc looks like the trafficGame arc: an operator-driven multi-session
-conversation that succeeds but pollutes the autonomy signal. Distinguishing the
-two modes structurally (per [human-directed-work-as-initiatives](../../cycles/themes/human-directed-work-as-initiatives.md)'s
-`origin` tag) is the start; building the second pipeline shape is the finish.
+Real engineering includes exploration — tuning, A/B searches, calibration. Without a dedicated cycle, exploration arcs run as operator-driven conversations that pollute the autonomy signal. Distinguishing modes structurally (via [human-directed-work-as-initiatives](../../cycles/themes/human-directed-work-as-initiatives.md)'s `origin` tag) and building the pipeline shape closes the gap.
 
 ## Sources
 

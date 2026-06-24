@@ -34,16 +34,12 @@ How forge checks it can still ship a correct cycle before being pointed at a
 real operator project: run a real cycle against a real dogfood repo and assert
 the **outcomes**, not a synthetic rubric.
 
-The dogfood repo is `claude-harness` (the `claude-trail` CLI at
-`projects/claude-harness/`) — a zero-runtime-dependency TypeScript CLI built and
-operated autonomously by claude so the operator's real projects stay clean.
-Being forge's punching bag (~203 tests, ~12 real cycles) surfaced **real forge
-defects unit tests and the old synthetic benches missed**: a hardcoded
-`main...HEAD` gate diff (broke on master-default repos), no-origin assumptions,
-the hollow-gate / `gate-too-loose` arc, unifier wedging on resume, sparse-event
-observability gaps. These live in the seams between phases and in real-repo edge
-cases (default branch, remote, resume state) — no phase-isolated fixture would
-produce them.
+The dogfood repo is `claude-harness` (a TypeScript CLI at `projects/claude-harness/`),
+built and operated autonomously by claude. Being forge's punching bag (~12 real
+cycles) surfaced real defects unit tests missed: hardcoded `main...HEAD` gate diff,
+no-origin assumptions, the hollow-gate arc, unifier wedging on resume, sparse-event
+observability gaps. These live in the seams between phases and real-repo edge cases
+that no phase-isolated fixture would produce.
 
 ## The discipline
 
@@ -65,37 +61,21 @@ produce them.
   (`brain/cycles/_raw/*claude-trail*.md`) are reused as cases; new cycles extend
   it. The 5-initiative rebuild roadmap doubles as the corpus.
 
-## Why this is NOT the 2026-05-25 benches trap
+## Why this avoids the benches trap
 
 The 2026-05-25 removal of `benchmarks/` warned that synthetic per-phase rubrics
-were starting to **teach the phases toward the bench shape** rather than measure
-real-cycle outcomes. A real-capability harness avoids the trap by construction:
-its only target is "did forge ship a correct, cheap cycle against a real repo?" —
-no per-phase rubric, no threshold to game, no hand-curated fixture to overfit,
-just a real repo, real git history, and binary outcome assertions. It is the
-real-cycle instantiation of `eval-driven-development`'s "full-cycle runs measure
-*system* behaviour" clause, promoted to a codified gate. The synthetic phase
-benches stay retired; this replaces them.
-
-The negative example —
-`brain/cycles/_raw/2026-05-23_betterado-init01-dogfood-abandoned-arc.md` — is why
-the *routine* target is not a real operator project: too expensive and
-taste-driven to re-run cheaply. The arm's-length, binary-acceptance
-`claude-harness` exists precisely so routine self-verification stays cheap and
-unambiguous.
+teach phases toward the bench shape rather than measure outcomes. This harness
+avoids the trap by construction: its only target is "did forge ship a correct,
+cheap cycle against a real repo?" — no per-phase rubric, no threshold to game.
+It is the real-cycle instantiation of `eval-driven-development`'s "full-cycle
+runs measure *system* behaviour" clause. The `claude-harness` dogfood repo
+exists so routine self-verification stays cheap and unambiguous.
 
 ## How to apply
 
-- *Routine:* pick one corpus initiative, reset `claude-harness` to its
-  pre-landing SHA, re-run it, diff its golden + check the outcome set.
-- *Release:* run the greenfield 1→5 chain; a break in any earlier initiative's
-  output shape surfaces downstream as a golden mismatch.
-- See [ADR 022](../../../docs/decisions/022-real-capability-harness.md) for the
-  decision + runner contract (inputs: corpus manifest + base SHA + tier + cost
-  ceiling; outputs: pass/fail per outcome assertion + realised cost). The original
-  decomposition lived in `docs/planning/2026-05-30-claude-trail-rebuild/ROADMAP.md`
-  (since pruned — de-linked 2026-06-06 to keep brain lint clean). The standing runner
-  is codified separately by evolving `scripts/verify-cycle.mjs`.
+- *Routine:* pick one corpus initiative, reset `claude-harness` to its pre-landing SHA, re-run it, and check outcomes.
+- *Release:* run the greenfield 1→5 chain; breaks surface as golden mismatches.
+- See [ADR 022](../../../docs/decisions/022-real-capability-harness.md) for the runner contract. The standing runner evolves in `scripts/verify-cycle.mjs`.
 
 ## See also
 

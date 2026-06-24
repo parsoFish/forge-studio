@@ -25,3 +25,7 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`m7-studio-consolidation-arc`](./themes/m7-studio-consolidation-arc.md) — How the M7 consolidation (Studio becomes the one product — delete /dashboard, fold the moment-screens, collapse the CLI, harden the launcher) was executed as per-WI multi-agent workflows, and the durable lessons: migrate-the-harness-before- you-delete, ui:journey as the integration oracle, adversarial review earns its cost.

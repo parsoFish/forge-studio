@@ -34,14 +34,10 @@ ensures forge can **run** a project's gate, route work to isolated worktrees,
 honour locked-core mandates, and merge without stranding. It does NOT ensure
 forge can **evaluate whether a change made the project better**.
 
-The trafficGame collision/elevation arc (PR #57) hammered this gap into view.
-Across 34 commits the simulation was rebuilt twice, each iteration judged not by
-tests but by two scalars from an in-sim grading harness: throughput
-(vehicles/sim-second) and severe-overlap count. The 788-test suite passed
-throughout — it said every elevation-model iteration was *correct*; the numbers
-said only the third was actually *better*. Without that pair of scalars there's
-no way to settle "this should be cleaner" against "throughput dropped 30%"
-agentically.
+The trafficGame PR #57 illustrated this gap: across 34 commits, the 788-test
+suite passed throughout, but only the third iteration was actually *better* by
+the metrics (throughput and overlap count). Tests prove correctness; metrics
+prove improvement. Without them, you cannot settle design trade-offs agentically.
 
 ## The missing clause — C7
 
@@ -63,25 +59,15 @@ within a declared tolerance or document + deliberately update it. Concretely:
 
 ## Why tests aren't enough
 
-Tests cover correctness under specific conditions ("given X, returns Y"); a
-green suite proves nothing about overall system performance. trafficGame's tests
-did not flag cars deadlocking on the elevated split-grid (observable only in a
-sweep), false-positive overlaps from grade-separated cars (only in the sweep raw
-JSON), or the ramp entry-jam (only in a mid-sim screenshot). A unit test is a
-single assertion; a holistic metric ("3.314 v/sim-s at 0 severe overlaps over
-60 s with 12 flows") is a system-level claim. Both are needed; forge lacks the
-latter as a contract clause.
+Tests cover correctness under specific conditions; a green suite proves nothing
+about system performance. trafficGame's tests missed deadlocks, false positives,
+and bottlenecks observable only in full sweeps. A unit test is a single
+assertion; a holistic metric is a system-level claim. Both are needed; forge
+lacks the latter as a contract clause.
 
 ## Implications if C7 lands
 
-The architect must consume the locked baselines (C4 extended), the PM must emit
-WIs whose AC is "metric within budget" not just "tests pass", the reviewer must
-compare against the baseline (eval-driven-development from principle to
-enforcement), and a project-onboarding skill should walk the operator through
-choosing the metric, command, baselines, and budget. Not every project has a
-metric as clean as trafficGame's (a documentation project's outcome is "is the
-doc useful"); the onboarding skill should help find the cleanest available
-proxy, since even an imperfect one beats none — it converts prose to deltas.
+The architect consumes locked baselines (C4 extended), the PM writes WIs with AC "metric within budget" not just "tests pass", and the reviewer compares against baseline. A project-onboarding skill should guide metric, command, and budget selection. Not every project has a metric as clean as trafficGame's; the skill helps find the cleanest proxy available, since even an imperfect one beats none — it converts prose to deltas.
 
 ## Sources
 
