@@ -43,6 +43,7 @@ import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { readAgentInstructionsFile } from './project-config.ts';
 
 export { type InterviewQuestion } from './interactive-session.ts';
 
@@ -58,6 +59,7 @@ export const INSTRUCTIONS_MODEL = modelForSpec(instructionsAgentSpec);
 // ---------------------------------------------------------------------------
 
 export type InstructionsPhase =
+  | 'briefing'
   | 'interviewing'
   | 'awaiting-answers'
   | 'drafting'
@@ -72,9 +74,15 @@ export type InstructionsStatus = {
   /** Absolute path to the project's git repo (where AGENTS.md is written). */
   project_repo_path: string;
   phase: InstructionsPhase;
+  /**
+   * `init` — no AGENTS.md yet, author one from scratch. `edit` — an AGENTS.md
+   * exists; the operator's brief is a set of change-notes and the agent revises
+   * the existing file rather than starting over. Absent ⇒ `init`.
+   */
+  mode?: 'init' | 'edit';
   /** 1-based interview round counter. */
   round: number;
-  /** The operator's raw brief (also persisted to `prompt.md`). */
+  /** The operator's raw brief / change-notes (also persisted to `prompt.md`). */
   prompt: string;
   updated_at: string;
 };
@@ -246,6 +254,7 @@ async function runInterviewStep(args: {
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
+  const editContext = editContextLines(status);
   const prompt = [
     skill,
     '',
@@ -253,17 +262,22 @@ async function runInterviewStep(args: {
     '',
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
+    ...editContext,
     '',
-    'Operator brief:',
+    status.mode === 'edit' ? 'Operator change-notes:' : 'Operator brief:',
     status.prompt || '_(no brief — author AGENTS.md from the repo as you find it)_',
     '',
     'Interview so far:',
     priorQa,
     '',
-    'Inspect the repo with your read tools, then decide whether you can write an ' +
-      'accurate AGENTS.md without unresolved ambiguity. If yes, return ' +
-      '`{ "done": true }`. Otherwise return `{ "done": false, "questions": [...] }` ' +
-      'with 1-4 high-leverage questions in the AskUserQuestion shape.',
+    status.mode === 'edit'
+      ? 'You are UPDATING the existing AGENTS.md above per the change-notes. You can usually ' +
+        'proceed without questions — return `{ "done": true }`. Only return ' +
+        '`{ "done": false, "questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely ambiguous.'
+      : 'Inspect the repo with your read tools, then decide whether you can write an ' +
+        'accurate AGENTS.md without unresolved ambiguity. If yes, return ' +
+        '`{ "done": true }`. Otherwise return `{ "done": false, "questions": [...] }` ' +
+        'with 1-4 high-leverage questions in the AskUserQuestion shape.',
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
@@ -301,6 +315,7 @@ async function runDraftStep(args: {
   const feedback = readFeedback(sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
+  const editContext = editContextLines(status);
   const prompt = [
     skill,
     '',
@@ -308,8 +323,9 @@ async function runDraftStep(args: {
     '',
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
+    ...editContext,
     '',
-    'Operator brief:',
+    status.mode === 'edit' ? 'Operator change-notes:' : 'Operator brief:',
     status.prompt || '_(none)_',
     '',
     'Interview answers:',
@@ -318,8 +334,12 @@ async function runDraftStep(args: {
       : '_(operator drafted directly)_',
     ...(feedback ? ['', 'Revision feedback from the operator (apply it):', feedback] : []),
     '',
-    'Return `{ "agents_md": "<full markdown>" }` — the complete AGENTS.md content, ' +
-      'ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight.',
+    status.mode === 'edit'
+      ? 'Return `{ "agents_md": "<full markdown>" }` — the existing AGENTS.md above, REVISED to ' +
+        'incorporate the operator\'s change-notes. Preserve everything they did not ask to change; ' +
+        'keep commands copy-accurate; keep it tight.'
+      : 'Return `{ "agents_md": "<full markdown>" }` — the complete AGENTS.md content, ' +
+        'ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight.',
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ agents_md?: string }>({
@@ -389,6 +409,24 @@ function runFinalizeStep(args: {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * For an `edit`-mode session, the current AGENTS.md content as prompt lines so the
+ * agent revises the existing file rather than starting over. `[]` for `init` mode
+ * or when no agent-instruction file exists yet.
+ */
+function editContextLines(status: InstructionsStatus): string[] {
+  if (status.mode !== 'edit') return [];
+  const current = readAgentInstructionsFile(status.project_repo_path);
+  if (!current) return [];
+  return [
+    '',
+    `## Existing ${current.file} (the file you are UPDATING — revise it, don't start over)`,
+    '```markdown',
+    current.content,
+    '```',
+  ];
+}
 
 /** Read `feedback.md` (operator revision notes) — trimmed content or null. */
 function readFeedback(sessionDir: string): string | null {

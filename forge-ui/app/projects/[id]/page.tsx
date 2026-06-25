@@ -236,7 +236,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           <div style={{ flex: 1, padding: '24px 28px 64px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
             <NorthStar value={northStar} onChange={(v) => { setNorthStar(v); markDirty(); }} />
             <Instructions project={id} value={instructions} source={instructionsSource} onChange={(v) => { setInstructions(v); markDirty(); }} />
-            <DemoTimeline project={id} steps={demoSteps} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
+            <DemoTimeline project={id} steps={demoSteps} hasLockedDemo={project?.hasLockedDemo ?? false} onChange={(s) => { setDemoSteps(s); markDirty(); }} />
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
           </div>
 

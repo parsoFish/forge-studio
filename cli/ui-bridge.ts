@@ -98,6 +98,7 @@ import {
   writeSessionStatus,
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
+import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -1371,15 +1372,21 @@ async function handleInstructions(
         staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
       }
 
+      // Surface the current AGENTS.md so the briefing screen can show the file
+      // the operator is editing (and the read-only context for their notes).
+      const current = readAgentInstructionsFile(s.project_repo_path);
       return {
         sessionId: s.session_id,
         project: s.project,
         projectRepoPath: s.project_repo_path,
         phase: s.phase,
+        mode: s.mode ?? 'init',
         round: s.round,
         prompt: s.prompt,
         questions,
         draftUrl,
+        currentInstructions: current ? current.content : null,
+        currentInstructionsFile: current ? current.file : null,
         staleMs,
       };
     });
@@ -1420,31 +1427,63 @@ async function handleInstructions(
     return true;
   }
 
-  // POST /api/instructions/start {project, prompt, projectRepoPath?} — create a
-  // new session and kick off the first interview turn.
+  // POST /api/instructions/start {project, mode?, projectRepoPath?} — create a
+  // session in the `briefing` phase. It does NOT spawn the agent: the operator
+  // lands on the screen, reviews the current AGENTS.md (edit mode), and provides
+  // notes; POST /api/instructions/brief then kicks off the agent.
   if (method === 'POST' && url === '/api/instructions/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; prompt?: string; projectRepoPath?: string };
-      if (!body.project || !body.prompt) {
-        sendJson(res, 400, { error: 'project and prompt are required' }, origin);
+      const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string };
+      if (!body.project) {
+        sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
       }
+      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // Default the mode by whether an agent-instruction file already exists.
+      const mode: 'init' | 'edit' =
+        body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
       const sessionId = newArchitectSessionId();
       const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), sessionId);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'prompt.md'), body.prompt);
       writeSessionStatus<InstructionsStatus>(dir, {
         session_id: sessionId,
         project: body.project,
-        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
-        phase: 'interviewing',
+        project_repo_path: repoPath,
+        phase: 'briefing',
+        mode,
         round: 1,
-        prompt: body.prompt,
+        prompt: '',
         updated_at: new Date().toISOString(),
       });
-      spawnInstructionsTurn(ctx.forgeRoot, body.project, sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, sessionId }, origin);
+      sendJson(res, 200, { ok: true, sessionId, mode }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/instructions/brief {project, sessionId, brief} — record the
+  // operator's brief / change-notes and kick off the agent (briefing → interviewing).
+  if (method === 'POST' && url === '/api/instructions/brief') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<InstructionsStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const brief = body.brief ?? '';
+      writeFileSync(join(dir, 'prompt.md'), brief);
+      writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: 1, prompt: brief });
+      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastInstructionsChanged();
+      sendJson(res, 200, { ok: true }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1619,9 +1658,11 @@ async function handleDemoBuilder(
         project: s.project,
         projectRepoPath: s.project_repo_path,
         phase: s.phase,
+        mode: s.mode ?? 'create',
         iteration: s.iteration,
         prompt: s.prompt,
         demoUrl,
+        hasLockedDemo: existsSync(join(s.project_repo_path, '.forge', 'demo', 'demo.lock.json')),
         staleMs,
       };
     });
@@ -1670,31 +1711,64 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/demo-builder/start {project, prompt, projectRepoPath?} — create a
-  // new session and kick off the first generate turn.
+  // POST /api/demo-builder/start {project, mode?, projectRepoPath?} — create a
+  // session in the `briefing` phase. It does NOT spawn the agent: the operator
+  // lands on the screen, sees the demo process + any existing locked demo, and
+  // provides notes; POST /api/demo-builder/brief then kicks off the agent.
   if (method === 'POST' && url === '/api/demo-builder/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; prompt?: string; projectRepoPath?: string };
+      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
       }
+      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // Default the mode by whether a locked demo already exists.
+      const mode: 'create' | 'update' =
+        body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
       const sessionId = newArchitectSessionId();
       const dir = demoSessionDir(join(ctx.projectsRoot, body.project), sessionId);
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'prompt.md'), body.prompt ?? '');
       writeSessionStatus<DemoBuilderStatus>(dir, {
         session_id: sessionId,
         project: body.project,
-        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
-        phase: 'generating',
+        project_repo_path: repoPath,
+        phase: 'briefing',
+        mode,
         iteration: 1,
-        prompt: body.prompt ?? '',
+        prompt: '',
         updated_at: new Date().toISOString(),
       });
-      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, sessionId }, origin);
+      sendJson(res, 200, { ok: true, sessionId, mode }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/demo-builder/brief {project, sessionId, brief} — record the
+  // operator's look-and-feel / change-notes and kick off the agent
+  // (briefing → generating).
+  if (method === 'POST' && url === '/api/demo-builder/brief') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const brief = body.brief ?? '';
+      writeFileSync(join(dir, 'prompt.md'), brief);
+      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: 1, prompt: brief });
+      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastDemoChanged();
+      sendJson(res, 200, { ok: true }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

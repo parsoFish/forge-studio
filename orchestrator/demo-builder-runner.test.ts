@@ -175,6 +175,24 @@ test('locking with no DEMO.html in the repo → throws', async () => {
   );
 });
 
+test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'update' });
+  const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });
+  assert.equal(result.phase, 'briefing');
+  assert.equal(result.wrote.length, 0);
+});
+
+test('update mode: the generate prompt carries an UPDATE framing referencing the locked skill + sample', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', mode: 'update' });
+  let captured = '';
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.match(captured, /UPDATE MODE/, 'update framing present');
+  assert.match(captured, /demo-design\/SKILL\.md/, 'references the existing generator');
+  assert.match(captured, /change-notes/i, 'frames the brief as change-notes');
+});
+
 test('awaiting-review turn is a no-op (bridge owns the wait state)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'awaiting-review' });
   const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });

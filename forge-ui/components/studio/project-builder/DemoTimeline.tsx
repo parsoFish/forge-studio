@@ -31,7 +31,7 @@ function attachUids(steps: DemoStep[]): StepWithUid[] {
   return steps.map((s) => ({ ...s, uid: nextUid() }));
 }
 
-export function DemoTimeline({ project, steps, onChange }: { project: string; steps: DemoStep[]; onChange: (s: DemoStep[]) => void }) {
+export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { project: string; steps: DemoStep[]; hasLockedDemo: boolean; onChange: (s: DemoStep[]) => void }) {
   const router = useRouter();
   const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -44,7 +44,7 @@ export function DemoTimeline({ project, steps, onChange }: { project: string; st
     setLaunchError(null);
     setLaunching(true);
     try {
-      const res = await startDemoBuilder({ project, prompt: '' });
+      const res = await startDemoBuilder({ project, mode: hasLockedDemo ? 'update' : 'create' });
       if (!res.ok || !res.sessionId) {
         setLaunchError(res.error ?? 'failed to start the demo agent');
         return;
@@ -107,20 +107,47 @@ export function DemoTimeline({ project, steps, onChange }: { project: string; st
       <div className="panel">
         <div className="panel-head"><span>Acceptable proof-of-work for this project</span></div>
         <div className="panel-body">
+          {/* Locked-state indicator — is a reproducible demo set up yet? */}
+          {hasLockedDemo ? (
+            <div
+              data-section="demo-locked"
+              data-demo-locked="true"
+              style={{ fontSize: 12, color: 'var(--green)', padding: '8px 12px', background: 'rgba(74,222,128,.07)', border: '1px solid rgba(74,222,128,.3)', borderRadius: 'var(--radius-sm)', marginBottom: 14, lineHeight: 1.5 }}
+            >
+              ✓ A reproducible demo is locked in (.forge/demo/). The agent renders a before/after of
+              each completed initiative&apos;s changes following the process below.
+            </div>
+          ) : (
+            <div
+              data-section="demo-locked"
+              data-demo-locked="false"
+              style={{ fontSize: 12, color: 'var(--dim)', padding: '8px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', marginBottom: 14, lineHeight: 1.5 }}
+            >
+              No demo is set up yet — build one with the agent so each completed initiative renders a
+              before/after of its changes.
+            </div>
+          )}
+
           <button
             type="button"
             className="btn btn-primary"
             data-action="launch-demo-builder"
+            data-demo-mode={hasLockedDemo ? 'update' : 'create'}
             onClick={() => void onLaunchDemoBuilder()}
             disabled={launching}
             style={{ alignSelf: 'flex-start', marginBottom: 14, opacity: launching ? 0.6 : 1 }}
           >
-            {launching ? 'Starting…' : '✦ Build the demo with the agent'}
+            {launching ? 'Starting…' : hasLockedDemo ? '✦ Update the demo with the agent' : '✦ Build the demo with the agent'}
           </button>
           {launchError && <div style={{ fontSize: 11.5, color: 'var(--red, #f85149)', marginBottom: 14 }}>{launchError}</div>}
 
           <div style={{ fontSize: 12, color: 'var(--amber)', fontStyle: 'italic', padding: '7px 12px', background: 'rgba(251,191,36,.06)', border: '1px solid rgba(251,191,36,.2)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
             ⚠ Demos show the ACTUAL resource — a passing-test table is not a demo.
+          </div>
+
+          {/* Demo process — the ordered steps the demo agent follows */}
+          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10 }}>
+            The demo process this follows
           </div>
 
           {/* Timeline */}

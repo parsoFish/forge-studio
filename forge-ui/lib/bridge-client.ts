@@ -514,6 +514,7 @@ export async function postPlanVerdict(input: PlanVerdict): Promise<{ ok: boolean
 // finalize).
 
 export type InstructionsPhase =
+  | 'briefing'
   | 'interviewing'
   | 'awaiting-answers'
   | 'drafting'
@@ -527,9 +528,15 @@ export type InstructionsSessionSummary = {
   project: string;
   projectRepoPath: string;
   phase: InstructionsPhase;
+  /** 'init' (no AGENTS.md yet) or 'edit' (carries the existing file as context). */
+  mode: 'init' | 'edit';
   round: number;
   prompt: string;
   questions: ArchitectQuestion[] | null;
+  /** Existing AGENTS.md content (edit mode) shown on the briefing screen, or null. */
+  currentInstructions: string | null;
+  /** The agent-instruction file backing `currentInstructions` (e.g. 'AGENTS.md'), or null. */
+  currentInstructionsFile: string | null;
   /** Bridge-relative URL to the pending AGENTS.draft.md, or null until drafted. */
   draftUrl: string | null;
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
@@ -545,14 +552,31 @@ export async function listInstructionsSessions(): Promise<InstructionsSessionSum
   return body.sessions ?? [];
 }
 
+/**
+ * Open a new instructions session in phase 'briefing' (does NOT spawn the agent).
+ * `mode: 'edit'` carries the existing AGENTS.md as context; `'init'` creates one.
+ * The operator reviews on the briefing screen, then kicks off via {@link instructionsBrief}.
+ */
 export async function startInstructions(input: {
   project: string;
-  prompt: string;
-  projectRepoPath?: string;
-}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/instructions/start', input);
+  mode: 'init' | 'edit';
+}): Promise<{ ok: boolean; sessionId?: string; mode?: 'init' | 'edit'; error?: string }> {
+  const r = await bridgePost('/api/instructions/start', { project: input.project, mode: input.mode });
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+  return {
+    ok: true,
+    sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined,
+    mode: (r.data?.mode === 'init' || r.data?.mode === 'edit') ? r.data.mode : undefined,
+  };
+}
+
+/** Record briefing notes and kick off the instructions agent (briefing → interviewing). */
+export async function instructionsBrief(input: {
+  project: string;
+  sessionId: string;
+  brief: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/instructions/brief', input);
 }
 
 export async function answerInstructions(input: {
@@ -579,6 +603,7 @@ export async function instructionsVerdict(input: {
 // DEMO.html lives in the project repo (.forge/demo/), served via `demoUrl`.
 
 export type DemoBuilderPhase =
+  | 'briefing'
   | 'generating'
   | 'awaiting-review'
   | 'locking'
@@ -590,6 +615,10 @@ export type DemoSessionSummary = {
   project: string;
   projectRepoPath: string;
   phase: DemoBuilderPhase;
+  /** 'create' (no locked demo yet) or 'update' (carries the existing demo as context). */
+  mode: 'create' | 'update';
+  /** True when the project already has a reproducible demo locked in (.forge/demo/). */
+  hasLockedDemo: boolean;
   iteration: number;
   prompt: string;
   /** Bridge-relative URL to the generated DEMO.html, or null until generated. */
@@ -607,13 +636,31 @@ export async function listDemoSessions(): Promise<DemoSessionSummary[]> {
   return body.sessions ?? [];
 }
 
+/**
+ * Open a new demo session in phase 'briefing' (does NOT spawn the agent).
+ * `mode: 'update'` carries the existing locked demo as context; `'create'` builds one.
+ * The operator reviews on the briefing screen, then kicks off via {@link demoBuilderBrief}.
+ */
 export async function startDemoBuilder(input: {
   project: string;
-  prompt: string;
-}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/demo-builder/start', input);
+  mode: 'create' | 'update';
+}): Promise<{ ok: boolean; sessionId?: string; mode?: 'create' | 'update'; error?: string }> {
+  const r = await bridgePost('/api/demo-builder/start', { project: input.project, mode: input.mode });
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+  return {
+    ok: true,
+    sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined,
+    mode: (r.data?.mode === 'create' || r.data?.mode === 'update') ? r.data.mode : undefined,
+  };
+}
+
+/** Record briefing notes and kick off the demo agent (briefing → generating). */
+export async function demoBuilderBrief(input: {
+  project: string;
+  sessionId: string;
+  brief: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/demo-builder/brief', input);
 }
 
 export async function demoBuilderFeedback(input: {

@@ -37,10 +37,9 @@ export function Instructions({
     setError(null);
     setLaunching(true);
     try {
-      // For a fresh project the textarea value is an optional brief; once
-      // file-bound, the agent reads the existing AGENTS.md itself, so no brief.
-      const prompt = fileBound ? '' : value.trim();
-      const res = await startInstructions({ project, prompt });
+      // No prompt — the session opens on a briefing screen (no spawn). 'edit'
+      // carries the existing AGENTS.md as context; 'init' creates a fresh one.
+      const res = await startInstructions({ project, mode: fileBound ? 'edit' : 'init' });
       if (!res.ok || !res.sessionId) {
         setError(res.error ?? 'failed to start the instructions agent');
         return;

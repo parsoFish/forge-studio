@@ -153,6 +153,32 @@ test('draft: empty agents_md throws a clear, recoverable error', async () => {
   );
 });
 
+test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'edit' });
+  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+  assert.equal(result.phase, 'briefing');
+  assert.equal(result.wrote.length, 0);
+});
+
+test('edit mode: the draft prompt carries the existing AGENTS.md + an UPDATE framing', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'drafting', mode: 'edit' });
+  writeFileSync(join(repoPath, 'AGENTS.md'), '# Existing\n\nKeep the lint command: npm run lint.');
+  let draftPrompt = '';
+  const queryFn: QueryFn = ({ prompt }) => {
+    if (prompt.includes('draft AGENTS.md')) draftPrompt = prompt;
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = prompt.includes('draft AGENTS.md') ? { agents_md: '# Existing\n\nKeep the lint command: npm run lint.\n\n## Added\n\nUse conventional commits.' } : null;
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  assert.equal(result.phase, 'awaiting-verdict');
+  assert.match(draftPrompt, /Existing AGENTS\.md/, 'existing file injected as context');
+  assert.match(draftPrompt, /Keep the lint command/, 'the actual file content is included');
+  assert.match(draftPrompt, /REVISED to/, 'framed as a revision, not a fresh draft');
+});
+
 test('awaiting-answers turn is a no-op (bridge owns the wait state)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'awaiting-answers' });
   const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });

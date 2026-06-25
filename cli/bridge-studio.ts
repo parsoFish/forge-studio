@@ -256,6 +256,10 @@ type ProjectWithMeta = {
   instructionsSource?: 'AGENTS.md' | 'CLAUDE.md' | 'project.json';
   skills?: string[];
   demoProcess?: Array<{ kind: string; text: string }>;
+  /** True when a demo-builder run has locked a reproducible demo into the repo
+   *  (`.forge/demo/demo.lock.json`) — drives the "update the demo" entry + the
+   *  locked-demo indicator on the project page. */
+  hasLockedDemo?: boolean;
 };
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
@@ -278,6 +282,8 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       result.instructions = agentFile.content;
       result.instructionsSource = agentFile.file as 'AGENTS.md' | 'CLAUDE.md';
     }
+    // Locked-demo state (read regardless of project.json) — the demo-builder lock.
+    result.hasLockedDemo = existsSync(join(ref.absPath, '.forge', 'demo', 'demo.lock.json'));
     if (!ref.hasConfig) return result;
     const projectJsonPath = join(ref.absPath, '.forge', 'project.json');
     try {

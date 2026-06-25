@@ -5,10 +5,12 @@ import Link from 'next/link';
 
 import {
   listInstructionsSessions,
+  instructionsBrief,
   type InstructionsSessionSummary,
 } from '@/lib/bridge-client';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { StageHex } from '@/components/StageHex';
+import { SessionBriefing } from '@/components/SessionBriefing';
 import { InstructionsQuestionForm } from '@/components/InstructionsQuestionForm';
 import { InstructionsVerdict } from '@/components/InstructionsVerdict';
 import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
@@ -117,6 +119,29 @@ export default function InstructionsInterviewPage({
             </div>
 
             {stale && <StuckWarning session={session} />}
+
+            {session.phase === 'briefing' && (
+              <SessionBriefing
+                heading="Instructions agent"
+                modeLabel={session.mode === 'edit' ? 'edit AGENTS.md' : 'create AGENTS.md'}
+                contextLabel={
+                  session.currentInstructionsFile ? `Current ${session.currentInstructionsFile}` : undefined
+                }
+                contextContent={session.currentInstructions}
+                notesPlaceholder={
+                  session.mode === 'edit'
+                    ? 'What should change about the current instructions? (optional)'
+                    : 'Anything the agent should know up front? (optional)'
+                }
+                onSubmit={(notes) =>
+                  instructionsBrief({
+                    project: session.project,
+                    sessionId: session.sessionId,
+                    brief: notes,
+                  }).then(() => loadSession())
+                }
+              />
+            )}
 
             {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
               <InstructionsQuestionForm

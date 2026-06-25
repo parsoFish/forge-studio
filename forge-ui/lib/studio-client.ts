@@ -143,6 +143,8 @@ export type Project = {
   demoProcess?: DemoStep[];
   skills: string[];
   kb?: string;
+  /** True when a reproducible demo is locked in the repo (.forge/demo/demo.lock.json). */
+  hasLockedDemo?: boolean;
 };
 
 export type Kb = {

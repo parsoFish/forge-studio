@@ -5,16 +5,25 @@ import Link from 'next/link';
 
 import {
   listDemoSessions,
+  demoBuilderBrief,
   type DemoSessionSummary,
   type DemoBuilderPhase,
 } from '@/lib/bridge-client';
+import { fetchStudioProjects, type DemoStep } from '@/lib/studio-client';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { StageHex } from '@/components/StageHex';
+import { SessionBriefing } from '@/components/SessionBriefing';
 import { DemoReview } from '@/components/DemoReview';
 import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { STATUS_COLOR } from '@/lib/status-colors';
+
+const STEP_KIND_LABEL: Record<DemoStep['kind'], string> = {
+  capture: 'capture',
+  verify: 'verify',
+  present: 'present',
+};
 
 /**
  * Demo-builder review surface (Stage B). Mirrors the instructions-creator
@@ -66,6 +75,7 @@ export default function DemoBuilderPage({
 
   const [session, setSession] = useState<DemoSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
   const nowMs = useNowTicker();
 
   const loadSession = useCallback(() => {
@@ -82,6 +92,21 @@ export default function DemoBuilderPage({
     const poll = setInterval(loadSession, 3000);
     return () => clearInterval(poll);
   }, [loadSession]);
+
+  // Resolve the configured demo process for this session's project so the
+  // generating/review views can show the demo adheres to it.
+  useEffect(() => {
+    if (!session?.project) return;
+    let cancelled = false;
+    fetchStudioProjects()
+      .then((ps) => {
+        if (cancelled) return;
+        const p = ps.find((x) => x.id === session.project);
+        setDemoProcess(Array.isArray(p?.demoProcess) ? p!.demoProcess! : []);
+      })
+      .catch(() => { /* leave empty */ });
+    return () => { cancelled = true; };
+  }, [session?.project]);
 
   const events = useCycleEvents(cycleId, (msg) => {
     if (msg.type === 'demo-list-changed') loadSession();
@@ -135,6 +160,25 @@ export default function DemoBuilderPage({
               {session.project}
             </div>
 
+            {session.phase === 'briefing' && (
+              <SessionBriefing
+                heading="Demo agent"
+                modeLabel={session.mode === 'update' ? 'update demo' : 'create demo'}
+                notesPlaceholder={
+                  session.mode === 'update'
+                    ? 'What should change about the current demo? (optional)'
+                    : 'Look-and-feel notes for the demo (optional)'
+                }
+                onSubmit={(notes) =>
+                  demoBuilderBrief({
+                    project: session.project,
+                    sessionId: session.sessionId,
+                    brief: notes,
+                  }).then(() => loadSession())
+                }
+              />
+            )}
+
             {(session.phase === 'generating' || session.phase === 'locking') && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <Status
@@ -144,17 +188,21 @@ export default function DemoBuilderPage({
                       : 'The demo agent is building the demo…'
                   }
                 />
+                <DemoProcessRef steps={demoProcess} />
                 <ArchitectActivityLog events={events} />
               </div>
             )}
 
             {session.phase === 'awaiting-review' && (
-              <DemoReview
-                project={session.project}
-                sessionId={session.sessionId}
-                demoUrl={session.demoUrl}
-                iteration={session.iteration}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <DemoReview
+                  project={session.project}
+                  sessionId={session.sessionId}
+                  demoUrl={session.demoUrl}
+                  iteration={session.iteration}
+                />
+                <DemoProcessRef steps={demoProcess} />
+              </div>
             )}
 
             {session.phase === 'locked' && (
@@ -219,6 +267,38 @@ function Status({ label }: { label: string }): JSX.Element {
       }}
     >
       {label}
+    </div>
+  );
+}
+
+/** The configured demo process for the project — surfaced so it's clear the
+ *  demo adheres to it. Empty steps = nothing configured yet. */
+function DemoProcessRef({ steps }: { steps: DemoStep[] }): JSX.Element | null {
+  if (steps.length === 0) return null;
+  return (
+    <div
+      data-section="demo-process-ref"
+      data-step-count={steps.length}
+      style={{
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        padding: '12px 16px',
+        background: 'var(--panel)',
+      }}
+    >
+      <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
+        The demo process this follows
+      </div>
+      <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.7 }}>
+        {steps.map((s, i) => (
+          <li key={i} data-step-kind={s.kind}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--steel, #5cc8ff)', marginRight: 6 }}>
+              [{STEP_KIND_LABEL[s.kind]}]
+            </span>
+            {s.text}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

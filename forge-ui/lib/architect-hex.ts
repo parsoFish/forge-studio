@@ -1,5 +1,5 @@
 import { STATUS_COLOR } from './status-colors';
-import type { ArchitectPhase, ArchitectSessionSummary } from './bridge-client';
+import type { ArchitectPhase } from './bridge-client';
 
 /**
  * Architect-phase presentation logic, extracted out of the old MomentHex
@@ -32,14 +32,23 @@ export const ARCHITECT_WORKING_PHASES = new Set<ArchitectPhase>([
 /** P1 stale threshold — the runner is presumed stalled after this much silence. */
 export const STALE_THRESHOLD_MS = 120_000;
 
-/** Resolve the hex meta for a phase, defaulting to the idle tone. */
-export function architectHexMeta(phase: ArchitectPhase): HexMeta {
-  return ARCHITECT_HEX_META[phase] ?? { glow: STATUS_COLOR.idle, frac: 0, label: phase };
+/**
+ * The instructions-creator reuses these helpers but adds a pre-spawn 'briefing'
+ * phase (no agent activity yet — the operator is reviewing). Widen the inputs to
+ * the superset so the instructions page can pass its phase without a cast; the
+ * architect's own `ArchitectPhase` callers remain valid (it's a subtype).
+ */
+type HexPhase = ArchitectPhase | 'briefing';
+
+/** Resolve the hex meta for a phase, defaulting to the idle tone. The pre-spawn
+ *  'briefing' phase has no agent activity, so it reads idle. */
+export function architectHexMeta(phase: HexPhase): HexMeta {
+  return ARCHITECT_HEX_META[phase as ArchitectPhase] ?? { glow: STATUS_COLOR.idle, frac: 0, label: phase };
 }
 
-/** Is the phase a working phase (architect runner busy)? */
-export function isArchitectWorking(phase: ArchitectPhase): boolean {
-  return ARCHITECT_WORKING_PHASES.has(phase);
+/** Is the phase a working phase (architect runner busy)? 'briefing' is not. */
+export function isArchitectWorking(phase: HexPhase): boolean {
+  return ARCHITECT_WORKING_PHASES.has(phase as ArchitectPhase);
 }
 
 /**
@@ -47,7 +56,7 @@ export function isArchitectWorking(phase: ArchitectPhase): boolean {
  * AND has been silent for longer than {@link STALE_THRESHOLD_MS}. A fresh
  * `staleMs` (session refresh) clears it; a non-working phase never reads stale.
  */
-export function isSessionStale(session: Pick<ArchitectSessionSummary, 'phase' | 'staleMs'>): boolean {
+export function isSessionStale(session: { phase: HexPhase; staleMs?: number }): boolean {
   if (!isArchitectWorking(session.phase)) return false;
   return (session.staleMs ?? 0) > STALE_THRESHOLD_MS;
 }

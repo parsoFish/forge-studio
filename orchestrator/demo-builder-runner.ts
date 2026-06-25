@@ -64,6 +64,7 @@ export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 // ---------------------------------------------------------------------------
 
 export type DemoBuilderPhase =
+  | 'briefing'
   | 'generating'
   | 'awaiting-review'
   | 'locking'
@@ -76,9 +77,15 @@ export type DemoBuilderStatus = {
   /** Absolute path to the project's git repo (where .forge/demo/ is written). */
   project_repo_path: string;
   phase: DemoBuilderPhase;
+  /**
+   * `create` — no locked demo yet, build one. `update` — a demo skill/sample
+   * already exists; the operator's brief is change-notes and the agent revises
+   * the existing skill + sample rather than rebuilding. Absent ⇒ `create`.
+   */
+  mode?: 'create' | 'update';
   /** 1-based generate-turn counter. */
   iteration: number;
-  /** The operator's look-and-feel guidance (also persisted to `prompt.md`). */
+  /** The operator's look-and-feel guidance / change-notes (persisted to `prompt.md`). */
   prompt: string;
   updated_at: string;
 };
@@ -197,8 +204,14 @@ async function runGenerateStep(args: {
     '',
     `Project: ${status.project}`,
     `Project repo (your working directory): ${status.project_repo_path}`,
+    ...(status.mode === 'update'
+      ? ['',
+         `UPDATE MODE: a locked demo already exists — ${DEMO_SKILL_REL_PATH} (the generator) and ` +
+         `${DEMO_HTML_REL_PATH} (the sample). READ both and REVISE them per the operator's change-notes ` +
+         'below; do NOT rebuild from scratch.']
+      : []),
     '',
-    'Operator look-and-feel guidance:',
+    status.mode === 'update' ? 'Operator change-notes:' : 'Operator look-and-feel guidance:',
     status.prompt || '_(none — choose a clean, faithful before/after treatment)_',
     '',
     'Configured demo process (capture / verify / present steps to bake into the skill):',
