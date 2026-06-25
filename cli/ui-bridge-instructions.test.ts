@@ -114,6 +114,27 @@ test('POST /api/demo-builder/start defaults mode=update when a demo is locked', 
   }
 });
 
+test('demo sessions surface per-element fragments + the fragment endpoint serves them', async () => {
+  const started = await post('/api/demo-builder/start', { project: 'demo' });
+  const sid = started.json.sessionId as string;
+  // The agent would write per-element fragments here; simulate one.
+  mkdirSync(join(repoDir(), '.forge', 'demo', 'fragments'), { recursive: true });
+  writeFileSync(join(repoDir(), '.forge', 'demo', 'fragments', 'cli-capture.html'), '<section>cli fragment</section>');
+
+  const sessions = (await (await fetch(`${url}/api/demo-builder/sessions`)).json()) as {
+    sessions: Array<{ sessionId: string; fragments: string[] }>;
+  };
+  const s = sessions.sessions.find((x) => x.sessionId === sid);
+  assert.deepEqual(s!.fragments, ['cli-capture'], 'session surfaces the element fragment ids');
+
+  const frag = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/cli-capture`);
+  assert.equal(frag.status, 200);
+  assert.match(await frag.text(), /cli fragment/);
+  // A path-escape / missing fragment 404s.
+  const missing = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/nope`);
+  assert.equal(missing.status, 404);
+});
+
 test('POST /api/demo-builder/brief transitions briefing → generating', async () => {
   const started = await post('/api/demo-builder/start', { project: 'demo' });
   const sid = started.json.sessionId as string;

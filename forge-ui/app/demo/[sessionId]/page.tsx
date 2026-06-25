@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import {
   listDemoSessions,
   demoBuilderBrief,
+  startDemoBuilder,
+  demoFragmentUrl,
   listDemoHistory,
   listDemoElements,
   architectFileUrl,
@@ -77,9 +80,12 @@ export default function DemoBuilderPage({
 }): JSX.Element {
   const sessionId = decodeURIComponent(params.sessionId);
   const cycleId = `_demo-${sessionId}`;
+  const router = useRouter();
 
   const [session, setSession] = useState<DemoSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // Which iterate action is in-flight: an element id, or '__whole__', or null.
+  const [iterating, setIterating] = useState<string | null>(null);
   const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
   // The forge demo-element library — used to resolve an `element` id on a
   // demoProcess step to its human name in the demo-process-ref panel.
@@ -154,6 +160,24 @@ export default function DemoBuilderPage({
   });
 
   const meta = session ? demoHexMeta(session.phase) : null;
+
+  // Iterate the whole demo (target=null) or one part (target=element id): open a
+  // fresh demo session focused accordingly, then jump to it.
+  async function iterate(target: string | null): Promise<void> {
+    if (iterating || !session) return;
+    setIterating(target ?? '__whole__');
+    try {
+      const res = await startDemoBuilder({
+        project: session.project,
+        mode: session.hasLockedDemo ? 'update' : 'create',
+        ...(target ? { targetElement: target } : {}),
+      });
+      if (res.ok && res.sessionId) router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+      else setIterating(null);
+    } catch {
+      setIterating(null);
+    }
+  }
 
   return (
     <StudioArchitectShell
@@ -249,22 +273,32 @@ export default function DemoBuilderPage({
                       : 'The demo agent is building the demo…'
                   }
                 />
-                <DemoProcessRef steps={demoProcess} elements={elements} targetElement={session.targetElement} />
                 <ArchitectActivityLog events={events} />
               </div>
             )}
 
             {session.phase === 'awaiting-review' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <DemoReview
-                  project={session.project}
-                  sessionId={session.sessionId}
-                  demoUrl={session.demoUrl}
-                  iteration={session.iteration}
-                />
-                <DemoProcessRef steps={demoProcess} elements={elements} targetElement={session.targetElement} />
-              </div>
+              <DemoReview
+                project={session.project}
+                sessionId={session.sessionId}
+                demoUrl={session.demoUrl}
+                iteration={session.iteration}
+              />
             )}
+
+            {/* The demo process — shown in EVERY phase. Each part can be iterated
+                on its own (or the whole demo), and its output viewed independently. */}
+            <DemoProcessPanel
+              steps={demoProcess}
+              elements={elements}
+              project={session.project}
+              sessionId={session.sessionId}
+              fragments={session.fragments}
+              targetElement={session.targetElement}
+              iterating={iterating}
+              busy={session.phase === 'generating' || session.phase === 'locking'}
+              onIterate={iterate}
+            />
 
             {session.phase === 'locked' && (
               <div
@@ -417,66 +451,118 @@ function elementName(elements: DemoElementSummary[], id: string): string {
   return elements.find((e) => e.id === id)?.name ?? id;
 }
 
-/** The configured demo process for the project — surfaced so it's clear the
- *  demo adheres to it. Steps composed from a forge library element render a
- *  small element badge; the element matching the session's per-element
- *  iteration target (`targetElement`) is marked as the focused element.
- *  Empty steps = nothing configured yet. */
-function DemoProcessRef({
+/** The demo process — each part shown in every phase, with the ability to iterate
+ *  on the whole demo or one part, and to view each part's rendered output
+ *  independently (its `.forge/demo/fragments/<element>.html`). Empty steps = nothing
+ *  configured yet (render nothing). */
+function DemoProcessPanel({
   steps,
   elements,
+  project,
+  sessionId,
+  fragments,
   targetElement,
+  iterating,
+  busy,
+  onIterate,
 }: {
   steps: DemoStep[];
   elements: DemoElementSummary[];
+  project: string;
+  sessionId: string;
+  fragments: string[];
   targetElement: string | null;
+  iterating: string | null;
+  busy: boolean;
+  onIterate: (target: string | null) => void;
 }): JSX.Element | null {
   if (steps.length === 0) return null;
+
+  async function viewOutput(element: string): Promise<void> {
+    const u = await architectFileUrl(demoFragmentUrl(project, sessionId, element));
+    if (u) window.open(u, '_blank');
+  }
+
+  const anyBusy = busy || iterating !== null;
+
   return (
     <div
-      data-section="demo-process-ref"
+      data-section="demo-process"
       data-step-count={steps.length}
-      style={{
-        border: '1px solid var(--line)',
-        borderRadius: 10,
-        padding: '12px 16px',
-        background: 'var(--panel)',
-      }}
+      style={{ marginTop: 16, border: '1px solid var(--line)', borderRadius: 10, padding: '12px 16px', background: 'var(--panel)' }}
     >
-      <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
-        The demo process this follows
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ flex: 1, fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+          The demo process — {steps.length} part{steps.length !== 1 ? 's' : ''}
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          data-action="iterate-whole-demo"
+          onClick={() => onIterate(null)}
+          disabled={anyBusy}
+          style={{ fontSize: 12, opacity: anyBusy ? 0.6 : 1 }}
+        >
+          {iterating === '__whole__' ? 'Starting…' : '⟳ Iterate the whole demo'}
+        </button>
       </div>
-      <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.7 }}>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {steps.map((s, i) => {
           const isFocus = !!s.element && s.element === targetElement;
+          const hasOutput = !!s.element && fragments.includes(s.element);
           return (
-            <li key={i} data-step-kind={s.kind} data-step-element={s.element ?? ''}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--steel, #5cc8ff)', marginRight: 6 }}>
-                [{STEP_KIND_LABEL[s.kind]}]
+            <div
+              key={i}
+              data-step-kind={s.kind}
+              data-step-element={s.element ?? ''}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                borderRadius: 8, border: `1px solid ${isFocus ? 'rgba(92,200,255,.4)' : 'var(--line-2)'}`,
+                background: isFocus ? 'rgba(92,200,255,.06)' : 'var(--panel-2)',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--steel, #5cc8ff)', flexShrink: 0 }}>
+                {i + 1}. [{STEP_KIND_LABEL[s.kind]}]
               </span>
-              {s.text}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {s.element ? elementName(elements, s.element) : (s.text || '— free text —')}
+                {s.element && s.text && (
+                  <span style={{ color: 'var(--faint)', marginLeft: 6, fontSize: 11.5 }}>{s.text}</span>
+                )}
+                {isFocus && <span data-element-focus="true" style={{ color: 'var(--steel, #5cc8ff)', fontSize: 10, marginLeft: 6 }}>● focus</span>}
+              </span>
+
               {s.element && (
-                <span
-                  data-element-badge={s.element}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    marginLeft: 8, padding: '1px 8px', borderRadius: 999,
-                    fontSize: 10.5, fontWeight: 600, verticalAlign: 'middle',
-                    border: isFocus ? '1px solid rgba(92,200,255,.5)' : '1px solid var(--line-2)',
-                    background: isFocus ? 'rgba(92,200,255,.12)' : 'var(--bg-2)',
-                    color: isFocus ? 'var(--steel, #5cc8ff)' : 'var(--text)',
-                  }}
-                >
-                  {elementName(elements, s.element)}
-                  {isFocus && (
-                    <span data-element-focus="true" style={{ color: 'var(--steel, #5cc8ff)', fontSize: 10 }}>● focus</span>
-                  )}
-                </span>
+                <>
+                  <button
+                    type="button"
+                    data-action="view-element-output"
+                    data-element-id={s.element}
+                    onClick={() => hasOutput && void viewOutput(s.element!)}
+                    disabled={!hasOutput}
+                    title={hasOutput ? 'View this part’s output' : 'No output rendered yet'}
+                    style={{ flexShrink: 0, fontSize: 11.5, color: hasOutput ? 'var(--ember)' : 'var(--faint)', background: 'transparent', border: 'none', cursor: hasOutput ? 'pointer' : 'default', padding: 0 }}
+                  >
+                    View output →
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    data-action="iterate-element"
+                    data-element-id={s.element}
+                    onClick={() => onIterate(s.element!)}
+                    disabled={anyBusy}
+                    style={{ flexShrink: 0, fontSize: 11.5, opacity: anyBusy ? 0.6 : 1 }}
+                  >
+                    {iterating === s.element ? 'Starting…' : '⟳ Iterate this part'}
+                  </button>
+                </>
               )}
-            </li>
+            </div>
           );
         })}
-      </ol>
+      </div>
     </div>
   );
 }

@@ -1641,6 +1641,17 @@ async function handleDemoBuilder(
       const demoUrl = existsSync(join(s.project_repo_path, DEMO_HTML_REL_PATH))
         ? `/api/demo-builder/demo/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}`
         : null;
+      // Per-element rendered fragments present in the repo (element ids) — so the
+      // operator can view each part's output independently.
+      const fragmentsDir = join(s.project_repo_path, '.forge', 'demo', 'fragments');
+      let fragments: string[] = [];
+      if (existsSync(fragmentsDir)) {
+        try {
+          fragments = readdirSync(fragmentsDir)
+            .filter((f) => f.endsWith('.html'))
+            .map((f) => f.slice(0, -'.html'.length));
+        } catch { fragments = []; }
+      }
 
       // staleMs: ms since the last sign of life — heartbeat mtime if present,
       // else the status.json updated_at timestamp.
@@ -1663,6 +1674,7 @@ async function handleDemoBuilder(
         iteration: s.iteration,
         prompt: s.prompt,
         demoUrl,
+        fragments,
         hasLockedDemo: existsSync(join(s.project_repo_path, '.forge', 'demo', 'demo.lock.json')),
         staleMs,
       };
@@ -1705,6 +1717,40 @@ async function handleDemoBuilder(
         'access-control-allow-origin': origin,
         'vary': 'origin',
       });
+      res.end(readFileSync(requested, 'utf8'));
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // GET /api/demo-builder/fragment/<project>/<sid>/<element> — serve one element's
+  // rendered HTML fragment (<repo>/.forge/demo/fragments/<element>.html), so the
+  // operator can view a single part's output independently. Path-escape guarded.
+  if (method === 'GET' && url.startsWith('/api/demo-builder/fragment/')) {
+    const rest = url.slice('/api/demo-builder/fragment/'.length).split('/').map(decodeURIComponent);
+    const [project, sessionId, element] = rest;
+    if (!project || !sessionId || !element) {
+      sendJson(res, 400, { error: 'expected /api/demo-builder/fragment/<project>/<sid>/<element>' }, origin);
+      return true;
+    }
+    const status = readSessionStatus<DemoBuilderStatus>(demoSessionDir(join(ctx.projectsRoot, project), sessionId));
+    if (!status) {
+      sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
+      return true;
+    }
+    const base = join(status.project_repo_path, '.forge', 'demo', 'fragments') + sep;
+    const requested = join(status.project_repo_path, '.forge', 'demo', 'fragments', `${element}.html`);
+    if (!requested.startsWith(base)) {
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
+      return true;
+    }
+    if (!existsSync(requested)) {
+      sendJson(res, 404, { error: 'fragment not found', project, sessionId, element }, origin);
+      return true;
+    }
+    try {
+      res.writeHead(200, { 'content-type': contentTypeFor('f.html'), 'access-control-allow-origin': origin, 'vary': 'origin' });
       res.end(readFileSync(requested, 'utf8'));
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);

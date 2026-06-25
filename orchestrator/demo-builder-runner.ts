@@ -60,6 +60,10 @@ export const DEMO_HTML_REL_PATH = '.forge/demo/DEMO.html';
 export const DEMO_LOCK_REL_PATH = '.forge/demo/demo.lock.json';
 /** Where each locked demo is snapshotted so previous demos stay viewable. */
 export const DEMO_HISTORY_REL_DIR = '.forge/demo/history';
+/** Per-element rendered fragments — one `<id>.html` each, so the operator can
+ *  view a single part's output independently. The composer assembles these in
+ *  demoProcess order into DEMO.html. */
+export const DEMO_FRAGMENTS_REL_DIR = '.forge/demo/fragments';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
 export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 
@@ -393,7 +397,7 @@ function demoTaskLines(args: {
     const el = byId.get(target)!;
     return [
       `## Iterate ONE element: '${target}' (${el.name})`,
-      `Author/refine the project-side element-skill at ${elementSkillRelPath(target)} using its generator (below), then render JUST this element's fragment to ${DEMO_HTML_REL_PATH} — a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated) — so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.`,
+      `Author/refine the project-side element-skill at ${elementSkillRelPath(target)} using its generator (below). Write this element's rendered HTML fragment to ${DEMO_FRAGMENTS_REL_DIR}/${target}.html (so the operator can view this part's output independently), and render ${DEMO_HTML_REL_PATH} as JUST this element's fragment (wrapped, with the base CSS) — a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated) — so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.`,
       ...elementGeneratorLines([el]),
       '',
       `Stop when ${elementSkillRelPath(target)} and ${DEMO_HTML_REL_PATH} exist.`,
@@ -408,7 +412,7 @@ function demoTaskLines(args: {
       '## This demo is COMPOSED of demo elements, run in this order:',
       order,
       '',
-      `For each element kind above, author/refresh a project-side element-skill at .forge/skills/demo/<id>/SKILL.md using its generator (below). Then author ${DEMO_SKILL_REL_PATH} — the composer that runs the element-skills IN THIS ORDER and assembles their HTML fragments into one page. Render ${DEMO_HTML_REL_PATH} as a real sample: a genuine before/after of a representative recent change (use git log/diff; REAL output, never fabricated).`,
+      `For each element kind above: author/refresh a project-side element-skill at .forge/skills/demo/<id>/SKILL.md using its generator (below) AND have it write its rendered HTML fragment to ${DEMO_FRAGMENTS_REL_DIR}/<id>.html (one file per element, so each part's output is viewable independently). Then author ${DEMO_SKILL_REL_PATH} — the composer that reads those fragments IN THIS ORDER and assembles them into ${DEMO_HTML_REL_PATH} (wrapped with <html>/<body> + the base CSS). Ground every fragment in a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated).`,
       ...elementGeneratorLines(usedEls),
       '',
       `Scope to what a change introduced, not the whole project. Stop when ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
