@@ -14,17 +14,6 @@ const KIND_META: Record<string, { icon: string; label: string }> = {
 /** Display order for the phase-grouped element picker. */
 const PHASE_ORDER: Array<DemoElementSummary['phase']> = ['capture', 'verify', 'present'];
 
-const PRESETS: Array<{ kind: DemoStep['kind']; text: string; icon: string }> = [
-  { kind: 'capture', text: 'Screenshot of live resource', icon: '📸' },
-  { kind: 'capture', text: 'API GET of created entity', icon: '🔌' },
-  { kind: 'capture', text: 'Terminal cast recording', icon: '⌨' },
-  { kind: 'capture', text: 'Playwright video of interaction', icon: '🎬' },
-  { kind: 'present', text: 'Portal walkthrough attached to PR', icon: '🖥' },
-  { kind: 'present', text: 'Demo evidence attached to PR', icon: '📎' },
-  { kind: 'verify',  text: 'Assert response matches expected schema', icon: '✓' },
-  { kind: 'verify',  text: 'Project tests green in CI after merge', icon: '🟢' },
-];
-
 let _uid = 0;
 function nextUid(): string { return `step-${++_uid}`; }
 
@@ -284,31 +273,6 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
                       })}
                     </select>
 
-                    {composed ? (
-                      /* Phase derived from the element. */
-                      <span style={{
-                        fontFamily: 'var(--font-display)', fontSize: 10.5, fontWeight: 600,
-                        letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)',
-                      }}>{step.kind}</span>
-                    ) : (
-                      /* Free-text step still chooses its phase (for the preflight DEMO clause). */
-                      <select
-                        value={step.kind}
-                        onChange={(e) => updateStep(i, { kind: e.target.value as DemoStep['kind'] })}
-                        title="Phase (capture / verify / present)"
-                        style={{
-                          background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
-                          color: 'var(--dim)', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
-                          letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 8px', cursor: 'pointer', outline: 'none',
-                        }}
-                      >
-                        {(['capture', 'verify', 'present'] as const).map((k) => (
-                          <option key={k} value={k}>{KIND_META[k].label}</option>
-                        ))}
-                      </select>
-                    )}
-                    <span>{KIND_META[step.kind]?.icon}</span>
-
                     {/* Reorder + remove controls */}
                     <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                       <button
@@ -365,32 +329,9 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
             })}
           </div>
 
-          {/* Add step (legacy freetext) */}
+          {/* Add step — a new step the operator binds to a forge element (or leaves free text). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, paddingLeft: 46 }}>
             <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add step</button>
-          </div>
-
-          {/* Preset strip */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ width: '100%', fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 2 }}>
-              Preset steps — click to add
-            </div>
-            {PRESETS.map((p, i) => (
-              <span
-                key={i}
-                onClick={() => addStep(p.kind, p.text)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', borderRadius: 999,
-                  fontSize: 11.5, cursor: 'pointer', userSelect: 'none',
-                  border: '1px solid var(--line-2)', background: 'var(--panel-2)', color: 'var(--dim)',
-                }}
-                data-kind={p.kind}
-                data-text={p.text}
-              >
-                <span style={{ fontSize: 12 }}>{p.icon}</span> {p.text}
-              </span>
-            ))}
           </div>
         </div>
       </div>
