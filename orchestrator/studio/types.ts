@@ -155,7 +155,35 @@ export type CommunitySkill = {
 
 export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
 export type DemoStepKind = (typeof DEMO_STEP_KINDS)[number];
-export type DemoStep = { kind: DemoStepKind; text: string };
+/**
+ * One step of a project's demo process. `kind` is the coarse phase (capture /
+ * verify / present). `element`, when present, names a **demo-element kind** from
+ * the forge demo-element library (`studio/demo-elements/<id>.md`): the demo then
+ * composes the project-side element-skills in this order. `text` is the operator's
+ * per-instance config (e.g. the command to run). A step without `element` is a
+ * legacy free-text step.
+ */
+export type DemoStep = { kind: DemoStepKind; text: string; element?: string };
+
+/**
+ * A demo-element definition — one entry in the forge-side library
+ * (`studio/demo-elements/<id>.md`). It is a **skill-creating skill**: its `body`
+ * instructs the demo-builder how to author a project-specific element-skill (under
+ * `.forge/skills/demo/<id>/`) that renders this element's HTML fragment from real
+ * project output. The library grows as operators add element kinds over time.
+ */
+export type DemoElementDefinition = {
+  id: string;
+  name: string;
+  /** The demo phase this element belongs to (drives the preflight DEMO clause). */
+  phase: DemoStepKind;
+  description: string;
+  /** What per-instance config the operator provides (shown in the picker). */
+  configHint: string;
+  /** The generator prompt — how to author + render this element for a project. */
+  body: string;
+  path: string;
+};
 
 /**
  * Release-process step kinds. Tagging a release (git tag) and publishing

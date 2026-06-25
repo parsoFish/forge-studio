@@ -179,6 +179,74 @@ test('locking with no DEMO.html in the repo → throws', async () => {
   );
 });
 
+/** A queryFn that writes ONLY a per-element project-side skill + the sample. */
+function makeElementQueryFn(elementId: string, capture?: (p: string) => void): QueryFn {
+  return ({ prompt, options }) => {
+    capture?.(prompt);
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      mkdirSync(join(cwd, '.forge', 'skills', 'demo', elementId), { recursive: true });
+      writeFileSync(join(cwd, '.forge', 'skills', 'demo', elementId, 'SKILL.md'), `# ${elementId} element`);
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>element fragment</body></html>');
+      yield { type: 'result', total_cost_usd: 0.02 };
+    }
+    return gen();
+  };
+}
+
+function writeComposedProcess(repoPath: string): void {
+  writeFileSync(
+    join(repoPath, '.forge', 'project.json'),
+    JSON.stringify({
+      quality_gate_cmd: ['npm', 'test'],
+      demoProcess: [
+        { kind: 'present', text: 'Lead', element: 'narrative' },
+        { kind: 'capture', text: 'node bin/x.js --write', element: 'cli-capture' },
+        { kind: 'verify', text: 'npm test', element: 'test-evidence' },
+      ],
+    }),
+  );
+}
+
+test('composed demo: the generate prompt lists the ordered elements + injects their generators', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup();
+  writeComposedProcess(repoPath);
+  let captured = '';
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(result.phase, 'awaiting-review');
+  assert.match(captured, /COMPOSED of demo elements/, 'composition framing present');
+  assert.match(captured, /\[present\] narrative/, 'ordered element list (narrative first)');
+  assert.match(captured, /\[capture\] cli-capture/, 'cli-capture in the order');
+  assert.match(captured, /Element generators/, 'element generator bodies injected');
+  assert.match(captured, /#### cli-capture/, 'the cli-capture generator block header is included');
+  assert.match(captured, /REAL stdout on the baseline/, 'the cli-capture generator body text is included');
+});
+
+test('per-element iteration: targetElement focuses the turn + requires the element skill', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' });
+  writeComposedProcess(repoPath);
+  let captured = '';
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture', (p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(result.phase, 'awaiting-review');
+  assert.match(captured, /Iterate ONE element: 'cli-capture'/, 'focused on the one element');
+  // It required + accepted the per-element skill (NOT the demo-design composer).
+  assert.ok(existsSync(join(repoPath, '.forge', 'skills', 'demo', 'cli-capture', 'SKILL.md')));
+});
+
+test('per-element iteration: missing the element skill → throws naming that element skill', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' });
+  writeComposedProcess(repoPath);
+  await assert.rejects(
+    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    /demo\/cli-capture\/SKILL\.md/,
+  );
+});
+
 test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'briefing', mode: 'update' });
   const result = await runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot });

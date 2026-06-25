@@ -218,6 +218,28 @@ triggers: []
   cleanup(root);
 });
 
+test('malformed demo-element (missing phase) → errorCount > 0, finding names demo-elements', () => {
+  const root = tmpRoot();
+  const skillDir = join(root, 'skills', 'real-agent');
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, 'SKILL.md'), validSkillMd('real-agent'));
+  mkdirSync(join(root, 'studio'), { recursive: true });
+  writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  seedValidProject(root);
+
+  // A demo-element missing the required `phase` frontmatter field.
+  const elDir = join(root, 'studio', 'demo-elements');
+  mkdirSync(elDir, { recursive: true });
+  writeFileSync(join(elDir, 'broken.md'), '---\nid: broken\nname: Broken\ndescription: no phase\n---\nbody');
+
+  const result = runStudioLint(root);
+  assert.ok(result.errorCount > 0, 'Expected an error for the malformed demo-element');
+  const finding = result.findings.find((f) => f.object.includes('demo-element'));
+  assert.ok(finding !== undefined, `Expected a demo-element finding, got: ${JSON.stringify(result.findings.map((f) => f.object))}`);
+
+  cleanup(root);
+});
+
 // ---------------------------------------------------------------------------
 // Test 3: missing studio/ dir entirely → errors naming the missing paths
 // ---------------------------------------------------------------------------

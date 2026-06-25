@@ -581,7 +581,15 @@ function parseDemoProcess(v: unknown): DemoStep[] | undefined {
     if (typeof s.text !== 'string') {
       throw new Error(`project-config: demoProcess[${i}].text must be a string`);
     }
-    return { kind: s.kind as DemoStepKind, text: s.text };
+    // Optional `element` names a demo-element kind from the library (composed demo).
+    if (s.element !== undefined && typeof s.element !== 'string') {
+      throw new Error(`project-config: demoProcess[${i}].element must be a string when present`);
+    }
+    return {
+      kind: s.kind as DemoStepKind,
+      text: s.text,
+      ...(typeof s.element === 'string' && s.element ? { element: s.element } : {}),
+    };
   });
 }
 

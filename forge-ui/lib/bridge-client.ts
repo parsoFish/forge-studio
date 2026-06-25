@@ -617,6 +617,8 @@ export type DemoSessionSummary = {
   phase: DemoBuilderPhase;
   /** 'create' (no locked demo yet) or 'update' (carries the existing demo as context). */
   mode: 'create' | 'update';
+  /** When set, the session is iterating ONE demo-element kind (per-element iteration). */
+  targetElement: string | null;
   /** True when the project already has a reproducible demo locked in (.forge/demo/). */
   hasLockedDemo: boolean;
   iteration: number;
@@ -663,8 +665,13 @@ export async function listDemoHistory(project: string): Promise<DemoHistoryEntry
 export async function startDemoBuilder(input: {
   project: string;
   mode: 'create' | 'update';
+  /** Iterate ONE demo-element kind (per-element iteration); omit to compose the full demo. */
+  targetElement?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'create' | 'update'; error?: string }> {
-  const r = await bridgePost('/api/demo-builder/start', { project: input.project, mode: input.mode });
+  const r = await bridgePost('/api/demo-builder/start', {
+    project: input.project, mode: input.mode,
+    ...(input.targetElement ? { targetElement: input.targetElement } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return {
     ok: true,
@@ -678,8 +685,25 @@ export async function demoBuilderBrief(input: {
   project: string;
   sessionId: string;
   brief: string;
+  /** Override/narrow the per-element iteration target for this run. */
+  targetElement?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/demo-builder/brief', input);
+}
+
+/** One demo-element kind from the forge library (the demoProcess composition palette). */
+export type DemoElementSummary = {
+  id: string;
+  name: string;
+  phase: 'capture' | 'verify' | 'present';
+  description: string;
+  configHint: string;
+};
+
+/** List the forge demo-element library (skill-creating skills) for the composer palette. */
+export async function listDemoElements(): Promise<DemoElementSummary[]> {
+  const body = await bridgeGet<{ elements: DemoElementSummary[] }>('/api/studio/demo-elements', { elements: [] });
+  return body.elements ?? [];
 }
 
 export async function demoBuilderFeedback(input: {

@@ -7,10 +7,12 @@ import {
   listDemoSessions,
   demoBuilderBrief,
   listDemoHistory,
+  listDemoElements,
   architectFileUrl,
   type DemoSessionSummary,
   type DemoBuilderPhase,
   type DemoHistoryEntry,
+  type DemoElementSummary,
 } from '@/lib/bridge-client';
 import { fetchStudioProjects, type DemoStep } from '@/lib/studio-client';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
@@ -79,6 +81,9 @@ export default function DemoBuilderPage({
   const [session, setSession] = useState<DemoSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
+  // The forge demo-element library — used to resolve an `element` id on a
+  // demoProcess step to its human name in the demo-process-ref panel.
+  const [elements, setElements] = useState<DemoElementSummary[]>([]);
   // Previously-locked demos for this project (newest first), with their
   // bridge-relative demoUrls pre-resolved to absolute so a View click is sync.
   const [history, setHistory] = useState<ResolvedHistoryEntry[]>([]);
@@ -98,6 +103,15 @@ export default function DemoBuilderPage({
     const poll = setInterval(loadSession, 3000);
     return () => clearInterval(poll);
   }, [loadSession]);
+
+  // Load the forge demo-element library once (to label composed demoProcess steps).
+  useEffect(() => {
+    let cancelled = false;
+    listDemoElements()
+      .then((els) => { if (!cancelled) setElements(els); })
+      .catch(() => { /* leave empty — badges fall back to the raw element id */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Resolve the configured demo process for this session's project so the
   // generating/review views can show the demo adheres to it.
@@ -188,6 +202,25 @@ export default function DemoBuilderPage({
               {session.project}
             </div>
 
+            {session.targetElement && (
+              <div
+                data-section="demo-target-element"
+                data-target-element={session.targetElement}
+                style={{
+                  fontSize: 12.5, color: 'var(--steel, #5cc8ff)', lineHeight: 1.5,
+                  padding: '10px 14px', marginBottom: 16,
+                  background: 'rgba(92,200,255,.07)', border: '1px solid rgba(92,200,255,.3)',
+                  borderRadius: 10,
+                }}
+              >
+                ⟳ Iterating the{' '}
+                <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                  &lsquo;{elementName(elements, session.targetElement)}&rsquo;
+                </strong>{' '}
+                element — perfect this one, then compose the full demo.
+              </div>
+            )}
+
             {session.phase === 'briefing' && (
               <SessionBriefing
                 heading="Demo agent"
@@ -216,7 +249,7 @@ export default function DemoBuilderPage({
                       : 'The demo agent is building the demo…'
                   }
                 />
-                <DemoProcessRef steps={demoProcess} />
+                <DemoProcessRef steps={demoProcess} elements={elements} targetElement={session.targetElement} />
                 <ArchitectActivityLog events={events} />
               </div>
             )}
@@ -229,7 +262,7 @@ export default function DemoBuilderPage({
                   demoUrl={session.demoUrl}
                   iteration={session.iteration}
                 />
-                <DemoProcessRef steps={demoProcess} />
+                <DemoProcessRef steps={demoProcess} elements={elements} targetElement={session.targetElement} />
               </div>
             )}
 
@@ -379,9 +412,25 @@ function Status({ label }: { label: string }): JSX.Element {
   );
 }
 
+/** Resolve a library element id to its human name; falls back to the raw id. */
+function elementName(elements: DemoElementSummary[], id: string): string {
+  return elements.find((e) => e.id === id)?.name ?? id;
+}
+
 /** The configured demo process for the project — surfaced so it's clear the
- *  demo adheres to it. Empty steps = nothing configured yet. */
-function DemoProcessRef({ steps }: { steps: DemoStep[] }): JSX.Element | null {
+ *  demo adheres to it. Steps composed from a forge library element render a
+ *  small element badge; the element matching the session's per-element
+ *  iteration target (`targetElement`) is marked as the focused element.
+ *  Empty steps = nothing configured yet. */
+function DemoProcessRef({
+  steps,
+  elements,
+  targetElement,
+}: {
+  steps: DemoStep[];
+  elements: DemoElementSummary[];
+  targetElement: string | null;
+}): JSX.Element | null {
   if (steps.length === 0) return null;
   return (
     <div
@@ -398,14 +447,35 @@ function DemoProcessRef({ steps }: { steps: DemoStep[] }): JSX.Element | null {
         The demo process this follows
       </div>
       <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.7 }}>
-        {steps.map((s, i) => (
-          <li key={i} data-step-kind={s.kind}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--steel, #5cc8ff)', marginRight: 6 }}>
-              [{STEP_KIND_LABEL[s.kind]}]
-            </span>
-            {s.text}
-          </li>
-        ))}
+        {steps.map((s, i) => {
+          const isFocus = !!s.element && s.element === targetElement;
+          return (
+            <li key={i} data-step-kind={s.kind} data-step-element={s.element ?? ''}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--steel, #5cc8ff)', marginRight: 6 }}>
+                [{STEP_KIND_LABEL[s.kind]}]
+              </span>
+              {s.text}
+              {s.element && (
+                <span
+                  data-element-badge={s.element}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    marginLeft: 8, padding: '1px 8px', borderRadius: 999,
+                    fontSize: 10.5, fontWeight: 600, verticalAlign: 'middle',
+                    border: isFocus ? '1px solid rgba(92,200,255,.5)' : '1px solid var(--line-2)',
+                    background: isFocus ? 'rgba(92,200,255,.12)' : 'var(--bg-2)',
+                    color: isFocus ? 'var(--steel, #5cc8ff)' : 'var(--text)',
+                  }}
+                >
+                  {elementName(elements, s.element)}
+                  {isFocus && (
+                    <span data-element-focus="true" style={{ color: 'var(--steel, #5cc8ff)', fontSize: 10 }}>● focus</span>
+                  )}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

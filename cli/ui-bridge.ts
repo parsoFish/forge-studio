@@ -1659,6 +1659,7 @@ async function handleDemoBuilder(
         projectRepoPath: s.project_repo_path,
         phase: s.phase,
         mode: s.mode ?? 'create',
+        targetElement: s.targetElement ?? null,
         iteration: s.iteration,
         prompt: s.prompt,
         demoUrl,
@@ -1774,7 +1775,7 @@ async function handleDemoBuilder(
   // provides notes; POST /api/demo-builder/brief then kicks off the agent.
   if (method === 'POST' && url === '/api/demo-builder/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string };
+      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
@@ -1792,6 +1793,8 @@ async function handleDemoBuilder(
         project_repo_path: repoPath,
         phase: 'briefing',
         mode,
+        // Optional per-element iteration target (a demo-element kind id).
+        ...(typeof body.targetElement === 'string' && body.targetElement ? { targetElement: body.targetElement } : {}),
         iteration: 1,
         prompt: '',
         updated_at: new Date().toISOString(),
@@ -1809,7 +1812,7 @@ async function handleDemoBuilder(
   // (briefing → generating).
   if (method === 'POST' && url === '/api/demo-builder/brief') {
     try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string; targetElement?: string };
       if (!body.project || !body.sessionId) {
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
@@ -1822,7 +1825,13 @@ async function handleDemoBuilder(
       }
       const brief = body.brief ?? '';
       writeFileSync(join(dir, 'prompt.md'), brief);
-      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: 1, prompt: brief });
+      // `targetElement` narrows the turn to one demo element (per-element iteration);
+      // omit/empty to compose the full demo.
+      const targetElement = typeof body.targetElement === 'string' && body.targetElement ? body.targetElement : status.targetElement;
+      writeSessionStatus<DemoBuilderStatus>(dir, {
+        ...status, phase: 'generating', iteration: 1, prompt: brief,
+        ...(targetElement ? { targetElement } : {}),
+      });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true }, origin);

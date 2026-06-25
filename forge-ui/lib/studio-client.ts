@@ -130,7 +130,12 @@ export type Flow = {
   origin?: string;
 };
 
-export type DemoStep = { kind: 'capture' | 'verify' | 'present'; text: string };
+export type DemoStep = {
+  kind: 'capture' | 'verify' | 'present';
+  text: string;
+  /** Library element-kind id when this step is composed from a forge demo element. */
+  element?: string;
+};
 
 export type Project = {
   id: string;

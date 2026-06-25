@@ -36,6 +36,7 @@ import {
   loadFlowDefinition,
   discoverProjects,
   loadCatalog,
+  listDemoElements,
 } from '../orchestrator/studio/registry.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -573,6 +574,22 @@ export async function handleStudioRoutes(
       // library (the palette reads catalog.skills) so skills are draggable too.
       const skills = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
       sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills } }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/demo-elements ------------------------------------------
+  // The forge demo-element library (skill-creating skills) — the palette of demo
+  // components an operator composes a demoProcess from. Body (the generator
+  // prompt) is omitted; the picker needs only the metadata.
+  if (url === '/api/studio/demo-elements') {
+    try {
+      const elements = listDemoElements(ctx.forgeRoot).map((e) => ({
+        id: e.id, name: e.name, phase: e.phase, description: e.description, configHint: e.configHint,
+      }));
+      sendJson(res, 200, { elements }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

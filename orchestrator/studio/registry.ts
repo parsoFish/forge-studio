@@ -9,7 +9,7 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { ARTIFACT_KINDS } from './types.ts';
+import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -21,6 +21,7 @@ import type {
   CatalogEntry,
   CatalogModel,
   CatalogSdk,
+  DemoElementDefinition,
   FlowDefinition,
   FlowEdge,
   FlowNode,
@@ -484,6 +485,43 @@ export function listArtifactTemplates(studioRoot: string): ArtifactTemplate[] {
     return []; // absent dir → no templates (tolerated)
   }
   return files.map((f) => loadArtifactTemplate(join(dir, f)));
+}
+
+/**
+ * Load one demo-element definition (`studio/demo-elements/<id>.md`) — a member of
+ * the forge demo-element library (a skill-creating skill). Throws on a malformed
+ * file so `forge studio lint` surfaces it.
+ */
+export function loadDemoElement(mdPath: string): DemoElementDefinition {
+  let raw: string;
+  try {
+    raw = readFileSync(mdPath, 'utf8');
+  } catch (err) {
+    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
+  }
+  const { data, content } = matter(raw);
+  const d = data as Record<string, unknown>;
+  return {
+    id: reqString(d, 'id', mdPath),
+    name: reqString(d, 'name', mdPath),
+    phase: oneOf(reqString(d, 'phase', mdPath), DEMO_STEP_KINDS, mdPath, 'phase'),
+    description: reqString(d, 'description', mdPath),
+    configHint: optString(d, 'configHint') ?? '',
+    body: content.trim(),
+    path: mdPath,
+  };
+}
+
+/** List the forge demo-element library (`studio/demo-elements/*.md`). Absent ⇒ []. */
+export function listDemoElements(studioRoot: string): DemoElementDefinition[] {
+  const dir = join(studioRoot, 'studio', 'demo-elements');
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+  return files.map((f) => loadDemoElement(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {

@@ -3,13 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DemoStep } from '@/lib/studio-client';
-import { startDemoBuilder } from '@/lib/bridge-client';
+import { startDemoBuilder, listDemoElements, type DemoElementSummary } from '@/lib/bridge-client';
 
 const KIND_META: Record<string, { icon: string; label: string }> = {
   capture: { icon: '📸', label: 'Capture' },
   verify:  { icon: '✓',  label: 'Verify'  },
   present: { icon: '📎', label: 'Present' },
 };
+
+/** Display order for the phase-grouped element picker. */
+const PHASE_ORDER: Array<DemoElementSummary['phase']> = ['capture', 'verify', 'present'];
 
 const PRESETS: Array<{ kind: DemoStep['kind']; text: string; icon: string }> = [
   { kind: 'capture', text: 'Screenshot of live resource', icon: '📸' },
@@ -37,7 +40,27 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  // The forge demo-element library (composer palette), loaded on mount.
+  const [palette, setPalette] = useState<DemoElementSummary[]>([]);
+  // Currently-selected element id in the add-element picker.
+  const [pickElement, setPickElement] = useState<string>('');
+  // Which element step's iterate action is in-flight (data-element-id), or null.
+  const [iterating, setIterating] = useState<string | null>(null);
   const prevStepsRef = useRef(steps);
+
+  // Load the forge demo-element library on mount (the composer palette).
+  useEffect(() => {
+    let cancelled = false;
+    listDemoElements()
+      .then((els) => { if (!cancelled) setPalette(els); })
+      .catch(() => { /* leave palette empty — composer hides itself */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  function elementById(id: string | undefined): DemoElementSummary | null {
+    if (!id) return null;
+    return palette.find((e) => e.id === id) ?? null;
+  }
 
   async function onLaunchDemoBuilder(): Promise<void> {
     if (launching) return;
@@ -52,6 +75,27 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
       router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
     } finally {
       setLaunching(false);
+    }
+  }
+
+  // Iterate ONE library element — start a per-element demo session and jump to it.
+  async function onIterateElement(elementId: string): Promise<void> {
+    if (iterating) return;
+    setLaunchError(null);
+    setIterating(elementId);
+    try {
+      const res = await startDemoBuilder({
+        project,
+        mode: hasLockedDemo ? 'update' : 'create',
+        targetElement: elementId,
+      });
+      if (!res.ok || !res.sessionId) {
+        setLaunchError(res.error ?? 'failed to start the demo agent');
+        return;
+      }
+      router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+    } finally {
+      setIterating(null);
     }
   }
 
@@ -74,12 +118,30 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
     emit([...internal, { kind, text, uid: nextUid() }]);
   }
 
+  // Append a composed step from a library element (phase becomes the step kind).
+  function addElementStep(elementId: string) {
+    const el = elementById(elementId);
+    if (!el) return;
+    emit([...internal, { kind: el.phase, text: '', element: el.id, uid: nextUid() }]);
+    setPickElement('');
+  }
+
   function removeStep(i: number) {
     emit(internal.filter((_, idx) => idx !== i));
   }
 
   function updateStep(i: number, patch: Partial<DemoStep>) {
     emit(internal.map((s, idx) => idx === i ? { ...s, ...patch } : s));
+  }
+
+  // Move a step within the array (the demo composition order).
+  function moveStep(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= internal.length) return;
+    const next = [...internal];
+    const [moved] = next.splice(i, 1);
+    next.splice(j, 0, moved);
+    emit(next);
   }
 
   function handleDrop(targetIdx: number) {
@@ -101,7 +163,7 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
         data-section="demo-source"
         style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5, marginBottom: 10 }}
       >
-        The demo is now an agent-built, reproducible <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>DEMO.html</code> — the demo agent generates it from the steps below, then you review and lock it in.
+        The demo is now <strong style={{ color: 'var(--text)' }}>composed</strong> of ordered demo elements drawn from the forge library — the demo agent runs each element&apos;s skill in order, then you review and lock it in.
       </div>
 
       <div className="panel">
@@ -145,16 +207,75 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
             ⚠ Demos show the ACTUAL resource — a passing-test table is not a demo.
           </div>
 
+          {/* Element composer — add a library element to the demo composition */}
+          {palette.length > 0 && (
+            <div
+              data-section="demo-element-composer"
+              data-palette-count={palette.length}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}
+            >
+              <div style={{ width: '100%', fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 2 }}>
+                Compose from the forge element library
+              </div>
+              <select
+                data-element-picker=""
+                value={pickElement}
+                onChange={(e) => setPickElement(e.target.value)}
+                style={{
+                  flex: 1, minWidth: 220,
+                  background: 'var(--panel-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 12,
+                  padding: '6px 8px', cursor: 'pointer', outline: 'none',
+                }}
+              >
+                <option value="">Choose a demo element…</option>
+                {PHASE_ORDER.map((phase) => {
+                  const inPhase = palette.filter((e) => e.phase === phase);
+                  if (inPhase.length === 0) return null;
+                  return (
+                    <optgroup key={phase} label={`${KIND_META[phase]?.icon ?? ''} ${KIND_META[phase]?.label ?? phase}`}>
+                      {inPhase.map((el) => (
+                        <option key={el.id} value={el.id}>{el.name}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-action="add-demo-element"
+                onClick={() => pickElement && addElementStep(pickElement)}
+                disabled={!pickElement}
+                style={{ fontSize: 13, opacity: pickElement ? 1 : 0.5 }}
+              >
+                + Add element
+              </button>
+              {pickElement && (
+                <div style={{ width: '100%', fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+                  {elementById(pickElement)?.description}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Demo process — the ordered steps the demo agent follows */}
-          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10 }}>
+          <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
             The demo process this follows
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--dim)', fontStyle: 'italic', marginBottom: 10 }}>
+            Elements run top-to-bottom — this is the demo composition order.
           </div>
 
           {/* Timeline */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {internal.map((step, i) => (
+            {internal.map((step, i) => {
+              const el = elementById(step.element);
+              const composed = !!step.element;
+              return (
               <div
                 key={step.uid}
+                data-step-element={step.element ?? ''}
                 style={{ display: 'flex', gap: 0, position: 'relative', opacity: dragIdx === i ? 0.4 : 1 }}
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={(e) => { e.preventDefault(); handleDrop(i); }}
@@ -178,6 +299,7 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
 
                 {/* Card */}
                 <div
+                  {...(composed ? { 'data-demo-element': step.element } : {})}
                   draggable
                   onDragStart={() => setDragIdx(i)}
                   onDragEnd={() => setDragIdx(null)}
@@ -189,42 +311,108 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ color: 'var(--faint)', cursor: 'grab', fontSize: 13, userSelect: 'none' }}>⠿</span>
-                    <select
-                      value={step.kind}
-                      onChange={(e) => updateStep(i, { kind: e.target.value as DemoStep['kind'] })}
-                      style={{
-                        background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
-                        color: 'var(--dim)', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
-                        letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 8px', cursor: 'pointer', outline: 'none',
-                      }}
-                    >
-                      {(['capture', 'verify', 'present'] as const).map((k) => (
-                        <option key={k} value={k}>{KIND_META[k].label}</option>
-                      ))}
-                    </select>
-                    <span>{KIND_META[step.kind]?.icon}</span>
-                    <button
-                      onClick={() => removeStep(i)}
-                      style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 15 }}
-                      title="Remove step"
-                    >×</button>
+
+                    {composed ? (
+                      <>
+                        {/* Composed-from-element badge (element name; falls back to raw id) */}
+                        <span
+                          data-element-badge={step.element}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '3px 9px', borderRadius: 999,
+                            fontSize: 11, fontWeight: 600,
+                            border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--text)',
+                          }}
+                        >
+                          <span>{KIND_META[step.kind]?.icon}</span>
+                          {el?.name ?? step.element}
+                        </span>
+                        {/* Phase tag */}
+                        <span style={{
+                          fontFamily: 'var(--font-display)', fontSize: 10.5, fontWeight: 600,
+                          letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)',
+                        }}>
+                          {step.kind}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <select
+                          value={step.kind}
+                          onChange={(e) => updateStep(i, { kind: e.target.value as DemoStep['kind'] })}
+                          style={{
+                            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
+                            color: 'var(--dim)', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
+                            letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 8px', cursor: 'pointer', outline: 'none',
+                          }}
+                        >
+                          {(['capture', 'verify', 'present'] as const).map((k) => (
+                            <option key={k} value={k}>{KIND_META[k].label}</option>
+                          ))}
+                        </select>
+                        <span>{KIND_META[step.kind]?.icon}</span>
+                      </>
+                    )}
+
+                    {/* Reorder + remove controls */}
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                      <button
+                        type="button"
+                        data-action="move-step-up"
+                        onClick={() => moveStep(i, -1)}
+                        disabled={i === 0}
+                        title="Move up"
+                        style={{ background: 'transparent', border: 'none', color: i === 0 ? 'var(--line-2)' : 'var(--faint)', cursor: i === 0 ? 'default' : 'pointer', fontSize: 13, padding: '0 3px' }}
+                      >↑</button>
+                      <button
+                        type="button"
+                        data-action="move-step-down"
+                        onClick={() => moveStep(i, 1)}
+                        disabled={i === internal.length - 1}
+                        title="Move down"
+                        style={{ background: 'transparent', border: 'none', color: i === internal.length - 1 ? 'var(--line-2)' : 'var(--faint)', cursor: i === internal.length - 1 ? 'default' : 'pointer', fontSize: 13, padding: '0 3px' }}
+                      >↓</button>
+                      <button
+                        type="button"
+                        onClick={() => removeStep(i)}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 15, padding: '0 3px' }}
+                        title="Remove step"
+                      >×</button>
+                    </span>
                   </div>
+
+                  {/* Config (composed: element configHint as placeholder) / freetext (legacy) */}
                   <textarea
                     className="input"
                     rows={2}
                     value={step.text}
                     onChange={(e) => updateStep(i, { text: e.target.value })}
-                    placeholder="Describe what this step does…"
+                    placeholder={composed ? (el?.configHint ?? 'Element config…') : 'Describe what this step does…'}
                     style={{ fontSize: 13, resize: 'none', minHeight: 36, width: '100%', boxSizing: 'border-box' }}
                   />
+
+                  {composed && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      data-action="iterate-element"
+                      data-element-id={step.element}
+                      onClick={() => step.element && void onIterateElement(step.element)}
+                      disabled={!!iterating}
+                      style={{ fontSize: 12, marginTop: 8, opacity: iterating ? 0.6 : 1 }}
+                    >
+                      {iterating === step.element ? 'Starting…' : '⟳ Iterate this element'}
+                    </button>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Add step */}
+          {/* Add step (legacy freetext) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, paddingLeft: 46 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add step</button>
+            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add freetext step</button>
           </div>
 
           {/* Preset strip */}

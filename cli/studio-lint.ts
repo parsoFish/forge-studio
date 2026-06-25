@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import {
   isStudioAgent,
   listArtifactTemplates,
+  listDemoElements,
   loadAgentDefinition,
   loadCatalog,
   loadFlowDefinition,
@@ -95,6 +96,32 @@ export function runStudioLint(root: string): StudioLintResult {
       object: 'studio:artifact-templates',
       check: 'load',
       message: `Cannot load artifact templates — ${(err as Error).message}`,
+    });
+  }
+
+  // Demo-element library (skill-creating skills under studio/demo-elements/).
+  // A malformed element file fails lint here — the loader validates required
+  // frontmatter (id/name/phase/description) and throws on a violation.
+  const demoElementIds = new Set<string>();
+  try {
+    for (const el of listDemoElements(root)) {
+      if (demoElementIds.has(el.id)) {
+        findings.push({
+          level: 'error',
+          object: `demo-element:${el.id}`,
+          check: 'unique-ids',
+          message: `Duplicate demo-element id "${el.id}"`,
+        });
+      } else {
+        demoElementIds.add(el.id);
+      }
+    }
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'studio:demo-elements',
+      check: 'load',
+      message: `Cannot load demo elements — ${(err as Error).message}`,
     });
   }
 

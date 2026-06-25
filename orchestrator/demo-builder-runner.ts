@@ -37,6 +37,8 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
+import { listDemoElements } from './studio/registry.ts';
+import type { DemoStep, DemoElementDefinition } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)
@@ -85,6 +87,13 @@ export type DemoBuilderStatus = {
    * the existing skill + sample rather than rebuilding. Absent ⇒ `create`.
    */
   mode?: 'create' | 'update';
+  /**
+   * When set, the agent iterates ONLY this demo-element kind (a "smaller chunk"):
+   * it authors/refines `.forge/skills/demo/<targetElement>/` and renders just that
+   * element's fragment as the sample, so the operator can perfect one element
+   * before composing the whole demo. Absent ⇒ compose the full demo.
+   */
+  targetElement?: string;
   /** 1-based generate-turn counter. */
   iteration: number;
   /** The operator's look-and-feel guidance / change-notes (persisted to `prompt.md`). */
@@ -196,41 +205,46 @@ async function runGenerateStep(args: {
   const { input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
   const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
   const baseCss = readBaseCss(forgeRoot);
-  const demoProcess = describeDemoProcess(status.project_repo_path);
   const feedback = readFeedback(sessionDir);
+
+  // Composition: the demoProcess may reference demo-element kinds from the forge
+  // library. When it does, the demo is COMPOSED of project-side element-skills the
+  // agent authors (per the library's skill-creating-skill generators) + a composer
+  // that runs them in order. `targetElement` narrows the turn to ONE element.
+  const steps = loadDemoSteps(status.project_repo_path);
+  const byId = new Map(listDemoElements(forgeRoot).map((e) => [e.id, e]));
+  const elementSteps = steps.filter(
+    (s): s is DemoStep & { element: string } => typeof s.element === 'string' && byId.has(s.element),
+  );
+  const target = status.targetElement && byId.has(status.targetElement) ? status.targetElement : undefined;
+  const composed = elementSteps.length > 0;
+
+  const taskLines = demoTaskLines({ status, target, composed, elementSteps, byId });
 
   const prompt = [
     skill,
     '',
-    '## Your task this turn: build the demo skill + render a sample',
+    `## Your task this turn: ${target ? `refine the '${target}' demo element` : 'build the demo + render a sample'}`,
     '',
     `Project: ${status.project}`,
     `Project repo (your working directory): ${status.project_repo_path}`,
-    ...(status.mode === 'update'
+    ...(status.mode === 'update' && !target
       ? ['',
-         `UPDATE MODE: a locked demo already exists — ${DEMO_SKILL_REL_PATH} (the generator) and ` +
-         `${DEMO_HTML_REL_PATH} (the sample). READ both and REVISE them per the operator's change-notes ` +
-         'below; do NOT rebuild from scratch.']
+         `UPDATE MODE: a locked demo already exists — ${DEMO_SKILL_REL_PATH} (the composer) and ` +
+         `${DEMO_HTML_REL_PATH} (the sample). READ them and REVISE per the operator's change-notes below; ` +
+         'do NOT rebuild from scratch.']
       : []),
     '',
     status.mode === 'update' ? 'Operator change-notes:' : 'Operator look-and-feel guidance:',
     status.prompt || '_(none — choose a clean, faithful before/after treatment)_',
-    '',
-    'Configured demo process (capture / verify / present steps to bake into the skill):',
-    demoProcess,
     ...(feedback ? ['', 'Operator feedback on the previous sample (apply it):', feedback] : []),
     '',
-    '## Forge demo base stylesheet — the demo skill must inline this verbatim into the HTML it generates',
+    ...taskLines,
+    '',
+    '## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit',
     '```css',
     baseCss,
     '```',
-    '',
-    'Deliver BOTH:',
-    `1. ${DEMO_SKILL_REL_PATH} — the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES.`,
-    `2. ${DEMO_HTML_REL_PATH} — a real sample produced by running that generator against a representative recent change ` +
-      '(use `git log`/`git diff` to pick one; render a genuine before/after with REAL output on both sides — never fabricate).',
-    '',
-    `Scope the demo to what a change introduced, not the whole project. Stop when both ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
   ].join('\n');
 
   const { costUsd } = await runAgentTurn({
@@ -247,10 +261,14 @@ async function runGenerateStep(args: {
     label: `demo-builder-${input.sessionId}`,
   });
 
+  // The required generator skill is the per-element skill when iterating one
+  // element, else the composer/demo-design skill; the sample DEMO.html is always
+  // the reviewable artifact.
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-  const skillPath = join(status.project_repo_path, DEMO_SKILL_REL_PATH);
+  const requiredSkillRel = target ? elementSkillRelPath(target) : DEMO_SKILL_REL_PATH;
+  const requiredSkillPath = join(status.project_repo_path, requiredSkillRel);
   const missing = [
-    !existsSync(skillPath) ? DEMO_SKILL_REL_PATH : null,
+    !existsSync(requiredSkillPath) ? requiredSkillRel : null,
     !existsSync(demoPath) ? DEMO_HTML_REL_PATH : null,
   ].filter(Boolean);
   if (missing.length > 0) {
@@ -262,12 +280,12 @@ async function runGenerateStep(args: {
   writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [], output_refs: [skillPath, demoPath], cost_usd: costUsd,
-    message: `demo-generated (iteration ${status.iteration}, awaiting operator review)`,
-    metadata: { session_id: input.sessionId, iteration: status.iteration },
+    event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath], cost_usd: costUsd,
+    message: `demo-generated (iteration ${status.iteration}${target ? `, element=${target}` : composed ? ', composed' : ''}, awaiting review)`,
+    metadata: { session_id: input.sessionId, iteration: status.iteration, target_element: target ?? null, composed },
   });
 
-  return { phase: 'awaiting-review', wrote: [skillPath, demoPath], demoPath };
+  return { phase: 'awaiting-review', wrote: [requiredSkillPath, demoPath], demoPath };
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +356,75 @@ function describeDemoProcess(projectRepoPath: string): string {
   }
   if (!steps || steps.length === 0) return '_(no demo process configured — design the skill around a representative initiative\'s before/after changes; ground the sample in a real recent change)_';
   return steps.map((s, i) => `${i + 1}. [${s.kind}] ${s.text}`).join('\n');
+}
+
+function loadDemoSteps(projectRepoPath: string): DemoStep[] {
+  try {
+    return loadProjectConfig(projectRepoPath)?.demoProcess ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** The project-side, concrete element-skill the generator authors for an element kind. */
+function elementSkillRelPath(id: string): string {
+  return `.forge/skills/demo/${id}/SKILL.md`;
+}
+
+/** The generator bodies for a set of elements (the skill-creating-skill prompts). */
+function elementGeneratorLines(els: DemoElementDefinition[]): string[] {
+  const out: string[] = ['', '### Element generators — author each project-side element-skill per these'];
+  for (const e of els) {
+    out.push('', `#### ${e.id} (${e.name}, phase: ${e.phase})`, e.body);
+  }
+  return out;
+}
+
+/** The task-specific instruction block: per-element iteration, composed, or legacy. */
+function demoTaskLines(args: {
+  status: DemoBuilderStatus;
+  target?: string;
+  composed: boolean;
+  elementSteps: Array<DemoStep & { element: string }>;
+  byId: Map<string, DemoElementDefinition>;
+}): string[] {
+  const { status, target, composed, elementSteps, byId } = args;
+  if (target) {
+    const el = byId.get(target)!;
+    return [
+      `## Iterate ONE element: '${target}' (${el.name})`,
+      `Author/refine the project-side element-skill at ${elementSkillRelPath(target)} using its generator (below), then render JUST this element's fragment to ${DEMO_HTML_REL_PATH} — a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated) — so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.`,
+      ...elementGeneratorLines([el]),
+      '',
+      `Stop when ${elementSkillRelPath(target)} and ${DEMO_HTML_REL_PATH} exist.`,
+    ];
+  }
+  if (composed) {
+    const usedEls = [...new Map(elementSteps.map((s) => [s.element, byId.get(s.element)!])).values()];
+    const order = elementSteps
+      .map((s, i) => `  ${i + 1}. [${s.kind}] ${s.element}${s.text ? ` — ${s.text}` : ''}`)
+      .join('\n');
+    return [
+      '## This demo is COMPOSED of demo elements, run in this order:',
+      order,
+      '',
+      `For each element kind above, author/refresh a project-side element-skill at .forge/skills/demo/<id>/SKILL.md using its generator (below). Then author ${DEMO_SKILL_REL_PATH} — the composer that runs the element-skills IN THIS ORDER and assembles their HTML fragments into one page. Render ${DEMO_HTML_REL_PATH} as a real sample: a genuine before/after of a representative recent change (use git log/diff; REAL output, never fabricated).`,
+      ...elementGeneratorLines(usedEls),
+      '',
+      `Scope to what a change introduced, not the whole project. Stop when ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
+    ];
+  }
+  // Legacy / no elements configured — the single monolithic generator.
+  return [
+    'Configured demo process (capture / verify / present steps to bake into the skill):',
+    describeDemoProcess(status.project_repo_path),
+    '',
+    'Deliver BOTH:',
+    `1. ${DEMO_SKILL_REL_PATH} — the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES.`,
+    `2. ${DEMO_HTML_REL_PATH} — a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated).`,
+    '',
+    `Scope the demo to what a change introduced, not the whole project. Stop when both ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
+  ];
 }
 
 function readBaseCss(forgeRoot: string): string {
