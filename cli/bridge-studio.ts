@@ -256,7 +256,7 @@ type ProjectWithMeta = {
    *  the read-only (file-bound) vs editable (json) UI binding. */
   instructionsSource?: 'AGENTS.md' | 'CLAUDE.md' | 'project.json';
   skills?: string[];
-  demoProcess?: Array<{ kind: string; text: string }>;
+  demoProcess?: Array<{ kind: string; text: string; element?: string }>;
   /** True when a demo-builder run has locked a reproducible demo into the repo
    *  (`.forge/demo/demo.lock.json`) — drives the "update the demo" entry + the
    *  locked-demo indicator on the project page. */
@@ -302,11 +302,17 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
         result.skills = raw.skills as string[];
       }
       // Surface the typed demo steps so the editor + ContractReadiness reflect
-      // a persisted demo (capture/verify/present) rather than showing none.
+      // a persisted demo. CARRY the optional `element` (the library element-kind
+      // a step composes from) — without it the UI can't show per-element controls
+      // and a save round-trip would silently drop the binding.
       if (Array.isArray(raw.demoProcess)) {
         result.demoProcess = (raw.demoProcess as Array<Record<string, unknown>>)
           .filter((s) => s && typeof s.kind === 'string' && typeof s.text === 'string')
-          .map((s) => ({ kind: s.kind as string, text: s.text as string }));
+          .map((s) => ({
+            kind: s.kind as string,
+            text: s.text as string,
+            ...(typeof s.element === 'string' && s.element ? { element: s.element as string } : {}),
+          }));
       }
     } catch {
       // ignore unreadable project.json

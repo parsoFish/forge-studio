@@ -283,7 +283,14 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'projects', 'agents-project', '.forge'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'projects', 'agents-project', '.forge', 'project.json'),
-    JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'stale json instructions' }),
+    JSON.stringify({
+      quality_gate_cmd: ['npm', 'test'],
+      instructions: 'stale json instructions',
+      demoProcess: [
+        { kind: 'verify', text: 'tests green', element: 'test-evidence' },
+        { kind: 'present', text: 'just a note' },
+      ],
+    }),
   );
   writeFileSync(
     join(forgeRoot, 'projects', 'agents-project', 'AGENTS.md'),
@@ -497,6 +504,17 @@ test('GET /api/studio/projects marks project.json instructions as the legacy sou
   const body = (await res.json()) as { projects: Array<{ id: string; instructionsSource?: string }> };
   const proj = body.projects.find((p) => p.id === 'test-project');
   assert.equal(proj!.instructionsSource, 'project.json');
+});
+
+test('GET /api/studio/projects carries the demoProcess `element` binding (per-element composition)', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const body = (await res.json()) as {
+    projects: Array<{ id: string; demoProcess?: Array<{ kind: string; text: string; element?: string }> }>;
+  };
+  const proj = body.projects.find((p) => p.id === 'agents-project');
+  assert.ok(proj?.demoProcess, 'demoProcess surfaced');
+  assert.equal(proj!.demoProcess![0].element, 'test-evidence', 'element binding is carried through (not stripped)');
+  assert.equal(proj!.demoProcess![1].element, undefined, 'a free-text step has no element');
 });
 
 // ---------------------------------------------------------------------------

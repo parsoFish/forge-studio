@@ -162,24 +162,26 @@ export default function DemoBuilderPage({
 
   const meta = session ? demoHexMeta(session.phase) : null;
 
-  // Iterate the whole demo (target=null) or one part (target=element id): open a
-  // fresh demo session focused accordingly, then jump to it.
-  async function iterate(target: string | null): Promise<void> {
+  // Iterate ONE component: open a demo session focused on that element, brief it
+  // with the component's own prompt (so it runs immediately on just that part),
+  // then jump to it. The WHOLE demo is updated via the briefing "Start the agent".
+  async function iteratePart(element: string, prompt: string): Promise<void> {
     if (iterating || !session) return;
     setIterateError(null);
-    setIterating(target ?? '__whole__');
+    setIterating(element);
     try {
-      const res = await startDemoBuilder({
+      const start = await startDemoBuilder({
         project: session.project,
         mode: session.hasLockedDemo ? 'update' : 'create',
-        ...(target ? { targetElement: target } : {}),
+        targetElement: element,
       });
-      if (res.ok && res.sessionId) {
-        router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
-      } else {
-        setIterateError(res.error ?? 'failed to start the demo agent');
+      if (!start.ok || !start.sessionId) {
+        setIterateError(start.error ?? 'failed to start the demo agent');
         setIterating(null);
+        return;
       }
+      await demoBuilderBrief({ project: session.project, sessionId: start.sessionId, brief: prompt, targetElement: element });
+      router.push(`/demo/${encodeURIComponent(start.sessionId)}`);
     } catch (err) {
       setIterateError(err instanceof Error ? err.message : String(err));
       setIterating(null);
@@ -333,8 +335,7 @@ export default function DemoBuilderPage({
               fragments={session.fragments}
               targetElement={session.targetElement}
               iterating={iterating}
-              busy={session.phase === 'generating' || session.phase === 'locking'}
-              onIterate={iterate}
+              onIteratePart={iteratePart}
             />
 
             {session.phase === 'locked' && (
@@ -488,10 +489,11 @@ function elementName(elements: DemoElementSummary[], id: string): string {
   return elements.find((e) => e.id === id)?.name ?? id;
 }
 
-/** The demo process — each part shown in every phase, with the ability to iterate
- *  on the whole demo or one part, and to view each part's rendered output
- *  independently (its `.forge/demo/fragments/<element>.html`). Empty steps = nothing
- *  configured yet (render nothing). */
+/** The demo process — each part shown in every phase. The WHOLE demo is updated
+ *  via the briefing "Start the agent" (notes prompt). Each element-bound component
+ *  carries its own prompt box + an iterate button that runs the agent on JUST that
+ *  component, plus a "view output" link to its rendered fragment. Empty steps =
+ *  nothing configured yet (render nothing). */
 function DemoProcessPanel({
   steps,
   elements,
@@ -500,8 +502,7 @@ function DemoProcessPanel({
   fragments,
   targetElement,
   iterating,
-  busy,
-  onIterate,
+  onIteratePart,
 }: {
   steps: DemoStep[];
   elements: DemoElementSummary[];
@@ -510,9 +511,9 @@ function DemoProcessPanel({
   fragments: string[];
   targetElement: string | null;
   iterating: string | null;
-  busy: boolean;
-  onIterate: (target: string | null) => void;
+  onIteratePart: (element: string, prompt: string) => void;
 }): JSX.Element | null {
+  const [prompts, setPrompts] = useState<Record<string, string>>({});
   if (steps.length === 0) return null;
 
   async function viewOutput(element: string): Promise<void> {
@@ -520,7 +521,7 @@ function DemoProcessPanel({
     if (u) window.open(u, '_blank');
   }
 
-  const anyBusy = busy || iterating !== null;
+  const anyBusy = iterating !== null;
 
   return (
     <div
@@ -528,73 +529,80 @@ function DemoProcessPanel({
       data-step-count={steps.length}
       style={{ marginTop: 16, border: '1px solid var(--line)', borderRadius: 10, padding: '12px 16px', background: 'var(--panel)' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <div style={{ flex: 1, fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-          The demo process — {steps.length} part{steps.length !== 1 ? 's' : ''}
-        </div>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          data-action="iterate-whole-demo"
-          onClick={() => onIterate(null)}
-          disabled={anyBusy}
-          style={{ fontSize: 12, opacity: anyBusy ? 0.6 : 1 }}
-        >
-          {iterating === '__whole__' ? 'Starting…' : '⟳ Iterate the whole demo'}
-        </button>
+      <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
+        The demo process — {steps.length} part{steps.length !== 1 ? 's' : ''}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--dim)', fontStyle: 'italic', marginBottom: 10 }}>
+        Update the whole demo via “Start the agent” above. Or iterate one component below with its own prompt.
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {steps.map((s, i) => {
           const isFocus = !!s.element && s.element === targetElement;
           const hasOutput = !!s.element && fragments.includes(s.element);
+          const el = s.element;
           return (
             <div
               key={i}
               data-step-kind={s.kind}
-              data-step-element={s.element ?? ''}
+              data-step-element={el ?? ''}
               style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px',
                 borderRadius: 8, border: `1px solid ${isFocus ? 'rgba(92,200,255,.4)' : 'var(--line-2)'}`,
                 background: isFocus ? 'rgba(92,200,255,.06)' : 'var(--panel-2)',
               }}
             >
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--steel, #5cc8ff)', flexShrink: 0 }}>
-                {i + 1}. [{STEP_KIND_LABEL[s.kind]}]
-              </span>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.element ? elementName(elements, s.element) : (s.text || '— free text —')}
-                {s.element && s.text && (
-                  <span style={{ color: 'var(--faint)', marginLeft: 6, fontSize: 11.5 }}>{s.text}</span>
-                )}
-                {isFocus && <span data-element-focus="true" style={{ color: 'var(--steel, #5cc8ff)', fontSize: 10, marginLeft: 6 }}>● focus</span>}
-              </span>
-
-              {s.element && (
-                <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--steel, #5cc8ff)', flexShrink: 0 }}>
+                  {i + 1}. [{STEP_KIND_LABEL[s.kind]}]
+                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {el ? elementName(elements, el) : (s.text || '— free text —')}
+                  {el && s.text && <span style={{ color: 'var(--faint)', marginLeft: 6, fontSize: 11.5 }}>{s.text}</span>}
+                  {isFocus && <span data-element-focus="true" style={{ color: 'var(--steel, #5cc8ff)', fontSize: 10, marginLeft: 6 }}>● focus</span>}
+                </span>
+                {el && (
                   <button
                     type="button"
                     data-action="view-element-output"
-                    data-element-id={s.element}
-                    onClick={() => hasOutput && void viewOutput(s.element!)}
+                    data-element-id={el}
+                    onClick={() => hasOutput && void viewOutput(el)}
                     disabled={!hasOutput}
                     title={hasOutput ? 'View this part’s output' : 'No output rendered yet'}
                     style={{ flexShrink: 0, fontSize: 11.5, color: hasOutput ? 'var(--ember)' : 'var(--faint)', background: 'transparent', border: 'none', cursor: hasOutput ? 'pointer' : 'default', padding: 0 }}
                   >
                     View output →
                   </button>
+                )}
+              </div>
+
+              {el ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                  <textarea
+                    className="input"
+                    data-element-prompt={el}
+                    rows={1}
+                    value={prompts[el] ?? ''}
+                    onChange={(e) => setPrompts((p) => ({ ...p, [el]: e.target.value }))}
+                    placeholder={`Notes for the ${elementName(elements, el)} component (optional)…`}
+                    style={{ flex: 1, fontSize: 12, resize: 'vertical', minHeight: 32, boxSizing: 'border-box' }}
+                  />
                   <button
                     type="button"
                     className="btn btn-ghost"
                     data-action="iterate-element"
-                    data-element-id={s.element}
-                    onClick={() => onIterate(s.element!)}
+                    data-element-id={el}
+                    onClick={() => onIteratePart(el, prompts[el] ?? '')}
                     disabled={anyBusy}
-                    style={{ flexShrink: 0, fontSize: 11.5, opacity: anyBusy ? 0.6 : 1 }}
+                    style={{ flexShrink: 0, fontSize: 11.5, opacity: anyBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}
                   >
-                    {iterating === s.element ? 'Starting…' : '⟳ Iterate this part'}
+                    {iterating === el ? 'Starting…' : '⟳ Iterate this component'}
                   </button>
-                </>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--faint)', fontStyle: 'italic' }}>
+                  Free-text step — bind it to a forge element in the project builder to iterate it on its own.
+                </div>
               )}
             </div>
           );
