@@ -636,6 +636,25 @@ export async function listDemoSessions(): Promise<DemoSessionSummary[]> {
   return body.sessions ?? [];
 }
 
+/** A previously-locked demo snapshot for a project (newest first). */
+export type DemoHistoryEntry = {
+  id: string;
+  /** Bridge-relative path serving the snapshotted DEMO.html (use architectFileUrl). */
+  demoUrl: string;
+  lockedAt: string | null;
+  prompt: string;
+  iterations: number | null;
+};
+
+/** List a project's previously-locked demos (snapshots under .forge/demo/history/). */
+export async function listDemoHistory(project: string): Promise<DemoHistoryEntry[]> {
+  const body = await bridgeGet<{ history: DemoHistoryEntry[] }>(
+    `/api/demo-builder/history/${encodeURIComponent(project)}`,
+    { history: [] },
+  );
+  return body.history ?? [];
+}
+
 /**
  * Open a new demo session in phase 'briefing' (does NOT spawn the agent).
  * `mode: 'update'` carries the existing locked demo as context; `'create'` builds one.

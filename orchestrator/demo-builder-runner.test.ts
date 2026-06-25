@@ -164,6 +164,10 @@ test('locking → writes demo.lock.json + status locked', async () => {
   assert.equal(lock.iterations, 3);
   assert.equal(lock.demo_html, DEMO_HTML_REL_PATH);
   assert.equal(lock.demo_skill, DEMO_SKILL_REL_PATH, 'lock records the reusable generator');
+  // The locked demo is snapshotted to history/<sessionId>/ so it stays viewable.
+  const histDemo = join(repoPath, '.forge', 'demo', 'history', sessionId, 'DEMO.html');
+  assert.ok(existsSync(histDemo), 'locked demo archived to history');
+  assert.ok(existsSync(join(repoPath, '.forge', 'demo', 'history', sessionId, 'meta.json')), 'history meta written');
   assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locked');
 });
 

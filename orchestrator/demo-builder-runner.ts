@@ -56,6 +56,8 @@ export const DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md';
 /** The reviewable sample the generator renders from a representative real change. */
 export const DEMO_HTML_REL_PATH = '.forge/demo/DEMO.html';
 export const DEMO_LOCK_REL_PATH = '.forge/demo/demo.lock.json';
+/** Where each locked demo is snapshotted so previous demos stay viewable. */
+export const DEMO_HISTORY_REL_DIR = '.forge/demo/history';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
 export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 
@@ -303,16 +305,24 @@ function runLockStep(args: {
     mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
   }
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+
+  // Archive this locked demo into history/<sessionId>/ so previous demos remain
+  // viewable — the latest stays at .forge/demo/DEMO.html, each lock is snapshotted.
+  const histDir = join(status.project_repo_path, DEMO_HISTORY_REL_DIR, status.session_id);
+  mkdirSync(histDir, { recursive: true });
+  writeFileSync(join(histDir, 'DEMO.html'), readFileSync(demoPath, 'utf8'));
+  writeFileSync(join(histDir, 'meta.json'), `${JSON.stringify(lock, null, 2)}\n`);
+
   writeSessionStatus(sessionDir, { ...status, phase: 'locked' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [demoPath], output_refs: [lockPath],
-    message: 'demo-locked (machinery committed-ready in the repo for reproduction)',
-    metadata: { session_id: input.sessionId, lock_path: lockPath },
+    event_type: 'log', input_refs: [demoPath], output_refs: [lockPath, join(histDir, 'DEMO.html')],
+    message: 'demo-locked (snapshotted to history; machinery reproducible in the repo)',
+    metadata: { session_id: input.sessionId, lock_path: lockPath, history_dir: histDir },
   });
 
-  return { phase: 'locked', wrote: [lockPath], lockPath };
+  return { phase: 'locked', wrote: [lockPath, join(histDir, 'DEMO.html')], lockPath };
 }
 
 // ---------------------------------------------------------------------------

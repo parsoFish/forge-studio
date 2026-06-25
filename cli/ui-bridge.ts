@@ -1711,6 +1711,63 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // GET /api/demo-builder/history/<project> — list previously-locked demos
+  // (snapshots under <repo>/.forge/demo/history/<id>/), newest first.
+  const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
+  if (method === 'GET' && histListMatch) {
+    const project = decodeURIComponent(histListMatch[1]);
+    const histRoot = join(ctx.projectsRoot, project, '.forge', 'demo', 'history');
+    const entries: Array<Record<string, unknown>> = [];
+    if (existsSync(histRoot)) {
+      let ids: string[];
+      try {
+        ids = readdirSync(histRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+      } catch { ids = []; }
+      for (const id of ids) {
+        if (!existsSync(join(histRoot, id, 'DEMO.html'))) continue;
+        const meta = readJsonFile<Record<string, unknown>>(join(histRoot, id, 'meta.json')) ?? {};
+        entries.push({
+          id,
+          demoUrl: `/api/demo-builder/history/${encodeURIComponent(project)}/${encodeURIComponent(id)}`,
+          lockedAt: typeof meta.locked_at === 'string' ? meta.locked_at : null,
+          prompt: typeof meta.prompt === 'string' ? meta.prompt : '',
+          iterations: typeof meta.iterations === 'number' ? meta.iterations : null,
+        });
+      }
+    }
+    entries.sort((a, b) => String(b.lockedAt ?? '').localeCompare(String(a.lockedAt ?? '')));
+    sendJson(res, 200, { history: entries }, origin);
+    return true;
+  }
+
+  // GET /api/demo-builder/history/<project>/<id> — serve a snapshotted DEMO.html.
+  const histServeMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)\/([^/]+)$/);
+  if (method === 'GET' && histServeMatch) {
+    const project = decodeURIComponent(histServeMatch[1]);
+    const id = decodeURIComponent(histServeMatch[2]);
+    const base = join(ctx.projectsRoot, project, '.forge', 'demo', 'history') + sep;
+    const requested = join(ctx.projectsRoot, project, '.forge', 'demo', 'history', id, 'DEMO.html');
+    if (!requested.startsWith(base)) {
+      sendJson(res, 400, { error: 'path escape rejected' }, origin);
+      return true;
+    }
+    if (!existsSync(requested)) {
+      sendJson(res, 404, { error: 'demo not found', project, id }, origin);
+      return true;
+    }
+    try {
+      res.writeHead(200, {
+        'content-type': contentTypeFor('DEMO.html'),
+        'access-control-allow-origin': origin,
+        'vary': 'origin',
+      });
+      res.end(readFileSync(requested, 'utf8'));
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
   // POST /api/demo-builder/start {project, mode?, projectRepoPath?} — create a
   // session in the `briefing` phase. It does NOT spawn the agent: the operator
   // lands on the screen, sees the demo process + any existing locked demo, and

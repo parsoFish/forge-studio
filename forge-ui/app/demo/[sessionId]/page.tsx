@@ -6,8 +6,11 @@ import Link from 'next/link';
 import {
   listDemoSessions,
   demoBuilderBrief,
+  listDemoHistory,
+  architectFileUrl,
   type DemoSessionSummary,
   type DemoBuilderPhase,
+  type DemoHistoryEntry,
 } from '@/lib/bridge-client';
 import { fetchStudioProjects, type DemoStep } from '@/lib/studio-client';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
@@ -76,6 +79,9 @@ export default function DemoBuilderPage({
   const [session, setSession] = useState<DemoSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
+  // Previously-locked demos for this project (newest first), with their
+  // bridge-relative demoUrls pre-resolved to absolute so a View click is sync.
+  const [history, setHistory] = useState<ResolvedHistoryEntry[]>([]);
   const nowMs = useNowTicker();
 
   const loadSession = useCallback(() => {
@@ -107,6 +113,27 @@ export default function DemoBuilderPage({
       .catch(() => { /* leave empty */ });
     return () => { cancelled = true; };
   }, [session?.project]);
+
+  // Load the project's previously-locked demo history once the project is known,
+  // and refresh it whenever the phase becomes 'locked' (a new lock appends a
+  // snapshot). Pre-resolve each bridge-relative demoUrl to absolute so the
+  // per-row "View" click can open synchronously in a new tab.
+  useEffect(() => {
+    if (!session?.project) return;
+    let cancelled = false;
+    listDemoHistory(session.project)
+      .then(async (entries) => {
+        const resolved = await Promise.all(
+          entries.map(async (entry) => ({
+            ...entry,
+            resolvedUrl: await architectFileUrl(entry.demoUrl),
+          })),
+        );
+        if (!cancelled) setHistory(resolved);
+      })
+      .catch(() => { /* leave existing history */ });
+    return () => { cancelled = true; };
+  }, [session?.project, session?.phase]);
 
   const events = useCycleEvents(cycleId, (msg) => {
     if (msg.type === 'demo-list-changed') loadSession();
@@ -153,6 +180,7 @@ export default function DemoBuilderPage({
           )}
 
           <div style={{ minWidth: 0 }}>
+            <Link href={`/projects/${encodeURIComponent(session.project)}`} data-action="back-to-project" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}>← Back to project</Link>
             <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
               Building DEMO.html
             </div>
@@ -233,10 +261,90 @@ export default function DemoBuilderPage({
             )}
 
             {session.phase === 'abandoned' && <Status label="Demo abandoned." />}
+
+            <PreviousDemos history={history} />
           </div>
         </div>
       )}
     </StudioArchitectShell>
+  );
+}
+
+/** A {@link DemoHistoryEntry} with its bridge-relative demoUrl pre-resolved to
+ *  an absolute URL (so the View action can `window.open` synchronously). */
+type ResolvedHistoryEntry = DemoHistoryEntry & { resolvedUrl: string };
+
+/** Format a lockedAt ISO timestamp readably; fall back to the entry id when null. */
+function historyLabel(entry: ResolvedHistoryEntry): string {
+  if (!entry.lockedAt) return entry.id;
+  const d = new Date(entry.lockedAt);
+  return Number.isNaN(d.getTime()) ? entry.lockedAt : d.toLocaleString();
+}
+
+/** Previously-locked demos for this project (newest first). Renders nothing when
+ *  the project has no locked demos yet. Each row links out to the snapshotted
+ *  DEMO.html (pre-resolved absolute URL) in a new tab. */
+function PreviousDemos({ history }: { history: ResolvedHistoryEntry[] }): JSX.Element | null {
+  if (history.length === 0) return null;
+  return (
+    <div
+      data-section="demo-history"
+      data-demo-history-count={history.length}
+      style={{
+        marginTop: 16,
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        padding: '12px 16px',
+        background: 'var(--panel)',
+      }}
+    >
+      <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
+        Previous demos
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {history.map((entry) => (
+          <li
+            key={entry.id}
+            data-demo-history-id={entry.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              fontSize: 12.5,
+              color: 'var(--dim)',
+            }}
+          >
+            <span style={{ minWidth: 0 }}>
+              <span style={{ color: 'var(--text)' }}>{historyLabel(entry)}</span>
+              {entry.iterations != null && (
+                <span style={{ marginLeft: 8, color: 'var(--faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  {entry.iterations} iter
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              data-action="view-previous-demo"
+              onClick={() => entry.resolvedUrl && window.open(entry.resolvedUrl, '_blank')}
+              disabled={!entry.resolvedUrl}
+              style={{
+                flex: '0 0 auto',
+                fontSize: 12,
+                color: 'var(--ember)',
+                background: 'transparent',
+                border: 'none',
+                cursor: entry.resolvedUrl ? 'pointer' : 'default',
+                padding: 0,
+                opacity: entry.resolvedUrl ? 1 : 0.5,
+              }}
+            >
+              View →
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

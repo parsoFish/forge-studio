@@ -111,6 +111,7 @@ export default function InstructionsInterviewPage({
           )}
 
           <div style={{ minWidth: 0 }}>
+            <Link href={`/projects/${encodeURIComponent(session.project)}`} data-action="back-to-project" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}>← Back to project</Link>
             <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
               Authoring AGENTS.md
             </div>
