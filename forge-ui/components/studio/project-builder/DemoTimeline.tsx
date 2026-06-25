@@ -40,10 +40,8 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
-  // The forge demo-element library (composer palette), loaded on mount.
+  // The forge demo-element library (the per-step element options), loaded on mount.
   const [palette, setPalette] = useState<DemoElementSummary[]>([]);
-  // Currently-selected element id in the add-element picker.
-  const [pickElement, setPickElement] = useState<string>('');
   // Which element step's iterate action is in-flight (data-element-id), or null.
   const [iterating, setIterating] = useState<string | null>(null);
   const prevStepsRef = useRef(steps);
@@ -118,12 +116,12 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
     emit([...internal, { kind, text, uid: nextUid() }]);
   }
 
-  // Append a composed step from a library element (phase becomes the step kind).
-  function addElementStep(elementId: string) {
+  // Bind a step to a library element (phase becomes the step kind), or clear it
+  // back to a free-text step (keeping the current kind).
+  function setStepElement(i: number, elementId: string) {
+    if (!elementId) { updateStep(i, { element: undefined }); return; }
     const el = elementById(elementId);
-    if (!el) return;
-    emit([...internal, { kind: el.phase, text: '', element: el.id, uid: nextUid() }]);
-    setPickElement('');
+    updateStep(i, { element: elementId, ...(el ? { kind: el.phase } : {}) });
   }
 
   function removeStep(i: number) {
@@ -207,64 +205,13 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
             ⚠ Demos show the ACTUAL resource — a passing-test table is not a demo.
           </div>
 
-          {/* Element composer — add a library element to the demo composition */}
-          {palette.length > 0 && (
-            <div
-              data-section="demo-element-composer"
-              data-palette-count={palette.length}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }}
-            >
-              <div style={{ width: '100%', fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 2 }}>
-                Compose from the forge element library
-              </div>
-              <select
-                data-element-picker=""
-                value={pickElement}
-                onChange={(e) => setPickElement(e.target.value)}
-                style={{
-                  flex: 1, minWidth: 220,
-                  background: 'var(--panel-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 12,
-                  padding: '6px 8px', cursor: 'pointer', outline: 'none',
-                }}
-              >
-                <option value="">Choose a demo element…</option>
-                {PHASE_ORDER.map((phase) => {
-                  const inPhase = palette.filter((e) => e.phase === phase);
-                  if (inPhase.length === 0) return null;
-                  return (
-                    <optgroup key={phase} label={`${KIND_META[phase]?.icon ?? ''} ${KIND_META[phase]?.label ?? phase}`}>
-                      {inPhase.map((el) => (
-                        <option key={el.id} value={el.id}>{el.name}</option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                data-action="add-demo-element"
-                onClick={() => pickElement && addElementStep(pickElement)}
-                disabled={!pickElement}
-                style={{ fontSize: 13, opacity: pickElement ? 1 : 0.5 }}
-              >
-                + Add element
-              </button>
-              {pickElement && (
-                <div style={{ width: '100%', fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-                  {elementById(pickElement)?.description}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Demo process — the ordered steps the demo agent follows */}
+          {/* Demo process — the ordered steps the demo agent follows. Each step
+              picks WHICH forge element renders it (or stays free text). */}
           <div style={{ fontSize: 10.5, fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
             The demo process this follows
           </div>
           <div style={{ fontSize: 11, color: 'var(--dim)', fontStyle: 'italic', marginBottom: 10 }}>
-            Elements run top-to-bottom — this is the demo composition order.
+            Each step picks which forge element renders it (or stays free text). They run top-to-bottom — this is the demo composition order.
           </div>
 
           {/* Timeline */}
@@ -312,47 +259,55 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ color: 'var(--faint)', cursor: 'grab', fontSize: 13, userSelect: 'none' }}>⠿</span>
 
+                    {/* Element selector — which forge element renders this step (or free text). */}
+                    <select
+                      data-step-element-select={step.element ?? ''}
+                      value={step.element ?? ''}
+                      onChange={(e) => setStepElement(i, e.target.value)}
+                      title="Which forge demo element renders this step"
+                      style={{
+                        background: 'var(--bg-2)', border: `1px solid ${composed ? 'var(--line-2)' : 'var(--line)'}`,
+                        borderRadius: 'var(--radius-sm)', color: composed ? 'var(--text)' : 'var(--dim)',
+                        fontFamily: 'var(--font-display)', fontSize: 11.5, fontWeight: 600,
+                        padding: '3px 8px', cursor: 'pointer', outline: 'none', maxWidth: 240,
+                      }}
+                    >
+                      <option value="">— free text —</option>
+                      {PHASE_ORDER.map((phase) => {
+                        const inPhase = palette.filter((e) => e.phase === phase);
+                        if (inPhase.length === 0) return null;
+                        return (
+                          <optgroup key={phase} label={`${KIND_META[phase]?.icon ?? ''} ${KIND_META[phase]?.label ?? phase}`}>
+                            {inPhase.map((el2) => <option key={el2.id} value={el2.id}>{el2.name}</option>)}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+
                     {composed ? (
-                      <>
-                        {/* Composed-from-element badge (element name; falls back to raw id) */}
-                        <span
-                          data-element-badge={step.element}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '3px 9px', borderRadius: 999,
-                            fontSize: 11, fontWeight: 600,
-                            border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--text)',
-                          }}
-                        >
-                          <span>{KIND_META[step.kind]?.icon}</span>
-                          {el?.name ?? step.element}
-                        </span>
-                        {/* Phase tag */}
-                        <span style={{
-                          fontFamily: 'var(--font-display)', fontSize: 10.5, fontWeight: 600,
-                          letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)',
-                        }}>
-                          {step.kind}
-                        </span>
-                      </>
+                      /* Phase derived from the element. */
+                      <span style={{
+                        fontFamily: 'var(--font-display)', fontSize: 10.5, fontWeight: 600,
+                        letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)',
+                      }}>{step.kind}</span>
                     ) : (
-                      <>
-                        <select
-                          value={step.kind}
-                          onChange={(e) => updateStep(i, { kind: e.target.value as DemoStep['kind'] })}
-                          style={{
-                            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
-                            color: 'var(--dim)', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
-                            letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 8px', cursor: 'pointer', outline: 'none',
-                          }}
-                        >
-                          {(['capture', 'verify', 'present'] as const).map((k) => (
-                            <option key={k} value={k}>{KIND_META[k].label}</option>
-                          ))}
-                        </select>
-                        <span>{KIND_META[step.kind]?.icon}</span>
-                      </>
+                      /* Free-text step still chooses its phase (for the preflight DEMO clause). */
+                      <select
+                        value={step.kind}
+                        onChange={(e) => updateStep(i, { kind: e.target.value as DemoStep['kind'] })}
+                        title="Phase (capture / verify / present)"
+                        style={{
+                          background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
+                          color: 'var(--dim)', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
+                          letterSpacing: '.06em', textTransform: 'uppercase', padding: '3px 8px', cursor: 'pointer', outline: 'none',
+                        }}
+                      >
+                        {(['capture', 'verify', 'present'] as const).map((k) => (
+                          <option key={k} value={k}>{KIND_META[k].label}</option>
+                        ))}
+                      </select>
                     )}
+                    <span>{KIND_META[step.kind]?.icon}</span>
 
                     {/* Reorder + remove controls */}
                     <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
@@ -412,7 +367,7 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
 
           {/* Add step (legacy freetext) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, paddingLeft: 46 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add freetext step</button>
+            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add step</button>
           </div>
 
           {/* Preset strip */}
