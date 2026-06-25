@@ -86,6 +86,7 @@ export default function DemoBuilderPage({
   const [loaded, setLoaded] = useState(false);
   // Which iterate action is in-flight: an element id, or '__whole__', or null.
   const [iterating, setIterating] = useState<string | null>(null);
+  const [iterateError, setIterateError] = useState<string | null>(null);
   const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
   // The forge demo-element library — used to resolve an `element` id on a
   // demoProcess step to its human name in the demo-process-ref panel.
@@ -165,6 +166,7 @@ export default function DemoBuilderPage({
   // fresh demo session focused accordingly, then jump to it.
   async function iterate(target: string | null): Promise<void> {
     if (iterating || !session) return;
+    setIterateError(null);
     setIterating(target ?? '__whole__');
     try {
       const res = await startDemoBuilder({
@@ -172,11 +174,23 @@ export default function DemoBuilderPage({
         mode: session.hasLockedDemo ? 'update' : 'create',
         ...(target ? { targetElement: target } : {}),
       });
-      if (res.ok && res.sessionId) router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
-      else setIterating(null);
-    } catch {
+      if (res.ok && res.sessionId) {
+        router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+      } else {
+        setIterateError(res.error ?? 'failed to start the demo agent');
+        setIterating(null);
+      }
+    } catch (err) {
+      setIterateError(err instanceof Error ? err.message : String(err));
       setIterating(null);
     }
+  }
+
+  // Open the current/locked DEMO.html for this session (if one exists) in a new tab.
+  async function viewCurrentDemo(): Promise<void> {
+    if (!session?.demoUrl) return;
+    const u = await architectFileUrl(session.demoUrl);
+    if (u) window.open(u, '_blank');
   }
 
   return (
@@ -225,6 +239,23 @@ export default function DemoBuilderPage({
             <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 16, fontFamily: 'var(--font-mono)' }}>
               {session.project}
             </div>
+
+            {/* View the current/locked demo — available in every phase when a
+                DEMO.html exists in the repo (so an already-built demo is viewable). */}
+            {session.demoUrl && (
+              <button
+                type="button"
+                data-action="view-current-demo"
+                onClick={() => void viewCurrentDemo()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
+                  fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#1f6feb',
+                  border: '1px solid var(--line)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
+                }}
+              >
+                ⧉ View the current demo
+              </button>
+            )}
 
             {session.targetElement && (
               <div
@@ -284,6 +315,12 @@ export default function DemoBuilderPage({
                 demoUrl={session.demoUrl}
                 iteration={session.iteration}
               />
+            )}
+
+            {iterateError && (
+              <div data-section="iterate-error" style={{ fontSize: 12, color: 'var(--red, #f85149)', marginTop: 12 }}>
+                {iterateError}
+              </div>
             )}
 
             {/* The demo process — shown in EVERY phase. Each part can be iterated
