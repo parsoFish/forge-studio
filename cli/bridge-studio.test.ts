@@ -350,6 +350,26 @@ test('GET /api/runs?flow=nonexistent-flow returns empty array', async () => {
   assert.deepEqual(body.runs, []);
 });
 
+test('GET /api/runs/planned lists pending develop-able initiatives (Stage C kickoff)', async () => {
+  const id = 'INIT-2026-06-26-planned';
+  mkdirSync(join(forgeRoot, '_queue', 'pending'), { recursive: true });
+  writeFileSync(join(forgeRoot, '_queue', 'pending', `${id}.md`), makeManifest({ initId: id }));
+  try {
+    const res = await fetch(`${bridgeUrl}/api/runs/planned`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      planned: Array<{ initiativeId: string; project: string | null; ready: boolean; blockedBy: string[] }>;
+    };
+    const row = body.planned.find((p) => p.initiativeId === id);
+    assert.ok(row, 'planned initiative must appear');
+    assert.equal(row!.project, 'test-project');
+    assert.equal(row!.ready, true);
+    assert.deepEqual(row!.blockedBy, []);
+  } finally {
+    rmSync(join(forgeRoot, '_queue', 'pending', `${id}.md`), { force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // /api/runs/<id>
 // ---------------------------------------------------------------------------

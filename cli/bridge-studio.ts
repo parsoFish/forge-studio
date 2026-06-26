@@ -27,6 +27,7 @@ import { join, resolve, sep } from 'node:path';
 
 import { runPreflight } from './preflight.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
+import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -389,6 +390,19 @@ export async function handleStudioRoutes(
         runs = runs.filter((r) => r.flowId === flowFilter);
       }
       sendJson(res, 200, { runs }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/runs/planned (develop-able initiatives) -----------------------
+  // Stage C: the forge-develop kickoff surface (kind: initiative-select). MUST
+  // precede /api/runs/<id> below (else "planned" parses as a run id).
+  if (url === '/api/runs/planned') {
+    try {
+      const planned = listPlannedInitiatives(join(resolve(ctx.forgeRoot), '_queue'));
+      sendJson(res, 200, { planned }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
