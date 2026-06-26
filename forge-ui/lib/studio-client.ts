@@ -651,12 +651,19 @@ export async function saveFlow(
   };
 }
 
+export type ClauseResolution = 'auto' | 'agent' | 'user';
+export type ClauseRoute = 'instructions' | 'demo-builder' | 'brain-fix' | 'preflight-fix';
+
 export type PreflightClause = {
   id: string;
   title: string;
   hard: boolean;
   pass: boolean;
   detail: string;
+  /** Stage D — resolution tier + (agent-tier) route + hint, from the server classifier. */
+  resolution?: ClauseResolution;
+  route?: ClauseRoute;
+  fixHint?: string;
 };
 
 export type PreflightResult = {
@@ -670,6 +677,60 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
     null,
   );
   return body;
+}
+
+// --- Stage D — preflight resolution -----------------------------------------
+
+/** Apply every deterministic AUTO-tier preflight fix, then return updated clauses. */
+export async function preflightFixAuto(
+  projectId: string,
+): Promise<{ ok: boolean; error?: string; applied: Array<{ clause: string; detail: string; cleared: boolean }>; skipped: Array<{ clause: string; reason: string }>; clauses: PreflightClause[]; ready: boolean }> {
+  const r = await studioPost(`/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-auto`, {});
+  return {
+    ok: r.ok,
+    error: r.error,
+    applied: (r.data?.applied as Array<{ clause: string; detail: string; cleared: boolean }>) ?? [],
+    skipped: (r.data?.skipped as Array<{ clause: string; reason: string }>) ?? [],
+    clauses: (r.data?.clauses as PreflightClause[]) ?? [],
+    ready: r.data?.ready === true,
+  };
+}
+
+/** Dispatch resolution for one agent/user-tier clause. Agent-tier returns a
+ *  `route` (the UI navigates to the builder); user-tier spawns the preflight-fix
+ *  agent with the operator's `instruction` and returns a `runId` to poll. */
+export async function preflightFixAgent(
+  projectId: string,
+  body: { clauseId: string; instruction?: string },
+): Promise<{ ok: boolean; error?: string; resolution?: ClauseResolution; route?: ClauseRoute; runId?: string }> {
+  const r = await studioPost(`/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent`, body);
+  return {
+    ok: r.ok,
+    error: r.error,
+    resolution: r.data?.resolution as ClauseResolution | undefined,
+    route: r.data?.route as ClauseRoute | undefined,
+    runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined,
+  };
+}
+
+/** Poll a dispatched preflight-fix (user-tier) run's state. */
+export async function preflightFixStatus(
+  projectId: string,
+  runId: string,
+): Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, state: 'running', cleared: false };
+  try {
+    const res = await fetch(`${base}/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`);
+    const data = (await res.json()) as { state?: string; cleared?: boolean };
+    return {
+      ok: res.ok,
+      state: (data.state as 'running' | 'cleared' | 'not-cleared' | 'failed') ?? 'running',
+      cleared: data.cleared === true,
+    };
+  } catch {
+    return { ok: false, state: 'running', cleared: false };
+  }
 }
 
 /**

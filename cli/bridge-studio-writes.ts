@@ -16,10 +16,14 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
+
+import { classifyClause } from './preflight-resolve.ts';
+import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
+import type { ClauseResult } from './preflight.ts';
 
 import {
   listAgentDefinitions,
@@ -136,6 +140,65 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
  *   3. Load-merge-write pattern: never clobbers preserved fields.
  *   4. validateAgent / validateProjectConfig block writes on error-level findings.
  */
+// ---------------------------------------------------------------------------
+// Stage D — preflight resolution helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve a managed-project id to its absolute root, or send an error + return null. */
+function resolveManagedProject(
+  ctx: StudioContext,
+  id: string,
+  res: ServerResponse,
+  origin: string | undefined,
+): string | null {
+  if (!SLUG_RE.test(id)) {
+    sendJson(res, 400, { error: 'invalid project id' }, origin);
+    return null;
+  }
+  const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+  const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
+  if (!projectRef) {
+    sendJson(res, 404, { error: 'unknown project' }, origin);
+    return null;
+  }
+  const projectRoot = projectRef.absPath;
+  if (!resolve(projectRoot).startsWith(resolve(ctx.forgeRoot) + sep)) {
+    sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
+    return null;
+  }
+  return projectRoot;
+}
+
+function toClauseDto(c: ClauseResult): {
+  id: string; title: string; hard: boolean; pass: boolean; detail: string;
+  resolution: string; route?: string; fixHint?: string;
+} {
+  const cls = classifyClause(c);
+  return { id: c.clause, title: c.title, hard: c.hard, pass: c.pass, detail: c.detail, resolution: cls.resolution, route: cls.route, fixHint: cls.fixHint };
+}
+
+/** Spawn ONE detached `forge preflight fix` agent turn; events stream to
+ *  _logs/_preflight-fix-<runId>/events.jsonl. Mirrors spawnBrainFix. */
+function spawnPreflightFix(
+  forgeRoot: string,
+  p: { project: string; clause: string; instruction: string; detail: string; runId: string },
+): void {
+  // Harness guard: tests pin FORGE_ARCHITECT_NO_SPAWN=1 so the route is exercised
+  // without launching a real SDK agent.
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  const logDir = join(forgeRoot, '_logs', `_preflight-fix-${p.runId}`);
+  mkdirSync(logDir, { recursive: true });
+  const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+  const argv = [
+    '--experimental-strip-types', 'orchestrator/cli.ts', 'preflight', 'fix',
+    '--project', p.project, '--clause', p.clause, '--run-id', p.runId,
+    '--instruction', p.instruction, '--detail', p.detail,
+  ];
+  const proc = spawn(process.execPath, argv, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
+  closeSync(stderrFd);
+  proc.unref();
+}
+
 export async function handleStudioWriteRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -147,6 +210,74 @@ export async function handleStudioWriteRoutes(
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
+
+  // ---- POST /api/studio/projects/:id/preflight/fix-auto (Stage D) ----------
+  const pfAutoMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-auto$/);
+  if (pfAutoMatch && method === 'POST') {
+    try {
+      const projectRoot = resolveManagedProject(ctx, decodeURIComponent(pfAutoMatch[1]), res, origin);
+      if (!projectRoot) return true;
+      const before = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const result = applyPreflightAutoFixes({ projectDir: projectRoot, forgeRoot: ctx.forgeRoot, clauses: before.clauses });
+      const after = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      sendJson(res, 200, { ok: true, applied: result.applied, skipped: result.skipped, clauses: after.clauses.map(toClauseDto), ready: after.ok }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/projects/:id/preflight/fix-agent (Stage D) ---------
+  const pfAgentMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-agent$/);
+  if (pfAgentMatch && method === 'POST') {
+    try {
+      const id = decodeURIComponent(pfAgentMatch[1]);
+      const projectRoot = resolveManagedProject(ctx, id, res, origin);
+      if (!projectRoot) return true;
+      let body: Record<string, unknown>;
+      try {
+        body = (await readJson(req)) as Record<string, unknown>;
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+        return true;
+      }
+      const clauseId = typeof body.clauseId === 'string' ? body.clauseId : '';
+      const instruction = typeof body.instruction === 'string' ? body.instruction : '';
+      if (!clauseId) {
+        sendJson(res, 400, { error: 'fix-agent requires clauseId' }, origin);
+        return true;
+      }
+      const report = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      const clause = report.clauses.find((c) => c.clause === clauseId);
+      if (!clause) {
+        sendJson(res, 404, { error: `unknown clause ${clauseId}` }, origin);
+        return true;
+      }
+      const cls = classifyClause(clause);
+      if (cls.resolution === 'auto') {
+        sendJson(res, 400, { error: `${clauseId} is auto-tier — use fix-auto`, route: 'auto' }, origin);
+        return true;
+      }
+      if (cls.resolution === 'agent') {
+        // C8→instructions, DEMO/DEMO-SKILL→demo-builder, BRAIN→brain-fix. The UI
+        // navigates to the existing builder surface; no spawn here.
+        sendJson(res, 200, { ok: true, resolution: 'agent', route: cls.route, fixHint: cls.fixHint }, origin);
+        return true;
+      }
+      // USER-tier — spawn the generic preflight-fix agent with the operator's decision.
+      const runId = `${id}-${clauseId}-${Date.now().toString(36)}`;
+      try {
+        spawnPreflightFix(ctx.forgeRoot, { project: id, clause: clauseId, instruction, detail: clause.detail, runId });
+      } catch (err) {
+        sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
+        return true;
+      }
+      sendJson(res, 200, { ok: true, resolution: 'user', route: 'preflight-fix', runId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
 
   // ---- PUT /api/studio/agents/:slug ----------------------------------------
   const agentMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);

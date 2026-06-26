@@ -19,6 +19,7 @@ import { Instructions } from '@/components/studio/project-builder/Instructions';
 import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
+import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 
@@ -283,6 +284,14 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
               kb={kb}
               preflight={preflight}
             />
+
+            {preflight && (
+              <ContractResolutionPanel
+                projectId={id}
+                clauses={preflight.clauses}
+                onChanged={() => void loadPreflight({ cancelled: false })}
+              />
+            )}
 
             <UsedByFlows flows={flows} projectId={id} />
           </aside>

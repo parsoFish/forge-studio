@@ -26,6 +26,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 import { runPreflight } from './preflight.ts';
+import { classifyClause } from './preflight-resolve.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import type { Run } from '../orchestrator/run-model.ts';
@@ -368,6 +369,32 @@ function loadAllFlows(forgeRoot: string): FlowDefinition[] {
  * @param rawUrl - Full URL including query string (e.g. '/api/runs?flow=forge-cycle')
  * @param method - HTTP method string
  */
+/** Read a preflight-fix run's terminal state from its event log. Mirrors
+ *  readBrainFixState — a local log reader so the bridge needn't import the
+ *  SDK-laden runner module. */
+function readPreflightFixState(
+  forgeRoot: string,
+  runId: string,
+): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean } {
+  const evPath = join(forgeRoot, '_logs', `_preflight-fix-${runId}`, 'events.jsonl');
+  if (!existsSync(evPath)) return { state: 'running', cleared: false };
+  let raw: string;
+  try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
+  for (const line of raw.split('\n').reverse()) {
+    if (!line.trim()) continue;
+    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean } };
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev.event_type === 'end' || ev.message?.startsWith('preflight-fix.end')) {
+      const cleared = ev.metadata?.cleared === true;
+      return { state: cleared ? 'cleared' : 'not-cleared', cleared };
+    }
+    if (ev.event_type === 'error' || ev.message === 'preflight-fix.crashed') {
+      return { state: 'failed', cleared: false };
+    }
+  }
+  return { state: 'running', cleared: false };
+}
+
 export async function handleStudioRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -640,17 +667,35 @@ export async function handleStudioRoutes(
         return true;
       }
       const report = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
-      const clauses = report.clauses.map((c) => ({
-        id: c.clause,
-        title: c.title,
-        hard: c.hard,
-        pass: c.pass,
-        detail: c.detail,
-      }));
+      const clauses = report.clauses.map((c) => {
+        const cls = classifyClause(c);
+        return {
+          id: c.clause,
+          title: c.title,
+          hard: c.hard,
+          pass: c.pass,
+          detail: c.detail,
+          resolution: cls.resolution,
+          route: cls.route,
+          fixHint: cls.fixHint,
+        };
+      });
       sendJson(res, 200, { clauses, ready: report.ok }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
+    return true;
+  }
+
+  // ---- /api/studio/projects/:id/preflight/fix-agent/:runId (Stage D) -------
+  const pfStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-agent\/([^/]+)$/);
+  if (pfStatusMatch) {
+    const runId = decodeURIComponent(pfStatusMatch[2]);
+    if (!SAFE_ID_RE.test(runId)) {
+      sendJson(res, 400, { error: 'invalid run id' }, origin);
+      return true;
+    }
+    sendJson(res, 200, { ok: true, runId, ...readPreflightFixState(ctx.forgeRoot, runId) }, origin);
     return true;
   }
 
