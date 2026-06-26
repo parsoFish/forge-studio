@@ -128,3 +128,26 @@ that every flow node is its own dispatch.
 
 Verified by a 4-lens adversarial review (order / resume / blast-radius / events)
 which found and fixed the resume event-emission regression. Full suite 1122 green.
+
+## Amendment (Stage C, 2026-06-27): flow triggers IMPLEMENTED + per-flow kickoff
+
+Item 7 ("Triggers") is now **implemented**, not reserved. `orchestrator/flow-trigger.ts`
+`fireFlowTriggers(flow, event, deps)` is the single, generic, declaration-driven
+firing path — both event sites route through it with an injectable dispatcher:
+
+- **`on: complete`** — the flow-runner fires a flow's complete-triggers on terminal
+  success; the dispatch stages a *claimable* flow-run request into `_queue/flow-runs/`
+  (a sibling of `pending/`, so a request is never mis-claimed as an initiative
+  manifest — the old marker risk), carrying the source initiative. The scheduler's
+  `drainFlowRunRequests` sweep repoints that initiative at the target flow. No seed
+  flow declares `on: complete` today, so this path is unit-tested, not yet live.
+- **`on: merged`** — fired by `orchestrator/finalize-merged.ts` once a merged PR is
+  confirmed (async + post-run, *after* the flow already terminated at
+  `ready-for-review`). `forge-develop` declares `{on: merged, flow: forge-reflect}`;
+  finalize-merged reads that declaration and fires reflect from it — the **single
+  source** of "merge fires reflect", replacing the hardcoded `runReflector` call.
+
+Per-flow **kickoff** (`FlowDefinition.kickoff`, format in ADR 027): the UI renders
+the launch surface matching `kickoff.kind` — `idea` (architect NewIdeaBox),
+`initiative-select` (`GET /api/runs/planned` picker → `POST /api/runs`),
+`trigger-only` (no manual launch; reflect, fired by the merge trigger above).

@@ -137,3 +137,15 @@ same as every other Studio object):
 The five seed templates (`plan`, `work-items`, `wi-branches`, `pr`, `verdict`) document the
 contracts the current cycle already relies on. `wi-branches` is `kind: git-state` (the
 artifact is commits on a branch, not a file).
+
+## Amendment (Stage C, 2026-06-27): per-flow `kickoff`
+
+`FlowDefinition` gains an optional `kickoff: { kind: 'idea' | 'initiative-select'
+| 'trigger-only' }`. It is a **format** concern owned by this ADR (parsed in
+`registry.ts`, enum-validated in `validate.ts`, round-tripped by
+`serializeFlowDefinition`); the launch *semantics* — which surface the UI renders
+and how a run starts — are ADR 028's. Seed flows: `forge-architect` = `idea`
+(NewIdeaBox → architect), `forge-develop` = `initiative-select` (planned-initiative
+picker → develop), `forge-reflect` = `trigger-only` (no manual launch; fired by a
+declared trigger). Absent ⇒ the generic launcher (back-compat for any flow without
+the field).

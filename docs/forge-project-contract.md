@@ -111,6 +111,20 @@ These clauses are checked by `forge preflight <project>`. Hard clauses
 (C3/C5/C6/C8/DEMO/DEMO-SKILL/ARTIFACTS/BRAIN) surface as warnings that never flip
 the verdict.
 
+**Guided resolution (Stage D).** Each failing clause is classified into a
+resolution tier (`cli/preflight-resolve.ts` `classifyClause`, mirroring the
+brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel`:
+- **auto** — `C2`/`ARTIFACTS` (append to `.gitignore`), `C4` (scaffold `roadmap.md`
+  + central brain `profile.md` stubs). One click applies every fixer
+  (`cli/preflight-fix-auto.ts`), then re-runs preflight to confirm each cleared.
+- **agent** — `C8` routes to the Stage-A instructions creator, `DEMO`/`DEMO-SKILL`
+  to the Stage-B demo builder, `BRAIN` to brain-fix. The operator authors it in
+  the matching builder (no auto-generation of an agent-instruction file — C8 stays
+  human-confirmed).
+- **user** — `C1`/`C3`/`C5`/`C6` need an operator decision; that decision drives
+  the `preflight-fix` agent (`orchestrator/preflight-fix-runner.ts`), which applies
+  it minimally and re-runs preflight as the verification gate.
+
 ### C1 — A truthful, discriminating done-signal *(HARD)*
 
 **One command, deterministic, green at HEAD, fast (≤ 10 s), and genuinely
