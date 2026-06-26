@@ -94,7 +94,7 @@ const C3_SKIP_DIRS = new Set([
 // `.forge/` wholesale — `.forge/project.json` + `.forge/quality_gate_cmd` are
 // tracked CONTRACT CONFIG every conformant project keeps, so flagging `.forge/`
 // here false-failed them.
-const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+export const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 
 // DEMO: loadProjectConfig is imported from orchestrator/project-config.ts
 // (single source of truth — CON-2). The loader also single-sources
@@ -112,7 +112,7 @@ const AGENT_INSTRUCTION_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const;
 // structural: for the detected language, does .gitignore mention ANY of the
 // characteristic build-output patterns? Zero coverage ⇒ warn. Conservative:
 // presence of any one hint clears it (we only flag the "no coverage at all" case).
-const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = {
+export const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = {
   typescript: ['dist', 'build', '.tsbuildinfo', 'coverage', 'out', '.next', 'lib/'],
   javascript: ['dist', 'build', 'coverage', 'out', '.next'],
   go: ['*.exe', '*.test', '*.out', 'bin/', '/bin', 'dist'], // Go binaries vary; any binary-ish ignore counts

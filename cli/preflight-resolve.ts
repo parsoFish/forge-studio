@@ -32,12 +32,14 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   // AUTO — deterministic, surgical project edits.
   C2: { resolution: 'auto', fixHint: 'Append the forge scratch paths to .gitignore so they are never committed.' },
   ARTIFACTS: { resolution: 'auto', fixHint: 'Append the language build-output globs to .gitignore.' },
-  'DEMO-SKILL': { resolution: 'auto', fixHint: 'Regenerate the .forge/skills/demo-design/SKILL.md from the declared demoProcess.' },
   C4: { resolution: 'auto', fixHint: 'Scaffold the missing roadmap.md / brain/projects/<name>/profile.md stubs.' },
 
   // AGENT — route to the matching agentic runner.
   C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author AGENTS.md with the instructions agent (operator-confirmed).' },
   DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
+  // DEMO-SKILL is the per-project demo machinery — authored by the demo agent
+  // (there is no deterministic generator), so it routes to demo-builder too.
+  'DEMO-SKILL': { resolution: 'agent', route: 'demo-builder', fixHint: 'Generate the demo-design skill with the demo agent.' },
   BRAIN: { resolution: 'agent', route: 'brain-fix', fixHint: 'Repair the stale brain citation with the brain-fix agent.' },
 
   // USER — needs an operator decision; no safe auto/agent fix.

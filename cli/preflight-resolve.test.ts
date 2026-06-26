@@ -9,17 +9,16 @@ function clause(id: ClauseId): ClauseResult {
 }
 
 test('AUTO-tier clauses route to a deterministic fixer', () => {
-  for (const id of ['C2', 'ARTIFACTS', 'DEMO-SKILL', 'C4'] as ClauseId[]) {
+  for (const id of ['C2', 'ARTIFACTS', 'C4'] as ClauseId[]) {
     assert.equal(classifyClause(clause(id)).resolution, 'auto', `${id} must be auto`);
   }
 });
 
 test('AGENT-tier clauses route to the matching runner', () => {
-  assert.deepEqual(
-    { ...classifyClause(clause('C8')) , fixHint: undefined },
-    { resolution: 'agent', route: 'instructions', fixHint: undefined },
-  );
+  assert.equal(classifyClause(clause('C8')).resolution, 'agent');
+  assert.equal(classifyClause(clause('C8')).route, 'instructions');
   assert.equal(classifyClause(clause('DEMO')).route, 'demo-builder');
+  assert.equal(classifyClause(clause('DEMO-SKILL')).route, 'demo-builder');
   assert.equal(classifyClause(clause('BRAIN')).route, 'brain-fix');
 });
 
