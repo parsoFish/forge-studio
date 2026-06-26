@@ -1,0 +1,57 @@
+/**
+ * Stage D — preflight clause resolution classifier.
+ *
+ * Mirrors the brain-lint guided-resolution pattern (`cli/brain-lint.ts`
+ * `classifyFinding`): each preflight clause is routed to a resolution tier —
+ *
+ *   - `auto`  — a deterministic, surgical fix exists (`cli/preflight-fix-auto.ts`).
+ *   - `agent` — an agent resolves it; `route` says which runner (the Stage-A
+ *               instructions creator for C8, the Stage-B demo builder for DEMO,
+ *               brain-fix for BRAIN, else the generic preflight-fix agent).
+ *   - `user`  — needs an operator decision (a command, a remote, a constraint).
+ *
+ * Pure — no I/O, no mutation. Unknown clauses fall back to `user` (the safe
+ * default: surface it for a human rather than auto-touching the project).
+ */
+import type { ClauseId, ClauseResult } from './preflight.ts';
+
+export type ClauseResolution = 'auto' | 'agent' | 'user';
+
+/** Which agentic runner resolves an `agent`-tier clause. */
+export type ClauseRoute = 'instructions' | 'demo-builder' | 'brain-fix' | 'preflight-fix';
+
+export type ClauseClassification = {
+  resolution: ClauseResolution;
+  /** Present on `agent`-tier — the runner that resolves the clause. */
+  route?: ClauseRoute;
+  /** Operator-facing (and agent-prompt) hint about how the clause is resolved. */
+  fixHint?: string;
+};
+
+const TABLE: Record<ClauseId, ClauseClassification> = {
+  // AUTO — deterministic, surgical project edits.
+  C2: { resolution: 'auto', fixHint: 'Append the forge scratch paths to .gitignore so they are never committed.' },
+  ARTIFACTS: { resolution: 'auto', fixHint: 'Append the language build-output globs to .gitignore.' },
+  'DEMO-SKILL': { resolution: 'auto', fixHint: 'Regenerate the .forge/skills/demo-design/SKILL.md from the declared demoProcess.' },
+  C4: { resolution: 'auto', fixHint: 'Scaffold the missing roadmap.md / brain/projects/<name>/profile.md stubs.' },
+
+  // AGENT — route to the matching agentic runner.
+  C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author AGENTS.md with the instructions agent (operator-confirmed).' },
+  DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
+  BRAIN: { resolution: 'agent', route: 'brain-fix', fixHint: 'Repair the stale brain citation with the brain-fix agent.' },
+
+  // USER — needs an operator decision; no safe auto/agent fix.
+  C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (package.json "test" or .forge/quality_gate_cmd).' },
+  C3: { resolution: 'user', fixHint: 'Split god-files (>800 LOC) into focused modules — a structural decision.' },
+  C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).' },
+  C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.' },
+};
+
+/**
+ * Classify a preflight clause into its resolution tier. Accepts the full
+ * `ClauseResult` (so the UI can pass it straight through); routing is keyed on
+ * the clause id. Unknown ids → `user` (safe default).
+ */
+export function classifyClause(clause: ClauseResult): ClauseClassification {
+  return TABLE[clause.clause] ?? { resolution: 'user' };
+}
