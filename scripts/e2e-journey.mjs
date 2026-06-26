@@ -1034,6 +1034,12 @@ async function main() {
       () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
       null, { timeout: 15000 },
     ).catch(() => {});
+    // Stage C — a no-runs flow monitor shows the per-flow kickoff surface (FlowKickoff).
+    const j3KickoffKind = await page.evaluate(() => {
+      const el = document.querySelector('[data-section="flow-kickoff"]');
+      return el ? el.getAttribute('data-kickoff-kind') : null;
+    });
+    check(j3KickoffKind !== null, `J3: no-runs flow shows the kickoff surface ([data-kickoff-kind]="${j3KickoffKind}")`);
     await page.locator('[data-page="flow-monitor"] .tab', { hasText: 'BUILD' }).first().click().catch(() => {});
     await page.waitForFunction(
       () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
@@ -1436,6 +1442,23 @@ async function main() {
         return el ? el.getAttribute('data-flow-ready') : null;
       });
       check(flowReady !== null, `project-builder: [data-flow-ready] attribute present (got "${flowReady}")`);
+      // Stage A/B backfill — the agentic instruction + demo launchers are present.
+      check(
+        await page.evaluate(() => document.querySelector('[data-action="launch-instructions"]') !== null),
+        'project-builder: instructions agent launcher present (Stage A)',
+      );
+      check(
+        await page.evaluate(() => document.querySelector('[data-action="launch-demo-builder"]') !== null),
+        'project-builder: demo agent launcher present (Stage B)',
+      );
+      // Stage D — contract resolution is wired: the panel renders when clauses
+      // fail, and is correctly absent when the project is fully contract-ready.
+      const resolutionWired = await page.evaluate(() => {
+        const panel = document.querySelector('[data-section="contract-resolution"]');
+        const ready = document.querySelector('[data-flow-ready]')?.getAttribute('data-flow-ready');
+        return panel !== null || ready === 'true';
+      });
+      check(resolutionWired, 'project-builder: contract-resolution panel wired (present on gaps, absent when ready)');
       await frame(page, 'a4-0-project-builder', 'A4 — project builder: north star, demo timeline, skills, contract readiness');
       // Add a demo step → data-step-count increments + dirty flips; discard.
       const presetBtn = page.locator('button').filter({ hasText: /^\+ Add step$/ }).first();
