@@ -12,3 +12,6 @@ nodes:
 edges:
   - { from: architect, to: pm, artifact: plan }
 triggers: []
+# Stage C — per-flow kickoff. Architect is launched from a free-text idea
+# (NewIdeaBox), the unchanged surface.
+kickoff: { kind: idea }

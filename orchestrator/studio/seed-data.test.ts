@@ -186,3 +186,24 @@ test('forge-reflect flow loads and validateFlow returns zero errors', () => {
     `forge-reflect flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Stage C — per-flow kickoff + the declaration-driven reflect trigger
+// ---------------------------------------------------------------------------
+
+test('seed flows declare their kickoff kind', () => {
+  const cases: Array<[string, string]> = [
+    ['forge-architect', 'idea'],
+    ['forge-develop', 'initiative-select'],
+    ['forge-reflect', 'trigger-only'],
+  ];
+  for (const [id, kind] of cases) {
+    const flow = loadFlowDefinition(join(ROOT, `studio/flows/${id}/flow.yaml`));
+    assert.deepEqual(flow.kickoff, { kind }, `${id} must declare kickoff.kind=${kind}`);
+  }
+});
+
+test('forge-develop declares the merged→forge-reflect trigger (single source for reflect firing)', () => {
+  const flow = loadFlowDefinition(join(ROOT, 'studio/flows/forge-develop/flow.yaml'));
+  assert.deepEqual(flow.triggers, [{ on: 'merged', flow: 'forge-reflect' }]);
+});

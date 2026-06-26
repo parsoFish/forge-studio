@@ -7,6 +7,7 @@
  */
 
 import { DEMO_STEP_KINDS } from './types.ts';
+import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import type {
   AgentDefinition,
@@ -274,6 +275,14 @@ export function validateFlow(
         );
       }
     }
+  }
+
+  // kickoff (Stage C, optional): kind must be in the enum. Loader parses it
+  // leniently so a typo is a lint error here, not a load crash (kb.backend precedent).
+  if (flow.kickoff !== undefined && !(FLOW_KICKOFF_KINDS as readonly string[]).includes(flow.kickoff.kind)) {
+    findings.push(
+      err(obj, 'kickoff/kind', `Flow kickoff.kind "${flow.kickoff.kind}" must be one of ${FLOW_KICKOFF_KINDS.join('|')}`),
+    );
   }
 
   // zero-gate: at least one node must carry a gate, unless disposable:true

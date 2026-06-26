@@ -32,3 +32,7 @@ nodes:
   - { id: reflect, agent: reflector }
 edges: []
 triggers: []
+# Stage C — per-flow kickoff. Reflect has NO manual launch surface; it is fired
+# only by forge-develop's declared `{on: merged, flow: forge-reflect}` trigger
+# (via finalize-merged). The UI renders an "auto-triggered on merge" note.
+kickoff: { kind: trigger-only }

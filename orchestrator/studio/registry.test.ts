@@ -314,6 +314,27 @@ describe('loadFlowDefinition', () => {
     assert.deepEqual(flow.triggers, []);
   });
 
+  it('kickoff present → parsed', () => {
+    const p = writeFixture('flow-kickoff.yaml', FLOW_FIXTURE + 'kickoff: { kind: initiative-select }\n');
+    const flow = loadFlowDefinition(p);
+    assert.deepEqual(flow.kickoff, { kind: 'initiative-select' });
+  });
+
+  it('kickoff absent → undefined', () => {
+    const p = writeFixture('flow-kickoff-absent.yaml', FLOW_FIXTURE);
+    const flow = loadFlowDefinition(p);
+    assert.strictEqual(flow.kickoff, undefined);
+  });
+
+  it('kickoff round-trips through serialize', () => {
+    const p = writeFixture('flow-kickoff-rt-src.yaml', FLOW_FIXTURE + 'kickoff: { kind: trigger-only }\n');
+    const original = loadFlowDefinition(p);
+    const reloaded = loadFlowDefinition(
+      writeFixture('flow-kickoff-rt-dst.yaml', serializeFlowDefinition(original)),
+    );
+    assert.deepEqual(reloaded.kickoff, { kind: 'trigger-only' });
+  });
+
   it('project absent → null', () => {
     const noProject = FLOW_FIXTURE.replace('project: null\n', '');
     const p = writeFixture('flow-no-project.yaml', noProject);

@@ -70,6 +70,14 @@ export type FlowNode = {
 export type FlowEdge = { from: string; to: string; artifact: string };
 export type FlowTrigger = { on: string; flow: string };
 
+// Stage C — per-flow kickoff. Declares which launch surface the UI renders for a
+// flow: `idea` (free-text idea → architect), `initiative-select` (pick a planned
+// initiative → develop), `trigger-only` (no manual launch — fired by a declared
+// FlowTrigger, e.g. reflect on merge). Optional: absent ⇒ the generic launcher.
+export const FLOW_KICKOFF_KINDS = ['idea', 'initiative-select', 'trigger-only'] as const;
+export type FlowKickoffKind = (typeof FLOW_KICKOFF_KINDS)[number];
+export type FlowKickoff = { kind: FlowKickoffKind };
+
 export type FlowDefinition = {
   id: string;
   name: string;
@@ -83,6 +91,7 @@ export type FlowDefinition = {
   nodes: FlowNode[];
   edges: FlowEdge[];
   triggers: FlowTrigger[];
+  kickoff?: FlowKickoff;
   path: string;
 };
 

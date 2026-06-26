@@ -586,6 +586,28 @@ describe('validateFlow — zero-gate', () => {
   });
 });
 
+describe('validateFlow — kickoff', () => {
+  it('each valid kickoff kind → no kickoff finding', () => {
+    for (const kind of ['idea', 'initiative-select', 'trigger-only'] as const) {
+      const findings = validateFlow(makeFlow({ kickoff: { kind } }), makeAgentMap(makeAgent()));
+      assert.ok(!findings.some((x) => x.check === 'kickoff/kind'), `kind "${kind}" must be accepted`);
+    }
+  });
+
+  it('unknown kickoff kind → error kickoff/kind', () => {
+    const findings = validateFlow(
+      makeFlow({ kickoff: { kind: 'bogus' as never } }),
+      makeAgentMap(makeAgent()),
+    );
+    assert.ok(findings.some((x) => x.level === 'error' && x.check === 'kickoff/kind'));
+  });
+
+  it('absent kickoff → no kickoff finding', () => {
+    const findings = validateFlow(makeFlow(), makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'kickoff/kind'));
+  });
+});
+
 describe('validateFlow — clean flow', () => {
   it('fully-valid flow with gate → no findings', () => {
     const findings = validateFlow(makeFlow(), makeAgentMap(makeAgent()));

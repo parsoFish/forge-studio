@@ -24,6 +24,8 @@ import type {
   DemoElementDefinition,
   FlowDefinition,
   FlowEdge,
+  FlowKickoff,
+  FlowKickoffKind,
   FlowNode,
   FlowTrigger,
   KbDescriptor,
@@ -406,7 +408,19 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
             throw new Error(`${flowYamlPath}: "triggers" must be an array`);
           })();
 
-  return { id, name, version, goal, project, kb, costCeilingUsd, origin, disposable, nodes, edges, triggers, path: flowYamlPath };
+  // kickoff (Stage C, optional). Parsed leniently — the `kind` enum is a lint
+  // concern (validateFlow), not a load crash, mirroring kb.backend.
+  const rawKickoff = d['kickoff'];
+  let kickoff: FlowKickoff | undefined;
+  if (rawKickoff !== undefined && rawKickoff !== null) {
+    if (typeof rawKickoff !== 'object' || Array.isArray(rawKickoff)) {
+      throw new Error(`${flowYamlPath}: "kickoff" must be a mapping`);
+    }
+    const k = rawKickoff as Record<string, unknown>;
+    kickoff = { kind: reqString(k, 'kind', flowYamlPath) as FlowKickoffKind };
+  }
+
+  return { id, name, version, goal, project, kb, costCeilingUsd, origin, disposable, nodes, edges, triggers, kickoff, path: flowYamlPath };
 }
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
@@ -437,6 +451,7 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
   });
   out['edges'] = rest.edges;
   out['triggers'] = rest.triggers;
+  if (rest.kickoff !== undefined) out['kickoff'] = { kind: rest.kickoff.kind };
 
   return yaml.dump(out, { lineWidth: 100, quotingType: '"', forceQuotes: false });
 }

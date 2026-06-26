@@ -24,4 +24,14 @@ nodes:
 edges:
   - { from: dev, to: unifier, artifact: wi-branches }
   - { from: unifier, to: review, artifact: pr }
-triggers: []
+# Stage C — declaration-driven reflect trigger. Develop terminates at
+# `ready-for-review` (PR open), BEFORE merge, so the flow-runner (which fires
+# `on: complete`) deliberately skips this `on: merged` trigger. The real merge
+# signal is async + post-run: orchestrator/finalize-merged.ts reads THIS
+# declaration and fires forge-reflect once the merged PR is confirmed. Single
+# source of "merge fires reflect" = this line (no hardcoded runReflector).
+triggers:
+  - { on: merged, flow: forge-reflect }
+# Stage C — per-flow kickoff. Develop is launched by selecting a planned,
+# dependency-ready initiative (the initiative-select surface).
+kickoff: { kind: initiative-select }
