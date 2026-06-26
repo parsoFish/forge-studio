@@ -111,6 +111,11 @@ export type FlowTrigger = {
   note?: string;
 };
 
+/** Stage C — per-flow kickoff kind; drives which launch surface the UI renders. */
+export type FlowKickoff = {
+  kind: 'idea' | 'initiative-select' | 'trigger-only';
+};
+
 export type Flow = {
   id: string;
   name: string;
@@ -120,6 +125,8 @@ export type Flow = {
   nodes: FlowNode[];
   edges: FlowEdge[];
   triggers: FlowTrigger[];
+  /** Stage C — how this flow is launched (idea / initiative-select / trigger-only). */
+  kickoff?: FlowKickoff;
   costCeilingUsd?: number;
   /**
    * Provenance of the flow. The bundled OOTB palette ships `seed` /
@@ -290,6 +297,21 @@ export async function fetchRuns(flowId?: string): Promise<Run[]> {
   const qs = flowId ? `?flow=${encodeURIComponent(flowId)}` : '';
   const body = await studioGet<{ runs: unknown[] }>(`/api/runs${qs}`, { runs: [] });
   return (body.runs ?? []).map(parseRun);
+}
+
+/** Stage C — a decomposed, not-yet-running initiative the develop flow can launch. */
+export type PlannedInitiative = {
+  initiativeId: string;
+  project: string | null;
+  title: string;
+  ready: boolean;
+  blockedBy: string[];
+};
+
+/** Fetch the develop-able (planned) initiatives for the initiative-select kickoff. */
+export async function fetchPlannedInitiatives(): Promise<PlannedInitiative[]> {
+  const body = await studioGet<{ planned: PlannedInitiative[] }>('/api/runs/planned', { planned: [] });
+  return body.planned ?? [];
 }
 
 /** Fetch a single run by id. */

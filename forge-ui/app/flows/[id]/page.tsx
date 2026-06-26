@@ -13,6 +13,7 @@ import { EventTail } from '@/components/studio/EventTail';
 import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
 import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
+import { FlowKickoff } from '@/components/studio/FlowKickoff';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -500,36 +501,15 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 </div>
               )}
 
-              {/* Start Run CTA — shown when the flow is known but no runs exist yet */}
+              {/* Stage C kickoff surface — shown when the flow is known but no
+                  runs exist yet. Renders the launch UI matching flow.kickoff.kind
+                  (idea / initiative-select / trigger-only), else a generic Start Run. */}
               {ready && flow && runs.length === 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 20px',
-                    background: 'var(--panel)',
-                    borderBottom: '1px solid var(--line)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: 'var(--dim)' }}>No runs yet.</span>
-                  <button
-                    data-action="start-run"
-                    onClick={() => void handleStartRun()}
-                    style={{
-                      fontSize: 12,
-                      padding: '3px 12px',
-                      background: 'var(--accent)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Start Run
-                  </button>
-                </div>
+                <FlowKickoff
+                  flow={flow}
+                  onLaunched={() => void loadData({ cancelled: false })}
+                  onStartGeneric={() => void handleStartRun()}
+                />
               )}
 
               {/* Resume CTA — shown when the active run has failed */}
