@@ -83,6 +83,7 @@ process.chdir(FORGE_ROOT);
     case 'demo':
       return await cmdDemo(args.slice(1));
     case 'preflight':
+      if (args[1] === 'fix') return await cmdPreflightFix(args.slice(2));
       return cmdPreflight(args.slice(1));
     case '--help':
     case '-h':
@@ -733,24 +734,58 @@ async function cmdDemo(rest: string[]): Promise<void> {
  * path. Prints a per-clause PASS/FAIL/WARN report and exits non-zero iff a
  * HARD clause (C1/C2/C4) fails — so an unattended caller can gate on it.
  */
-function cmdPreflight(rest: string[]): void {
-  const target = rest[0];
+/** Resolve a managed-project name or explicit path to an existing project dir, or exit(2). */
+function resolvePreflightProjectDir(target: string | undefined): string {
   if (!target) {
     console.error('forge preflight: missing <project>');
     console.error('Usage: forge preflight <project-name | path>');
     process.exit(2);
   }
-  // Accept either an explicit path or a managed-project name.
   const asPath = resolve(target);
   const asManaged = resolve('projects', target);
-  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory()
-    ? asPath
-    : asManaged;
+  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory() ? asPath : asManaged;
   if (!existsSync(projectDir)) {
     console.error(`forge preflight: project directory not found: ${projectDir}`);
     console.error('Pass a directory under projects/ or an absolute path.');
     process.exit(2);
   }
+  return projectDir;
+}
+
+/**
+ * `forge preflight fix --project <p> --clause <c> [--instruction <i>] [--detail <d>] [--run-id <id>]`
+ * Runs ONE agent-tier preflight-fix turn (the detached child the bridge spawns
+ * for the contract-resolution UI's USER-tier "apply decision"). Streams to
+ * _logs/_preflight-fix-<runId>/.
+ */
+async function cmdPreflightFix(rest: string[]): Promise<void> {
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(`--${name}`);
+    return i >= 0 ? rest[i + 1] : undefined;
+  };
+  const project = flag('project');
+  const clause = flag('clause');
+  if (!project || !clause) {
+    console.error('forge preflight fix: requires --project --clause [--instruction --detail --run-id]');
+    process.exit(2);
+    return;
+  }
+  const projectDir = resolvePreflightProjectDir(project);
+  const runId = flag('run-id') ?? `manual-${clause}`;
+  const { runPreflightFixTurn } = await import('./preflight-fix-runner.ts');
+  const r = await runPreflightFixTurn({
+    runId,
+    projectDir,
+    clause: clause as Parameters<typeof runPreflightFixTurn>[0]['clause'],
+    instruction: flag('instruction') ?? '',
+    detail: flag('detail'),
+    forgeRoot: FORGE_ROOT,
+  });
+  console.log(`preflight-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${clause}`);
+}
+
+function cmdPreflight(rest: string[]): void {
+  const projectDir = resolvePreflightProjectDir(rest[0]);
   const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT });
   console.log(formatPreflightReport(report));
   // CON-5: write the verdict event as JSONL so callers can audit preflight outcomes.
