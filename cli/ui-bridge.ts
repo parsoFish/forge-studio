@@ -1592,6 +1592,29 @@ function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: str
   } catch { /* best-effort */ }
 }
 
+/** Read the Forge demo base stylesheet (best-effort; a minimal dark fallback). */
+function readForgeDemoCss(forgeRoot: string): string {
+  try {
+    return readFileSync(join(forgeRoot, 'studio', 'demo', 'forge-demo.css'), 'utf8');
+  } catch {
+    return 'body{background:#0a0e14;color:#e6edf3;font-family:system-ui,sans-serif;padding:2rem}';
+  }
+}
+
+/** Wrap one element fragment in a self-contained, Forge-styled HTML doc so a single
+ *  component renders as a styled slice of the full demo. */
+function wrapDemoFragment(forgeRoot: string, element: string, fragment: string): string {
+  return [
+    '<!doctype html>',
+    '<html lang="en"><head><meta charset="utf-8">',
+    `<title>demo · ${element}</title>`,
+    `<style>${readForgeDemoCss(forgeRoot)}</style>`,
+    '</head><body>',
+    fragment,
+    '</body></html>',
+  ].join('\n');
+}
+
 /** Discover every demo-builder session under `projects/<name>/_demo/<sid>/`
  *  — used by the bridge's `GET /api/demo-builder/sessions`. Best-effort; never
  *  throws on a malformed dir. Mirrors `listInstructionsSessions`. */
@@ -1750,8 +1773,15 @@ async function handleDemoBuilder(
       return true;
     }
     try {
+      // A fragment is just the element's `<section>` slice. Wrap it in the Forge
+      // demo base stylesheet so the component view is a styled slice of the full
+      // demo (the composer inlines the same CSS into DEMO.html). If the fragment
+      // is already a full HTML doc, serve it untouched.
+      const raw = readFileSync(requested, 'utf8');
+      const isFullDoc = /^\s*<!doctype|^\s*<html[\s>]/i.test(raw);
+      const out = isFullDoc ? raw : wrapDemoFragment(ctx.forgeRoot, element, raw);
       res.writeHead(200, { 'content-type': contentTypeFor('f.html'), 'access-control-allow-origin': origin, 'vary': 'origin' });
-      res.end(readFileSync(requested, 'utf8'));
+      res.end(out);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

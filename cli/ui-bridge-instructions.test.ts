@@ -129,7 +129,12 @@ test('demo sessions surface per-element fragments + the fragment endpoint serves
 
   const frag = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/cli-capture`);
   assert.equal(frag.status, 200);
-  assert.match(await frag.text(), /cli fragment/);
+  const fragHtml = await frag.text();
+  assert.match(fragHtml, /cli fragment/, 'serves the fragment content');
+  // The bare <section> fragment is wrapped into a styled, self-contained HTML doc
+  // so a single component renders as a styled slice of the full demo.
+  assert.match(fragHtml, /^\s*<!doctype html>/i, 'wrapped in a full HTML doc');
+  assert.match(fragHtml, /<style>/, 'carries the Forge demo stylesheet');
   // A path-escape / missing fragment 404s.
   const missing = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/nope`);
   assert.equal(missing.status, 404);

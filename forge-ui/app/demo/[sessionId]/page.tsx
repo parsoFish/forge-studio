@@ -87,6 +87,9 @@ export default function DemoBuilderPage({
   // Which iterate action is in-flight: an element id, or '__whole__', or null.
   const [iterating, setIterating] = useState<string | null>(null);
   const [iterateError, setIterateError] = useState<string | null>(null);
+  // When set, the page shows that output in-app (an iframe) with a back button,
+  // instead of opening a new tab.
+  const [viewing, setViewing] = useState<{ url: string; label: string } | null>(null);
   const [demoProcess, setDemoProcess] = useState<DemoStep[]>([]);
   // The forge demo-element library — used to resolve an `element` id on a
   // demoProcess step to its human name in the demo-process-ref panel.
@@ -188,11 +191,11 @@ export default function DemoBuilderPage({
     }
   }
 
-  // Open the current/locked DEMO.html for this session (if one exists) in a new tab.
+  // Show the current/locked DEMO.html (if one exists) in-app with a back button.
   async function viewCurrentDemo(): Promise<void> {
     if (!session?.demoUrl) return;
     const u = await architectFileUrl(session.demoUrl);
-    if (u) window.open(u, '_blank');
+    if (u) setViewing({ url: u, label: 'the full demo' });
   }
 
   return (
@@ -234,6 +237,10 @@ export default function DemoBuilderPage({
           )}
 
           <div style={{ minWidth: 0 }}>
+            {viewing ? (
+              <DemoViewer url={viewing.url} label={viewing.label} onBack={() => setViewing(null)} />
+            ) : (
+            <>
             <Link href={`/projects/${encodeURIComponent(session.project)}`} data-action="back-to-project" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}>← Back to project</Link>
             <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
               Building DEMO.html
@@ -336,6 +343,7 @@ export default function DemoBuilderPage({
               targetElement={session.targetElement}
               iterating={iterating}
               onIteratePart={iteratePart}
+              onView={(url, label) => setViewing({ url, label })}
             />
 
             {session.phase === 'locked' && (
@@ -367,7 +375,9 @@ export default function DemoBuilderPage({
 
             {session.phase === 'abandoned' && <Status label="Demo abandoned." />}
 
-            <PreviousDemos history={history} />
+            <PreviousDemos history={history} onView={(url, label) => setViewing({ url, label })} />
+            </>
+            )}
           </div>
         </div>
       )}
@@ -376,7 +386,7 @@ export default function DemoBuilderPage({
 }
 
 /** A {@link DemoHistoryEntry} with its bridge-relative demoUrl pre-resolved to
- *  an absolute URL (so the View action can `window.open` synchronously). */
+ *  an absolute URL (so the in-app View action can open it synchronously). */
 type ResolvedHistoryEntry = DemoHistoryEntry & { resolvedUrl: string };
 
 /** Format a lockedAt ISO timestamp readably; fall back to the entry id when null. */
@@ -389,7 +399,7 @@ function historyLabel(entry: ResolvedHistoryEntry): string {
 /** Previously-locked demos for this project (newest first). Renders nothing when
  *  the project has no locked demos yet. Each row links out to the snapshotted
  *  DEMO.html (pre-resolved absolute URL) in a new tab. */
-function PreviousDemos({ history }: { history: ResolvedHistoryEntry[] }): JSX.Element | null {
+function PreviousDemos({ history, onView }: { history: ResolvedHistoryEntry[]; onView: (url: string, label: string) => void }): JSX.Element | null {
   if (history.length === 0) return null;
   return (
     <div
@@ -431,7 +441,7 @@ function PreviousDemos({ history }: { history: ResolvedHistoryEntry[] }): JSX.El
             <button
               type="button"
               data-action="view-previous-demo"
-              onClick={() => entry.resolvedUrl && window.open(entry.resolvedUrl, '_blank')}
+              onClick={() => entry.resolvedUrl && onView(entry.resolvedUrl, historyLabel(entry))}
               disabled={!entry.resolvedUrl}
               style={{
                 flex: '0 0 auto',
@@ -484,6 +494,35 @@ function Status({ label }: { label: string }): JSX.Element {
   );
 }
 
+/** In-app viewer for a demo output (the full demo or one component) — a sandboxed
+ *  iframe + a back button to the demo editor. No new tab. */
+function DemoViewer({ url, label, onBack }: { url: string; label: string; onBack: () => void }): JSX.Element {
+  return (
+    <div data-section="demo-viewer">
+      <button
+        type="button"
+        data-action="back-to-editor"
+        onClick={onBack}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12,
+          fontSize: 12.5, fontWeight: 600, color: 'var(--text)', background: 'var(--panel-2)',
+          border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
+        }}
+      >
+        ← Back to the demo editor
+      </button>
+      <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 12 }}>Viewing {label}</div>
+      <iframe
+        data-demo-view-iframe
+        src={url}
+        sandbox=""
+        title={label}
+        style={{ width: '100%', height: 'min(80vh, 1000px)', minHeight: 600, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }}
+      />
+    </div>
+  );
+}
+
 /** Resolve a library element id to its human name; falls back to the raw id. */
 function elementName(elements: DemoElementSummary[], id: string): string {
   return elements.find((e) => e.id === id)?.name ?? id;
@@ -503,6 +542,7 @@ function DemoProcessPanel({
   targetElement,
   iterating,
   onIteratePart,
+  onView,
 }: {
   steps: DemoStep[];
   elements: DemoElementSummary[];
@@ -512,13 +552,14 @@ function DemoProcessPanel({
   targetElement: string | null;
   iterating: string | null;
   onIteratePart: (element: string, prompt: string) => void;
+  onView: (url: string, label: string) => void;
 }): JSX.Element | null {
   const [prompts, setPrompts] = useState<Record<string, string>>({});
   if (steps.length === 0) return null;
 
   async function viewOutput(element: string): Promise<void> {
     const u = await architectFileUrl(demoFragmentUrl(project, sessionId, element));
-    if (u) window.open(u, '_blank');
+    if (u) onView(u, `the ${elementName(elements, element)} component`);
   }
 
   const anyBusy = iterating !== null;
