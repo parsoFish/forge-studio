@@ -29,7 +29,13 @@ import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
-import type { CycleInput } from './cycle-context.ts';
+import { fireFlowTriggers } from './flow-trigger.ts';
+import { loadFlowDefinition } from './studio/registry.ts';
+import { flowPathForId } from './flow-runner.ts';
+import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
+import type { ClosureResult } from './phases/closure.ts';
+import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
+import type { FlowTrigger } from './studio/types.ts';
 
 export type FinalizeStatus = 'finalized' | 'still-open' | 'no-worktree' | 'error';
 export type FinalizeResult = { initiativeId: string; status: FinalizeStatus; detail?: string };
@@ -42,11 +48,17 @@ export type FinalizeDeps = {
   /** Merge probe. Defaults to `confirmPrMerged` (gh pr view state == MERGED). */
   confirmMerge?: (worktreePath: string) => boolean | Promise<boolean>;
   /**
-   * Per-cycle finalize action: run closure + (on confirmed merge) the
-   * reflector. Returns whether the merge was confirmed. Injectable for tests;
-   * defaults to the real closure→reflector chain (mirrors cycle.ts G10).
+   * Per-cycle finalize action: run closure + (on confirmed merge) fire the
+   * flow's declared `on: merged` triggers. Returns whether the merge was
+   * confirmed. Injectable for tests; defaults to the real closure→trigger chain.
    */
   finalizeOne?: (input: CycleInput, logger: EventLogger) => Promise<boolean>;
+  /** Closure step. Injectable so a trigger-firing test needn't run real git/gh. */
+  runClosure?: (input: CycleInput, logger: EventLogger, reviewerOutcome: ReviewerOutcome) => Promise<ClosureResult>;
+  /** Reflector action a `forge-reflect` merge-trigger dispatches to. Injectable. */
+  runReflector?: (input: CycleInput, logger: EventLogger) => Promise<void>;
+  /** Resolve a flow's declared triggers by id. Default loads the flow.yaml. */
+  loadFlowTriggers?: (flowId: string) => FlowTrigger[];
   notify?: (msg: string) => void;
 };
 
@@ -65,12 +77,78 @@ export function latestCycleId(logsRoot: string, initiativeId: string): string | 
   return best?.id ?? null;
 }
 
-/** Default per-cycle finalize: closure confirms+aligns+moves, reflector fires
- *  on a confirmed merge (same wiring as cycle.ts, G10). */
-async function defaultFinalizeOne(input: CycleInput, logger: EventLogger): Promise<boolean> {
-  const closure = await runClosure(input, logger, 'pr-open');
-  if (closure.merged) {
-    await runReflector(input, logger);
+/** Read a manifest's flow_id (the flow the merged cycle ran); null on any failure. */
+function readManifestFlowId(manifestPath: string): string | null {
+  try {
+    return parseManifest(readFileSync(manifestPath, 'utf8')).flow_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Default trigger resolution: load the flow.yaml and return its declared triggers. */
+function defaultLoadFlowTriggers(flowId: string): FlowTrigger[] {
+  try {
+    return loadFlowDefinition(flowPathForId(flowId)).triggers;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Default per-cycle finalize: closure confirms+aligns+moves, then — on a
+ * confirmed merge — fires the merged flow's declared `on: merged` triggers
+ * through the generic FlowTrigger path. The SINGLE source of "merge fires
+ * reflect" is forge-develop's `{on: merged, flow: forge-reflect}` declaration in
+ * its flow.yaml, NOT a hardcoded runReflector call here. Built from `deps` so a
+ * test can inject the closure + reflector + trigger source.
+ */
+function makeDefaultFinalizeOne(
+  deps: FinalizeDeps,
+): (input: CycleInput, logger: EventLogger) => Promise<boolean> {
+  const runClosureFn = deps.runClosure ?? runClosure;
+  const runReflectorFn = deps.runReflector ?? runReflector;
+  const loadFlowTriggers = deps.loadFlowTriggers ?? defaultLoadFlowTriggers;
+
+  return async (input, logger) => {
+    const closure = await runClosureFn(input, logger, 'pr-open');
+    if (!closure.merged) return false;
+
+    const flowId = readManifestFlowId(input.manifestPath) ?? DEVELOP_FLOW_ID;
+    await fireFlowTriggers(
+      { id: flowId, triggers: loadFlowTriggers(flowId) },
+      'merged',
+      {
+        onFire: (t) =>
+          logger.emit({
+            initiative_id: input.initiativeId,
+            phase: 'orchestrator',
+            skill: 'finalize-merged',
+            event_type: 'log',
+            input_refs: [],
+            output_refs: [],
+            message: 'finalize.trigger-firing',
+            metadata: { on: t.on, target_flow: t.flow, source_flow: flowId },
+          }),
+        dispatch: async (t) => {
+          if (t.flow === 'forge-reflect') {
+            await runReflectorFn(input, logger);
+          } else {
+            logger.emit({
+              initiative_id: input.initiativeId,
+              phase: 'orchestrator',
+              skill: 'finalize-merged',
+              event_type: 'log',
+              input_refs: [],
+              output_refs: [],
+              message: 'finalize.trigger-unhandled-target',
+              metadata: { on: t.on, target_flow: t.flow, note: 'only forge-reflect has a merge-time handler' },
+            });
+          }
+        },
+      },
+    );
+
     // report.md was written once at cycle.end (pr-open). Now that the merge is
     // confirmed + finalized, regenerate it so the report reflects the MERGED
     // state (baseline/diff render against the merge commit) instead of staying
@@ -83,15 +161,14 @@ async function defaultFinalizeOne(input: CycleInput, logger: EventLogger): Promi
       }
     }
     return true;
-  }
-  return false;
+  };
 }
 
 export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Promise<FinalizeResult[]> {
   const paths = getPaths(deps.queueRoot);
   const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve('_logs');
   const confirmMerge = deps.confirmMerge ?? confirmPrMerged;
-  const finalizeOne = deps.finalizeOne ?? defaultFinalizeOne;
+  const finalizeOne = deps.finalizeOne ?? makeDefaultFinalizeOne(deps);
 
   const out: FinalizeResult[] = [];
   if (!existsSync(paths.readyForReview)) return out;

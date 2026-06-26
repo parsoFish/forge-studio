@@ -42,9 +42,9 @@
  *   8. enforceFinalCiGate before openPrInline
  */
 
-import { resolve, dirname, join } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
@@ -67,6 +67,8 @@ import {
 } from './cycle-helpers.ts';
 import { listArtifactTemplates } from './studio/registry.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
+import { fireFlowTriggers } from './flow-trigger.ts';
+import { stageFlowRunRequest } from './flow-run-requests.ts';
 
 /** Forge repo root — `<root>/orchestrator/flow-runner.ts` resolves to `<root>`. */
 const FLOW_RUNNER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,8 +139,17 @@ export type FlowRunnerDeps = {
     logger: EventLogger,
   ) => void;
 
-  /** M3-5: Enqueue a target flow's run (trigger firing). Injectable for tests. Default stages a minimal run-request into `_queue/pending/` (M4+ scheduler claim extension required). */
-  enqueueFlowRun: (flowId: string, opts: { origin: string; triggeredBy: string }) => void;
+  /**
+   * Stage C: enqueue a target flow's run when an `on: complete` trigger fires.
+   * Injectable for tests. The default stages a claimable flow-run request into
+   * `_queue/flow-runs/`, carrying the source initiative so a drain can repoint it
+   * at the target flow. (`on: merged` triggers are fired by finalize-merged, not
+   * here.)
+   */
+  enqueueFlowRun: (
+    flowId: string,
+    opts: { origin: string; triggeredBy: string; sourceInitiativeId?: string },
+  ) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -265,27 +276,28 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
 }
 
 /**
- * Flow-TRIGGER enqueue (declarative `flow.triggers[]`, fired on terminal
- * success). Writes a structural flow-run-request marker into `_queue/pending/`.
+ * Stage C — flow-TRIGGER enqueue (declarative `flow.triggers[]`, `on: complete`,
+ * fired on terminal success). Stages a CLAIMABLE flow-run request into
+ * `_queue/flow-runs/` (carrying the source initiative), which the scheduler's
+ * drain repoints at the target flow. Lives outside `_queue/pending/` so the
+ * initiative claim never mis-reads it.
  *
  * NOTE (S7): the operator-driven "start development" path does NOT go through
- * here — it threads a real initiative + cycle_id, so it has its own claimable
- * enqueue (`orchestrator/enqueue-develop-run.ts`, behind `POST /api/develop/start`).
- * This marker covers only auto-chaining BETWEEN flows (e.g. a future
- * architect→develop trigger), which threads the just-completed initiative's
- * manifest when the monolith retirement lands (S8). No seed flow declares a
- * trigger today, so this stays a marker by design.
+ * here — it threads a real initiative + cycle_id via `enqueue-develop-run.ts`
+ * (behind `POST /api/develop/start`). This path covers auto-chaining BETWEEN
+ * flows. No seed flow declares an `on: complete` trigger today (reflect fires on
+ * `merged`, via finalize-merged), so the drain has no live consumer yet.
  */
-function defaultEnqueueFlowRun(flowId: string, opts: { origin: string; triggeredBy: string }): void {
-  const pendingDir = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), '_queue', 'pending');
-  if (!existsSync(pendingDir)) mkdirSync(pendingDir, { recursive: true });
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const now = new Date().toISOString();
-  writeFileSync(
-    join(pendingDir, `flow-run-${flowId}-${ts}.md`),
-    `---\nflow_id: ${flowId}\norigin: ${opts.origin}\ntriggered_by: ${opts.triggeredBy}\ncreated_at: ${now}\n---\n\n# Flow run request: ${flowId}\n\nTriggered by "${opts.triggeredBy}" on terminal completion. Scheduler claim deferred to M4+.\n`,
-    'utf8',
-  );
+function defaultEnqueueFlowRun(
+  flowId: string,
+  opts: { origin: string; triggeredBy: string; sourceInitiativeId?: string },
+): void {
+  stageFlowRunRequest({
+    flowId,
+    origin: opts.origin,
+    triggeredBy: opts.triggeredBy,
+    sourceInitiativeId: opts.sourceInitiativeId,
+  });
 }
 
 const DEFAULT_DEPS: FlowRunnerDeps = {
@@ -856,11 +868,13 @@ export async function runFlow({
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
   }
 
-  // M3-5: Trigger firing — fire on terminal SUCCESS only (not on failure,
-  // which exits via throw before reaching here). Only `on: complete` is
-  // supported in M3; unknown `on` values are logged and skipped.
-  for (const trigger of flow.triggers) {
-    if (trigger.on === 'complete') {
+  // Stage C: fire `on: complete` triggers on terminal SUCCESS only (failures
+  // exit via throw before reaching here), through the generic declaration-driven
+  // path. `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
+  // fired here: the develop flow terminates at `ready-for-review` (PR open),
+  // before the operator merges, so finalize-merged fires those post-merge.
+  await fireFlowTriggers(flow, 'complete', {
+    onFire: (trigger) => {
       logger.emit({
         initiative_id: input.initiativeId,
         phase: 'orchestrator',
@@ -871,20 +885,15 @@ export async function runFlow({
         message: 'flow-runner.trigger-firing',
         metadata: { on: trigger.on, target_flow: trigger.flow, source_flow: flow.id },
       });
-      deps.enqueueFlowRun(trigger.flow, { origin: 'trigger', triggeredBy: flow.id });
-    } else {
-      logger.emit({
-        initiative_id: input.initiativeId,
-        phase: 'orchestrator',
-        skill: 'flow-runner',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'flow-runner.trigger-skipped-unknown-on',
-        metadata: { on: trigger.on, target_flow: trigger.flow, note: 'only "complete" is supported in M3' },
+    },
+    dispatch: (trigger) => {
+      deps.enqueueFlowRun(trigger.flow, {
+        origin: 'trigger',
+        triggeredBy: flow.id,
+        sourceInitiativeId: input.initiativeId,
       });
-    }
-  }
+    },
+  });
 
   return {
     cycleOutcome: state.cycleOutcome,

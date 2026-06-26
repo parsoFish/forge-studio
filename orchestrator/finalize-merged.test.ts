@@ -64,6 +64,54 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
   }
 });
 
+// Stage C — the default finalize fires reflect FROM forge-develop's declared
+// {on: merged, flow: forge-reflect} trigger, not a hardcoded runReflector call.
+test('finalize: merged → fires reflect from the develop declaration (default path)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-decl', wt);
+    const reflectCalls: string[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      // No finalizeOne override → exercises makeDefaultFinalizeOne; inject its
+      // closure + reflector + trigger source so the test stays git/SDK-free.
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async (input) => { reflectCalls.push(input.initiativeId); },
+      loadFlowTriggers: () => [{ on: 'merged', flow: 'forge-reflect' }],
+    });
+    assert.deepEqual(results.map((r) => r.status), ['finalized']);
+    assert.deepEqual(reflectCalls, ['INIT-2026-05-30-decl'], 'reflect must fire from the declaration');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (declaration-driven)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nodecl', wt);
+    let reflected = false;
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async () => { reflected = true; },
+      loadFlowTriggers: () => [], // the flow declares no merge trigger
+    });
+    assert.deepEqual(results.map((r) => r.status), ['finalized'], 'still finalizes (merge confirmed)');
+    assert.equal(reflected, false, 'no declaration → no reflect (proves it is not hardcoded)');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 026 lineage)', async () => {
   const { root, queueRoot } = setup();
   try {

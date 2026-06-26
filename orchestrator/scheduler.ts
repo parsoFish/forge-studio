@@ -31,6 +31,7 @@ import { runCycle } from './cycle.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingUnifierItems } from './drain-unifier-items.ts';
+import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig } from './notify.ts';
@@ -126,6 +127,8 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   // ADR 026: at startup, drain any review work-items appended while the daemon
   // was down (the operator sent back; the cycle must re-run them in place).
   await runDrainSweep();
+  // Stage C: dispatch any flow-trigger run-requests staged while down.
+  runFlowTriggerSweep();
 
   const inFlight = new Map<string, Promise<void>>();
   let stop = false;
@@ -260,6 +263,8 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
     // then (ADR 026) drain any review work-items appended since the last sweep.
     void runFinalizeSweep().then(() => runDrainSweep());
+    // Stage C: dispatch any flow-trigger run-requests (on:complete chaining).
+    runFlowTriggerSweep();
   }, cfg.recoverIntervalMs);
 
   console.log(
@@ -509,6 +514,26 @@ async function runDrainSweep(): Promise<void> {
     }
   } catch {
     /* sweep is best-effort — never throw out of setInterval */
+  }
+}
+
+/**
+ * Stage C flow-trigger sweep: dispatch any flow-run requests staged by an
+ * `on: complete` trigger (repoint the source initiative at the target flow +
+ * make it claimable). Best-effort — never throws out of the timer. No seed flow
+ * declares an `on: complete` trigger today, so this is usually a no-op.
+ */
+function runFlowTriggerSweep(): void {
+  try {
+    for (const r of drainFlowRunRequests({ notify: (m) => console.log(`[serve] ${m}`) })) {
+      if (r.status === 'dispatched') {
+        console.log(`[serve] flow-trigger dispatched ${r.flowId} on ${r.sourceInitiativeId}`);
+      } else if (r.status === 'error') {
+        console.error(`[serve] flow-trigger ${r.flowId} failed: ${r.detail}`);
+      }
+    }
+  } catch {
+    /* sweep is best-effort — never throw out of the timer */
   }
 }
 
