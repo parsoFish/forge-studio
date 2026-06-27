@@ -34,6 +34,7 @@ import {
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
+import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
@@ -174,6 +175,13 @@ export async function runDemoBuilderTurn(
 
   let result: RunDemoBuilderTurnResult;
 
+  // The agent writes demo machinery (.forge/demo/, .forge/skills/demo-design/)
+  // into the project repo — land it on the project's forge-studio branch.
+  const writesProjectRepo = status.phase === 'generating' || status.phase === 'locking';
+  if (writesProjectRepo) {
+    try { ensureStudioBranch(status.project_repo_path); } catch { /* non-git project */ }
+  }
+
   if (status.phase === 'generating') {
     result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText });
   } else if (status.phase === 'locking') {
@@ -184,6 +192,10 @@ export async function runDemoBuilderTurn(
   } else {
     // awaiting-review / locked — no actionable work this turn.
     result = { phase: status.phase, wrote: [] };
+  }
+
+  if (writesProjectRepo) {
+    try { commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`); } catch { /* best-effort */ }
   }
 
   sink.flushIteration(1);

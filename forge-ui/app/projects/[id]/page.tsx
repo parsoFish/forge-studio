@@ -20,6 +20,7 @@ import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+import { SaveProjectRepoBar } from '@/components/studio/project-builder/SaveProjectRepoBar';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 
@@ -36,6 +37,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [catalog, setCatalog] = useState<Catalog>({});
   const [demoSteps, setDemoSteps] = useState<DemoStep[]>([]);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [repoKey, setRepoKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [ready, setReady] = useState(false);
   // F5: set after a demoProcess save — surfaces data-demo-design-state="needed"
@@ -84,7 +86,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   const loadPreflight = useCallback(async (signal: { cancelled: boolean }) => {
     const result = await fetchPreflight(id);
-    if (!signal.cancelled) setPreflight(result);
+    if (!signal.cancelled) { setPreflight(result); setRepoKey((k) => k + 1); }
   }, [id]);
 
   const loadRoadmap = useCallback(async (signal: { cancelled: boolean }) => {
@@ -246,6 +248,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
             gap: 16, overflowY: 'auto', background: 'var(--bg-2)',
           }}>
+            <SaveProjectRepoBar projectId={id} reloadKey={repoKey} />
             <div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Card Preview</div>
               <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: 14, position: 'relative', overflow: 'hidden' }}>

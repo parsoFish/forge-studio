@@ -27,6 +27,7 @@ import { join, resolve, sep } from 'node:path';
 
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
+import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import type { Run } from '../orchestrator/run-model.ts';
@@ -681,6 +682,28 @@ export async function handleStudioRoutes(
         };
       });
       sendJson(res, 200, { clauses, ready: report.ok }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/projects/:id/repo-status (R1-2) — pending studio changes -
+  const repoStatusMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/repo-status$/);
+  if (repoStatusMatch) {
+    try {
+      const id = decodeURIComponent(repoStatusMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id' }, origin);
+        return true;
+      }
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
+      if (!projectRef) {
+        sendJson(res, 404, { error: 'unknown project' }, origin);
+        return true;
+      }
+      sendJson(res, 200, { pending: hasPendingStudioChanges(projectRef.absPath), branch: STUDIO_BRANCH }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

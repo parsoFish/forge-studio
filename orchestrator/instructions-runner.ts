@@ -40,6 +40,7 @@ import {
   type InterviewAnswer,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { withStudioWrite } from './project-repo-tx.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
@@ -393,7 +394,14 @@ function runFinalizeStep(args: {
   if (!existsSync(status.project_repo_path)) {
     mkdirSync(status.project_repo_path, { recursive: true });
   }
-  writeFileSync(agentsPath, content.endsWith('\n') ? content : `${content}\n`);
+  // Commit AGENTS.md onto the project's forge-studio branch (durable; merged to
+  // main on Save). Non-git project → the write simply stays in the tree.
+  withStudioWrite(
+    status.project_repo_path,
+    'forge-studio: author AGENTS.md',
+    () => writeFileSync(agentsPath, content.endsWith('\n') ? content : `${content}\n`),
+    ['AGENTS.md'],
+  );
   writeSessionStatus(sessionDir, { ...status, phase: 'committed' });
 
   logger.emit({

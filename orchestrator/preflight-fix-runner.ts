@@ -23,6 +23,7 @@ import { withIdleDeadline } from './stream-deadline.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { runPreflight, type ClauseId } from '../cli/preflight.ts';
+import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
 
 export const preflightFixAgentSpec = deriveAgentSpec('skills/preflight-fix/SKILL.md');
 export const PREFLIGHT_FIX_MODEL = modelForSpec(preflightFixAgentSpec);
@@ -96,6 +97,10 @@ export async function runPreflightFixTurn(
   } catch {
     /* fall through to default */
   }
+
+  // Land the agent's edits on the project's forge-studio branch so they persist
+  // (the working tree the verify re-run reads is this branch).
+  try { ensureStudioBranch(input.projectDir); } catch { /* non-git project — edits stay in the tree */ }
 
   const userPayload = [
     '## Fix task',
@@ -173,6 +178,10 @@ export async function runPreflightFixTurn(
   }
 
   sink.flushIteration(1);
+
+  // Persist the agent's edits onto forge-studio (durable; survives a later tree
+  // reset) before the verification re-run reads the working tree.
+  try { commitStudioChange(input.projectDir, `forge-studio: preflight-fix ${input.clause}`); } catch { /* best-effort */ }
 
   // Verification gate: re-run preflight and read the clause's pass flag.
   let cleared = false;

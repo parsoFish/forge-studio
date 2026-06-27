@@ -679,6 +679,31 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
   return body;
 }
 
+// --- R1-2 — project-repo write transaction (forge-studio branch) ------------
+
+/** Whether the project repo has forge-UI changes accumulated on forge-studio,
+ *  pending a merge to main. */
+export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string }> {
+  return studioGet<{ pending: boolean; branch: string }>(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`,
+    { pending: false, branch: 'forge-studio' },
+  );
+}
+
+/** Merge the accumulated forge-studio changes into the project's default branch + push. */
+export async function saveProjectRepo(
+  projectId: string,
+): Promise<{ ok: boolean; merged: boolean; pushed: boolean; detail: string; error?: string }> {
+  const r = await studioPost(`/api/studio/projects/${encodeURIComponent(projectId)}/save-repo`, {});
+  return {
+    ok: r.ok,
+    error: r.error,
+    merged: r.data?.merged === true,
+    pushed: r.data?.pushed === true,
+    detail: typeof r.data?.detail === 'string' ? r.data.detail : '',
+  };
+}
+
 // --- Stage D — preflight resolution -----------------------------------------
 
 /** Apply every deterministic AUTO-tier preflight fix, then return updated clauses. */

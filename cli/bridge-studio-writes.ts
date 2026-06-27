@@ -23,6 +23,7 @@ import matter from 'gray-matter';
 
 import { classifyClause } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
+import { ensureStudioBranch, commitStudioChange, withStudioWrite, saveProjectRepo } from '../orchestrator/project-repo-tx.ts';
 import type { ClauseResult } from './preflight.ts';
 
 import {
@@ -211,6 +212,21 @@ export async function handleStudioWriteRoutes(
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
+  // ---- POST /api/studio/projects/:id/save-repo (R1-2) ----------------------
+  // Merge the project's accumulated forge-studio changes into main + push.
+  const saveRepoMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/save-repo$/);
+  if (saveRepoMatch && method === 'POST') {
+    try {
+      const projectRoot = resolveManagedProject(ctx, decodeURIComponent(saveRepoMatch[1]), res, origin);
+      if (!projectRoot) return true;
+      const result = saveProjectRepo(projectRoot);
+      sendJson(res, 200, { ok: true, ...result }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- POST /api/studio/projects/:id/preflight/fix-auto (Stage D) ----------
   const pfAutoMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/preflight\/fix-auto$/);
   if (pfAutoMatch && method === 'POST') {
@@ -218,7 +234,9 @@ export async function handleStudioWriteRoutes(
       const projectRoot = resolveManagedProject(ctx, decodeURIComponent(pfAutoMatch[1]), res, origin);
       if (!projectRoot) return true;
       const before = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
+      try { ensureStudioBranch(projectRoot); } catch { /* non-git */ }
       const result = applyPreflightAutoFixes({ projectDir: projectRoot, forgeRoot: ctx.forgeRoot, clauses: before.clauses });
+      try { commitStudioChange(projectRoot, 'forge-studio: preflight auto-fix'); } catch { /* best-effort */ }
       const after = runPreflight(projectRoot, { forgeRoot: ctx.forgeRoot });
       sendJson(res, 200, { ok: true, applied: result.applied, skipped: result.skipped, clauses: after.clauses.map(toClauseDto), ready: after.ok }, origin);
     } catch (err) {
@@ -577,12 +595,17 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 7. Write back (pretty, 2-space)
+      // 7. Write back (pretty, 2-space), committed to the project's forge-studio branch.
       const forgeDir = resolve(projectRoot, '.forge');
       if (!existsSync(forgeDir)) {
         mkdirSync(forgeDir, { recursive: true });
       }
-      writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8');
+      withStudioWrite(
+        projectRoot,
+        'forge-studio: update .forge/project.json',
+        () => writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8'),
+        ['.forge/project.json'],
+      );
 
       // F5: when demoProcess was in the save body, signal that the demo-design
       // skill should be run to generate per-project demo machinery. The UI
