@@ -44,8 +44,7 @@ export function ContractResolutionPanel({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [userIdx, setUserIdx] = useState(0);
-  const [note, setNote] = useState('');
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [runState, setRunState] = useState<Record<string, AgentState>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -82,23 +81,20 @@ export function ContractResolutionPanel({
     }
   }, [projectId, router]);
 
-  const submitUser = useCallback(async () => {
-    const c = user[Math.min(userIdx, Math.max(0, user.length - 1))];
-    if (!c) return;
-    setBusy('user'); setMsg(null);
+  const submitUser = useCallback(async (c: PreflightClause) => {
+    const instruction = (notes[c.id] ?? '').trim();
+    setBusy(`user:${c.id}`); setMsg(null);
     setRunState((m) => ({ ...m, [c.id]: 'running' }));
-    const r = await preflightFixAgent(projectId, { clauseId: c.id, instruction: note.trim() });
+    const r = await preflightFixAgent(projectId, { clauseId: c.id, instruction });
     if (!r.ok || !r.runId) { setBusy(null); setRunState((m) => ({ ...m, [c.id]: 'failed' })); setMsg(r.error ?? 'dispatch failed'); return; }
     const state = await poll(projectId, r.runId);
-    setBusy(null); setNote('');
+    setBusy(null);
     setRunState((m) => ({ ...m, [c.id]: state }));
     if (state === 'cleared') onChanged?.();
-    else setMsg(`agent could not clear ${c.id} (${state}) — refine your answer and retry`);
-  }, [projectId, user, userIdx, note, onChanged]);
+    else setMsg(`agent could not clear ${c.id} (${state}) — refine your decision and retry`);
+  }, [projectId, notes, onChanged]);
 
   if (failing.length === 0) return null;
-
-  const curUser = user[Math.min(userIdx, Math.max(0, user.length - 1))];
 
   return (
     <div
@@ -141,26 +137,32 @@ export function ContractResolutionPanel({
       )}
 
       {/* STAGE 3 — USER (one at a time) */}
-      {user.length > 0 && curUser && (
-        <div data-resolution-stage="user" data-user-index={userIdx} data-user-total={user.length} style={{ marginBottom: 8 }}>
-          <Stage title={`Needs your decision (${userIdx + 1}/${user.length})`} sub="Your answer drives the fix; the agent applies it and re-runs preflight." />
-          <ClauseRow c={curUser} state={runState[curUser.id]} />
-          <textarea
-            data-component="clause-decision-input"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={curUser.fixHint ?? 'How should this be resolved?'}
-            rows={3}
-            style={{ width: '100%', marginTop: 8, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 7, resize: 'vertical' }}
-          />
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <button data-action="apply-clause-decision" style={btn} disabled={busy !== null || note.trim() === ''} onClick={() => void submitUser()}>
-              {busy === 'user' ? 'Applying…' : 'Apply decision'}
-            </button>
-            <button data-action="skip-clause-decision" style={btn} disabled={busy !== null} onClick={() => { setNote(''); setUserIdx((i) => i + 1); }}>
-              Skip
-            </button>
-          </div>
+      {user.length > 0 && (
+        <div data-resolution-stage="user" data-user-total={user.length} style={{ marginBottom: 8 }}>
+          <Stage title={`Needs your decision (${user.length})`} sub="State the decision (or your reasoning to accept it as-is); the agent applies it and re-runs preflight." />
+          {user.map((c) => (
+            <div key={c.id} data-user-clause data-user-clause-id={c.id} style={{ marginBottom: 10 }}>
+              <ClauseRow c={c} state={runState[c.id]} />
+              <textarea
+                data-component="clause-decision-input"
+                data-decision-clause-id={c.id}
+                value={notes[c.id] ?? ''}
+                onChange={(e) => setNotes((m) => ({ ...m, [c.id]: e.target.value }))}
+                placeholder={c.fixHint ?? 'How should this be resolved?'}
+                rows={2}
+                style={{ width: '100%', marginTop: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 7, resize: 'vertical' }}
+              />
+              <button
+                data-action="apply-clause-decision"
+                data-apply-clause-id={c.id}
+                style={{ ...btn, marginTop: 4 }}
+                disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
+                onClick={() => void submitUser(c)}
+              >
+                {busy === `user:${c.id}` ? 'Applying…' : 'Apply decision'}
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
