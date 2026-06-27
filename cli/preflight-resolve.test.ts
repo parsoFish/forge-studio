@@ -23,7 +23,7 @@ test('AGENT-tier clauses route to the matching runner', () => {
 });
 
 test('USER-tier clauses need an operator decision (no route)', () => {
-  for (const id of ['C1', 'C3', 'C5', 'C6'] as ClauseId[]) {
+  for (const id of ['C1', 'C5', 'C6'] as ClauseId[]) {
     const c = classifyClause(clause(id));
     assert.equal(c.resolution, 'user', `${id} must be user`);
     assert.equal(c.route, undefined, `${id} must carry no agent route`);
@@ -31,7 +31,7 @@ test('USER-tier clauses need an operator decision (no route)', () => {
 });
 
 test('every classification carries a fixHint except the unknown fallback', () => {
-  for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'BRAIN', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
+  for (const id of ['C1', 'C2', 'C4', 'C5', 'C6', 'C8', 'BRAIN', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
     assert.ok(classifyClause(clause(id)).fixHint, `${id} must carry a fixHint`);
   }
 });

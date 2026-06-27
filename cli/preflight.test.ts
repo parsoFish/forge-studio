@@ -2,7 +2,7 @@
  * Tests for the forge↔project contract preflight (US-4.1 / ADR-017).
  *
  * Each test builds a throwaway project dir exercising one clause's
- * pass/fail path. C1/C2/C4 are HARD (drive `ok`); C3/C5/C6/C8 are advisory
+ * pass/fail path. C1/C2/C4 are HARD (drive `ok`); C5/C6/C8 are advisory
  * (warn, never flip `ok`).
  *
  * C2 uses git-truth checks (git ls-files + git check-ignore) rather than
@@ -81,7 +81,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
+    for (const id of ['C1', 'C2', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -198,35 +198,6 @@ test('C2 (HARD): no git repo + absent .gitignore fails', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(forgeRoot, { recursive: true, force: true });
-  }
-});
-
-test('C3 (ADVISORY): an oversized source file warns but does NOT flip ok', () => {
-  const p = happyProject();
-  try {
-    writeFileSync(join(p.dir, 'huge.ts'), 'const x = 1;\n'.repeat(900));
-    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
-    const c = clause(r, 'C3');
-    assert.equal(c.pass, false);
-    assert.equal(c.hard, false);
-    assert.equal(r.ok, true, 'C3 is advisory — must not flip ok');
-    assert.match(c.detail, /huge\.ts:90[01]/);
-    assert.match(formatPreflightReport(r), /advisory warning/);
-  } finally {
-    p.cleanup();
-  }
-});
-
-test('C3 (ADVISORY): an extreme god-file (≥2× ceiling) is called out, still non-fatal', () => {
-  const p = happyProject();
-  try {
-    writeFileSync(join(p.dir, 'god.ts'), 'const x = 1;\n'.repeat(1700));
-    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
-    assert.equal(clause(r, 'C3').pass, false);
-    assert.equal(r.ok, true);
-    assert.match(clause(r, 'C3').detail, /god-file class/);
-  } finally {
-    p.cleanup();
   }
 });
 

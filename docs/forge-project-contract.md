@@ -108,7 +108,7 @@ only to explicitly leave unbound when Brain 3 doesn't exist yet).
 
 These clauses are checked by `forge preflight <project>`. Hard clauses
 (C1/C2/C4) fail the preflight (non-zero exit); advisory clauses
-(C3/C5/C6/C8/DEMO/DEMO-SKILL/ARTIFACTS/BRAIN) surface as warnings that never flip
+(C5/C6/C8/DEMO/DEMO-SKILL/ARTIFACTS/BRAIN) surface as warnings that never flip
 the verdict.
 
 **Guided resolution (Stage D).** Each failing clause is classified into a
@@ -121,7 +121,7 @@ brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel
   to the Stage-B demo builder, `BRAIN` to brain-fix. The operator authors it in
   the matching builder (no auto-generation of an agent-instruction file — C8 stays
   human-confirmed).
-- **user** — `C1`/`C3`/`C5`/`C6` need an operator decision; that decision drives
+- **user** — `C1`/`C5`/`C6` need an operator decision; that decision drives
   the `preflight-fix` agent (`orchestrator/preflight-fix-runner.ts`), which applies
   it minimally and re-runs preflight as the verification gate.
 
@@ -180,19 +180,6 @@ already-tracked files.
 
 ---
 
-### C3 — Conflict-free decomposability *(advisory)*
-
-Source files must sit under the project's size norm so parallel WIs can fan out
-without colliding at merge.
-
-- Soft warning: > 400 LOC
-- Hard ceiling: 800 LOC (same ceiling forge holds on its own tree)
-- God-file class (flag): ≥ 1,600 LOC (2×)
-- Functions: ≤ 80 LOC; modules: single responsibility
-
-Advisory — the PM's `detectHiddenCoupling` is the runtime guard.
-
----
 
 ### C4 — Machine-readable planning inputs *(HARD)*
 
@@ -473,7 +460,6 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | kb | UI readiness | Non-null string |
 | C1 / C1b | `forge preflight` — **HARD** | Structural: single command, not a slow umbrella; `ci_gate` presence |
 | C2 | `forge preflight` — **HARD** | git-truth: `git ls-files` + `git check-ignore` |
-| C3 | `forge preflight` — advisory | File size walk (800 / 1600 LOC thresholds) |
 | C4 | `forge preflight` — **HARD** | `roadmap.md` + `<artifactRoot>/brain/profile.md` existence |
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
@@ -504,7 +490,6 @@ flow-ready — the flow engine will not accept it.
 | kb | `betterado` (Brain 3 in `brain/`) |
 | **C1 / C1b** | `quality_gate_cmd`: `go test -tags all -count=1 ./...` scoped to changed packages. `ci_gate`: `make test && golangci-lint run ./... && make terrafmt-check`. `ci_fix_cmd`: `make fmt && make terrafmt` |
 | **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
-| C3 | Net-new code isolated to `azuredevops/internal/service/release/` and `/taskagent/`. No god-files in net-new scope |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |

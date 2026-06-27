@@ -44,7 +44,6 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
 
   // USER — needs an operator decision; no safe auto/agent fix.
   C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (package.json "test" or .forge/quality_gate_cmd).' },
-  C3: { resolution: 'user', fixHint: 'Split god-files (>800 LOC) into focused modules — a structural decision.' },
   C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).' },
   C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.' },
 };

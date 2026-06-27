@@ -11,20 +11,20 @@
  * (`orchestrator/cli.ts`) renders + sets exit code + writes the
  * `preflight.verdict` JSONL event.
  *
- * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C3/C5/C6/C8 +
- * DEMO are advisory — surfaced as warnings, not blockers — because (C3) source
- * size is a heuristic, (C5) constraint-doc presence can't prove the harness
- * honours them, (C6) is structurally satisfied by forge post-Phase-6 (no
- * auto-merge; the operator merges the PR), (C8) absence of an agent-instruction
- * file is a gap but not a blocker, and (DEMO) demoProcess step presence can't
- * prove the demo evidence is correct (hand-verified at onboarding).
+ * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C5/C6/C8 +
+ * DEMO are advisory — surfaced as warnings, not blockers — because (C5)
+ * constraint-doc presence can't prove the harness honours them, (C6) is
+ * structurally satisfied by forge post-Phase-6 (no auto-merge; the operator
+ * merges the PR), (C8) absence of an agent-instruction file is a gap but not a
+ * blocker, and (DEMO) demoProcess step presence can't prove the demo evidence
+ * is correct (hand-verified at onboarding).
  * DEMO is the project half of the demo contract family; the forge half is
  * skills/demo/SKILL.md.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { join, resolve, relative } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
 import {
@@ -32,7 +32,7 @@ import {
 } from '../orchestrator/project-config.ts';
 import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
-export type ClauseId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C2' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -69,21 +69,6 @@ export type PreflightOptions = {
 // (e2e/playwright/cypress as the *primary* test command — those are the
 // 18k-LOC-suite smell that broke trafficGame's per-iteration gate).
 const SLOW_GATE_MARKERS = ['playwright', 'cypress', 'e2e', 'integration'];
-
-// C3: a source file is "egregiously oversized" past this many LOC. 800 is
-// the same ceiling forge holds on its own tree (coverage-matrix SIMPL-LOC)
-// and is a defensible default project size norm. Advisory unless a file is
-// *extreme* (≥ 2× the ceiling — the Game.ts-at-1732 class of god-file that
-// made work items collide), which is reported but still non-fatal: the
-// operator may have a justified exception and the PM's coupling detector is
-// the real runtime guard.
-const C3_SOFT_LOC = 800;
-const C3_EXTREME_LOC = C3_SOFT_LOC * 2;
-const SOURCE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java'];
-const C3_SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'coverage', 'vendor',
-  '.forge', 'test-results', '__pycache__', '.venv', 'target',
-]);
 
 // C2: forge scratch the project repo MUST NOT track these paths (else every
 // cycle commits orchestration state into the PR — the W4 reviewer-confusion
@@ -132,7 +117,6 @@ export function runPreflight(
   const clauses: ClauseResult[] = [
     checkC1(dir),
     checkC2(dir),
-    checkC3(dir),
     checkC4(dir, projectName, forgeRoot),
     checkC5(dir),
     checkC6(dir),
@@ -289,34 +273,6 @@ function checkC2(dir: string): ClauseResult {
     ...base,
     pass: true,
     detail: `git-truth: all forge scratch paths (${SCRATCH_PATHS.join(', ')}) are untracked + ignored`,
-  };
-}
-
-// --- C3: decomposed source under the project's size norm (ADVISORY) ---
-
-function checkC3(dir: string): ClauseResult {
-  const base = { clause: 'C3' as const, title: 'Decomposed source (no god-files)', hard: false };
-  const offenders: string[] = [];
-  let extreme = false;
-  for (const file of walkSource(dir)) {
-    const loc = readFileSync(file, 'utf8').split('\n').length;
-    if (loc > C3_SOFT_LOC) {
-      offenders.push(`${relative(dir, file)}:${loc}`);
-      if (loc >= C3_EXTREME_LOC) extreme = true;
-    }
-  }
-  if (offenders.length === 0) {
-    return { ...base, pass: true, detail: `no source file > ${C3_SOFT_LOC} LOC` };
-  }
-  const shown = offenders.slice(0, 5).join(', ');
-  return {
-    ...base,
-    pass: false,
-    detail:
-      `${offenders.length} file(s) > ${C3_SOFT_LOC} LOC (${shown}${offenders.length > 5 ? ', …' : ''})` +
-      (extreme
-        ? ` — at least one is ≥ ${C3_EXTREME_LOC} LOC (god-file class; work items will collide). Advisory, but strongly recommend extracting before unattended runs.`
-        : ' — advisory; the PM coupling detector is the runtime guard.'),
   };
 }
 
@@ -620,33 +576,6 @@ function checkBrainStaleness(
       `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
       `(or run a reflection pass). Sample: ${sample}`,
   };
-}
-
-function walkSource(dir: string): string[] {
-  const out: string[] = [];
-  const stack = [dir];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    let entries: string[];
-    try {
-      entries = readdirSync(cur);
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      if (C3_SKIP_DIRS.has(e)) continue;
-      const p = join(cur, e);
-      let st;
-      try {
-        st = statSync(p);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) stack.push(p);
-      else if (SOURCE_EXTS.some((x) => e.endsWith(x)) && !e.endsWith('.d.ts')) out.push(p);
-    }
-  }
-  return out;
 }
 
 function gitRemoteUrl(dir: string): string | null {
