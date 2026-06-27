@@ -82,6 +82,8 @@ process.chdir(FORGE_ROOT);
       return await cmdBrain(args.slice(1));
     case 'demo':
       return await cmdDemo(args.slice(1));
+    case 'project-brain':
+      return await cmdProjectBrain(args.slice(1));
     case 'preflight':
       if (args[1] === 'fix') return await cmdPreflightFix(args.slice(2));
       return cmdPreflight(args.slice(1));
@@ -506,6 +508,32 @@ async function cmdArchitectRun(rest: string[]): Promise<void> {
 // Unlike architect, `--project <name>` is REQUIRED — instructions sessions are
 // always scoped to a named managed project (no session auto-discovery).
 // ---------------------------------------------------------------------------
+
+async function cmdProjectBrain(rest: string[]): Promise<void> {
+  const sub = rest[0];
+  if (sub === 'run') return await cmdProjectBrainRun(rest.slice(1));
+  console.error('forge project-brain: subcommands: run <session-id> --project <name>');
+  process.exit(2);
+}
+
+async function cmdProjectBrainRun(rest: string[]): Promise<void> {
+  const sessionId = rest[0];
+  const projectIdx = rest.indexOf('--project');
+  const projectArg = projectIdx >= 0 ? rest[projectIdx + 1] : undefined;
+  if (!sessionId || !projectArg) {
+    console.error('Usage: forge project-brain run <session-id> --project <name>');
+    process.exit(2);
+    return;
+  }
+  const projectRoot = resolve('projects', projectArg);
+  if (!existsSync(projectRoot)) {
+    console.error(`forge project-brain run: project root not found: ${projectRoot}`);
+    process.exit(2);
+  }
+  const { runProjectBrainTurn } = await import('./project-brain-builder-runner.ts');
+  const result = await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT });
+  console.log(`project-brain turn complete — phase=${result.phase} (${result.themes?.length ?? 0} theme(s))`);
+}
 
 async function cmdInstructions(rest: string[]): Promise<void> {
   const sub = rest[0];

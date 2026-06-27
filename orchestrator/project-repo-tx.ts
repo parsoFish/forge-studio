@@ -19,7 +19,7 @@ import { existsSync } from 'node:fs';
 export const STUDIO_BRANCH = 'forge-studio';
 
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
-const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '.forge/work-items'];
+const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '_project-brain', '.forge/work-items'];
 
 function git(projectDir: string, args: string[], opts: { allowFail?: boolean } = {}): string {
   try {
