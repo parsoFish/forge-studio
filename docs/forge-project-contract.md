@@ -125,6 +125,18 @@ brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel
   the `preflight-fix` agent (`orchestrator/preflight-fix-runner.ts`), which applies
   it minimally and re-runs preflight as the verification gate.
 
+**Project-repo write transaction (R1-2).** Every forge-UI change that touches a
+*project* repo (`.forge/project.json`, `AGENTS.md`, `.gitignore`, `roadmap.md`,
+demo machinery, preflight-fix edits) is committed to a single persistent
+`forge-studio` branch (`orchestrator/project-repo-tx.ts`) rather than left
+uncommitted in the working tree. Changes accumulate there across many actions; a
+single **Save** (`POST /api/studio/projects/:id/save-repo`, the project-builder
+`SaveProjectRepoBar`) merges that one branch into the default branch — **no CI**,
+since these are forge-controlled, non-structural files — and pushes to origin so
+cycles branching from `origin/main` (and GitHub) see the configuration. Forge's
+own central artifacts (Brain 3 `brain/projects/<name>/`, ADR 035) are NOT project
+files and do not flow through this transaction.
+
 ### C1 — A truthful, discriminating done-signal *(HARD)*
 
 **One command, deterministic, green at HEAD, fast (≤ 10 s), and genuinely
