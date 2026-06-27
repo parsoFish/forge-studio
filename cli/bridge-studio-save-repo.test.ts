@@ -22,15 +22,6 @@ function g(dir: string, args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
 }
 
-async function post(path: string, body?: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${bridgeUrl}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
-
 async function put(path: string, body: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
   const res = await fetch(`${bridgeUrl}${path}`, {
     method: 'PUT',
