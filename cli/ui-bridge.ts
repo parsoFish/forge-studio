@@ -94,6 +94,10 @@ import {
   type DemoBuilderStatus,
 } from '../orchestrator/demo-builder-runner.ts';
 import {
+  projectBrainSessionDir,
+  type ProjectBrainStatus,
+} from '../orchestrator/project-brain-builder-runner.ts';
+import {
   readSessionStatus,
   writeSessionStatus,
   type InterviewQuestion,
@@ -133,7 +137,8 @@ type WsOutbound =
   | { type: 'instructions-list-changed' }
   // Stage B — a demo-builder session changed (started, regenerated, awaiting
   // review, locked, abandoned). The UI re-fetches `/api/demo-builder/sessions`.
-  | { type: 'demo-list-changed' };
+  | { type: 'demo-list-changed' }
+  | { type: 'project-brain-list-changed' };
 
 export type BridgeOptions = {
   forgeRoot: string;
@@ -510,6 +515,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // Stage B — live-tail a demo-builder session's event log. The runner
       // writes to `_logs/_demo-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
       ensureDemoTail: (sessionId: string) => ensureTailFor(`_demo-${sessionId}`),
+      broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
+      ensureProjectBrainTail: (sessionId: string) => ensureTailFor(`_project-brain-${sessionId}`),
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -619,6 +626,10 @@ type HttpContext = {
   broadcastDemoChanged: () => void;
   /** Start (idempotently) live-tailing a demo-builder session's event log. */
   ensureDemoTail: (sessionId: string) => void;
+  /** R1-3b — broadcast a `project-brain-list-changed` WS message. */
+  broadcastProjectBrainChanged: () => void;
+  /** R1-3b — live-tail a project-brain session's event log. */
+  ensureProjectBrainTail: (sessionId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -1592,6 +1603,55 @@ function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: str
   } catch { /* best-effort */ }
 }
 
+/** R1-3b — spawn ONE detached `forge project-brain run` turn (analyze or commit). */
+function spawnProjectBrainTurn(forgeRoot: string, project: string, sessionId: string): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  try {
+    const logDir = join(forgeRoot, '_logs', `_project-brain-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(
+      process.execPath,
+      ['--experimental-strip-types', 'orchestrator/cli.ts', 'project-brain', 'run', sessionId, '--project', project],
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
+    );
+    closeSync(stderrFd);
+    proc.unref();
+  } catch { /* best-effort */ }
+}
+
+/** R1-3b — list every project-brain session with its current state. */
+function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
+  const out: ProjectBrainStatus[] = [];
+  if (!existsSync(projectsRoot)) return out;
+  let projects: string[];
+  try { projects = readdirSync(projectsRoot); } catch { return out; }
+  for (const project of projects) {
+    const base = join(projectsRoot, project, '_project-brain');
+    if (!existsSync(base)) continue;
+    let sids: string[];
+    try { sids = readdirSync(base); } catch { continue; }
+    for (const sid of sids) {
+      const status = readSessionStatus<ProjectBrainStatus>(projectBrainSessionDir(join(projectsRoot, project), sid));
+      if (status) out.push(status);
+    }
+  }
+  return out;
+}
+
+/** R1-3b — the staged theme files (name + content) for a session under review. */
+function readStagedThemes(projectsRoot: string, project: string, sessionId: string): Array<{ name: string; content: string }> {
+  const dir = join(projectBrainSessionDir(join(projectsRoot, project), sessionId), 'themes');
+  if (!existsSync(dir)) return [];
+  const out: Array<{ name: string; content: string }> = [];
+  let files: string[];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.md')).sort(); } catch { return out; }
+  for (const name of files) {
+    try { out.push({ name, content: readFileSync(join(dir, name), 'utf8') }); } catch { /* skip */ }
+  }
+  return out;
+}
+
 /** Read the Forge demo base stylesheet (best-effort; a minimal dark fallback). */
 function readForgeDemoCss(forgeRoot: string): string {
   try {
@@ -1849,6 +1909,72 @@ async function handleDemoBuilder(
   // session in the `briefing` phase. It does NOT spawn the agent: the operator
   // lands on the screen, sees the demo process + any existing locked demo, and
   // provides notes; POST /api/demo-builder/brief then kicks off the agent.
+  // R1-3b — project-brain builder ops (analyze → review → commit).
+  if (method === 'GET' && url === '/api/project-brain/sessions') {
+    const statuses = listProjectBrainSessions(ctx.projectsRoot);
+    for (const s of statuses) {
+      if (s.phase !== 'committed' && s.phase !== 'abandoned') ctx.ensureProjectBrainTail(s.session_id);
+    }
+    sendJson(res, 200, { sessions: statuses }, origin);
+    return true;
+  }
+  {
+    const themesMatch = url.match(/^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/);
+    if (method === 'GET' && themesMatch) {
+      const project = decodeURIComponent(themesMatch[1]);
+      const sessionId = decodeURIComponent(themesMatch[2]);
+      sendJson(res, 200, { themes: readStagedThemes(ctx.projectsRoot, project, sessionId) }, origin);
+      return true;
+    }
+  }
+  if (method === 'POST' && url === '/api/project-brain/start') {
+    try {
+      const body = (await readJson(req)) as { project?: string; projectRepoPath?: string };
+      if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
+      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      const sessionId = newArchitectSessionId();
+      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), sessionId);
+      mkdirSync(dir, { recursive: true });
+      writeSessionStatus<ProjectBrainStatus>(dir, {
+        session_id: sessionId, project: body.project, project_repo_path: repoPath,
+        phase: 'briefing', prompt: '', updated_at: new Date().toISOString(),
+      });
+      ctx.broadcastProjectBrainChanged();
+      sendJson(res, 200, { ok: true, sessionId }, origin);
+    } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
+    return true;
+  }
+  if (method === 'POST' && url === '/api/project-brain/brief') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
+      if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
+      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<ProjectBrainStatus>(dir);
+      if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      writeFileSync(join(dir, 'prompt.md'), body.brief ?? '');
+      writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: 'analyzing', prompt: body.brief ?? '' });
+      spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastProjectBrainChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
+    return true;
+  }
+  if (method === 'POST' && (url === '/api/project-brain/approve' || url === '/api/project-brain/abandon')) {
+    try {
+      const approve = url.endsWith('/approve');
+      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
+      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const status = readSessionStatus<ProjectBrainStatus>(dir);
+      if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
+      if (approve) spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
+      ctx.broadcastProjectBrainChanged();
+      sendJson(res, 200, { ok: true }, origin);
+    } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
+    return true;
+  }
+
   if (method === 'POST' && url === '/api/demo-builder/start') {
     try {
       const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string };

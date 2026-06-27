@@ -699,6 +699,52 @@ export async function demoBuilderBrief(input: {
   return bridgePost('/api/demo-builder/brief', input);
 }
 
+// --- R1-3b — agentic project-brain builder ----------------------------------
+
+export type ProjectBrainSession = {
+  session_id: string;
+  project: string;
+  phase: 'briefing' | 'analyzing' | 'awaiting-review' | 'committing' | 'committed' | 'abandoned';
+  prompt: string;
+};
+
+/** Start a project-brain builder session (phase=briefing). */
+export async function startProjectBrain(input: { project: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/project-brain/start', { project: input.project });
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+}
+
+/** Record the operator's focus + kick off the analysis (briefing → analyzing). */
+export async function projectBrainBrief(input: { project: string; sessionId: string; brief: string }): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/project-brain/brief', input);
+}
+
+/** Approve the staged themes → commit into the central brain (awaiting-review → committing). */
+export async function projectBrainApprove(input: { project: string; sessionId: string }): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/project-brain/approve', input);
+}
+
+/** Abandon a project-brain session. */
+export async function projectBrainAbandon(input: { project: string; sessionId: string }): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/project-brain/abandon', input);
+}
+
+/** Fetch all project-brain sessions. */
+export async function fetchProjectBrainSessions(): Promise<ProjectBrainSession[]> {
+  const body = await bridgeGet<{ sessions: ProjectBrainSession[] }>('/api/project-brain/sessions', { sessions: [] });
+  return body.sessions ?? [];
+}
+
+/** Fetch the staged theme files for a session under review. */
+export async function fetchStagedThemes(project: string, sessionId: string): Promise<Array<{ name: string; content: string }>> {
+  const body = await bridgeGet<{ themes: Array<{ name: string; content: string }> }>(
+    `/api/project-brain/themes/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}`,
+    { themes: [] },
+  );
+  return body.themes ?? [];
+}
+
 /** One demo-element kind from the forge library (the demoProcess composition palette). */
 export type DemoElementSummary = {
   id: string;
