@@ -68,30 +68,29 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-test('PUT project.json commits to forge-studio; save-repo merges it into main', async () => {
-  // A forge-UI write lands on forge-studio (not main yet).
+test('PUT project.json is one durable save — written + merged to main + on main', async () => {
   const upd = await put(`/api/studio/projects/${PROJECT}`, { northStar: 'a new north star' });
   assert.equal(upd.status, 200, JSON.stringify(upd.json));
-  assert.equal(g(projectDir, ['rev-parse', '--abbrev-ref', 'HEAD']), 'forge-studio');
-
-  // repo-status reports pending changes.
-  const before = await getJson(`/api/studio/projects/${PROJECT}/repo-status`);
-  assert.equal(before.pending, true);
-
-  // Save merges forge-studio → main, removes the branch.
-  const saved = await post(`/api/studio/projects/${PROJECT}/save-repo`);
-  assert.equal(saved.status, 200, JSON.stringify(saved.json));
-  assert.equal(saved.json.merged, true);
+  // The single "Save project" merges forge-studio → main (no remote → local) and
+  // rests on main, branch removed.
+  assert.equal((upd.json.save as { merged: boolean }).merged, true);
   assert.equal(g(projectDir, ['rev-parse', '--abbrev-ref', 'HEAD']), 'main');
   assert.match(g(projectDir, ['show', 'main:.forge/project.json']), /a new north star/);
-
-  // No longer pending.
   const after = await getJson(`/api/studio/projects/${PROJECT}/repo-status`);
   assert.equal(after.pending, false);
 });
 
-test('save-repo with nothing pending → merged:false', async () => {
-  const saved = await post(`/api/studio/projects/${PROJECT}/save-repo`);
-  assert.equal(saved.status, 200);
-  assert.equal(saved.json.merged, false);
+test('save succeeds when quality_gate_cmd lives in the sidecar, not project.json', async () => {
+  // betterado's shape: project.json omits quality_gate_cmd; the gate is in the
+  // .forge/quality_gate_cmd sidecar. The save must validate via the sidecar.
+  writeFileSync(join(projectDir, '.forge', 'project.json'), JSON.stringify({ northStar: 'sidecar project' }));
+  writeFileSync(join(projectDir, '.forge', 'quality_gate_cmd'), 'go test -tags all ./pkg/...');
+  g(projectDir, ['add', '-A']);
+  g(projectDir, ['commit', '-m', 'switch to sidecar gate']);
+
+  const upd = await put(`/api/studio/projects/${PROJECT}`, { kb: `${PROJECT}-brain` });
+  assert.equal(upd.status, 200, JSON.stringify(upd.json));
+  assert.match(g(projectDir, ['show', 'main:.forge/project.json']), /sidecar project/);
+  // project.json still does NOT mirror the gate (single source preserved).
+  assert.equal(g(projectDir, ['show', 'main:.forge/project.json']).includes('quality_gate_cmd'), false);
 });

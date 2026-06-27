@@ -266,7 +266,7 @@ export function readAgentInstructionsFile(
  * (or throws if neither is present). Whitespace-splitting mirrors how preflight
  * already consumes the sidecar (`cli/preflight.ts readQualityGateCmd`).
  */
-function readQualityGateSidecar(projectRoot: string): string[] | null {
+export function readQualityGateSidecar(projectRoot: string): string[] | null {
   try {
     const sidecarPath = join(projectRoot, QUALITY_GATE_SIDECAR_REL_PATH);
     if (!existsSync(sidecarPath)) return null;

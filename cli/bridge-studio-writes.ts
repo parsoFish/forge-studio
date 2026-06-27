@@ -36,7 +36,7 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
-import { validateProjectConfig, readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
@@ -587,9 +587,18 @@ export async function handleStudioWriteRoutes(
       // kb can be string or null
       if (b['kb'] !== undefined) merged['kb'] = b['kb'];
 
-      // 6. Validate the merged config (throws on invalid)
+      // 6. Validate the merged config (throws on invalid). Single-source the
+      // quality gate from the `.forge/quality_gate_cmd` sidecar for validation
+      // ONLY (same as loadProjectConfig) — a project that declares the gate in
+      // the sidecar legitimately omits it from project.json, so validate a copy
+      // with the sidecar injected, but write `merged` unchanged (no mirror).
+      const forValidation: Record<string, unknown> = { ...merged };
+      if (forValidation['quality_gate_cmd'] === undefined || forValidation['quality_gate_cmd'] === null) {
+        const sidecar = readQualityGateSidecar(projectRoot);
+        if (sidecar) forValidation['quality_gate_cmd'] = sidecar;
+      }
       try {
-        validateProjectConfig(merged);
+        validateProjectConfig(forValidation);
       } catch (err) {
         sendJson(res, 400, { error: String(err) }, origin);
         return true;
@@ -607,13 +616,21 @@ export async function handleStudioWriteRoutes(
         ['.forge/project.json'],
       );
 
+      // R1-2: a "Save project" is the ONE durable save — merge the accumulated
+      // forge-studio changes (this config edit + any preflight/instructions/demo
+      // writes) into the default branch + push. Best-effort: the config is
+      // already safe on forge-studio, so a merge/push failure (e.g. protected
+      // main) doesn't fail the save — it's surfaced in `save`.
+      let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
+      try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
+
       // F5: when demoProcess was in the save body, signal that the demo-design
       // skill should be run to generate per-project demo machinery. The UI
       // surfaces this as data-demo-design-state="needed" on the project page
       // so the operator can trigger: `forge run skill demo-design --project <id>`.
       const demoDesignNeeded = Array.isArray(b['demoProcess']);
 
-      sendJson(res, 200, { ok: true, id, ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
+      sendJson(res, 200, { ok: true, id, ...(save ? { save } : {}), ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
