@@ -696,7 +696,7 @@ async function handleHttp(
     res.writeHead(204, {
       'access-control-allow-origin': origin,
       'vary': 'origin',
-      'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'access-control-allow-headers': 'content-type, x-forge-csrf',
     });
     res.end();

@@ -291,6 +291,12 @@ test('DELETE an unknown kb → 404', async () => {
   assert.equal(status, 404);
 });
 
+test('CORS preflight (OPTIONS) advertises DELETE — else the browser blocks the delete', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/kbs/anything`, { method: 'OPTIONS' });
+  assert.equal(res.status, 204);
+  assert.match(res.headers.get('access-control-allow-methods') ?? '', /DELETE/);
+});
+
 test('DELETE without CSRF header → 403', async () => {
   await post('/api/studio/kbs', { id: 'csrf-brain', name: 'CSRF', scope: 'project', desc: 'x' });
   const { status } = await del('/api/studio/kbs/csrf-brain', true);
