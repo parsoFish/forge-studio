@@ -507,7 +507,6 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {ready && flow && runs.length === 0 && (
                 <FlowKickoff
                   flow={flow}
-                  onLaunched={() => void loadData({ cancelled: false })}
                   onStartGeneric={() => void handleStartRun()}
                 />
               )}

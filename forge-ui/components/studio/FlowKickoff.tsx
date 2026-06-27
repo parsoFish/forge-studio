@@ -1,38 +1,35 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
-import { startRun } from '@/lib/bridge-client';
-import { fetchPlannedInitiatives, type Flow, type PlannedInitiative } from '@/lib/studio-client';
+import type { Flow } from '@/lib/studio-client';
 
 /**
  * Stage C — per-flow kickoff surface. Renders the launch UI that matches the
- * flow's declared `kickoff.kind`:
+ * flow's declared `kickoff.kind` (the operator's three entry points):
  *
- *   - `idea`             → the architect NewIdeaBox (free-text idea).
- *   - `initiative-select`→ a picker of planned, develop-able initiatives; ready
- *                          ones launch, blocked ones are greyed with blockers.
+ *   - `idea`             → the architect NewIdeaBox (free-text idea); the
+ *                          interactive entry point.
+ *   - `initiative-select`→ NOT launched here — points to the roadmap, where the
+ *                          operator picks a planned initiative ("Start development").
  *   - `trigger-only`     → no launcher — the flow runs only when its declared
  *                          FlowTrigger fires (e.g. forge-reflect on merge).
- *   - (none)             → the generic "Start Run" fallback.
+ *   - (none)             → the generic "Start Run" fallback (authored flows).
  */
 export function FlowKickoff({
   flow,
   knownProjects,
-  onLaunched,
   onStartGeneric,
 }: {
   flow: Flow;
   knownProjects?: string[];
-  onLaunched?: () => void;
   onStartGeneric?: () => void;
 }): JSX.Element {
   const kind = flow.kickoff?.kind;
 
   if (kind === 'idea') return <IdeaKickoff knownProjects={knownProjects} project={flow.project} />;
-  if (kind === 'initiative-select') return <InitiativeSelectKickoff onLaunched={onLaunched} />;
+  if (kind === 'initiative-select') return <InitiativeSelectKickoff />;
   if (kind === 'trigger-only') return <TriggerOnlyKickoff />;
   return <GenericKickoff onStartGeneric={onStartGeneric} />;
 }
@@ -77,86 +74,16 @@ function IdeaKickoff({ knownProjects, project }: { knownProjects?: string[]; pro
 
 // ---- initiative-select ---------------------------------------------------
 
-function InitiativeSelectKickoff({ onLaunched }: { onLaunched?: () => void }): JSX.Element {
-  const [planned, setPlanned] = useState<PlannedInitiative[] | null>(null);
-  const [launching, setLaunching] = useState<string | null>(null);
-
-  const reload = useCallback(() => {
-    fetchPlannedInitiatives().then(setPlanned).catch(() => setPlanned([]));
-  }, []);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  const launch = useCallback(
-    async (initiativeId: string) => {
-      setLaunching(initiativeId);
-      try {
-        const r = await startRun(initiativeId);
-        if (r.ok) { reload(); onLaunched?.(); }
-      } finally {
-        setLaunching(null);
-      }
-    },
-    [reload, onLaunched],
-  );
-
+function InitiativeSelectKickoff(): JSX.Element {
+  // Develop-type flows are launched from the roadmap (pick a planned initiative
+  // → "Start development"), NOT from a generic list here — keeping one entry
+  // point per flow type. This is an informational note, not a launcher.
   return (
-    <div
-      data-section="flow-kickoff"
-      data-kickoff-kind="initiative-select"
-      data-planned-count={planned?.length ?? 0}
-      data-planned-ready={planned == null ? 'false' : 'true'}
-      style={{ padding: '12px 20px', borderBottom: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}
-    >
-      <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 8 }}>
-        Planned initiatives — pick one to develop. Blocked rows wait on a prerequisite.
-      </div>
-      {planned == null && <div style={{ fontSize: 12, color: 'var(--dim)' }}>Loading…</div>}
-      {planned != null && planned.length === 0 && (
-        <div data-kickoff-empty="true" style={{ fontSize: 12, color: 'var(--dim)' }}>
-          No planned initiatives. Run the architect to decompose one first.
-        </div>
-      )}
-      {planned != null && planned.length > 0 && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {planned.map((p) => (
-            <li
-              key={p.initiativeId}
-              data-initiative-row
-              data-initiative-id={p.initiativeId}
-              data-initiative-ready={p.ready ? 'true' : 'false'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '6px 10px',
-                borderRadius: 4,
-                background: 'var(--bg)',
-                border: '1px solid var(--line)',
-                opacity: p.ready ? 1 : 0.55,
-              }}
-            >
-              <span style={{ flex: 1, fontSize: 12.5 }}>
-                <span style={{ fontWeight: 600 }}>{p.title}</span>
-                {p.project && <span style={{ color: 'var(--dim)' }}> · {p.project}</span>}
-                {!p.ready && (
-                  <span data-initiative-blockers style={{ color: 'var(--dim)', display: 'block', fontSize: 11 }}>
-                    blocked by {p.blockedBy.join(', ')}
-                  </span>
-                )}
-              </span>
-              <button
-                data-action="start-develop"
-                disabled={!p.ready || launching === p.initiativeId}
-                onClick={() => void launch(p.initiativeId)}
-                style={{ ...launchButtonStyle, opacity: p.ready ? 1 : 0.4, cursor: p.ready ? 'pointer' : 'not-allowed' }}
-              >
-                {launching === p.initiativeId ? 'Launching…' : 'Develop'}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div data-section="flow-kickoff" data-kickoff-kind="initiative-select" style={{ ...barStyle }}>
+      <span style={{ fontSize: 12, color: 'var(--dim)' }}>
+        Launched from a project&apos;s roadmap — open the project, pick a planned initiative, and
+        press &ldquo;Start development&rdquo;.
+      </span>
     </div>
   );
 }

@@ -8,9 +8,16 @@ import type { Flow } from '@/lib/studio-client';
  * model a flow is given work FROM the project: pick a flow, click "give this
  * project work", and land on the architect entry pre-scoped to this project
  * (the established work-creation path; the chosen flow is carried as ?flow=).
+ *
+ * Only flows whose kickoff starts with an interactive component (kickoff.kind ===
+ * 'idea', e.g. forge-architect) belong here — they are the operator's "describe
+ * the work" entry point. Flows fed by that (kickoff: initiative-select, e.g.
+ * forge-develop) launch from the roadmap's planned initiatives; trigger-only
+ * flows (forge-reflect) are never manually launched.
  */
 export function UsedByFlows({ flows, projectId }: { flows: Flow[]; projectId: string }) {
-  const [flowId, setFlowId] = useState(flows[0]?.id ?? '');
+  const ideaFlows = flows.filter((f) => f.kickoff?.kind === 'idea');
+  const [flowId, setFlowId] = useState(ideaFlows[0]?.id ?? '');
   const href = `/architect/new?project=${encodeURIComponent(projectId)}${flowId ? `&flow=${encodeURIComponent(flowId)}` : ''}`;
 
   return (
@@ -18,8 +25,8 @@ export function UsedByFlows({ flows, projectId }: { flows: Flow[]; projectId: st
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
         Run a flow
       </div>
-      {flows.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--faint)', fontStyle: 'italic' }}>No flows yet — build one first.</div>
+      {ideaFlows.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--faint)', fontStyle: 'italic' }}>No interactive flow yet — build one whose kickoff is an idea.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <select
@@ -28,7 +35,7 @@ export function UsedByFlows({ flows, projectId }: { flows: Flow[]; projectId: st
             onChange={(e) => setFlowId(e.target.value)}
             style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 12.5, padding: '6px 9px', outline: 'none' }}
           >
-            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            {ideaFlows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <a
             className="btn btn-primary"
