@@ -93,35 +93,41 @@ export function KbBind({
         <option value="">— bind a knowledge base —</option>
         {kbs.map((k) => <option key={k.id} value={k.id}>{k.name} [{k.scope}]</option>)}
       </select>
-      {/* P3: pick the KB kind before building the brain. */}
-      <select
-        data-field="kb-kind"
-        value={kind}
-        onChange={(e) => setKind(e.target.value)}
-        disabled={createState === 'creating' || createState === 'bootstrapping'}
-        style={{
-          width: '100%', background: 'var(--panel)', border: '1px solid var(--line-2)',
-          borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)',
-          fontSize: 12.5, padding: '6px 10px', cursor: 'pointer', outline: 'none', marginBottom: 6,
-        }}
-      >
-        {KB_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label} brain</option>)}
-      </select>
-      <button
-        className="btn btn-ghost"
-        data-action="create-project-brain"
-        style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
-        disabled={createState === 'creating' || createState === 'bootstrapping'}
-        onClick={handleCreateProjectBrain}
-      >
-        {createState === 'creating' ? 'Creating…'
-          : createState === 'bootstrapping' ? 'Building brain…'
-          : createState === 'done' ? '✓ Brain built'
-          : '+ Build project brain'}
-      </button>
-      {createState === 'error' && createError && (
-        <div style={{ fontSize: 11, color: 'var(--error, #f87171)', marginTop: 4 }}>
-          {createError}
+      {/* A project carries a SINGLE brain — once one is bound, the build button is
+          hidden (swap via the dropdown above, or unbind with the × chip). */}
+      {!boundKb && (
+        <div data-section="build-project-brain">
+          {/* P3: pick the KB kind before building the brain. */}
+          <select
+            data-field="kb-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            disabled={createState === 'creating' || createState === 'bootstrapping'}
+            style={{
+              width: '100%', background: 'var(--panel)', border: '1px solid var(--line-2)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)',
+              fontSize: 12.5, padding: '6px 10px', cursor: 'pointer', outline: 'none', marginBottom: 6,
+            }}
+          >
+            {KB_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label} brain</option>)}
+          </select>
+          <button
+            className="btn btn-ghost"
+            data-action="create-project-brain"
+            style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
+            disabled={createState === 'creating' || createState === 'bootstrapping'}
+            onClick={handleCreateProjectBrain}
+          >
+            {createState === 'creating' ? 'Creating…'
+              : createState === 'bootstrapping' ? 'Building brain…'
+              : createState === 'done' ? '✓ Brain built'
+              : '+ Build project brain'}
+          </button>
+          {createState === 'error' && createError && (
+            <div style={{ fontSize: 11, color: 'var(--error, #f87171)', marginTop: 4 }}>
+              {createError}
+            </div>
+          )}
         </div>
       )}
     </div>

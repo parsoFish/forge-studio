@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance } from '@/lib/studio-client';
+import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle } from '@/lib/studio-client';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
@@ -215,7 +215,16 @@ function KnowledgePageInner() {
         <div style={{ flexGrow: 1 }} />
 
         {/* K3: manual brain maintenance */}
-        {currentId && <KbMaintenance kbId={currentId} />}
+        {currentId && (
+          <KbMaintenance
+            kbId={currentId}
+            onDeleted={() => {
+              setCurrentId('');
+              setKbDetail(null);
+              fetchStudioKbs().then((ks) => setAllKbs(ks)).catch(() => {});
+            }}
+          />
+        )}
 
         {/* "maintained by agents" pill */}
         <div
@@ -283,8 +292,8 @@ function KnowledgePageInner() {
 // (Ingest + agentic review run during cycle reflection; these are the
 // deterministic, operator-triggerable ops.)
 // ---------------------------------------------------------------------------
-function KbMaintenance({ kbId }: { kbId: string }) {
-  const [busy, setBusy] = useState<'lint' | 'index' | null>(null);
+function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => void }) {
+  const [busy, setBusy] = useState<'lint' | 'index' | 'delete' | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
   async function run(op: 'lint' | 'index') {
@@ -302,6 +311,16 @@ function KbMaintenance({ kbId }: { kbId: string }) {
     setTimeout(() => setResult(null), 6000);
   }
 
+  async function handleDelete() {
+    if (!window.confirm(`Delete brain "${kbId}" and all its content? This cannot be undone.`)) return;
+    setBusy('delete');
+    setResult(null);
+    const r = await deleteKb(kbId);
+    setBusy(null);
+    if (!r.ok) { setResult(r.error ?? 'delete failed'); return; }
+    onDeleted?.();
+  }
+
   const btn: React.CSSProperties = {
     fontSize: 11.5, padding: '4px 10px', background: 'var(--panel-2)', color: 'var(--text)',
     border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
@@ -313,6 +332,15 @@ function KbMaintenance({ kbId }: { kbId: string }) {
       </button>
       <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
         {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
+      </button>
+      <button
+        data-action="kb-delete"
+        style={{ ...btn, color: 'var(--error, #f87171)', borderColor: 'var(--error, #f87171)' }}
+        disabled={busy !== null}
+        onClick={() => void handleDelete()}
+        title="Delete this knowledge base"
+      >
+        {busy === 'delete' ? 'Deleting…' : 'Delete'}
       </button>
       {result && <span data-component="kb-maintenance-result" style={{ fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>{result}</span>}
     </div>

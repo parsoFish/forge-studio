@@ -18,12 +18,13 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
 import yaml from 'js-yaml';
 
 import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
@@ -506,6 +507,38 @@ export async function handleStudioKbRoutes(
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);
 
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- DELETE /api/studio/kbs/:id (R1-5) — remove a knowledge base --------
+  const kbDeleteMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)$/);
+  if (kbDeleteMatch && method === 'DELETE') {
+    try {
+      const id = decodeURIComponent(kbDeleteMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      // Guard the forge-owned core brains (the three-brain model) from deletion.
+      if (id === 'cycles' || id === 'forge-dev') {
+        sendJson(res, 403, { error: `the forge-owned brain "${id}" cannot be deleted` }, origin);
+        return true;
+      }
+      const dir = resolveKbBrainDir(ctx.forgeRoot, id);
+      if (!dir || !existsSync(dir)) {
+        sendJson(res, 404, { error: `unknown kb: ${id}` }, origin);
+        return true;
+      }
+      const brainBase = resolve(ctx.forgeRoot, 'brain');
+      if (!resolve(dir).startsWith(brainBase + sep)) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+      rmSync(dir, { recursive: true, force: true });
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

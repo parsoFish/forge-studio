@@ -778,3 +778,21 @@ export async function createKb(body: {
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id };
 }
+
+/** Delete a knowledge base (removes its brain/<id>/ dir). The forge-owned core
+ *  brains (cycles, forge-dev) are server-guarded against deletion. */
+export async function deleteKb(id: string): Promise<{ ok: boolean; error?: string }> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/studio/kbs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'x-forge-csrf': '1' },
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: data.ok !== false };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}

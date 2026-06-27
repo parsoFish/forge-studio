@@ -260,3 +260,40 @@ test('POST /api/studio/kbs: YAML-special desc value round-trips correctly', asyn
   const descriptor = loadKbDescriptor(kbYamlPath);
   assert.equal(descriptor.desc, specialDesc, 'YAML-special desc round-trips correctly');
 });
+
+// ---------------------------------------------------------------------------
+// DELETE /api/studio/kbs/:id (R1-5)
+// ---------------------------------------------------------------------------
+
+async function del(path: string, nocsrf = false): Promise<{ status: number; json: Record<string, unknown> }> {
+  const headers: Record<string, string> = {};
+  if (!nocsrf) headers['x-forge-csrf'] = '1';
+  const res = await fetch(`${bridgeUrl}${path}`, { method: 'DELETE', headers });
+  return { status: res.status, json: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
+test('DELETE /api/studio/kbs/:id removes the brain dir', async () => {
+  await post('/api/studio/kbs', { id: 'doomed-brain', name: 'Doomed', scope: 'project', desc: 'to be deleted' });
+  assert.equal(existsSync(join(forgeRoot, 'brain', 'doomed-brain')), true);
+  const { status, json } = await del('/api/studio/kbs/doomed-brain');
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(existsSync(join(forgeRoot, 'brain', 'doomed-brain')), false, 'brain dir removed');
+});
+
+test('DELETE a forge-owned core brain (cycles) → 403 (guarded)', async () => {
+  const { status } = await del('/api/studio/kbs/cycles');
+  assert.equal(status, 403);
+  assert.equal(existsSync(join(forgeRoot, 'brain', 'cycles')), true, 'cycles brain preserved');
+});
+
+test('DELETE an unknown kb → 404', async () => {
+  const { status } = await del('/api/studio/kbs/no-such-brain');
+  assert.equal(status, 404);
+});
+
+test('DELETE without CSRF header → 403', async () => {
+  await post('/api/studio/kbs', { id: 'csrf-brain', name: 'CSRF', scope: 'project', desc: 'x' });
+  const { status } = await del('/api/studio/kbs/csrf-brain', true);
+  assert.equal(status, 403);
+  assert.equal(existsSync(join(forgeRoot, 'brain', 'csrf-brain')), true, 'not deleted without CSRF');
+});
