@@ -27,7 +27,7 @@ budgets: {}
 Manual / research ingest path. Takes raw input (text, URL contents, external research, or **pending human guidance notes**) and:
 
 1. Appends the raw to `brain/_raw/` with full provenance.
-2. Creates new theme pages or appends to existing ones in `brain/cycles/themes/` (forge-wide) or `projects/<name>/brain/themes/` (project-specific).
+2. Creates new theme pages or appends to existing ones in `brain/cycles/themes/` (forge-wide) or `brain/projects/<name>/themes/` (project-specific).
 3. Updates category indexes.
 4. Appends an entry to `brain/forge-dev/log.md`.
 5. Consumes pending `_guidance/*.md` files (human-originated, the twin of `brain-gaps.jsonl`) and **deletes** each one after incorporation.
@@ -57,8 +57,8 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 ## Outputs
 
 - New `brain/_raw/<...>.md` (with mandatory frontmatter — see [`brain/_raw/README.md`](../../brain/_raw/README.md)).
-- New or updated `brain/cycles/themes/<slug>.md` or `projects/<name>/brain/themes/<slug>.md`.
-- Updated category index (`brain/cycles/<category>.md` or `projects/<name>/brain/<category>.md`).
+- New or updated `brain/cycles/themes/<slug>.md` or `brain/projects/<name>/themes/<slug>.md`.
+- Updated category index (`brain/cycles/<category>.md` or `brain/projects/<name>/<category>.md`).
 - Append to `brain/forge-dev/log.md`.
 
 ## Event-log entries to emit

@@ -35,8 +35,8 @@ Your host is the **in-UI runner** (`orchestrator/architect-runner.ts`) — the s
 
 **First tool calls MUST be `Read` against brain paths.** Use the brain navigation index in your system prompt to pick relevant themes. Required minimum:
 1. `brain/cycles/themes/*.md` covering initiative sizing, prior patterns, antipatterns for this work type.
-2. `projects/<project>/brain/profile.md` — taste signals and hard constraints.
-3. Any `projects/<project>/brain/themes/*.md` matching the initiative's domain.
+2. `brain/projects/<project>/profile.md` — taste signals and hard constraints.
+3. Any `brain/projects/<project>/themes/*.md` matching the initiative's domain.
 4. Project tech stack (package.json, go.mod, etc.) and prior cycle artifacts.
 
 **Before any question, write a 3-bullet context brief (scratchpad):**
@@ -162,7 +162,7 @@ The runner owns all mechanics — renders questions, builds manifests, writes PL
 
 ## Constraints
 
-- **Initiatives are coherent and releasable.** Query `projects/<project>/brain/themes/` and `brain/cycles/themes/` for the shape of past successful initiatives.
+- **Initiatives are coherent and releasable.** Query `brain/projects/<project>/themes/` and `brain/cycles/themes/` for the shape of past successful initiatives.
 - **ACs are concrete.** Reject your own draft if you can't write a GWT (or EARS equivalent) for it. Each initiative body MUST contain ≥1 AC block.
 - **Dependencies are explicit.** Set `depends_on` on each initiative for scheduler ordering. No intra-initiative feature dependency layer — the PM orders WIs directly.
 - **Aggregate footprint is informational** (C19). PLAN.md surfaces total iteration budget + per-initiative estimated cost as a single line; forge does NOT enforce a budget gate or auto-escalate. The operator decides.

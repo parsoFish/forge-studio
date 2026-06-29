@@ -45,6 +45,8 @@ Category indexes:
 
 ### Brain 3 — per-project (`<project-repo>/brain/`)
 
+> **Superseded on location by [ADR 035](./035-forge-owned-central-artifacts.md) (2026-06-20):** Brain 3 now lives **centrally in the forge repo** at `brain/projects/<name>/themes/`, not in the project repo. The three-brain *scoping* still stands; only the *location* described in this section is reversed.
+
 Lives inside each managed project's own repo, not in the forge repo. Contains
 taste profiles, project-specific patterns, and project cycle archives.
 

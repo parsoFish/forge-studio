@@ -149,7 +149,7 @@ The brain is the system's memory. It is a **Karpathy-style LLM wiki** with three
 After the **Tier 4 three-brain restructure (2026-05-26)**, three scoped brains:
 - **Brain 1 (forge-dev):** `brain/forge-dev/` — forge TypeScript source knowledge + ADRs + engineering notes.
 - **Brain 2 (cycles):** `brain/cycles/` — cycle-derived patterns, antipatterns, raw archives. `brain/cycles/_raw/` holds immutable cycle records.
-- **Brain 3 (per-project):** `<project-repo>/brain/` — lives inside each managed project's repo.
+- **Brain 3 (per-project):** `brain/projects/<name>/themes/` — forge-owned, central in the forge repo (ADR 035).
 
 Layer structure (each brain follows this pattern):
 1. **`_raw/`** — immutable raw sources. Ground truth.
@@ -322,6 +322,6 @@ Cycle helpers extracted to `orchestrator/cycle-helpers.ts` to break the `flow-ru
 
 - It is not a job queue with priorities and dedup. (See ADR 011.)
 - It is not a resource controller. (`maxConcurrentInitiatives` is a static knob.)
-- It is not a per-project agent personality. (Skills are shared; per-project taste lives in `<project-repo>/brain/profile.md`.)
+- It is not a per-project agent personality. (Skills are shared; per-project taste lives in `brain/projects/<name>/profile.md` in the forge repo (ADR 035).)
 - It does not retry failed initiatives automatically. (Failure → human triage.)
 - It does not host its own model runtime, vector DB, or agent harness. (Claude Agent SDK does that.)

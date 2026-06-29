@@ -75,11 +75,12 @@ missing or malformed, and surfaces the error in the operator queue.
    and passes it via env to the preview server.
 4. **For `shape: "harness"`:** confirm `demo.command` completes within
    ~5 minutes on baseline and emits stable, regex-scrapable lines.
-5. **Seed at least one Brain 3 theme** in the project's own repo
-   (`<project-root>/forge/brain/themes/` or `<project-root>/brain/themes/`,
-   per [ADR 018](../decisions/018-three-brain-model.md)) describing the
-   project's demo-shape choice (see
-   [`projects/mdtoc/forge/brain/themes/anchor-slug-fidelity.md`](../../projects/mdtoc/forge/brain/themes/anchor-slug-fidelity.md)
+5. **Seed at least one Brain 3 theme** in the forge repo at
+   `brain/projects/<name>/themes/`
+   (per [ADR 035](../decisions/035-forge-owned-central-artifacts.md),
+   superseding [ADR 018](../decisions/018-three-brain-model.md) on location)
+   describing the project's demo-shape choice (see
+   [`brain/projects/mdtoc/themes/anchor-slug-fidelity.md`](../../brain/projects/mdtoc/themes/anchor-slug-fidelity.md)
    for an example).
 
 ### Worked examples per `demo.shape`

@@ -40,8 +40,8 @@ Running **non-interactively** in an unattended cycle. Do not ask clarifying ques
 
 Required reads (minimum):
 - One or more `brain/cycles/themes/*.md` covering work-item sizing and file-scope discipline.
-- `projects/<project>/brain/profile.md` — taste signals. Cite this in the WI body.
-- Any `projects/<project>/brain/themes/*.md` matching the initiative's domain.
+- `brain/projects/<project>/profile.md` — taste signals. Cite this in the WI body.
+- Any `brain/projects/<project>/themes/*.md` matching the initiative's domain.
 
 Always-relevant themes (Read directly — faster than brain-query for known paths):
 - [`brain/cycles/themes/spec-driven-work-items.md`](../../brain/cycles/themes/spec-driven-work-items.md)

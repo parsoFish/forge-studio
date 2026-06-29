@@ -17,7 +17,7 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 - `brain/_raw/<source>.md` — appended raw source.
 - `brain/forge-dev/themes/<theme>.md` — forge-engineering theme page (Brain 1).
 - `brain/cycles/themes/<theme>.md` — cross-cycle pattern theme page (Brain 2).
-- `<project-repo>/brain/themes/<theme>.md` — project-specific theme page (Brain 3, lives in each project's own repo).
+- `brain/projects/<name>/themes/<theme>.md` — project-specific theme page (Brain 3 lives in the forge repo, ADR 035).
 - Updated category indexes (`patterns.md`, `antipatterns.md`, `decisions.md`, `operations.md`, per-project `profile.md`).
 - Append to `brain/log.md` for significant operations.
 

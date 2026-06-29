@@ -22,7 +22,7 @@ This skill is invoked **first** by every other skill, per [ADR 010](../../docs/d
 |---|---|
 | `forge-dev` | `brain/forge-dev/themes/` + category indexes |
 | `cycles` | `brain/cycles/themes/` + category indexes |
-| `project` | `<project-repo>/brain/themes/` + `profile.md` |
+| `project` | `brain/projects/<name>/themes/` + `profile.md` (forge repo, ADR 035) |
 | `all` | union of all three (emit a scope-missing warning) |
 
 **Role defaults** (the calling skill or orchestrator should supply these):
@@ -82,7 +82,7 @@ For each `gap: true` answer, append to `_logs/<cycle-id>/brain-gaps.jsonl`.
 ## Constraints
 
 - **Cite, don't paraphrase deeply.** Synthesis is a one-paragraph answer + source list. The caller can read the linked file.
-- **Cite theme pages only.** Valid `sources` entries are `brain/cycles/themes/<slug>.md`, `brain/forge-dev/{log.md,decisions.md,reference.md}`, and `<project-repo>/brain/{profile.md,themes/<slug>.md}`. Never cite `brain/cycles/_raw/*` (inputs to synthesis, not citations) or category indexes (navigation, not knowledge).
+- **Cite theme pages only.** Valid `sources` entries are `brain/cycles/themes/<slug>.md`, `brain/forge-dev/{log.md,decisions.md,reference.md}`, and `brain/projects/<name>/{profile.md,themes/<slug>.md}`. Never cite `brain/cycles/_raw/*` (inputs to synthesis, not citations) or category indexes (navigation, not knowledge).
 - **Exhaustive on theme coverage.** Recall matters — under-citing (missing the corrective antipattern) is worse than over-citing by 1–2 extras.
 - **Scope is load-bearing.** When `scope: project`, cited sources MUST come from inside the project's own brain. Do not pull in forge-dev concepts not documented in the project brain — that's hallucination.
 - **Missing scope defaults to `all` + warn.** Emit: `[brain-query] no scope supplied — searching all three brains; supply --scope to reduce noise`.

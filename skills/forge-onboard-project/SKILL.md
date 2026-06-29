@@ -30,12 +30,16 @@ code** (`git check-ignore -q <file>`). Map its keys to the env vars the app read
 prove them with one read-only live call.
 
 ### Step 1 — Choose the committed-artifact home (`artifactRoot`)
-Decide where the project's COMMITTED forge artifacts live. Default `"."` keeps the
-legacy layout (`brain/` at the project root). For a single visible home out of the
+Decide where the project's COMMITTED forge artifacts live. `artifactRoot` now scopes
+**only** the in-repo demo + project-action skills. Default `"."` keeps the legacy
+layout (`demo/` + `skills/` at the project root). For a single visible home out of the
 source tree, set `"artifactRoot": "forge"` in `.forge/project.json` — then:
-- `forge/brain/` — Brain 3 (`profile.md` + `themes/`).
-- `forge/history/<initiative-id>/` — the committed development record (plan + demo).
+- `forge/history/<initiative-id>/demo/` — the per-cycle in-PR demo (committed for review).
 - `forge/skills/` — the project-action skills.
+
+Brain 3 (`profile.md` + `themes/`) and the durable cycle record (plan + verdict) are
+**forge-owned and central** in the forge repo — `brain/projects/<name>/` and
+`_logs/<cycleId>/artifacts/` respectively (ADR 035) — NOT in the project repo.
 `artifactRoot` must be a clean relative path (no leading `/`, no `..`). Runtime
 scratch (`_architect/`, worktree `demo/<id>/`, `.forge/` runtime dir) stays
 gitignored regardless.
@@ -78,8 +82,10 @@ repo-wide wildcard). Declare as ONE command in `.forge/quality_gate_cmd` +
 (`.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`), build artifacts + generated
 output (binaries, bundles, coverage), and force-track required config inside an
 ignored dir (`.forge/project.json`). Acceptance: clean build ⇒ `git status` shows
-nothing but intended source. **Note:** `<artifactRoot>/` itself (brain, history,
-skills) IS committed.
+nothing but intended source. **Note:** in the project repo only the in-PR demo
+(`<artifactRoot>/history/<id>/demo`) and project-action skills (`<artifactRoot>/skills/`)
+are committed; Brain 3 and the durable cycle record are **forge-owned and central**
+(ADR 035).
 
 ### Step 6 — Project-action skills (under `<artifactRoot>/skills/`)
 Capture the project's recurring actions as skills forge agents read by path:
@@ -89,8 +95,9 @@ agent-instruction file. These are the "consistent actions forge takes" on this
 project.
 
 ### Step 7 — Prime the brain & roadmap (C4)
-Author `roadmap.md` (project root) + an accurate `<artifactRoot>/brain/profile.md`
-+ any `themes/`. **Correct stale facts** (renamed paths, dead conventions) — a
+Author `roadmap.md` (project root); the brain profile is **forge-owned and central**
+at `brain/projects/<name>/profile.md` (+ any `themes/`) in the forge repo (ADR 035),
+not authored in the project repo. **Correct stale facts** (renamed paths, dead conventions) — a
 wrong brain misleads the planner worse than an absent one. The profile is the
 queryable structure the PM/architect reads first.
 
@@ -104,10 +111,11 @@ the result; the Studio `instructions` field binds to this one file). Confirm a
 GitHub remote and that PRs won't need to stack.
 
 ### Step 9 — Committed development-history convention
-Every initiative leaves a browsable record at
-`<artifactRoot>/history/<initiative-id>/` — the plan (`plan.md`), the demo
-evidence (`demo/`), and the verdict. The project's `instructions` + agents write
-this into the worktree as part of the work so it lands in the PR and is committed.
+Every initiative leaves a browsable record: only the in-PR demo evidence lands at
+`<artifactRoot>/history/<initiative-id>/demo/` in the project repo, while the plan
+(`plan.md`) + verdict + durable history are **forge-owned** in `_logs/<cycleId>/artifacts/`
+(ADR 035). The project's `instructions` + agents write the demo into the worktree as
+part of the work so it lands in the PR and is committed.
 This is a project-side convention (forge does not hard-code it) — state it in the
 instruction file and back it with a `present` `demoProcess` step.
 

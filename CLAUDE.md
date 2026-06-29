@@ -23,12 +23,12 @@ There is **one operating model**: the daemon (`forge serve`). Operator-directed 
 
 ## The brain is the first source of knowledge
 
-**Before** answering a question about how forge works, before designing, before implementing — **query the brain**. Since the three-brain restructure ([ADR 018](./docs/decisions/018-three-brain-model.md)) the brain is three scoped graphs: **Brain 1** `brain/forge-dev/` (forge engineering), **Brain 2** `brain/cycles/` (cross-cycle patterns + archives), and **Brain 3** `projects/<name>/brain/` (per-project, lives in each project's own repo). Query via the `brain-query` skill with `--scope`. If the brain doesn't know, research further AND log the gap so the next ingest pass can fill it.
+**Before** answering a question about how forge works, before designing, before implementing — **query the brain**. Since the three-brain restructure ([ADR 018](./docs/decisions/018-three-brain-model.md)) the brain is three scoped graphs: **Brain 1** `brain/forge-dev/` (forge engineering), **Brain 2** `brain/cycles/` (cross-cycle patterns + archives), and **Brain 3** `brain/projects/<name>/themes/` (per-project, lives in the forge repo — [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)). Query via the `brain-query` skill with `--scope`. If the brain doesn't know, research further AND log the gap so the next ingest pass can fill it.
 
 Who reads what (see [ADR 010](./docs/decisions/010-brain-first.md) as amended + [`brain/forge-dev/themes/brain-read-policy.md`](./brain/forge-dev/themes/brain-read-policy.md)):
 
 - **Planners (architect / project-manager) + reflector** — query Brain 2 + the cycle's Brain 3 (reflector: all three). Mandatory for planners.
-- **Dev-loop + reviewer** — do **NOT** read the forge brain (Brains 1+2); the planner already encoded every relevant convention/antipattern into the work items, their single source of *intent*. They **may** consult the cycle's Brain 3 (the project's own `brain/`) for supplemental project context — advisory, not mandatory (amended 2026-05-26, ADR 010).
+- **Dev-loop + reviewer** — do **NOT** read the forge brain (Brains 1+2); the planner already encoded every relevant convention/antipattern into the work items, their single source of *intent*. They **may** consult the cycle's Brain 3 at `brain/projects/<name>/themes/` in the forge repo (per [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)) for supplemental project context — advisory, not mandatory (amended 2026-05-26, ADR 010).
 
 ## Architecture, principles, decisions
 

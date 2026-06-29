@@ -19,7 +19,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 - The operator's free-form idea / brief / pain point (entered via the Studio library "new run / drop an idea" entry).
 - Brain 2 (cycles) — `brain/cycles/themes/` patterns + antipatterns (read at turn start).
-- Brain 3 (project) — `projects/<name>/brain/profile.md` + `projects/<name>/brain/themes/` (read at turn start).
+- Brain 3 (project) — `brain/projects/<name>/profile.md` + `brain/projects/<name>/themes/` in the forge repo (ADR 035; read at turn start).
 - If continuing a prior `revise` round: `<projectRoot>/_architect/<session-id>/feedback.md`.
 
 ## Outputs

@@ -8,7 +8,7 @@
 > enforcement* is [`cli/preflight.ts`](../cli/preflight.ts), and the *UI readiness
 > surface* is
 > [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx).
-> Last aligned: commit 1ba05f6 (2026-06-17).
+> Last aligned to [ADR-035](./decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
 
 ---
 
@@ -195,14 +195,16 @@ already-tracked files.
 
 ### C4 — Machine-readable planning inputs *(HARD)*
 
-A `roadmap.md` at the project root **and** a brain sub-wiki at
-`<artifactRoot>/brain/profile.md` (Brain 3 inside the project repo) must both
-exist. Without these the planner hallucinates plans for a project it doesn't
-understand.
+A `roadmap.md` at the project root **and** the project's Brain 3 profile — the
+**central** `brain/projects/<name>/profile.md` in the forge repo, **not** inside
+the project repo (per [ADR-035](./decisions/035-forge-owned-central-artifacts.md)) —
+must both exist. Without these the planner hallucinates plans for a project it
+doesn't understand.
 
-`artifactRoot` defaults to `"."` (legacy layout: `brain/` at the project root);
-a project can set e.g. `"forge"` to gather all committed forge artifacts under
-`forge/brain/` and `forge/history/`. See the Artifact Layout section below.
+`artifactRoot` (default `"."`) no longer governs Brain 3 or history — per
+[ADR-035](./decisions/035-forge-owned-central-artifacts.md) both are forge-owned
+and central; it now scopes only the in-repo in-PR demo and project skills. See the
+Artifact Layout section below.
 
 ---
 
@@ -395,7 +397,7 @@ one hint clears it.
 
 ### BRAIN — Brain freshness *(advisory)*
 
-Scans `<artifactRoot>/brain/themes/*.md` in the project repo for `src/`/`tests/`
+Scans `brain/projects/<name>/themes/*.md` in the central forge repo for `src/`/`tests/`
 paths that no longer exist in the project tree. A stale theme silently misleads
 the PM/architect. WARN-only: themes legitimately reference history; the operator
 judges.
@@ -413,21 +415,27 @@ in git via force-add (C2). Contains both Studio object fields (Face A) and
 operational-clause fields (Face B). The authoritative type is `ProjectConfig`
 in `orchestrator/project-config.ts`.
 
-### `<artifactRoot>/{brain,history}` — committed forge artifacts
+### Forge-owned central artifacts + the in-repo `<artifactRoot>` scope
 
-The project-relative subdirectory `artifactRoot` (default `"."`) scopes all
-**committed** forge artifacts:
+Brain 3 and durable cycle history are **forge-owned and central** — they live in
+the forge repo, **not** the project repo (per
+[ADR-035](./decisions/035-forge-owned-central-artifacts.md)):
 
-- **`<artifactRoot>/brain/`** — Brain 3: the project's knowledge base
-  (`profile.md`, `themes/`, the KB graph). Read by planners and reflectors via
-  the `KbBackend` seam.
-- **`<artifactRoot>/history/<initiative-id>/`** — the development history store
-  (see below).
+- **`brain/projects/<name>/`** — Brain 3: the project's knowledge base
+  (`profile.md`, `themes/`, the KB graph) in the central forge repo. Read by
+  planners and reflectors via the `KbBackend` seam.
+- **`_logs/<cycleId>/artifacts/`** — durable cycle history (plan + verdict +
+  archived demo) in the forge repo (see below).
 
-Setting `artifactRoot: "forge"` (for example) gathers both under `forge/brain/`
-and `forge/history/`, giving the project a single visible home for its forge
-artifacts. Validated as a clean relative path (no leading `/`, no `..`). Existing
-projects retain the default `"."` (no migration required).
+The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
+**only** the forge artifacts that remain committed in the *project* repo:
+
+- **`<artifactRoot>/history/<id>/demo/`** — the per-cycle in-PR demo the unifier
+  writes (committed to the PR for review).
+- **`<artifactRoot>/skills/`** — project-action skills.
+
+Validated as a clean relative path (no leading `/`, no `..`). Existing projects
+retain the default `"."` (no migration required).
 
 ### Runtime/session scratch — gitignored, never committed
 
@@ -441,23 +449,23 @@ These are excluded by the project's `.gitignore` (C2 enforces this).
 
 ## Development-history convention
 
-Every initiative leaves a **browsable, committed record** at
-`<artifactRoot>/history/<initiative-id>/` in the project repo. The convention
-has three entries:
+Every initiative leaves a **durable record** — plan, verdict, and an archived
+demo — that is **forge-owned**, written to `_logs/<cycleId>/artifacts/` in the
+forge repo (per [ADR-035](./decisions/035-forge-owned-central-artifacts.md)). The
+only history artifact that commits to the *project* repo is the per-cycle in-PR
+demo the unifier writes at `<artifactRoot>/history/<id>/demo/`:
 
 | Path | Content |
 |------|---------|
-| `plan.md` | The initiative brief + approach as written by the architect/PM |
-| `demo/` | The demo evidence produced by the unifier (screenshots, API responses, CLI captures) |
-| `verdict.json` | The operator's approve/send-back verdict and timestamp |
+| `_logs/<cycleId>/artifacts/plan.md` | The initiative brief + approach as written by the architect/PM (forge repo) |
+| `<artifactRoot>/history/<id>/demo/` | The demo evidence produced by the unifier (screenshots, API responses, CLI captures), committed to the PR |
+| `_logs/<cycleId>/artifacts/verdict.json` | The operator's approve/send-back verdict and timestamp (forge repo) |
 
-The project's agents write this into the worktree as part of the work so it lands
-in the PR and is committed — "showcase the history of project development through
-plans and demos." This is a **convention enforced by the project's own
-instructions and skills**, not hard-coded forge logic. The project's `AGENTS.md`
-or `instructions` field should direct agents to write these files; the
-`demoProcess` field (Face A) declares which steps populate `demo/`. Forge
-provides the `artifactRoot` path so the convention is consistently locatable.
+The unifier writes the in-PR demo into the worktree as part of the work so it
+lands in the PR and is committed — "showcase the history of project development
+through plans and demos." The `demoProcess` field (Face A) declares which steps
+populate the demo. Forge provides the `artifactRoot` path so the in-repo demo is
+consistently locatable; the durable plan/verdict record is forge-owned and central.
 
 ---
 
@@ -472,7 +480,7 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | kb | UI readiness | Non-null string |
 | C1 / C1b | `forge preflight` — **HARD** | Structural: single command, not a slow umbrella; `ci_gate` presence |
 | C2 | `forge preflight` — **HARD** | git-truth: `git ls-files` + `git check-ignore` |
-| C4 | `forge preflight` — **HARD** | `roadmap.md` + `<artifactRoot>/brain/profile.md` existence |
+| C4 | `forge preflight` — **HARD** | `roadmap.md` (project repo) + `brain/projects/<name>/profile.md` (central forge repo) existence |
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
 | C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requires_env` guard) | `acceptance_gate` enforcement; `ci_gate_unset_env` on final delivery gate |
@@ -481,7 +489,7 @@ provides the `artifactRoot` path so the convention is consistently locatable.
 | C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
-| BRAIN | `forge preflight` — advisory | `brain/themes/` path-existence scan |
+| BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&
@@ -499,7 +507,7 @@ flow-ready — the flow engine will not accept it.
 | instructions | Two standing ACs injected into every WI (live acceptance + CI-equivalent) |
 | demoProcess | `capture`: `terraform apply` run; `verify`: ADO API GET assert + idempotency re-plan; `present`: portal screenshot |
 | skills | `forge-onboard-project`, `demo` |
-| kb | `betterado` (Brain 3 in `brain/`) |
+| kb | `betterado` (Brain 3 at `brain/projects/betterado/` in the central forge repo) |
 | **C1 / C1b** | `quality_gate_cmd`: `go test -tags all -count=1 ./...` scoped to changed packages. `ci_gate`: `make test && golangci-lint run ./... && make terrafmt-check`. `ci_fix_cmd`: `make fmt && make terrafmt` |
 | **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |

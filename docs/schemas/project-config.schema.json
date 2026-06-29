@@ -93,7 +93,7 @@
     },
     "artifactRoot": {
       "type": "string",
-      "description": "Project-root-relative subdirectory under which the project's COMMITTED forge artifacts live: its Brain 3 (<artifactRoot>/brain/) and development history (<artifactRoot>/history/<initiative-id>/). Must be a clean relative path (no leading slash, no '..'). Default '.' keeps the legacy layout (brain/ at the project root); set e.g. 'forge' for a single visible home. Only affects committed artifacts — runtime scratch is unchanged. Optional."
+      "description": "A project-root-relative subdirectory (default '.') scoping the only forge artifacts committed in the project repo — the per-cycle in-PR demo (<artifactRoot>/history/<id>/demo) and project-action skills (<artifactRoot>/skills/). Per ADR 035, Brain 3 and durable history are forge-owned and central in the forge repo (brain/projects/<name>/ and _logs/<cycleId>/artifacts/), not governed by artifactRoot. Must be a clean relative path (no leading slash, no '..'). Optional."
     },
     "logging": {
       "type": "object",

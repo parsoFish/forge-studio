@@ -99,6 +99,8 @@ live:
 - `<artifactRoot>/brain/` — Brain 3 (the project's KB)
 - `<artifactRoot>/history/<initiative-id>/` — the development history store
 
+> **Amended by [ADR 035](./035-forge-owned-central-artifacts.md) (2026-06-20):** Brain 3 and durable history are now **forge-owned and central** (`brain/projects/<name>/` + `_logs/<cycleId>/artifacts/`); `artifactRoot` now scopes only the in-repo in-PR demo (`<artifactRoot>/history/<id>/demo`) and project skills (`<artifactRoot>/skills/`). The `<artifactRoot>/brain` paths in this section (and the preflight C4/BRAIN note below) describe the pre-035 model.
+
 **What it does NOT affect:** runtime/session scratch (`.forge/work-items/`,
 `_architect/`, `demo/<id>/`). Scratch location is unchanged regardless of
 `artifactRoot`.

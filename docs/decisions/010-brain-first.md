@@ -6,7 +6,9 @@ deliberately do NOT read the brain (their intent is wholly in the
 work items the planner authored). See the brain-read-policy theme
 (`brain/forge-dev/themes/brain-read-policy.md`) and F-34 / F-41.
 Amended 2026-05-26 — three-brain model (ADR 018): dev-loop and reviewer
-MAY read Brain 3 (`<project-repo>/brain/`) for supplemental project
+MAY read Brain 3 (`<project-repo>/brain/` — location further amended by
+ADR 035, 2026-06-20: Brain 3 now lives at `brain/projects/<name>/themes/`
+in the forge repo) for supplemental project
 context, but this is advisory not mandatory. The forge brain (Brains 1+2)
 remains off-limits for dev-loop and reviewer.
 **Date:** 2026-04-24 (amended 2026-05-16, 2026-05-26)
@@ -33,7 +35,9 @@ the trafficGame arc proved that net-negative for execution phases
   are the **single source of intent**. A forge-brain pass is wasted cost and
   a source-of-truth split. No runtime brain gate for these.
   *(Amended 2026-05-26 — ADR 018: they MAY read Brain 3, the cycle's
-  project brain at `projects/<name>/brain/`, for supplemental project
+  project brain at `projects/<name>/brain/` (location further amended by
+  ADR 035, 2026-06-20: Brain 3 now lives at `brain/projects/<name>/themes/`
+  in the forge repo), for supplemental project
   context — file layout, testing norms — now that it is scope-clean
   project-only. Advisory, not mandatory; the WI remains the single source
   of* intent*, Brain 3 is supplemental* context*.)*
