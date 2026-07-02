@@ -111,6 +111,7 @@ test('reconcileReflectFeedback: reruns only cycles whose feedback out-dates the 
     const reran = await reconcileReflectFeedback({
       logsRoot,
       queueRoot: join(logsRoot, '..', '_queue'),
+      now: Date.parse('2026-06-24T00:00:00Z'), // pin the clock: fixtures sit inside the recency window
       rerunReflector: async ({ cycleId }) => { calls.push(cycleId); },
     });
 
@@ -153,6 +154,7 @@ test('reconcileReflectFeedback: a throwing rerun is logged-and-skipped, the pass
     const reran = await reconcileReflectFeedback({
       logsRoot,
       queueRoot: join(logsRoot, '_queue'),
+      now: Date.parse('2026-06-24T00:00:00Z'), // pin the clock: fixtures sit inside the recency window
       rerunReflector: async ({ cycleId }) => {
         if (cycleId === 'orphan') throw new Error('no manifest');
       },
