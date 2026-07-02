@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -477,7 +477,7 @@ export async function runDeveloperLoop(
             return makeQualityGateFromCmd(
               input.worktreePath,
               effective,
-              (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); },
+              (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(input.worktreePath, gateInfo); },
               // Wave B (2026-06-04): enforce that declared output paths land.
               // If the WI declares `creates` paths those MUST appear in the
               // branch diff before the gate can pass — independently of whether
@@ -1024,6 +1024,52 @@ function emitGateEvent(
       ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
     },
   });
+}
+
+/**
+ * S9 fix (2026-07-01): feed the authoritative LIVE gate failure back to the dev
+ * agent. The orchestrator's quality gate runs the WI's `quality_gate_cmd` live
+ * (secrets.env-injected, TF_ACC set) while the agent's own self-check runs
+ * offline and can false-pass (acceptance tests silently skip without TF_ACC).
+ * Persisting the live failure to `.forge/last-gate-failure.md` — which the dev
+ * PROMPT tells the agent to read first — lets the next iteration fix the exact
+ * live failure instead of re-confirming offline-green and burning the iteration
+ * budget. `.forge/` is stripped pre-PR, so this scratch file never lands on the branch.
+ */
+function writeGateFeedback(worktreePath: string, info: GateRunInfo): void {
+  const filePath = join(worktreePath, '.forge', 'last-gate-failure.md');
+  try {
+    if (info.passed) {
+      if (existsSync(filePath)) unlinkSync(filePath);
+      return;
+    }
+    const body = [
+      `# Live quality-gate failure — AUTHORITATIVE (forge, iteration ${info.iteration ?? '?'})`,
+      '',
+      'This is the result of the SAME gate that decides whether this work item is done.',
+      'Your own offline test run can show a FALSE pass: live acceptance tests silently',
+      'skip without TF_ACC and print `ok ... 0.00s`. Fix EXACTLY what is below — the work',
+      'item is NOT done until this file disappears.',
+      '',
+      `Command: ${info.command ?? ''}`,
+      `Exit code: ${String(info.exitCode ?? '?')}${info.errored ? '  (gate ERRORED — could not run; fix the gate/build itself)' : ''}`,
+      '',
+      '## stdout (tail)',
+      '```',
+      info.stdoutTail ?? '',
+      '```',
+      '',
+      '## stderr (tail)',
+      '```',
+      info.stderrTail ?? '',
+      '```',
+      '',
+    ].join('\n');
+    mkdirSync(join(worktreePath, '.forge'), { recursive: true });
+    writeFileSync(filePath, body);
+  } catch {
+    /* best-effort — never throw out of the gate sink */
+  }
 }
 
 /**

@@ -61,7 +61,7 @@ export type RunProjectManagerOptions = {
  * (real worktrees are richer than fixtures); the bench enforces 0.5 USD / 30
  * turns to keep iteration cheap.
  */
-const PM_LIVE_MAX_TURNS = 50;
+const PM_LIVE_MAX_TURNS = 70;
 // F-42: PM budget floor bumped from $1.00 → $2.50. The 22:17
 // simplification-source cycle hit $1.01 and emitted 0 WIs
 // (pm-budget-exhausted). At trafficGame's scale (251 files) $1.00 wasn't
