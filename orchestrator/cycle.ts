@@ -77,7 +77,8 @@ import { loadFlowDefinition } from './studio/registry.ts';
 
 /**
  * Resolve the effective per-run cost ceiling override for a cycle. Precedence:
- *   FORGE_COST_CEILING_USD env  ??  manifest `cost_ceiling_usd`  ??  undefined
+ *   FORGE_COST_CEILING_USD env  ??  manifest `cost_ceiling_usd`
+ *   ??  manifest `cost_budget_usd` + DERIVED_CEILING_MARGIN_USD  ??  undefined
  * When undefined, runFlow falls back to the flow's own `costCeilingUsd`. A
  * non-numeric / non-positive env value is ignored (fail-soft to the manifest).
  * Exported for unit testing of the precedence rule.

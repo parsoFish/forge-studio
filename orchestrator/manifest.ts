@@ -386,17 +386,31 @@ export function readManifestFlowId(manifestPath: string): string | null {
 }
 
 /**
- * Read the optional per-run cost ceiling (USD) off the manifest frontmatter.
- * Returns the positive number when present, else null. Best-effort: a
- * missing/unparseable manifest yields null (caller falls back to the flow's
- * own `costCeilingUsd`).
+ * Margin added on top of the architect's `cost_budget_usd` when deriving a
+ * per-run ceiling for a manifest that carries no explicit `cost_ceiling_usd`.
+ * The budget estimates the dev-loop spend only; unifier + review + reflect
+ * legs of the same saga bill against the same ceiling, so a flat flow ceiling
+ * (or the bare budget) stops cycles between phases mid-saga.
+ */
+export const DERIVED_CEILING_MARGIN_USD = 40;
+
+/**
+ * Read the per-run cost ceiling (USD) off the manifest frontmatter.
+ * Precedence: explicit `cost_ceiling_usd` ?? `cost_budget_usd` + margin.
+ * Returns null only when neither field yields a positive number (caller
+ * falls back to the flow's own `costCeilingUsd`). Best-effort: a
+ * missing/unparseable manifest yields null.
  */
 export function readManifestCostCeiling(manifestPath: string): number | null {
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    return typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0
-      ? m.cost_ceiling_usd
-      : null;
+    if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
+      return m.cost_ceiling_usd;
+    }
+    if (typeof m.cost_budget_usd === 'number' && m.cost_budget_usd > 0) {
+      return m.cost_budget_usd + DERIVED_CEILING_MARGIN_USD;
+    }
+    return null;
   } catch {
     return null;
   }

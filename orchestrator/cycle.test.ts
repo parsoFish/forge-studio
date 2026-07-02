@@ -24,7 +24,7 @@ import {
   type CiCommandRunner,
 } from './cycle.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
-import { serializeManifest, type InitiativeManifest } from './manifest.ts';
+import { serializeManifest, DERIVED_CEILING_MARGIN_USD, type InitiativeManifest } from './manifest.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cycle-test-'));
@@ -87,16 +87,18 @@ test('resolveCostCeilingOverride: falls back to manifest when env unset', () => 
   }
 });
 
-test('resolveCostCeilingOverride: undefined when neither env nor manifest set; bad env ignored', () => {
-  const path = writeManifestWithCeiling(undefined);
+test('resolveCostCeilingOverride: derives cost_budget_usd + margin when ceiling unset; bad env ignored', () => {
+  const path = writeManifestWithCeiling(undefined); // fixture carries cost_budget_usd: 25
+  const derived = 25 + DERIVED_CEILING_MARGIN_USD;
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
   try {
-    assert.equal(resolveCostCeilingOverride(path), undefined);
+    assert.equal(resolveCostCeilingOverride(path), derived);
     process.env.FORGE_COST_CEILING_USD = 'not-a-number';
-    assert.equal(resolveCostCeilingOverride(path), undefined);
+    assert.equal(resolveCostCeilingOverride(path), derived);
     process.env.FORGE_COST_CEILING_USD = '-5';
-    assert.equal(resolveCostCeilingOverride(path), undefined);
+    assert.equal(resolveCostCeilingOverride(path), derived);
+    assert.equal(resolveCostCeilingOverride('/nonexistent/manifest.md'), undefined);
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
