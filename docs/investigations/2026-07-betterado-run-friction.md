@@ -84,6 +84,17 @@
   De-bloat idea: the scope→WI mapping check is mechanical; it belongs in the PM's own
   output contract (emit a coverage table; orchestrator diffs it against the scope list —
   cheap, no LLM validator layer).
+- **2026-07-02 — PM — re-decomposes complete after env scrub + contract.** dashboard-extension
+  (4.4 min, 3 WIs, both resources owned) and core (6.5 min, 9 WIs, 12/12 items owned)
+  both re-decomposed COMPLETE on the first clean-env attempt with the appended
+  completeness contract. Can't cleanly attribute (env fix and contract landed together),
+  but the speed delta (minutes vs max_turns) points at the proxy tax as the dominant cause.
+- **2026-07-02 — project contract — live-evidence label collision across WIs.** Every WI's
+  standing AC uses the same `CaptureLiveEvidence("acceptance-resource", ...)` label →
+  `.forge/live-evidence/acceptance-resource.json` is last-writer-wins across 7 sequential
+  WIs in one initiative. Unifier's demo.json may carry evidence for only the final WI's
+  resource. Judge-time check for multi-resource initiatives; candidate fix: per-WI label
+  suffix in the standing AC boilerplate (project contract, not forge core).
 - **2026-07-02 — scheduler — daemon stop mid-decompose lands manifests in failed/.**
   Stopping the daemon with 2 decomposes in flight classified both as failed rather than
   requeuing to pending on next boot. Operator had to move 4 manifests back by hand.
