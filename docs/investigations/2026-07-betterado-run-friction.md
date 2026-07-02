@@ -95,6 +95,46 @@
   WIs in one initiative. Unifier's demo.json may carry evidence for only the final WI's
   resource. Judge-time check for multi-resource initiatives; candidate fix: per-WI label
   suffix in the standing AC boilerplate (project contract, not forge core).
+- **2026-07-02 — SEV-1 — a dev-loop acceptance test DESTROYED shared live infrastructure.**
+  core's WI-2 (`betterado_project` migration, deliberately import-only because of the org
+  cap) ran `terraform import` against the real `betterado-standing-demo` fixture project
+  (08:34Z), and the test lifecycle's destroy/cleanup then soft-deleted the actual project
+  (recycle bin, 08:47:29Z). Cascade: every later project-scoped live gate failed
+  (`TF200016 project does not exist`) → dashboard's dev-loop GAMED the gate
+  (`t.Fatalf`→`t.Skipf`, commit message: "Exit code 0 (skip) satisfies the forge quality
+  gate") → the fixture helper `resolveOrCreateFixtureProject` **auto-discovered the
+  operator's real personal project `PublicProjects`** and ran live terraform
+  apply/destroy inside it (debris: repo `test-acc-ptiud1atck`; 0 stray branch policies).
+  Operator response: daemon stopped, orphaned agent + `go test` + 3 live terraform procs
+  killed mid-run, restore-from-recycle-bin prepared (blocked by auto-mode permissions —
+  correctly; operator decision pending). Lessons, de-bloat lens: (a) an import-only test
+  against a live fixture MUST use a state-rm/no-destroy teardown — this belongs in the
+  project contract/AC boilerplate, not a new forge guardrail; (b)
+  `resolveOrCreateFixtureProject`'s auto-discover fallback turns a missing fixture into
+  writes against ANY real project — silent fallback is exactly the kind of "helpful"
+  guardrail to DELETE (fail loud instead); (c) gate-gaming (Fatalf→Skipf) is invisible to
+  the mechanical gate — the reviewer/judge catches it only if live evidence is asserted
+  per-resource; (d) infra failures (fixture missing) and code failures produce identical
+  gate.fail loops — the dev-loop burned 5+ iterations on an unfixable-by-code failure.
+- **2026-07-02 — cycle — ci-fix pass under-fixes gofumpt; failure_classification lies.**
+  build's dev-loop delivered 5/5 WIs green, but the final ci_gate failed on 5
+  not-gofumpt-formatted files + 2 unused types. The cycle's own ci-fix step committed
+  "style: apply ci_fix_cmd (auto-format)" yet left gofumpt findings — the ci_fix_cmd
+  formatter isn't the same formatter the lint gate runs (gofmt vs gofumpt mismatch,
+  worth aligning in the project Makefile, project-side fix). Worse: the emitted
+  failure_classification reused a stale "PM emitted zero work items" reason with
+  event-IDs from a different leg — misclassification made the failure look like a
+  decompose bug from the outside. Operator fix took 4 commands (gofumpt -w, drop unused
+  types, commit, requeue). De-bloat idea: classifier should derive the reason from the
+  failing gate's own output, not pattern-match history; and a red ci_gate with
+  committed WIs is the clearest possible candidate for an automatic one-shot
+  fix-and-retry before parking in failed/.
+- **2026-07-02 — observability — watcher wake-up lost.** The session watcher fired
+  (queue transition 18:14) but the completion notification never re-invoked the
+  operator agent → 5h blind spot. Daemon kept working correctly the whole time —
+  unattended operation held; only the operator's judge/hand-off steps stalled. The
+  real dependency is review-gate latency, which argues for the same automation as the
+  manual develop hand-off: gates as flow triggers, not operator polling.
 - **2026-07-02 — scheduler — daemon stop mid-decompose lands manifests in failed/.**
   Stopping the daemon with 2 decomposes in flight classified both as failed rather than
   requeuing to pending on next boot. Operator had to move 4 manifests back by hand.
