@@ -45,6 +45,21 @@ inherited from upstream and is **not** the fork's concern.
 - **Artifact `definition_reference`** comes back with extra API keys (e.g. `artifactSourceDefinitionUrl`) not in user config; `flattenArtifacts` filters to user-set keys to avoid a perpetual diff.
 - **Live-acc env guard:** a `TF_ACC` acceptance test that runs without `TF_ACC` + `AZDO_ORG_SERVICE_URL` + `AZDO_PERSONAL_ACCESS_TOKEN` either SKIPS (false-pass) or `t.Fatal`s in PreCheck — the gate errors fast on missing env rather than false-passing.
 
+## Framework migration (SDKv2 -> plugin-framework) -- per-resource checklist
+
+Provider runs SDKv2 + framework side-by-side under `terraform-plugin-mux`. For each
+resource/data-source a WI migrates, ALL must hold (each is a live-only failure --
+`make test` passes while the live `TestAcc` gate fails; the WI `quality_gate_cmd`
+MUST be the live `TestAcc<Name>`):
+
+1. **Deregister from SDKv2 in the same WI** -- remove it from `provider.go`
+   ResourcesMap/DataSourcesMap when adding it to `framework_provider.go`, else
+   `Duplicate resource type <name>` at apply; update `provider_test.go` counts.
+2. **`Configure()` wires `*client.AggregatedClient`** (not a stub); framework
+   resources + test helpers read it from framework provider data, never SDKv2
+   `meta.(*client.AggregatedClient)` (nil under mux -> panic).
+3. **Tests use `GetMuxedProviderFactories()`** (ProtoV6 SDKv2+framework).
+
 ## API-coverage discipline
 
 The release_definition surface has a field-by-field gap matrix at

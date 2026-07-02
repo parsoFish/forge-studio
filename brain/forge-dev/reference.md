@@ -12,6 +12,7 @@
 - [`infrastructure-evolution`](./themes/infrastructure-evolution.md) — What forge kept from its founding mental models and what it replaced with battle-tested tools.
 - [`forge-studio-build-arc`](./themes/forge-studio-build-arc.md) — How the full Forge Studio roadmap (M0-M6) was built via subagent orchestration, and the durable lessons (strangler equivalence, verify-cycle corpus non-determinism, review discipline).
 - [`framework-migration-capstone-arc`](./themes/framework-migration-capstone-arc.md) — Operator-driven betterado SDKv2→plugin-framework migration: the four forge fixes, the TF_ACC-inheritance off-rails, and the gate-gap that shipped a mis-named headline resource (a passing live acc test doesn't prove the merged surface).
+- [`2026-07-01-architect-coverage-scope-fidelity`](./themes/2026-07-01-architect-coverage-scope-fidelity.md) — Architect first-pass gaps on roadmap-scale migration plans (no coverage-closure → orphans, decomposition-vs-package double-ownership, silent scope reduction, invariants left in the narrative, brain constraints not propagated to ACs) and the FINALIZE completeness-critic that would catch them; from the 2026-07-01 betterado readiness review.
 
 ### External-system profiles
 
