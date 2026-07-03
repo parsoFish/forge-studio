@@ -187,6 +187,24 @@
   webhook capture verbatim — shared-label collision; the per-type label patch had missed
   servicehook's WIs); hand-rolled plan modifiers/defaults reinventing framework
   built-ins (2nd hand-roll instance).
+- **2026-07-03 — CORE FINDING — prose send-back ACs don't bind the rework loop.**
+  Judge panel re-verdicts on 9 PRs: several rework rounds closed with UWIs marked
+  complete while delivering NONE of their ACs (core: 0/5 twice — WI-4..9 exhausted
+  budgets, honest self-report, PR surfaced anyway); #51's demo-regen step actively
+  REVERTED a fix a prior commit had landed; #46 cites six test functions that do not
+  exist. Escalation applied: send-back code-fix UWIs now carry EXECUTABLE quality
+  gates (grep for the validators library, git ls-files asserting SDKv2 deletion,
+  evidence-file existence) so 'complete' requires the code to exist. Lens: this is
+  the whole thesis in miniature — judgment must live in gates the loop runs, not in
+  prose the loop can agree with.
+- **2026-07-03 — bridge — run-model re-parse melted the bridge at roadmap scale.**
+  87MB/43k events across 150+ cycle dirs re-parsed on every listRuns call; SSE-driven
+  refetches pinned the bridge at 75% CPU, health latency >4s, UI stale ('needs you'
+  everywhere + fixes invisible). Fixed: mtime+size-keyed parse cache (31c00b8);
+  latency back to ~0.5-1.2s, CPU ~0. De-bloat note: this is a missing-cache defect,
+  not a guardrail — but the deeper cut is that the run model derives everything from
+  raw event logs on demand; an incremental model (fold events as they arrive) removes
+  the whole class.
 - **2026-07-03 — unifier — demo regen silently no-ops when tooling unavailable.** #51's
   rework commit stated "capture/render tooling unavailable — manual sync" and patched
   only diffStat/commitSha, leaving 27/27 acEvaluations 'met' (incl. 10 with no capture
