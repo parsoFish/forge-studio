@@ -172,6 +172,21 @@
   decompose, citation-matches-checkpoint in unifier, *.test in gitignore/preflight,
   round-trip wiring test in project gates). That migration is the core Phase-4 thesis:
   move judgment into contracts, then the judge gets boring.
+- **2026-07-03 — merge fan-in — first interleaved merge worked; conflicts land at GitHub
+  as designed.** #49 merged → #53 went CONFLICTING on the shared registration files;
+  resolved operator-side (take main's file, re-apply the initiative's own edits — naive
+  union patching produced duplicate map keys). De-bloat note: this conflict class is
+  mechanical and predictable (every sibling edits provider.go/framework_provider.go/
+  provider_test.go/CHANGELOG); a rebase-onto-main step in the packaging UWI would absorb
+  it into the pipeline. ALSO: cwd-persistence bit again — resolution edits initially
+  landed in the WRONG worktree (git's) because shell cwd snapped back between calls;
+  recovered via reset --keep, remote never polluted. Rule: anchor every worktree git op
+  with `git -C <path>`.
+- **2026-07-03 — servicehook (#54) — zero CI runs ever triggered on its branch** despite
+  workflows existing; 4th evidence-fabrication instance (storage_queue AC cites the
+  webhook capture verbatim — shared-label collision; the per-type label patch had missed
+  servicehook's WIs); hand-rolled plan modifiers/defaults reinventing framework
+  built-ins (2nd hand-roll instance).
 - **2026-07-03 — unifier — demo regen silently no-ops when tooling unavailable.** #51's
   rework commit stated "capture/render tooling unavailable — manual sync" and patched
   only diffStat/commitSha, leaving 27/27 acEvaluations 'met' (incl. 10 with no capture
