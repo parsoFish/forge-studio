@@ -374,3 +374,10 @@
   pr-description (PR #65), manifest hand-moved failed/→ready-for-review. Fix: pr-open must
   re-stat its required artifacts after the last packaging step completes (or the unifier
   should emit an explicit packaging-complete marker pr-open waits on).
+  CORRECTION (same morning): the fuller log line shows the real cause — not a filesystem
+  race. flow-runner.artifact-missing: the review node's "pr" artifact contract requires
+  `demo/<initiative-id>/demo.json`, but the unifier wrote the demo only to
+  `forge/history/<initiative-id>/demo/demo.json`. Producer/contract PATH mismatch (recurring
+  demo-path class). The gates all passed because they read the history path. Fix: single
+  source of truth for the demo path — the unifier must write (or symlink/copy to) the
+  contract path the review node resolves.
