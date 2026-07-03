@@ -24,7 +24,7 @@
  * live in ./run-model-derive.ts.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
@@ -505,7 +505,25 @@ function extractTitle(body: string, fallback: string): string {
   return match ? match[1].trim() : fallback;
 }
 
+/**
+ * mtime+size-keyed cache for parsed event logs. At roadmap scale (150+ cycle
+ * dirs, 40k+ events) re-parsing every events.jsonl on every listRuns call
+ * pinned the bridge at ~75% CPU and pushed /api/health latency past 4s —
+ * only in-flight cycles' logs actually change between calls. Entries are
+ * evicted lazily on stat mismatch; the map stays bounded by the number of
+ * cycle dirs on disk.
+ */
+const eventsCache = new Map<string, { mtimeMs: number; size: number; entries: EventLogEntry[] }>();
+
 function readEventsJsonl(path: string): EventLogEntry[] {
+  let st: { mtimeMs: number; size: number };
+  try {
+    st = statSync(path);
+  } catch {
+    return [];
+  }
+  const hit = eventsCache.get(path);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.entries;
   const content = readFileSync(path, 'utf8');
   const entries: EventLogEntry[] = [];
   for (const line of content.split('\n')) {
@@ -517,6 +535,7 @@ function readEventsJsonl(path: string): EventLogEntry[] {
       // Skip malformed lines
     }
   }
+  eventsCache.set(path, { mtimeMs: st.mtimeMs, size: st.size, entries });
   return entries;
 }
 
