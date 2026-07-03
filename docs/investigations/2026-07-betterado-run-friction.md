@@ -149,6 +149,18 @@
   input). Encoded as profile.md migration rule #4 (validator parity) so future decomposes
   bake it into WI ACs; existing PRs fixed via send-back ACs. Lens note: this is a
   *contract* fix (teach the planner), not a new orchestrator guardrail.
+- **2026-07-03 — SEVERE PATTERN — facade migration invisible to every gate.** PR #49's
+  build_definition: whole SDKv2 subtrees dropped; fields kept in the schema but never
+  wired into expand/read (apply succeeds, zero API effect, no drift detection); the WI-1
+  gap matrix claims them "Implemented" (aspirational doc, not as-built); CHANGELOG says
+  "schema unchanged". The WI's quality gate asserted attribute PRESENCE only — presence
+  isn't wiring. Three gates in a row (dev-loop schema test, ci_gate, CI) all green on a
+  resource that silently no-ops. Caught only by the review judge tracing
+  expandBuildDefinitionFw. Lens: the fix is a stronger project-side gate contract (a
+  round-trip test per resource: set every attribute → expand → read → assert equality),
+  not another orchestrator layer. Also 3rd+4th instances of evidence-claims-without-
+  evidence (placeholder text cited as a URL) — the unifier NEEDS the mechanical
+  citation-must-match-checkpoint rule.
 - **2026-07-03 — PATTERN — demo/evidence narrative drifts from checkpoints.** PR #46
   demo.json claimed six live passes while its own acEvaluation said TF_ACC unavailable;
   PR #48 DEMO.md cited a stale pre-restore evidence blob contradicting the real
