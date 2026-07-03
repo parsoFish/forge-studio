@@ -333,13 +333,17 @@ test('GET /api/runs returns runs array with the seeded complete run', async () =
   assert.equal(run!.status, 'complete');
 });
 
-test('GET /api/runs?flow=forge-cycle returns only forge-cycle runs', async () => {
+test('GET /api/runs?flow=forge-cycle returns runs on the flow or with it in their lineage', async () => {
   const res = await fetch(`${bridgeUrl}/api/runs?flow=forge-cycle`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { runs: Array<{ flowId: string }> };
+  const body = (await res.json()) as { runs: Array<{ flowId: string; flowLineage?: string[] }> };
   assert.ok(Array.isArray(body.runs));
+  assert.ok(body.runs.length > 0, 'seeded run must match the flow filter');
   for (const r of body.runs) {
-    assert.equal(r.flowId, 'forge-cycle');
+    assert.ok(
+      r.flowId === 'forge-cycle' || (r.flowLineage ?? []).includes('forge-cycle'),
+      `run must be on forge-cycle or carry it in lineage, got flowId=${r.flowId} lineage=${JSON.stringify(r.flowLineage)}`,
+    );
   }
 });
 
