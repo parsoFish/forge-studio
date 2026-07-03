@@ -143,20 +143,22 @@ test('assertLocalRemoteSynced: THROWS when local has an unpushed commit ahead of
   }
 });
 
-test('checkLocalRemoteSynced: detects main diverged from the merge-base', () => {
+test('checkLocalRemoteSynced: tolerates main advancing past the merge-base (published branch stays OK)', () => {
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     pushInitiativeBranch(proj);
-    // Advance local main so it is no longer the merge-base (pre-initiative
-    // state). This is exactly the stacked-PR divergence the invariant guards.
+    // Advance local main past the branch point — a sibling initiative merging or
+    // an operator hotfix. Worktrees share refs, so this happens to every in-flight
+    // cycle whenever ANY merge lands; a published branch must still close. A stale
+    // base is GitHub's to arbitrate at merge time (2026-07-03).
     sh(proj, 'git', ['checkout', '-q', 'main']);
     writeFileSync(join(proj, 'mainonly.txt'), 'diverged\n');
     sh(proj, 'git', ['add', '.']);
-    sh(proj, 'git', ['commit', '-q', '-m', 'main diverged']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'main advanced']);
     sh(proj, 'git', ['checkout', '-q', 'initiative-x']);
     const inv = checkLocalRemoteSynced(proj);
-    assert.equal(inv.ok, false);
-    assert.match(inv.detail, /main diverged from the pre-initiative state/);
+    assert.equal(inv.ok, true);
+    assert.doesNotThrow(() => assertLocalRemoteSynced(proj));
   } finally {
     cleanup();
   }

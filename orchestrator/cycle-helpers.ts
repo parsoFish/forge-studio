@@ -255,7 +255,7 @@ export function commitDevLoopBoundary(
  * more (the boundary commit may have added a commit on top of the
  * dev-loop's last per-WI push), then asserts:
  *   - `origin/<branch>` == local HEAD  (branch fully published)
- *   - `main` == merge-base(main, branch)  (main did not diverge)
+ *   - origin/<branch> == local HEAD (the branch is fully published; base drift vs main is GitHub's to arbitrate)
  *
  * On violation this THROWS — a diverged / unpublished branch is not a
  * reviewable state, and the failure-classifier surfaces it. The branch

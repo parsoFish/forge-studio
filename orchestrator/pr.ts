@@ -735,18 +735,14 @@ export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvaria
       detail: `origin/${branch} (${originHead.slice(0, 8)}) != local HEAD (${localHead?.slice(0, 8)}) — local diverged from remote`,
     };
   }
-  if (mainHead && mergeBase && mainHead !== mergeBase) {
-    return {
-      ok: false,
-      branch,
-      localHead,
-      originHead,
-      mergeBase,
-      mainHead,
-      detail: `main (${mainHead.slice(0, 8)}) != merge-base (${mergeBase.slice(0, 8)}) — main diverged from the pre-initiative state`,
-    };
-  }
-  return { ok: true, branch, localHead, originHead, mergeBase, mainHead, detail: 'origin == local HEAD; main == merge-base' };
+  // NOTE (2026-07-03): the historical third check — `main == merge-base(main, branch)`
+  // — was deleted. Worktrees share refs, so ANY local-main advance mid-flight (a
+  // sibling initiative merging, an operator hotfix) failed EVERY in-flight cycle at
+  // close, making parallel fan-out + interleaved merges impossible. A stale base is
+  // GitHub's job to arbitrate (conflict detection at merge time), not a reason to
+  // fail a fully-published branch. The invariant that matters here is only that the
+  // local work is published: origin/<branch> == local HEAD.
+  return { ok: true, branch, localHead, originHead, mergeBase, mainHead, detail: 'origin == local HEAD' };
 }
 
 /**
