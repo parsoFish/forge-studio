@@ -264,3 +264,39 @@
   requeuing to pending on next boot. Operator had to move 4 manifests back by hand.
   De-bloat idea: boot reconcile should treat a dead-heartbeat in-flight/failed-by-SIGKILL
   architect cycle as requeue-able (no side effects to lose — decompose is idempotent).
+
+- **2026-07-04 — resilience — provider outage turns the drain sweep into an infinite crash loop.**
+  ~23:45–00:20 local the Anthropic API was unavailable ("Claude Code process exited with
+  code 1" at iteration 0). Every 5-min drain sweep re-claimed all six send-back manifests,
+  crashed instantly, and re-parked them — forever. The crash never persists a failed status
+  to the UWI (it never starts), so the skip-failed-UWI guard can't fire; there is no backoff,
+  no crash counter, no environment-vs-work classification. Same window dumped five pending
+  builds into `failed/` (operator requeued by hand). Improvements: classify SDK-spawn-exit-1
+  as an ENVIRONMENT failure (halt claims + alert, exponential backoff, auto-resume on a
+  cheap canary success), never `failed/` for infra outages, and cancel ghost heartbeat
+  emitters of dead retries (zero-tool-use agents still emitting at +68 min pollute events).
+
+- **2026-07-04 — merge integrity — the feed (#50) squash-merge shipped a broken main.**
+  main's CHANGELOG.md contained raw conflict markers (`<<<<<<<`/`=======`/`>>>>>>>` at
+  lines 10/50/352) and two orphaned SDKv2 test files referencing deleted sources — the
+  feed package did not COMPILE on main, undetected for a day (no post-merge CI on main).
+  Repaired inside the graph-identity fan-in (PR #51). Improvements: (a) pre-push conflict-
+  marker grep as a merge-commit content gate; (b) post-merge main CI run + alert (second
+  instance of this gap — see servicehook entry); (c) `go build ./... && go vet` on the
+  MERGED tree, not the branch tree, before push.
+
+- **2026-07-04 — pre-existing main defect — TestBuildDefinition_{Create,Update}_DoesNotSwallowError
+  fail on origin/main** (mock arg mismatch; tag-gated out of `make test` so the canonical
+  gate stays green). Needs a small standalone fix PR; not folded into any initiative.
+
+- **2026-07-04 — judge ergonomics — all 7 judges flagged version-below-main/CONFLICTING.**
+  Operator-owned fan-in criteria leaked into agent verdicts as noise ACs (operator stripped
+  them by pattern before send-back). Two fixes: judge prompts must pre-exclude operator-owned
+  criteria, and forge's re-prep packaging step keeps stamping PROVIDER_VERSION below moved
+  main — packaging should read origin/main's version at re-prep time.
+
+- **2026-07-04 — send-back plumbing — judge gates installed by file-patching UWIs.**
+  The verdict API accepts one argv-shaped qualityGateCmd (no pipelines), so multi-assert
+  judge gates required writing `.forge/review-gate-r3.sh` into each worktree and patching
+  `quality_gate_cmd` after the POST (6×). The API should accept a gate script body and
+  materialise it itself.
