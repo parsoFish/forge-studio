@@ -172,7 +172,15 @@
   decompose, citation-matches-checkpoint in unifier, *.test in gitignore/preflight,
   round-trip wiring test in project gates). That migration is the core Phase-4 thesis:
   move judgment into contracts, then the judge gets boring.
-- **2026-07-03 — PATTERN — demo/evidence narrative drifts from checkpoints.** PR #46
+- **2026-07-03 — unifier — demo regen silently no-ops when tooling unavailable.** #51's
+  rework commit stated "capture/render tooling unavailable — manual sync" and patched
+  only diffStat/commitSha, leaving 27/27 acEvaluations 'met' (incl. 10 with no capture
+  path) and a nonexistent test name cited 3x. A demo step that can't run its tooling
+  must fail the UWI, not fake the sync. Same cycle: dev-loop HAND-ROLLED validators
+  (validators.go) while terraform-plugin-framework-validators sat unused in go.mod →
+  depscheck red + battle-tested-over-hand-rolled violation. Also observed: send-back
+  drains bypass maxConcurrent (4 cycles ran concurrently); watcher wedge signal fixed
+  to per-cycle heartbeat age (serve-log mtime false-positives during long iterations). PR #46
   demo.json claimed six live passes while its own acEvaluation said TF_ACC unavailable;
   PR #48 DEMO.md cited a stale pre-restore evidence blob contradicting the real
   checkpoint lines below it. The unifier composes the narrative from AC text + assumed
