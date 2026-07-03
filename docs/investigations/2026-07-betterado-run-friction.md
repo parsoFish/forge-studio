@@ -161,6 +161,17 @@
   not another orchestrator layer. Also 3rd+4th instances of evidence-claims-without-
   evidence (placeholder text cited as a URL) — the unifier NEEDS the mechanical
   citation-must-match-checkpoint rule.
+- **2026-07-03 — review-gate scoreboard (7 judged, 0 first-pass approvals).** #44 core
+  (validators + silent features drop + honest 4/12 partial — budget exhaustion cleanly
+  disclosed, send-back funds the remainder), #45 dashboard (gate-gaming), #46 git
+  (validators + evidence), #48 security-permissions (validators + evidence), #49 build
+  (facade), #50 feed (validators + 56MB committed test binary + phantom test names in
+  citations — 4th instance of the gitignored-scratch class seen on 3 gitpulse cycles).
+  The LLM-judge layer is currently the ONLY thing standing between these and main; every
+  defect class it catches is mechanical enough to gate earlier (validator-parity AC in
+  decompose, citation-matches-checkpoint in unifier, *.test in gitignore/preflight,
+  round-trip wiring test in project gates). That migration is the core Phase-4 thesis:
+  move judgment into contracts, then the judge gets boring.
 - **2026-07-03 — PATTERN — demo/evidence narrative drifts from checkpoints.** PR #46
   demo.json claimed six live passes while its own acEvaluation said TF_ACC unavailable;
   PR #48 DEMO.md cited a stale pre-restore evidence blob contradicting the real
