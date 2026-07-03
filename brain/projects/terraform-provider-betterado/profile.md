@@ -59,6 +59,19 @@ MUST be the live `TestAcc<Name>`):
    resources + test helpers read it from framework provider data, never SDKv2
    `meta.(*client.AggregatedClient)` (nil under mux -> panic).
 3. **Tests use `GetMuxedProviderFactories()`** (ProtoV6 SDKv2+framework).
+4. **Validator parity** -- every SDKv2 `ValidateFunc`/`ValidateDiagFunc` (IsUUID,
+   StringIsNotWhiteSpace, OneOf enums, URL checks) maps to a framework
+   `Validators:` entry (`terraform-plugin-framework-validators`); ConflictsWith/
+   RequiredWith/ExactlyOneOf map to config validators; ForceNew maps to
+   `RequiresReplace`. Dropping these is a silent plan-time->apply-time regression
+   (caught in review on TWO initiatives: git PR #46, security-permissions PR #48).
+5. **Live evidence per-type labels** -- `CaptureLiveEvidence("acceptance-resource-<type>", ...)`;
+   a shared label overwrites earlier captures (last-writer-wins) and multi-resource
+   initiatives ship evidence for only their final resource.
+6. **Never create ADO projects in tests** -- the org sits at its project cap; reuse
+   `SharedFixtureProjectName` (standing fixture, restored 2026-07-03). The resolver
+   fails loudly on a missing fixture by design; import-style tests must end with a
+   `removed` block (`destroy = false`), never a destroy of the fixture.
 
 ## API-coverage discipline
 

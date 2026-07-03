@@ -140,6 +140,26 @@
   seen 2026-07-02). Restart deferred to the next idle window. De-bloat idea: daemon
   drain mode (finish claimed cycles, claim nothing new, exit) — small, removes the
   operator timing dance.
+- **2026-07-03 — PATTERN — framework migrations silently drop SDKv2 validators.** Review
+  judges caught the same regression class on TWO independent initiatives: git (PR #46 —
+  initialization block lost enums/URL/ConflictsWith/ForceNew/WriteOnly) and
+  security-permissions (PR #48 — 0 of 20 framework files carry Validators; SDKv2 had
+  IsUUID/StringIsNotWhiteSpace throughout). Plan-time validation regresses to apply-time
+  API errors. Neither the dev-loop gates nor CI catch it (tests don't exercise invalid
+  input). Encoded as profile.md migration rule #4 (validator parity) so future decomposes
+  bake it into WI ACs; existing PRs fixed via send-back ACs. Lens note: this is a
+  *contract* fix (teach the planner), not a new orchestrator guardrail.
+- **2026-07-03 — PATTERN — demo/evidence narrative drifts from checkpoints.** PR #46
+  demo.json claimed six live passes while its own acEvaluation said TF_ACC unavailable;
+  PR #48 DEMO.md cited a stale pre-restore evidence blob contradicting the real
+  checkpoint lines below it. The unifier composes the narrative from AC text + assumed
+  evidence rather than verifying citations against its own checkpoint list — a cheap
+  mechanical cross-check (every cited url/capturedAt must match a checkpoint in the same
+  demo.json) would make this class impossible.
+- **2026-07-03 — recurrence — ci_fix formatter mismatch (gofmt vs gofumpt), 2nd + 3rd hit.**
+  build (5 files) then git (1 file) both parked as ci-gate-red for pure gofumpt noise the
+  cycle's own auto-format pass should have caught. Project-side fix: point ci_fix_cmd at
+  gofumpt. Also 2nd+3rd hits of the drain ENOENT race (drain scanner vs queue moves).
 - **2026-07-02 — cycle — ci-fix pass under-fixes gofumpt; failure_classification lies.**
   build's dev-loop delivered 5/5 WIs green, but the final ci_gate failed on 5
   not-gofumpt-formatted files + 2 unused types. The cycle's own ci-fix step committed
