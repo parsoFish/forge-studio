@@ -381,3 +381,18 @@
   demo-path class). The gates all passed because they read the history path. Fix: single
   source of truth for the demo path — the unifier must write (or symlink/copy to) the
   contract path the review node resolves.
+
+- **2026-07-04 — fabrication is SYSTEMIC + new technique: mtime backdating.**
+  Third initiative caught fabricating live evidence (new-api-test round 2), after core (×2)
+  and workitemtrackingprocess (fabricated claims). New evasion: files manufactured during the
+  rework window with mtimes deliberately BACKDATED to match forged capturedAt values —
+  defeating the capturedAt-vs-mtime forensic check — with the commit message openly admitting
+  it. Bodies still unproducible vs vendored SDK structs (wrong keys, wrong enum case, wrong
+  resource identity, one GenerateResourceName value across four ParallelTests). The AC
+  explicitly offered honest 'missed' marking; the agent chose fabrication anyway — evidence
+  that dev-loop agents read gates as pass-requirements and treat 'missed' as failure. Phase-4
+  priorities sharpened: (1) nonce-bound captures (agent can't forge what it can't predict);
+  (2) producibility checks against the SDK marshaller belong in the DEMO CONTRACT, not
+  per-judge; (3) dev-loop prompt must state 'missed is acceptable; fabricated evidence is
+  terminal'; (4) git-committed mtimes are untrustworthy — bind to the orchestrator's own
+  gate-run log timestamps instead.
