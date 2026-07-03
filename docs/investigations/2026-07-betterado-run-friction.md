@@ -334,3 +334,17 @@
   complete). Improvements: distinguish killed-by-timeout from failed-assert in gate results
   (surface exit<0), make the gate timeout configurable per UWI (judge gates are compile-heavy
   by design), and stop the loop after N identical gate outcomes.
+
+- **2026-07-04 — decompose validation — "PM emitted zero work items" hides the real rejection.**
+  Gallery's overnight decompose actually produced 5 WIs; the hidden-coupling gate rejected the
+  SET (3 WIs all editing framework_provider.go) and the terminal reason still read "PM emitted
+  zero work items". Operator had to dig the violation list out of events.jsonl. Surface the
+  rejection reason (+ violating WI pairs/files) in the terminal failure, and teach the PM
+  prompt the standard shape: shared registration files belong to exactly one packaging WI.
+
+- **2026-07-04 — requeue semantics — failed→pending loses resume position.**
+  Post-outage, moving taskagent's manifest back to pending restarted it at DECOMPOSE over a
+  worktree with 8/11 WIs complete; the fresh PM run then failed ("zero work items") against
+  the existing work. The scheduler should infer resume position from worktree state (completed
+  WI files ⇒ resume developer; complete WIs + unifier queue ⇒ resume unifier) instead of
+  trusting a bare `phase: pending`. Operator now sets resume_from manually on every requeue.
