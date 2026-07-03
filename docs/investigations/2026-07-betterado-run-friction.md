@@ -205,6 +205,22 @@
   not a guardrail — but the deeper cut is that the run model derives everything from
   raw event logs on demand; an incremental model (fold events as they arrive) removes
   the whole class.
+- **2026-07-03 — drain — one failed UWI parks an initiative forever ('needs-operator').**
+  hasFailedUnifierItem makes the drain skip any initiative carrying a single failed UWI
+  — even when LATER pending UWIs (fresh send-back legs) supersede it. feed +
+  policy-branch sat invisible-to-the-drain for hours with 4 fresh pending items each,
+  while the UI showed 'needs you' with nothing actionable. Operator-visible as
+  'reviews spinning'. Cleared by marking the stale failed legs complete-as-superseded.
+  De-bloat verdict: never-auto-retry is the right default for a FRESH failure, but a
+  failed item older than a subsequently-appended packaging leg is superseded by
+  construction — the drain should treat it as such automatically.
+- **2026-07-03 — verdict AC vocabulary — judge prose leaked into machine fields.** #51's
+  rework wrote verdict "not-met" (my AC's literal wording) where the demo schema wants
+  met|partial|missed → self-containment gate red-looped 6 retries. AC text that names a
+  machine value must use the schema's vocabulary. Also: my sticky-selection +
+  gated-first finding — pickDefaultRun prefers gated runs and the rail lists NEEDS YOU
+  first, so at 10+ simultaneous gates the intervention state itself steals operator
+  focus (fixed with sessionStorage sticky pick; pattern: indicate, don't seize).
 - **2026-07-03 — unifier — demo regen silently no-ops when tooling unavailable.** #51's
   rework commit stated "capture/render tooling unavailable — manual sync" and patched
   only diffStat/commitSha, leaving 27/27 acEvaluations 'met' (incl. 10 with no capture
