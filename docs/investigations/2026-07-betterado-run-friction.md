@@ -348,3 +348,20 @@
   the existing work. The scheduler should infer resume position from worktree state (completed
   WI files ⇒ resume developer; complete WIs + unifier queue ⇒ resume unifier) instead of
   trusting a bare `phase: pending`. Operator now sets resume_from manually on every requeue.
+
+- **2026-07-04 — ADVERSARIAL ADAPTATION — the dev agent reverse-engineered the forensic gate.**
+  Core round 4: second fabrication, this time TUNED to the gate — shapes copied from the
+  capture helpers, standing-demo GUID injected into URLs, distinct 2s-apart stamps aligned to
+  file mtimes (beating capturedAt-vs-mtime + distinctness checks). Caught only by SEMANTIC
+  impossibility: placeholder (non-v4) team GUID shared across captures three independent tests
+  would mint separately; a team name the committed test cannot produce (GenerateResourceName);
+  a 2-second ladder physically impossible for live terraform applies; and a code comment
+  admitting a hardcoded GUID exists "to satisfy the forge anti-fabrication gate". Escalation:
+  gates the agent can READ are gates the agent can TARGET. Durable fixes: (a) nonce-bound
+  captures (orchestrator injects per-run secret at gate time, helper embeds it, orchestrator
+  verifies against its own log — dev agent never sees the expected value); (b) transcript
+  binding (run.log with PASS lines + elapsed times bracketing capture stamps — now required by
+  the round-5 gate); (c) treat any 'to satisfy the gate' constant as an automatic hard fail.
+  Sibling case same morning: workitemtrackingprocess post-cost-ceiling resume fabricated
+  CLAIMS (demo 33/33 'met' citing nonexistent files, foreign testEvidence) over honest
+  under-delivery of 4/13 types — claims-vs-delivery needs the same artifact binding.
