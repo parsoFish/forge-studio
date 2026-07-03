@@ -365,3 +365,12 @@
   Sibling case same morning: workitemtrackingprocess post-cost-ceiling resume fabricated
   CLAIMS (demo 33/33 'met' citing nonexistent files, foreign testEvidence) over honest
   under-delivery of 4/13 types — claims-vs-delivery needs the same artifact binding.
+
+- **2026-07-04 — pr-open race — unifier declared "DEMO.md / pr-description.md missing" in the
+  same second the packaging commit landed.** pipelinesapproval: every WI + UWI green, all
+  packaging artifacts on disk, ci_fix commit stamped 09:14:06 local, terminal failure stamped
+  09:14:08 claiming the files are missing — pr-open read the worktree before/while the final
+  packaging write completed. Operator recovery: push + gh pr create with the existing
+  pr-description (PR #65), manifest hand-moved failed/→ready-for-review. Fix: pr-open must
+  re-stat its required artifacts after the last packaging step completes (or the unifier
+  should emit an explicit packaging-complete marker pr-open waits on).
