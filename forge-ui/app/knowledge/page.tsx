@@ -98,7 +98,10 @@ function KnowledgePageInner() {
       });
       return () => { signal.cancelled = true; };
     }
-    if (idParam) {
+    // Only trust the URL id while it still exists — after deleting the open
+    // KB the stale ?id= would otherwise resurrect a phantom selection that
+    // renders like the first item being re-selected.
+    if (idParam && allKbs.some((k) => k.id === idParam)) {
       setCurrentId(idParam);
       return;
     }

@@ -250,16 +250,19 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     const signal = { cancelled: false };
     const r = await startRun(flow?.project ?? id);
     if (r.ok) {
-      void loadData(signal);
+      // Pin selection to the run just created (or whatever was selected) —
+      // without preserveRunId, loadData re-derives via pickDefaultRun and the
+      // selection snaps to the highest-priority run in the rail.
+      void loadData(signal, r.runId ?? activeRun?.id);
     }
-  }, [flow, id, loadData]);
+  }, [flow, id, loadData, activeRun]);
 
   const handleResumeRun = useCallback(async () => {
     if (!activeRun) return;
     const signal = { cancelled: false };
     const r = await resumeRun(activeRun.id);
     if (r.ok) {
-      void loadData(signal);
+      void loadData(signal, activeRun.id);
     }
   }, [activeRun, loadData]);
 

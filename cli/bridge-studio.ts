@@ -415,7 +415,12 @@ export async function handleStudioRoutes(
       const flowFilter = qs.get('flow');
       let runs = listRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
-        runs = runs.filter((r) => r.flowId === flowFilter);
+        // Match by lineage, not just current flowId: a run whose manifest was
+        // repointed mid-saga (architect→develop hand-off) stays visible on
+        // every flow page in its lineage. Filtering on flowId alone made the
+        // selected run's card vanish from the rail on the next
+        // cycle-list-changed tick — selection appeared to snap to the top run.
+        runs = runs.filter((r) => r.flowId === flowFilter || (r.flowLineage ?? []).includes(flowFilter));
       }
       sendJson(res, 200, { runs }, origin);
     } catch (err) {
