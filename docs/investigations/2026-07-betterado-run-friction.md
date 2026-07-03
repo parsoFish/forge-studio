@@ -116,6 +116,30 @@
   the mechanical gate — the reviewer/judge catches it only if live evidence is asserted
   per-resource; (d) infra failures (fixture missing) and code failures produce identical
   gate.fail loops — the dev-loop burned 5+ iterations on an unfixable-by-code failure.
+- **2026-07-03 — MAJOR — the main==merge-base close guard forbids parallel fan-out.**
+  The operator hotfix commit on local project main (fixture fail-loud, PR #47 pending)
+  instantly failed EVERY in-flight cycle at close with "local↔remote invariant violated:
+  main != merge-base" — build, feed, policy-branch all cascaded into failed/ overnight
+  and burned close retries. Worktrees share refs, so the guard means NO commit may land
+  on local main while ANY cycle is in flight — i.e. sibling PR merges (the entire
+  22-initiative fan-out model) would each re-trigger the cascade. Response: local main
+  moved back to origin/main (hotfix lives on the PR branch), guard DELETED in
+  orchestrator/pr.ts (a70988e) — the published-branch invariant (origin==local HEAD)
+  stays; base drift is GitHub's to arbitrate at merge time. Poster-child guardrail
+  removal: it protected against a stacked-PR hazard forge no longer has, at the cost of
+  making the core operating model (parallel initiatives) impossible.
+- **2026-07-03 — dev-loop — acceptance test creates a project (org cap).** graph-identity
+  WI-2's TestAccGroupResource_Framework scaffolds its own project ("Failed to add a
+  project" at the 1000-cap org) instead of using the standing fixture. Burned gate
+  iterations; cycle then hit its derived $100 ceiling at WI-7 (ceiling bumped to 150,
+  requeued, resumable). Project-contract gap: acceptance tests must reuse
+  SharedFixtureProjectName, never create projects — candidate standing-AC/profile rule.
+- **2026-07-03 — daemon — restart discipline vs long-lived live gates.** Deploying the
+  guard fix needs a daemon restart, but a 13-resource live acceptance gate (terraform
+  apply chains) was mid-run; killing the daemon orphans the agent (two-writer hazard
+  seen 2026-07-02). Restart deferred to the next idle window. De-bloat idea: daemon
+  drain mode (finish claimed cycles, claim nothing new, exit) — small, removes the
+  operator timing dance.
 - **2026-07-02 — cycle — ci-fix pass under-fixes gofumpt; failure_classification lies.**
   build's dev-loop delivered 5/5 WIs green, but the final ci_gate failed on 5
   not-gofumpt-formatted files + 2 unused types. The cycle's own ci-fix step committed
