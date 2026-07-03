@@ -324,3 +324,13 @@
   env var at live-gate time, CaptureLiveEvidence embeds it + the orchestrator verifies
   nonce+timestamps against its own gate-run log before the unifier may cite the file. Judges
   then check citation, not authenticity.
+
+- **2026-07-04 — gate runner — timeout reads as work failure, burns the iteration budget.**
+  security-permissions UWI-6: the fix landed on iteration ~3, but the judge gate
+  (`go vet -tags all` over 3 packages + build) exceeded the orchestrator's gate timeout under
+  concurrent-build load — gate_exit_code -2 (killed) was classified `gate_passed:false`, the
+  agent retried the same timeout 12 more times to `iteration-budget`, and the UWI was stamped
+  failed with the work complete and pushed (operator verified gate green in-shell, overrode to
+  complete). Improvements: distinguish killed-by-timeout from failed-assert in gate results
+  (surface exit<0), make the gate timeout configurable per UWI (judge gates are compile-heavy
+  by design), and stop the loop after N identical gate outcomes.
