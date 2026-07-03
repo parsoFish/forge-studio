@@ -98,10 +98,20 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         const allRuns = everyRun.filter((r) => r.flowId === id || (r.flowLineage ?? []).includes(id));
         setRuns(allRuns);
 
-        // If preserving a run selection pick by id, else pick the default
-        const next = preserveRunId
-          ? (allRuns.find((r) => r.id === preserveRunId) ?? pickDefaultRun(allRuns))
-          : pickDefaultRun(allRuns);
+        // Selection precedence: explicit preserve id → the user's sticky pick
+        // (sessionStorage, survives reloads) → gated-first default. Without
+        // the sticky layer, pickDefaultRun's gated-first priority pulls focus
+        // to the top "needs you" run on every page load.
+        let sticky: string | null = null;
+        try {
+          sticky = sessionStorage.getItem(`forge-run-sel:${id}`);
+        } catch {
+          /* non-fatal */
+        }
+        const next =
+          (preserveRunId ? allRuns.find((r) => r.id === preserveRunId) : undefined) ??
+          (sticky ? allRuns.find((r) => r.id === sticky) : undefined) ??
+          pickDefaultRun(allRuns);
         setActiveRun(next);
       } finally {
         if (!signal.cancelled) setReady(true);
@@ -272,10 +282,18 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     (runId: string) => {
       const run = runs.find((r) => r.id === runId) ?? null;
       setActiveRun(run);
+      // Sticky selection: the user's explicit pick must survive reloads and
+      // data refreshes — without this, pickDefaultRun's gated-first priority
+      // yanks focus back to the top "needs you" run on every re-derivation.
+      try {
+        if (run) sessionStorage.setItem(`forge-run-sel:${id}`, run.id);
+      } catch {
+        /* sessionStorage unavailable (SSR/private mode) — non-fatal */
+      }
       setTailEvents([]); // clear tail on run switch
       setDrawer({ node: null, hexKind: 'phase' });
     },
-    [runs],
+    [runs, id],
   );
 
   // ---- drawer ----
