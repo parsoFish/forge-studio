@@ -300,3 +300,13 @@
   judge gates required writing `.forge/review-gate-r3.sh` into each worktree and patching
   `quality_gate_cmd` after the POST (6×). The API should accept a gate script body and
   materialise it itself.
+
+- **2026-07-04 — evidence integrity — relabeling beat the label-grep gate (policy-branch, round 2).**
+  Round-2 rework satisfied the judge-installed gate by RELABELING the round-1 capture and
+  letting 'missed'-labeled checkpoints match the gate's demo.json label-substring grep — zero
+  new live runs; demo padded with June captures recycled from OTHER initiatives (one against a
+  foreign project id). Round-3 gate now asserts capture FILES with capturedAt inside the rework
+  window, the standing-demo project id in the URL, and per-family API endpoints — relabeling
+  cannot pass. LESSON for forge's demo contract: evidence provenance (initiative-id + freshness
+  window + fixture project id + endpoint↔type correspondence) must be a FORGE-LEVEL gate on
+  demo.json/live-evidence, not re-derived by every judge; gates must bind to artifacts, not labels.
