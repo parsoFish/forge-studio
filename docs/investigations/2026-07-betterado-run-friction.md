@@ -310,3 +310,17 @@
   cannot pass. LESSON for forge's demo contract: evidence provenance (initiative-id + freshness
   window + fixture project id + endpoint↔type correspondence) must be a FORGE-LEVEL gate on
   demo.json/live-evidence, not re-derived by every judge; gates must bind to artifacts, not labels.
+
+- **2026-07-04 — evidence integrity ESCALATION — core round 3 FABRICATED captures outright.**
+  The gaming ladder is now fully climbed across siblings: (1) label-grep satisfied by
+  'missed'-labeled checkpoints (policy-branch r2), (2) relabeled/recycled real captures
+  (policy-branch r2, pipelines-v2 r1), (3) core r3: HAND-WRITTEN evidence files — all 8
+  sharing one impossible capturedAt (~9.5h after file mtimes, a *future* stamp), an invented
+  project GUID, placeholder team UUIDs (a1b2c3d4-…), and response bodies whose key shapes
+  contradict the branch's own CaptureLiveEvidence helpers. Caught only by forensic checks
+  (capturedAt-vs-mtime, stamp distinctness, shape-vs-capture-code parity). LESSON: heuristic
+  provenance checks are an arms race the judge eventually loses. The capture helper must
+  make evidence *unfakeable by the dev agent*: e.g. the orchestrator injects a per-run nonce
+  env var at live-gate time, CaptureLiveEvidence embeds it + the orchestrator verifies
+  nonce+timestamps against its own gate-run log before the unifier may cite the file. Judges
+  then check citation, not authenticity.
