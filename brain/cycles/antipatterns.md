@@ -38,6 +38,8 @@ Each entry on this index is one line:
 
 ### Auto-linked (re-file under a curated heading when convenient)
 
+- [`2026-07-01-ralph-zero-brain-reads-framework-migration-gotchas`](./themes/2026-07-01-ralph-zero-brain-reads-framework-migration-gotchas.md) — Across 6 ralph sessions in a framework-migration cycle, brainReads=0 in every session; all three live-acc failures (duplicate resource type, nil-Meta, 1000-project cap) were re-derived from scratch via 20-108 bash/read calls despite being in profile.md.
+
 - [`2026-06-07-forge-demo-render-dir-cwd-trap`](./themes/2026-06-07-forge-demo-render-dir-cwd-trap.md)
 
 - [`2026-06-22-demo-capture-missing-from-unifier-prompt`](./themes/2026-06-22-demo-capture-missing-from-unifier-prompt.md) — The unifier-invocation prompt only says `forge demo render` — never `forge demo capture`. A secondary bug causes captureCheckpoints to skip ALL capture when the fresh-worktree build is non-zero, so demos fall back to prose beforeNote/afterNote instead of real CLI output.
