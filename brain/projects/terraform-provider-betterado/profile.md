@@ -59,6 +59,10 @@ MUST be the live `TestAcc<Name>`):
    resources + test helpers read it from framework provider data, never SDKv2
    `meta.(*client.AggregatedClient)` (nil under mux -> panic).
 3. **Tests use `GetMuxedProviderFactories()`** (ProtoV6 SDKv2+framework).
+3b. **Dedup = deregister AND delete** -- migrating a type means the superseded
+   SDKv2 files (resource/data-source .go, their _test.go, now-unused shared
+   helpers) are DELETED in the same WI, not left orphaned (two PRs left 13 and
+   35 dead files; "removed from provider.go" alone is not dedup).
 4. **Validator parity** -- every SDKv2 `ValidateFunc`/`ValidateDiagFunc` (IsUUID,
    StringIsNotWhiteSpace, OneOf enums, URL checks) maps to a framework
    `Validators:` entry (`terraform-plugin-framework-validators`); ConflictsWith/
