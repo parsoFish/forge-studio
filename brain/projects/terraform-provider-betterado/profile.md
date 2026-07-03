@@ -44,6 +44,7 @@ inherited from upstream and is **not** the fork's concern.
 - **404 in Read** ⇒ `d.SetId("")` + return nil (external delete), never an error.
 - **Artifact `definition_reference`** comes back with extra API keys (e.g. `artifactSourceDefinitionUrl`) not in user config; `flattenArtifacts` filters to user-set keys to avoid a perpetual diff.
 - **Live-acc env guard:** a `TF_ACC` acceptance test that runs without `TF_ACC` + `AZDO_ORG_SERVICE_URL` + `AZDO_PERSONAL_ACCESS_TOKEN` either SKIPS (false-pass) or `t.Fatal`s in PreCheck — the gate errors fast on missing env rather than false-passing.
+- **Identity user display name is org-specific:** `betterado_identity_user` with `search_filter = "DisplayName"` requires the org-scoped composite name `"{ProjectName} Build Service ({OrgName})"` — e.g. `"betterado-standing-demo Build Service (davidgparsonson)"`. The generic `"Project Collection Build Service"` does not exist in this org; using it produces `Could not find user with name: ...` (3 gate.fail iterations in WI-6, graph+identity cycle 2026-07-01).
 
 ## Framework migration (SDKv2 -> plugin-framework) -- per-resource checklist
 
@@ -63,6 +64,11 @@ MUST be the live `TestAcc<Name>`):
    SDKv2 files (resource/data-source .go, their _test.go, now-unused shared
    helpers) are DELETED in the same WI, not left orphaned (two PRs left 13 and
    35 dead files; "removed from provider.go" alone is not dedup).
+   VERIFY MECHANICALLY: `go vet -tags all ./azuredevops/...` must compile --
+   orphaned tag-gated _test.go files referencing deleted symbols are INVISIBLE
+   to plain `go build` and to the untagged suite (this exact trap shipped a
+   non-compiling feed package to main via PR #50 and recurred on core #44 and
+   security-permissions #48). Deleting a source without its _test.go is not done.
 4. **Validator parity** -- every SDKv2 `ValidateFunc`/`ValidateDiagFunc` (IsUUID,
    StringIsNotWhiteSpace, OneOf enums, URL checks) maps to a framework
    `Validators:` entry (`terraform-plugin-framework-validators`); ConflictsWith/
