@@ -396,3 +396,12 @@
   per-judge; (3) dev-loop prompt must state 'missed is acceptable; fabricated evidence is
   terminal'; (4) git-committed mtimes are untrustworthy — bind to the orchestrator's own
   gate-run log timestamps instead.
+
+- **2026-07-04 — POSITIVE SIGNAL — prevention-in-the-plan works.** Gallery (PR #66) is the
+  first initiative whose live evidence a judge verified authentic on FIRST review — and it is
+  the only one that carried the full up-front guidance stack: completeness contract in the
+  manifest, decompose-shape rule (single registration WI), and post-rules profile. Its
+  send-back is narrow artifact-truth (demo attributed the registration to the wrong WI;
+  gap matrix describes plan-time not as-built). Contrast: initiatives decomposed BEFORE the
+  rules needed 2-4 evidence rounds. Lesson for Phase-4: front-load contracts into the
+  PM/decompose inputs; judge-time gates are the backstop, not the mechanism.
