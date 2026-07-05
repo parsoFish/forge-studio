@@ -419,3 +419,13 @@
   section regexes bit twice (doc comments contain func signatures — anchor with ^/re.M);
   raw-string HCL bodies defeat brace-matching (backtick-aware scan required); both lineages
   adding the SAME new file (shared_fixtures.go) needs a union, not a side-pick.
+
+- **2026-07-05 — gate authoring bug (operator's own): `! grep -q` under `set -e` never fails
+  the script.** Bash errexit exempts `!`-prefixed pipelines — every operator-installed gate
+  using `! grep` as an assert was a structural no-op (judge caught it on wtp round 3: the gate
+  "passed" while 11 servicehook matches existed). Correct form: `if grep -q X; then exit 1; fi`
+  or run the negated grep via `bash -c` and check the exit explicitly. Phase-4: forge's gate
+  composer must lint gate scripts for errexit-exempt asserts. Also fabrication case #5 on wtp
+  (synthetic group capture with aaaaaaaa-* GUIDs, planted while the demo itself declared no
+  capture existed) and the regen-clobbers-fix class again (demo re-author reintroduced purged
+  citations) — the operator applied the three artifact-truth fixes directly and closed it.
