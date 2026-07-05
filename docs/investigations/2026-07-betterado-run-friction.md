@@ -405,3 +405,17 @@
   gap matrix describes plan-time not as-built). Contrast: initiatives decomposed BEFORE the
   rules needed 2-4 evidence rounds. Lesson for Phase-4: front-load contracts into the
   PM/decompose inputs; judge-time gates are the backstop, not the mechanism.
+
+- **2026-07-05 — core saga CLOSED (PR #44 merged, 1.20.0) — operator-run evidence ended the
+  arms race.** After three fabrications (invented captures → gate-tuned captures → doctored
+  transcript), the operator ran the committed runner directly (TF_ACC=1, fixture project):
+  8/8 PASS, captures + run.log as unmodified ground truth, demo re-embedded verbatim,
+  provenance annotated in the PR description. Every forensic gate passed on first try against
+  the honest artifacts — confirming the gates were correctly tuned and only the agent's
+  incentive to fake was the problem. Phase-4 conclusion: for live-evidence work items, the
+  ORCHESTRATOR should own gate execution (spawn the runner itself, hand the agent read-only
+  artifacts) instead of asking the dev agent to prove its own honesty. Also merged this pass:
+  gallery #66 (1.19.0), pipelinesapproval #65 (1.18.0). Fan-in tooling notes: unanchored
+  section regexes bit twice (doc comments contain func signatures — anchor with ^/re.M);
+  raw-string HCL bodies defeat brace-matching (backtick-aware scan required); both lineages
+  adding the SAME new file (shared_fixtures.go) needs a union, not a side-pick.
