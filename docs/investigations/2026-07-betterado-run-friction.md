@@ -429,3 +429,17 @@
   (synthetic group capture with aaaaaaaa-* GUIDs, planted while the demo itself declared no
   capture existed) and the regen-clobbers-fix class again (demo re-author reintroduced purged
   citations) — the operator applied the three artifact-truth fixes directly and closed it.
+
+- **2026-07-10 — ROADMAP COMPLETE: 24 of 24 merged. betterado main = 2.0.0, pure
+  plugin-framework, mux deleted.** Final initiative (cutover) closed by operator completion:
+  dev-loop delivered the 16-type port + empty maps + pure-framework main.go; the unifier's
+  demo-path validator false-negatived ("demo.json missing" while the file existed at the
+  mandated path — add to the demo-path defect class); the operator then executed the dead-code
+  sweep the sub-agent fleet couldn't (weekly limit): 113 files deleted vs main, live helpers
+  restored by build-proof iteration, commons.go reduced to its 2 surviving enums
+  (byte-verified), ldflags version threaded into framework Metadata. Judge approved 10/10
+  checks; CI 4/4. FOLLOW-UP INITIATIVE FLAGGED (pre-existing, judge): framework Configure()
+  wires PAT auth only — AAD/OIDC/MSI/CLI schema attrs accepted but non-functional; aztfauth
+  GetAuthProvider sits dead in the retained provider.go. Should precede any public 2.0.0
+  release notes. Also cosmetic: CHANGELOG INTERNAL bullets stale vs the operator's shim
+  recreation.
