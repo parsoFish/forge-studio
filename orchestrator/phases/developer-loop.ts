@@ -36,7 +36,7 @@ import type { AgentInvocation } from '../../loops/_adapters/types.ts';
 import { projectDemoRelDir, readArtifactRoot } from '../brain-paths.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
-import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
+import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from '../pr.ts';
 import {
   buildUnifierSystemPrompt,
@@ -52,6 +52,13 @@ import {
 import { modelForSpec } from '../phase-agent.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
+import {
+  buildDemoCaptureArgv,
+  commitOrchestratedCaptureArtifacts,
+  demoJsonWantsCapture,
+  resolveDemoCaptureTimeoutMs,
+  runOrchestratorCommand,
+} from './orchestrated-capture.ts';
 import type { CycleInput } from '../cycle-context.ts';
 
 /**
@@ -477,14 +484,18 @@ export async function runDeveloperLoop(
             return makeQualityGateFromCmd(
               input.worktreePath,
               effective,
-              (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(input.worktreePath, gateInfo); },
+              // N10: a TIMED-OUT gate also stops the loop early (iterating
+              // doesn't fix machine load and burns agent spend) — but its
+              // distinct gate.timeout event classifies as transient/environment
+              // so the scheduler retries instead of failing the work as wrong.
+              (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(input.worktreePath, gateInfo); },
               // Wave B (2026-06-04): enforce that declared output paths land.
               // If the WI declares `creates` paths those MUST appear in the
               // branch diff before the gate can pass — independently of whether
               // a sibling WI already produced tests. The `already-complete`
               // 3-way runner check handles the "sibling beat us" case upstream;
               // this layer catches "agent exited without writing declared files".
-              { requiredPaths: wi.creates ?? [], ...(requiredEnv ? { requiredEnv } : {}) },
+              { requiredPaths: wi.creates ?? [], ...(requiredEnv ? { requiredEnv } : {}), timeoutMs: resolveGateTimeoutMs() },
             );
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
@@ -994,7 +1005,11 @@ function emitGateEvent(
   // "expected", even at iter-0: it's a broken gate, not a test outcome. Always
   // surface it as an error with a distinct `gate.errored` message so the
   // classifier says "fix the gate" instead of mis-reading it as a code failure.
-  const isExpectedIter0Fail = !info.passed && !info.errored && info.iteration === 0;
+  // N10: a gate KILLED by its timeout is an ENVIRONMENT failure — never
+  // "expected" and never a work failure. Distinct `gate.timeout` message +
+  // `gate_timed_out` / `failure_kind: 'environment'` metadata so the failure
+  // classifier routes it as transient instead of "the code was wrong".
+  const isExpectedIter0Fail = !info.passed && !info.errored && !info.timedOut && info.iteration === 0;
   logger.emit({
     initiative_id: initiativeId,
     parent_event_id: parentEventId,
@@ -1004,13 +1019,15 @@ function emitGateEvent(
     input_refs: [],
     output_refs: [],
     duration_ms: info.durationMs,
-    message: info.errored
-      ? 'gate.errored'
-      : info.passed
-        ? 'gate.pass'
-        : isExpectedIter0Fail
-          ? 'gate.expected-fail'
-          : 'gate.fail',
+    message: info.timedOut
+      ? 'gate.timeout'
+      : info.errored
+        ? 'gate.errored'
+        : info.passed
+          ? 'gate.pass'
+          : isExpectedIter0Fail
+            ? 'gate.expected-fail'
+            : 'gate.fail',
     metadata: {
       work_item_id: workItemId,
       gate_passed: info.passed,
@@ -1019,6 +1036,7 @@ function emitGateEvent(
       gate_stdout_tail: info.stdoutTail,
       gate_stderr_tail: info.stderrTail,
       ...(info.errored ? { gate_errored: true } : {}),
+      ...(info.timedOut ? { gate_timed_out: true, failure_kind: 'environment' } : {}),
       ...(info.rejectReason ? { reject_reason: info.rejectReason } : {}),
       ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
       ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
@@ -1139,7 +1157,7 @@ export function assertGreenBaseline(
     input.worktreePath,
     [...baselineCmd],
     (i) => { info = i; },
-    { noWorkIndicators: null },
+    { noWorkIndicators: null, timeoutMs: resolveGateTimeoutMs() },
   )();
 
   if (passed) {
@@ -1268,6 +1286,13 @@ export async function runUnifier(
     estimatedIterations: iterationCap,
     qualityGateCmd,
   });
+
+  // Stale-feedback fix (2026-07-04 theme: stale-last-gate-failure-poisons-
+  // unifier): `.forge/` is gitignored, so a dev-WI's final gate failure from
+  // hours ago survives into the unifier session and reads as live signal.
+  // Delete it up front — the composed gate rewrites it fresh on every failing
+  // evaluation, so from here on "present ⇒ fresh".
+  clearUnifierGateFeedback(input.worktreePath);
 
   const pending = pendingUnifierItems(input.worktreePath);
 
@@ -1607,6 +1632,13 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       // artifactRoot-resolved so the gate checks demo.json where the unifier was
       // told to author it (same projectDemoRelDir the invocation/mirror use).
       demoDir: projectDemoRelDir(input.initiativeId, readArtifactRoot(input.projectRepoPath)),
+      // N10: bound the initiative gate; a kill by this timeout classifies as
+      // environment (unifier.gate.timeout), never work-failure.
+      gateTimeoutMs: resolveGateTimeoutMs(),
+      // ADR 036 / N1: the ORCHESTRATOR runs `forge demo capture` — the agent
+      // only authors checkpoint `command`s; real before/after evidence is
+      // produced by a process the agent never touched and committed by forge.
+      orchestratedCapture: { argv: buildDemoCaptureArgv(input.initiativeId) },
     });
 
   let loopResult: LoopResult | null = null;
@@ -1716,8 +1748,11 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
   const gate = makeQualityGateFromCmd(
     input.worktreePath,
     [...itemGateCmd],
-    (gateInfo) => { lastGateErrored = gateInfo.errored ?? false; emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); },
-    { requiredPaths: uwi.creates ?? [] },
+    // N10: a timed-out gate stops the loop like a broken gate, but its
+    // gate.timeout event classifies as transient/environment (see the dev-WI
+    // call site above).
+    (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); },
+    { requiredPaths: uwi.creates ?? [], timeoutMs: resolveGateTimeoutMs() },
   );
 
   let loopResult: LoopResult | null = null;
@@ -1765,6 +1800,26 @@ type ComposedUnifierGateInput = {
    * false-fails "demo.json missing" forever on artifactRoot≠"." projects.
    */
   demoDir: string;
+  /**
+   * N10: wall-clock bound on the initiative gate command (ms). A gate killed
+   * by this timeout is classified as an ENVIRONMENT failure (distinct
+   * `unifier.gate.timeout` event, `failure_kind: 'environment'`), never a
+   * work failure. Absent ⇒ no timeout (unit-test callers).
+   */
+  gateTimeoutMs?: number;
+  /**
+   * ADR 036 / N1 — orchestrator-owned demo capture. When set AND demo.json
+   * declares capture-needing checkpoints (a `command`, or an explicit
+   * screenshot/video kind), the ORCHESTRATOR spawns this argv in the worktree
+   * before validating the demo — so before/after evidence is produced by a
+   * process the agent never ran, and hand-written outputs for command
+   * checkpoints are overwritten by the real run. Production passes
+   * `buildDemoCaptureArgv(initiativeId)` (the forge CLI's `demo capture`);
+   * tests substitute a fake script. Best-effort: a capture failure/timeout is
+   * recorded as an event but does not block the gate (the demo validation +
+   * review judge on the resulting artifacts).
+   */
+  orchestratedCapture?: { argv: string[]; timeoutMs?: number };
 };
 
 /**
@@ -1820,8 +1875,49 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
     });
   };
 
+  // Live-gate-feedback seam (ADR 036 / 2026-07 friction): persist the
+  // orchestrator's OWN gate verdict for the next agent iteration. The unifier
+  // previously had no equivalent of the dev-loop's `.forge/last-gate-failure.md`
+  // — the agent learned of composed-gate failures only by re-running gates
+  // itself. The file is deleted when the composed gate passes (and at unifier
+  // start, per the stale-file theme), so "present ⇒ fresh".
+  const failFeedback = (checkId: CheckId | 'gate-timeout', lines: string[]): void => {
+    writeUnifierGateFeedback(worktreePath, checkId, lines);
+  };
+
   // 1. initiative_gate
-  const initiativeGate = runShellGate(worktreePath, qualityGateCmd);
+  const initiativeGate = runShellGate(worktreePath, qualityGateCmd, input.gateTimeoutMs);
+  if (initiativeGate.timedOut) {
+    // N10: killed by OUR timeout — an ENVIRONMENT failure (load / hung live
+    // step), categorically distinct from a work failure and from a broken
+    // gate. Distinct event + failure_kind so the classifier retries instead
+    // of failing the work as wrong.
+    emitSubCheck('initiative_gate', false, `gate command timed out after ${input.gateTimeoutMs}ms (environment, not work-failure)`);
+    logger.emit({
+      initiative_id: input.initiativeIdForEvent,
+      parent_event_id: input.parentEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      input_refs: [worktreePath],
+      output_refs: [],
+      message: 'unifier.gate.timeout',
+      metadata: {
+        failure_class: 'dev-loop-unifier-gate-timeout',
+        failure_kind: 'environment',
+        gate_timed_out: true,
+        command: qualityGateCmd,
+        timeout_ms: input.gateTimeoutMs,
+        gate_stderr_tail: initiativeGate.stderr.slice(-2000),
+      },
+    });
+    failFeedback('gate-timeout', [
+      `The quality-gate command was KILLED after exceeding its ${input.gateTimeoutMs}ms timeout.`,
+      'This is an ENVIRONMENT failure (machine load / a hung step) — the work may be complete.',
+      `Command: ${qualityGateCmd.join(' ')}`,
+    ]);
+    return false;
+  }
   if (!initiativeGate.passed) {
     emitSubCheck(
       'initiative_gate',
@@ -1847,9 +1943,60 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         gate_stderr_tail: initiativeGate.stderr.slice(-2000),
       },
     });
+    failFeedback('initiative_gate', [
+      initiativeGate.errored
+        ? 'The quality-gate command could not RUN (broken gate — fix the gate/build itself, not the code).'
+        : 'The quality-gate command ran and FAILED (non-zero exit). Fix exactly what it reports.',
+      `Command: ${qualityGateCmd.join(' ')}`,
+      '',
+      '## stderr (tail)',
+      '```',
+      initiativeGate.stderr.slice(-2000),
+      '```',
+    ]);
     return false;
   }
   emitSubCheck('initiative_gate', true, `gate command exited 0 (${qualityGateCmd.join(' ')})`);
+
+  // ADR 036 / N1 — orchestrator-owned demo capture. Runs BEFORE the demo is
+  // validated so the artifacts the gate (and the reviewer) judge are the ones
+  // the ORCHESTRATOR produced: `forge demo capture` re-runs every command
+  // checkpoint on main AND branch HEAD and back-fills the REAL output over
+  // whatever text the agent wrote. Best-effort by contract (same as the CLI):
+  // a failed/timed-out capture is recorded but does not block — the demo
+  // validation below judges whatever evidence exists.
+  const demoJsonPathForCapture = join(worktreePath, demoDir, 'demo.json');
+  if (input.orchestratedCapture && demoJsonWantsCapture(demoJsonPathForCapture)) {
+    const captureTimeoutMs = input.orchestratedCapture.timeoutMs ?? resolveDemoCaptureTimeoutMs();
+    const cap = runOrchestratorCommand(input.orchestratedCapture.argv, {
+      cwd: worktreePath,
+      timeoutMs: captureTimeoutMs,
+    });
+    const committed = cap.ok
+      ? commitOrchestratedCaptureArtifacts(worktreePath, demoDir, input.initiativeId)
+      : false;
+    logger.emit({
+      initiative_id: input.initiativeIdForEvent,
+      parent_event_id: input.parentEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'log',
+      input_refs: [demoJsonPathForCapture],
+      output_refs: committed ? [demoJsonPathForCapture] : [],
+      duration_ms: cap.durationMs,
+      message: 'unifier.demo-capture',
+      metadata: {
+        capture_ok: cap.ok,
+        exit_code: cap.exitCode,
+        command: cap.command,
+        stdout_tail: cap.stdoutTail,
+        stderr_tail: cap.stderrTail,
+        committed,
+        ...(cap.timedOut ? { timed_out: true, failure_kind: 'environment', timeout_ms: captureTimeoutMs } : {}),
+        ...(cap.errored ? { capture_errored: true } : {}),
+      },
+    });
+  }
 
   // 2. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
   //    is derived. The gate validates demo.json against the schema — the
@@ -1918,6 +2065,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         pr_body_ok: prBodyOk,
       },
     });
+    failFeedback('pr_self_contained', [
+      'The PR is not self-contained yet:',
+      ...(demoOk ? [] : [`- demo.json (${demoDir}/demo.json) errors: ${demoErrors.join('; ')}`]),
+      ...(prBodyOk ? [] : ['- .forge/pr-description.md is missing or lacks the ## Why / ## What / ## How sections']),
+    ]);
     return false;
   }
   emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
@@ -1942,6 +2094,10 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         error: errMsg,
       },
     });
+    failFeedback('branches_in_sync', [
+      'Local and remote branches have diverged — push the branch so origin matches local HEAD.',
+      `Detail: ${errMsg}`,
+    ]);
     return false;
   }
   emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
@@ -1969,6 +2125,10 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         message: 'unifier.gate.delivery-indeterminate',
         metadata: { failure_class: 'delivery-indeterminate', reason: delivery.reason },
       });
+      failFeedback('complete_delivery', [
+        'The delivery-completeness check could not be computed (fails closed).',
+        `Reason: ${delivery.reason}`,
+      ]);
       return false;
     }
     if (delivery.missing.length > 0) {
@@ -1988,12 +2148,57 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
           missing: delivery.missing,
         },
       });
+      failFeedback('complete_delivery', [
+        'Declared WI output paths are MISSING from the branch diff (git diff --name-only main...HEAD):',
+        ...delivery.missing.map((m) => `- ${m.path} (${m.work_item_id})`),
+        'Create each missing path (a compiling stub satisfies the path check), commit, and push.',
+      ]);
       return false;
     }
     emitSubCheck('complete_delivery', true, 'all declared creates[] paths present in branch diff');
   }
 
+  // Composed gate PASSED — remove the feedback file so a later session never
+  // reads a fossil (the 2026-07-04 stale-last-gate-failure theme).
+  clearUnifierGateFeedback(worktreePath);
   return true;
+}
+
+/**
+ * Persist the composed unifier gate's failing verdict to
+ * `.forge/last-gate-failure.md` — the SAME live-gate-feedback seam the
+ * dev-loop uses — so the next unifier iteration fixes exactly what the
+ * orchestrator's own gate run reported instead of re-deriving it. Deleted on
+ * a passing composed gate and at unifier start, so "present ⇒ fresh".
+ */
+function writeUnifierGateFeedback(worktreePath: string, checkId: string, lines: string[]): void {
+  try {
+    const body = [
+      `# Live quality-gate failure — AUTHORITATIVE (forge unifier composed gate: ${checkId})`,
+      '',
+      'This is the result of the orchestrator\'s OWN gate run — the same composed gate that',
+      'decides whether the PR can open. Forge deletes this file at unifier start and after',
+      'every passing gate run, so if you are reading it, it is FRESH. Fix exactly what is',
+      'below; the initiative is NOT review-ready until this file disappears.',
+      '',
+      ...lines,
+      '',
+    ].join('\n');
+    mkdirSync(join(worktreePath, '.forge'), { recursive: true });
+    writeFileSync(join(worktreePath, '.forge', 'last-gate-failure.md'), body);
+  } catch {
+    /* best-effort — never throw out of the gate */
+  }
+}
+
+/** Delete `.forge/last-gate-failure.md` (passing gate / fresh unifier session). */
+export function clearUnifierGateFeedback(worktreePath: string): void {
+  try {
+    const p = join(worktreePath, '.forge', 'last-gate-failure.md');
+    if (existsSync(p)) unlinkSync(p);
+  } catch {
+    /* best-effort */
+  }
 }
 
 /**
@@ -2066,25 +2271,29 @@ export function collectMissingDeliveries(
   return { indeterminate: false, missing };
 }
 
-type ShellGateResult = { passed: boolean; errored: boolean; stderr: string };
+type ShellGateResult = { passed: boolean; errored: boolean; timedOut: boolean; stderr: string };
 
 /**
  * Run a unifier gate command. Distinguishes a gate that RAN and returned
  * non-zero (test/build fail) from a gate that could NOT RUN at all (missing
  * binary / EACCES / killed by signal) — the latter is a broken gate, not a
- * delivery failure (re-review #1). Callers emit a distinct `gate-errored`
- * class for the errored case and stop discarding stderr.
+ * delivery failure (re-review #1) — and (N10) from a gate KILLED by our own
+ * `timeoutMs`, which is an ENVIRONMENT failure, never a work failure.
  */
-function runShellGate(worktreePath: string, cmd: string[]): ShellGateResult {
-  if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, stderr: 'empty gate command' };
+function runShellGate(worktreePath: string, cmd: string[], timeoutMs?: number): ShellGateResult {
+  if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, timedOut: false, stderr: 'empty gate command' };
   const [head, ...rest] = cmd;
+  const startedAt = Date.now();
   try {
-    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe' });
-    return { passed: true, errored: false, stderr: '' };
+    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe', ...(timeoutMs ? { timeout: timeoutMs } : {}) });
+    return { passed: true, errored: false, timedOut: false, stderr: '' };
   } catch (err) {
     const e = err as { status?: number | null; code?: string; signal?: string; message?: string; stderr?: Buffer | string };
     const stderr = e.stderr ? (typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8')) : (e.message ?? '');
-    const errored = e.code === 'ENOENT' || e.code === 'EACCES' || (!!e.signal && (e.status === null || e.status === undefined));
-    return { passed: false, errored, stderr };
+    const killedBySignal = !!e.signal && (e.status === null || e.status === undefined);
+    const deadlineElapsed = timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs;
+    const timedOut = e.code === 'ETIMEDOUT' || (killedBySignal && deadlineElapsed);
+    const errored = !timedOut && (e.code === 'ENOENT' || e.code === 'EACCES' || killedBySignal);
+    return { passed: false, errored, timedOut, stderr };
   }
 }

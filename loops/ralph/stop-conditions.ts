@@ -125,7 +125,7 @@ export type GateRunInfo = {
    * rejected the run. Empty when the gate's outcome was determined by exit
    * code alone (the pre-tightening behaviour).
    */
-  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored' | 'live-env-missing';
+  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored' | 'live-env-missing' | 'gate-timeout';
   /**
    * Set when the gate command itself could NOT RUN (missing binary, EACCES,
    * killed by signal) — a BROKEN GATE, categorically different from a test
@@ -135,6 +135,18 @@ export type GateRunInfo = {
    * iterating against an unrunnable command.
    */
   errored?: boolean;
+  /**
+   * N10 (2026-07 betterado friction): set when the gate was KILLED by its
+   * timeout — an ENVIRONMENT failure (concurrent-build load, a hung live
+   * call), categorically distinct from BOTH a work-failure (tests ran and
+   * failed) and a broken gate (`errored`). The emitter logs a distinct
+   * `gate.timeout` event with `failure_kind: 'environment'` so the failure
+   * classifier routes it as transient (auto-retry) instead of "the code was
+   * wrong" — the 2026-07-04 security-permissions UWI-6 case: the fix was
+   * complete and pushed, but a timed-out judge gate read as work-failure and
+   * burned the remaining loop budget.
+   */
+  timedOut?: boolean;
   /**
    * The Ralph iteration this gate ran in. iter-0 is the sharp-gate
    * must-fail check that runs BEFORE the agent has done any work; a
@@ -231,7 +243,31 @@ export type GateTighteningOptions = {
    * though secrets.env held them — the 2026-06-08 betterado cycle failures.
    */
   requiredEnv?: readonly string[];
+  /**
+   * Wall-clock bound on the gate child process (ms). When exceeded the child
+   * is killed and the run is classified `timedOut` (environment failure, NOT
+   * work-failure — N10). Absent ⇒ no timeout (pre-2026-07 behaviour; callers
+   * on the orchestrator hot path pass `resolveGateTimeoutMs()`).
+   */
+  timeoutMs?: number;
 };
+
+/** Default wall-clock bound for orchestrator-run gate commands (30 min). */
+const DEFAULT_GATE_TIMEOUT_MS = 30 * 60_000;
+
+/**
+ * Resolve the gate-command timeout: `FORGE_GATE_TIMEOUT_MS` overrides (heavy
+ * live-acceptance gates — e.g. a multi-resource terraform apply — can
+ * legitimately exceed the default under a cold cache); otherwise 30 min.
+ */
+export function resolveGateTimeoutMs(): number {
+  const raw = process.env.FORGE_GATE_TIMEOUT_MS;
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return DEFAULT_GATE_TIMEOUT_MS;
+}
 
 /**
  * Minimal dotenv read of the project's `secrets.env` — the forge↔project
@@ -389,7 +425,12 @@ function runGateCapturing(
   // (no-work / required-paths) OR when the command itself could not run (errored).
   let rejectReason: GateRunInfo['rejectReason'];
   try {
-    const out = execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe', ...(gateEnv ? { env: gateEnv } : {}) });
+    const out = execFileSync(head, rest, {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      ...(gateEnv ? { env: gateEnv } : {}),
+      ...(options?.timeoutMs ? { timeout: options.timeoutMs } : {}),
+    });
     stdout = out.toString('utf8');
     passed = true;
   } catch (err) {
@@ -397,6 +438,33 @@ function runGateCapturing(
     if (e.stdout) stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout.toString('utf8');
     if (e.stderr) stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8');
     passed = false;
+    // N10: killed by OUR OWN timeout — an environment failure (load, a hung
+    // live call), not a work failure and not a broken gate. Node reports it as
+    // code ETIMEDOUT (belt: any kill-signal death after the deadline elapsed).
+    const deadlineElapsed = options?.timeoutMs !== undefined && Date.now() - startedAt >= options.timeoutMs;
+    const killedBySignalRaw = !!e.signal && (e.status === null || e.status === undefined);
+    if (e.code === 'ETIMEDOUT' || (killedBySignalRaw && deadlineElapsed)) {
+      exitCode = -6; // synthetic — gate killed by timeout (environment, not work-failure)
+      rejectReason = 'gate-timeout';
+      stderr =
+        (stderr ? stderr + (stderr.endsWith('\n') ? '' : '\n') : '') +
+        `[forge gate-timeout] the gate command was killed after exceeding its ${options?.timeoutMs}ms timeout.\n` +
+        `  This is an ENVIRONMENT failure (machine load / a hung step), NOT a work failure — the code may well be ` +
+        `complete. The orchestrator classifies it as transient; raise FORGE_GATE_TIMEOUT_MS if this gate is ` +
+        `legitimately slow (e.g. a cold multi-package build or a long live-acceptance run).`;
+      onRun?.({
+        passed: false,
+        timedOut: true,
+        exitCode,
+        durationMs: Date.now() - startedAt,
+        stdoutTail: tail(stdout, GATE_OUTPUT_MAX),
+        stderrTail: tail(stderr, GATE_OUTPUT_MAX),
+        command,
+        rejectReason,
+        iteration,
+      });
+      return false;
+    }
     // Gate ERROR vs test FAIL (re-review #1). The command could not be EXECUTED
     // as intended — a missing binary (ENOENT), permission error (EACCES), or a
     // kill signal (no exit status) — as opposed to a test runner that ran and
@@ -405,7 +473,7 @@ function runGateCapturing(
     // cycle as if the CODE were wrong, mis-training the reflector. Surface it as
     // a distinct state so the classifier says "fix the gate", not "tests failed".
     const spawnFailed = e.code === 'ENOENT' || e.code === 'EACCES';
-    const killedBySignal = !!e.signal && (e.status === null || e.status === undefined);
+    const killedBySignal = killedBySignalRaw;
     if (spawnFailed || killedBySignal) {
       errored = true;
       exitCode = -4; // synthetic — gate could not run (distinct from a real non-zero exit)

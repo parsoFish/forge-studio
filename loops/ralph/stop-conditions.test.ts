@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeQualityGateFromCmd, readWorktreeSecretsEnv, type GateRunInfo } from './stop-conditions.ts';
+import { makeQualityGateFromCmd, readWorktreeSecretsEnv, resolveGateTimeoutMs, type GateRunInfo } from './stop-conditions.ts';
 
 test('makeQualityGateFromCmd: returns true when command exits 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
@@ -60,6 +60,63 @@ test('makeQualityGateFromCmd: a missing binary is reported as a gate ERROR, not 
     assert.match(info!.stderrTail, /BROKEN GATE/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// N10 (2026-07 betterado friction): a gate killed by its TIMEOUT is an
+// ENVIRONMENT failure (load / hung build), categorically distinct from both a
+// test fail (work-failure) and a broken gate (gate-errored). It gets its own
+// synthetic exit (-6), `timedOut: true`, and a `gate-timeout` reject reason so
+// the failure classifier can route it as transient instead of "the code was
+// wrong" or "fix the gate".
+test('makeQualityGateFromCmd: a gate exceeding timeoutMs is classified timedOut, not errored/work-fail', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sleep', '30'],
+      (i) => { info = i; },
+      { timeoutMs: 300 },
+    );
+    assert.equal(gate({ iteration: 1 }), false);
+    assert.ok(info, 'onRun must fire');
+    assert.equal(info!.timedOut, true, 'killed by timeout ⇒ timedOut');
+    assert.equal(info!.errored, undefined, 'timeout is NOT the broken-gate class');
+    assert.equal(info!.exitCode, -6, 'synthetic gate-timeout exit code');
+    assert.equal(info!.rejectReason, 'gate-timeout');
+    assert.match(info!.stderrTail, /\[forge gate-timeout\]/);
+    assert.match(info!.stderrTail, /environment/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: a fast gate under timeoutMs passes normally (no timeout side effects)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(dir, ['true'], (i) => { info = i; }, { timeoutMs: 5_000 });
+    assert.equal(gate(), true);
+    assert.equal(info!.timedOut, undefined);
+    assert.equal(info!.passed, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveGateTimeoutMs: default 30 min, FORGE_GATE_TIMEOUT_MS overrides', () => {
+  const prev = process.env.FORGE_GATE_TIMEOUT_MS;
+  try {
+    delete process.env.FORGE_GATE_TIMEOUT_MS;
+    assert.equal(resolveGateTimeoutMs(), 30 * 60_000);
+    process.env.FORGE_GATE_TIMEOUT_MS = '120000';
+    assert.equal(resolveGateTimeoutMs(), 120_000);
+    process.env.FORGE_GATE_TIMEOUT_MS = 'not-a-number';
+    assert.equal(resolveGateTimeoutMs(), 30 * 60_000);
+  } finally {
+    if (prev === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS;
+    else process.env.FORGE_GATE_TIMEOUT_MS = prev;
   }
 });
 

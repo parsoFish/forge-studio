@@ -136,3 +136,59 @@ test('classifyCycleFailure: no phase-start event in the log ⇒ falls back to sc
   assert.equal(c.kind, 'terminal');
   assert.match(c.reason, /missing npm script/i);
 });
+
+// ---------------------------------------------------------------------------
+// N10 (2026-07 betterado friction): a gate killed by its TIMEOUT is an
+// ENVIRONMENT failure — transient, auto-retryable — never "the code was
+// wrong" (work-failure) and never "fix the gate" (broken-gate terminal).
+// ---------------------------------------------------------------------------
+
+test('classifyCycleFailure: gate.timeout → transient environment failure, not work-failure', () => {
+  const events = [
+    ev({
+      event_type: 'error',
+      message: 'gate.timeout',
+      metadata: { gate_timed_out: true, failure_kind: 'environment', gate_exit_code: -6 },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.match(c.reason, /timed out/i);
+  assert.match(c.reason, /environment/i);
+});
+
+test('classifyCycleFailure: unifier.gate.timeout beats the unifier.failed terminal (the timeout CAUSED the failure)', () => {
+  const events = [
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.gate.timeout',
+      metadata: { gate_timed_out: true, failure_kind: 'environment' },
+    }),
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.failed',
+      metadata: { status: 'failed', failure_class: 'dev-loop-unifier-gate-timeout' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /timed out/i);
+});
+
+test('classifyCycleFailure: gate.errored (broken gate, NOT timeout) stays terminal', () => {
+  const events = [
+    ev({
+      event_type: 'error',
+      message: 'gate.errored',
+      metadata: { gate_errored: true, gate_exit_code: -4 },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /BROKEN GATE/);
+});

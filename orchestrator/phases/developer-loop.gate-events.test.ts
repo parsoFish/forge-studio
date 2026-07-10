@@ -21,6 +21,7 @@ import {
   writeFileSync,
   readFileSync,
   rmSync,
+  existsSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -378,6 +379,231 @@ test('composedUnifierGate sub-check events have correct phase/skill/event_type/m
       assert.ok('pass' in meta, 'metadata.pass required');
       assert.ok('detail' in meta, 'metadata.detail required');
     }
+  } finally {
+    h.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N10 (2026-07): initiative gate TIMEOUT → distinct unifier.gate.timeout event
+// classified as ENVIRONMENT failure, never work-failure / broken-gate.
+// ---------------------------------------------------------------------------
+
+test('composedUnifierGate initiative gate TIMEOUT: unifier.gate.timeout event with environment classification', async () => {
+  const h = unifierGateHarness();
+  try {
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['sleep', '30'],
+      gateTimeoutMs: 300,
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    assert.equal(passed, false);
+
+    const timeouts = h.events().filter((e) => e.message === 'unifier.gate.timeout');
+    assert.equal(timeouts.length, 1, 'expected exactly one unifier.gate.timeout event');
+    const md = timeouts[0]!.metadata as Record<string, unknown>;
+    assert.equal(md.gate_timed_out, true);
+    assert.equal(md.failure_kind, 'environment');
+    assert.equal(md.failure_class, 'dev-loop-unifier-gate-timeout');
+
+    // No unifier.gate.initiative-failed / unifier.gate.errored mis-classification.
+    assert.equal(h.events().filter((e) => e.message === 'unifier.gate.initiative-failed').length, 0);
+    assert.equal(h.events().filter((e) => e.message === 'unifier.gate.errored').length, 0);
+  } finally {
+    h.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Live-gate-feedback seam for the unifier (design step 2): the orchestrator's
+// own gate result is persisted to .forge/last-gate-failure.md for the next
+// agent iteration, and DELETED when the composed gate passes.
+// ---------------------------------------------------------------------------
+
+test('composedUnifierGate failure writes .forge/last-gate-failure.md for the next iteration', async () => {
+  const h = unifierGateHarness();
+  try {
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['false'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    assert.equal(passed, false);
+    const fb = join(h.worktreePath, '.forge', 'last-gate-failure.md');
+    assert.ok(existsSync(fb), 'gate failure must persist feedback for the next iteration');
+    const body = readFileSync(fb, 'utf8');
+    assert.match(body, /initiative_gate/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('composedUnifierGate pass DELETES a stale .forge/last-gate-failure.md', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJson(h.worktreePath, INITIATIVE_ID);
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    // A stale feedback file from a prior failed evaluation.
+    mkdirSync(join(h.worktreePath, '.forge'), { recursive: true });
+    writeFileSync(join(h.worktreePath, '.forge', 'last-gate-failure.md'), '# stale\n');
+
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    assert.equal(passed, true);
+    assert.ok(
+      !existsSync(join(h.worktreePath, '.forge', 'last-gate-failure.md')),
+      'a passing composed gate must remove the stale feedback file',
+    );
+  } finally {
+    h.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N1 — orchestrator-owned demo capture: when demo.json carries command
+// checkpoints, the ORCHESTRATOR (not the agent) spawns the capture runner in
+// the worktree, records its output as events, and commits what it produced.
+// ---------------------------------------------------------------------------
+
+/** demo.json with a command checkpoint (the orchestrated-capture trigger). */
+function writeDemoJsonWithCommand(wt: string, initiativeId: string): void {
+  const demoDir = join(wt, 'demo', initiativeId);
+  mkdirSync(demoDir, { recursive: true });
+  writeFileSync(
+    join(demoDir, 'demo.json'),
+    JSON.stringify({
+      title: 'Test demo',
+      essence: 'Validates orchestrator-owned capture.',
+      project: 'test-project',
+      diffStat: '2 files changed, 10 insertions(+)',
+      checkpoints: [
+        {
+          label: 'CLI output',
+          caption: 'Real stdout captured by the orchestrator.',
+          command: 'echo hello',
+        },
+      ],
+    }),
+  );
+}
+
+test('composedUnifierGate spawns the orchestrated capture in the worktree and records events (N1)', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJsonWithCommand(h.worktreePath, INITIATIVE_ID);
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    // Fake capture runner standing in for `forge demo capture`: proves cwd is
+    // the worktree and produces a derived artifact the orchestrator commits.
+    const script = join(h.worktreePath, 'fake-capture.sh');
+    writeFileSync(
+      script,
+      '#!/bin/bash\npwd > captured-cwd.txt\necho "captured" > demo/INIT-test/DEMO.md\necho done\n',
+      { mode: 0o755 },
+    );
+
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      orchestratedCapture: { argv: ['bash', 'fake-capture.sh'], timeoutMs: 10_000 },
+    });
+    assert.equal(passed, true, 'gate should pass after orchestrated capture');
+
+    // The child ran with cwd = the worktree.
+    const cwdMarker = join(h.worktreePath, 'captured-cwd.txt');
+    assert.ok(existsSync(cwdMarker), 'capture child must run in the worktree');
+
+    // Structured event: command + exit code + output tail.
+    const captureEvents = h.events().filter((e) => e.message === 'unifier.demo-capture');
+    assert.equal(captureEvents.length, 1);
+    const md = captureEvents[0]!.metadata as Record<string, unknown>;
+    assert.equal(md.exit_code, 0);
+    assert.equal(md.capture_ok, true);
+    assert.match(String(md.command), /fake-capture\.sh/);
+    assert.match(String(md.stdout_tail), /done/);
+
+    // The orchestrator committed (and pushed) the capture-produced artifacts,
+    // so branches_in_sync still holds and the evidence is ON the branch.
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: h.worktreePath, encoding: 'utf8' });
+    assert.match(log, /orchestrated demo capture/i);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('composedUnifierGate skips orchestrated capture when no checkpoint wants it', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJson(h.worktreePath, INITIATIVE_ID); // notes-only checkpoint, no command
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      orchestratedCapture: { argv: ['bash', '-c', 'exit 1'], timeoutMs: 10_000 },
+    });
+    assert.equal(passed, true);
+    assert.equal(h.events().filter((e) => e.message === 'unifier.demo-capture').length, 0);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('composedUnifierGate orchestrated capture TIMEOUT is best-effort: recorded as environment, gate proceeds', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJsonWithCommand(h.worktreePath, INITIATIVE_ID);
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      orchestratedCapture: { argv: ['sleep', '30'], timeoutMs: 300 },
+    });
+    assert.equal(passed, true, 'capture is best-effort — a timeout must not block the gate');
+
+    const captureEvents = h.events().filter((e) => e.message === 'unifier.demo-capture');
+    assert.equal(captureEvents.length, 1);
+    const md = captureEvents[0]!.metadata as Record<string, unknown>;
+    assert.equal(md.capture_ok, false);
+    assert.equal(md.timed_out, true);
+    assert.equal(md.failure_kind, 'environment');
   } finally {
     h.cleanup();
   }

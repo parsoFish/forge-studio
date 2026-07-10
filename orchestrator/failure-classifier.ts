@@ -63,7 +63,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let agentThrew = false, devLoopTotalFailure = false;
   let unifierNoDemo = false, unifierNotPassed = false, reviewFailed = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
-  let gateErrored = false;
+  let gateErrored = false, gateTimedOut = false;
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -94,6 +94,14 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // mis-trained into "the code was wrong". Covers per-WI (gate.errored) and
     // unifier (unifier.gate.errored) paths via the gate_errored metadata flag.
     if (md.gate_errored === true || msg === 'gate.errored' || msg === 'unifier.gate.errored') { gateErrored = true; ev(e); }
+    // N10 (2026-07 betterado): a gate killed by its TIMEOUT is an ENVIRONMENT
+    // failure (machine load / a hung live step), not a work failure and not a
+    // broken gate — the work may be complete (security-permissions UWI-6: fix
+    // landed and pushed, the compile-heavy judge gate timed out under
+    // concurrent-build load and the WI mis-failed). Covers per-WI
+    // (gate.timeout) and unifier (unifier.gate.timeout) paths via the
+    // gate_timed_out metadata flag.
+    if (md.gate_timed_out === true || msg === 'gate.timeout' || msg === 'unifier.gate.timeout') { gateTimedOut = true; ev(e); }
     if (e.event_type === 'error') {
       const blob = (msg + ' ' + JSON.stringify(md)).toLowerCase();
       // Transient API-pressure signatures: rate limits, usage limits, overload,
@@ -121,6 +129,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       }
     }
   }
+
+  // N10: checked BEFORE the terminal chain — when a gate timed out, the
+  // timeout is the CAUSE of any downstream terminal-looking signal
+  // (unifier.failed, dev-loop total failure) and a retry under normal load
+  // is the correct move. Environment, not work.
+  if (gateTimedOut) return T('transient', 'a quality gate timed out (environment failure — machine load / hung step, NOT a work failure; the code may be complete). Auto-retry; raise FORGE_GATE_TIMEOUT_MS if this gate is legitimately slow.', evidence);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
