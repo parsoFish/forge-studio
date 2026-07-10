@@ -84,6 +84,10 @@ Each entry on this index is one line:
 
 ### Auto-linked (re-file under a curated heading when convenient)
 
+- [`2026-07-03-pm-hidden-coupling-gate-forces-serial-chain`](./themes/2026-07-03-pm-hidden-coupling-gate-forces-serial-chain.md) — When multiple WIs each edit framework_provider.go + provider.go + provider_test.go, the orchestrator's hidden-coupling checker rejects the decomposition; PM must re-run with a strict serial dependency chain (each WI → next). The gate works but doubles PM cost.
+
+- [`2026-06-08-unifier-crash-main-divergence-resume`](./themes/2026-06-08-unifier-crash-main-divergence-resume.md) — When a sibling initiative merges to main between cycle start and unifier phase, the invariant check fires and kills the unifier; recovery via resume_from:unifier skips ralph entirely and costs only ~1 unifier iteration.
+
 - [`2026-06-20-ralph-crash-with-committed-delivery`](./themes/2026-06-20-ralph-crash-with-committed-delivery.md) — WI-6 ralph crashed (exit code 1) mid-iteration but its git commits had already landed; dev-loop.delivered captured the work; per-WI status:failed was stale — the diff was authoritative.
 
 - [`2026-06-18-capstone-flow-as-data-live-gate`](./themes/2026-06-18-capstone-flow-as-data-live-gate.md) — The betterado capstone proved forge can author a flow as Studio data and run real live work to merged PRs; the live-acceptance gate is the load-bearing quality mechanism; gap-bugs cluster at API-shape boundaries.

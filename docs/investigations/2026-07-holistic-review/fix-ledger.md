@@ -28,12 +28,12 @@
 
 | # | Item (plan ref) | Surface | Status |
 |---|---|---|---|
-| W1.1 | 1.1 failure-classifier windowing (G5: classify from last N events, not full-history first-match) | orchestrator failure classifier | pending |
-| W1.2 | 1.2 gate-node derivation (hardcoded `gate='review'` in derive; show real gate names) | orchestrator/run-model-derive.ts | pending |
-| W1.3 | 1.7 fan-out truth (G6: runtime honors fanOut-forbidden-on-entry that lint already flags) | orchestrator flow engine | pending |
-| W1.4 | 1.9 reflector-loss visibility (lint-style check: diff `_queue/done/` vs `brain/cycles/_raw/`) | cli (brain lint family) | pending |
-| W1.5 | 1.10 reflector question re-emission + category→brain routing prompt clause | skills/ reflector skill | pending |
-| W1.6 | 2.12 docs-only gate-fit authoring clause | skills/ architect + PM skills | pending |
+| W1.1 | 1.1 failure-classifier windowing (G5: classify from last N events, not full-history first-match) | orchestrator failure classifier | done |
+| W1.2 | 1.2 gate-node derivation (hardcoded `gate='review'` in derive; show real gate names) | orchestrator/run-model-derive.ts | done |
+| W1.3 | 1.7 fan-out truth (G6: runtime honors fanOut-forbidden-on-entry that lint already flags) | orchestrator flow engine | done |
+| W1.4 | 1.9 reflector-loss visibility (lint-style check: diff `_queue/done/` vs `brain/cycles/_raw/`) | cli (brain lint family) | done |
+| W1.5 | 1.10 reflector question re-emission + category→brain routing prompt clause | skills/ reflector skill | done |
+| W1.6 | 2.12 docs-only gate-fit authoring clause | skills/ architect + PM skills | done |
 
 ## Wave 2 — cost truth + UI instruments (parallel ×4)
 

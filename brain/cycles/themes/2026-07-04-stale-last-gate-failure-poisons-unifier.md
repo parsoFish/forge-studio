@@ -30,7 +30,7 @@ Fix #1 (delete-at-start) is simplest and eliminates the class entirely. Fix #2 i
 
 ## Affected components
 
-- Orchestrator: `orchestrator/phases/unifier.ts` or equivalent unifier-invocation path
+- Orchestrator: unifier-invocation path
 - Unifier PROMPT.md / AGENT.md
 
 ## Sources
