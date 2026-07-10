@@ -14,8 +14,9 @@
  *    deterministic per-PHASE node set (filter out fanOut WI expansion) and a
  *    per-WI node set independently.
  *  - Each phase hex carries `costUsd` from `run.phaseMeta[nodeId].costUsd`
- *    (0 when absent). WI hexes carry costUsd=0 (per-WI cost is not tracked
- *    separately).
+ *    (0 when absent). WI hexes keep costUsd=0 (phase semantics) and carry
+ *    their own spend as `wiCostUsd` from `run.workItems[].costUsd` (item 1.4;
+ *    surfaced as `data-wi-cost-usd`, mirroring `data-phase-cost-usd`).
  *  - `topologyHexes` is the deduplicated set used to render the node layer —
  *    exactly one 'phase' hex per nodeId, plus every 'wi' hex. `hexes` is the
  *    full (pre-dedup) set, kept because edges resolve by nodeId only.
@@ -46,6 +47,7 @@ export interface HexPos {
   wiId?: string; // set for fanOut-expanded WI hexes
   dependsOn?: string[]; // WI dependency ids (fanOut WI hexes) — surfaced as data-wi-deps (#11)
   costUsd: number; // per-phase cost (0 for WI hexes)
+  wiCostUsd?: number; // per-WI cost (WI hexes only) — surfaced as data-wi-cost-usd (1.4)
 }
 
 /** Tight bounding box over the render set (topologyHexes), in canvas-px hex centers. */
@@ -164,6 +166,7 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
             wiId: wiItem.id,
             dependsOn: wiItem.dependsOn,
             costUsd: 0,
+            wiCostUsd: wiItem.costUsd ?? 0,
           });
           rowIndex++;
         }

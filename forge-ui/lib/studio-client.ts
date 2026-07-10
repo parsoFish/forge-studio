@@ -51,7 +51,7 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;
   failNote?: string;
-  workItems?: { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
+  workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   /**
    * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
    * A threaded spine run carries [forge-architect, forge-develop, forge-reflect] so it

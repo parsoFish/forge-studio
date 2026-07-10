@@ -10,7 +10,10 @@ import type { Flow, Run } from '@/lib/studio-client';
 // Design §6 contract:
 //  - No ReactFlow; pure positioned divs + SVG bezier edges
 //  - x = topo level, y = lane within level (siblings stacked vertically)
-//  - fanOut node expands to one hex per run.workItems when WIs present
+//  - fanOut node expands to one hex per run.workItems when WIs present;
+//    each WI hex mirrors its own spend as data-wi-cost-usd (from
+//    run.workItems[].costUsd — item 1.4), alongside data-wi-id/data-wi-deps,
+//    the same DOM-as-metrics pattern as data-phase-cost-usd on phase hexes
 //  - Gated node shows "needs you" tag + pulsing ember outline
 //  - Failed node shows red outline
 //  - SVG bezier edges with artifact label at midpoint
@@ -388,6 +391,7 @@ function HexNode({
       data-hex-kind={hex.hexKind}
       {...(hex.wiId ? { 'data-wi-id': hex.wiId } : {})}
       {...(hex.dependsOn && hex.dependsOn.length > 0 ? { 'data-wi-deps': hex.dependsOn.join(',') } : {})}
+      {...(hex.wiId ? { 'data-wi-cost-usd': (hex.wiCostUsd ?? 0).toFixed(2) } : {})}
       data-phase-cost-usd={(hex.costUsd ?? 0).toFixed(2)}
       onClick={() => onNodeClick(hex.nodeId, hex.hexKind, hex.wiId)}
       style={{

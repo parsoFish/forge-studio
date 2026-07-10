@@ -204,6 +204,12 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     assert.equal(run.workItems?.length, 1, 'should have 1 WI');
     assert.equal(run.workItems?.[0].id, 'WI-1');
     assert.equal(run.workItems?.[0].status, 'complete');
+    // Per-WI cost (1.4): WI-scoped iteration events sum to 1.343978 (the rest
+    // of the dev spend in this older fixture predates work_item_id tagging).
+    assert.ok(
+      Math.abs((run.workItems?.[0].costUsd ?? 0) - 1.343978) < 0.01,
+      `WI-1 cost should be ~1.343978, got ${run.workItems?.[0].costUsd}`,
+    );
 
     // Artifacts ready
     assert.equal(run.artifactsReady['demo'], 'gate', 'demo artifact should be gate mode when gated');
@@ -265,6 +271,14 @@ test('aggregateRun: complete-release-definition real fixture — status gated, 5
     // 5 WIs, all complete
     assert.equal(run.workItems?.length, 5, 'should have 5 WIs');
     assert.ok(run.workItems?.every((wi) => wi.status === 'complete'), 'all WIs complete');
+    // Per-WI cost (1.4): every WI in this fixture carries iteration cost, and
+    // the WI-scoped sum stays at or below the dev phase total (8.325460).
+    assert.ok(run.workItems?.every((wi) => (wi.costUsd ?? 0) > 0), 'every WI carries cost');
+    const wiCostSum = (run.workItems ?? []).reduce((s, wi) => s + (wi.costUsd ?? 0), 0);
+    assert.ok(
+      Math.abs(wiCostSum - 6.982584) < 0.1,
+      `WI cost sum should be ~6.982584 (≤ dev phase total), got ${wiCostSum}`,
+    );
 
     // delivered: dev-loop.delivered metadata has files_changed, insertions, commits
     const delivered = run.phaseMeta['dev']?.delivered;

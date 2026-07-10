@@ -167,6 +167,38 @@ test('buildMonitorLayout: phase hexes carry per-phase cost from phaseMeta', () =
   ).toBeTruthy();
 });
 
+// ---------------------------------------------------------------------------
+// per-WI cost (plan item 1.4 — data-wi-cost-usd source)
+// ---------------------------------------------------------------------------
+
+test('buildMonitorLayout: WI hexes carry per-WI cost from run.workItems[].costUsd', () => {
+  const run = makeRun({
+    workItems: [
+      { id: 'WI-1', status: 'complete', costUsd: 0.62 },
+      { id: 'WI-2', status: 'active', costUsd: 0.31 },
+    ],
+  });
+  const layout = buildMonitorLayout(makeFlow(), run);
+  const wi1 = layout.topologyHexes.find((h) => h.wiId === 'WI-1');
+  const wi2 = layout.topologyHexes.find((h) => h.wiId === 'WI-2');
+  expect(wi1?.wiCostUsd).toBeCloseTo(0.62);
+  expect(wi2?.wiCostUsd).toBeCloseTo(0.31);
+  // phase hexes never carry wiCostUsd; WI hexes keep costUsd=0 (phase semantics)
+  expect(
+    layout.topologyHexes
+      .filter((h) => h.hexKind === 'phase')
+      .every((h) => h.wiCostUsd === undefined),
+  ).toBeTruthy();
+  expect(wi1?.costUsd).toBe(0);
+});
+
+test('buildMonitorLayout: WI without a costUsd defaults wiCostUsd to 0', () => {
+  const layout = buildMonitorLayout(makeFlow(), makeRun());
+  const wiHexes = layout.topologyHexes.filter((h) => h.hexKind === 'wi');
+  expect(wiHexes.length).toBe(2);
+  expect(wiHexes.every((h) => h.wiCostUsd === 0)).toBeTruthy();
+});
+
 test('buildMonitorLayout: missing phaseMeta entry → costUsd defaults to 0', () => {
   const run = makeRun({ phaseMeta: {} });
   const layout = buildMonitorLayout(makeFlow(), run);

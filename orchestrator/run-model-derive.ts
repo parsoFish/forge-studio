@@ -20,7 +20,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { EventLogEntry } from './logging.ts';
 import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-model.ts';
-import { sumAuthoritativeCostUsd } from './event-cost.ts';
+import { phasesWithIterationEvents, sumAuthoritativeCostUsd } from './event-cost.ts';
 
 // ---------------------------------------------------------------------------
 // Constants (used by derivation helpers only)
@@ -325,7 +325,7 @@ export function findGateChecks(
 export function deriveWorkItems(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
-): { id: string; status: RunPhaseStatus; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[] {
+): { id: string; status: RunPhaseStatus; costUsd: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[] {
   // Collect WI ids in order of first appearance
   const wiOrder: string[] = [];
   const wiIdSet = new Set<string>();
@@ -374,8 +374,17 @@ export function deriveWorkItems(
     if (bucket) bucket.push(e);
   }
 
+  // Per-WI cost (item 1.4): WI-scoped iteration events carry the authoritative
+  // spend (metadata.work_item_id rides on each dev-loop iteration event). The
+  // iteration-phase set is derived from the WHOLE stream — not the WI bucket —
+  // so a WI that crashed before iterating never counts a restated 'end'
+  // rollup the phase badge excludes (event-cost.ts rule; feeds the WI hex's
+  // data-wi-cost-usd, mirroring data-phase-cost-usd).
+  const iterationPhases = phasesWithIterationEvents(events);
+
   return wiOrder.map((id) => {
     const delivered = findDelivered(events, id); // M5: this WI's own net delta
+    const costUsd = sumAuthoritativeCostUsd(buckets.get(id) ?? [], iterationPhases);
     let status = wiStatusFor(buckets.get(id) ?? []);
     // A WI that auto-committed real work then crashed on a later retry is
     // recoverable, not a red failure — show 'retrying' so the hex matches its
@@ -383,7 +392,7 @@ export function deriveWorkItems(
     if (status === 'failed' && delivered && delivered.commits > 0) {
       status = 'retrying';
     }
-    return { id, status, ...wiSpec.get(id), delivered };
+    return { id, status, costUsd, ...wiSpec.get(id), delivered };
   });
 }
 
