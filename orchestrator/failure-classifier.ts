@@ -89,6 +89,41 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
 }
 
 /**
+ * G10 (2026-07 refinement, brain/cycles/themes/2026-07-03 + 2026-07-09
+ * parallel-golangci-lint themes): golangci-lint holds a file lock; when a
+ * concurrent run (another forge worktree, a prior cycle's straggler) holds it,
+ * the new invocation exits non-zero with this exact text instead of waiting.
+ * That is host contention — an environment failure that self-resolves in
+ * minutes — NOT a lint failure in the code.
+ */
+const PARALLEL_LINT_CONTENTION_SIGNATURE = 'parallel golangci-lint is running';
+
+/**
+ * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
+ * prereq-failed-cascade.md): the CLI's rate/usage-limit death surfaces in
+ * *reasoning/log* events ("You've hit your limit · resets 12:10am
+ * (Australia/Brisbane)") while the crash itself is a generic exit-code-1 —
+ * so limit detection cannot be restricted to error events. These are the
+ * HIGH-specificity signatures safe to scan across every event type: literal
+ * system/API strings that an agent merely *writing rate-limit handling code*
+ * won't emit (broad forms like `429` / `rate-limit` stay error-events-only).
+ */
+const RATE_LIMIT_TEXT_SIGNATURES = [
+  'hit your limit', // Claude Code CLI: "You've hit your limit · resets …"
+  'usage limit reached', // "Claude AI usage limit reached|resets …"
+  'rate_limit_error', // Anthropic API error type
+  'overloaded_error', // Anthropic API error type (529)
+] as const;
+
+/** True iff `text` carries one of the high-specificity rate/usage-limit
+ *  signatures. Shared with the dev-loop (N9) so the signature set that marks
+ *  a WI's death "environment" is the same one the classifier keys on. */
+export function matchesRateLimitSignature(text: string): boolean {
+  const t = text.toLowerCase();
+  return RATE_LIMIT_TEXT_SIGNATURES.some((s) => t.includes(s));
+}
+
+/**
  * G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): a cycle's event log accumulates across
  * scheduler resumes (ADR 019 resume-preserves-work) — a superseded earlier
@@ -127,7 +162,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let unifierNoDemo = false, unifierNotPassed = false, reviewFailed = false;
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
-  let gateErrored = false, gateTimedOut = false;
+  let gateErrored = false, gateTimedOut = false, transientLint = false;
   let crashDeterministic = false;
 
   for (const e of windowed) {
@@ -155,6 +190,23 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
       if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
       if (blob.includes('cannot find module') || blob.includes('module not found')) { worktreeNoDeps = true; ev(e); }
+    }
+    // G10: golangci-lint lock contention in any FAILED gate's captured output —
+    // per-WI / code-fix-UWI gates (`gate.fail`, tails), the unifier's composed
+    // initiative gate (`unifier.gate.initiative-failed`, stderr tail), and the
+    // final CI delivery gate (`cycle.ci-gate` red, output_tail). Passing gate
+    // events never set it (a pass that merely echoes the string is not
+    // contention that failed anything).
+    if (
+      e.event_type === 'error' &&
+      (msg === 'gate.fail' || msg === 'unifier.gate.initiative-failed' || msg === 'cycle.ci-gate')
+    ) {
+      const tails = (
+        String(md.gate_stderr_tail ?? '') + ' ' +
+        String(md.gate_stdout_tail ?? '') + ' ' +
+        String(md.output_tail ?? '')
+      ).toLowerCase();
+      if (tails.includes(PARALLEL_LINT_CONTENTION_SIGNATURE)) { transientLint = true; ev(e); }
     }
     // re-review #1/#5: a gate that could not RUN (missing binary / EACCES /
     // killed) is a BROKEN GATE, not a test or code failure. Distinct terminal
@@ -191,6 +243,11 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       ) { rateLimited = true; ev(e); }
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
     }
+    // N9: the CLI's limit death surfaces in reasoning/log events while the
+    // crash is a generic exit-code-1 — scan EVERY event type for the
+    // high-specificity limit signatures, plus the structured `rate_limited`
+    // flag the dev-loop stamps on an environment-failed WI's `ralph.end`.
+    if (md.rate_limited === true || matchesRateLimitSignature(msg)) { rateLimited = true; ev(e); }
     if (e.phase === 'orchestrator' && e.event_type === 'error') {
       if (msg.includes('developer-loop') && msg.includes('total failure')) { devLoopTotalFailure = true; ev(e); }
       // F1.I1: distinguish unifier-no-demo from generic reviewer failure.
@@ -203,11 +260,20 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     }
   }
 
-  // N10: checked BEFORE the terminal chain — when a gate timed out, the
-  // timeout is the CAUSE of any downstream terminal-looking signal
-  // (unifier.failed, dev-loop total failure) and a retry under normal load
-  // is the correct move. Environment, not work.
+  // Environment failures — checked BEFORE the terminal chain: the environment
+  // signal is the CAUSE of any downstream terminal-looking signal
+  // (agent_threw, unifier.failed, dev-loop total failure) and a retry under
+  // normal conditions is the correct move. Environment, not work.
+  // N10: gate killed by its timeout.
   if (gateTimedOut) return T('transient', 'a quality gate timed out (environment failure — machine load / hung step, NOT a work failure; the code may be complete). Auto-retry; raise FORGE_GATE_TIMEOUT_MS if this gate is legitimately slow.', evidence);
+  // G10: golangci-lint lock contention.
+  if (transientLint) return T('transient', 'a gate hit golangci-lint lock contention ("parallel golangci-lint is running" — environment failure: a concurrent lint run on this host held the lock, NOT a lint failure in the code). Auto-retry; the lock clears when the other run finishes.', evidence);
+  // N9: rate/usage-limit death — time-bounded API pressure, never a code
+  // defect. Must beat agent_threw + dev-loop-total-failure (the limit caused
+  // them) so the manifest goes back to pending instead of failed/ — dependents
+  // of this initiative stay QUEUED behind a retrying prerequisite rather than
+  // collapsing behind a dead one.
+  if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
@@ -233,7 +299,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.
-  if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (transient API pressure) — auto-retry', evidence);
   if (pmHiddenCoupling) return T('transient', 'PM emitted overlapping WIs (hidden coupling)', evidence);
   if (pmInvalidWorkItems) return T('transient', 'PM emitted schema-invalid WIs', evidence);
   if (brainSkipped) return T('transient', 'agent skipped brain reads', evidence);

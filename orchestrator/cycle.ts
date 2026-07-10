@@ -410,7 +410,7 @@ function writeCycleReportSafely(cycleId: string): void {
 // runProjectManager + its PM_LIVE_* defaults moved to
 // ./phases/project-manager.ts (Phase 3.4c step 3). Imported at the top.
 
-// runDeveloperLoop + its DEV_LIVE_* defaults + prerequisiteFailed +
+// runDeveloperLoop + its DEV_LIVE_* defaults + prerequisiteBlockage +
 // the dev-only emitGateEvent helper moved to ./phases/developer-loop.ts
 // (Phase 3.4c step 4). Imported at the top.
 

@@ -37,6 +37,7 @@ import type { AgentInvocation } from '../../loops/_adapters/types.ts';
 import { projectDemoRelDir, readArtifactRoot } from '../brain-paths.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
+import { matchesRateLimitSignature } from '../failure-classifier.ts';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from '../pr.ts';
 import {
@@ -321,7 +322,9 @@ export async function runDeveloperLoop(
     /* best-effort — a malformed config is fail-closed by the baseline gate */
   }
 
-  const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null }> = [];
+  // N9: `environment` marks a WI that died for an environment reason (rate-
+  // limit hit) — its dependents are left queued, not cascaded to failed.
+  const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null; environment?: boolean }> = [];
 
   for (const wi of toRun) {
     const wiStart = logger.emit({
@@ -339,7 +342,8 @@ export async function runDeveloperLoop(
     // delivered summary at its end (vs the one cycle-level aggregate).
     const wiBaseSha = gitHeadSha(input.worktreePath);
 
-    if (prerequisiteFailed(wi, wiOutcomes)) {
+    const blockage = prerequisiteBlockage(wi, wiOutcomes);
+    if (blockage === 'work-failure') {
       writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
       logger.emit({
         initiative_id: input.initiativeId,
@@ -353,6 +357,29 @@ export async function runDeveloperLoop(
         metadata: { work_item_id: wi.work_item_id, reason: 'prerequisite-failed' },
       });
       wiOutcomes.push({ id: wi.work_item_id, status: 'failed', result: null });
+      continue;
+    }
+    if (blockage === 'environment-failure') {
+      // N9: the prerequisite died for an ENVIRONMENT reason (rate-limit) — this
+      // WI was never attempted and nothing about it is wrong. Leave its status
+      // file `pending` (queued for the transient auto-retry) instead of
+      // cascading `failed`/`prerequisite-failed` through the whole wave.
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
+        output_refs: [],
+        message: 'ralph.skipped',
+        metadata: {
+          work_item_id: wi.work_item_id,
+          reason: 'prerequisite-environment-failure',
+          failure_kind: 'environment',
+        },
+      });
+      wiOutcomes.push({ id: wi.work_item_id, status: 'pending', result: null, environment: true });
       continue;
     }
 
@@ -395,6 +422,10 @@ export async function runDeveloperLoop(
       })();
     };
 
+    // N9: set from the reasoning stream below; read when classifying this
+    // WI's failure as environment (rate-limit) vs work.
+    let wiSawRateLimit = false;
+
     // Change C — Phase A per-tool live telemetry sink + agent built together.
     const { agent, toolSink: wiToolSink } = makeAgentWithTelemetry(
       logger,
@@ -420,6 +451,11 @@ export async function runDeveloperLoop(
       // Studio observability sub-gap #2: emit each assistant reasoning block
       // as a log event so the operator UI can show live "thinking" per WI hex.
       (text) => {
+        // N9: the CLI's rate/usage-limit death announces itself in the
+        // reasoning stream ("You've hit your limit · resets …") while the
+        // crash that follows is a generic exit-code-1 — remember the sighting
+        // so this WI's failure is marked environment, not work.
+        if (matchesRateLimitSignature(text)) wiSawRateLimit = true;
         try {
           logger.emit({
             initiative_id: input.initiativeId,
@@ -624,6 +660,14 @@ export async function runDeveloperLoop(
         : 'failed';
     writeWorkItemStatus(specPath, finalStatus);
 
+    // N9: a failed WI whose death carries a rate/usage-limit signature (seen
+    // in the reasoning stream, or in the thrown error itself) failed for an
+    // ENVIRONMENT reason — stamp it so the failure classifier retries the
+    // cycle and dependents below stay queued instead of cascading to failed.
+    const environmentFailure =
+      finalStatus === 'failed' &&
+      (wiSawRateLimit || (runnerError !== undefined && matchesRateLimitSignature(runnerError.message)));
+
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: wiStart.event_id,
@@ -642,6 +686,9 @@ export async function runDeveloperLoop(
         stop_reason: result?.stop_reason ?? 'crashed',
         tool_use: wiToolUse,
         runner_error: runnerError,
+        // N9: structured environment marker (mirrors the N10 gate.timeout
+        // convention) — the failure classifier keys on `rate_limited`.
+        ...(environmentFailure ? { failure_kind: 'environment', rate_limited: true } : {}),
       },
     });
 
@@ -693,12 +740,17 @@ export async function runDeveloperLoop(
         : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true },
     });
 
-    wiOutcomes.push({ id: wi.work_item_id, status: finalStatus, result });
+    wiOutcomes.push({
+      id: wi.work_item_id,
+      status: finalStatus,
+      result,
+      ...(environmentFailure ? { environment: true } : {}),
+    });
 
     if (!push.pushed) {
       // Mark every WI we won't reach as 'failed' with reason
-      // 'branch-push-failed-early-exit' — mirrors the prerequisiteFailed
-      // path's shape so metrics + cycle report stay accurate. Then break
+      // 'branch-push-failed-early-exit' — mirrors the prerequisite-blockage
+      // work-failure path's shape so metrics + cycle report stay accurate. Then break
       // out of the loop; the close-step invariant + failure classifier
       // take it from here.
       const currentIndex = ordered.findIndex((w) => w.work_item_id === wi.work_item_id);
@@ -1000,17 +1052,43 @@ export function assertDevLoopCloseSync(
   }
 }
 
-function prerequisiteFailed(
+/**
+ * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
+ * prereq-failed-cascade.md): decide whether a work item is blocked by a
+ * prerequisite's outcome, and by WHICH KIND of failure:
+ *
+ *   - `work-failure` — a prerequisite genuinely failed its work; the dependent
+ *     is failed with reason `prerequisite-failed` (the historical cascade).
+ *   - `environment-failure` — every blocking prerequisite died for an
+ *     ENVIRONMENT reason (rate-limit hit — `environment: true` on its outcome)
+ *     or was itself left `pending` by an environment skip (transitive). The
+ *     dependent is left QUEUED (`pending`) for the cycle's transient
+ *     auto-retry, NOT failed — the work was never attempted and nothing about
+ *     it is wrong.
+ *
+ * A genuine work failure dominates across mixed prerequisites. Outcomes
+ * without `environment` flags (the unifier's UWI loop) behave exactly like
+ * the old boolean `prerequisiteFailed`.
+ */
+export function prerequisiteBlockage(
   wi: WorkItem,
-  outcomes: Array<{ id: string; status: WorkItem['status'] }>,
-): boolean {
-  if (wi.depends_on.length === 0) return false;
-  const byId = new Map(outcomes.map((o) => [o.id, o.status] as const));
+  outcomes: ReadonlyArray<{ id: string; status: WorkItem['status']; environment?: boolean }>,
+): 'none' | 'work-failure' | 'environment-failure' {
+  if (wi.depends_on.length === 0) return 'none';
+  const byId = new Map(outcomes.map((o) => [o.id, o] as const));
+  let environmentBlocked = false;
   for (const dep of wi.depends_on) {
-    const status = byId.get(dep);
-    if (status === 'failed') return true;
+    const outcome = byId.get(dep);
+    if (!outcome) continue;
+    if (outcome.status === 'failed') {
+      if (outcome.environment === true) environmentBlocked = true;
+      else return 'work-failure';
+    }
+    // A dep left queued by an environment skip transitively blocks its
+    // dependents the same way — its work does not exist on the branch yet.
+    if (outcome.status === 'pending') environmentBlocked = true;
   }
-  return false;
+  return environmentBlocked ? 'environment-failure' : 'none';
 }
 
 /**
@@ -1355,7 +1433,9 @@ export async function runUnifier(
   const uwiOutcomes: UnifierItemOutcome[] = [];
   for (const uwi of pending) {
     const uwiPath = resolve(uwiDir, `${uwi.work_item_id}.md`);
-    if (prerequisiteFailed(uwi, uwiOutcomes)) {
+    // UWI outcomes never carry `environment` flags nor `pending` statuses, so
+    // this is exactly the old boolean prerequisite-failed check.
+    if (prerequisiteBlockage(uwi, uwiOutcomes) !== 'none') {
       writeWorkItemStatus(uwiPath, 'failed');
       logger.emit({
         initiative_id: input.initiativeId,

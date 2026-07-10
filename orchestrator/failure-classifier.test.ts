@@ -8,7 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCycleFailure } from './failure-classifier.ts';
+import { classifyCycleFailure, matchesRateLimitSignature } from './failure-classifier.ts';
 import type { EventLogEntry } from './logging.ts';
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {
@@ -231,8 +231,233 @@ test('classifyCycleFailure: N10 timeout priority beats the loop-cap signal (envi
       event_type: 'error',
       message: 'uwi.loop-cap-exhausted',
       metadata: { failure_class: 'dev-loop-unifier-loop-cap-exhausted', check_id: 'gate-timeout' },
+// ---------------------------------------------------------------------------
+// Item 2.4 / G10 — TRANSIENT-LINT: "parallel golangci-lint is running" is a
+// shared-cache/lock contention race on the host (a concurrent forge worktree
+// or a prior cycle's lint run still holds golangci-lint's file lock), NOT a
+// lint failure in the code. Error text is verbatim from
+// brain/cycles/themes/2026-07-03-parallel-golangci-lint-ci-gate-failure.md +
+// 2026-07-09-parallel-golangci-lint-transient-ci-gate-fail.md.
+// ---------------------------------------------------------------------------
+
+const PARALLEL_LINT_TAIL =
+  'Error: parallel golangci-lint is running\n' +
+  'The command is terminated due to an error: parallel golangci-lint is running';
+
+test('classifyCycleFailure: cycle.ci-gate red with "parallel golangci-lint is running" → transient environment (07-09 theme: was unclassified terminal)', () => {
+  const events = [
+    ev({ event_type: 'start', message: 'ralph.start' }),
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'cycle.ci-gate',
+      metadata: {
+        ok: false,
+        ran_fixer: false,
+        ci_gate: ['make', 'test'],
+        output_tail: PARALLEL_LINT_TAIL,
+      },
     }),
   ];
   const c = classifyCycleFailure(events);
   assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.match(c.reason, /golangci-lint/i);
+  assert.match(c.reason, /environment|contention/i);
+});
+
+test('classifyCycleFailure: gate.fail with the parallel-lint text in gate_stderr_tail → transient, not a work failure', () => {
+  const events = [
+    ev({
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: {
+        gate_passed: false,
+        gate_exit_code: 3,
+        gate_stderr_tail: PARALLEL_LINT_TAIL,
+        gate_stdout_tail: '',
+        iteration: 2,
+      },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /golangci-lint/i);
+});
+
+test('classifyCycleFailure: parallel-lint contention beats the unifier.failed terminal (the lock race CAUSED the gate red)', () => {
+  const events = [
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.gate.initiative-failed',
+      metadata: {
+        failure_class: 'dev-loop-unifier-gate-failed',
+        command: ['make', 'ci'],
+        gate_stderr_tail: PARALLEL_LINT_TAIL,
+      },
+    }),
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.failed',
+      metadata: { status: 'failed', failure_class: 'dev-loop-unifier-gate-failed' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /golangci-lint/i);
+});
+
+test('classifyCycleFailure: a GENUINE golangci-lint failure (issues found) does not match the contention signature', () => {
+  const events = [
+    ev({
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: {
+        gate_passed: false,
+        gate_exit_code: 1,
+        gate_stderr_tail: 'azuredevops/foo.go:12:2: ineffectual assignment (ineffassign)\ngolangci-lint run failed with 3 issues',
+        iteration: 4,
+      },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+});
+
+test('classifyCycleFailure: a PASSING cycle.ci-gate log event mentioning the string does not flip an unrelated terminal to transient', () => {
+  const events = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'log',
+      message: 'cycle.ci-gate',
+      metadata: { ok: true, ran_fixer: false, output_tail: PARALLEL_LINT_TAIL },
+    }),
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.failed',
+      metadata: { status: 'failed' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /unifier did not pass/i);
+});
+
+// ---------------------------------------------------------------------------
+// Item 2.4 / N9 — rate-limit death during ANY phase is an ENVIRONMENT failure.
+// Evidence (brain/cycles/themes/2026-07-04-rate-limit-crash-prereq-failed-
+// cascade.md): the CLI's limit message surfaces in *reasoning/log* events
+// ("You've hit your limit · resets 12:10am (Australia/Brisbane)") while the
+// crash itself is a generic exit-code-1 agent_threw — so the old error-events-
+// only scan missed it and the terminal chain (agent_threw / dev-loop total
+// failure) won.
+// ---------------------------------------------------------------------------
+
+const HIT_YOUR_LIMIT = "You've hit your limit · resets 12:10am (Australia/Brisbane)";
+
+test('classifyCycleFailure: N9 theme fixture — rate-limit reasoning + iter-0 crash + total failure → transient environment, not terminal', () => {
+  const events = [
+    ev({ event_type: 'start' }),
+    ev({ event_type: 'log', message: 'ralph.start', metadata: { work_item_id: 'WI-1' } }),
+    ev({
+      event_type: 'log',
+      message: HIT_YOUR_LIMIT,
+      metadata: { kind: 'reasoning', work_item_id: 'WI-1' },
+    }),
+    ev({
+      event_type: 'end',
+      message: 'ralph.end',
+      metadata: {
+        work_item_id: 'WI-1',
+        status: 'failed',
+        iterations: 0,
+        stop_reason: 'crashed',
+        runner_error: { kind: 'agent_threw', message: 'Claude Code process exited with code 1' },
+      },
+    }),
+    ev({ event_type: 'log', message: 'ralph.skipped', metadata: { work_item_id: 'WI-2', reason: 'prerequisite-failed' } }),
+    ev({ event_type: 'log', message: 'ralph.skipped', metadata: { work_item_id: 'WI-3', reason: 'prerequisite-failed' } }),
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'developer-loop: 0/3 work items completed — total failure',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.match(c.reason, /rate.?limit/i);
+  assert.match(c.reason, /environment/i);
+});
+
+test('classifyCycleFailure: rate-limit beats agent_threw when both fire (the limit CAUSED the throw)', () => {
+  const events = [
+    ev({ event_type: 'start' }),
+    ev({
+      event_type: 'error',
+      message: 'agent_threw: rate_limit_error 429 too many requests',
+      metadata: { kind: 'agent_threw' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /rate.?limit/i);
+});
+
+test('classifyCycleFailure: structured rate_limited flag on a ralph.end event → transient environment', () => {
+  const events = [
+    ev({ event_type: 'start' }),
+    ev({
+      event_type: 'end',
+      message: 'ralph.end',
+      metadata: {
+        work_item_id: 'WI-1',
+        status: 'failed',
+        stop_reason: 'crashed',
+        rate_limited: true,
+        failure_kind: 'environment',
+      },
+    }),
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'developer-loop: 0/2 work items completed — total failure',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /rate.?limit/i);
+});
+
+test('classifyCycleFailure: windowing still isolates attempts — a stale rate-limit reasoning event before a later phase start does not leak into the current attempt', () => {
+  const events = [
+    ev({ event_type: 'start' }),
+    ev({ event_type: 'log', message: HIT_YOUR_LIMIT, metadata: { kind: 'reasoning' } }),
+    // resumed attempt: unrelated, unrecognised failure
+    ev({ event_type: 'start' }),
+    ev({ event_type: 'error', message: 'catastrophic-unrelated-crash: totally unclassified' }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /could not be classified/i);
+});
+
+test('matchesRateLimitSignature: matches real limit strings, not reasoning ABOUT rate limits', () => {
+  assert.equal(matchesRateLimitSignature(HIT_YOUR_LIMIT), true);
+  assert.equal(matchesRateLimitSignature('Claude AI usage limit reached|resets 3am'), true);
+  assert.equal(matchesRateLimitSignature('rate_limit_error: Number of requests has exceeded your per-minute rate limit'), true);
+  assert.equal(matchesRateLimitSignature('API Error: 529 overloaded_error'), true);
+  // An agent WRITING rate-limit handling code must not trip the signature.
+  assert.equal(matchesRateLimitSignature('implement retry-with-backoff for 429 rate limiting in the ADO client'), false);
+  assert.equal(matchesRateLimitSignature('add a rate limit test for httpRetry'), false);
 });
