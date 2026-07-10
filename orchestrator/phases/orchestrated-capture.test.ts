@@ -9,14 +9,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   buildDemoCaptureArgv,
+  CAPTURE_NONCE_ENV,
   commitOrchestratedCaptureArtifacts,
   demoJsonWantsCapture,
+  generateCaptureNonce,
+  preflightDemoCaptureCommands,
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
 } from './orchestrated-capture.ts';
@@ -206,5 +209,106 @@ test('resolveDemoCaptureTimeoutMs: default 15 min, env override', () => {
   } finally {
     if (prev === undefined) delete process.env.FORGE_DEMO_CAPTURE_TIMEOUT_MS;
     else process.env.FORGE_DEMO_CAPTURE_TIMEOUT_MS = prev;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N2 (plan item 2.6) — nonce + producibility in the demo contract.
+// ---------------------------------------------------------------------------
+
+test('N2: runOrchestratorCommand passes the caller env to the child (the nonce seam)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-env-'));
+  try {
+    const r = runOrchestratorCommand(
+      ['bash', '-c', `printf '%s' "$${CAPTURE_NONCE_ENV}" > nonce-seen.txt`],
+      { cwd: dir, timeoutMs: 10_000, env: { ...process.env, [CAPTURE_NONCE_ENV]: 'nonce-abc123' } },
+    );
+    assert.equal(r.ok, true);
+    const seen = readFileSync(join(dir, 'nonce-seen.txt'), 'utf8');
+    assert.equal(seen, 'nonce-abc123', 'the capture child must see the per-run nonce in its environment');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('N2: generateCaptureNonce produces distinct non-empty nonces per run', () => {
+  const a = generateCaptureNonce();
+  const b = generateCaptureNonce();
+  assert.ok(a.length >= 16, 'nonce must be non-trivially long');
+  assert.notEqual(a, b, 'each run gets its own nonce');
+});
+
+function writeDemoJson(dir: string, checkpoints: Array<Record<string, unknown>>): string {
+  const p = join(dir, 'demo.json');
+  writeFileSync(p, JSON.stringify({ title: 't', essence: 'e', project: 'p', diffStat: 'd', checkpoints }));
+  return p;
+}
+
+test('N2 producibility: PATH-resolvable command checkpoint → ok', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-prod-'));
+  try {
+    const demoJson = writeDemoJson(dir, [{ label: 'cli', caption: 'c', command: 'echo hello' }]);
+    const r = preflightDemoCaptureCommands(demoJson, dir);
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.problems, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('N2 producibility: missing binary → problem naming the checkpoint and the binary', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-prod-'));
+  try {
+    const demoJson = writeDemoJson(dir, [{ label: 'cli', caption: 'c', command: 'definitely-not-a-binary-xyz-42 --flag' }]);
+    const r = preflightDemoCaptureCommands(demoJson, dir);
+    assert.equal(r.ok, false);
+    assert.equal(r.problems.length, 1);
+    assert.match(r.problems[0]!, /cli/);
+    assert.match(r.problems[0]!, /definitely-not-a-binary-xyz-42/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('N2 producibility: `npm run <script>` requires the script to be defined in the worktree package.json', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-prod-'));
+  try {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { demo: 'echo demo' } }));
+    const okJson = writeDemoJson(dir, [{ label: 'defined', caption: 'c', command: 'npm run demo' }]);
+    assert.equal(preflightDemoCaptureCommands(okJson, dir).ok, true);
+
+    const badJson = writeDemoJson(dir, [{ label: 'undefined-script', caption: 'c', command: 'npm run nope' }]);
+    const r = preflightDemoCaptureCommands(badJson, dir);
+    assert.equal(r.ok, false);
+    assert.match(r.problems[0]!, /nope/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('N2 producibility: worktree-relative script path must exist and be executable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-prod-'));
+  try {
+    writeFileSync(join(dir, 'tool.sh'), '#!/bin/bash\necho hi\n', { mode: 0o755 });
+    const okJson = writeDemoJson(dir, [{ label: 'rel', caption: 'c', command: './tool.sh --version' }]);
+    assert.equal(preflightDemoCaptureCommands(okJson, dir).ok, true);
+
+    const badJson = writeDemoJson(dir, [{ label: 'rel-missing', caption: 'c', command: './missing.sh' }]);
+    const r = preflightDemoCaptureCommands(badJson, dir);
+    assert.equal(r.ok, false);
+    assert.match(r.problems[0]!, /missing\.sh/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('N2 producibility: notes-only demo (no command checkpoints) and unreadable demo.json → ok (nothing to preflight)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-oc-prod-'));
+  try {
+    const notesOnly = writeDemoJson(dir, [{ label: 'notes', caption: 'c' }]);
+    assert.equal(preflightDemoCaptureCommands(notesOnly, dir).ok, true);
+    assert.equal(preflightDemoCaptureCommands(join(dir, 'nonexistent.json'), dir).ok, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

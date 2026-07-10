@@ -1,8 +1,13 @@
 /**
  * Focused tests for the quality-gate command builder added in F-04, plus
- * the post-2026-05-23-dogfood tightening (no-work-indicator scan +
- * requiredPaths git-diff check). See
- * [[quality-gate-cmd-must-assert-new-work]].
+ * the post-2026-05-23-dogfood tightening (requiredPaths git-diff check).
+ * See [[quality-gate-cmd-must-assert-new-work]].
+ *
+ * G2 (2026-07-11, plan item 2.6): the NO_WORK_INDICATORS /
+ * WORK_HAPPENED_PATTERNS string heuristics were DELETED — hollow-gate
+ * detection is now the runner's deterministic tool-use + diff-presence
+ * check (`hollow-no-work` in runner.ts) plus the requiredPaths tightening
+ * here.
  */
 
 import { test } from 'node:test';
@@ -298,10 +303,12 @@ test('makeQualityGateFromCmd: passes additional args through', () => {
 });
 
 // -------------------------------------------------------------------------
-// Tightening 1: no-work-indicator scan (the 2026-05-23 dogfood case)
+// G2 (plan item 2.6): the no-work-indicator string scan is GONE. An exit-0
+// gate passes regardless of runner chatter — hollow detection is the
+// runner's diff-presence check (`hollow-no-work`) + requiredPaths below.
 // -------------------------------------------------------------------------
 
-test('makeQualityGateFromCmd: rejects exit-0 + "[no tests to run]" in stdout (go test pattern)', () => {
+test('G2: exit-0 + "[no tests to run]" chatter PASSES — string heuristics deleted; hollow detection lives in the runner', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
   try {
     let captured: GateRunInfo | undefined;
@@ -310,35 +317,14 @@ test('makeQualityGateFromCmd: rejects exit-0 + "[no tests to run]" in stdout (go
       ['sh', '-c', 'echo "ok  github.com/x/y  0.003s [no tests to run]"; exit 0'],
       (info) => { captured = info; },
     );
-    assert.equal(gate(), false, 'gate must reject exit-0 + no-tests-to-run indicator');
-    assert.equal(captured?.rejectReason, 'no-work-indicator');
-    assert.match(captured?.stderrTail ?? '', /no-work indicator/);
+    assert.equal(gate(), true, 'exit-0 alone decides — no output-string scan');
+    assert.equal(captured?.rejectReason, undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('makeQualityGateFromCmd: rejects exit-0 + "no tests ran" (pytest empty pattern)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    const gate = makeQualityGateFromCmd(dir, ['sh', '-c', 'echo "no tests ran in 0.01s"; exit 0']);
-    assert.equal(gate(), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: rejects exit-0 + "running 0 tests" (cargo pattern)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    const gate = makeQualityGateFromCmd(dir, ['sh', '-c', 'echo "running 0 tests"; exit 0']);
-    assert.equal(gate(), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: exit-0 + no indicator in output → passes (legit pass)', () => {
+test('makeQualityGateFromCmd: exit-0 with plain passing output → passes (legit pass)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
   try {
     let captured: GateRunInfo | undefined;
@@ -349,102 +335,6 @@ test('makeQualityGateFromCmd: exit-0 + no indicator in output → passes (legit 
     );
     assert.equal(gate(), true);
     assert.equal(captured?.rejectReason, undefined);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: indicators can be disabled with noWorkIndicators: null', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'echo "[no tests to run]"; exit 0'],
-      undefined,
-      { noWorkIndicators: null },
-    );
-    assert.equal(gate(), true, 'with indicators disabled, exit-0 alone is enough');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: a custom noWorkIndicators array overrides the default', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    // Default would reject "[no tests to run]"; custom set checks only for "WIDGET-NULL"
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'echo "[no tests to run] but WIDGET-NULL"; exit 0'],
-      undefined,
-      { noWorkIndicators: ['WIDGET-NULL'] },
-    );
-    assert.equal(gate(), false, 'custom indicator should fire');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: multi-package run — one pkg ran tests, a sibling had none → PASSES (betterado #3)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    let captured: GateRunInfo | undefined;
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'printf "ok  pkg1  0.10s\\nok  pkg2  0.003s [no tests to run]\\n"; exit 0'],
-      (info) => { captured = info; },
-    );
-    assert.equal(gate(), true, 'a test-less sibling must not reject when another package ran tests');
-    assert.equal(captured?.rejectReason, undefined);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: multi-package run where NO package ran tests still rejects (discrimination held)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    let captured: GateRunInfo | undefined;
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'printf "ok  pkg1  0.003s [no tests to run]\\nok  pkg2  0.002s [no tests to run]\\n"; exit 0'],
-      (info) => { captured = info; },
-    );
-    assert.equal(gate(), false, 'all-empty multi-package run is still a hollow gate');
-    assert.equal(captured?.rejectReason, 'no-work-indicator');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: a package with ZERO test files ("[no test files]") is rejected (betterado release_def dogfood)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    let captured: GateRunInfo | undefined;
-    // Exactly what `go test -tags all -run TestX ./fresh-pkg/...` prints when the
-    // package has no _test.go files: exit 0 + "[no test files]". A first-ever-test
-    // WI must NOT get a hollow iter-0 pass here.
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'printf "?   github.com/x/release\\t[no test files]\\n"; exit 0'],
-      (info) => { captured = info; },
-    );
-    assert.equal(gate(), false, 'a test-less package must reject (else false gate-too-loose blocks the first test)');
-    assert.equal(captured?.rejectReason, 'no-work-indicator');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('makeQualityGateFromCmd: project gate where a test-less pkg + a passing pkg coexist still PASSES', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
-  try {
-    // The release+taskagent project gate: release has no test files, taskagent ran tests.
-    const gate = makeQualityGateFromCmd(
-      dir,
-      ['sh', '-c', 'printf "?   github.com/x/release\\t[no test files]\\nok  github.com/x/taskagent  0.20s\\n"; exit 0'],
-    );
-    assert.equal(gate(), true, 'a test-less sibling must not sink a gate where another package ran tests');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -543,7 +433,7 @@ test('makeQualityGateFromCmd: empty requiredPaths array → no tightening, exit-
   }
 });
 
-test('makeQualityGateFromCmd: tightenings combine — no-work indicator caught first', () => {
+test('G2: exit-0 chatter + requiredPaths present in diff → passes (no string scan to fire first)', () => {
   const dir = setupTinyRepo();
   try {
     let captured: GateRunInfo | undefined;
@@ -551,23 +441,24 @@ test('makeQualityGateFromCmd: tightenings combine — no-work indicator caught f
       dir,
       ['sh', '-c', 'echo "[no tests to run]"; exit 0'],
       (info) => { captured = info; },
-      { requiredPaths: ['bar_test.go'] },  // would be in diff, but indicator fires first
+      { requiredPaths: ['bar_test.go'] },  // in diff — the only remaining tightening holds
     );
-    assert.equal(gate(), false);
-    assert.equal(captured?.rejectReason, 'no-work-indicator', 'no-work indicator is checked before requiredPaths');
+    assert.equal(gate(), true);
+    assert.equal(captured?.rejectReason, undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('makeQualityGateFromCmd: real dogfood-shape — go-test-no-tests + missing test file → rejects with reason', () => {
+test('makeQualityGateFromCmd: real dogfood-shape — go-test-no-tests + missing test file → requiredPaths rejects', () => {
   const dir = setupTinyRepo();
   try {
     let captured: GateRunInfo | undefined;
     // Simulates the exact 2026-05-23 betterado false-pass:
     //   `go test ./...release/... -run TestReleaseDefinition` exits 0
     //   with stdout containing "[no tests to run]" and no _test.go file
-    //   in the diff.
+    //   in the diff. G2: the deterministic requiredPaths diff check (not a
+    //   string scan) is what catches it now.
     const gate = makeQualityGateFromCmd(
       dir,
       ['sh', '-c', 'echo "ok  github.com/x/release  0.001s [no tests to run]"; exit 0'],
@@ -575,7 +466,7 @@ test('makeQualityGateFromCmd: real dogfood-shape — go-test-no-tests + missing 
       { requiredPaths: ['azuredevops/internal/service/release/resource_release_definition_test.go'] },
     );
     assert.equal(gate(), false, 'dogfood scenario must be caught by the gate now');
-    assert.equal(captured?.rejectReason, 'no-work-indicator');
+    assert.equal(captured?.rejectReason, 'required-paths-missing');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

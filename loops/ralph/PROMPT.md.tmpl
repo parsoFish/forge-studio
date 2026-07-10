@@ -36,7 +36,7 @@ Your current working directory is **already** `{{WORKTREE_PATH}}` — your shell
 
 1. **Orient on prior progress first:** run `git log --oneline main..HEAD` and `git diff --stat main..HEAD` to see what's already built, then read `AGENT.md` (what's been tried) and `fix_plan.md` (the checklist). Don't re-research anything `AGENT.md` already records.
 2. **Write code now.** Make a concrete, committed change toward the highest-priority unchecked item. If an acceptance criterion needs a new file, write a compiling skeleton of it in your first one or two tool calls, then flesh it out — don't spend the whole iteration reading.
-3. Commit your changes with a conventional-commits message.
+3. Commit your changes with a conventional-commits message. If a DECLARED deliverable (a `creates:` path or verification artifact) falls under a `.gitignore` pattern, stage it with `git add -f <path>` — a plain `git add`/`git add -A` silently skips ignored paths and the gate rejects the WI as if you wrote nothing. Never `git add` the loop-scratch files (`AGENT.md`, `PROMPT.md`, `fix_plan.md`): they are gitignored on purpose and stay off the branch.
 4. Run the project's quality gates (the orchestrator will verify; your claim is not trusted).
 5. Update `fix_plan.md` to reflect what's done and what's left.
 6. Update `AGENT.md` with anything you learned, so the next iteration doesn't re-tread your steps.

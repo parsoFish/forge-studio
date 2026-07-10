@@ -51,6 +51,7 @@ You **may** consult the project brain (Brain 3 — `brain/profile.md` + `brain/t
 
 - `ralph.start` — `event_type: 'log'`, loop initiated.
 - per-iteration `event_type: 'iteration'` — number, cost, duration, files touched.
+- `ralph.uncommitted-work-swept` — `event_type: 'log'`; the autocommit safety net fired (G1: the agent's commit-discipline gap, made visible for reflectors).
 - `ralph.end` — `event_type: 'end'`; carries `status`, `iterations`, `stop_reason`, `tool_use`.
 
 ## Process
@@ -79,6 +80,11 @@ You are inside a Ralph loop. Each call is **one iteration**. Loop state carries 
 - **`fix_plan.md`** — checklist of ACs + sub-tasks. Tick items as you complete them; add items as you discover sub-problems.
 
 After your work, **commit** with a conventional-commits message (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`). Atomic commits — one concern per commit. Use `Bash` for `git`, `npm test`, `pytest`, `bats`, or any test runner.
+
+**Commit discipline (G1, 2026-07-11):** committing your own work is YOUR job, every iteration — the `forge-autocommit` safety net exists only for the failure case, and every sweep it makes is flagged as a distinct `ralph.uncommitted-work-swept` event (a visible discipline gap, not a convenience). Two gitignore rules:
+
+- If a **declared deliverable** (a `creates:` path or verification artifact) falls under a `.gitignore` pattern, stage it with `git add -f <path>` — a plain `git add`/`git add -A` silently skips ignored paths, so the gate's required-paths diff check rejects the WI as if you wrote nothing (recurred across 3+ gitpulse initiatives before this clause).
+- **Never `git add` the loop-scratch files** (`AGENT.md`, `PROMPT.md`, `fix_plan.md`). They are gitignored on purpose (contract C2) and must stay off the branch — attempting to commit them silently does nothing and wastes tool calls.
 
 **The orchestrator decides when to stop, not you** — it runs quality gates between your iterations. Your job is incremental progress every iteration.
 

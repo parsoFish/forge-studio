@@ -727,7 +727,8 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
     try {
       const { captureCheckpoints } = await import('../cli/demo.ts');
-      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle } = await import('../cli/demo-model.ts');
+      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = await import('../cli/demo-model.ts');
+      const { CAPTURE_NONCE_ENV } = await import('./phases/orchestrated-capture.ts');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;
@@ -740,7 +741,14 @@ async function cmdDemo(rest: string[]): Promise<void> {
       await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
-      writeFileSync(jsonPath, JSON.stringify(merged, null, 2));
+      // N2 (plan item 2.6): bind the artifacts to THIS orchestrated run. The
+      // orchestrator injected a per-run nonce into our environment; stamping
+      // it into demo.json AFTER a successful capture+merge is the proof the
+      // composed unifier gate verifies. Reached only when capture succeeded —
+      // the inner-failure path (catch below) must never stamp.
+      const runNonce = process.env[CAPTURE_NONCE_ENV];
+      const stamped = runNonce ? stampCaptureNonce(merged, runNonce) : merged;
+      writeFileSync(jsonPath, JSON.stringify(stamped, null, 2));
       const r = renderDemoBundle(demoDir, projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {

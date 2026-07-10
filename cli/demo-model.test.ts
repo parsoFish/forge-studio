@@ -22,6 +22,7 @@ import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectLiveEvidence,
   mergeLiveEvidence,
+  stampCaptureNonce,
   type DemoModel,
 } from './demo-model.ts';
 
@@ -568,4 +569,39 @@ test('renderDemoMarkdown: fences the captured before/after output', () => {
   assert.match(md, /\*\*Before output:\*\*/);
   assert.match(md, /OLD table/);
   assert.match(md, /NEW table/);
+});
+
+// ---------------------------------------------------------------------------
+// N2 (plan item 2.6) — capture-nonce stamp: `forge demo capture` binds the
+// artifacts it produced to the orchestrator's per-run nonce.
+// ---------------------------------------------------------------------------
+
+test('N2: stampCaptureNonce returns a NEW model carrying capture.nonce (+ capturedAt), input untouched', () => {
+  const model = validModel();
+  const stamped = stampCaptureNonce(model, 'nonce-xyz');
+  assert.equal(stamped.capture?.nonce, 'nonce-xyz');
+  assert.ok(stamped.capture?.capturedAt, 'capturedAt defaults to now');
+  assert.equal(model.capture, undefined, 'immutability: the input model is not mutated');
+  // The rest of the model is preserved.
+  assert.equal(stamped.title, model.title);
+  assert.equal(stamped.checkpoints.length, model.checkpoints.length);
+});
+
+test('N2: validateDemoModel accepts a stamped capture and rejects a malformed one', () => {
+  const stamped = stampCaptureNonce(validModel(), 'nonce-abc', '2026-07-11T00:00:00.000Z');
+  assert.deepEqual(validateDemoModel(stamped), []);
+
+  const emptyNonce = { ...validModel(), capture: { nonce: '' } };
+  assert.ok(
+    validateDemoModel(emptyNonce).some((e) => e.includes('capture')),
+    'an empty nonce must be rejected',
+  );
+  const notObject = { ...validModel(), capture: 'nonce-as-string' };
+  assert.ok(validateDemoModel(notObject).some((e) => e.includes('capture')));
+});
+
+test('N2: the capture stamp survives coerceDemoModel and renderDemoBundle live-evidence merge', () => {
+  const stamped = stampCaptureNonce(validModel(), 'nonce-persist');
+  const { model: coerced } = coerceDemoModel(stamped);
+  assert.equal((coerced as DemoModel).capture?.nonce, 'nonce-persist');
 });

@@ -516,11 +516,17 @@ test('composedUnifierGate spawns the orchestrated capture in the worktree and re
     h.git('push', 'origin', 'forge/init-test');
 
     // Fake capture runner standing in for `forge demo capture`: proves cwd is
-    // the worktree and produces a derived artifact the orchestrator commits.
+    // the worktree, stamps the per-run nonce it received in its environment
+    // into demo.json (as the real engine does — N2), and produces a derived
+    // artifact the orchestrator commits.
     const script = join(h.worktreePath, 'fake-capture.sh');
     writeFileSync(
       script,
-      '#!/bin/bash\npwd > captured-cwd.txt\necho "captured" > demo/INIT-test/DEMO.md\necho done\n',
+      '#!/bin/bash\n' +
+        'pwd > captured-cwd.txt\n' +
+        `"${process.execPath}" -e "const fs=require('fs');const p='demo/INIT-test/demo.json';const m=JSON.parse(fs.readFileSync(p,'utf8'));m.capture={nonce:process.env.FORGE_CAPTURE_NONCE,capturedAt:new Date().toISOString()};fs.writeFileSync(p,JSON.stringify(m,null,2));"\n` +
+        'echo "captured" > demo/INIT-test/DEMO.md\n' +
+        'echo done\n',
       { mode: 0o755 },
     );
 
@@ -538,7 +544,7 @@ test('composedUnifierGate spawns the orchestrated capture in the worktree and re
     const cwdMarker = join(h.worktreePath, 'captured-cwd.txt');
     assert.ok(existsSync(cwdMarker), 'capture child must run in the worktree');
 
-    // Structured event: command + exit code + output tail.
+    // Structured event: command + exit code + output tail + the run's nonce.
     const captureEvents = h.events().filter((e) => e.message === 'unifier.demo-capture');
     assert.equal(captureEvents.length, 1);
     const md = captureEvents[0]!.metadata as Record<string, unknown>;
@@ -546,12 +552,104 @@ test('composedUnifierGate spawns the orchestrated capture in the worktree and re
     assert.equal(md.capture_ok, true);
     assert.match(String(md.command), /fake-capture\.sh/);
     assert.match(String(md.stdout_tail), /done/);
+    assert.ok(typeof md.capture_nonce === 'string' && (md.capture_nonce as string).length >= 16, 'the event carries the per-run nonce');
+
+    // N2: the capture-produced demo.json embeds exactly that nonce.
+    const demoJson = JSON.parse(
+      readFileSync(join(h.worktreePath, 'demo', INITIATIVE_ID, 'demo.json'), 'utf8'),
+    ) as { capture?: { nonce?: string } };
+    assert.equal(demoJson.capture?.nonce, md.capture_nonce, 'evidence is bound to THIS run');
 
     // The orchestrator committed (and pushed) the capture-produced artifacts,
     // so branches_in_sync still holds and the evidence is ON the branch. (A
     // demo-metadata refresh commit may follow it — plan 2.5 — so scan the log.)
     const log = execFileSync('git', ['log', '--oneline', '-3'], { cwd: h.worktreePath, encoding: 'utf8' });
     assert.match(log, /orchestrated demo capture/i);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('N2: a completed capture run whose demo.json lacks this run\'s nonce FAILS pr_self_contained (stale/replayed evidence)', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJsonWithCommand(h.worktreePath, INITIATIVE_ID);
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    // A capture stand-in that exits 0 but does NOT stamp the nonce — exactly
+    // what replayed/stale/hand-written evidence looks like after a run whose
+    // inner engine silently no-opped.
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      orchestratedCapture: { argv: ['bash', '-c', 'true'], timeoutMs: 10_000 },
+    });
+    assert.equal(passed, false, 'evidence not bound to this run must not pass');
+
+    const sub = h.events().filter((e) => e.message === 'unifier.gate.sub-check');
+    const prCheck = sub.find((e) => (e.metadata as Record<string, unknown>).check_id === 'pr_self_contained');
+    assert.ok(prCheck, 'pr_self_contained sub-check must have run');
+    assert.equal((prCheck!.metadata as Record<string, unknown>).pass, false);
+    assert.match(String((prCheck!.metadata as Record<string, unknown>).detail), /nonce/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('N2 producibility: an unrunnable checkpoint command SKIPS the capture spawn and fails the gate with the problem', async () => {
+  const h = unifierGateHarness();
+  try {
+    // demo.json declaring a command whose binary does not exist.
+    const demoDir = join(h.worktreePath, 'demo', INITIATIVE_ID);
+    mkdirSync(demoDir, { recursive: true });
+    writeFileSync(
+      join(demoDir, 'demo.json'),
+      JSON.stringify({
+        title: 'Test demo',
+        essence: 'Validates producibility preflight.',
+        project: 'test-project',
+        diffStat: '1 file changed',
+        checkpoints: [
+          { label: 'broken CLI', caption: 'c', command: 'definitely-not-a-binary-xyz-42 --run' },
+        ],
+      }),
+    );
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    // The capture argv would create a marker file if spawned — it must NOT be.
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      orchestratedCapture: { argv: ['bash', '-c', 'touch capture-ran.txt'], timeoutMs: 10_000 },
+    });
+    assert.equal(passed, false, 'an unproducible demo command must fail the gate, not silently no-op the capture');
+    assert.ok(!existsSync(join(h.worktreePath, 'capture-ran.txt')), 'the capture spawn must be skipped');
+
+    const captureEvents = h.events().filter((e) => e.message === 'unifier.demo-capture');
+    assert.equal(captureEvents.length, 1);
+    const md = captureEvents[0]!.metadata as Record<string, unknown>;
+    assert.equal(md.capture_ok, false);
+    assert.equal(md.not_producible, true);
+    assert.match(JSON.stringify(md.problems), /definitely-not-a-binary-xyz-42/);
+
+    const sub = h.events().filter((e) => e.message === 'unifier.gate.sub-check');
+    const prCheck = sub.find((e) => (e.metadata as Record<string, unknown>).check_id === 'pr_self_contained');
+    assert.ok(prCheck);
+    assert.match(String((prCheck!.metadata as Record<string, unknown>).detail), /not producible/);
   } finally {
     h.cleanup();
   }

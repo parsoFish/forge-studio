@@ -91,11 +91,20 @@ security-permissions UWI-6).
 
 ## What this does NOT cover
 
-- **Demo-contract nonce + producibility binding (N2, plan item 2.6)** — the
-  remaining seam for *live-evidence files* produced by acceptance tests
-  (`.forge/live-evidence/`). Those are produced during the orchestrator-run
-  gate, but nonce-binding them to the specific gate run is the demo contract's
-  job, not this ADR's.
+- **Demo-contract nonce + producibility binding (N2, plan item 2.6)** —
+  *landed 2026-07-11* for the orchestrated capture path: the orchestrator
+  injects a per-run nonce (`FORGE_CAPTURE_NONCE`) into the capture child's
+  environment; `forge demo capture` stamps it into demo.json
+  (`capture: { nonce, capturedAt }`) on completion, and the composed gate
+  rejects evidence without this run's nonce (kills replayed/stale/hand-written
+  demo evidence). Checkpoint commands are producibility-preflighted before
+  the spawn (binary on PATH / worktree path / defined npm script), so an
+  unrunnable command fails `pr_self_contained` with the problem instead of
+  silently no-opping the capture. Still open within N2's spirit:
+  *live-evidence files* produced by acceptance tests
+  (`.forge/live-evidence/`) run inside the orchestrator-run gate but are not
+  yet nonce-bound to the specific gate run — that remains the demo
+  contract's next seam if replay is ever observed there.
 - **Gate-fit authoring clauses** (docs-only initiatives, sharp-gate authoring)
   — planner-side, unchanged.
 - `acEvaluations[]` verdicts in demo.json remain agent-authored claims; the

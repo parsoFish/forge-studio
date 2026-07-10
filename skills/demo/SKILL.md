@@ -197,8 +197,21 @@ collapses them gracefully when absent, but their absence means a less useful dem
    into `beforeOutput`/`afterOutput`; for browser checkpoints, screenshots. It
    re-renders DEMO.md and commits the result. **The agent must NOT run
    `forge demo capture` and must never hand-write `beforeOutput`/`afterOutput`**
-   — the orchestrator's run overwrites them. Best-effort (a capture failure
-   leaves the checkpoint as-is and is recorded as a `unifier.demo-capture` event).
+   — the orchestrator's run overwrites them. Environment failures (timeout /
+   non-zero exit) stay best-effort (recorded as a `unifier.demo-capture` event,
+   gate proceeds), with two N2 hardenings (plan item 2.6):
+   - **Producibility:** every checkpoint `command` must be EXECUTABLE in the
+     project (binary on PATH / worktree path / defined npm script) — checked
+     by the orchestrator BEFORE the capture spawn. An unrunnable command
+     fails the `pr_self_contained` gate with the exact problem; fix the
+     command, don't paper over it with prose.
+   - **Nonce binding:** the orchestrator injects a per-run nonce
+     (`FORGE_CAPTURE_NONCE`) into the capture child's environment — the agent
+     never sees it. A capture run that completes stamps it into demo.json as
+     `capture: { nonce, capturedAt }`, and the gate verifies the stamp:
+     evidence without this run's nonce (stale, replayed, or hand-written) is
+     rejected. Never author the `capture` field by hand — it cannot carry the
+     right nonce.
 5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
    shadow).
 

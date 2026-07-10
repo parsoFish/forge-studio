@@ -96,6 +96,16 @@ export type LoopInput = {
    * 16-restart / $84.56 unifier spins).
    */
   loopCapExhausted?: () => boolean;
+  /**
+   * G1 rescope (2026-07-11, plan item 2.6): called when the post-iteration
+   * autocommit safety net actually SWEPT uncommitted agent work into a
+   * `forge-autocommit:` commit. The net stays (it closes the
+   * scratch-dead-ends-the-gate failure mode), but the agent's
+   * commit-discipline failure must be VISIBLE: the caller emits a distinct
+   * `ralph.uncommitted-work-swept` event so reflectors see the gap instead
+   * of it being silently absorbed.
+   */
+  onAutoCommit?: (iteration: number) => void;
 };
 
 /**
@@ -139,6 +149,14 @@ export type LoopResult = {
   artifacts: { agentMdPath: string; fixPlanPath: string };
   filesChanged: string[];
   stop_reason: StopCondition['kind'];
+  /**
+   * G2 rescope (plan item 2.6): total tool invocations across all agent
+   * iterations (0 when the agent reported none). Paired with the
+   * diff-presence check that classifies `hollow-no-work` — the evidence
+   * distinguishing "the agent did nothing" (≈0 tools, no diff) from "the
+   * agent worked but produced nothing durable" (many tools, no diff).
+   */
+  toolUseTotal: number;
 };
 
 export type AgentInvocation = (params: {
@@ -201,6 +219,9 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     costUsdSoFar: 0,
     filesChangedHistory: [],
   };
+  // G2 rescope: tool-use tally across iterations — evidence for the
+  // hollow-no-work classification below.
+  let toolUseTotal = 0;
 
   // Caller-overridable iter-0 hollow-gate detection. Defaults to TRUE
   // for per-WI Ralphs (per the 2026-05-24 claude-harness audit: a gate
@@ -229,7 +250,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
         const branchHasWork = checkBranchHasCommitsVsBase(input.worktreePath);
         if (!branchHasWork) {
           // Hollow gate — gate passes on a clean branch with no agent work.
-          return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath);
+          return finalize(state, startedAt, 'gate-too-loose', agentMdPath, fixPlanPath, toolUseTotal);
         }
         // re-review #3: the branch has SOME work, but `already-complete` is only
         // honest when a sibling delivered THIS WI's OWN declared outputs — not on
@@ -238,7 +259,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
         // fall through and let the agent attempt this WI's own AC. The unifier's
         // (fail-closed) incomplete-delivery gate is the backstop if it doesn't.
         if (branchHasAllCreates(input.worktreePath, input.requiredPaths ?? [])) {
-          return finalize(state, startedAt, 'already-complete', agentMdPath, fixPlanPath);
+          return finalize(state, startedAt, 'already-complete', agentMdPath, fixPlanPath, toolUseTotal);
         }
       }
       // re-review #1: the gate FAILED at iter-0 — but did it fail because the
@@ -246,7 +267,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
       // command could not RUN? A broken gate errors every iteration; iterating
       // only burns the budget and then mis-reports as a code failure. Stop now.
       if (input.gateErrored?.()) {
-        return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath);
+        return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath, toolUseTotal);
       }
     }
 
@@ -256,18 +277,32 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
         : conditions;
     const stop = await checkStopConditions(state, conditionsForThisCheck, qualityGate);
     if (stop.stop) {
-      return finalize(state, startedAt, stop.condition, agentMdPath, fixPlanPath);
+      // G2 rescope (plan item 2.6): a gate that passes after ≥1 agent
+      // iteration while the branch has ZERO diff/commits vs base is HOLLOW —
+      // no durable work exists (the autocommit net has already swept any
+      // uncommitted work by this point, so an empty branch means an empty
+      // worktree too). The deterministic tool-use + diff-presence replacement
+      // for the deleted NO_WORK_INDICATORS output-string heuristics; the
+      // iter-0 equivalent is `gate-too-loose` above.
+      if (
+        stop.condition === 'quality-gates-pass' &&
+        state.iteration > 0 &&
+        !checkBranchHasCommitsVsBase(input.worktreePath)
+      ) {
+        return finalize(state, startedAt, 'hollow-no-work', agentMdPath, fixPlanPath, toolUseTotal);
+      }
+      return finalize(state, startedAt, stop.condition, agentMdPath, fixPlanPath, toolUseTotal);
     }
     // A gate that broke mid-run (binary vanished / OOM-killed) is also
     // unrunnable — don't keep iterating against it.
     if (input.gateErrored?.()) {
-      return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath);
+      return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath, toolUseTotal);
     }
     // G4: the caller's own fix-loop ceiling fired (e.g. the unifier's
     // consecutive same-sub-check gate-failure cap) — stop honestly instead
     // of re-invoking the agent against a gate it keeps failing the same way.
     if (input.loopCapExhausted?.()) {
-      return finalize(state, startedAt, 'loop-cap-exhausted', agentMdPath, fixPlanPath);
+      return finalize(state, startedAt, 'loop-cap-exhausted', agentMdPath, fixPlanPath, toolUseTotal);
     }
 
     state.iteration += 1;
@@ -280,6 +315,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     });
     state.costUsdSoFar += result.costUsd;
     state.filesChangedHistory.push(result.filesChanged);
+    toolUseTotal += result.toolsUsed?.length ?? 0;
     // Safety net (surfaced by claude-harness cycle 1, 2026-05-24): if
     // the agent left WIP uncommitted, commit it under a clearly-tagged
     // `forge-autocommit:` message before the next gate check so the
@@ -287,7 +323,11 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // intent IS still "commit your own work" (per dev-invocation
     // system prompt) — this just guarantees the gate doesn't dead-end
     // on iteration-budget when the work is otherwise complete.
-    autoCommitWorktreeIfDirty(input.worktreePath, state.iteration, deriveWorkItemId(input.workItemSpecPath));
+    // G1 rescope (plan item 2.6): the net staying silent was hiding the
+    // agent's commit-discipline failure — when it actually sweeps, report it
+    // so the caller emits `ralph.uncommitted-work-swept`.
+    const swept = autoCommitWorktreeIfDirty(input.worktreePath, state.iteration, deriveWorkItemId(input.workItemSpecPath));
+    if (swept) input.onAutoCommit?.(state.iteration);
     if (input.onIteration) {
       // F-23: forward all rich-info fields the agent populated. Plain assignment
       // (no field-by-field copy) keeps onIteration backward compatible with the
@@ -342,6 +382,7 @@ function finalize(
   stopReason: StopCondition['kind'],
   agentMdPath: string,
   fixPlanPath: string,
+  toolUseTotal: number,
 ): LoopResult {
   const status: LoopResult['status'] =
     stopReason === 'quality-gates-pass' || stopReason === 'already-complete'
@@ -352,6 +393,8 @@ function finalize(
   // report + the failure-classifier.
   // already-complete surfaces as a complete WI — a sibling delivered
   // this WI's work; no agent invocation is needed or desirable.
+  // hollow-no-work (G2) surfaces as a failed WI — the gate passed after
+  // agent iterations that left zero durable work on the branch.
   const filesChanged = uniqueFiles(state.filesChangedHistory);
   return {
     status,
@@ -361,6 +404,7 @@ function finalize(
     artifacts: { agentMdPath, fixPlanPath },
     filesChanged,
     stop_reason: stopReason,
+    toolUseTotal,
   };
 }
 

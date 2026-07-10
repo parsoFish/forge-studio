@@ -58,8 +58,11 @@ import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import {
   buildDemoCaptureArgv,
+  CAPTURE_NONCE_ENV,
   commitOrchestratedCaptureArtifacts,
   demoJsonWantsCapture,
+  generateCaptureNonce,
+  preflightDemoCaptureCommands,
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
 } from './orchestrated-capture.ts';
@@ -553,6 +556,19 @@ export async function runDeveloperLoop(
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,
+          // G1 rescope (plan item 2.6): the autocommit safety net stays, but
+          // when it fires the agent's commit-discipline failure becomes a
+          // distinct, greppable event instead of being silently absorbed —
+          // reflectors see the gap and the skill clause can be tightened.
+          onAutoCommit: (iteration) =>
+            emitUncommittedWorkSwept(logger, {
+              initiativeId: input.initiativeId,
+              parentEventId: wiStart.event_id,
+              workItemId: wi.work_item_id,
+              worktreePath: input.worktreePath,
+              phase: 'developer-loop',
+              skill: 'developer-ralph',
+            }, iteration),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
           // can aggregate iteration counts. F-23 enriches the metadata so
           // post-mortems can see what the agent actually did per iteration
@@ -1263,15 +1279,15 @@ export function assertGreenBaseline(
     return;
   }
 
-  // Pure exit-code check (noWorkIndicators: null) — the baseline question is
-  // "is HEAD green", not "does the gate discriminate" (that is the per-WI
-  // gate's job, enforced by the iter-0 hollow check).
+  // Pure exit-code check — the baseline question is "is HEAD green", not
+  // "does the gate discriminate" (that is the per-WI gate's job, enforced by
+  // the iter-0 hollow check).
   let info: GateRunInfo | undefined;
   const passed = makeQualityGateFromCmd(
     input.worktreePath,
     [...baselineCmd],
     (i) => { info = i; },
-    { noWorkIndicators: null, timeoutMs: resolveGateTimeoutMs() },
+    { timeoutMs: resolveGateTimeoutMs() },
   )();
 
   if (passed) {
@@ -1918,6 +1934,17 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
         // G4: stop the loop once the consecutive same-sub-check failure
         // cap is exhausted (stop_reason: loop-cap-exhausted).
         loopCapExhausted: gateFailureTracker.capExhausted,
+        // G1 rescope (plan item 2.6): surface autocommit sweeps as a distinct
+        // event so the unifier's commit-discipline gaps are visible too.
+        onAutoCommit: (iteration) =>
+          emitUncommittedWorkSwept(logger, {
+            initiativeId: input.initiativeId,
+            parentEventId: startEventId,
+            workItemId: uwi.work_item_id,
+            worktreePath: input.worktreePath,
+            phase: 'unifier',
+            skill: 'developer-unifier',
+          }, iteration),
         onIteration: unifierIterationHandler(args, toolSink),
       },
       agent,
@@ -1927,6 +1954,43 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
   }
 
   return unifierItemClassify(uwi, loopResult, runnerError);
+}
+
+/**
+ * G1 rescope (plan item 2.6): one autocommit-sweep observation. The safety
+ * net (`autoCommitWorktreeIfDirty`) STAYS — it closes the
+ * uncommitted-work-dead-ends-the-gate failure mode — but when it fires, the
+ * AGENT failed its commit discipline, and that must be a distinct greppable
+ * event for reflectors instead of being silently absorbed.
+ */
+function emitUncommittedWorkSwept(
+  logger: EventLogger,
+  ctx: {
+    initiativeId: string;
+    parentEventId: string;
+    workItemId: string;
+    worktreePath: string;
+    phase: 'developer-loop' | 'unifier';
+    skill: 'developer-ralph' | 'developer-unifier';
+  },
+  iteration: number,
+): void {
+  logger.emit({
+    initiative_id: ctx.initiativeId,
+    parent_event_id: ctx.parentEventId,
+    phase: ctx.phase,
+    skill: ctx.skill,
+    event_type: 'log',
+    input_refs: [ctx.worktreePath],
+    output_refs: [],
+    message: 'ralph.uncommitted-work-swept',
+    metadata: {
+      work_item_id: ctx.workItemId,
+      iteration,
+      detail:
+        'agent exited the iteration with uncommitted work; the forge-autocommit safety net swept it (commit-discipline gap — the agent must commit its own work, git add -f for gitignored declared deliverables)',
+    },
+  });
 }
 
 /**
@@ -2025,6 +2089,16 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
         // B5: only enforce the iter-0 sharp-gate check with a real sharp gate
         // (else the green project-gate fallback false-completes at iter-0).
         failOnHollowIter0Gate: hasSharpGate,
+        // G1 rescope (plan item 2.6): commit-discipline sweeps are visible.
+        onAutoCommit: (iteration) =>
+          emitUncommittedWorkSwept(logger, {
+            initiativeId: input.initiativeId,
+            parentEventId: startEventId,
+            workItemId: uwi.work_item_id,
+            worktreePath: input.worktreePath,
+            phase: 'unifier',
+            skill: 'developer-unifier',
+          }, iteration),
         onIteration: unifierIterationHandler(args, toolSink),
       },
       agent,
@@ -2083,9 +2157,13 @@ type ComposedUnifierGateInput = {
    * process the agent never ran, and hand-written outputs for command
    * checkpoints are overwritten by the real run. Production passes
    * `buildDemoCaptureArgv(initiativeId)` (the forge CLI's `demo capture`);
-   * tests substitute a fake script. Best-effort: a capture failure/timeout is
-   * recorded as an event but does not block the gate (the demo validation +
-   * review judge on the resulting artifacts).
+   * tests substitute a fake script. Environment failures (timeout / non-zero
+   * exit / unrunnable) stay best-effort: recorded as an event, gate proceeds.
+   * N2 (plan item 2.6) hardens the silent-no-op seams: checkpoint commands
+   * must be producible BEFORE the spawn (else pr_self_contained fails with
+   * the problems), and a capture run that completes must leave demo.json
+   * stamped with the run's env nonce (else the evidence is stale/replayed
+   * and pr_self_contained rejects it).
    */
   orchestratedCapture?: { argv: string[]; timeoutMs?: number };
   /**
@@ -2254,40 +2332,77 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   // validated so the artifacts the gate (and the reviewer) judge are the ones
   // the ORCHESTRATOR produced: `forge demo capture` re-runs every command
   // checkpoint on main AND branch HEAD and back-fills the REAL output over
-  // whatever text the agent wrote. Best-effort by contract (same as the CLI):
-  // a failed/timed-out capture is recorded but does not block — the demo
-  // validation below judges whatever evidence exists.
+  // whatever text the agent wrote. Environment failures (timeout, non-zero
+  // exit) stay best-effort (recorded, not blocking) — but N2 (plan item 2.6)
+  // hardens the two silent-no-op seams:
+  //   - PRODUCIBILITY: every checkpoint command must be executable in the
+  //     project BEFORE the spawn; otherwise the capture is skipped and the
+  //     pr_self_contained gate fails with the actionable problems.
+  //   - NONCE: the spawn env carries a per-run nonce the agent never sees;
+  //     a capture run that completes (exit 0) must leave demo.json stamped
+  //     with it, or the evidence was not produced by this run (stale,
+  //     replayed, or hand-written) and pr_self_contained rejects it.
   const demoJsonPathForCapture = join(worktreePath, demoDir, DEMO_JSON_BASENAME);
+  let expectedCaptureNonce: string | null = null;
+  const captureProblems: string[] = [];
   if (input.orchestratedCapture && demoJsonWantsCapture(demoJsonPathForCapture)) {
-    const captureTimeoutMs = input.orchestratedCapture.timeoutMs ?? resolveDemoCaptureTimeoutMs();
-    const cap = runOrchestratorCommand(input.orchestratedCapture.argv, {
-      cwd: worktreePath,
-      timeoutMs: captureTimeoutMs,
-    });
-    const committed = cap.ok
-      ? commitOrchestratedCaptureArtifacts(worktreePath, demoDir, input.initiativeId)
-      : false;
-    logger.emit({
-      initiative_id: input.initiativeIdForEvent,
-      parent_event_id: input.parentEventId,
-      phase: 'unifier',
-      skill: 'developer-unifier',
-      event_type: 'log',
-      input_refs: [demoJsonPathForCapture],
-      output_refs: committed ? [demoJsonPathForCapture] : [],
-      duration_ms: cap.durationMs,
-      message: 'unifier.demo-capture',
-      metadata: {
-        capture_ok: cap.ok,
-        exit_code: cap.exitCode,
-        command: cap.command,
-        stdout_tail: cap.stdoutTail,
-        stderr_tail: cap.stderrTail,
-        committed,
-        ...(cap.timedOut ? { timed_out: true, failure_kind: 'environment', timeout_ms: captureTimeoutMs } : {}),
-        ...(cap.errored ? { capture_errored: true } : {}),
-      },
-    });
+    const producibility = preflightDemoCaptureCommands(demoJsonPathForCapture, worktreePath);
+    if (!producibility.ok) {
+      captureProblems.push(...producibility.problems);
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [demoJsonPathForCapture],
+        output_refs: [],
+        message: 'unifier.demo-capture',
+        metadata: {
+          capture_ok: false,
+          not_producible: true,
+          problems: producibility.problems,
+          committed: false,
+        },
+      });
+    } else {
+      const captureTimeoutMs = input.orchestratedCapture.timeoutMs ?? resolveDemoCaptureTimeoutMs();
+      const nonce = generateCaptureNonce();
+      const cap = runOrchestratorCommand(input.orchestratedCapture.argv, {
+        cwd: worktreePath,
+        timeoutMs: captureTimeoutMs,
+        env: { ...process.env, [CAPTURE_NONCE_ENV]: nonce },
+      });
+      const committed = cap.ok
+        ? commitOrchestratedCaptureArtifacts(worktreePath, demoDir, input.initiativeId)
+        : false;
+      // A run that completed must have produced+stamped the evidence; enforce
+      // below. A timed-out / non-zero / unrunnable capture is an environment
+      // failure — recorded, not nonce-enforced (best-effort stance stands).
+      if (cap.ok) expectedCaptureNonce = nonce;
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [demoJsonPathForCapture],
+        output_refs: committed ? [demoJsonPathForCapture] : [],
+        duration_ms: cap.durationMs,
+        message: 'unifier.demo-capture',
+        metadata: {
+          capture_ok: cap.ok,
+          exit_code: cap.exitCode,
+          command: cap.command,
+          stdout_tail: cap.stdoutTail,
+          stderr_tail: cap.stderrTail,
+          committed,
+          ...(cap.ok ? { capture_nonce: nonce } : {}),
+          ...(cap.timedOut ? { timed_out: true, failure_kind: 'environment', timeout_ms: captureTimeoutMs } : {}),
+          ...(cap.errored ? { capture_errored: true } : {}),
+        },
+      });
+    }
   }
 
   // 2. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
@@ -2319,9 +2434,26 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         });
       }
       demoErrors = validateDemoModel(model);
+      // N2 nonce binding: the orchestrated capture COMPLETED for this run, so
+      // the demo.json on disk must carry this run's nonce (stamped by `forge
+      // demo capture` from its child env). Anything else is evidence that was
+      // not produced by this run — stale, replayed, or hand-written.
+      if (expectedCaptureNonce !== null) {
+        const stampedNonce = (model as { capture?: { nonce?: unknown } }).capture?.nonce;
+        if (stampedNonce !== expectedCaptureNonce) {
+          demoErrors.push(
+            "demo.json does not embed this run's capture nonce — the evidence was not produced by this orchestrated capture run (stale, replayed, or hand-written; or the capture engine silently no-opped — see the unifier.demo-capture event). Fix the checkpoint commands so `forge demo capture` can produce real evidence; never author beforeOutput/afterOutput by hand.",
+          );
+        }
+      }
     } catch (err) {
       demoErrors = [`demo.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`];
     }
+  }
+  // N2 producibility: unrunnable checkpoint commands fail the demo contract
+  // with the actionable problem list (the capture spawn was skipped above).
+  if (captureProblems.length > 0) {
+    demoErrors.push(...captureProblems.map((p) => `demo capture command not producible: ${p}`));
   }
   const demoOk = demoErrors.length === 0;
   let prBodyOk = false;

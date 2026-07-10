@@ -127,6 +127,16 @@ export type DemoModel = {
    * Optional.
    */
   impact?: string[];
+  /**
+   * N2 (plan item 2.6) — the orchestrated-capture binding stamp. Written by
+   * `forge demo capture` (via `stampCaptureNonce`) from the per-run nonce the
+   * ORCHESTRATOR injected into the capture child's environment
+   * (`FORGE_CAPTURE_NONCE`) — never authored by an agent (the agent never
+   * sees the nonce). The composed unifier gate verifies this equals the nonce
+   * it generated for the run: evidence without it was not produced BY that
+   * run (stale, replayed, or hand-written) and is rejected.
+   */
+  capture?: { nonce: string; capturedAt?: string };
 };
 
 const VALID_KINDS = new Set(['screenshot', 'video', 'harness']);
@@ -251,8 +261,38 @@ export function validateDemoModel(raw: unknown): string[] {
   if (m.impact !== undefined && !Array.isArray(m.impact)) {
     errors.push('impact must be an array of strings when set');
   }
+  // N2: the orchestrated-capture stamp, when present, must carry a real nonce.
+  if (m.capture !== undefined) {
+    const cap = m.capture as Record<string, unknown> | null;
+    if (
+      !cap ||
+      typeof cap !== 'object' ||
+      Array.isArray(cap) ||
+      typeof cap.nonce !== 'string' ||
+      cap.nonce.trim() === ''
+    ) {
+      errors.push(
+        'capture must be { nonce: string (non-empty), capturedAt? } when set — it is stamped by the orchestrated `forge demo capture` run, never authored by hand',
+      );
+    }
+  }
 
   return errors;
+}
+
+/**
+ * N2 (plan item 2.6): bind a demo model to the orchestrated capture run that
+ * produced its evidence. Pure + immutable — returns a new model carrying
+ * `capture: { nonce, capturedAt }`. Called by `forge demo capture` with the
+ * nonce from its `FORGE_CAPTURE_NONCE` environment (injected per-run by the
+ * orchestrator); the composed unifier gate verifies the stamp.
+ */
+export function stampCaptureNonce(
+  model: DemoModel,
+  nonce: string,
+  capturedAt: string = new Date().toISOString(),
+): DemoModel {
+  return { ...model, capture: { nonce, capturedAt } };
 }
 
 /**

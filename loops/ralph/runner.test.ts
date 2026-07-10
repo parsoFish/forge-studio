@@ -294,3 +294,132 @@ test('G4: gate keeps failing + loopCapExhausted() flips true ⇒ loop-cap-exhaus
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// -------------------------------------------------------------------------
+// G2 rescope (plan item 2.6): hollow-gate detection is a deterministic
+// tool-use + diff-presence check — a WI whose gate passes after N agent
+// iterations with ZERO branch diff vs base did no durable work; the pass is
+// hollow. Replaces the deleted NO_WORK_INDICATORS string heuristics.
+// -------------------------------------------------------------------------
+
+/**
+ * Like setupEmptyBranchRepo, but with the loop-scratch files gitignored the
+ * way the C2 contract requires of every conformant project — so the
+ * autocommit safety net never sweeps PROMPT.md/AGENT.md/fix_plan.md into a
+ * commit that would mask a zero-work branch.
+ */
+function setupIgnoredScratchRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-runner-g2-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+  git('init', '-b', 'main');
+  git('config', 'user.email', 'test@forge.test');
+  git('config', 'user.name', 'forge-test');
+  writeFileSync(join(dir, 'README.md'), '# baseline\n');
+  writeFileSync(join(dir, '.gitignore'), 'PROMPT.md\nAGENT.md\nfix_plan.md\nWI-*.md\n');
+  git('add', '.');
+  git('commit', '-m', 'baseline');
+  git('checkout', '-b', 'forge/wi-g2');
+  return dir;
+}
+
+test('G2: gate passes after ≥1 agent iteration with ZERO branch diff ⇒ hollow-no-work, status failed', async () => {
+  const dir = setupIgnoredScratchRepo();
+  const swept: number[] = [];
+  try {
+    const workItemPath = join(dir, 'WI-g2.md');
+    writeFileSync(workItemPath, '# WI-g2: agent does nothing durable\n');
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 5, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-g2-hollow',
+      initiativeId: 'INIT-g2h',
+      // Gate not evaluated at iter-0 (failOnHollowIter0Gate false — mirrors
+      // callers whose gate can legitimately pass early); passes at iteration 1.
+      qualityGate: () => true,
+      failOnHollowIter0Gate: false,
+      onAutoCommit: (iteration) => { swept.push(iteration); },
+    };
+    // The agent runs but produces no worktree change at all.
+    const result = await run(input, async () => ({ filesChanged: [], costUsd: 0 }));
+
+    assert.equal(result.stop_reason, 'hollow-no-work', `expected hollow-no-work, got ${result.stop_reason}`);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.iterations, 1, 'the hollow pass is detected on the first post-iteration gate check');
+    assert.equal(result.toolUseTotal, 0, 'zero tool use recorded as evidence');
+    assert.deepEqual(swept, [], 'nothing to sweep — scratch files are gitignored');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('G2: gate passes after an iteration that produced real committed work ⇒ quality-gates-pass, complete', async () => {
+  const dir = setupIgnoredScratchRepo();
+  try {
+    const workItemPath = join(dir, 'WI-g2-real.md');
+    writeFileSync(workItemPath, '# WI-g2-real: agent writes a real file\n');
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 5, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-g2-real',
+      initiativeId: 'INIT-g2r',
+      qualityGate: () => true,
+      failOnHollowIter0Gate: false,
+    };
+    const result = await run(input, async () => {
+      // Real durable work: a non-ignored file lands in the worktree (the
+      // autocommit net commits it before the gate check).
+      writeFileSync(join(dir, 'real_work.go'), 'package x\n');
+      return { filesChanged: ['real_work.go'], costUsd: 0, toolsUsed: [{ name: 'Write', inputSummary: 'real_work.go' }] };
+    });
+
+    assert.equal(result.stop_reason, 'quality-gates-pass', `expected quality-gates-pass, got ${result.stop_reason}`);
+    assert.equal(result.status, 'complete');
+    assert.equal(result.toolUseTotal, 1, 'tool use tallied across iterations');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------------------------------------
+// G1 rescope (plan item 2.6): the autocommit safety net STAYS, but when it
+// fires the agent's commit-discipline failure must be VISIBLE — the runner
+// reports it through onAutoCommit so the caller emits a distinct
+// `ralph.uncommitted-work-swept` event instead of silently absorbing it.
+// -------------------------------------------------------------------------
+
+test('G1: the autocommit net sweeping uncommitted agent work invokes onAutoCommit with the iteration', async () => {
+  const dir = setupIgnoredScratchRepo();
+  const swept: number[] = [];
+  try {
+    const workItemPath = join(dir, 'WI-g1.md');
+    writeFileSync(workItemPath, '# WI-g1: agent forgets to commit\n');
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 2, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-g1',
+      initiativeId: 'INIT-g1',
+      qualityGate: () => true,
+      failOnHollowIter0Gate: false,
+      onAutoCommit: (iteration) => { swept.push(iteration); },
+    };
+    const result = await run(input, async () => {
+      writeFileSync(join(dir, 'forgotten.go'), 'package x\n');
+      return { filesChanged: ['forgotten.go'], costUsd: 0 };
+    });
+
+    assert.deepEqual(swept, [1], 'the sweep must be reported with its iteration');
+    // The net still works: the swept work counts as durable branch work.
+    assert.equal(result.status, 'complete');
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: dir }).toString('utf8');
+    assert.match(log, /forge-autocommit:/, 'the swept commit keeps its distinguishing prefix');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

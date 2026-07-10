@@ -34,7 +34,13 @@ export type StopCondition =
   // failure cap) has been hit. Status: failed — the agent has demonstrably
   // not cleared this gate; re-invoking it only burns budget (the $84.56 /
   // 16-restart 2026-07-04 spins).
-  | { kind: 'loop-cap-exhausted'; reason: string };
+  | { kind: 'loop-cap-exhausted'; reason: string }
+  // G2 rescope (2026-07-11, plan item 2.6): synthesised by the runner inline
+  // when the gate passes AFTER ≥1 agent iteration but the branch has ZERO
+  // diff/commits vs base — no durable work exists, so the pass is hollow.
+  // The deterministic tool-use + diff-presence replacement for the deleted
+  // NO_WORK_INDICATORS string heuristics. Status: failed.
+  | { kind: 'hollow-no-work'; reason: string };
 
 export type LoopState = {
   worktreePath: string;
@@ -114,6 +120,12 @@ async function checkOne(
       // Synthesised by the runner inline when the caller's fix-loop cap
       // predicate fires. Never fired from the per-iteration condition loop.
       return { stop: false };
+
+    case 'hollow-no-work':
+      // Synthesised by the runner inline when the gate passes after ≥1
+      // iteration with zero branch diff vs base. Never fired from the
+      // per-iteration condition loop.
+      return { stop: false };
   }
 }
 
@@ -135,9 +147,11 @@ export type GateRunInfo = {
   /**
    * Set when the gate failed despite exit 0 — surfaces *which* tightening
    * rejected the run. Empty when the gate's outcome was determined by exit
-   * code alone (the pre-tightening behaviour).
+   * code alone (the pre-tightening behaviour). G2 (2026-07-11): the
+   * 'no-work-indicator' string-scan reason was deleted with its heuristics —
+   * hollow detection is the runner's `hollow-no-work` diff-presence check.
    */
-  rejectReason?: 'no-work-indicator' | 'required-paths-missing' | 'gate-errored' | 'live-env-missing' | 'gate-timeout';
+  rejectReason?: 'required-paths-missing' | 'gate-errored' | 'live-env-missing' | 'gate-timeout';
   /**
    * Set when the gate command itself could NOT RUN (missing binary, EACCES,
    * killed by signal) — a BROKEN GATE, categorically different from a test
@@ -171,51 +185,17 @@ export type GateRunInfo = {
 const GATE_OUTPUT_MAX = 4096;
 
 /**
- * Strings that, when present in gate stdout/stderr, indicate **the test
- * runner exited 0 without actually running any tests**. Catches the
- * classic false-pass surfaced by the 2026-05-23 betterado dogfood — see
- * [[quality-gate-cmd-must-assert-new-work]].
- *
- * Match is case-insensitive substring. Lines added here MUST be specific
- * enough that they can't appear in legitimate passing output.
- */
-const NO_WORK_INDICATORS: readonly string[] = [
-  '[no tests to run]',     // go test (test files EXIST but -run filter matches nothing)
-  '[no test files]',       // go test on a package with ZERO _test.go files (fresh substrate);
-                           // Go exits 0 here, so without this a first-ever-test WI gets a hollow
-                           // iter-0 pass → false gate-too-loose (betterado release_def dogfood 2026-05-31)
-  'no tests to run',       // go test (other forms)
-  'no test files found',   // vitest / jest (matchPattern misses)
-  'no tests ran',          // pytest (`pytest tests/` with empty collection)
-  'running 0 tests',       // cargo test (no #[test] in scope)
-  'collected 0 items',     // pytest verbose summary
-  '0 passing, 0 failing',  // mocha (no specs matched)
-  'no specs found',        // jasmine
-];
-
-/**
- * Positive evidence that tests ACTUALLY EXECUTED somewhere in the output.
- * betterado #3: a `go test ./...` run that includes a test-less sibling
- * package prints `[no tests to run]` for that package while OTHER packages
- * ran real tests and passed — so a no-work indicator must NOT reject the whole
- * gate when there is also evidence tests ran. We only reject a no-work
- * indicator when NONE of these match (i.e. the whole run found no tests).
- * Patterns require a NON-ZERO count where the runner prints one.
- */
-const WORK_HAPPENED_PATTERNS: readonly RegExp[] = [
-  /^ok\s+\S+\s+[\d.]+s\s*$/m,                 // go: a package that passed with tests (no trailing "[no tests to run]")
-  /^ok\s+\S+\s+\(cached\)\s*$/m,              // go: cached pass
-  /\b[1-9]\d*\s+(passed|passing)\b/i,          // vitest / jest / mocha / pytest "N passed"
-  /^#\s+pass\s+[1-9]\d*/m,                      // node:test TAP summary "# pass N"
-  /test result:\s+ok\.\s+[1-9]\d*\s+passed/i,  // cargo "test result: ok. N passed"
-  /\brunning\s+[1-9]\d*\s+tests?\b/i,          // cargo "running N tests"
-  /\bcollected\s+[1-9]\d*\s+item/i,            // pytest "collected N items"
-];
-
-/**
  * Tightening options for `makeQualityGateFromCmd`. When all are absent the
  * gate's pass/fail is the exit-code alone (pre-tightening behaviour); when
  * present each layer adds a fail-closed check on top of exit 0.
+ *
+ * G2 (2026-07-11, plan item 2.6): the `NO_WORK_INDICATORS` /
+ * `WORK_HAPPENED_PATTERNS` output-string heuristics (and their
+ * `noWorkIndicators` override) were DELETED. They were prompt-shaped
+ * guesswork over runner chatter; the deterministic replacements are the
+ * `requiredPaths` diff check here and the runner's `hollow-no-work`
+ * tool-use + diff-presence check (a gate that passes after N agent
+ * iterations with zero branch diff is hollow).
  */
 export type GateTighteningOptions = {
   /**
@@ -227,18 +207,12 @@ export type GateTighteningOptions = {
    */
   requiredPaths?: readonly string[];
   /**
-   * Override the default no-work-indicator scan with a project-specific set.
-   * `null` disables the check entirely (e.g. for projects whose runners
-   * print legitimately matching substrings on PASS).
-   */
-  noWorkIndicators?: readonly string[] | null;
-  /**
    * Env vars that MUST be set for this gate to actually exercise the live
    * system (e.g. `["TF_ACC"]` for a Terraform live-acceptance gate). When any
    * is unset, the gate is treated as ERRORED (could not validate) rather than
    * passed — because a live-acc runner without these SKIPS, and a skipped Go
-   * acc test prints `ok pkg 0.00Xs` (matches WORK_HAPPENED_PATTERNS), so the
-   * no-work scan can't catch it. Wired from `.forge/project.json`
+   * acc test prints `ok pkg 0.00Xs` (exit 0, indistinguishable from a real
+   * pass), so no post-hoc output check can catch it. Wired from `.forge/project.json`
    * `acceptance_gate.requires_env` for WIs whose gate targets the acc suite.
    * Empty/absent ⇒ no env requirement (default behaviour). Surfaced after the
    * forge daemon ran betterado cycles without TF_ACC → live-acc gates skipped +
@@ -338,9 +312,9 @@ export function defaultQualityGates(
  * Ralph runner — eliminating the F-04 hardcoded `npm test` problem.
  *
  * Returns a sync closure suitable for `LoopInput.qualityGate`. Returns true
- * iff the command exits 0 **and** any tightening checks pass — the
- * dogfood-driven `NO_WORK_INDICATORS` scan + an optional `requiredPaths`
- * git-diff inclusion check (see [[quality-gate-cmd-must-assert-new-work]]).
+ * iff the command exits 0 **and** any tightening checks pass — the optional
+ * `requiredPaths` git-diff inclusion check (see
+ * [[quality-gate-cmd-must-assert-new-work]]).
  *
  * F-23: optional `onRun` callback receives stdout/stderr/exit + reject
  * reason after each invocation so the orchestrator can emit a `gate` event
@@ -359,17 +333,13 @@ export function makeQualityGateFromCmd(
  * Shared gate-runner: capture stdout/stderr/exit + duration, deliver them via
  * the optional callback, return the boolean the runner expects.
  *
- * Tightening layered on top of exit-0:
- *  1. Scan output for `NO_WORK_INDICATORS` — e.g. `go test` exits 0 with
- *     "[no tests to run]" when `-run TestX` matches nothing. Catches the
- *     2026-05-23 betterado dogfood pattern.
- *  2. If `requiredPaths` supplied, run `git diff --name-only main...HEAD`
- *     in the worktree and require ≥1 of those paths in the diff. Catches
- *     "agent wrote nothing the manifest declared as `creates` /
- *     `verification_artifact`".
- *
- * Either rejection sets `passed: false` + a `rejectReason` on the
- * GateRunInfo so post-mortems can see which layer caught it.
+ * Tightening layered on top of exit-0: if `requiredPaths` supplied, run
+ * `git diff --name-only main...HEAD` in the worktree and require ≥1 of those
+ * paths in the diff. Catches "agent wrote nothing the manifest declared as
+ * `creates` / `verification_artifact`". A rejection sets `passed: false` + a
+ * `rejectReason` on the GateRunInfo so post-mortems can see which layer
+ * caught it. (G2: the output-string no-work scan that used to run here was
+ * deleted — the runner's `hollow-no-work` diff-presence check replaces it.)
  */
 function runGateCapturing(
   worktreePath: string,
@@ -391,8 +361,8 @@ function runGateCapturing(
 
   // Live-acceptance env guard (2026-06-06). A live-acc gate that runs WITHOUT
   // its declared live-test env makes the runner SKIP — and a skipped Go acc
-  // test prints `ok pkg 0.00Xs`, indistinguishable from a real pass (it even
-  // matches WORK_HAPPENED_PATTERNS), so the no-work scan below cannot catch it.
+  // test prints `ok pkg 0.00Xs`, indistinguishable from a real pass, so no
+  // output check can catch it after the fact.
   // The only reliable guard is up front: if any required var is unset, the gate
   // could ONLY skip, so ERROR it (could-not-validate, a broken gate) rather than
   // let it false-pass. Errored ⇒ the runner stops early + the classifier says
@@ -505,44 +475,10 @@ function runGateCapturing(
   }
 
   // Tightening: only relevant when exit-code already said "pass". A non-zero
-  // exit is a clear fail regardless of indicators / paths.
+  // exit is a clear fail regardless of paths.
   if (passed) {
-    // 1. No-work indicator scan.
-    const indicators =
-      options?.noWorkIndicators === null
-        ? []
-        : options?.noWorkIndicators ?? NO_WORK_INDICATORS;
-    if (indicators.length > 0) {
-      const combined = (stdout + ' ' + stderr).toLowerCase();
-      const matchedIndicator = indicators.find((ind) => combined.includes(ind.toLowerCase()));
-      if (matchedIndicator) {
-        // betterado #3: a no-work indicator from ONE target (a test-less
-        // sibling package in a multi-package `go test` run) must not reject
-        // the whole gate when ANOTHER target actually ran tests. Only reject
-        // when there is NO positive evidence tests executed anywhere — i.e.
-        // the WHOLE run found no tests (the genuine hollow-gate case).
-        const ranTestsSomewhere = WORK_HAPPENED_PATTERNS.some(
-          (re) => re.test(stdout) || re.test(stderr),
-        );
-        if (!ranTestsSomewhere) {
-          passed = false;
-          exitCode = -2; // synthetic — distinguishes tightening rejection from a real non-zero exit
-          rejectReason = 'no-work-indicator';
-          // F1.I2 prescriptive: tell the agent WHAT TO DO, not just what failed.
-          stderr =
-            stderr +
-            (stderr.endsWith('\n') ? '' : '\n') +
-            `[forge gate-tightening] REJECTED: gate exited 0 but stdout/stderr contains no-work indicator "${matchedIndicator}" and NO evidence any tests ran. The test runner found no tests to execute.\n` +
-            `  ACTION REQUIRED before exiting this iteration: write at least one test that actually runs against the code you just changed (or the code declared in files_in_scope). A test that runs and asserts on real behaviour — not a placeholder. Do NOT exit until the gate sees executed tests.\n` +
-            `  (If this is a multi-package run where a sibling has no tests, scope the gate to the exact package dir — never \`./...\` — so a test-less sibling can't mask the real result.)`;
-        }
-        // else: a no-work indicator appeared but tests demonstrably ran
-        // elsewhere (mixed multi-target run) — accept the gate.
-      }
-    }
-
-    // 2. requiredPaths diff inclusion check (skipped if step 1 already rejected).
-    if (passed && options?.requiredPaths && options.requiredPaths.length > 0) {
+    // requiredPaths diff inclusion check.
+    if (options?.requiredPaths && options.requiredPaths.length > 0) {
       const diffPaths = gitDiffPathsAgainstMain(worktreePath);
       const matched = options.requiredPaths.some((p) => diffPaths.has(p));
       if (!matched) {
