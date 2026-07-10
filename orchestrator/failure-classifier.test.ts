@@ -231,6 +231,12 @@ test('classifyCycleFailure: N10 timeout priority beats the loop-cap signal (envi
       event_type: 'error',
       message: 'uwi.loop-cap-exhausted',
       metadata: { failure_class: 'dev-loop-unifier-loop-cap-exhausted', check_id: 'gate-timeout' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+});
+
 // ---------------------------------------------------------------------------
 // Item 2.4 / G10 — TRANSIENT-LINT: "parallel golangci-lint is running" is a
 // shared-cache/lock contention race on the host (a concurrent forge worktree
