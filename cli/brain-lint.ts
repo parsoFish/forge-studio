@@ -3,7 +3,7 @@
  *
  * CLI: `forge brain lint [--scope <s>] [--project <name>] [--file <path>] [--cycle <id>] [--fix]`
  *
- * Implements 8 checks (per `brain/LINT.md`):
+ * Implements 9 checks (per `brain/LINT.md`):
  *
  *   1. checkFrontmatter        — required fields + category whitelist
  *   2. checkIndexSync          — themes appear in their category index exactly once
@@ -13,6 +13,7 @@
  *   6. checkLengthSoftCap      — > 60 lines warn; > 100 lines error
  *   7. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
  *   8. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
+ *   9. checkReflectorLoss      — advisory: `_queue/done/` initiatives missing a reflection archive
  *
  * Each check is a pure function `(forgeRoot) => Finding[]`. The CLI aggregates,
  * prints a human-readable report, and exits non-zero iff ≥1 error.
@@ -756,6 +757,70 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- checkReflectorLoss ----------
+
+/**
+ * 9. checkReflectorLoss — advisory only (S6-follow-on). Nothing else diffs
+ * completed initiatives against the reflection archive, so a reflector
+ * crash/skip on a merged initiative goes unnoticed until someone audits
+ * `_queue/done/` by hand (10 initiatives lost reflection in the 2026-07
+ * betterado roadmap wave with zero signal at the time).
+ *
+ * For every manifest under `_queue/done/`, flag when no file in
+ * `brain/cycles/_raw/` matches its initiative id. The scheduler always
+ * writes/moves a manifest as `<initiative_id>.md` (queue.ts `moveTo`
+ * preserves the filename across states), so the filename stem IS the
+ * initiative id — no frontmatter parse needed. Archives are named
+ * `<timestamp>_<initiativeId>.md` (cycle.ts `newCycleId`); a reflector may
+ * emit more than one archive per initiative (retries), so ANY match passes.
+ *
+ * `_queue/` is gitignored and may not exist at all (fresh checkout, CI) —
+ * this is an instrument, not a guardrail, so it no-ops rather than erroring
+ * when `_queue/done/` is absent.
+ */
+export function checkReflectorLoss(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  const doneDir = join(forgeRoot, '_queue', 'done');
+  if (!existsSync(doneDir)) return findings;
+
+  let entries: string[];
+  try {
+    entries = readdirSync(doneDir);
+  } catch {
+    return findings;
+  }
+
+  const cyclesDir = cyclesRawDir(forgeRoot);
+  let archiveFiles: string[] = [];
+  if (existsSync(cyclesDir)) {
+    try {
+      archiveFiles = readdirSync(cyclesDir);
+    } catch {
+      archiveFiles = [];
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue;
+    const manifestPath = join(doneDir, entry);
+    const initiativeId = basename(entry, '.md');
+
+    const hasArchive = archiveFiles.some(
+      (f) => f.endsWith('.md') && f.endsWith(`_${initiativeId}.md`),
+    );
+    if (!hasArchive) {
+      findings.push({
+        category: 'flag',
+        file: manifestPath,
+        message: `no reflection archive found for ${initiativeId} in brain/cycles/_raw/`,
+        check: 'checkReflectorLoss',
+      });
+    }
+  }
+
+  return findings;
+}
+
 // ---------- classification (resolution tier) ----------
 
 /**
@@ -802,6 +867,8 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       if (/tier-C|load-bearing/.test(msg)) return { kind: 'cleanup.load-bearing', resolution: 'user' };
       if (/tier-B/.test(msg)) return { kind: 'cleanup.routine', resolution: 'user' };
       return { kind: 'cleanup.untriaged', resolution: 'user' };
+    case 'checkReflectorLoss':
+      return { kind: 'reflector.loss', resolution: 'user' };
     default:
       return { kind: 'unknown', resolution: 'user' };
   }
@@ -890,6 +957,7 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...checkLengthSoftCap(opts.cwd),
     ...checkContradictions(opts.cwd),
     ...checkCategoryScope(opts.cwd),
+    ...checkReflectorLoss(opts.cwd),
     // S6A — cleanup-candidates only contributes when scope is
     // `cleanup-dry-run`; filterFindingsByScope drops everything else.
     ...(opts.scope === 'cleanup-dry-run' ? checkCleanupCandidates(opts.cwd) : []),

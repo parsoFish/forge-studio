@@ -73,7 +73,7 @@ npm install              # install Claude Agent SDK + minimal deps
 npm run build            # compile TypeScript
 npm test                 # run scaffold smoke tests
 forge --help             # CLI surface
-forge brain lint         # structural integrity checks on brain/ (8 checks; exit non-zero on errors)
+forge brain lint         # structural integrity checks on brain/ (9 checks; exit non-zero on errors)
 forge brain index --write  # regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
 forge studio lint        # validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
 ```

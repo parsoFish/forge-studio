@@ -25,6 +25,7 @@ import {
   checkIndexSync,
   checkLengthSoftCap,
   checkOrphans,
+  checkReflectorLoss,
   checkSourceLinks,
   checkStaleness,
   runBrainLint,
@@ -664,4 +665,110 @@ test('checkCategoryScope: real brain has 0 scope-guard errors', async () => {
     0,
     `Real brain has ${errors.length} mis-routed theme(s):\n${errors.map((f) => `  ${f.file}: ${f.message}`).join('\n')}`,
   );
+});
+
+// ---------- checkReflectorLoss ----------
+
+/** Minimal forgeRoot fixture: `_queue/done/` + `brain/cycles/_raw/`, no brain/ theme scaffolding needed. */
+function buildQueueFixture(opts: {
+  doneManifests?: string[]; // initiative ids
+  archives?: string[]; // filenames under brain/cycles/_raw/
+  omitDoneDir?: boolean;
+}): string {
+  const root = mkdtempSync(join(tmpdir(), 'brain-lint-reflector-test-'));
+  if (!opts.omitDoneDir) {
+    const doneDir = join(root, '_queue', 'done');
+    mkdirSync(doneDir, { recursive: true });
+    for (const id of opts.doneManifests ?? []) {
+      writeFileSync(
+        join(doneDir, `${id}.md`),
+        `---\ninitiative_id: ${id}\nproject: demo\n---\n\nbody\n`,
+      );
+    }
+  }
+  if (opts.archives && opts.archives.length > 0) {
+    const rawDir = join(root, 'brain', 'cycles', '_raw');
+    mkdirSync(rawDir, { recursive: true });
+    for (const name of opts.archives) {
+      writeFileSync(join(rawDir, name), '# archive\n');
+    }
+  }
+  return root;
+}
+
+test('checkReflectorLoss: done manifest with a matching archive produces no finding', () => {
+  const root = buildQueueFixture({
+    doneManifests: ['INIT-2026-07-01-foo'],
+    archives: ['2026-07-01T10-00-00_INIT-2026-07-01-foo.md'],
+  });
+  try {
+    const findings = checkReflectorLoss(root);
+    assert.equal(findings.length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkReflectorLoss: done manifest with no matching archive is flagged (advisory)', () => {
+  const root = buildQueueFixture({
+    doneManifests: ['INIT-2026-07-01-bar'],
+    archives: [],
+  });
+  try {
+    const findings = checkReflectorLoss(root);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].category, 'flag');
+    assert.equal(findings[0].check, 'checkReflectorLoss');
+    assert.match(findings[0].message, /INIT-2026-07-01-bar/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkReflectorLoss: an unrelated archive does not satisfy the match (no false negative)', () => {
+  const root = buildQueueFixture({
+    doneManifests: ['INIT-2026-07-01-gallery'],
+    // Longer id that merely starts with the same prefix must NOT count as a match.
+    archives: ['2026-07-01T10-00-00_INIT-2026-07-01-gallery-extensionmanagement.md'],
+  });
+  try {
+    const findings = checkReflectorLoss(root);
+    assert.equal(findings.length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkReflectorLoss: any of multiple archives for the same initiative satisfies the match', () => {
+  const root = buildQueueFixture({
+    doneManifests: ['INIT-2026-07-01-baz'],
+    archives: [
+      '2026-07-01T10-00-00_INIT-2026-07-01-baz.md',
+      '2026-07-02T11-30-00_INIT-2026-07-01-baz.md',
+    ],
+  });
+  try {
+    const findings = checkReflectorLoss(root);
+    assert.equal(findings.length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkReflectorLoss: no-ops gracefully when _queue/done/ does not exist', () => {
+  const root = buildQueueFixture({ omitDoneDir: true });
+  try {
+    const findings = checkReflectorLoss(root);
+    assert.equal(findings.length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkReflectorLoss: classifies as an advisory user-tier finding', () => {
+  const { kind, resolution } = classifyFinding(
+    cf('checkReflectorLoss', 'no reflection archive found for INIT-2026-07-01-bar in brain/cycles/_raw/'),
+  );
+  assert.equal(kind, 'reflector.loss');
+  assert.equal(resolution, 'user');
 });

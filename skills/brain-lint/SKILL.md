@@ -54,11 +54,11 @@ single-file | cycle-touched-themes | cleanup-dry-run`. Default is `full`.
 
 > Note (2026-05-25): the `benchmarks/` harnesses (formerly shared with `brain-ingest` and `brain-query` under `benchmarks/brain/`) were removed. The lint checks are now covered by unit tests; phase quality is judged on real merged cycles.
 
-The 8 checks implemented in `cli/brain-lint.ts` each have unit
-tests in `cli/brain-lint.test.ts` (tests on the eight
-checks + the contradictions stretch-goal + scope filtering).
+The checks implemented in `cli/brain-lint.ts` each have unit
+tests in `cli/brain-lint.test.ts` (tests on every check +
+the contradictions stretch-goal + scope filtering).
 
-## The 8 checks (defined in `cli/brain-lint.ts`)
+## The checks (defined in `cli/brain-lint.ts`)
 
 | Check | What it catches |
 |---|---|
@@ -70,6 +70,7 @@ checks + the contradictions stretch-goal + scope filtering).
 | `checkLengthSoftCap` | > 60 lines warn; > 100 lines error (per `brain/LINT.md` rule 3). |
 | `checkCleanupCandidates` | Themes that are good candidates for cleanup (dry-run scope). |
 | `checkContradictions` (warn-only) | Stretch: pattern + antipattern with ≥3 keyword overlaps. Per plan 01 downgrade — staleness is the load-bearing contradiction defence. |
+| `checkReflectorLoss` (advisory `flag`) | `_queue/done/` initiatives with no matching cycle archive in `brain/cycles/_raw/` (reflector crash/skip going unnoticed). No-ops when `_queue/done/` doesn't exist. |
 
 ## Process
 
