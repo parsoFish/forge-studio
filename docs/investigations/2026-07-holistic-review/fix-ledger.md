@@ -62,10 +62,10 @@
 
 | # | Item | Surface | Status |
 |---|---|---|---|
-| W4.1 | 2.5 demo fan-in honesty + N3 demo-path SSOT (stale metadata, live-evidence id validation) | orchestrator demo fan-in + demo contract | pending |
-| W4.2 | 2.6 ralph commit discipline (G1/G2) + N2 nonce+producibility in demo contract | loops/ralph + demo contract | pending |
-| W4.3 | 2.7 send-back gate-body flow + N4 errexit-exempt gate template | orchestrator send-back path + gate template | pending |
-| W4.4 | 2.8 post-merge CI watch (N6) + 2.9 requeue-resume-from-worktree (N7) | orchestrator scheduler/pr | pending |
+| W4.1 | 2.5 demo fan-in honesty + N3 demo-path SSOT (stale metadata, live-evidence id validation) | orchestrator demo fan-in + demo contract | done |
+| W4.2 | 2.6 ralph commit discipline (G1/G2) + N2 nonce+producibility in demo contract | loops/ralph + demo contract | done |
+| W4.3 | 2.7 send-back gate-body flow + N4 errexit-exempt gate template | orchestrator send-back path + gate template | done |
+| W4.4 | 2.8 post-merge CI watch (N6) + 2.9 requeue-resume-from-worktree (N7) | orchestrator scheduler/pr | done |
 
 ## Wave 5 — pipeline honesty tail (parallel ×2)
 
