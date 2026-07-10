@@ -76,8 +76,8 @@
 
 ## Close-out gates (after Wave 5)
 
-- [ ] Full `npm test` green on main
-- [ ] `forge brain lint` 0 errors, `forge studio lint` green
-- [ ] `npm run ui:journey` green (single serialized run)
-- [ ] Ledger all-done, committed
-- [ ] Operator notified → auth cycle kickoff (auth-initiative-brief.md)
+- [x] Full `npm test` green on main
+- [x] `forge brain lint` 0 errors, `forge studio lint` green
+- [x] `npm run ui:journey` green (single serialized run)
+- [x] Ledger all-done, committed
+- [x] Operator notified → auth cycle kickoff (auth-initiative-brief.md)
