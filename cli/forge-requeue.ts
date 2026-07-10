@@ -15,10 +15,16 @@
  *
  * Resume modes (ADR 019) PRESERVE the worktree + branch instead of wiping
  * them, so the resumed cycle runs against the salvaged per-WI work:
- *   - `--resume-from=unifier`   re-runs only the unifier sub-phase.
- *   - `--resume-from=developer` re-runs the dev-loop over ALL work items on the
- *                               preserved branch (builds newly-added WIs), then
- *                               re-unifies — "send it back for another dev pass".
+ *   - `--resume-from=unifier` re-runs only the unifier sub-phase.
+ *
+ * N7 (plan 2.9): when no explicit resume flag is given, the requeue INFERS
+ * the resume position from the prior failure classification + the preserved
+ * worktree/branch state (`inferRequeueResume`): an environment-classified
+ * failure (rate-limit death, gate timeout — G3/N9) whose branch still
+ * carries committed WI work resumes from that state instead of wiping it —
+ * all WIs complete ⇒ `resume_from: unifier`; some incomplete ⇒ preserve the
+ * worktree with no marker (the scheduler's preserved-work-items reuse path
+ * re-runs the dev-loop in place). Everything else re-runs fresh from main.
  *
  * Each step is idempotent; running on an already-cleaned manifest is safe.
  */
@@ -30,6 +36,7 @@ import { join } from 'node:path';
 import { getPaths } from '../orchestrator/queue.ts';
 import { resolveInitiativeId } from '../orchestrator/initiative-id.ts';
 import { parseManifest, serializeManifest } from '../orchestrator/manifest.ts';
+import { inferRequeueResume, type RequeueResumeDecision } from '../orchestrator/requeue-resume.ts';
 
 export type RequeueOptions = {
   /** Forge root (parent of _queue/). Defaults to cwd. */
@@ -58,6 +65,13 @@ export type RequeueResult = {
   retryCountBefore: number;
   retryCountAfter: number;
   previousFailureModesAfter: string[];
+  /**
+   * N7: how the resume position was decided — the operator's explicit
+   * `--resume-from=unifier`, or the inference over the prior failure
+   * classification + preserved worktree/branch state. Surfaced so the
+   * bridge/CLI can show WHY the worktree was preserved or wiped.
+   */
+  resumeDecision: RequeueResumeDecision;
 };
 
 /**
@@ -77,11 +91,6 @@ export function runRequeue(
   }
   const initiativeId = resolved.canonical;
   const filename = `${initiativeId}.md`;
-
-  // ADR 019: a unifier resume preserves the worktree + branch (the salvaged
-  // per-WI work the resumed cycle runs against). Only a full (non-resume)
-  // requeue wipes them for a fresh-from-main re-run.
-  const preserveWorktree = opts.resumeFromUnifier;
 
   // 1. Locate manifest in any queue dir.
   const candidates: Array<{ dir: string; label: string }> = [
@@ -111,15 +120,43 @@ export function runRequeue(
   const previousFailureModesAfter = [...previousModes, newMode];
   const retryCountAfter = opts.resetRetries ? 0 : retryCountBefore;
 
+  const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
+  const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
+
+  // ADR 019 + N7: decide the resume position. An explicit
+  // `--resume-from=unifier` is the operator's override; otherwise infer from
+  // the prior failure classification + the preserved worktree/branch state
+  // (environment failure with salvageable committed work resumes; everything
+  // else re-runs fresh from main — the pre-N7 behaviour).
+  const resumeDecision: RequeueResumeDecision = opts.resumeFromUnifier
+    ? { resume: true, resume_from: 'unifier', reason: 'operator-requested --resume-from=unifier' }
+    : inferRequeueResume({
+        forgeRoot,
+        cycleId: manifest.cycle_id,
+        initiativeId,
+        worktreePath,
+        projectRepoPath,
+      });
+
+  // A resume preserves the worktree + branch (the salvaged per-WI work the
+  // resumed cycle runs against). Only a full (non-resume) requeue wipes them
+  // for a fresh-from-main re-run.
+  const preserveWorktree = resumeDecision.resume;
+
   const updated = {
     ...manifest,
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
     // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
     // preserved worktree — `unifier` re-runs only the unifier (draining any
-    // pending review UWIs). A full (non-resume) requeue CLEARS any resume marker
+    // pending review UWIs). A fresh (non-resume) requeue CLEARS any resume marker
     // (e.g. one a send-back stamped, ADR 026) so the re-run is a true full cycle.
-    resume_from: opts.resumeFromUnifier ? ('unifier' as const) : undefined,
+    // N7's in-place dev-loop resume deliberately stamps NOTHING: the scheduler's
+    // preserved-work-items reuse path detects it from the worktree itself.
+    resume_from:
+      resumeDecision.resume && resumeDecision.resume_from === 'unifier'
+        ? ('unifier' as const)
+        : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
@@ -155,8 +192,6 @@ export function runRequeue(
   //    (2026-06-02: this exact divergence sank the ci-green re-run.)
   let worktreeRemoved = false;
   let branchDeleted = false;
-  const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
-  const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
   if (!preserveWorktree) {
     if (existsSync(worktreePath) && projectRepoPath && existsSync(projectRepoPath)) {
       try {
@@ -193,5 +228,6 @@ export function runRequeue(
     retryCountBefore,
     retryCountAfter,
     previousFailureModesAfter,
+    resumeDecision,
   };
 }

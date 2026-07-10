@@ -17,12 +17,25 @@ export type FailureClassification = {
   reason: string;
   /** Convenience: true iff kind === 'transient'. Scheduler reads this. */
   recoverable: boolean;
+  /**
+   * N7 (plan 2.9): true iff the failure is an ENVIRONMENT failure — API
+   * pressure / host contention / a hung external step (rate-limit death,
+   * gate timeout, parallel-lint lock), never a defect in the work itself.
+   * Structured so the requeue-resume decision keys on a flag, not on
+   * sniffing reason text. Always a subset of `transient`.
+   */
+  environment: boolean;
   /** Up to 5 event_ids whose content drove the classification. */
   evidence_event_ids: string[];
 };
 
-const T = (kind: FailureKind, reason: string, evidence: string[]): FailureClassification => ({
-  kind, reason, recoverable: kind === 'transient', evidence_event_ids: evidence,
+const T = (
+  kind: FailureKind,
+  reason: string,
+  evidence: string[],
+  environment = false,
+): FailureClassification => ({
+  kind, reason, recoverable: kind === 'transient', environment, evidence_event_ids: evidence,
 });
 
 // ---------------------------------------------------------------------------
@@ -265,15 +278,15 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // (agent_threw, unifier.failed, dev-loop total failure) and a retry under
   // normal conditions is the correct move. Environment, not work.
   // N10: gate killed by its timeout.
-  if (gateTimedOut) return T('transient', 'a quality gate timed out (environment failure — machine load / hung step, NOT a work failure; the code may be complete). Auto-retry; raise FORGE_GATE_TIMEOUT_MS if this gate is legitimately slow.', evidence);
+  if (gateTimedOut) return T('transient', 'a quality gate timed out (environment failure — machine load / hung step, NOT a work failure; the code may be complete). Auto-retry; raise FORGE_GATE_TIMEOUT_MS if this gate is legitimately slow.', evidence, true);
   // G10: golangci-lint lock contention.
-  if (transientLint) return T('transient', 'a gate hit golangci-lint lock contention ("parallel golangci-lint is running" — environment failure: a concurrent lint run on this host held the lock, NOT a lint failure in the code). Auto-retry; the lock clears when the other run finishes.', evidence);
+  if (transientLint) return T('transient', 'a gate hit golangci-lint lock contention ("parallel golangci-lint is running" — environment failure: a concurrent lint run on this host held the lock, NOT a lint failure in the code). Auto-retry; the lock clears when the other run finishes.', evidence, true);
   // N9: rate/usage-limit death — time-bounded API pressure, never a code
   // defect. Must beat agent_threw + dev-loop-total-failure (the limit caused
   // them) so the manifest goes back to pending instead of failed/ — dependents
   // of this initiative stay QUEUED behind a retrying prerequisite rather than
   // collapsing behind a dead one.
-  if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence);
+  if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence, true);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);

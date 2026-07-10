@@ -467,3 +467,53 @@ test('matchesRateLimitSignature: matches real limit strings, not reasoning ABOUT
   assert.equal(matchesRateLimitSignature('implement retry-with-backoff for 429 rate limiting in the ADO client'), false);
   assert.equal(matchesRateLimitSignature('add a rate limit test for httpRetry'), false);
 });
+
+// ---------------------------------------------------------------------------
+// N7 (plan 2.9): environment-classified failures carry an explicit
+// `environment: true` so the requeue-resume decision (and any other consumer)
+// keys on a structured flag rather than sniffing reason text.
+// ---------------------------------------------------------------------------
+
+test('classifyCycleFailure: gate timeout → environment:true', () => {
+  const c = classifyCycleFailure([
+    ev({ event_type: 'error', message: 'gate.timeout', metadata: { gate_timed_out: true } }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.environment, true);
+});
+
+test('classifyCycleFailure: rate-limit death → environment:true', () => {
+  const c = classifyCycleFailure([
+    ev({ message: 'ralph.end', metadata: { rate_limited: true } }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.environment, true);
+});
+
+test('classifyCycleFailure: parallel golangci-lint contention → environment:true', () => {
+  const c = classifyCycleFailure([
+    ev({
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: { gate_stderr_tail: 'ERRO parallel golangci-lint is running' },
+    }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.environment, true);
+});
+
+test('classifyCycleFailure: non-environment transient (trivial pass) does NOT carry environment:true', () => {
+  const c = classifyCycleFailure([
+    ev({ message: 'ralph.end', metadata: { status: 'failed', iterations: 0, stop_reason: 'quality-gates-pass' } }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.notEqual(c.environment, true);
+});
+
+test('classifyCycleFailure: terminal failure does NOT carry environment:true', () => {
+  const c = classifyCycleFailure([
+    ev({ phase: 'unifier', skill: 'developer-unifier', event_type: 'error', message: 'unifier.failed' }),
+  ]);
+  assert.equal(c.kind, 'terminal');
+  assert.notEqual(c.environment, true);
+});

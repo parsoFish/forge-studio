@@ -465,6 +465,8 @@ function emitFailureClassification(
         failure_mode: cls.kind,
         failure_kind: cls.kind,
         recoverable: cls.recoverable,
+        // N7: structured environment marker — requeue-resume keys on this.
+        environment: cls.environment,
         reason: cls.reason,
         evidence_event_ids: cls.evidence_event_ids,
       },

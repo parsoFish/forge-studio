@@ -72,3 +72,32 @@ Use `resume_from: unifier` when all WIs are done and only the unifier failed. Us
 - **Re-run the whole cycle (status quo).** Rejected: discards correct WI work; expensive; the exact thing the operator flagged.
 - **A standalone `forge unify <id>` command** that bypasses `runCycle`. Rejected: would duplicate the reviewer/closure/reflector wiring and drift from `runCycle`. Reusing `runCycle` with a skip flag keeps one spine.
 - **Auto-resume in the failure-classifier now.** Deferred: needs a reliable "WIs done, unifier-only failed" signature; explicit operator signal is the safe first step.
+
+## Amendment (2026-07-11, plan 2.9 / N7): requeue infers the resume position
+
+The "auto-resume" alternative deferred above is now implemented — not in the
+failure classifier itself, but at the requeue boundary, keyed on the
+classifier's structured output:
+
+- `classifyCycleFailure` marks environment failures (rate-limit / usage-limit
+  death, gate timeout, golangci-lint lock contention — G3/N9/N10/G10) with an
+  explicit `environment: true`, stamped into the `failure_classification`
+  event.
+- `runRequeue` (the bridge recovery route's engine) no longer needs the
+  operator to know the magic flag. With no explicit `--resume-from=unifier`
+  it runs `inferRequeueResume` (`orchestrator/requeue-resume.ts`):
+  - prior failure `environment: true` AND the preserved worktree exists AND
+    `forge/<init>` carries commits beyond main AND `.forge/work-items/` is
+    readable →
+    - every WI `complete` → stamp `resume_from: unifier` (this ADR's
+      machinery, unchanged);
+    - some WIs incomplete → preserve the worktree/branch with NO marker; the
+      scheduler's preserved-work-items reuse path re-runs the dev-loop in
+      place (complete WIs take the iter-0 already-complete shortcut).
+  - anything else → the pre-existing fresh-from-main wipe.
+
+The explicit `--resume-from=unifier` flag remains as the operator override.
+(Note: the `resume_from: developer` manifest variant described above was
+retired with ADR 026; review feedback flows through typed unifier work items,
+and N7's "incomplete WIs" path deliberately re-runs the dev node via worktree
+state rather than resurrecting the marker.)
