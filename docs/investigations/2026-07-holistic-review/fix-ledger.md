@@ -54,9 +54,9 @@
 
 | # | Item | Surface | Status |
 |---|---|---|---|
-| W3b.1 | 2.2 unifier iteration cap (G4: cap loops, $84.56 overrun class) + uwi.gate-failed event | orchestrator unifier invocation | pending |
-| W3b.2 | 2.3 crash-no-identical-retry (classify SIGKILL/env before identical re-spawn) | orchestrator scheduler/cycle-runner | pending |
-| W3b.3 | 2.4 transient-lint reclassification + N9 rate-limit→env-failure (no cascade) | orchestrator failure classifier | pending |
+| W3b.1 | 2.2 unifier iteration cap (G4: cap loops, $84.56 overrun class) + uwi.gate-failed event | orchestrator unifier invocation | done |
+| W3b.2 | 2.3 crash-no-identical-retry (classify SIGKILL/env before identical re-spawn) | orchestrator scheduler/cycle-runner | done |
+| W3b.3 | 2.4 transient-lint reclassification + N9 rate-limit→env-failure (no cascade) | orchestrator failure classifier | done |
 
 ## Wave 4 — delivery honesty (parallel ×4, opus)
 
