@@ -28,6 +28,15 @@ the trafficGame arc proved that net-negative for execution phases
   first — antipatterns + historical work-sizing shape how an
   initiative is sliced. Runtime-enforced for PM (throws on 0 brain
   reads).
+  *(Amended 2026-07-11 — plan 2.11, PM turn economy: the orchestrator now
+  PRE-FETCHES the deterministic subset — the project profile + the
+  always-relevant themes — and inlines it into the PM prompt, so the
+  mandate is satisfied structurally; injected files count toward the
+  runtime gate and 0 agent-side brain `Read` turns is the intended fast
+  path. The behavioural throw remains as a backstop when injection comes
+  up empty AND the agent read nothing. Three cycles' evidence
+  (2026-07-01→10): turn-budgeted re-discovery of known context caused
+  `error_max_turns` empty decompositions.)*
 - **Reflector: reads (and writes) the brain** by definition.
 - **Dev-loop and reviewer: MUST NOT read the forge brain (Brains 1+2).**
   The planner already encoded every relevant pattern/antipattern/convention

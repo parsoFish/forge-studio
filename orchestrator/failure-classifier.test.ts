@@ -517,3 +517,83 @@ test('classifyCycleFailure: terminal failure does NOT carry environment:true', (
   assert.equal(c.kind, 'terminal');
   assert.notEqual(c.environment, true);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 2.11 (PM turn economy): partial-but-usable decomposition classification.
+// Evidence: 2026-07-10-pm-error-max-turns-new-api-exploration.md — a capped PM
+// run's re-queue succeeds, so a partial usable graph is transient, while an
+// empty decomposition (0 WIs) and a capped+degenerate set stay terminal.
+// ---------------------------------------------------------------------------
+
+test('classifyCycleFailure: pm.partial-decomposition usable → transient (re-queue is viable)', () => {
+  const c = classifyCycleFailure([
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.partial-decomposition',
+      metadata: { result_subtype: 'error_max_turns', work_item_count: 3, valid_count: 3, planned_count: 6, usable: true },
+    }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.match(c.reason, /partial/i);
+  assert.notEqual(c.environment, true);
+});
+
+test('classifyCycleFailure: partial-usable beats the capped+degenerate terminal rule (truncated tail WI is expected)', () => {
+  // A capped incremental run may leave a half-written final WI (per-item
+  // errors) alongside usable ones — that must NOT classify as "never
+  // converged" terminal.
+  const c = classifyCycleFailure([
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.partial-decomposition',
+      metadata: { result_subtype: 'error_max_turns', work_item_count: 4, valid_count: 3, planned_count: 6, usable: true },
+    }),
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      metadata: { result_subtype: 'error_max_turns', per_item_error_count: 2, work_item_count: 4 },
+    }),
+  ]);
+  assert.equal(c.kind, 'transient');
+  assert.match(c.reason, /partial/i);
+});
+
+test('classifyCycleFailure: pm.partial-decomposition with usable:false falls through to capped+degenerate terminal', () => {
+  const c = classifyCycleFailure([
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.partial-decomposition',
+      metadata: { result_subtype: 'error_max_turns', work_item_count: 1, valid_count: 0, usable: false },
+    }),
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      metadata: { result_subtype: 'error_max_turns', per_item_error_count: 3, work_item_count: 1 },
+    }),
+  ]);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /never converged/i);
+});
+
+test('classifyCycleFailure: pm.empty-decomposition unchanged — still terminal', () => {
+  const c = classifyCycleFailure([
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.empty-decomposition',
+      metadata: { result_subtype: 'error_max_turns' },
+    }),
+  ]);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /zero work items/i);
+});

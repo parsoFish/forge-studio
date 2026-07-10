@@ -272,10 +272,13 @@ test('M2-3: PM_BRAIN_ACCESS is mandatory (SKILL.md frontmatter regression lock)'
   assert.equal(PM_BRAIN_ACCESS, 'mandatory');
 });
 
-test('M2-3: mandatory brainAccess + 0 brain reads → throws (brain-first mandate gate)', async () => {
-  // A queryFn that writes valid WIs but does NOT emit any brain/ Read tool use.
-  // runProjectManager throws on failure (see project-manager.ts:108); the gate
-  // fires because PM_BRAIN_ACCESS is 'mandatory'.
+test('M2-3 as amended by plan 2.11: 0 agent brain reads no longer aborts — injected brain context satisfies the mandate structurally', async () => {
+  // Pre-2.11 this scenario threw `brain-first mandate not honoured`. The PM
+  // turn-economy change (G8 rescoped) has the orchestrator PRE-FETCH the
+  // project profile + always-relevant themes and inline them into the prompt,
+  // so 0 agent-side Read turns is now the intended fast path, not a skip.
+  // The behavioural gate remains as a backstop for the (unreachable-in-repo)
+  // case where injection comes up empty AND the agent reads nothing.
   const h = setupHarness({ ...BASE_CONFIG });
   const noBrainQueryFn: PmQueryFn = ({ options }) => {
     const cwd = (options as { cwd: string }).cwd;
@@ -304,16 +307,19 @@ test('M2-3: mandatory brainAccess + 0 brain reads → throws (brain-first mandat
     })();
   };
   try {
-    await assert.rejects(
-      () => runProjectManager(h.input, h.logger, { queryFn: noBrainQueryFn }),
-      /brain-first mandate not honoured/,
-    );
-    // Confirm the brain-skipped error event was emitted.
+    await runProjectManager(h.input, h.logger, { queryFn: noBrainQueryFn });
     const events = readEvents(h.logger);
-    const brainSkipped = events.find(
-      (e) => e.phase === 'project-manager' && e.event_type === 'error' && e.message === 'project-manager.brain-skipped',
+    assert.equal(
+      events.filter((e) => e.message === 'project-manager.brain-skipped').length,
+      0,
+      'injected brain context must satisfy the brain-first gate',
     );
-    assert.ok(brainSkipped, 'expected a project-manager.brain-skipped error event');
+    const injected = events.find((e) => e.message === 'pm.context-injected');
+    assert.ok(injected, 'expected the pm.context-injected observability event');
+    assert.ok(
+      ((injected.metadata as { brain_files: string[] }).brain_files ?? []).length > 0,
+      'the injected event must carry the pre-fetched brain file paths',
+    );
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }

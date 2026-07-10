@@ -5,7 +5,7 @@
  * items, and emits decomposition telemetry.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
@@ -16,7 +16,10 @@ import {
   PM_DISALLOWED_TOOLS,
   PM_MODEL,
   PM_BRAIN_ACCESS,
+  PM_ALWAYS_RELEVANT_THEMES,
+  DECOMPOSITION_STATE_FILENAME,
   buildPmSystemPrompt,
+  parseDecompositionState,
   renderPmUserPrompt,
   tallyToolUse,
   type PmToolUseSummary,
@@ -80,6 +83,9 @@ const PM_LIVE_MAX_TURNS = 70;
 // makes the classifier's existing recommendation actually true.
 const PM_LIVE_MAX_BUDGET_USD_FLOOR = 2.5;
 const PM_BUDGET_FRACTION_OF_INITIATIVE = 0.2;
+// Plan 2.11 part 3: emit `pm.turn-budget-warning` once when the streamed
+// assistant-turn count crosses this fraction of the live turn cap.
+const PM_TURN_WARNING_FRACTION = 0.8;
 function pmMaxBudgetUsd(initiativeCostBudgetUsd: number): number {
   return Math.max(
     PM_LIVE_MAX_BUDGET_USD_FLOOR,
@@ -101,13 +107,15 @@ export async function runProjectManager(
     output_refs: [],
   });
 
-  const manifest = parseManifest(readFileSync(input.manifestPath, 'utf8'));
+  const manifestRaw = readFileSync(input.manifestPath, 'utf8');
+  const manifest = parseManifest(manifestRaw);
   const queryFn = options.queryFn ?? (sdkQuery as unknown as PmQueryFn);
 
   const result = await runOnePmPass({
     input,
     logger,
     manifest,
+    manifestRaw,
     parentEventId: start.event_id,
     queryFn,
     signal: options.signal,
@@ -121,6 +129,8 @@ type PmPassInput = {
   input: CycleInput;
   logger: EventLogger;
   manifest: InitiativeManifest;
+  /** Raw manifest markdown — inlined into the PM prompt (plan 2.11). */
+  manifestRaw: string;
   parentEventId: string;
   queryFn: PmQueryFn;
   signal?: AbortSignal;
@@ -136,7 +146,7 @@ type PmPassOutcome =
  * the outer orchestrator can decide how to handle failure.
  */
 async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
-  const { input, logger, manifest, parentEventId, queryFn, signal } = p;
+  const { input, logger, manifest, manifestRaw, parentEventId, queryFn, signal } = p;
 
   // F-21: wipe any stale `.forge/work-items/` inherited from the project's
   // base branch. The dev-loop's pre-review boundary snapshot historically
@@ -167,15 +177,39 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // isolated here so a config-read failure doesn't abort the PM pass.
   let projectConfigForPrompt: ProjectConfig | null = null;
   try { projectConfigForPrompt = loadProjectConfig(input.worktreePath); } catch { /* best-effort */ }
+  // Plan 2.11 (G8 rescoped — env-pin at the SDK seam): inline everything the
+  // orchestrator already knows so the PM spends turns DECIDING, not
+  // re-discovering. Evidence (2026-07-10-pm-error-max-turns-new-api-
+  // exploration.md): the PM's first run burned its budget on brain reads +
+  // 6 tree Globs + manifest/profile reads before writing any WI; the
+  // successful re-queue read the manifest then wrote immediately.
+  const brainContext = readPmBrainContext(forgeRoot, manifest.project);
   const prompt = renderPmUserPrompt({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
+    manifestContent: manifestRaw,
     worktreeRelPath: input.worktreePath,
     projectName: manifest.project,
     projectContext,
+    brainContext,
     gateRecipe,
     instructions: projectConfigForPrompt?.instructions,
     northStar: projectConfigForPrompt?.northStar,
+  });
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'project-manager',
+    skill: 'project-manager',
+    event_type: 'log',
+    input_refs: brainContext.map((b) => b.path),
+    output_refs: [],
+    message: 'pm.context-injected',
+    metadata: {
+      brain_files: brainContext.map((b) => b.path),
+      manifest_inlined: true,
+      tree_listing: Boolean(projectContext.treeListing),
+    },
   });
 
   const opts: Record<string, unknown> = {
@@ -211,6 +245,15 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   let costUsd = 0;
   let durationMs = 0;
   let resultSubtype: string | undefined;
+  // Plan 2.11 part 3: the SDK exposes turn counts only on the terminal result
+  // message (`num_turns`) — no mid-run remaining-turns surface. But this loop
+  // IS the mid-run surface: each streamed assistant message is one turn, so
+  // the orchestrator counts them itself and emits a single near-exhaustion
+  // warning at the threshold (observability for the operator + the event log;
+  // the skill-side `_decomposition-state.md` checkpoint is the recovery half).
+  let observedTurns = 0;
+  let turnWarningEmitted = false;
+  const turnWarningThreshold = Math.ceil(PM_LIVE_MAX_TURNS * PM_TURN_WARNING_FRACTION);
 
   // Phase A — per-tool live telemetry for the PM (no work-item yet).
   // The PM drives its own stream loop, so it feeds the sink manually via
@@ -230,6 +273,21 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     if (typeof msg !== 'object' || msg === null) continue;
     const m = msg as { type?: string; message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> }; subtype?: string; total_cost_usd?: number; duration_ms?: number };
     if (m.type === 'assistant') {
+      observedTurns += 1;
+      if (!turnWarningEmitted && observedTurns >= turnWarningThreshold) {
+        turnWarningEmitted = true;
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: parentEventId,
+          phase: 'project-manager',
+          skill: 'project-manager',
+          event_type: 'log',
+          input_refs: [],
+          output_refs: [],
+          message: 'pm.turn-budget-warning',
+          metadata: { observed_turns: observedTurns, max_turns: PM_LIVE_MAX_TURNS },
+        });
+      }
       tallyToolUse(m.message, toolUseSummary);
       for (const detail of extractLiveToolDetails(m.message, pmToolSeq)) {
         pmToolSink.onToolUse(detail);
@@ -267,13 +325,24 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // M2-3: gate is conditional on PM_BRAIN_ACCESS so a hypothetical advisory
   // agent would not abort on 0 reads. PM IS mandatory, so behaviour is
   // identical in production.
+  // Plan 2.11 (G8 rescoped): brain files the orchestrator INJECTED into the
+  // prompt count toward the mandate — the knowledge is structurally in
+  // context, so 0 agent-side Read turns is the intended fast path, not a
+  // skip. The behavioural gate remains as a backstop for the case where
+  // injection came up empty (no profile, themes missing) AND the agent read
+  // nothing.
   if (
     PM_BRAIN_ACCESS === 'mandatory' &&
-    !recordBrainGateResult('project-manager', 'project-manager', toolUseSummary.brainReads, {
-      initiativeId: input.initiativeId,
-      logger,
-      parentEventId,
-    })
+    !recordBrainGateResult(
+      'project-manager',
+      'project-manager',
+      toolUseSummary.brainReads + brainContext.length,
+      {
+        initiativeId: input.initiativeId,
+        logger,
+        parentEventId,
+      },
+    )
   ) {
     return {
       kind: 'failure',
@@ -396,13 +465,56 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     });
   }
 
+  // Plan 2.11 parts 2+3: the skill writes WIs incrementally and keeps a
+  // checkbox checkpoint (`_decomposition-state.md`) — so a turn/budget cap
+  // mid-flight leaves a partial graph the orchestrator can CLASSIFY instead
+  // of nothing. Read the checkpoint best-effort: planned > emitted WI files
+  // means the set is incomplete even when every written WI validates cleanly.
+  const capped = resultSubtype === 'error_max_turns' || resultSubtype === 'error_max_budget_usd';
+  let decompState: { planned: number; emitted: number } | null = null;
+  try {
+    decompState = parseDecompositionState(
+      readFileSync(join(workItemsDir, DECOMPOSITION_STATE_FILENAME), 'utf8'),
+    );
+  } catch {
+    decompState = null; // no checkpoint — the PM never got that far, or pre-2.11 skill
+  }
+  const plannedCount = decompState?.planned ?? null;
+  const checkpointIncomplete = capped && plannedCount !== null && plannedCount > items.length;
+
   const failed =
     items.length === 0 ||
     Object.keys(parseErrors).length > 0 ||
     setErrors.length > 0 ||
     itemErrorCount > 0 ||
     couplingViolations.length > 0 ||
-    accGateViolation !== null;
+    accGateViolation !== null ||
+    checkpointIncomplete;
+
+  // Partial-but-usable signal (plan 2.11): a capped run that DID write WIs is
+  // a different failure class from an empty decomposition — the classifier
+  // treats `usable: true` (≥1 valid WI) as transient (the 07-10 evidence shows
+  // a re-queue succeeds), while empty/degenerate stays terminal.
+  if (capped && items.length > 0 && failed) {
+    const validCount = items.filter((it) => (perItem[it.work_item_id] ?? []).length === 0).length;
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      input_refs: [input.manifestPath],
+      output_refs: [workItemsDir],
+      message: 'pm.partial-decomposition',
+      metadata: {
+        result_subtype: resultSubtype,
+        work_item_count: items.length,
+        valid_count: validCount,
+        planned_count: plannedCount,
+        usable: validCount > 0,
+      },
+    });
+  }
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -434,6 +546,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       set_errors: setErrors,
       per_item_error_count: itemErrorCount,
       hidden_coupling_violations: couplingViolations,
+      ...(plannedCount !== null ? { planned_count: plannedCount } : {}),
       ...(accGateViolation ? { acceptance_gate_violation: accGateViolation } : {}),
     },
   });
@@ -447,6 +560,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     itemErrorCount > 0 ? `${itemErrorCount} per-item validation errors` : null,
     couplingViolations.length > 0
       ? `${couplingViolations.length} hidden-coupling pair(s): ${couplingViolations.map((pair) => `${pair.a}↔${pair.b} share ${pair.sharedFiles.join(',')}`).join('; ')}`
+      : null,
+    checkpointIncomplete
+      ? `decomposition capped mid-flight (${resultSubtype}): checkpoint plans ${plannedCount} WI(s) but only ${items.length} emitted`
       : null,
     accGateViolation,
   ]
@@ -560,6 +676,7 @@ function readProjectContext(worktreePath: string): {
   cargoToml?: string;
   forgeProjectJson?: string;
   claudeMd?: string;
+  treeListing?: string;
 } {
   const safeRead = (rel: string): string | undefined => {
     const p = resolve(worktreePath, rel);
@@ -577,5 +694,88 @@ function readProjectContext(worktreePath: string): {
     cargoToml: safeRead('Cargo.toml'),
     forgeProjectJson: safeRead('.forge/project.json'),
     claudeMd: safeRead('CLAUDE.md'),
+    treeListing: buildTreeListing(worktreePath),
   };
+}
+
+/**
+ * Plan 2.11 (G8 rescoped): pre-fetch the brain files EVERY PM run needs —
+ * the project profile + the always-relevant themes SKILL.md Step 0 names —
+ * so they ride in the prompt instead of costing agent turns. Domain-specific
+ * project themes stay agent-discovered (the navigation index in the system
+ * prompt covers them); only the deterministic reads are pinned here.
+ * Best-effort per file (missing profile on a new project is fine); each
+ * capped at 8 KB like the project-context reads.
+ */
+function readPmBrainContext(
+  forgeRoot: string,
+  projectName: string,
+): Array<{ path: string; content: string }> {
+  const rels = [
+    `brain/projects/${projectName}/profile.md`,
+    ...PM_ALWAYS_RELEVANT_THEMES,
+  ];
+  const out: Array<{ path: string; content: string }> = [];
+  for (const rel of rels) {
+    const p = resolve(forgeRoot, rel);
+    if (!existsSync(p)) continue;
+    try {
+      const raw = readFileSync(p, 'utf8');
+      out.push({
+        path: rel,
+        content: raw.length > 8192 ? raw.slice(0, 8192) + '\n… (truncated)' : raw,
+      });
+    } catch {
+      /* best-effort — an unreadable theme is skipped, not fatal */
+    }
+  }
+  return out;
+}
+
+/** Bounds for the injected worktree listing (plan 2.11 — closes the
+ *  six-broad-Globs gap from the 07-10 max-turns theme). */
+const TREE_LISTING_MAX_DEPTH = 3;
+const TREE_LISTING_MAX_ENTRIES = 400;
+const TREE_LISTING_SKIP_DIRS = new Set([
+  'node_modules', 'vendor', 'dist', 'build', 'out', 'coverage',
+  '.git', '.next', '.forge', '.terraform', '__pycache__', 'target',
+]);
+
+/**
+ * Depth- and entry-capped worktree listing, injected into the PM prompt so
+ * the agent structurally sees the tree instead of re-deriving it with
+ * repeated broad Globs (the 2026-07-10 theme recorded 6 Glob scans before
+ * any WI write). Dot-entries and dependency/build dirs are skipped; deeper
+ * paths remain reachable via targeted Glob.
+ */
+function buildTreeListing(worktreePath: string): string | undefined {
+  const lines: string[] = [];
+  const walk = (dir: string, rel: string, depth: number): void => {
+    if (depth > TREE_LISTING_MAX_DEPTH || lines.length >= TREE_LISTING_MAX_ENTRIES) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (lines.length >= TREE_LISTING_MAX_ENTRIES) return;
+      if (entry.name.startsWith('.') || TREE_LISTING_SKIP_DIRS.has(entry.name)) continue;
+      const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        lines.push(`${childRel}/`);
+        walk(join(dir, entry.name), childRel, depth + 1);
+      } else {
+        lines.push(childRel);
+      }
+    }
+  };
+  walk(worktreePath, '', 1);
+  if (lines.length === 0) return undefined;
+  const suffix =
+    lines.length >= TREE_LISTING_MAX_ENTRIES
+      ? `\n… (truncated at ${TREE_LISTING_MAX_ENTRIES} entries — use targeted Glob for deeper paths)`
+      : '';
+  return lines.join('\n') + suffix;
 }

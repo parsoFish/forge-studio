@@ -112,10 +112,68 @@ export function buildPmSystemPrompt(brainCwd: string): string {
   ].join('\n');
 }
 
+/**
+ * Plan 2.11 (PM turn economy / G8 rescoped) — the always-relevant brain themes
+ * SKILL.md Step 0 names. The live caller pre-fetches these (plus the project
+ * profile) and inlines them into the prompt so the PM never spends turns
+ * re-discovering knowledge the orchestrator already holds. Kept in the
+ * invocation contract (not the phase runner) so a test can assert the list
+ * stays in sync with SKILL.md.
+ */
+export const PM_ALWAYS_RELEVANT_THEMES = [
+  'brain/cycles/themes/spec-driven-work-items.md',
+  'brain/cycles/themes/design-is-the-bottleneck.md',
+  'brain/cycles/themes/work-item-completion-by-domain.md',
+  'brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md',
+] as const;
+
+/**
+ * Plan 2.11 part 3 — the incremental-decomposition checkpoint the PM skill
+ * writes after each WI (`- [x] WI-1 — title` per planned WI). Underscore-
+ * prefixed so `readWorkItemsFromDir` never parses it as a work item.
+ */
+export const DECOMPOSITION_STATE_FILENAME = '_decomposition-state.md';
+
+/**
+ * Parse the checkbox checkpoint: planned = every `- [ ]`/`- [x]` line,
+ * emitted = the ticked ones. Returns null when the content carries no
+ * checklist (missing/never-written/free-prose file) so callers can
+ * distinguish "no checkpoint" from "0 planned".
+ */
+export function parseDecompositionState(
+  content: string,
+): { planned: number; emitted: number } | null {
+  let planned = 0;
+  let emitted = 0;
+  for (const line of content.split('\n')) {
+    const m = /^\s*[-*]\s*\[( |x|X)\]/.exec(line);
+    if (!m) continue;
+    planned += 1;
+    if (m[1]!.toLowerCase() === 'x') emitted += 1;
+  }
+  return planned > 0 ? { planned, emitted } : null;
+}
+
 export type PmUserPromptInput = {
   initiativeId: string;
   /** Path to the initiative manifest, relative to the cwd the SDK runs in. */
   manifestRelPath: string;
+  /**
+   * Plan 2.11 (G8 rescoped): the manifest's full markdown, inlined so the PM
+   * does not spend a turn Reading a file the orchestrator has already parsed.
+   * Evidence: 2026-07-10-pm-error-max-turns-new-api-exploration.md — the PM
+   * burned its turn budget on exploration before writing any WI; the
+   * successful re-queue pattern was "read manifest → write immediately".
+   * Inlining removes even that read.
+   */
+  manifestContent?: string;
+  /**
+   * Plan 2.11 (G8 rescoped): brain files the orchestrator pre-fetched — the
+   * project profile + PM_ALWAYS_RELEVANT_THEMES. Injected verbatim so the
+   * brain-first mandate is satisfied structurally (the knowledge is IN
+   * context) instead of behaviourally (turns spent on Read calls).
+   */
+  brainContext?: ReadonlyArray<{ path: string; content: string }>;
   /** Path to the worktree where work items will be written, relative to cwd. */
   worktreeRelPath: string;
   projectName: string;
@@ -165,6 +223,13 @@ export const INSTRUCTIONS_SECTION_HEADER = '## Project instructions (injected by
 /** Header for the injected project-north-star block — exported for tests. */
 export const NORTH_STAR_SECTION_HEADER = '## Project north star (injected by forge)';
 
+/** Header for the inlined initiative manifest — exported for tests. */
+export const MANIFEST_SECTION_HEADER =
+  '## Initiative manifest (inlined by forge — your single source of intent)';
+
+/** Header for the pre-fetched brain-context block — exported for tests. */
+export const BRAIN_CONTEXT_SECTION_HEADER = '## Brain context (pre-fetched by forge)';
+
 /**
  * Render the per-cycle user prompt the SDK sends to the PM agent.
  *
@@ -179,6 +244,10 @@ export const NORTH_STAR_SECTION_HEADER = '## Project north star (injected by for
  */
 export function renderPmUserPrompt(input: PmUserPromptInput): string {
   const projectContextBlock = renderProjectContextBlock(input.projectContext);
+  const brainContextBlock = renderBrainContextBlock(input.brainContext);
+  const manifestBullet = input.manifestContent
+    ? `- Initiative manifest: \`${input.manifestRelPath}\` — its full content is inlined below; do NOT spend a turn re-reading it.`
+    : `- Initiative manifest: \`${input.manifestRelPath}\` — read this (after brain queries + structural Globs) as your single source of intent.`;
   return [
     '# Project-manager invocation',
     '',
@@ -191,13 +260,44 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     `## Initiative: ${input.initiativeId}`,
     `## Project: ${input.projectName}`,
     '',
-    `- Initiative manifest: \`${input.manifestRelPath}\` — read this (after brain queries + structural Globs) as your single source of intent.`,
+    manifestBullet,
     `- Worktree: \`${input.worktreeRelPath}\` — your current working directory. All \`files_in_scope\` paths resolve here.`,
     `- Write work items to \`.forge/work-items/WI-<n>.md\` and the graph to \`.forge/work-items/_graph.md\`.`,
     `- Set \`initiative_id: ${input.initiativeId}\` exactly on every WI frontmatter.`,
+    ...(input.manifestContent
+      ? ['', MANIFEST_SECTION_HEADER, '', '```markdown', input.manifestContent.trim(), '```']
+      : []),
+    ...(brainContextBlock ? ['', brainContextBlock] : []),
     '',
     'Do not update the manifest frontmatter or status — leave that to the orchestrator. Just write the work items and the graph, then stop.',
   ].join('\n');
+}
+
+/**
+ * Render the pre-fetched brain-context block (plan 2.11 / G8 rescoped). The
+ * orchestrator already knows which brain files every PM run needs (the
+ * project profile + the always-relevant themes SKILL.md names); inlining them
+ * converts N Read turns into zero. The block tells the PM these count as
+ * consulted — it should cite them in the "Brain themes consulted" footer and
+ * only Read ADDITIONAL themes the navigation index shows as directly relevant.
+ *
+ * Returns '' (caller omits the block) for a missing/empty list so callers
+ * that don't inject stay byte-stable.
+ */
+export function renderBrainContextBlock(
+  brainContext: PmUserPromptInput['brainContext'],
+): string {
+  if (!brainContext || brainContext.length === 0) return '';
+  const parts: string[] = [
+    BRAIN_CONTEXT_SECTION_HEADER,
+    '',
+    'The following brain files have already been read for you (pre-fetched by the orchestrator) — they COUNT as consulted. Cite their paths in each WI\'s "Brain themes consulted" footer. Do NOT re-Read them; only Read additional `brain/...` themes when the navigation index shows one directly relevant to this initiative\'s domain that is not inlined here.',
+    '',
+  ];
+  for (const { path, content } of brainContext) {
+    parts.push(`### ${path}`, '', '```markdown', content.trim(), '```', '');
+  }
+  return parts.join('\n');
 }
 
 /**
@@ -237,7 +337,14 @@ export function renderProjectContextBlock(
     parts.push('### CLAUDE.md (project conventions)', '', '```markdown', ctx.claudeMd.trim(), '```', '');
   }
   if (ctx.treeListing) {
-    parts.push('### Directory listing (top-level + src/ + tests/)', '', '```', ctx.treeListing.trim(), '```', '');
+    parts.push(
+      '### Directory listing (depth-capped — trust this over repeated broad Globs; Glob only for deeper paths)',
+      '',
+      '```',
+      ctx.treeListing.trim(),
+      '```',
+      '',
+    );
   }
   if (parts.length <= 4) return ''; // header only — nothing actually inlined
   return parts.join('\n');

@@ -34,34 +34,45 @@ Format and validation rules are locked in [`docs/decisions/015-work-item-format.
 
 Running **non-interactively** in an unattended cycle. Do not ask clarifying questions; if something is genuinely under-specified, infer the most reasonable choice, note it in the work-item body, and proceed. **You MUST write at least one work-item file before stopping; finishing without writing any files is a failed run.**
 
-## Step 0 — Brain queries (REQUIRED, before any other action)
+## Turn economy — write incrementally (MANDATORY)
 
-**Your FIRST tool calls MUST be `Read` against `brain/...` paths.** The orchestrator records which files you read; if zero are under `brain/`, the cycle aborts with `pm.brain-skipped` before validation runs. Use the brain navigation index to pick relevant theme files, then `Read` them in full.
+Your turn budget is finite and exploration without write commitment exhausts it (three real cycles died `error_max_turns` with ZERO work items written — the re-queue then succeeded by writing immediately). The orchestrator inlines everything it already knows into your prompt: the **initiative manifest**, the **project profile + always-relevant brain themes**, the **project context files**, and a **depth-capped directory listing**. Do NOT spend turns re-reading any of it.
 
-Required reads (minimum):
-- One or more `brain/cycles/themes/*.md` covering work-item sizing and file-scope discipline.
-- `brain/projects/<project>/profile.md` — taste signals. Cite this in the WI body.
-- Any `brain/projects/<project>/themes/*.md` matching the initiative's domain.
+1. **Plan first, on paper.** From the inlined manifest + context, decide the full WI list (ids + one-line titles) before touching any other file.
+2. **Write the checkpoint immediately.** Create `.forge/work-items/_decomposition-state.md` with one checkbox per planned WI:
 
-Always-relevant themes (Read directly — faster than brain-query for known paths):
+   ```markdown
+   # Decomposition state — <initiative-id>
+   - [ ] WI-1 — token introspection client
+   - [ ] WI-2 — session store
+   - [ ] WI-3 — bearer-header middleware
+   ```
+
+3. **At most ~3 additional file reads before the first WI file is written.** Targeted reads only (a specific mock, a specific client registration) — never broad tree scans; the directory listing in your prompt already IS the tree.
+4. **Write each WI file AS IT IS DECIDED — never batch WIs for the end.** Immediately after each WI write, tick its checkbox in `_decomposition-state.md` (one `Edit`). A turn-budget hit mid-run must leave a partial, valid graph the orchestrator can classify and retry — not nothing. Later WIs may reference an earlier WI's pattern instead of restating it.
+5. **`_graph.md` last** (or keep it updated as you go — final state must agree exactly with the union of `depends_on`).
+
+## Step 0 — Brain grounding (injected — verify, don't re-read)
+
+The orchestrator pre-fetches and inlines the brain files every decomposition needs (see the "Brain context (pre-fetched by forge)" section of your prompt): `brain/projects/<project>/profile.md` plus the always-relevant themes. **These count as consulted — cite their paths in the "Brain themes consulted" footer.** Do NOT re-`Read` them.
+
+`Read` an ADDITIONAL `brain/...` theme ONLY when the brain navigation index (system prompt) shows one directly relevant to this initiative's domain that is not inlined — e.g. a `brain/projects/<project>/themes/*.md` matching the feature area. One or two such reads at most.
+
+Always-relevant themes (inlined by the orchestrator; listed here so the set is auditable):
 - [`brain/cycles/themes/spec-driven-work-items.md`](../../brain/cycles/themes/spec-driven-work-items.md)
 - [`brain/cycles/themes/design-is-the-bottleneck.md`](../../brain/cycles/themes/design-is-the-bottleneck.md)
 - [`brain/cycles/themes/work-item-completion-by-domain.md`](../../brain/cycles/themes/work-item-completion-by-domain.md)
 - [`brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md`](../../brain/cycles/themes/quality-gate-cmd-must-assert-new-work.md)
 
-The "Brain themes consulted" footer in each WI body must list paths you actually `Read`-ed.
+The "Brain themes consulted" footer in each WI body lists the inlined paths plus any you actually `Read`-ed.
 
-## Step 0.5 — Project structure enumeration (REQUIRED, before any WI emission)
+## Step 0.5 — Project structure (injected — targeted Glob only)
 
 **Your `cwd` is the project worktree** — all relative paths resolve against it, not forge's root. Use relative paths everywhere.
 
-**You MUST `Glob` the actual project tree before drafting any WI** — hallucinated `files_in_scope` paths cause dev-loop failures. Required:
-- `Glob({ pattern: "src/**" })` — entire source tree
-- `Glob({ pattern: "tests/**" })` (or `spec/**`, `__tests__/**` — the project's actual convention)
-- `Read({ file_path: "package.json" })` (or `pyproject.toml`, `Cargo.toml`) — confirm scripts, deps, project type
-- `Read({ file_path: "README.md" })` and `CLAUDE.md` if present
+Your prompt already carries the project's `package.json`/`pyproject.toml`/`Cargo.toml`, `CLAUDE.md`, `.forge/project.json`, and a **depth-capped directory listing** — trust these; do not re-read them and do not run broad tree scans (`src/**`-style Globs across the whole tree burned entire turn budgets in past cycles). Use a **targeted** `Glob`/`Read` only for what the listing cannot answer: a deeper path (`internal/service/wiki/**`), a specific pattern (`**/mock*`), or one key source file you must see before sizing a WI.
 
-**Never invent files.** Every path in `files_in_scope` must either (a) appear in your Glob results, OR (b) be a new file this WI explicitly creates.
+**Never invent files.** Every path in `files_in_scope` must either (a) appear in the injected directory listing or your targeted Glob/Read results, OR (b) be a new file this WI explicitly creates.
 
 ## Inputs
 
@@ -71,7 +82,8 @@ The "Brain themes consulted" footer in each WI body must list paths you actually
 
 ## Outputs
 
-- `<worktree>/.forge/work-items/WI-<n>.md` — one file per work item, frontmatter + spec body. Schema locked in [ADR 015](../../docs/decisions/015-work-item-format.md).
+- `<worktree>/.forge/work-items/WI-<n>.md` — one file per work item, frontmatter + spec body. Schema locked in [ADR 015](../../docs/decisions/015-work-item-format.md). **Written incrementally, one file per decided WI** (see Turn economy).
+- `<worktree>/.forge/work-items/_decomposition-state.md` — the checkbox checkpoint (planned WIs, ticked as emitted). Written FIRST, updated after every WI write; the orchestrator parses it to classify how far a capped run got.
 - `<worktree>/.forge/work-items/_graph.md` — dependency graph (mermaid `graph TD`).
 
 ## Concrete examples
@@ -134,8 +146,8 @@ graph TD
 
 ## Process
 
-1. **Brain query first.** Always-relevant themes plus project-specific.
-2. Read the initiative manifest, the worktree's README, and source layout.
+1. **Ground on the injected context first** (Step 0/0.5): the inlined manifest, profile, always-relevant themes, project context, and directory listing. Add at most a couple of targeted reads (a domain-specific project theme, a key source file).
+2. **Plan the WI list and write `_decomposition-state.md`** (Turn economy step 2) before authoring any WI body.
 3. **Decompose the initiative body's GWT ACs directly into atomic outcome-sized work items.** The body is your single source of intent — no `features[]` list. **The initiative TITLE is a filing label, NOT the spec — if title and body disagree, the body wins** (a past cycle hallucinated off a "release-folder" title and built unrelated release-NOTES markdown). **Before drafting any WI, restate the target in one line** — the concrete resource/file/module the body asks for and where it lives in this project's source tree. Put that line in the first WI body. Every WI's `files_in_scope` must sit under that source tree. Each GWT block in the body MUST be exercised by ≥1 WI's `quality_gate_cmd`. Do not invent work outside the body's ACs. For each WI:
    - At least one **GWT** acceptance criterion: `given`/`when`/`then` strings. **Always double-quote values** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators; unquoted strings starting with these fail to parse.
    - Declares `depends_on` and `files_in_scope` (worktree-relative, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files**. **Exception — hotspot files** (listed in ≥2 WIs with no `depends_on` edge): a shared file with no ordering edge is a guaranteed merge conflict, hard-failed by `detectHiddenCoupling()` at PM close.
@@ -157,7 +169,7 @@ graph TD
 4. **Prefer independence.** Emit WIs with empty `depends_on` where possible — the dev-loop parallelises every DAG level. Serialise only for true prerequisites.
 5. **File-scope discipline.** If two WIs edit the same file: (a) split the file by concern, (b) merge WIs, or (c) add a `depends_on` edge. Two WIs sharing a file with no edge is a guaranteed merge conflict; `detectHiddenCoupling()` REJECTS the cycle (the 2026-05-23 betterado dogfood failed this way: WI-1 + WI-5 shared a schema file with no edge → cycle failed at PM phase, $1.54 wasted).
 6. Write the dependency graph as `_graph.md` (mermaid `graph TD`; edges must agree exactly with the union of all `depends_on` lists).
-7. **Self-check — MANDATORY before writing files.** Walk this checklist:
+7. **Self-check — MANDATORY.** Run the per-WI checks AS you write each file (not batched at the end — a capped run must leave valid WIs behind), then walk the set-level checks once, fixing with `Edit`, before stopping:
 
    **Per work item — frontmatter completeness:**
    - `work_item_id` (matches `WI-<n>` and filename), `initiative_id`, `status: pending`

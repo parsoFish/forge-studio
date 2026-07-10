@@ -168,7 +168,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // Each group is only what's needed to resolve the classification below.
   let gateMissingScript = false, worktreeNoDeps = false;
   let baselineRed = false, resumeNeedsRebase = false;
-  let pmEmptyDecomposition = false;
+  let pmEmptyDecomposition = false, pmPartialUsable = false;
   let pmCapped = false, pmBudgetExhausted = false;
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
   let agentThrew = false, devLoopTotalFailure = false;
@@ -193,6 +193,9 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (pmErr && Array.isArray(md.hidden_coupling_violations) && md.hidden_coupling_violations.length > 0) { pmHiddenCoupling = true; ev(e); }
     if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
     if (e.phase === 'project-manager' && msg === 'pm.empty-decomposition') { pmEmptyDecomposition = true; ev(e); }
+    // Plan 2.11: a capped PM run that still wrote ≥1 valid WI (incremental-
+    // write discipline) is partial-but-usable — a distinct, recoverable class.
+    if (e.phase === 'project-manager' && msg === 'pm.partial-decomposition' && md.usable === true) { pmPartialUsable = true; ev(e); }
     if (e.phase === 'developer-loop' && msg === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
     if (msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
     // G4 (plan item 2.2): the unifier's fix-iteration loop halted after N
@@ -295,6 +298,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (resumeNeedsRebase) return T('terminal', 'resume blocked — the preserved branch conflicts with current main (another cycle merged during the stall); rebase the initiative branch onto main by hand, then re-resume', evidence);
+  // Plan 2.11: partial-but-usable BEATS both the empty-decomposition and the
+  // capped+degenerate terminal rules — an incremental-write run capped
+  // mid-flight legitimately leaves a truncated tail WI (per-item errors)
+  // alongside usable ones, and the 2026-07-10 evidence shows a re-queue
+  // (fresh PM pass with injected context) succeeds.
+  if (pmPartialUsable) return T('transient', 'PM hit its turn/budget cap mid-decomposition but left a partial, USABLE work-item graph (incremental-write discipline held) — the decomposition is viable; auto-retry runs a fresh PM pass. If this recurs, split the initiative or raise its cost budget', evidence);
   if (pmEmptyDecomposition) return T('terminal', 'PM emitted zero work items — the initiative body may have no decomposable ACs or the PM ignored them entirely; amend the initiative body and re-queue', evidence);
   if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
   if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
