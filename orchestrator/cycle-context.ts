@@ -96,6 +96,22 @@ export type CycleInput = {
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
 
 /**
+ * 2.10 reflector pipeline honesty — the event message recorded whenever a
+ * cycle's reflection is abandoned (reflector crash, budget/turn exhaustion,
+ * unreadable manifest, brain-gate failure, or a caller-side throw). Ten July
+ * roadmap cycles lost reflection silently — the cycle closed as done with
+ * nothing in events.jsonl marking the loss; it was only discovered by manual
+ * triage against `_queue/done/`. Emitting this event at the moment of loss
+ * makes it visible in events.jsonl + Studio (run-model `reflectionLost`), and
+ * `forge brain lint`'s checkReflectorLoss remains the archive-side backstop.
+ *
+ * `metadata.cause` values: 'crash' | 'budget-exhausted' | 'max-turns' |
+ * 'error' | 'manifest-unreadable' | 'brain-gate-failed' | 'interrupted'
+ * (the last is derived, not emitted — see run-model-derive.findReflectionLoss).
+ */
+export const REFLECTION_LOST_EVENT = 'cycle.reflection-lost';
+
+/**
  * S6A / C8 — outcome of the post-reflection brain-lint pass over
  * cycle-touched themes. Sibling field on `CycleResult`; NOT a new value on
  * the existing `reflection_status` enum. Per

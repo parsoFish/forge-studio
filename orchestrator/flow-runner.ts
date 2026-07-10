@@ -47,7 +47,8 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
-import type { CycleInput, CycleOutcome, ReviewerOutcome } from './cycle-context.ts';
+import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
+import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets } from './studio/types.ts';
 import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flow-budgets.ts';
@@ -669,9 +670,31 @@ const execReview: NodeExecutor = async (ctx) => {
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
   if (state.closure?.merged) {
-    const reflectorResult = await deps.runReflector(input, nodeLogger);
-    state.reflectionStatus = reflectorResult.reflection_status;
-    state.lintStatus = reflectorResult.lint_status;
+    try {
+      const reflectorResult = await deps.runReflector(input, nodeLogger);
+      state.reflectionStatus = reflectorResult.reflection_status;
+      state.lintStatus = reflectorResult.lint_status;
+    } catch (err) {
+      // 2.10 reflector pipeline honesty: runReflector's log-and-continue
+      // contract means a throw here is a CALLER-side death (prompt/brain-index
+      // build, an injected adapter) that would otherwise vanish into the
+      // cycle-failure catch with nothing marking the reflection as lost.
+      // Instrument-only: record the loss, then rethrow — control flow unchanged.
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const crash = classifyCrash(errMsg, null);
+      state.reflectionStatus = 'failed';
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'reflection',
+        skill: 'reflector',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: REFLECTION_LOST_EVENT,
+        metadata: { cause: 'crash', detail: errMsg, crash_kind: crash.kind, crash_reason: crash.reason },
+      });
+      throw err;
+    }
   }
 };
 

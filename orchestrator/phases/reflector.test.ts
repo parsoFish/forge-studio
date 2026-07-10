@@ -629,3 +629,165 @@ test('runReflector: emits retention-assigned event on successful close', async (
     h.cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// 2.10 reflector pipeline honesty — cycle.reflection-lost emission.
+// Every path that abandons reflection must record the loss in events.jsonl
+// at the moment it happens (10 July cycles lost reflection silently).
+// ---------------------------------------------------------------------------
+
+test('runReflector: SDK crash → cycle.reflection-lost with classified cause', async () => {
+  const h = setupHarness({ suffix: 'lost-crash' });
+  try {
+    async function* fakeSdkQueryCrash(): AsyncIterable<unknown> {
+      throw new Error('fetch failed: socket hang up');
+    }
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryCrash,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'failed');
+
+    const events = h.events();
+    const lost = events.find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event');
+    assert.equal(lost!.event_type, 'error');
+    assert.equal(lost!.metadata?.['cause'], 'crash');
+    // classifyCrash recognises the network signature as environment pressure.
+    assert.equal(lost!.metadata?.['crash_kind'], 'transient');
+    assert.match(String(lost!.metadata?.['detail']), /socket hang up/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: budget-exhausted result → failed + cycle.reflection-lost cause budget-exhausted', async () => {
+  const h = setupHarness({ suffix: 'lost-budget' });
+  try {
+    async function* fakeSdkQueryBudget(): AsyncIterable<unknown> {
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'brain/INDEX.md' } }] },
+      };
+      yield { type: 'result', subtype: 'error_max_budget_usd', total_cost_usd: 2.0, duration_ms: 90_000 };
+    }
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryBudget,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'failed', 'a budget-exhausted reflector must not close silently');
+    assert.equal(result.lint_status, 'skipped');
+
+    const lost = h.events().find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event');
+    assert.equal(lost!.metadata?.['cause'], 'budget-exhausted');
+    assert.equal(lost!.metadata?.['result_subtype'], 'error_max_budget_usd');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: max-turns result → failed + cycle.reflection-lost cause max-turns', async () => {
+  const h = setupHarness({ suffix: 'lost-turns' });
+  try {
+    async function* fakeSdkQueryTurns(): AsyncIterable<unknown> {
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'brain/INDEX.md' } }] },
+      };
+      yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.0, duration_ms: 60_000 };
+    }
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryTurns,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'failed');
+    const lost = h.events().find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event');
+    assert.equal(lost!.metadata?.['cause'], 'max-turns');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: unreadable manifest → cycle.reflection-lost cause manifest-unreadable', async () => {
+  const h = setupHarness({ suffix: 'lost-manifest' });
+  try {
+    const input = { ...makeInput(h), manifestPath: join(h.cycleLogDir, 'no-such-manifest.md') };
+    const result = await runReflector(input, h.logger, {
+      sdkQuery: fakeSdkQueryClean,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'failed');
+    const lost = h.events().find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event');
+    assert.equal(lost!.metadata?.['cause'], 'manifest-unreadable');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: brain-gate failure → cycle.reflection-lost cause brain-gate-failed', async () => {
+  const h = setupHarness({ suffix: 'lost-brain-gate' });
+  try {
+    async function* fakeSdkQueryNoBrain(): AsyncIterable<unknown> {
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0.01, duration_ms: 100 };
+    }
+    const result = await runReflector(makeInput(h), h.logger, {
+      sdkQuery: fakeSdkQueryNoBrain,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'failed');
+    const lost = h.events().find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event');
+    assert.equal(lost!.metadata?.['cause'], 'brain-gate-failed');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runReflector: successful close emits NO cycle.reflection-lost; disposable skip emits NONE either', async () => {
+  // Success case.
+  const ok = setupHarness({ suffix: 'lost-none' });
+  try {
+    const result = await runReflector(makeInput(ok), ok.logger, {
+      sdkQuery: fakeSdkQueryClean,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'closed');
+    assert.equal(ok.events().find((e) => e.message === 'cycle.reflection-lost'), undefined);
+  } finally {
+    ok.cleanup();
+  }
+
+  // Disposable skip is DELIBERATE — not a loss.
+  const disp = setupHarness({ suffix: 'lost-disposable' });
+  try {
+    writeFileSync(
+      disp.manifestPath,
+      [
+        '---',
+        'initiative_id: INIT-2026-05-23-s6a',
+        'project: demo-project',
+        'created_at: 2026-05-23T12:00:00Z',
+        'iteration_budget: 3',
+        'cost_budget_usd: 1.0',
+        'phase: done',
+        'origin: architect',
+        'disposable: true',
+        '---',
+        '',
+        'body',
+        '',
+      ].join('\n'),
+    );
+    const result = await runReflector(makeInput(disp), disp.logger, {
+      sdkQuery: fakeSdkQueryClean,
+      brainLint: makeCleanLintStub(),
+    });
+    assert.equal(result.reflection_status, 'skipped');
+    assert.equal(disp.events().find((e) => e.message === 'cycle.reflection-lost'), undefined);
+  } finally {
+    disp.cleanup();
+  }
+});

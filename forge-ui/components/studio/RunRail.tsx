@@ -179,6 +179,7 @@ function RunCard({
       className={`fb-run-card${isSelected ? ' active-card' : ''}${isGated ? ' gated-card' : ''}${isFailed ? ' failed-card' : ''}`}
       data-run-id={run.id}
       data-run-status={run.status}
+      data-reflection-lost={run.reflectionLost}
       onClick={() => onSelect(run.id)}
       style={{
         display: 'flex',
@@ -282,6 +283,25 @@ function RunCard({
           }}
         >
           {run.failNote}
+        </div>
+      )}
+
+      {/* 2.10 reflection honesty: a merged cycle whose reflection was lost
+          (reflector crash / budget-exhausted / killed) surfaces the loss
+          instead of closing silently. Amber, not red — the merge itself
+          succeeded; only the learning loop was dropped. */}
+      {run.reflectionLost && (
+        <div
+          data-reflection-lost-note={run.reflectionLost}
+          title={run.reflectionLostNote}
+          style={{
+            fontSize: 11,
+            color: 'var(--amber)',
+            lineHeight: 1.4,
+            marginTop: 2,
+          }}
+        >
+          reflection lost: {run.reflectionLost}
         </div>
       )}
     </div>

@@ -272,6 +272,41 @@ describe('flow-runner reflect skipped when not merged', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 2.10: a reflect-node throw records the loss before propagating
+// ---------------------------------------------------------------------------
+
+describe('flow-runner reflect throw → cycle.reflection-lost (2.10)', () => {
+  it('emits cycle.reflection-lost with a classified cause, then rethrows (behavior unchanged)', async () => {
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+
+    // runReflector's own emission points cover its internal failures; this
+    // covers the caller-side throw (e.g. system-prompt/brain-index read dies
+    // before runReflector's internal try, or an injected adapter throws).
+    deps.runReflector = async (_input, _logger) => {
+      throw new Error('ECONNRESET: connection reset by peer');
+    };
+
+    const input = makeInput();
+    const logger = makeLogger();
+    const flow = makeForgeCycleFlow();
+
+    await assert.rejects(
+      () => runFlow({ flow, input, logger, deps }),
+      /ECONNRESET/,
+      'the throw must still propagate — instrument-only, no swallowed failures',
+    );
+
+    const events = logger.events as Array<{ message?: string; event_type?: string; metadata?: Record<string, unknown> }>;
+    const lost = events.find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost event before the rethrow');
+    assert.equal(lost!.event_type, 'error');
+    assert.equal(lost!.metadata?.cause, 'crash');
+    assert.equal(lost!.metadata?.crash_kind, 'transient', 'ECONNRESET classifies as environment pressure');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (S9 removed the "real full-sequence flow" test that loaded forge-cycle-with-review:
 // that monolith seed was retired with the 3-flow split. The full executor sequence is
 // covered by the synthetic makeForgeCycleFlow tests above; the real spine seeds —

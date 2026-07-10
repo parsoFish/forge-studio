@@ -38,6 +38,7 @@ import {
   findGateNodeId,
   findGateNote,
   findFailure,
+  findReflectionLoss,
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 import { sumAuthoritativeCostUsd } from './event-cost.ts';
@@ -78,6 +79,18 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;                 // node id
   failNote?: string;
+  /**
+   * 2.10 reflector pipeline honesty: set when the cycle merged/closed but its
+   * reflection was lost (reflector crash, budget/turn exhaustion, or killed —
+   * see cycle-context REFLECTION_LOST_EVENT + run-model-derive
+   * findReflectionLoss). Value is the loss cause ('crash' | 'budget-exhausted'
+   * | 'max-turns' | 'error' | 'manifest-unreadable' | 'brain-gate-failed' |
+   * 'interrupted'). Carried as a flag alongside status — same pattern as
+   * gate/gateNote — NOT a new top-level RunStatus; a successful rerun
+   * (reflect-reconcile / `forge reflect --rerun`) clears it.
+   */
+  reflectionLost?: string;
+  reflectionLostNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; costUsd: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   /**
    * S9 (DEC-2/DEC-3): the seed flows this run traversed (derived from its phases ∩
@@ -462,6 +475,15 @@ function buildRun(args: {
       ? 'active'
       : runStatus;
 
+  // 2.10 reflection-loss surfacing: a merged cycle whose reflection was lost
+  // (explicit cycle.reflection-lost event, or reflector stranded start-no-end
+  // + stale) carries the loss as a flag — the status above stays 'complete',
+  // matching the gate/failedAt field pattern rather than a new top-level state.
+  const reflectionLoss = findReflectionLoss(events, {
+    queueComplete: runStatus === 'complete',
+    isStale,
+  });
+
   return {
     id: cycleId,
     // ADR-028 / J5: associate the run with the flow its manifest names, so a
@@ -482,6 +504,9 @@ function buildRun(args: {
     flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
     ...(gate !== undefined ? { gate, gateNote } : {}),
     ...(failedAt !== undefined ? { failedAt, failNote } : {}),
+    ...(reflectionLoss !== undefined
+      ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }
+      : {}),
     ...(workItems.length > 0 ? { workItems } : {}),
   };
 }

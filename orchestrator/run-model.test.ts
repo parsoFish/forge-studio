@@ -514,6 +514,10 @@ test('aggregateRun: done + reflector start-no-end, STALE (quiet > wedge) → com
     const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
     assert.equal(run.phases['reflect'], 'active', 'reflect node still active (started, never ended)');
     assert.equal(run.status, 'complete', 'a long-quiet merged (done/) cycle reports complete, not stranded active');
+    // 2.10: the silent-loss case — reflector started, never ended, went quiet
+    // (SIGKILL / Studio restart leaves no event). Must surface distinctly.
+    assert.equal(run.reflectionLost, 'interrupted', 'stranded reflection surfaces as reflectionLost=interrupted');
+    assert.ok(run.reflectionLostNote !== undefined && run.reflectionLostNote.length > 0, 'carries a note');
   } finally {
     cleanup(root);
   }
@@ -538,6 +542,68 @@ test('aggregateRun: done + reflector start-no-end, RECENT (still live) → activ
     const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
     assert.equal(run.phases['reflect'], 'active');
     assert.equal(run.status, 'active', 'a cycle still actively reflecting holds active until reflector.end (or it goes stale)');
+    // 2.10: a genuinely-live reflection is NOT lost.
+    assert.equal(run.reflectionLost, undefined, 'a live reflection must not be flagged lost');
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 2.10 reflection-lost surfacing (explicit cycle.reflection-lost event)
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: explicit cycle.reflection-lost event → reflectionLost carries the cause + note', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-lost-reflect';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-lost-reflect';
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    const nowMs = Date.parse('2026-01-01T10:00:00Z');
+    const oldIso = new Date(nowMs - 60 * 60 * 1000).toISOString();
+    const at = { started_at: oldIso };
+
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }, at),
+      ev('closure', 'start', undefined, undefined, at), ev('closure', 'end', undefined, undefined, at),
+      ev('reflection', 'start', 'reflector.start', undefined, at),
+      ev('reflection', 'error', 'cycle.reflection-lost', {
+        cause: 'budget-exhausted',
+        detail: 'reflector SDK run ended with result subtype "error_max_budget_usd"',
+      }, at),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
+    assert.equal(run.status, 'complete', 'the merged cycle still reports complete — no new top-level status');
+    assert.equal(run.reflectionLost, 'budget-exhausted');
+    assert.match(String(run.reflectionLostNote), /error_max_budget_usd/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('aggregateRun: reflection lost then RECOVERED (later reflector.end) → no reflectionLost', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-recovered-reflect';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-recovered-reflect';
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    const nowMs = Date.parse('2026-01-01T10:00:00Z');
+    const oldIso = new Date(nowMs - 60 * 60 * 1000).toISOString();
+    const at = { started_at: oldIso };
+
+    writeCycleLog(root, cycleId, [
+      ev('reflection', 'start', 'reflector.start', undefined, at),
+      ev('reflection', 'error', 'cycle.reflection-lost', { cause: 'crash', detail: 'fetch failed' }, at),
+      // A later rerun (forge reflect --rerun / boot reconcile) closed it.
+      ev('reflection', 'start', 'reflector.start', undefined, at),
+      ev('reflection', 'end', 'reflector.end', { status: 'closed' }, at),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs });
+    assert.equal(run.reflectionLost, undefined, 'a recovered reflection is no longer lost');
   } finally {
     cleanup(root);
   }

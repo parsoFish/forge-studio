@@ -41,11 +41,13 @@ import {
 } from '../reflector-invocation.ts';
 import {
   recordBrainGateResult,
+  REFLECTION_LOST_EVENT,
   type CycleInput,
   type LintStatus,
   type ReflectionStatus,
   type ReflectorPhaseResult,
 } from '../cycle-context.ts';
+import { classifyCrash } from '../failure-classifier.ts';
 import { runBrainLint, type RunBrainLintResult } from '../../cli/brain-lint.ts';
 import {
   assignRetention,
@@ -91,12 +93,47 @@ export type ReflectorDeps = {
 };
 
 /**
+ * 2.10 reflector pipeline honesty — record the loss of a cycle's reflection
+ * in events.jsonl AT THE MOMENT it happens. Every catch/early-return in
+ * `runReflector` that abandons reflection calls this (a deliberate disposable
+ * skip does NOT — that is not a loss). Emitted with phase `reflection` so the
+ * run-model maps it onto the reflect node, and consumed by
+ * `run-model-derive.findReflectionLoss` + the reflect-reconcile boot log.
+ */
+export function emitReflectionLost(
+  logger: EventLogger,
+  opts: {
+    initiativeId: string;
+    parentEventId?: string;
+    cause: string;
+    detail: string;
+    extraMetadata?: Record<string, unknown>;
+  },
+): void {
+  logger.emit({
+    initiative_id: opts.initiativeId,
+    ...(opts.parentEventId !== undefined ? { parent_event_id: opts.parentEventId } : {}),
+    phase: 'reflection',
+    skill: 'reflector',
+    event_type: 'error',
+    input_refs: [],
+    output_refs: [],
+    message: REFLECTION_LOST_EVENT,
+    metadata: { cause: opts.cause, detail: opts.detail, ...(opts.extraMetadata ?? {}) },
+  });
+}
+
+/**
  * Reflection phase. Runs after a successful merge to extract patterns from the
  * cycle's event log + merged tree into brain themes. Closes the learning loop.
  *
  * Failure mode: log-and-continue. A thrown reflector returns
  * `reflection_status: 'failed'` but does not propagate — the merge already
  * happened in `runReviewer`, and reflection cannot un-merge.
+ *
+ * Every abandonment path additionally emits `cycle.reflection-lost` (2.10) so
+ * the loss is visible in events.jsonl + Studio when it happens — ten July
+ * cycles closed as done with reflection silently missing.
  *
  * Live invocation contract is shared with the bench via
  * orchestrator/reflector-invocation.ts (single source of truth).
@@ -150,6 +187,12 @@ export async function runReflector(
       output_refs: [],
       message: 'reflector.manifest-unreadable',
       metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      cause: 'manifest-unreadable',
+      detail: err instanceof Error ? err.message : String(err),
     });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
@@ -258,6 +301,7 @@ export async function runReflector(
       break;
     }
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -267,7 +311,40 @@ export async function runReflector(
       input_refs: [logger.logFilePath],
       output_refs: [],
       message: 'reflector.crashed',
-      metadata: { error: err instanceof Error ? err.message : String(err) },
+      metadata: { error: errMsg },
+    });
+    // 2.10: classify the crash (G3 classifier) so the loss carries whether a
+    // rerun could succeed (transient environment pressure vs deterministic).
+    const crash = classifyCrash(errMsg, null);
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      cause: 'crash',
+      detail: errMsg,
+      extraMetadata: { crash_kind: crash.kind, crash_reason: crash.reason },
+    });
+    return { reflection_status: 'failed', lint_status: 'skipped' };
+  }
+
+  // 2.10: a non-success SDK result means the reflector died mid-run
+  // (budget/turn exhaustion, execution error) — its outputs are incomplete
+  // and the reflection is LOST, not closed. Previously this fell through: a
+  // budget-exhausted reflector that had already read the brain cleared the
+  // F-13 gate and closed silently (the July silent-loss pattern). Same
+  // precedent as release-finalize's non-success handling.
+  if (resultSubtype !== undefined && resultSubtype !== 'success') {
+    const cause =
+      resultSubtype === 'error_max_budget_usd'
+        ? 'budget-exhausted'
+        : resultSubtype === 'error_max_turns'
+          ? 'max-turns'
+          : 'error';
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      cause,
+      detail: `reflector SDK run ended with result subtype "${resultSubtype}" — reflection outputs are incomplete`,
+      extraMetadata: { result_subtype: resultSubtype, cost_usd: costUsd, duration_ms: durationMs },
     });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
@@ -282,6 +359,12 @@ export async function runReflector(
       parentEventId: start.event_id,
     })
   ) {
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+      cause: 'brain-gate-failed',
+      detail: 'F-13 brain-first gate failed (zero brain reads) — reflection abandoned before retention/lint/recap',
+    });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
 

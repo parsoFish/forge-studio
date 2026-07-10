@@ -33,6 +33,8 @@ import { fireFlowTriggers } from './flow-trigger.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
+import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
+import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
 import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
 import type { FlowTrigger } from './studio/types.ts';
@@ -132,7 +134,32 @@ function makeDefaultFinalizeOne(
           }),
         dispatch: async (t) => {
           if (t.flow === 'forge-reflect') {
-            await runReflectorFn(input, logger);
+            // 2.10 reflector pipeline honesty: closure already moved the
+            // manifest to done/ — a reflector throw from here on used to
+            // bubble to the per-manifest catch as a bare 'error' result with
+            // the cycle ALREADY closed and nothing in events.jsonl marking
+            // the loss (the July silent-loss pattern). Record the loss in the
+            // cycle's own event log and let the finalize complete: the merge
+            // finalization DID succeed; only the reflection was lost. No
+            // auto-retry — recovery stays with `forge reflect --rerun` / the
+            // boot reconcile.
+            try {
+              await runReflectorFn(input, logger);
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              const crash = classifyCrash(errMsg, null);
+              logger.emit({
+                initiative_id: input.initiativeId,
+                phase: 'reflection',
+                skill: 'reflector',
+                event_type: 'error',
+                input_refs: [],
+                output_refs: [],
+                message: REFLECTION_LOST_EVENT,
+                metadata: { cause: 'crash', detail: errMsg, crash_kind: crash.kind, crash_reason: crash.reason },
+              });
+              deps.notify?.(`${input.initiativeId} · reflection LOST after merge (${errMsg}) — recorded cycle.reflection-lost; recover via forge reflect --rerun`);
+            }
           } else {
             logger.emit({
               initiative_id: input.initiativeId,

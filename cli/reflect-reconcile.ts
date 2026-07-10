@@ -66,6 +66,34 @@ export function lastReflectorEndMs(eventsPath: string): number | null {
   return latest;
 }
 
+/**
+ * 2.10 reflector pipeline honesty — true when the cycle's event log carries a
+ * `cycle.reflection-lost` event (the runtime marker every reflection-abandoning
+ * path emits). The reconcile uses it to NAME what it recovered: re-running a
+ * reflector over late feedback is routine; re-running one whose reflection was
+ * recorded LOST closes that loss's loop, and the boot log should say so.
+ * Best-effort like `lastReflectorEndMs`: missing/malformed input never throws.
+ */
+export function hasReflectionLossEvent(eventsPath: string): boolean {
+  if (!existsSync(eventsPath)) return false;
+  let raw: string;
+  try {
+    raw = readFileSync(eventsPath, 'utf8');
+  } catch {
+    return false;
+  }
+  for (const line of raw.split('\n')) {
+    if (!line.includes('cycle.reflection-lost')) continue;
+    try {
+      const ev = JSON.parse(line) as { message?: string };
+      if (ev.message === 'cycle.reflection-lost') return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
 /** Default recovery window — only feedback this recent is reconciled at boot.
  *  The boot pass is a safety net for feedback that landed while the bridge was
  *  briefly DOWN, not a reason to re-run reflectors on months-old cycles (which
@@ -118,12 +146,19 @@ export async function reconcileReflectFeedback(deps: ReconcileDeps): Promise<str
     }
     // Only recent feedback — old feedback is recovered deliberately, not at boot.
     if (now - feedbackMs > maxAgeMs) continue;
-    const endMs = lastReflectorEndMs(join(logsRoot, cycleId, 'events.jsonl'));
+    const eventsPath = join(logsRoot, cycleId, 'events.jsonl');
+    const endMs = lastReflectorEndMs(eventsPath);
     if (!needsReflectRerun(feedbackMs, endMs)) continue;
+    // 2.10: name what this pass is picking up — a recorded reflection LOSS
+    // (cycle.reflection-lost in the event log) closes that loss's loop and
+    // must say so; ordinary late feedback keeps the routine wording.
+    const reason = hasReflectionLossEvent(eventsPath)
+      ? 'recovering lost reflection — cycle.reflection-lost was recorded'
+      : 'recent feedback newer than last reflector.end';
     try {
       await rerunReflector({ cycleId, logsRoot, queueRoot });
       reran.push(cycleId);
-      log(`reflect-reconcile: re-ran reflector for ${cycleId} (recent feedback newer than last reflector.end)`);
+      log(`reflect-reconcile: re-ran reflector for ${cycleId} (${reason})`);
     } catch (err) {
       log(`reflect-reconcile: skipped ${cycleId} — ${err instanceof Error ? err.message : String(err)}`);
     }

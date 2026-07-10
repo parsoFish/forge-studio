@@ -18,6 +18,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from './logging.ts';
 import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-model.ts';
 import { phasesWithIterationEvents, sumAuthoritativeCostUsd } from './event-cost.ts';
@@ -589,6 +590,65 @@ export function findLastErrorNode(
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Reflection-loss info (2.10 reflector pipeline honesty)
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect a lost reflection on a merged cycle so Studio surfaces it distinctly
+ * (ten July cycles closed as done with reflection silently missing).
+ *
+ * Two signals, in priority order:
+ *
+ * 1. An explicit `cycle.reflection-lost` event (emitted by the reflector /
+ *    its callers at the moment of loss) with no LATER reflection `end` —
+ *    a later end means a rerun (`forge reflect --rerun`, boot reconcile)
+ *    recovered it, which clears the flag.
+ * 2. The stranded case: the queue says complete (manifest in `_queue/done/`),
+ *    reflection STARTED but never emitted any `end`, and the cycle has gone
+ *    quiet past the wedge threshold — a SIGKILL / Studio restart leaves no
+ *    event to find, so the loss is inferred. (`reflector.skipped-disposable`
+ *    is an `end` event, so deliberate skips never trip this.)
+ *
+ * A never-started reflection (killed between merge and reflector.start) has
+ * no runtime trace at all — that gap stays covered archive-side by
+ * `forge brain lint`'s checkReflectorLoss (plan 1.9).
+ */
+export function findReflectionLoss(
+  events: readonly EventLogEntry[],
+  opts: { queueComplete: boolean; isStale: boolean },
+): { cause: string; note?: string } | undefined {
+  let lastLost: { idx: number; cause: string; note?: string } | undefined;
+  let lastEndIdx = -1;
+  let sawReflectionEvent = false;
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.phase !== 'reflection') continue;
+    sawReflectionEvent = true;
+    if (e.event_type === 'end') {
+      lastEndIdx = i;
+      continue;
+    }
+    if (e.message === REFLECTION_LOST_EVENT) {
+      const cause = typeof e.metadata?.cause === 'string' ? e.metadata.cause : 'unknown';
+      const note = typeof e.metadata?.detail === 'string' ? e.metadata.detail : undefined;
+      lastLost = { idx: i, cause, note };
+    }
+  }
+
+  if (lastLost !== undefined && lastLost.idx > lastEndIdx) {
+    return { cause: lastLost.cause, note: lastLost.note };
+  }
+  if (lastLost === undefined && opts.queueComplete && opts.isStale && sawReflectionEvent && lastEndIdx === -1) {
+    return {
+      cause: 'interrupted',
+      note: 'reflector started but never completed and the cycle went quiet — likely killed (Studio restart / SIGKILL)',
+    };
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

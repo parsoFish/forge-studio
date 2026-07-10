@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import {
   needsReflectRerun,
   lastReflectorEndMs,
+  hasReflectionLossEvent,
   reconcileReflectFeedback,
 } from './reflect-reconcile.ts';
 
@@ -161,6 +162,70 @@ test('reconcileReflectFeedback: a throwing rerun is logged-and-skipped, the pass
     });
     // 'good' still ran despite 'orphan' throwing.
     assert.deepEqual(reran, ['good']);
+  } finally {
+    rmSync(logsRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 2.10 reflector pipeline honesty — the boot reconcile names WHAT it recovered
+// ---------------------------------------------------------------------------
+
+test('hasReflectionLossEvent: true only when a cycle.reflection-lost event is present', () => {
+  const root = mkdtempSync(join(tmpdir(), 'reconcile-loss-'));
+  try {
+    const p = join(root, 'events.jsonl');
+    writeFileSync(p, [
+      JSON.stringify({ message: 'reflector.start', started_at: '2026-07-09T00:00:00.000Z' }),
+      JSON.stringify({ message: 'cycle.reflection-lost', started_at: '2026-07-09T00:01:00.000Z', metadata: { cause: 'crash' } }),
+    ].join('\n'));
+    assert.equal(hasReflectionLossEvent(p), true);
+
+    const q = join(root, 'clean.jsonl');
+    writeFileSync(q, JSON.stringify({ message: 'reflector.end', started_at: '2026-07-09T00:00:00.000Z' }));
+    assert.equal(hasReflectionLossEvent(q), false);
+
+    assert.equal(hasReflectionLossEvent(join(root, 'missing.jsonl')), false, 'missing file never throws');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reconcileReflectFeedback: log line says it RECOVERED a lost reflection when the loss was recorded', async () => {
+  const logsRoot = mkdtempSync(join(tmpdir(), 'reconcile-logs-'));
+  try {
+    // lost: reflection-lost recorded, feedback later → rerun logs the recovery
+    const lostDir = join(logsRoot, 'lost');
+    mkdirSync(lostDir, { recursive: true });
+    writeFileSync(join(lostDir, 'events.jsonl'), [
+      JSON.stringify({ message: 'reflector.start', started_at: '2026-06-22T00:00:00.000Z' }),
+      JSON.stringify({ message: 'cycle.reflection-lost', started_at: '2026-06-22T00:01:00.000Z', metadata: { cause: 'budget-exhausted' } }),
+    ].join('\n'));
+    const lostFp = join(lostDir, 'user-feedback.md');
+    writeFileSync(lostFp, '# feedback\n');
+    {
+      const s = Date.parse('2026-06-23T00:00:00Z') / 1000;
+      utimesSync(lostFp, s, s);
+    }
+    // plain: ordinary late feedback, no loss recorded
+    writeCycle(logsRoot, 'plain', { feedback: true, feedbackMs: Date.parse('2026-06-23T00:00:00Z'), endIso: '2026-06-22T00:00:00.000Z' });
+
+    const logged: string[] = [];
+    const reran = await reconcileReflectFeedback({
+      logsRoot,
+      queueRoot: join(logsRoot, '_queue'),
+      now: Date.parse('2026-06-24T00:00:00Z'),
+      rerunReflector: async () => { /* ok */ },
+      log: (msg) => logged.push(msg),
+    });
+    assert.deepEqual(reran.sort(), ['lost', 'plain']);
+
+    const lostLine = logged.find((l) => l.includes('lost'));
+    assert.ok(lostLine, 'expected a log line for the lost cycle');
+    assert.match(lostLine!, /recovering lost reflection/, 'the recovery of a recorded loss is named explicitly');
+    const plainLine = logged.find((l) => l.includes('plain'));
+    assert.ok(plainLine, 'expected a log line for the plain cycle');
+    assert.doesNotMatch(plainLine!, /recovering lost reflection/, 'ordinary feedback re-ingest keeps the plain wording');
   } finally {
     rmSync(logsRoot, { recursive: true, force: true });
   }

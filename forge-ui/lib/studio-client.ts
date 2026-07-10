@@ -51,6 +51,9 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;
   failNote?: string;
+  /** 2.10: the merged cycle's reflection was lost (cause) — mirrors orchestrator/run-model.ts. */
+  reflectionLost?: string;
+  reflectionLostNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   /**
    * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).

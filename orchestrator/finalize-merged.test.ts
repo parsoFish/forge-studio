@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -214,6 +214,66 @@ test('finalize: worktree gone → no-worktree, skipped (no re-claim)', async () 
     });
     assert.deepEqual(results.map((r) => r.status), ['no-worktree']);
     assert.equal(existsSync(join(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nowt.md')), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// 2.10 reflector pipeline honesty: closure has already moved the manifest to
+// done/ by the time the reflect trigger fires — a reflector throw here used to
+// bubble to the per-file catch as status 'error' with the cycle already closed
+// and NOTHING in events.jsonl marking the loss (the July silent-loss pattern).
+test('finalize: reflector throw after confirmed merge → cycle.reflection-lost recorded, finalize still completes', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    const id = 'INIT-2026-05-30-lost';
+    const cycleId = `2026-05-30T01-02-03_${id}`;
+    const body = [
+      '---',
+      `initiative_id: ${id}`,
+      'project: demo',
+      `project_repo_path: ${wt}`,
+      "created_at: '2026-05-30T00:00:00.000Z'",
+      'iteration_budget: 2',
+      'cost_budget_usd: 1',
+      'phase: pending',
+      'origin: architect',
+      `worktree_path: ${wt}`,
+      `cycle_id: ${cycleId}`,
+      '---',
+      `# ${id}`,
+      '',
+    ].join('\n');
+    writeFileSync(join(queueRoot, 'ready-for-review', `${id}.md`), body);
+
+    const logsRoot = join(root, '_logs');
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot,
+      confirmMerge: () => true,
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async () => { throw new Error('rate_limit_error: usage limit reached'); },
+      loadFlowTriggers: () => [{ on: 'merged', flow: 'forge-reflect' }],
+    });
+
+    assert.deepEqual(
+      results.map((r) => r.status),
+      ['finalized'],
+      'the merge finalization completed — a lost reflection must not report the finalize itself as error',
+    );
+
+    const eventsPath = join(logsRoot, cycleId, 'events.jsonl');
+    assert.ok(existsSync(eventsPath), 'cycle events.jsonl exists');
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter((l) => l.trim());
+    const lost = lines
+      .map((l) => JSON.parse(l) as { message?: string; event_type?: string; metadata?: Record<string, unknown> })
+      .find((e) => e.message === 'cycle.reflection-lost');
+    assert.ok(lost, 'expected cycle.reflection-lost in the cycle event log');
+    assert.equal(lost!.event_type, 'error');
+    assert.equal(lost!.metadata?.cause, 'crash');
+    assert.equal(lost!.metadata?.crash_kind, 'transient', 'rate-limit classifies as environment pressure');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
