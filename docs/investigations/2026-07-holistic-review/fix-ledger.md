@@ -39,10 +39,10 @@
 
 | # | Item (plan ref) | Surface | Status |
 |---|---|---|---|
-| W2.1 | 1.8 cost-rollup double-count fix THEN 1.4 per-WI cost attribution (same files, one agent, sequential) — opus | orchestrator/run-model-derive.ts + cli/metrics.ts | pending |
-| W2.2 | 1.3 flow-swap flicker (run-model staleness on flow switch) — sonnet | forge-ui + orchestrator/run-model.ts | pending |
-| W2.3 | 1.5 WI DAG layout honesty (deps rendered as real edges) — sonnet | forge-ui pipeline-tree | pending |
-| W2.4 | 1.6 roadmap page rework (initiative-centric, not cycle-centric) — sonnet | forge-ui roadmap page | pending |
+| W2.1 | 1.8 cost-rollup double-count fix THEN 1.4 per-WI cost attribution (same files, one agent, sequential) — opus | orchestrator/run-model-derive.ts + cli/metrics.ts | done |
+| W2.2 | 1.3 flow-swap flicker (run-model staleness on flow switch) — sonnet | forge-ui + orchestrator/run-model.ts | done |
+| W2.3 | 1.5 WI DAG layout honesty (deps rendered as real edges) — sonnet | forge-ui pipeline-tree | done |
+| W2.4 | 1.6 roadmap page rework (initiative-centric, not cycle-centric) — sonnet | forge-ui roadmap page | done |
 
 ## Wave 3a — N1 solo (opus/inherit, the big one)
 
