@@ -13,15 +13,15 @@ import {
   fetchRecovery,
   recoveryRequeue,
   recoveryAbandon,
-  type Cycle,
   type RecoveryInspect,
 } from '@/lib/bridge-client';
+import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
 
 const RECOVERABLE = new Set(['in-flight', 'ready-for-review', 'failed']);
 
 export default function RecoveryPage() {
   const [ready, setReady] = useState(false);
-  const [items, setItems] = useState<Cycle[]>([]);
+  const [items, setItems] = useState<InitiativeGroup[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<RecoveryInspect | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,13 +30,10 @@ export default function RecoveryPage() {
   const load = useCallback(async () => {
     const snap = await fetchCycles();
     const all = [...(snap?.live ?? []), ...(snap?.recent ?? [])];
-    // Newest-first, de-duplicated by initiativeId, recoverable states only.
-    const seen = new Set<string>();
-    const recoverable = all.filter((c) => {
-      if (!RECOVERABLE.has(c.status) || seen.has(c.initiativeId)) return false;
-      seen.add(c.initiativeId);
-      return true;
-    });
+    // One card per initiative (collapses resume/requeue attempts onto the
+    // active cycle — see lib/cycle-grouping.ts), newest-first, recoverable
+    // states only.
+    const recoverable = groupCyclesByInitiative(all).filter((g) => RECOVERABLE.has(g.status));
     setItems(recoverable);
     setReady(true);
   }, []);
@@ -88,11 +85,21 @@ export default function RecoveryPage() {
               data-recovery-item
               data-recovery-initiative={c.initiativeId}
               data-recovery-status={c.status}
+              data-recovery-attempt-count={c.attemptCount}
               style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', marginBottom: 8 }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
                 <code style={{ fontSize: 12 }}>{c.initiativeId}</code>
                 <span style={{ fontSize: 11, color: 'var(--dim)' }}>{c.status}</span>
+                {c.attemptCount > 1 && (
+                  <span
+                    data-recovery-prior-attempts={c.attemptCount - 1}
+                    title={`${c.attemptCount - 1} prior attempt(s): ${c.priorCycleIds.join(', ')}`}
+                    style={{ fontSize: 10, color: 'var(--faint)', border: '1px solid var(--border)', borderRadius: 10, padding: '1px 7px' }}
+                  >
+                    ×{c.attemptCount}
+                  </span>
+                )}
                 <span style={{ display: 'flex', gap: 8 }}>
                   <button data-action="recovery-inspect" onClick={() => void inspect(c.initiativeId)}
                     style={btn('var(--border)')}>Inspect</button>
