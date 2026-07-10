@@ -66,6 +66,7 @@ Each initiative body **MUST contain ≥1 acceptance criterion**, one per indepen
 - **No `features[]` list.** Hierarchy is 3-level (initiative → WI → file), not 4.
 - Write ACs at the grain of independently-runnable outcomes.
 - **Do NOT size work items or set `quality_gate_cmd`.** The PM owns all sizing and gate selection.
+- **Gates/ACs MUST match the deliverable type.** A docs-only initiative (README, ADR, skill-markdown, docs-site content — no source code delivered) gets docs-appropriate ACs: build/render passes, links resolve, rendered output matches source-of-truth. It MUST NOT carry a demo-evidence or test-count AC — the PM has no code gate to hang one on, and forcing one costs ~4 wasted PM decomposition retries per cycle. Code initiatives keep test/demo-evidence ACs as usual. The PM inherits its gate choice from how you frame the AC, so frame it as the deliverable actually is.
 - Cross-initiative ordering via `depends_on` on the initiative (scheduler gate).
 - **State NOT-DOING positively.** Every initiative body must include a `### Not in scope` block naming what this initiative deliberately does NOT implement — prevents scope creep, gives the reviewer a clear rejection criterion.
 
