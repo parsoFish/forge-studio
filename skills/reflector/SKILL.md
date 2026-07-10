@@ -107,16 +107,18 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 **Do NOT call `AskUserQuestion`.** Write questions to `user-questions.md` only; the orchestrator derives `user-questions.json` post-exit.
 
+**Before writing anything, read `_logs/<cycle-id>/user-feedback.md` if it exists (this is a rerun — the operator already answered a prior question set).** For each candidate question below (seed or Stage-1-derived), check whether `user-feedback.md` already answers it — same question, a paraphrase of it, or the underlying open item it was probing. **Do NOT re-emit a question `user-feedback.md` already answers.** Only genuinely new/unanswered questions may be written to `user-questions.md`. If every candidate is already answered, write `_logs/<cycle-id>/user-questions.md` with a single line — `_(no open questions — prior feedback covers this cycle)_` — instead of the seed set; do not pad back up to 4 with already-answered questions just to hit a count.
+
 5. From Stage 1, identify items you cannot resolve from established principles + brain knowledge. These become user questions.
 6. Write up to 4 structured questions into `_logs/<cycle-id>/user-questions.md` (`## N. <header>` per question). Each question is a `## N. <header>` heading, a one-line body, then (optionally) a markdown bullet list of choices — the orchestrator renders a bullet list as radio options and a question with no bullets as a freeform textarea.
 
-   **Guaranteed seed questions** — always include these four unless literally zero deliverables:
+   **Guaranteed seed questions** — include these four unless literally zero deliverables **or** `user-feedback.md` already answers them (see above):
    1. "Was the work-item decomposition the right size?" (bullets: too-few, right-sized, too-many)
    2. "Did the implementation match the design intent and stay on the initiative's goals?" (bullets: exact match, minor divergence, scope drift)
    3. **Repeated actions / roadblocks** — surface the specific repeated actions + roadblocks you found in Stage 1 and ask which is worth a forge fix or a new tool (bullets drawn from the actual findings, e.g. the most-repeated action, the worst wedge, "none — leave as-is").
    4. **General notes** — a freeform question (NO bullet list) inviting any other operator notes on this initiative.
 
-   Replace a seed with a sharper project-grounded follow-up only when Stage 1 gives a more pointed version of the same question; keep #4 freeform. Cap at 4 total.
+   Replace a seed with a sharper project-grounded follow-up only when Stage 1 gives a more pointed version of the same question; keep #4 freeform. Cap at 4 total, minus whatever `user-feedback.md` already covers.
 
 7. Capture user answers (from `user-feedback.md` in stage 3) as Section 2 of `retro.md`.
 
@@ -127,9 +129,21 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**:
-    - Lesson about **this project** (code, conventions, domain, a bug) → `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`.
-    - Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → `brain/cycles/themes/<YYYY-MM-DD>-<slug>.md`. Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge lesson, NOT Brain 3.
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**. Two routing decisions apply, in order:
+
+    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
+
+    **(b) For forge-wide themes, category decides the sub-wiki — this is enforced by `checkCategoryScope` (`cli/brain-lint.ts`) and a mismatch is a lint error, not a style choice:**
+    | `category` frontmatter | Brain dir |
+    |---|---|
+    | `pattern` | `brain/cycles/themes/` |
+    | `antipattern` | `brain/cycles/themes/` |
+    | `operation` | `brain/cycles/themes/` |
+    | `decision` | `brain/forge-dev/themes/` |
+    | `reference` | `brain/forge-dev/themes/` |
+
+    Set `category` first, then place the file per this table — do not default a `decision` or `reference` theme into `brain/cycles/themes/` (a real rerun mis-routed a `decision`-category theme there; caught only by hand-running `checkCategoryScope`). Project-scoped themes (a) are exempt from this table — they always go under `brain/projects/<project>/themes/` regardless of category.
+
     - Required frontmatter + `## Sources` listing ≥1 path resolving to the cycle log or archive.
 11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full provenance frontmatter.
 12. Validate: every theme file has valid frontmatter + valid `category` + ≥1 resolvable evidence path. Fix before exiting.
