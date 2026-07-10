@@ -71,8 +71,8 @@
 
 | # | Item | Surface | Status |
 |---|---|---|---|
-| W5.1 | 2.10 reflector pipeline honesty (consumes 1.10; unreflected-cycle event on crash) — opus | orchestrator reflector invocation | pending |
-| W5.2 | 2.11 PM turn economy (env-pin at SDK seam G8, write-WIs-incrementally, partial graph on exhaustion) — opus | orchestrator PM invocation + PM skill | pending |
+| W5.1 | 2.10 reflector pipeline honesty (consumes 1.10; unreflected-cycle event on crash) — opus | orchestrator reflector invocation | done |
+| W5.2 | 2.11 PM turn economy (env-pin at SDK seam G8, write-WIs-incrementally, partial graph on exhaustion) — opus | orchestrator PM invocation + PM skill | done |
 
 ## Close-out gates (after Wave 5)
 
