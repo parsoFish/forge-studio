@@ -64,9 +64,11 @@ brain INDEX regenerated; 166 reflection questions triaged (99 artifact-answered,
 missing archives + consuming 8 stranded operator answers); review PRs — v1's
 0.2 was already OBE (everything merged).
 
-Remaining operator input (from the triage report §4): the SDK
-v2.38.1→v2.40.1 acceptance call; whether acceptance gates may skip docs-only
-initiatives; the 5 open-ended catch-alls.
+Operator input resolved (2026-07-10): **SDK v2.38.1→v2.40.1 bump ACCEPTED**
+(ratified as-is in betterado). **Docs-only acceptance gates** — delegated
+call: no orchestrator skip mechanism; fix is authoring-side (Phase 2.12).
+The 5 open-ended catch-alls: closed, no action. Decomposition-sizing
+questions: ignored per operator.
 
 ## 4. Phase 1 — Honest instruments
 
@@ -134,6 +136,10 @@ Reordered; N1 first — it deletes the most mechanism.
 11. **PM turn economy** — env-pin at the SDK seam (G8 rescoped),
     write-WIs-incrementally, emit partial graph near exhaustion (large-package
     starvation persisted to 07-05).
+12. **Gate-fit for docs-only initiatives** (operator-delegated call, 07-10):
+    no skip flag in the orchestrator. Architect/PM authoring clause — gates
+    must match the deliverable type (docs-only → build/link-check/render
+    gates, never demo/test-evidence gates). Prompt-level, zero mechanism.
 
 ## 6. Phase 3 — Design-phase consolidation
 
