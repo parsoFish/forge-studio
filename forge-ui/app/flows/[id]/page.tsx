@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
+import { resolveFlowViewState } from '@/lib/flow-view-state';
 import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
@@ -147,6 +148,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   useEffect(() => {
     const signal = { cancelled: false };
+    // Clear the previous flow's transient view state (event tail, open drawer)
+    // up front — `view` (lib/flow-view-state.ts) already keeps the render path
+    // from showing a stale flow/run/activeRun during the reload, but these two
+    // are accumulated independently of loadData() and must reset the same way
+    // a manual run switch already resets them (see handleSelectRun below).
+    setTailEvents([]);
+    setDrawer({ node: null, hexKind: 'phase' });
     void loadData(signal);
 
     const sub = subscribe({
@@ -325,18 +333,27 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     setDrawer({ node: null, hexKind: 'phase' });
   }, []);
 
+  // ---- flow-switch staleness guard ----
+  // `id` (the route param) changes the instant the operator swaps flows, but
+  // `flow`/`runs`/`activeRun`/`ready` only catch up once the async loadData()
+  // for the new id resolves. `view` is the atomically-reset render state for
+  // that window — see lib/flow-view-state.ts. Every render-affecting read
+  // below (JSX + data-* mirrors) uses `view.*`, never the raw state, so a
+  // flow switch never paints the previous flow's run model.
+  const view = resolveFlowViewState(id, { flow, runs, activeRun, ready });
+
   // ---- empty states ----
 
-  const flowNotFound = ready && !flow;
+  const flowNotFound = view.ready && !view.flow;
 
   return (
     <main
       data-page="flow-monitor"
       data-flow-id={id}
-      data-active-run={activeRun?.id ?? ''}
-      data-page-ready={ready ? 'true' : 'false'}
-      data-run-count={runs.length}
-      data-can-start={flow ? 'true' : 'false'}
+      data-active-run={view.activeRun?.id ?? ''}
+      data-page-ready={view.ready ? 'true' : 'false'}
+      data-run-count={view.runs.length}
+      data-can-start={view.flow ? 'true' : 'false'}
       data-active-tab={tab}
       style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
@@ -395,11 +412,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {(() => {
                 const candidates = allFlows.some((f) => f.id === id)
                   ? allFlows
-                  : [...allFlows, ...(flow ? [flow] : [])];
+                  : [...allFlows, ...(view.flow ? [view.flow] : [])];
                 if (candidates.length <= 1) {
                   return (
                     <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>
-                      {flow?.name ?? id}
+                      {view.flow?.name ?? id}
                     </h2>
                   );
                 }
@@ -416,9 +433,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   </select>
                 );
               })()}
-              {flow?.goal && (
+              {view.flow?.goal && (
                 <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>
-                  {flow.goal}
+                  {view.flow.goal}
                 </span>
               )}
             </div>
@@ -462,8 +479,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           <>
             {/* Left: Run rail */}
             <RunRail
-              runs={runs}
-              activeRunId={activeRun?.id ?? null}
+              runs={view.runs}
+              activeRunId={view.activeRun?.id ?? null}
               onSelect={handleSelectRun}
             />
 
@@ -496,13 +513,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               </p>
 
               {/* Gated banner */}
-              {runs.some((r) => r.status === 'gated') && (
-                <GatedBanner runs={runs} onSelect={handleSelectRun} />
+              {view.runs.some((r) => r.status === 'gated') && (
+                <GatedBanner runs={view.runs} onSelect={handleSelectRun} />
               )}
 
               {/* M6: reflection ready — surface the feedback CTA on the monitor so
                   the operator isn't left hunting for the reflection screen. */}
-              {activeRun?.artifactsReady?.reflection && (
+              {view.activeRun?.artifactsReady?.reflection && (
                 <div
                   data-banner="reflection-ready"
                   style={{
@@ -514,7 +531,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   <strong>Reflection ready</strong> — review the retro &amp; answer the agent&apos;s questions.
                   <a
                     data-action="review-reflection"
-                    href={`/artifact?run=${encodeURIComponent(activeRun.id)}&type=reflection&mode=view`}
+                    href={`/artifact?run=${encodeURIComponent(view.activeRun.id)}&type=reflection&mode=view`}
                     style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 12px', background: 'var(--violet)', color: '#fff', borderRadius: 4, textDecoration: 'none' }}
                   >
                     Review reflection →
@@ -525,15 +542,15 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Stage C kickoff surface — shown when the flow is known but no
                   runs exist yet. Renders the launch UI matching flow.kickoff.kind
                   (idea / initiative-select / trigger-only), else a generic Start Run. */}
-              {ready && flow && runs.length === 0 && (
+              {view.ready && view.flow && view.runs.length === 0 && (
                 <FlowKickoff
-                  flow={flow}
+                  flow={view.flow}
                   onStartGeneric={() => void handleStartRun()}
                 />
               )}
 
               {/* Resume CTA — shown when the active run has failed */}
-              {activeRun?.status === 'failed' && (
+              {view.activeRun?.status === 'failed' && (
                 <div
                   style={{
                     display: 'flex',
@@ -548,7 +565,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   <span style={{ fontSize: 12, color: 'var(--faint)' }}>Run failed.</span>
                   <button
                     data-action="resume-run"
-                    data-run-id={activeRun.id}
+                    data-run-id={view.activeRun.id}
                     onClick={() => void handleResumeRun()}
                     style={{
                       fontSize: 12,
@@ -566,28 +583,28 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               )}
 
               {/* Summary strip */}
-              <MonitorSummary run={activeRun} flow={flow ?? EMPTY_FLOW} />
+              <MonitorSummary run={view.activeRun} flow={view.flow ?? EMPTY_FLOW} />
 
               {/* Topology canvas — each flow's monitor renders its OWN nodes
                   (Model B). A threaded spine run surfaces under all three flows via
                   its derived flowLineage, so /flows/forge-architect shows architect+pm,
                   /flows/forge-develop shows dev[+WI fan-out]+unifier+review, etc. */}
-              {flow ? (
+              {view.flow ? (
                 <FlowTopology
-                  flow={flow}
-                  run={activeRun}
+                  flow={view.flow}
+                  run={view.activeRun}
                   onNodeClick={handleNodeClick}
                 />
               ) : (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)' }}>
-                  {ready ? 'No runs yet for this flow.' : 'Loading…'}
+                  {view.ready ? 'No runs yet for this flow.' : 'Loading…'}
                 </div>
               )}
 
               {/* Event tail */}
               <EventTail
                 events={tailEvents}
-                activeRunId={activeRun?.id ?? null}
+                activeRunId={view.activeRun?.id ?? null}
               />
             </div>
           </>
@@ -595,11 +612,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       </div>
 
           {/* Phase drawer — overlays from right */}
-          {flow && (
+          {view.flow && (
             <PhaseDrawer
               nodeId={drawer.node}
-              run={activeRun}
-              flow={flow}
+              run={view.activeRun}
+              flow={view.flow}
               onClose={handleDrawerClose}
               hexKind={drawer.hexKind}
               wiId={drawer.wiId}
