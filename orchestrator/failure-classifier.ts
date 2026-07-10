@@ -62,6 +62,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let pmHiddenCoupling = false, pmInvalidWorkItems = false;
   let agentThrew = false, devLoopTotalFailure = false;
   let unifierNoDemo = false, unifierNotPassed = false, reviewFailed = false;
+  let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false;
 
@@ -82,6 +83,9 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'project-manager' && msg === 'pm.empty-decomposition') { pmEmptyDecomposition = true; ev(e); }
     if (e.phase === 'developer-loop' && msg === 'dev-loop.baseline-red') { baselineRed = true; ev(e); }
     if (msg === 'unifier.failed') { unifierNotPassed = true; ev(e); }
+    // G4 (plan item 2.2): the unifier's fix-iteration loop halted after N
+    // consecutive failures of the SAME composed-gate sub-check.
+    if (msg === 'uwi.loop-cap-exhausted') { uwiLoopCapExhausted = true; ev(e); }
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
@@ -147,6 +151,13 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
   if (agentThrew) return T('terminal', 'agent threw a non-rate-limit error', evidence);
   if (devLoopTotalFailure) return T('terminal', 'dev-loop completed 0/N work items', evidence);
+  // G4: checked AFTER the N10 timeout-transient rule above — a cap exhausted
+  // BY gate timeouts stays an environment failure (the cap already did its
+  // job bounding the in-session burn); a cap exhausted by real gate failures
+  // is terminal: the agent demonstrably cannot clear this sub-check, so an
+  // auto-retry would only re-enter the same loop (the 2026-07-04 16-restart
+  // spins).
+  if (uwiLoopCapExhausted) return T('terminal', 'unifier fix-loop cap exhausted — the SAME composed-gate sub-check failed the configured number of consecutive times (see the uwi.gate-failed events for which gate + output); the agent cannot clear it autonomously. Fix by hand or send a targeted review UWI, then re-run', evidence);
   if (unifierNoDemo) return T('terminal', 'unifier did not author the PR — DEMO.md / pr-description.md missing because dev-loop WIs failed to produce their declared paths', evidence);
   if (unifierNotPassed) return T('terminal', 'unifier did not pass its composed gate (tests / demo / self-contained PR / branch-sync) — branch not review-ready, PR creation blocked at the delivery gate', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);

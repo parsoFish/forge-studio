@@ -42,3 +42,14 @@ test('unifierItemClassify: runnerError dominates even if a stale loopResult is p
   const o = unifierItemClassify(uwi, loop('failed'), 'stream deadline');
   assert.equal(o.crashed, true);
 });
+
+test('unifierItemClassify: a loop-cap-exhausted stop is failed + NOT crashed + distinct failure class (G4)', () => {
+  const capped = {
+    status: 'failed', iterations: 4, cost_usd: 0, duration_ms: 0,
+    stop_reason: 'loop-cap-exhausted', artifacts: [], filesChanged: [],
+  } as unknown as Parameters<typeof unifierItemClassify>[1];
+  const o = unifierItemClassify(uwi, capped, null);
+  assert.equal(o.status, 'failed');
+  assert.equal(o.crashed, false, 'cap exhaustion is a deterministic gate outcome, not a transient crash');
+  assert.equal(o.failureClass, 'dev-loop-unifier-loop-cap-exhausted');
+});

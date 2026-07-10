@@ -13,10 +13,13 @@
  * `PROMPT.md` (stamped by `prepareUnifierWorkspace`) at the start of every
  * iteration.
  *
- * C19: there is no $ cap; an iteration runaway-bound (see
- * `UNIFIER_DEFAULT_ITERATION_CAP`) is the only backstop — this module does not
- * expose any cost-related fields. (ADR 026 retired the `feedbackRef` send-back
- * mode: review feedback is now appended UWIs the unifier loop runs in place.)
+ * C19: there is no $ cap; the backstops are the iteration runaway-bound (see
+ * `UNIFIER_DEFAULT_ITERATION_CAP`) and — since G4 (2026-07-11) — the
+ * consecutive same-sub-check gate-failure cap (`resolveUnifierGateFailureCap`,
+ * enforced by the packaging-UWI loop in `phases/developer-loop.ts`). This
+ * module does not expose any cost-related fields. (ADR 026 retired the
+ * `feedbackRef` send-back mode: review feedback is now appended UWIs the
+ * unifier loop runs in place.)
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

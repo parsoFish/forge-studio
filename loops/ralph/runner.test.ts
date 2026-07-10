@@ -253,3 +253,44 @@ test('re-review #1: gate fails + gateErrored() ⇒ gate-errored, status failed, 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// G4 (plan item 2.2): the caller's fix-loop failure ceiling (the unifier's
+// consecutive same-sub-check composed-gate failure cap) stops the loop EARLY
+// with `loop-cap-exhausted` instead of burning the remaining iteration budget
+// re-invoking the agent against a gate it has repeatedly failed to clear.
+test('G4: gate keeps failing + loopCapExhausted() flips true ⇒ loop-cap-exhausted, no further agent runs', async () => {
+  const dir = setupEmptyBranchRepo();
+  let agentRuns = 0;
+  let gateFails = 0;
+  try {
+    const workItemPath = join(dir, 'WI-loop-cap.md');
+    writeFileSync(workItemPath, '# WI: fix-loop cap\n\nThe gate fails the same way every evaluation.\n');
+    mkdirSync(join(dir, 'loops', 'ralph'), { recursive: true });
+
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 10, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-loop-cap',
+      initiativeId: 'INIT-lc',
+      qualityGate: () => { gateFails++; return false; },
+      // The unifier's tracker flips this after N consecutive same-check
+      // failures; here: after the 2nd failing evaluation.
+      loopCapExhausted: () => gateFails >= 2,
+      failOnHollowIter0Gate: false, // mirrors the unifier caller
+    };
+
+    const result = await run(input, async () => { agentRuns++; return { filesChanged: [], costUsd: 0 }; });
+
+    assert.equal(result.stop_reason, 'loop-cap-exhausted', `expected loop-cap-exhausted, got ${result.stop_reason}`);
+    assert.equal(result.status, 'failed');
+    // Trace: iter0 (gate not run at iter 0) → agent#1 → gate fail#1 (cap not
+    // hit) → agent#2 → gate fail#2 (cap hit) → STOP before agent#3. The agent
+    // never runs again once the predicate is true.
+    assert.equal(agentRuns, 2, 'the agent must NOT be re-invoked once the cap is exhausted');
+    assert.ok(result.iterations < 10, 'must stop well before the iteration budget');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

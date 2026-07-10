@@ -1,6 +1,6 @@
 # ADR 009 — Minimal `forge.config.json`; settings live in skills/ADRs
 
-**Status:** Accepted (scaffold)
+**Status:** Accepted (scaffold); amended 2026-07-11 (G4 unifier cap)
 **Date:** 2026-04-24
 
 ## Context
@@ -20,9 +20,23 @@ The prior `forge.config.json` accumulated knobs: model overrides, concurrency se
   "notify": {
     "desktop": true,                       // default: on
     "webhook_url": null                    // optional; e.g. Slack/Discord
+  },
+  "unifier": {
+    "maxConsecutiveGateFailures": 4        // G4 fix-loop ceiling (default 4)
   }
 }
 ```
+
+> **Amendment 2026-07-11 (G4, refinement plan item 2.2):** added
+> `unifier.maxConsecutiveGateFailures` — the hard ceiling on consecutive
+> failures of the SAME composed-gate sub-check before the unifier's
+> fix-iteration loop halts with a terminal `uwi.loop-cap-exhausted` event
+> instead of re-invoking the agent. The real failure mode this answers: the
+> 2026-07-04 betterado cycles where the unifier spun 16 restarts (~$84.56 on
+> one cycle) against an `incomplete-delivery` gate it could not clear
+> autonomously, with no forge-level bound. Resolved by
+> `resolveUnifierGateFailureCap` (env `FORGE_UNIFIER_GATE_FAILURE_CAP` >
+> config > default 4).
 
 > Per-skill model override was specified here originally but never wired
 > into the SDK invocation contracts. Per the simplification mandate it

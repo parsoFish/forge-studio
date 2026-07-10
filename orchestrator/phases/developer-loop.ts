@@ -50,6 +50,7 @@ import {
   unifierItemsDir,
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
+import { resolveUnifierGateFailureCap } from '../config.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import {
@@ -1557,14 +1558,102 @@ export function unifierItemClassify(uwi: WorkItem, loopResult: LoopResult | null
   // gate). The former is transient/incomplete (retry inline; resume re-drains);
   // the latter is operator-deferred. A complete run is never a crash.
   const crashed = status !== 'complete' && (runnerError !== null || loopResult === null);
+  // G4: a loop-cap-exhausted stop is a deterministic gate outcome with its own
+  // class — the agent repeatedly failed the SAME composed-gate sub-check and
+  // the fix-iteration ceiling halted the loop (never a transient crash).
+  const capExhausted = !crashed && loopResult?.stop_reason === 'loop-cap-exhausted';
   return {
     id: uwi.work_item_id,
     status,
     result: loopResult,
-    failureClass: status === 'complete' ? null : crashed ? 'dev-loop-unifier-crashed' : 'dev-loop-unifier-gate-failed',
+    failureClass:
+      status === 'complete'
+        ? null
+        : crashed
+          ? 'dev-loop-unifier-crashed'
+          : capExhausted
+            ? 'dev-loop-unifier-loop-cap-exhausted'
+            : 'dev-loop-unifier-gate-failed',
     runnerError,
     crashed,
   };
+}
+
+/**
+ * G4 (plan item 2.2): per-UWI composed-gate failure tracker.
+ *
+ * Wired into `composedUnifierGate`'s `onGateFailure` seam by the packaging
+ * UWI's fix-iteration loop:
+ *   - Every failing evaluation emits ONE `uwi.gate-failed` event carrying the
+ *     failing sub-check + exit code + output tail — the restart between
+ *     iterations was previously invisible (2026-07-04 theme: 16 unifier
+ *     restarts with zero diagnostic events between them).
+ *   - `cap` CONSECUTIVE failures of the SAME sub-check emit a single terminal
+ *     `uwi.loop-cap-exhausted` error event and flip `capExhausted()`, which
+ *     the Ralph runner reads to stop the loop (stop_reason:
+ *     `loop-cap-exhausted`) instead of re-invoking the agent against a gate
+ *     it demonstrably cannot clear (the $84.56 single-cycle spin). A failure
+ *     of a DIFFERENT sub-check means progress (short-circuit order) and
+ *     resets the counter.
+ *
+ * The code-fix UWI loop deliberately does NOT get this cap: its sharp gate is
+ * SUPPOSED to fail repeatedly during the red→green TDD rhythm, its failures
+ * are already visible via per-run `gate.fail` events, and its iteration
+ * budget bounds it.
+ */
+export function createUwiGateFailureTracker(args: {
+  logger: EventLogger;
+  initiativeId: string;
+  parentEventId: string;
+  workItemId: string;
+  cap: number;
+}): { onGateFailure: (failure: UnifierGateFailure) => void; capExhausted: () => boolean } {
+  let consecutive = 0;
+  let lastCheckId: UnifierGateFailure['checkId'] | null = null;
+  let exhausted = false;
+
+  const onGateFailure = (failure: UnifierGateFailure): void => {
+    consecutive = failure.checkId === lastCheckId ? consecutive + 1 : 1;
+    lastCheckId = failure.checkId;
+    const evidence = {
+      work_item_id: args.workItemId,
+      check_id: failure.checkId,
+      gate_exit_code: failure.exitCode,
+      gate_output_tail: failure.outputTail.slice(-2000),
+      consecutive_failures: consecutive,
+      failure_cap: args.cap,
+    };
+    // Restart-visibility marker ('log', not 'error' — the failing sub-check
+    // already emitted its own classified unifier.gate.* error event; this is
+    // the observational between-restarts trace, like unifier.gate.sub-check).
+    args.logger.emit({
+      initiative_id: args.initiativeId,
+      parent_event_id: args.parentEventId,
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'uwi.gate-failed',
+      metadata: evidence,
+    });
+    if (consecutive >= args.cap && !exhausted) {
+      exhausted = true;
+      args.logger.emit({
+        initiative_id: args.initiativeId,
+        parent_event_id: args.parentEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'uwi.loop-cap-exhausted',
+        metadata: { failure_class: 'dev-loop-unifier-loop-cap-exhausted', ...evidence },
+      });
+    }
+  };
+
+  return { onGateFailure, capExhausted: () => exhausted };
 }
 
 /** The packaging role: unify, author demo/PR, prove the 4-gate composed unifier
@@ -1615,6 +1704,21 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     args.unifierSdkId,
   );
 
+  // G4 (plan item 2.2): bound the fix-iteration loop. Every failing composed-
+  // gate evaluation emits a `uwi.gate-failed` event (the restart was
+  // previously invisible — 2026-07-04 themes: 16 restarts, zero diagnostic
+  // events); `cap` consecutive failures of the SAME sub-check trip a terminal
+  // `uwi.loop-cap-exhausted` and stop the Ralph loop instead of spinning
+  // ($84.56 single-cycle burn). This also bounds an orchestrated-capture
+  // failure inside the loop (the N1 caveat).
+  const gateFailureTracker = createUwiGateFailureTracker({
+    logger,
+    initiativeId: input.initiativeId,
+    parentEventId: startEventId,
+    workItemId: uwi.work_item_id,
+    cap: resolveUnifierGateFailureCap(),
+  });
+
   // Composed quality gate (4 gates after Wave B):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
   //   2. pr_self_contained (demo.json valid + pr-description.md present)
@@ -1622,6 +1726,7 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
   //   4. incomplete_delivery (every WI's creates[] paths in diff)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
+      onGateFailure: gateFailureTracker.onGateFailure,
       worktreePath: input.worktreePath,
       initiativeId: input.initiativeId,
       qualityGateCmd: itemGateCmd,
@@ -1667,6 +1772,9 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
         // (Tier 2 thinning 2026-05-26): wedged-detection was removed
         // from the runner entirely; the unifier no longer needs the
         // Infinity override because the check is gone.
+        // G4: stop the loop once the consecutive same-sub-check failure
+        // cap is exhausted (stop_reason: loop-cap-exhausted).
+        loopCapExhausted: gateFailureTracker.capExhausted,
         onIteration: unifierIterationHandler(args, toolSink),
       },
       agent,
@@ -1785,6 +1893,21 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
   return unifierItemClassify(uwi, loopResult, runnerError);
 }
 
+/**
+ * G4 (plan item 2.2): one failing composed-gate evaluation, as reported to the
+ * caller through `onGateFailure`. `checkId` is the sub-check that blocked
+ * (short-circuit order — exactly one per failing evaluation); `exitCode` /
+ * `outputTail` carry the evidence where the sub-check ran a command
+ * (initiative_gate), or the structural detail string otherwise.
+ */
+export type UnifierGateFailure = {
+  checkId: 'initiative_gate' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery' | 'gate-timeout';
+  /** The failing command's exit code; null for structural checks / killed commands. */
+  exitCode: number | null;
+  /** Tail of the failing sub-check's output / detail (bounded by the caller's event). */
+  outputTail: string;
+};
+
 type ComposedUnifierGateInput = {
   worktreePath: string;
   initiativeId: string;
@@ -1822,6 +1945,15 @@ type ComposedUnifierGateInput = {
    * review judge on the resulting artifacts).
    */
   orchestratedCapture?: { argv: string[]; timeoutMs?: number };
+  /**
+   * G4 (plan item 2.2): called once per FAILING composed-gate evaluation with
+   * the failing sub-check's identity + evidence. The unifier's fix-loop wires
+   * this to `createUwiGateFailureTracker`, which (a) emits the
+   * `uwi.gate-failed` restart-visibility event and (b) trips the consecutive
+   * same-sub-check failure cap that halts the Ralph loop. Absent ⇒ unchanged
+   * behaviour (unit-test callers).
+   */
+  onGateFailure?: (failure: UnifierGateFailure) => void;
 };
 
 /**
@@ -1918,6 +2050,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
       'This is an ENVIRONMENT failure (machine load / a hung step) — the work may be complete.',
       `Command: ${qualityGateCmd.join(' ')}`,
     ]);
+    input.onGateFailure?.({
+      checkId: 'gate-timeout',
+      exitCode: null,
+      outputTail: initiativeGate.stderr.slice(-2000) || `gate command timed out after ${input.gateTimeoutMs}ms`,
+    });
     return false;
   }
   if (!initiativeGate.passed) {
@@ -1956,6 +2093,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
       initiativeGate.stderr.slice(-2000),
       '```',
     ]);
+    input.onGateFailure?.({
+      checkId: 'initiative_gate',
+      exitCode: initiativeGate.exitCode,
+      outputTail: initiativeGate.stderr.slice(-2000),
+    });
     return false;
   }
   emitSubCheck('initiative_gate', true, `gate command exited 0 (${qualityGateCmd.join(' ')})`);
@@ -2072,6 +2214,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
       ...(demoOk ? [] : [`- demo.json (${demoDir}/demo.json) errors: ${demoErrors.join('; ')}`]),
       ...(prBodyOk ? [] : ['- .forge/pr-description.md is missing or lacks the ## Why / ## What / ## How sections']),
     ]);
+    input.onGateFailure?.({ checkId: 'pr_self_contained', exitCode: null, outputTail: failReasons.join(' | ') });
     return false;
   }
   emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
@@ -2100,6 +2243,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
       'Local and remote branches have diverged — push the branch so origin matches local HEAD.',
       `Detail: ${errMsg}`,
     ]);
+    input.onGateFailure?.({ checkId: 'branches_in_sync', exitCode: null, outputTail: errMsg });
     return false;
   }
   emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
@@ -2131,6 +2275,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         'The delivery-completeness check could not be computed (fails closed).',
         `Reason: ${delivery.reason}`,
       ]);
+      input.onGateFailure?.({
+        checkId: 'complete_delivery',
+        exitCode: null,
+        outputTail: `delivery check indeterminate: ${delivery.reason}`,
+      });
       return false;
     }
     if (delivery.missing.length > 0) {
@@ -2155,6 +2304,11 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
         ...delivery.missing.map((m) => `- ${m.path} (${m.work_item_id})`),
         'Create each missing path (a compiling stub satisfies the path check), commit, and push.',
       ]);
+      input.onGateFailure?.({
+        checkId: 'complete_delivery',
+        exitCode: null,
+        outputTail: `missing declared paths: ${missingPaths}`,
+      });
       return false;
     }
     emitSubCheck('complete_delivery', true, 'all declared creates[] paths present in branch diff');
@@ -2273,7 +2427,14 @@ export function collectMissingDeliveries(
   return { indeterminate: false, missing };
 }
 
-type ShellGateResult = { passed: boolean; errored: boolean; timedOut: boolean; stderr: string };
+type ShellGateResult = {
+  passed: boolean;
+  errored: boolean;
+  timedOut: boolean;
+  stderr: string;
+  /** G4: the gate command's exit code — 0 on pass, null when it never ran / was killed. */
+  exitCode: number | null;
+};
 
 /**
  * Run a unifier gate command. Distinguishes a gate that RAN and returned
@@ -2283,12 +2444,12 @@ type ShellGateResult = { passed: boolean; errored: boolean; timedOut: boolean; s
  * `timeoutMs`, which is an ENVIRONMENT failure, never a work failure.
  */
 function runShellGate(worktreePath: string, cmd: string[], timeoutMs?: number): ShellGateResult {
-  if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, timedOut: false, stderr: 'empty gate command' };
+  if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, timedOut: false, stderr: 'empty gate command', exitCode: null };
   const [head, ...rest] = cmd;
   const startedAt = Date.now();
   try {
     execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe', ...(timeoutMs ? { timeout: timeoutMs } : {}) });
-    return { passed: true, errored: false, timedOut: false, stderr: '' };
+    return { passed: true, errored: false, timedOut: false, stderr: '', exitCode: 0 };
   } catch (err) {
     const e = err as { status?: number | null; code?: string; signal?: string; message?: string; stderr?: Buffer | string };
     const stderr = e.stderr ? (typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8')) : (e.message ?? '');
@@ -2296,6 +2457,6 @@ function runShellGate(worktreePath: string, cmd: string[], timeoutMs?: number): 
     const deadlineElapsed = timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs;
     const timedOut = e.code === 'ETIMEDOUT' || (killedBySignal && deadlineElapsed);
     const errored = !timedOut && (e.code === 'ENOENT' || e.code === 'EACCES' || killedBySignal);
-    return { passed: false, errored, timedOut, stderr };
+    return { passed: false, errored, timedOut, stderr, exitCode: typeof e.status === 'number' ? e.status : null };
   }
 }

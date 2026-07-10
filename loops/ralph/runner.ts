@@ -85,6 +85,17 @@ export type LoopInput = {
    * The developer-loop wires this to the captured GateRunInfo.errored.
    */
   gateErrored?: () => boolean;
+  /**
+   * G4 (2026-07-11, plan item 2.2): predicate returning whether the CALLER's
+   * fix-loop failure ceiling has been hit — e.g. the unifier's cap on
+   * consecutive same-sub-check composed-gate failures. Checked at the same
+   * point as `gateErrored` (after every gate evaluation, BEFORE the next agent
+   * invocation): when true the runner stops EARLY with `loop-cap-exhausted`
+   * instead of burning the remaining iteration budget re-invoking the agent
+   * against a gate it has repeatedly failed to clear (the 2026-07-04
+   * 16-restart / $84.56 unifier spins).
+   */
+  loopCapExhausted?: () => boolean;
 };
 
 /**
@@ -251,6 +262,12 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // unrunnable — don't keep iterating against it.
     if (input.gateErrored?.()) {
       return finalize(state, startedAt, 'gate-errored', agentMdPath, fixPlanPath);
+    }
+    // G4: the caller's own fix-loop ceiling fired (e.g. the unifier's
+    // consecutive same-sub-check gate-failure cap) — stop honestly instead
+    // of re-invoking the agent against a gate it keeps failing the same way.
+    if (input.loopCapExhausted?.()) {
+      return finalize(state, startedAt, 'loop-cap-exhausted', agentMdPath, fixPlanPath);
     }
 
     state.iteration += 1;

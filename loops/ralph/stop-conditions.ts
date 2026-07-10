@@ -27,7 +27,14 @@ export type StopCondition =
   // COMMAND could not run (missing binary / EACCES / killed). Status: failed —
   // a broken gate, distinct from "tests failed". The runner stops early rather
   // than iterating against an unrunnable command.
-  | { kind: 'gate-errored'; reason: string };
+  | { kind: 'gate-errored'; reason: string }
+  // G4 (2026-07-11, plan item 2.2): synthesised by the runner inline when the
+  // caller's `loopCapExhausted` predicate fires — its own fix-loop failure
+  // ceiling (e.g. the unifier's consecutive same-sub-check composed-gate
+  // failure cap) has been hit. Status: failed — the agent has demonstrably
+  // not cleared this gate; re-invoking it only burns budget (the $84.56 /
+  // 16-restart 2026-07-04 spins).
+  | { kind: 'loop-cap-exhausted'; reason: string };
 
 export type LoopState = {
   worktreePath: string;
@@ -101,6 +108,11 @@ async function checkOne(
     case 'gate-errored':
       // Synthesised by the runner inline when the gate command can't run.
       // Never fired from the per-iteration condition loop.
+      return { stop: false };
+
+    case 'loop-cap-exhausted':
+      // Synthesised by the runner inline when the caller's fix-loop cap
+      // predicate fires. Never fired from the per-iteration condition loop.
       return { stop: false };
   }
 }

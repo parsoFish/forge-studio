@@ -25,6 +25,16 @@ export type ForgeConfig = {
     desktop?: boolean;
     webhook_url?: string | null;
   };
+  /** Unifier tuning (G4, ADR 009 as amended 2026-07-11). */
+  unifier?: {
+    /**
+     * Hard ceiling on CONSECUTIVE composed-gate failures of the SAME sub-check
+     * before the unifier's fix-iteration loop halts with a terminal
+     * `uwi.loop-cap-exhausted` event instead of re-invoking the agent.
+     * Default: `DEFAULT_UNIFIER_GATE_FAILURE_CAP` (4).
+     */
+    maxConsecutiveGateFailures?: number;
+  };
 };
 
 /**
@@ -64,6 +74,34 @@ export function resolveProjectsDir(forgeRoot: string, cfg?: ForgeConfig): string
   const fromCfg = cfg?.projectsDir?.trim();
   const chosen = fromEnv || fromCfg || 'projects';
   return resolve(root, chosen);
+}
+
+/**
+ * G4 (2026-07 refinement, plan item 2.2): default ceiling on CONSECUTIVE
+ * composed-gate failures of the SAME sub-check inside the unifier's
+ * fix-iteration loop. Evidence for 4: the 2026-07-04 themes (16-restart /
+ * $84.56 spins) show that a sub-check the agent hasn't cleared after 4
+ * straight attempts needs different work (dev-loop code, an operator), not
+ * a 5th identical attempt.
+ */
+export const DEFAULT_UNIFIER_GATE_FAILURE_CAP = 4;
+
+/**
+ * Resolve the unifier fix-loop failure cap. Precedence (mirrors
+ * `resolveProjectsDir`):
+ *   1. `FORGE_UNIFIER_GATE_FAILURE_CAP` env var (operator/CI override)
+ *   2. `unifier.maxConsecutiveGateFailures` from `forge.config.json`
+ *   3. `DEFAULT_UNIFIER_GATE_FAILURE_CAP` (4)
+ *
+ * Non-finite / zero / negative values are ignored (fall through) — a cap
+ * below 1 would halt the loop before the agent's first fix attempt.
+ */
+export function resolveUnifierGateFailureCap(cfg: ForgeConfig = loadConfig()): number {
+  const fromEnv = Number(process.env.FORGE_UNIFIER_GATE_FAILURE_CAP);
+  if (Number.isFinite(fromEnv) && fromEnv >= 1) return Math.floor(fromEnv);
+  const fromCfg = cfg.unifier?.maxConsecutiveGateFailures;
+  if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) return Math.floor(fromCfg);
+  return DEFAULT_UNIFIER_GATE_FAILURE_CAP;
 }
 
 export type EnvAssertionMode = 'warn' | 'throw';

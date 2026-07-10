@@ -192,3 +192,47 @@ test('classifyCycleFailure: gate.errored (broken gate, NOT timeout) stays termin
   assert.equal(c.kind, 'terminal');
   assert.match(c.reason, /BROKEN GATE/);
 });
+
+// G4 (plan item 2.2): the unifier fix-loop cap event is a TERMINAL signal —
+// the agent demonstrably cannot clear this gate autonomously; auto-retry
+// would re-enter the same loop.
+test('classifyCycleFailure: uwi.loop-cap-exhausted → terminal', () => {
+  const events = [
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'uwi.loop-cap-exhausted',
+      metadata: { failure_class: 'dev-loop-unifier-loop-cap-exhausted', check_id: 'complete_delivery', consecutive_failures: 4, failure_cap: 4 },
+    }),
+    ev({ phase: 'unifier', skill: 'developer-unifier', event_type: 'error', message: 'unifier.failed', metadata: { status: 'failed' } }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.match(c.reason, /fix-loop cap/i);
+});
+
+test('classifyCycleFailure: N10 timeout priority beats the loop-cap signal (environment stays transient)', () => {
+  // A cap exhausted BY gate timeouts is still an environment failure — the
+  // timeout is the cause; retry under normal load is the correct move. The
+  // cap's job (bounding the in-session burn) is already done.
+  const events = [
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'unifier.gate.timeout',
+      metadata: { gate_timed_out: true, failure_kind: 'environment' },
+    }),
+    ev({
+      phase: 'unifier',
+      skill: 'developer-unifier',
+      event_type: 'error',
+      message: 'uwi.loop-cap-exhausted',
+      metadata: { failure_class: 'dev-loop-unifier-loop-cap-exhausted', check_id: 'gate-timeout' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+});
