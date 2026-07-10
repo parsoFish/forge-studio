@@ -14,6 +14,9 @@ import {
   assertEnv,
   resolveUnifierGateFailureCap,
   DEFAULT_UNIFIER_GATE_FAILURE_CAP,
+  resolvePostMergeCiConfig,
+  DEFAULT_POST_MERGE_CI_TIMEOUT_MS,
+  DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -165,5 +168,46 @@ test('loadConfig: parses the unifier block', () => {
     assert.equal(cfg.unifier?.maxConsecutiveGateFailures, 3);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N6 (plan 2.8): post-merge CI watch tuning.
+// ---------------------------------------------------------------------------
+
+test('resolvePostMergeCiConfig: defaults → 10min timeout / 30s poll', () => {
+  const r = resolvePostMergeCiConfig({});
+  assert.equal(r.timeoutMs, DEFAULT_POST_MERGE_CI_TIMEOUT_MS);
+  assert.equal(r.pollIntervalMs, DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS);
+  assert.equal(DEFAULT_POST_MERGE_CI_TIMEOUT_MS, 10 * 60_000);
+  assert.equal(DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS, 30_000);
+});
+
+test('resolvePostMergeCiConfig: config values honoured; env overrides beat config; junk falls through', () => {
+  const origT = process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS;
+  const origP = process.env.FORGE_POST_MERGE_CI_POLL_MS;
+  try {
+    delete process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS;
+    delete process.env.FORGE_POST_MERGE_CI_POLL_MS;
+    const fromCfg = resolvePostMergeCiConfig({ postMergeCi: { timeoutMs: 120_000, pollIntervalMs: 5_000 } });
+    assert.equal(fromCfg.timeoutMs, 120_000);
+    assert.equal(fromCfg.pollIntervalMs, 5_000);
+
+    process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS = '60000';
+    process.env.FORGE_POST_MERGE_CI_POLL_MS = '1000';
+    const fromEnv = resolvePostMergeCiConfig({ postMergeCi: { timeoutMs: 120_000, pollIntervalMs: 5_000 } });
+    assert.equal(fromEnv.timeoutMs, 60_000);
+    assert.equal(fromEnv.pollIntervalMs, 1_000);
+
+    process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS = 'junk';
+    process.env.FORGE_POST_MERGE_CI_POLL_MS = '-5';
+    const junk = resolvePostMergeCiConfig({});
+    assert.equal(junk.timeoutMs, DEFAULT_POST_MERGE_CI_TIMEOUT_MS);
+    assert.equal(junk.pollIntervalMs, DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS);
+  } finally {
+    if (origT === undefined) delete process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS;
+    else process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS = origT;
+    if (origP === undefined) delete process.env.FORGE_POST_MERGE_CI_POLL_MS;
+    else process.env.FORGE_POST_MERGE_CI_POLL_MS = origP;
   }
 });

@@ -237,3 +237,129 @@ test('runClosure: non-pr-open reviewer outcome is passed through, never merged, 
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// N6 (plan 2.8): post-merge CI watch on the confirmed-merge path.
+// `postMergeCiWatch` is injected (the production default shells gh via
+// pr.ts:watchPostMergeCi — exercised in pr.postmerge-ci.test.ts).
+// ---------------------------------------------------------------------------
+
+import { dirname } from 'node:path';
+import type { PostMergeCiOutcome } from '../pr.ts';
+
+test('runClosure N6: confirmed merge + green CI → cycle.post-merge-ci info event', async () => {
+  const h = setup();
+  try {
+    const inp: CycleInput = {
+      ...input(h, () => true),
+      postMergeCiWatch: () => ({
+        status: 'green',
+        sha: 'abc123',
+        runs: [{ name: 'CI', url: 'https://x/1' }],
+      } satisfies PostMergeCiOutcome),
+    };
+    const r = await runClosure(inp, h.logger, 'pr-open');
+    assert.equal(r.merged, true);
+    const ev = h.events().find((e) => e.message === 'cycle.post-merge-ci');
+    assert.ok(ev, 'expected a cycle.post-merge-ci event');
+    assert.equal(ev!.event_type, 'log');
+    assert.equal((ev!.metadata as Record<string, unknown>).status, 'green');
+    assert.equal((ev!.metadata as Record<string, unknown>).sha, 'abc123');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure N6: confirmed merge + red CI → error event with run link + failing jobs + needs-operator marker', async () => {
+  const h = setup();
+  try {
+    const inp: CycleInput = {
+      ...input(h, () => true),
+      postMergeCiWatch: () => ({
+        status: 'red',
+        sha: 'abc123',
+        failing: [{ name: 'CI', url: 'https://x/9', failing_jobs: ['acc-tests'] }],
+      } satisfies PostMergeCiOutcome),
+    };
+    const r = await runClosure(inp, h.logger, 'pr-open');
+    // Red CI does NOT change the cycle outcome (the merge already happened).
+    assert.equal(r.outcome, 'merged');
+    const ev = h.events().find((e) => e.message === 'cycle.post-merge-ci');
+    assert.ok(ev);
+    assert.equal(ev!.event_type, 'error');
+    const md = ev!.metadata as Record<string, unknown>;
+    assert.equal(md.status, 'red');
+    assert.equal(md.needs_operator, true);
+    assert.match(JSON.stringify(md.failing), /https:\/\/x\/9/);
+    assert.match(JSON.stringify(md.failing), /acc-tests/);
+    // Needs-operator marker written next to the event log (greppable artifact).
+    const marker = join(dirname(h.logger.logFilePath), 'POST-MERGE-CI-FAILED.md');
+    assert.equal(existsSync(marker), true, 'expected POST-MERGE-CI-FAILED.md marker');
+    const body = readFileSync(marker, 'utf8');
+    assert.match(body, /https:\/\/x\/9/);
+    assert.match(body, /acc-tests/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure N6: no CI configured → debug-level log event, no marker', async () => {
+  const h = setup();
+  try {
+    const inp: CycleInput = {
+      ...input(h, () => true),
+      postMergeCiWatch: () => ({
+        status: 'no-ci',
+        sha: 'abc123',
+        detail: 'no GitHub Actions workflows configured for this repo',
+      } satisfies PostMergeCiOutcome),
+    };
+    await runClosure(inp, h.logger, 'pr-open');
+    const ev = h.events().find((e) => e.message === 'cycle.post-merge-ci');
+    assert.ok(ev);
+    assert.equal(ev!.event_type, 'log');
+    assert.equal((ev!.metadata as Record<string, unknown>).status, 'no-ci');
+    assert.equal(existsSync(join(dirname(h.logger.logFilePath), 'POST-MERGE-CI-FAILED.md')), false);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure N6: the CI watch throwing never breaks closure (merged stands; unavailable event)', async () => {
+  const h = setup();
+  try {
+    const inp: CycleInput = {
+      ...input(h, () => true),
+      postMergeCiWatch: () => {
+        throw new Error('gh exploded');
+      },
+    };
+    const r = await runClosure(inp, h.logger, 'pr-open');
+    assert.equal(r.merged, true);
+    assert.equal(existsSync(join(h.paths.done, 'INIT-x.md')), true, 'done/ move must survive a watch throw');
+    const ev = h.events().find((e) => e.message === 'cycle.post-merge-ci');
+    assert.ok(ev);
+    assert.equal((ev!.metadata as Record<string, unknown>).status, 'unavailable');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('runClosure N6: unconfirmed merge (pr-open) → CI watch NOT invoked', async () => {
+  const h = setup();
+  try {
+    let called = 0;
+    const inp: CycleInput = {
+      ...input(h, () => false),
+      postMergeCiWatch: () => {
+        called += 1;
+        return { status: 'green', sha: 'x', runs: [] } satisfies PostMergeCiOutcome;
+      },
+    };
+    const r = await runClosure(inp, h.logger, 'pr-open');
+    assert.equal(r.merged, false);
+    assert.equal(called, 0, 'post-merge CI watch must only run on a CONFIRMED merge');
+  } finally {
+    h.cleanup();
+  }
+});

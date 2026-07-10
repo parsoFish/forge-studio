@@ -41,6 +41,20 @@ export type CycleInput = {
    */
   confirmMerge?: (worktreePath: string) => Promise<boolean> | boolean;
   /**
+   * N6 (plan 2.8): post-merge CI watch hook. After a CONFIRMED merge the
+   * closure step calls this to learn whether the merged commit's CI on main
+   * went green — bounded (config-driven timeout), result surfaced as
+   * `cycle.post-merge-ci` events (green → info, red → error + needs-operator
+   * marker; red never auto-fixes anything).
+   *
+   * Production (closure): omitted → defaults to `watchPostMergeCi` from
+   * pr.ts (`gh` polling with `resolvePostMergeCiConfig()` bounds). Tests
+   * inject a stub to stay hermetic.
+   */
+  postMergeCiWatch?: (
+    worktreePath: string,
+  ) => Promise<import('./pr.ts').PostMergeCiOutcome> | import('./pr.ts').PostMergeCiOutcome;
+  /**
    * US-1.3 opt-in: when the holistic intent gate finds the whole branch
    * misaligned, spawn a targeted developer-loop (reusing `runDeveloperLoop`)
    * to refine/fix/align before the review-Ralph produces the PR. Default

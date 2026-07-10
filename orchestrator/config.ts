@@ -35,6 +35,18 @@ export type ForgeConfig = {
      */
     maxConsecutiveGateFailures?: number;
   };
+  /**
+   * N6 (plan 2.8): post-merge CI watch tuning. After a confirmed merge the
+   * closure phase polls the merged commit's GitHub Actions runs, bounded by
+   * this window, and emits `cycle.post-merge-ci` events (green → info,
+   * red → error + needs-operator marker).
+   */
+  postMergeCi?: {
+    /** Total watch window. Default: `DEFAULT_POST_MERGE_CI_TIMEOUT_MS` (10 min). */
+    timeoutMs?: number;
+    /** Poll interval. Default: `DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS` (30 s). */
+    pollIntervalMs?: number;
+  };
 };
 
 /**
@@ -102,6 +114,36 @@ export function resolveUnifierGateFailureCap(cfg: ForgeConfig = loadConfig()): n
   const fromCfg = cfg.unifier?.maxConsecutiveGateFailures;
   if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) return Math.floor(fromCfg);
   return DEFAULT_UNIFIER_GATE_FAILURE_CAP;
+}
+
+/** N6: default post-merge CI watch window (bounded — forge never waits forever). */
+export const DEFAULT_POST_MERGE_CI_TIMEOUT_MS = 10 * 60_000;
+/** N6: default post-merge CI poll interval. */
+export const DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS = 30_000;
+
+/**
+ * Resolve the post-merge CI watch tuning. Precedence (mirrors
+ * `resolveUnifierGateFailureCap`):
+ *   1. `FORGE_POST_MERGE_CI_TIMEOUT_MS` / `FORGE_POST_MERGE_CI_POLL_MS` env vars
+ *   2. `postMergeCi.{timeoutMs,pollIntervalMs}` from `forge.config.json`
+ *   3. the defaults above
+ * Non-finite / non-positive values are ignored (fall through).
+ */
+export function resolvePostMergeCiConfig(
+  cfg: ForgeConfig = loadConfig(),
+): { timeoutMs: number; pollIntervalMs: number } {
+  const pick = (envName: string, cfgValue: number | undefined, fallback: number): number => {
+    const fromEnv = Number(process.env[envName]);
+    if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv);
+    if (typeof cfgValue === 'number' && Number.isFinite(cfgValue) && cfgValue > 0) {
+      return Math.floor(cfgValue);
+    }
+    return fallback;
+  };
+  return {
+    timeoutMs: pick('FORGE_POST_MERGE_CI_TIMEOUT_MS', cfg.postMergeCi?.timeoutMs, DEFAULT_POST_MERGE_CI_TIMEOUT_MS),
+    pollIntervalMs: pick('FORGE_POST_MERGE_CI_POLL_MS', cfg.postMergeCi?.pollIntervalMs, DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS),
+  };
 }
 
 export type EnvAssertionMode = 'warn' | 'throw';

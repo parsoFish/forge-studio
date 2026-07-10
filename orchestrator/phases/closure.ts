@@ -21,6 +21,12 @@
  *      until the operator merges, or a partial/failed state): moves the
  *      manifest `in-flight/ → ready-for-review/`, flagged; reflection is
  *      skipped.
+ *   4. N6 (plan 2.8): on a CONFIRMED merge, runs a bounded post-merge CI
+ *      watch (`watchPostMergeCi`, gh polling, config-driven ~10min window)
+ *      and emits `cycle.post-merge-ci` — green → info, red → error with run
+ *      links + failing jobs + a `POST-MERGE-CI-FAILED.md` needs-operator
+ *      marker beside the event log. Red never auto-fixes and never changes
+ *      the cycle outcome; projects without CI skip with a debug event.
  *
  * Closure is the SINGLE terminal-move authority. The reviewer no longer
  * moves the manifest — it stays in `in-flight/` through review (it is in
@@ -31,11 +37,18 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { basename } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 import type { EventLogger } from '../logging.ts';
 import { moveTo as moveQueueItem } from '../queue.ts';
-import { alignLocalToRemote, confirmPrMerged } from '../pr.ts';
+import {
+  alignLocalToRemote,
+  confirmPrMerged,
+  watchPostMergeCi,
+  type PostMergeCiOutcome,
+} from '../pr.ts';
+import { resolvePostMergeCiConfig } from '../config.ts';
 import type { CycleInput, CycleOutcome, ReviewerOutcome } from '../cycle-context.ts';
 
 export type ClosureResult = {
@@ -258,6 +271,13 @@ export async function runClosure(
   // an orchestrator-internal flag and never from the reviewer.
   terminalMove(input, logger, start.event_id, 'done');
 
+  // N6 (plan 2.8): bounded post-merge CI watch. Runs AFTER the terminal
+  // move so a watch defect can never corrupt queue state, and only on a
+  // CONFIRMED merge. Red does not change the cycle outcome (the merge
+  // already happened on the remote) — the error event + needs-operator
+  // marker are the deliverable.
+  await runPostMergeCiWatch(input, logger, start.event_id);
+
   logger.emit({
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
@@ -270,4 +290,87 @@ export async function runClosure(
     metadata: { outcome: 'merged', merged: true },
   });
   return { outcome: 'merged', merged: true };
+}
+
+/**
+ * N6: run the post-merge CI watch and surface the outcome. NEVER throws —
+ * the merge already happened; a broken watch must not fail the cycle.
+ *
+ *   - green       → info `cycle.post-merge-ci` event
+ *   - red         → error event with run links + failing job names, plus a
+ *                   greppable `POST-MERGE-CI-FAILED.md` marker next to the
+ *                   event log. NO auto-fix — the operator resolves.
+ *   - no-ci       → debug-level log event (project has no CI; skip silently)
+ *   - timeout / unavailable → log event (inconclusive; bounded watch ended)
+ */
+async function runPostMergeCiWatch(
+  input: CycleInput,
+  logger: EventLogger,
+  parentEventId: string,
+): Promise<void> {
+  const watch =
+    input.postMergeCiWatch ??
+    ((worktreePath: string) => watchPostMergeCi(worktreePath, resolvePostMergeCiConfig()));
+
+  let outcome: PostMergeCiOutcome;
+  try {
+    outcome = await watch(input.worktreePath);
+  } catch (err) {
+    outcome = {
+      status: 'unavailable',
+      detail: `post-merge CI watch threw: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const red = outcome.status === 'red';
+  const outputRefs: string[] = [];
+  if (outcome.status === 'red') {
+    const marker = writePostMergeCiMarker(input, dirname(logger.logFilePath), outcome);
+    if (marker) outputRefs.push(marker);
+  }
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'closure',
+    skill: 'cycle',
+    event_type: red ? 'error' : 'log',
+    input_refs: [input.worktreePath],
+    output_refs: outputRefs,
+    message: 'cycle.post-merge-ci',
+    metadata: { ...outcome, needs_operator: red },
+  });
+}
+
+/**
+ * Greppable needs-operator marker for a red post-merge CI: sits next to the
+ * cycle's events.jsonl so the run links + failing jobs survive the cycle.
+ * Best-effort — returns the path, or null when unwritable.
+ */
+function writePostMergeCiMarker(
+  input: CycleInput,
+  logDir: string,
+  outcome: Extract<PostMergeCiOutcome, { status: 'red' }>,
+): string | null {
+  try {
+    const path = join(logDir, 'POST-MERGE-CI-FAILED.md');
+    const lines = [
+      `# NEEDS OPERATOR — post-merge CI failed on main`,
+      '',
+      `- initiative: ${input.initiativeId}`,
+      `- merged commit: ${outcome.sha}`,
+      '',
+      '## Failing runs',
+      '',
+      ...outcome.failing.map(
+        (r) => `- [${r.name}](${r.url})${r.failing_jobs.length > 0 ? ` — failing jobs: ${r.failing_jobs.join(', ')}` : ''}`,
+      ),
+      '',
+      'The PR merged and the cycle closed; main is now red. Forge does not auto-fix post-merge breakage — investigate the run(s) above and land a fix (or revert) by hand.',
+      '',
+    ];
+    writeFileSync(path, lines.join('\n'));
+    return path;
+  } catch {
+    return null;
+  }
 }
