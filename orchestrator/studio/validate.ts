@@ -54,6 +54,33 @@ function findDuplicates(ids: string[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Fan-out predicate (G6) — shared by validateFlow (lint) and the flow engine
+// (orchestrator/flow-runner.ts, runtime enforcement). A node declaring
+// `fanOut` must have at least one inbound edge whose `artifact` matches the
+// declaration. A node with zero inbound edges (a flow's entry node) can never
+// satisfy this, so fanOut on an entry node is always a violation — this one
+// predicate is what makes that true for both lint and runtime. Extracted so
+// the two call sites can never drift from each other.
+// ---------------------------------------------------------------------------
+
+export type FanOutViolation = { nodeId: string; fanOut: string };
+
+export function findFanOutViolations(flow: FlowDefinition): FanOutViolation[] {
+  const violations: FanOutViolation[] = [];
+  for (const node of flow.nodes) {
+    if (node.fanOut) {
+      const hasMatchingInbound = flow.edges.some(
+        (e) => e.to === node.id && e.artifact === node.fanOut,
+      );
+      if (!hasMatchingInbound) {
+        violations.push({ nodeId: node.id, fanOut: node.fanOut });
+      }
+    }
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
 // validateAgent
 // ---------------------------------------------------------------------------
 
@@ -259,22 +286,17 @@ export function validateFlow(
     }
   }
 
-  // fan-out: node.fanOut must match artifact of ≥1 inbound edge
-  for (const node of flow.nodes) {
-    if (node.fanOut) {
-      const hasMatchingInbound = flow.edges.some(
-        (e) => e.to === node.id && e.artifact === node.fanOut,
-      );
-      if (!hasMatchingInbound) {
-        findings.push(
-          err(
-            obj,
-            'fan-out',
-            `Node "${node.id}" declares fanOut:"${node.fanOut}" but no inbound edge carries artifact "${node.fanOut}"`,
-          ),
-        );
-      }
-    }
+  // fan-out: node.fanOut must match artifact of ≥1 inbound edge (G6 — the
+  // runtime enforces this SAME predicate at flow start; see
+  // orchestrator/flow-runner.ts and findFanOutViolations above)
+  for (const violation of findFanOutViolations(flow)) {
+    findings.push(
+      err(
+        obj,
+        'fan-out',
+        `Node "${violation.nodeId}" declares fanOut:"${violation.fanOut}" but no inbound edge carries artifact "${violation.fanOut}"`,
+      ),
+    );
   }
 
   // kickoff (Stage C, optional): kind must be in the enum. Loader parses it

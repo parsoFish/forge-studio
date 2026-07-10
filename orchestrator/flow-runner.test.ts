@@ -811,3 +811,52 @@ describe('flow-runner per-run cost ceiling override', () => {
     assert.strictEqual(stops.length, 0, 'no cost-ceiling-stop when the override raises the ceiling above spend');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fan-out truth (G6): `forge studio lint` rejects a node whose `fanOut`
+// declaration has no matching inbound edge — an entry node (zero inbound
+// edges) can never satisfy this, so fanOut on an entry node is always
+// illegal. The runtime must honor the SAME predicate the lint rule uses
+// (orchestrator/studio/validate.ts::findFanOutViolations) and reject at flow
+// start, before any node executes — never mid-run.
+// ---------------------------------------------------------------------------
+
+describe('flow-runner fan-out enforcement (G6)', () => {
+  it('rejects at flow start when the entry node declares an unsatisfiable fanOut', async () => {
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const logger = makeLogger();
+    const flow: FlowDefinition = {
+      ...makeForgeCycleFlow(),
+      // 'dev' is the entry node here — it has zero inbound edges, so its
+      // fanOut:'work-items' declaration can never be satisfied.
+      nodes: [
+        { id: 'dev', agent: 'developer-ralph', fanOut: 'work-items' },
+        { id: 'unifier', agent: 'developer-unifier', resumable: true },
+      ],
+      edges: [{ from: 'dev', to: 'unifier', artifact: 'wi-branches' }],
+    };
+
+    await assert.rejects(
+      () => runFlow({ flow, input: makeInput(), logger, deps }),
+      /fanOut/,
+    );
+
+    assert.deepEqual(
+      tracker.calls,
+      [],
+      'no node executor should run — the illegal fanOut must be caught before any node executes, not mid-run',
+    );
+  });
+
+  it('does not reject a fanOut node whose inbound edge carries the matching artifact', async () => {
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const logger = makeLogger();
+    const flow = makeForgeCycleFlow(); // 'dev' fanOut:'work-items' is fed by pm→dev artifact:'work-items'
+
+    await runFlow({ flow, input: makeInput(), logger, deps });
+
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'a legally-fed fanOut node must still run');
+  });
+});

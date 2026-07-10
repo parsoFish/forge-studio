@@ -66,6 +66,7 @@ import {
   preservingForgeScratch,
 } from './cycle-helpers.ts';
 import { listArtifactTemplates } from './studio/registry.ts';
+import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
@@ -740,6 +741,21 @@ export async function runFlow({
   lintStatus: string;
 }> {
   const deps: FlowRunnerDeps = { ...DEFAULT_DEPS, ...depOverrides };
+
+  // G6: fan-out truth — a node declaring `fanOut` must be fed by an inbound
+  // edge carrying a matching artifact (an entry node, having no inbound edges
+  // at all, can never satisfy this). `forge studio lint` already rejects this
+  // shape at authoring time via the SAME predicate (findFanOutViolations);
+  // this is belt-and-suspenders here since the runner must never execute a
+  // flow with an illegal fanOut — fail fast, before any node runs, not
+  // mid-run.
+  const fanOutViolations = findFanOutViolations(flow);
+  if (fanOutViolations.length > 0) {
+    const detail = fanOutViolations
+      .map((v) => `"${v.nodeId}" declares fanOut:"${v.fanOut}" with no inbound edge carrying that artifact`)
+      .join('; ');
+    throw new Error(`flow-runner: flow "${flow.id}" has an illegal fanOut — ${detail} (see \`forge studio lint\`)`);
+  }
 
   // M3-3: Budget setup — additive, no-ops when ceiling is 0/absent.
   // Per-run override (cycle.ts resolves FORGE_COST_CEILING_USD ?? manifest
