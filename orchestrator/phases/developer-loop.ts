@@ -1750,8 +1750,10 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
     [...itemGateCmd],
     // N10: a timed-out gate stops the loop like a broken gate, but its
     // gate.timeout event classifies as transient/environment (see the dev-WI
-    // call site above).
-    (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); },
+    // call site above). Gate feedback flows through the SAME
+    // .forge/last-gate-failure.md seam the dev loop + composed gate use
+    // (ADR 036) — cleared at unifier start, so present ⇒ fresh.
+    (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); writeGateFeedback(input.worktreePath, gateInfo); },
     { requiredPaths: uwi.creates ?? [], timeoutMs: resolveGateTimeoutMs() },
   );
 
