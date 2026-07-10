@@ -153,11 +153,14 @@ Section + component anchors (post-2026-05-25 cascade-tree layout —
 the old state-machine + activity-sidebar + standalone wi-graph
 sections were merged into a single hex pipeline):
 
-- `[data-section="cycles-tab"]` — the initiative pane: cycles grouped into
-  per-project roadmap tracks. Carries `data-cycles-count` + `data-project-count`.
-  Each group is `[data-project-group=<name>][data-project-cycle-count]` with a
-  status tally header and a `[data-project-track]` of status-coloured cycle
-  cards: `[data-cycle-id][data-cycle-initiative-id][data-cycle-status][data-cycle-project][data-cycle-active]`.
+- Project roadmap (initiative-centric since M7; the old cycles-tab pane is
+  gone) — `forge-ui/components/studio/SerpentineTimeline.tsx` on the project
+  page renders one node per INITIATIVE:
+  `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
+  `data-node-count`, per-node `[data-popover-initiative-id]` pop-off cards).
+  The recovery page (`app/recovery/page.tsx`) groups by initiative too:
+  `[data-recovery-initiative][data-recovery-attempt-count][data-recovery-prior-attempts]`
+  + page-level `data-recovery-count`.
 - `[data-section="pipeline-tree"]` — the cascading hex view (phases
   on top, WIs branching directly off the dev-loop hex) hosted by
   `[data-component="agent-graph"]`.
@@ -190,7 +193,7 @@ sections were merged into a single hex pipeline):
     `[data-escalation-id][data-decision-resolved]`.
 - Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
 - Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd]`.
-- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps]`.
+- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps][data-wi-cost-usd]`.
 - Canvas panel overlays: `[data-component="cost-panel"]` (CostPanel) + the FileHeatmap.
 - Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
 - Components: `[data-component="scheduler-banner"][data-banner-state]`,
