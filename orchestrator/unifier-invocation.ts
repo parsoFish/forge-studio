@@ -25,7 +25,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { readWorkItemsFromDir } from './work-item.ts';
+import { readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { projectDemoRelDir, worktreeDemoRelDir } from './demo-paths.ts';
@@ -115,6 +115,14 @@ export type UnifierUserPromptInput = {
    * behaviour (the non-opted-in path is unchanged).
    */
   changelogPath?: string;
+  /**
+   * Plan 2.7 — the unifier work-item THIS run serves, embedded verbatim. The
+   * packaging role threads it so a review send-back's operator rationale + ACs
+   * (which live only in `.forge/unifier-items/UWI-<n>.md`) land in the agent's
+   * prompt instead of being invisible behind the generic unify brief. Absent ⇒
+   * no section (prompt unchanged).
+   */
+  uwi?: { id: string; specRelPath: string; body: string };
 };
 
 /**
@@ -188,6 +196,16 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     .filter((line) => line !== '')
     .join('\n');
 
+  // Plan 2.7 — the current UWI spec, verbatim. A review send-back's operator
+  // rationale + acceptance criteria are IN this body; embedding it is what
+  // makes the operator's feedback reach the re-run's agent exactly as written.
+  const uwiBlock = input.uwi
+    ? '\n\n## Current unifier work item — ' + input.uwi.id + '\n\n' +
+      `> Spec: \`${input.uwi.specRelPath}\` — the mission THIS run serves (tick its acceptance` +
+      ' criteria in the spec as you prove them). Its body follows verbatim:\n\n' +
+      input.uwi.body.trim()
+    : '';
+
   // The typed demoProcess steps are the EXECUTED demo: `capture` steps name what
   // before/after evidence to record, `verify` steps name the assertion that makes
   // the evidence non-trivial (run the step's command and encode its result),
@@ -220,7 +238,7 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
       `\`${input.changelogPath}\` under an \`## [Unreleased]\` heading: one bullet per user-visible behaviour change in this initiative, categorised (Added / Changed / Fixed). Do NOT compute the semver version or set a release date — that is the post-approval finaliser's job. Commit the draft as part of the unify commit.`
     : '';
 
-  return base + projectDemoBlock + projectSkillsBlock + projectReleaseBlock;
+  return base + uwiBlock + projectDemoBlock + projectSkillsBlock + projectReleaseBlock;
 }
 
 export type PrepareUnifierWorkspaceInput = {
@@ -237,6 +255,12 @@ export type PrepareUnifierWorkspaceInput = {
   skills?: string[];
   /** WS-A: worktree-relative changelog path (release opt-in). Threaded into the prompt. */
   changelogPath?: string;
+  /**
+   * Plan 2.7 — the UWI this workspace serves. Embedded verbatim in PROMPT.md so
+   * review send-back feedback (operator rationale + ACs, which live in the UWI
+   * body) reaches the agent. Absent ⇒ the generic brief only (unchanged).
+   */
+  uwi?: WorkItem;
 };
 
 export type PreparedUnifierWorkspace = {
@@ -292,6 +316,13 @@ export function prepareUnifierWorkspace(
       demoProcess: input.demoProcess,
       skills: input.skills,
       changelogPath: input.changelogPath,
+      uwi: input.uwi
+        ? {
+            id: input.uwi.work_item_id,
+            specRelPath: `.forge/unifier-items/${input.uwi.work_item_id}.md`,
+            body: input.uwi.body,
+          }
+        : undefined,
     });
     writeFileSync(promptPath, prompt);
   }

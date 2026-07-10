@@ -29,6 +29,7 @@ import {
 } from '../orchestrator/unifier-items.ts';
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
 import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
+import { createLogger } from '../orchestrator/logging.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
@@ -275,6 +276,32 @@ export async function applyReviewVerdict(
       estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
     });
     persistManifestResumeFromUnifier(manifestPath);
+    // Plan 2.7 — the structured send-back event. Appends to the SAME cycle's
+    // events.jsonl the drain re-claims (one lineage), carrying the operator's
+    // feedback verbatim so send-backs are auditable from the event log alone.
+    // cycle-retention + cycle-recap count `reviewer.verdict.send-back`; this is
+    // its (previously missing) emit site. Best-effort: the UWIs are already
+    // appended, so a logging failure must not fail the verdict.
+    try {
+      const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+      logger.emit({
+        initiative_id: initiativeId,
+        phase: 'review-loop',
+        skill: 'review-verdict',
+        event_type: 'log',
+        input_refs: [manifestPath],
+        output_refs: appended.map((id) => `.forge/unifier-items/${id}.md`),
+        message: 'reviewer.verdict.send-back',
+        metadata: {
+          decided_by: 'operator',
+          rationale,
+          acceptance_criteria: acs,
+          concern_kind: concernKind ?? 'code-fix',
+          quality_gate_cmd: concernGateCmd ?? null,
+          appended_uwis: appended,
+        },
+      });
+    } catch { /* best-effort — never block the send-back on logging */ }
     // ADR-027: persist the operator's send-back (rationale + the UWI acceptance
     // criteria) as the durable verdict artifact for the reflector.
     writeVerdictJson(

@@ -1819,7 +1819,9 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
   const itemGateCmd = uwi.quality_gate_cmd && uwi.quality_gate_cmd.length > 0 ? uwi.quality_gate_cmd : qualityGateCmd;
   const itemCap = Math.max(1, uwi.estimated_iterations || UNIFIER_DEFAULT_ITERATION_CAP);
 
-  // Stamp PROMPT.md / AGENT.md / fix_plan.md for this UWI.
+  // Stamp PROMPT.md / AGENT.md / fix_plan.md for this UWI. Threading `uwi`
+  // embeds ITS spec verbatim (plan 2.7) — for a review-concern UWI that is the
+  // operator's send-back rationale + ACs, previously invisible to this role.
   const { promptPath } = prepareUnifierWorkspace({
     initiativeId: input.initiativeId,
     manifestRelPath: input.manifestPath,
@@ -1829,6 +1831,7 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     demoProcess: args.demoProcess,
     skills: args.skills,
     changelogPath: args.changelogPath,
+    uwi,
   });
 
   const systemPrompt = buildUnifierSystemPrompt();

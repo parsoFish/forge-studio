@@ -258,3 +258,94 @@ test('renderUnifierUserPrompt: no project demo/skills blocks when fields absent'
   assert.ok(!prompt.includes('## Project demo process'), 'should not include demo process when absent');
   assert.ok(!prompt.includes('## Project skills'), 'should not include skills when absent');
 });
+
+// ---------------------------------------------------------------------------
+// Plan 2.7 — the current UWI spec (review send-back feedback) must land
+// VERBATIM in the packaging prompt. Previously the generic unify brief never
+// referenced `.forge/unifier-items/UWI-<n>.md`, so a packaging-kind review
+// concern (operator rationale + ACs) was invisible to the re-run's agent.
+// ---------------------------------------------------------------------------
+
+test('renderUnifierUserPrompt: threads the current UWI spec (id, path, body) verbatim', () => {
+  const rationale = 'The demo table hides the live API output — show the actual GET response.';
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-2026-07-11-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: ['.forge/work-items/WI-1.md'],
+    iteration: 1,
+    iterationBudget: 3,
+    qualityGateCmd: ['npm', 'test'],
+    uwi: {
+      id: 'UWI-2',
+      specRelPath: '.forge/unifier-items/UWI-2.md',
+      body: [
+        '# UWI-2 — review concern (packaging)',
+        '',
+        '## Operator rationale',
+        '',
+        rationale,
+        '',
+        '## Acceptance criteria to satisfy',
+        '',
+        '- [ ] AC1: GIVEN the demo WHEN rendered THEN it embeds the live GET response',
+      ].join('\n'),
+    },
+  });
+  assert.ok(prompt.includes('## Current unifier work item — UWI-2'), 'names the UWI this run serves');
+  assert.ok(prompt.includes('.forge/unifier-items/UWI-2.md'), 'references the UWI spec path');
+  assert.ok(prompt.includes(rationale), 'operator rationale lands VERBATIM');
+  assert.ok(
+    prompt.includes('GIVEN the demo WHEN rendered THEN it embeds the live GET response'),
+    'send-back acceptance criteria land verbatim',
+  );
+});
+
+test('renderUnifierUserPrompt: no UWI section when uwi absent (initial-prep unchanged)', () => {
+  const prompt = renderUnifierUserPrompt({
+    initiativeId: 'INIT-2026-07-11-test',
+    manifestRelPath: '.forge/manifest.md',
+    workItemSpecs: [],
+    iteration: 1,
+    iterationBudget: 3,
+    qualityGateCmd: ['npm', 'test'],
+  });
+  assert.ok(!prompt.includes('## Current unifier work item'), 'no UWI section without a threaded UWI');
+});
+
+test('prepareUnifierWorkspace: threads the packaging UWI spec into PROMPT.md', () => {
+  const root = newTempDir();
+  try {
+    mkdirSync(join(root, '.forge', 'work-items'), { recursive: true });
+    writeFileSync(join(root, '.forge', 'manifest.md'), '# manifest');
+    const out = prepareUnifierWorkspace({
+      initiativeId: 'INIT-x',
+      manifestRelPath: '.forge/manifest.md',
+      worktreePath: root,
+      iterationBudget: 3,
+      qualityGateCmd: ['npm', 'test'],
+      uwi: {
+        work_item_id: 'UWI-3',
+        initiative_id: 'INIT-x',
+        status: 'pending',
+        depends_on: ['UWI-1'],
+        acceptance_criteria: [
+          { given: 'a sent-back cycle', when: 'the unifier re-runs', then: 'the operator concern is addressed' },
+        ],
+        files_in_scope: ['.forge/pr-description.md'],
+        quality_gate_cmd: ['npm', 'test'],
+        kind: 'packaging',
+        estimated_iterations: 2,
+        body: '## Operator rationale\n\nPR description omits the schema change — document it.',
+      },
+    });
+    const prompt = readFileSync(out.promptPath, 'utf8');
+    assert.ok(prompt.includes('## Current unifier work item — UWI-3'), 'UWI section stamped');
+    assert.ok(prompt.includes('.forge/unifier-items/UWI-3.md'), 'spec rel path stamped');
+    assert.ok(
+      prompt.includes('PR description omits the schema change — document it.'),
+      'operator rationale lands verbatim in PROMPT.md',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
