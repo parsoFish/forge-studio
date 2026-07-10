@@ -156,7 +156,11 @@ Three silent failure modes observed in production:
 **Design rule:** scope the gate to the *unit of change* so empty ⇒ fail and
 real-work ⇒ pass. The preflight checks structure, not runtime: a single command
 (no `&&`/`;`/`|` chaining) that is not a known-slow umbrella
-(`playwright`/`cypress`/`e2e`/`integration`).
+(`playwright`/`cypress`/`e2e`/`integration`). When one command cannot express
+the gate, the escape hatch is a committed gate **script** invoked as one argv —
+author it from [`docs/gate-script-template.md`](./gate-script-template.md)
+(`set -euo pipefail` + explicit per-step `fail()` asserts; bare `! cmd` asserts
+are errexit-exempt and forbidden — their failures silently don't fail the gate).
 
 #### C1b — CI alignment *(HARD when `ci_gate` is populated)*
 

@@ -162,6 +162,11 @@ export type ReviewConcern = {
    * to the project gate (the suite must stay green; the dev-role prompt asks
    * the agent to add the failing test first, but enforcement is softer — the
    * operator should supply a sharp gate for true dev-grade rigor).
+   *
+   * N4: when the gate is a script (`['bash', 'scripts/gates/<name>.sh']`),
+   * author it from `docs/gate-script-template.md` — `set -euo pipefail` +
+   * explicit per-step `fail()` asserts; bare `! cmd` asserts are errexit-exempt
+   * (their failures silently don't fail the gate).
    */
   qualityGateCmd?: string[];
 };

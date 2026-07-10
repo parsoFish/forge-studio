@@ -75,7 +75,11 @@ A gate that is fast, deterministic, green at HEAD, and **scoped to the unit of
 change** (empty ⇒ fail / real-work ⇒ pass). Map to the form (UI render test • API
 contract test • library/CLI unit test • monorepo package-scoped gate — never a
 repo-wide wildcard). Declare as ONE command in `.forge/quality_gate_cmd` +
-`.forge/project.json`. Verify fail-then-pass by hand.
+`.forge/project.json`. Verify fail-then-pass by hand. If one command cannot
+express the gate, commit a gate script authored from
+[`docs/gate-script-template.md`](../../docs/gate-script-template.md) — never
+bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
+gate).
 
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch
