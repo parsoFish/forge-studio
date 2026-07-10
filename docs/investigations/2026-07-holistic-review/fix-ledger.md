@@ -48,7 +48,7 @@
 
 | # | Item | Surface | Status |
 |---|---|---|---|
-| W3.1 | 2.1 N1 orchestrator-owned gate execution — orchestrator runs gate commands itself, records pass/fail + output as events; deletes the agent-self-reported forensic ladder | orchestrator (gate execution path) + dev-loop/unifier skills | pending |
+| W3.1 | 2.1 N1 orchestrator-owned gate execution — orchestrator runs gate commands itself, records pass/fail + output as events; deletes the agent-self-reported forensic ladder | orchestrator (gate execution path) + dev-loop/unifier skills | done |
 
 ## Wave 3b — engine honesty riding on N1 (parallel ×3, opus)
 
