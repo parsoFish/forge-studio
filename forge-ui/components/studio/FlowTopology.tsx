@@ -279,15 +279,33 @@ function EdgePath({
   const toHex   = hexes.find((h) => h.wiId === edge.to)   ?? hexes.find((h) => h.nodeId === edge.to);
   if (!fromHex || !toHex) return null;
 
-  const x1 = fromHex.x + HEX_W / 2 - 2;
-  const y1 = fromHex.y;
-  const x2 = toHex.x - HEX_W / 2 + 2;
-  const y2 = toHex.y;
-  // S-curve: per-endpoint horizontal stubs whose offset grows with the drop
-  // and is clamped to the inter-column gap, so curves never swing back through
-  // stacked WI hexes in the same column.
-  const k = Math.min(0.5 * Math.abs(x2 - x1) + 0.4 * Math.abs(y2 - y1), COL_GAP * 0.9);
-  const d = `M ${x1} ${y1} C ${x1 + k} ${y1}, ${x2 - k} ${y2}, ${x2} ${y2}`;
+  // Same-column WI dependency edges (#1.5): WI hexes fanned out from one node
+  // share an x position, so the cross-column formula below (right-of-source →
+  // left-of-target) would point back through the stack and sprawl into the
+  // gap. Route those with a fixed side-loop instead — right edge to right
+  // edge, bulging a constant amount regardless of row distance — so the loop
+  // never grows large enough to intrude on the neighbouring column.
+  const sameColumn = Math.abs(fromHex.x - toHex.x) < 1;
+
+  let x1: number, y1: number, x2: number, y2: number, d: string;
+  if (sameColumn) {
+    const bulge = HEX_W * 0.55;
+    x1 = fromHex.x + HEX_W / 2 - 2;
+    y1 = fromHex.y;
+    x2 = toHex.x + HEX_W / 2 - 2;
+    y2 = toHex.y;
+    d = `M ${x1} ${y1} C ${x1 + bulge} ${y1}, ${x2 + bulge} ${y2}, ${x2} ${y2}`;
+  } else {
+    x1 = fromHex.x + HEX_W / 2 - 2;
+    y1 = fromHex.y;
+    x2 = toHex.x - HEX_W / 2 + 2;
+    y2 = toHex.y;
+    // S-curve: per-endpoint horizontal stubs whose offset grows with the drop
+    // and is clamped to the inter-column gap, so curves never swing back through
+    // stacked WI hexes in the same column.
+    const k = Math.min(0.5 * Math.abs(x2 - x1) + 0.4 * Math.abs(y2 - y1), COL_GAP * 0.9);
+    d = `M ${x1} ${y1} C ${x1 + k} ${y1}, ${x2 - k} ${y2}, ${x2} ${y2}`;
+  }
 
   // Edge flow follows each endpoint hex's OWN status (a WI hex carries its WI's
   // status), so an in-progress edge clears the moment its source WI completes —

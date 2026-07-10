@@ -12,12 +12,13 @@
  *  - per-phase cost carried from run.phaseMeta[nodeId].costUsd (0 when absent)
  *  - fanOut reroutes the dev pulse onto the WI hexes following the dependency
  *    DAG: PM→root WIs, leaf WIs→unifier (resolve by wiId, then nodeId); the deps
- *    themselves ride on the WI hex as data-wi-deps, not cross-stack edges (#11)
+ *    themselves ride on the WI hex as data-wi-deps (#11) AND render as real
+ *    edges between WI hexes via `deriveWiDependencyEdges` (#1.5)
  */
 
 import { test, expect } from 'vitest';
 
-import { buildMonitorLayout } from './monitor-layout';
+import { buildMonitorLayout, deriveWiDependencyEdges } from './monitor-layout';
 import type { Flow, Run } from './studio-client';
 
 // ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ test('buildMonitorLayout: independent WIs → PM pulse fans to each WI; each WI 
   }
 });
 
-test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps); pulse follows the DAG (#11)', () => {
+test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps) AND rendered as real WI-to-WI edges (#1.5)', () => {
   const run = makeRun({
     workItems: [
       { id: 'WI-1', status: 'complete' },
@@ -288,17 +289,90 @@ test('buildMonitorLayout: WI deps are carried on the hex (data-wi-deps); pulse f
     ],
   });
   const layout = buildMonitorLayout(makeFlow(), run);
-  // dependency is surfaced on the WI hex (rendered as data-wi-deps), not as a
-  // cross-stack edge between the same-column WI hexes
+  // dependency is still surfaced on the WI hex (rendered as data-wi-deps) —
+  // that attribute is load-bearing for the harness and must stay intact …
   const wi2 = layout.hexes.find((h) => h.wiId === 'WI-2');
   expect(wi2?.dependsOn).toEqual(['WI-1']);
-  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'WI-2')).toBeFalsy();
-  // pulse follows the DAG: root WI-1 takes the PM pulse; WI-2 (has a dep) does NOT
+  // … AND the same dependency now renders as a real edge between the two WI
+  // hexes (#1.5: WI DAG layout honesty — dependent WIs no longer look independent).
+  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'WI-2')).toBeTruthy();
+  // pulse still follows the DAG: root WI-1 takes the PM pulse; WI-2 (has a dep) does NOT
   expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-1')).toBeTruthy();
   expect(layout.edges.some((e) => e.from === 'pm' && e.to === 'WI-2')).toBeFalsy();
   // leaf WI-2 feeds the unifier; WI-1 (has a dependent) does NOT
   expect(layout.edges.some((e) => e.from === 'WI-2' && e.to === 'unifier')).toBeTruthy();
   expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'unifier')).toBeFalsy();
+  // every edge endpoint (including the new WI-to-WI edge) resolves to a hex
+  for (const e of layout.edges) {
+    expect(layout.hexes.some((h) => h.wiId === e.from || h.nodeId === e.from)).toBeTruthy();
+    expect(layout.hexes.some((h) => h.wiId === e.to || h.nodeId === e.to)).toBeTruthy();
+  }
+});
+
+test('buildMonitorLayout: a WI with multiple deps renders one edge per dependency (#1.5)', () => {
+  const run = makeRun({
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'active', dependsOn: ['WI-1', 'WI-2'] },
+    ],
+  });
+  const layout = buildMonitorLayout(makeFlow(), run);
+  expect(layout.edges.some((e) => e.from === 'WI-1' && e.to === 'WI-3')).toBeTruthy();
+  expect(layout.edges.some((e) => e.from === 'WI-2' && e.to === 'WI-3')).toBeTruthy();
+});
+
+test('buildMonitorLayout: a dependsOn id that is not a present WI is skipped silently (#1.5)', () => {
+  const run = makeRun({
+    workItems: [
+      { id: 'WI-2', status: 'active', dependsOn: ['WI-does-not-exist'] },
+    ],
+  });
+  const layout = buildMonitorLayout(makeFlow(), run);
+  expect(layout.edges.some((e) => e.to === 'WI-2' && e.from !== 'pm')).toBeFalsy();
+});
+
+// ---------------------------------------------------------------------------
+// deriveWiDependencyEdges — pure edge-derivation function (#1.5)
+// ---------------------------------------------------------------------------
+
+test('deriveWiDependencyEdges: emits one {from,to} edge per resolvable dependency', () => {
+  const edges = deriveWiDependencyEdges([
+    { id: 'WI-1' },
+    { id: 'WI-2', dependsOn: ['WI-1'] },
+    { id: 'WI-3', dependsOn: ['WI-1', 'WI-2'] },
+  ]);
+  expect(edges).toEqual([
+    { from: 'WI-1', to: 'WI-2' },
+    { from: 'WI-1', to: 'WI-3' },
+    { from: 'WI-2', to: 'WI-3' },
+  ]);
+});
+
+test('deriveWiDependencyEdges: WIs with no deps produce no edges', () => {
+  expect(deriveWiDependencyEdges([{ id: 'WI-1' }, { id: 'WI-2', dependsOn: [] }])).toEqual([]);
+});
+
+test('deriveWiDependencyEdges: empty input produces no edges', () => {
+  expect(deriveWiDependencyEdges([])).toEqual([]);
+});
+
+test('deriveWiDependencyEdges: a dependency id that does not resolve to a present WI is skipped (orphan-dep tolerance)', () => {
+  const edges = deriveWiDependencyEdges([{ id: 'WI-2', dependsOn: ['WI-ghost'] }]);
+  expect(edges).toEqual([]);
+});
+
+test('deriveWiDependencyEdges: a dependency cycle is preserved as-is (edges are not deduplicated against direction)', () => {
+  // The function does not validate acyclicity — that is an upstream (PM/architect)
+  // concern; it just mirrors whatever dependsOn data is present.
+  const edges = deriveWiDependencyEdges([
+    { id: 'WI-1', dependsOn: ['WI-2'] },
+    { id: 'WI-2', dependsOn: ['WI-1'] },
+  ]);
+  expect(edges).toEqual([
+    { from: 'WI-2', to: 'WI-1' },
+    { from: 'WI-1', to: 'WI-2' },
+  ]);
 });
 
 // ---------------------------------------------------------------------------

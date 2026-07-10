@@ -91,6 +91,34 @@ export interface MonitorLayout {
 }
 
 /**
+ * Derive dependency edges between WI hexes (#1.5: WI DAG layout honesty).
+ *
+ * `data-wi-deps` already surfaces a WI's dependencies as an attribute on its
+ * own hex, but that attribute alone doesn't render as a connector — dependent
+ * WIs look independent in the topology. This emits one `{from, to}` edge per
+ * resolvable dependency (`from` = the depended-on WI, `to` = the dependent
+ * WI) so the pipeline-tree can draw a real edge between the two WI hexes.
+ *
+ * Pure + synchronous — unit-testable without a layout, a flow, or a run.
+ * Deps that don't resolve to a WI present in `wis` are skipped silently
+ * (same orphan-dep tolerance as `topoLevels`); a dependency cycle is not
+ * validated here (that is an upstream PM/architect concern) — the edges are
+ * emitted as-is, mirroring whatever `dependsOn` data is present.
+ */
+export function deriveWiDependencyEdges(
+  wis: readonly { id: string; dependsOn?: string[] }[],
+): Array<{ from: string; to: string }> {
+  const present = new Set(wis.map((w) => w.id));
+  const edges: Array<{ from: string; to: string }> = [];
+  for (const w of wis) {
+    for (const dep of w.dependsOn ?? []) {
+      if (present.has(dep)) edges.push({ from: dep, to: w.id });
+    }
+  }
+  return edges;
+}
+
+/**
  * Build the monitor topology layout from a flow definition + a run model.
  * Pure: deterministic for a given (flow, run) pair.
  */
@@ -220,13 +248,15 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
       }
     : null;
 
-  // Render edge set (#11): when the fanOut node expanded into WI hexes, reroute
-  // its inbound/outbound flow edges onto the WI hexes — the upstream pulse fans
-  // into the ROOT WIs (those with no in-run deps) and the LEAF WIs feed the
-  // downstream node, so the pulse follows the dependency DAG instead of pinning
-  // to WI-1. The inter-WI dependencies themselves are surfaced as `data-wi-deps`
-  // on each WI hex (not as cross-stack edges — WI hexes share a column). Without
-  // a fanOut expansion, the flow edges pass through unchanged.
+  // Render edge set (#11 + #1.5): when the fanOut node expanded into WI hexes,
+  // reroute its inbound/outbound flow edges onto the WI hexes — the upstream
+  // pulse fans into the ROOT WIs (those with no in-run deps) and the LEAF WIs
+  // feed the downstream node, so the pulse follows the dependency DAG instead
+  // of pinning to WI-1. The inter-WI dependencies themselves are surfaced both
+  // as `data-wi-deps` on each WI hex (kept intact — the harness depends on it)
+  // AND as real edges between the WI hexes (`deriveWiDependencyEdges`), so
+  // dependent WIs no longer look independent in the pipeline-tree. Without a
+  // fanOut expansion, the flow edges pass through unchanged.
   let edges: Array<{ from: string; to: string; artifact?: string }> = edgesRaw.map((e) => ({
     from: e.from,
     to: e.to,
@@ -258,7 +288,7 @@ export function buildMonitorLayout(flow: Flow, run: Run | null): MonitorLayout {
         rerouted.push(e);
       }
     }
-    edges = rerouted;
+    edges = [...rerouted, ...deriveWiDependencyEdges(wis)];
   }
 
   // Canvas dimensions (computed over the full hex set)
