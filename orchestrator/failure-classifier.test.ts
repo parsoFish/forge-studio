@@ -72,3 +72,67 @@ test('classifyCycleFailure: dev-loop.baseline-red still classified (phase guard 
   assert.equal(c.kind, 'terminal');
   assert.match(c.reason, /baseline already red/i);
 });
+
+// G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
+// prereq-failed-cascade.md): a cycle's event log accumulates across scheduler
+// resumes (ADR 019 resume-preserves-work) — a superseded earlier attempt's
+// events stay in the SAME log file the next attempt appends to. Scanning the
+// FULL history let a stale signal from an already-resolved earlier attempt
+// win the fixed terminal-then-transient priority chain and mask the CURRENT
+// attempt's real (and different) failure. Fix: window classification to
+// events since the last phase `start` event — every phase entry point emits
+// exactly one, so it cleanly marks "the current attempt" without a new
+// data-model concept.
+
+test('classifyCycleFailure: windows to events since the last phase start — a stale terminal signal from an earlier resumed attempt does not mask the current attempt\'s different (transient) failure', () => {
+  const events = [
+    // Attempt 1 (superseded by resume): dev-loop hit a broken-gate terminal.
+    ev({ event_type: 'start', message: 'ralph.start' }),
+    ev({
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: { gate_stderr_tail: 'npm error: missing script: test:visual:fast' },
+    }),
+    // Attempt 2 (the resumed, current attempt): a genuinely different,
+    // transient failure — rate-limited, nothing to do with the old gate.
+    ev({ event_type: 'start', message: 'ralph.start' }),
+    ev({ event_type: 'error', message: 'rate_limit_error: You have exceeded your rate limit' }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.match(c.reason, /rate-limited/i);
+});
+
+test('classifyCycleFailure: windows to events since the last phase start — a stale rate-limit from an earlier resumed attempt does not get misapplied to the current attempt\'s unrelated, unrecognised failure', () => {
+  const events = [
+    // Attempt 1 (superseded by resume): transient rate-limit, already retried past.
+    ev({ event_type: 'start', message: 'ralph.start' }),
+    ev({ event_type: 'error', message: 'rate_limit_error: You have exceeded your rate limit' }),
+    // Attempt 2 (the resumed, current attempt): an unrelated failure with no
+    // matching signature at all — must fall through to the safe "could not
+    // be classified" terminal default, NOT inherit the stale rate-limit flag.
+    ev({ event_type: 'start', message: 'ralph.start' }),
+    ev({ event_type: 'error', message: 'catastrophic-unrelated-crash: totally unclassified' }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.match(c.reason, /could not be classified/i);
+});
+
+test('classifyCycleFailure: no phase-start event in the log ⇒ falls back to scanning the full history (legacy/minimal logs keep working)', () => {
+  // No `event_type: 'start'` present at all — the windowing has nothing to
+  // anchor on, so it must not silently drop everything; it scans the whole
+  // (short) array exactly as before.
+  const events = [
+    ev({
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: { gate_stderr_tail: 'npm error: missing script: test:visual:fast' },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /missing npm script/i);
+});

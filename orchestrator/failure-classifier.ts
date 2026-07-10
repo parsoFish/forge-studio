@@ -25,7 +25,31 @@ const T = (kind: FailureKind, reason: string, evidence: string[]): FailureClassi
   kind, reason, recoverable: kind === 'transient', evidence_event_ids: evidence,
 });
 
+/**
+ * G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
+ * prereq-failed-cascade.md): a cycle's event log accumulates across
+ * scheduler resumes (ADR 019 resume-preserves-work) — a superseded earlier
+ * attempt's events stay in the SAME log file the next attempt appends to.
+ * Classifying from the FULL history let a stale signal from an
+ * already-resolved earlier attempt win the fixed terminal-then-transient
+ * priority chain below and mask the CURRENT attempt's real (and often
+ * different) failure. Every phase entry point emits exactly one
+ * `event_type: 'start'` event, so windowing to "events since the last
+ * phase start" cleanly isolates the current attempt without inventing a
+ * new data-model concept. Falls back to the full array when no `start`
+ * event is present (empty/minimal/legacy logs) so existing behaviour is
+ * unchanged for those.
+ */
+function windowSinceLastPhaseStart(events: readonly EventLogEntry[]): readonly EventLogEntry[] {
+  let lastStart = -1;
+  for (let i = 0; i < events.length; i++) {
+    if (events[i]!.event_type === 'start') lastStart = i;
+  }
+  return lastStart === -1 ? events : events.slice(lastStart);
+}
+
 export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureClassification {
+  const windowed = windowSinceLastPhaseStart(events);
   const evidence: string[] = [];
   const ev = (e: EventLogEntry): void => { if (evidence.length < 5) evidence.push(e.event_id); };
 
@@ -41,7 +65,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false;
 
-  for (const e of events) {
+  for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
     const msg = e.message ?? '';
     const pmErr = e.phase === 'project-manager' && e.event_type === 'error';
