@@ -20,6 +20,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { EventLogEntry } from './logging.ts';
 import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-model.ts';
+import { sumAuthoritativeCostUsd } from './event-cost.ts';
 
 // ---------------------------------------------------------------------------
 // Constants (used by derivation helpers only)
@@ -141,8 +142,11 @@ export function buildNodeMeta(
   iterationBudget: number,
   nowMs: number,
 ): RunPhaseMeta {
-  // Cost
-  const costUsd = events.reduce((sum, e) => sum + (e.cost_usd ?? 0), 0);
+  // Cost — authoritative rule (item 1.8, orchestrator/event-cost.ts): an
+  // iteration-loop phase restates its iteration spend on per-WI + phase-level
+  // 'end' events; the old naive sum inflated the Studio phase-hex cost badge
+  // (data-phase-cost-usd) 2-3x for developer-loop/unifier nodes.
+  const costUsd = sumAuthoritativeCostUsd(events);
 
   // Model (first event with metadata.model)
   const model = findModel(events);

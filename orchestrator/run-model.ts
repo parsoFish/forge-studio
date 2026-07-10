@@ -40,6 +40,7 @@ import {
   findFailure,
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
+import { sumAuthoritativeCostUsd } from './event-cost.ts';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)
@@ -407,8 +408,9 @@ function buildRun(args: {
   // --- Artifacts ---
   const artifactsReady = deriveArtifacts(logDir, root, runStatus, manifest.initiative_id, hasReflectionEvents);
 
-  // --- Cost rollup ---
-  const costUsd = events.reduce((sum, e) => sum + (e.cost_usd ?? 0), 0);
+  // --- Cost rollup (authoritative rule — orchestrator/event-cost.ts, item 1.8;
+  // the naive all-events sum double/triple-counted iteration-loop phases) ---
+  const costUsd = sumAuthoritativeCostUsd(events);
 
   // --- startedAt from first orchestrator start or first event ---
   const startedAt = findStartedAt(events);

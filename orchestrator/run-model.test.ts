@@ -157,9 +157,11 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     assert.equal(run.gate, 'review', 'gate node should be review');
     assert.ok(run.gateNote, 'gateNote should be set');
 
-    // Per-phase costs (computed from fixture with node -e):
-    // pm phase cost_usd sum = 1.0729395499999996
-    // dev phase cost_usd sum = 12.883512 (approximately)
+    // Per-phase costs (computed from fixture with node -e, authoritative rule:
+    // iteration events only for looping phases — plan item 1.8; the old
+    // expectations 12.883512/13.956451 were the double-counted naive sums):
+    // pm phase cost_usd = 1.0729395 (no iteration events → end cost)
+    // dev phase cost_usd = 5.769767 (iteration events only)
     // All others = 0
     const pmCost = run.phaseMeta['pm']?.costUsd ?? 0;
     const devCost = run.phaseMeta['dev']?.costUsd ?? 0;
@@ -169,13 +171,13 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
     );
     // dev band wider because float accumulation across hundreds of usage events
     assert.ok(
-      Math.abs(devCost - 12.883512) < 0.1,
-      `dev cost should be ~12.883512, got ${devCost}`,
+      Math.abs(devCost - 5.769767) < 0.1,
+      `dev cost should be ~5.769767, got ${devCost}`,
     );
     // dev band wider because float accumulation across hundreds of usage events
     assert.ok(
-      Math.abs(run.costUsd - 13.956451) < 0.1,
-      `total cost should be ~13.956451, got ${run.costUsd}`,
+      Math.abs(run.costUsd - 6.842707) < 0.1,
+      `total cost should be ~6.842707, got ${run.costUsd}`,
     );
 
     // Phases: architect+pm+dev+review all complete; reflect pending
@@ -249,15 +251,16 @@ test('aggregateRun: complete-release-definition real fixture — status gated, 5
     assert.equal(run.initiativeId, initId);
     assert.equal(run.origin, 'architect');
 
-    // Per-phase costs (computed from fixture):
-    // pm = 0.777214, dev = 23.633504, total = 24.410718
+    // Per-phase costs (computed from fixture, authoritative rule — plan item
+    // 1.8; the old expectations 23.633504/24.410718 were double-counted):
+    // pm = 0.777214, dev = 8.325460 (iterations only), total = 9.102674
     const pmCost = run.phaseMeta['pm']?.costUsd ?? 0;
     const devCost = run.phaseMeta['dev']?.costUsd ?? 0;
     assert.ok(Math.abs(pmCost - 0.777214) < 0.01, `pm cost ${pmCost}`);
     // dev band wider because float accumulation across hundreds of usage events
-    assert.ok(Math.abs(devCost - 23.633504) < 0.1, `dev cost ${devCost}`);
+    assert.ok(Math.abs(devCost - 8.325460) < 0.1, `dev cost ${devCost}`);
     // dev band wider because float accumulation across hundreds of usage events
-    assert.ok(Math.abs(run.costUsd - 24.410718) < 0.1, `total cost ${run.costUsd}`);
+    assert.ok(Math.abs(run.costUsd - 9.102674) < 0.1, `total cost ${run.costUsd}`);
 
     // 5 WIs, all complete
     assert.equal(run.workItems?.length, 5, 'should have 5 WIs');

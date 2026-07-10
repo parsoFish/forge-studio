@@ -16,7 +16,7 @@ let seq = 0;
 function ev(
   phase: Phase | string,
   event_type: string,
-  opts: { cost_usd?: number; duration_ms?: number; message?: string; tokens_in?: number; tokens_out?: number; work_item_id?: string } = {},
+  opts: { cost_usd?: number; duration_ms?: number; message?: string; tokens_in?: number; tokens_out?: number; work_item_id?: string; skill?: string } = {},
 ): EventLogEntry {
   seq += 1;
   return {
@@ -25,7 +25,7 @@ function ev(
     cycle_id: 'CYCLE-test',
     started_at: new Date().toISOString(),
     phase: phase as Phase,
-    skill: phase as string,
+    skill: opts.skill ?? (phase as string),
     event_type,
     message: opts.message ?? '',
     cost_usd: opts.cost_usd,
@@ -119,6 +119,64 @@ test('aggregate: full cycle matches real evidence (dev 1x + unifier 1x + PM + re
   const expectedTotal = 0.700842 + 1.467052 + 0.665096 + 0.866460;
   assert.ok(Math.abs(m.total_cost_usd - expectedTotal) < 0.000001,
     `total got ${m.total_cost_usd}, expected ${expectedTotal}`);
+});
+
+test('aggregate: per_skill does not restate iteration-loop cost (developer-ralph 3x → 1x)', () => {
+  // Plan item 1.8: per_skill summed cost_usd across ALL events unconditionally,
+  // so an iteration-loop skill (developer-ralph, developer-unifier) was
+  // double/triple-counted via the per-WI 'ralph.end' + phase-level 'end'
+  // restatements. per_skill must follow the same rule as per_phase.
+  const events = [
+    ev('developer-loop', 'iteration', { cost_usd: 1.027781, work_item_id: 'WI-1', skill: 'developer-ralph' }),
+    ev('developer-loop', 'end', { cost_usd: 1.027781, message: 'ralph.end', work_item_id: 'WI-1', skill: 'developer-ralph' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.439271, work_item_id: 'WI-2', skill: 'developer-ralph' }),
+    ev('developer-loop', 'end', { cost_usd: 0.439271, message: 'ralph.end', work_item_id: 'WI-2', skill: 'developer-ralph' }),
+    ev('developer-loop', 'end', { cost_usd: 1.467052, skill: 'developer-ralph' }), // phase-level rollup
+    ev('unifier', 'iteration', { cost_usd: 0.665096, work_item_id: 'UWI-1', skill: 'developer-unifier' }),
+    ev('unifier', 'end', { cost_usd: 0.665096, message: 'unifier.end', skill: 'developer-unifier' }),
+  ];
+  const m = aggregate('CYCLE-test', events);
+  assert.ok(
+    Math.abs(m.per_skill['developer-ralph']!.cost_usd - 1.467052) < 0.000001,
+    `developer-ralph cost should be ~1.467052 (1x), got ${m.per_skill['developer-ralph']!.cost_usd}`,
+  );
+  assert.ok(
+    Math.abs(m.per_skill['developer-unifier']!.cost_usd - 0.665096) < 0.000001,
+    `developer-unifier cost should be ~0.665096 (1x), got ${m.per_skill['developer-unifier']!.cost_usd}`,
+  );
+});
+
+test('aggregate: per_skill keeps end-event cost for single-call skills', () => {
+  const events = [
+    ev('project-manager', 'end', { cost_usd: 0.700842, skill: 'project-manager' }),
+    ev('reflection', 'end', { cost_usd: 0.866460, message: 'reflector.end', skill: 'reflector' }),
+  ];
+  const m = aggregate('CYCLE-test', events);
+  assert.ok(
+    Math.abs(m.per_skill['project-manager']!.cost_usd - 0.700842) < 0.000001,
+    `project-manager skill cost should be ~0.700842, got ${m.per_skill['project-manager']!.cost_usd}`,
+  );
+  assert.ok(
+    Math.abs(m.per_skill['reflector']!.cost_usd - 0.866460) < 0.000001,
+    `reflector skill cost should be ~0.866460, got ${m.per_skill['reflector']!.cost_usd}`,
+  );
+});
+
+test('aggregate: sum of per_skill costs equals total_cost_usd (mixed loop + single-call)', () => {
+  const events = [
+    ev('project-manager', 'end', { cost_usd: 0.5, skill: 'project-manager' }),
+    ev('developer-loop', 'iteration', { cost_usd: 1.0, work_item_id: 'WI-1', skill: 'developer-ralph' }),
+    ev('developer-loop', 'end', { cost_usd: 1.0, message: 'ralph.end', work_item_id: 'WI-1', skill: 'developer-ralph' }),
+    ev('developer-loop', 'end', { cost_usd: 1.0, skill: 'developer-ralph' }),
+    ev('unifier', 'iteration', { cost_usd: 0.25, work_item_id: 'UWI-1', skill: 'developer-unifier' }),
+    ev('unifier', 'end', { cost_usd: 0.25, message: 'unifier.end', skill: 'developer-unifier' }),
+  ];
+  const m = aggregate('CYCLE-test', events);
+  const skillSum = Object.values(m.per_skill).reduce((s, p) => s + p.cost_usd, 0);
+  assert.ok(
+    Math.abs(m.total_cost_usd - skillSum) < 0.000001,
+    `total_cost_usd ${m.total_cost_usd} should equal sum of per_skill costs ${skillSum}`,
+  );
 });
 
 test('aggregate: total_cost_usd equals sum of per_phase costs', () => {
