@@ -23,6 +23,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
+
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /** Default wall-clock bound for an orchestrated capture run (15 min — it
@@ -150,18 +152,19 @@ export function commitOrchestratedCaptureArtifacts(
   worktreePath: string,
   demoDirRel: string,
   initiativeId: string,
+  message?: string,
 ): boolean {
   const git = (args: string[]): string =>
     execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' });
   try {
-    const paths = [join(demoDirRel, 'demo.json'), join(demoDirRel, 'DEMO.md')].filter((p) =>
+    const paths = [join(demoDirRel, DEMO_JSON_BASENAME), join(demoDirRel, DEMO_MD_BASENAME)].filter((p) =>
       existsSync(join(worktreePath, p)),
     );
     if (paths.length === 0) return false;
     git(['add', '--', ...paths]);
     const staged = git(['diff', '--cached', '--name-only']).trim();
     if (staged.length === 0) return false;
-    git(['commit', '-m', `chore(demo): orchestrated demo capture (${initiativeId})`, '--no-verify']);
+    git(['commit', '-m', message ?? `chore(demo): orchestrated demo capture (${initiativeId})`, '--no-verify']);
     // Push so the sync gate (local HEAD == origin HEAD) keeps holding.
     git(['push', 'origin', 'HEAD']);
     return true;

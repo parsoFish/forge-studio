@@ -28,7 +28,7 @@ import { join, resolve } from 'node:path';
 import { readWorkItemsFromDir } from './work-item.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
-import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
+import { projectDemoRelDir, worktreeDemoRelDir } from './demo-paths.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
@@ -135,9 +135,11 @@ export function renderUnifierUserPrompt(input: UnifierUserPromptInput): string {
     ? input.workItemSpecs.map((p) => `- \`${p}\``).join('\n')
     : '- _(no work items recorded; consult the manifest body)_';
 
-  // Worktree-relative demo dir, artifactRoot-resolved. Defaults to the legacy
-  // `demo/<initiative-id>` so a caller that doesn't compute one is unchanged.
-  const demoDir = input.demoDir ?? `demo/${input.initiativeId}`;
+  // Worktree-relative demo dir, artifactRoot-resolved. Pure renderer — no
+  // worktree to read artifactRoot from, so the default is the SSOT's legacy
+  // rule (demo-paths.ts). prepareUnifierWorkspace always passes the
+  // worktree-resolved dir; only unit-test callers hit the default.
+  const demoDir = input.demoDir ?? projectDemoRelDir(input.initiativeId);
 
   // WS-A: when the project declares a release changelog, widen the scope ceiling
   // to admit the changelog file so the draft-changelog edit is in-bounds.
@@ -276,7 +278,7 @@ export function prepareUnifierWorkspace(
   // (the worktree carries .forge/project.json), so the prompt instructs the agent
   // to write the demo where the snapshot + flow-artifact guard + `forge demo
   // render` all expect it.
-  const demoDir = projectDemoRelDir(input.initiativeId, readArtifactRoot(input.worktreePath));
+  const demoDir = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
 
   if (!existsSync(promptPath)) {
     const prompt = renderUnifierUserPrompt({

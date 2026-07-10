@@ -17,7 +17,7 @@
  *   project-artifacts/<name>/demo-history/<init>/ — archived dev/demo history (central)
  *   project-artifacts/<name>/contract.json — resolved forge↔project contract (central SSOT)
  *
- * The in-PR demo dir (`projectDemoRelDir`) stays WORKTREE-relative — it is the
+ * The in-PR demo dir (`projectDemoRelDir`, demo-paths.ts) stays WORKTREE-relative — it is the
  * demo the unifier authors into the PR, not the post-merge archive. `artifactRoot`
  * (project.json) now governs only that in-repo demo location.
  */
@@ -80,28 +80,9 @@ export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | nul
 }
 
 
-/**
- * The worktree-relative demo directory for one initiative, resolved against the
- * project's `artifactRoot`. Single source of truth for where the unifier writes
- * the tracked demo bundle (and where every demo-seam consumer looks for it).
- *
- * - `artifactRoot === '.'` (legacy layout) → `demo/<initiativeId>` — unchanged,
- *   so projects that don't set `artifactRoot` keep the original location.
- * - any other `artifactRoot` → `<artifactRoot>/history/<initiativeId>/demo`, so a
- *   project that gathers its committed artifacts under (e.g.) `forge/` lands the
- *   demo alongside that initiative's history record at
- *   `forge/history/<initiativeId>/demo` rather than a parallel top-level `demo/`.
- *
- * Returns a POSIX-style relative path (forward slashes) because it is used both
- * as a filesystem segment AND as display text in prompts; callers `resolve(...)`
- * it against the worktree root when they need an absolute path. The same
- * path-escape guard `readArtifactRoot` applies means the segment is always clean.
- */
-export function projectDemoRelDir(initiativeId: string, artifactRoot = '.'): string {
-  const root = artifactRoot.trim();
-  if (root === '' || root === '.') return `demo/${initiativeId}`;
-  return `${root}/history/${initiativeId}/demo`;
-}
+// projectDemoRelDir moved to demo-paths.ts (plan 2.5 / N3) — the demo-artifact
+// path SSOT. This module keeps readArtifactRoot: artifactRoot also governs
+// non-demo in-repo locations (project brain dir, profile.md).
 
 /**
  * Read a managed project's `artifactRoot` straight from its `.forge/project.json`

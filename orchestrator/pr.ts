@@ -38,7 +38,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { extname, join } from 'node:path';
-import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
+import { DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 
 /**
  * Best-effort PR creation via `gh pr create`. Returns the PR URL on success,
@@ -122,7 +122,7 @@ export function embedDemoInPr(
 
     // The tracked demo dir is worktree-relative; resolve it through the SSOT so
     // a project with an artifactRoot (e.g. betterado's forge/) links correctly.
-    const relDir = projectDemoRelDir(initiativeId, readArtifactRoot(worktreePath));
+    const relDir = worktreeDemoRelDir(worktreePath, initiativeId);
 
     const images = entries
       .filter((n) => DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))
@@ -131,7 +131,7 @@ export function embedDemoInPr(
       .filter((n) => !DEMO_IMAGE_EXTS.has(extname(n).toLowerCase()))
       .sort();
 
-    const demoMdPath = join(trackedDemoDir, 'DEMO.md');
+    const demoMdPath = join(trackedDemoDir, DEMO_MD_BASENAME);
 
     const rawBase = `https://github.com/${ownerRepo}/raw/${branch}/${relDir}`;
     const blobBase = `https://github.com/${ownerRepo}/blob/${branch}/${relDir}`;
@@ -185,12 +185,11 @@ export function embedDemoInPr(
  * this asserts the structured source exists.
  */
 export function assertTrackedDemoExists(worktreePath: string, initiativeId: string): string {
-  // artifactRoot-resolved (e.g. forge/history/<id>/demo) so the PR-open
-  // prerequisite checks demo.json/DEMO.md where the unifier authored them —
-  // mirrors the composed-unifier-gate fix. Falls back to legacy demo/<id>
-  // when artifactRoot is "." or unreadable.
-  const dir = join(worktreePath, projectDemoRelDir(initiativeId, readArtifactRoot(worktreePath)));
-  const demoJson = join(dir, 'demo.json');
+  // Resolved through the demo-path SSOT (demo-paths.ts) so the PR-open
+  // prerequisite checks demo.json/DEMO.md exactly where the unifier authored
+  // them — legacy demo/<id> or <artifactRoot>/history/<id>/demo.
+  const dir = worktreeDemoDir(worktreePath, initiativeId);
+  const demoJson = worktreeDemoJsonPath(worktreePath, initiativeId);
   if (!existsSync(demoJson)) {
     throw new Error(
       `assertTrackedDemoExists: ${demoJson} is missing — the dev-loop unifier did not author the structured demo (demo.json). ` +

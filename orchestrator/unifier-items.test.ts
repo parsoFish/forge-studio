@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -330,6 +330,70 @@ test('H1: appendReviewUnifierItems accepts a safe direct qualityGateCmd (no shel
     assert.ok(appended.length > 0, 'safe gate accepted — UWIs appended');
     const u2 = readUnifierItems(wt).items.find((i) => i.work_item_id === appended[0])!;
     assert.deepEqual(u2.quality_gate_cmd, sharp);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Plan 2.5 / N3 — UWI scope + prose resolve the demo path through the SSOT.
+// On an artifactRoot project the unifier authors forge/history/<id>/demo/…;
+// a UWI whose files_in_scope / AC text says demo/<id>/demo.json points the
+// agent (and the scope ceiling) at a path nothing writes to.
+// ---------------------------------------------------------------------------
+
+function tmpArtifactRootWorktree(): string {
+  const wt = tmpWorktree();
+  mkdirSync(join(wt, '.forge'), { recursive: true });
+  writeFileSync(join(wt, '.forge', 'project.json'), JSON.stringify({ artifactRoot: 'forge' }));
+  return wt;
+}
+
+test('seedStaticUnifierItem resolves the demo path via the SSOT on an artifactRoot project', () => {
+  const wt = tmpArtifactRootWorktree();
+  try {
+    const path = seedStaticUnifierItem(wt, {
+      initiativeId: INIT,
+      estimatedIterations: 8,
+      qualityGateCmd: ['go', 'test', './...'],
+    });
+    const text = readFileSync(path, 'utf8');
+    const uwi1 = readUnifierItems(wt).items[0]!;
+    const ssotPath = `forge/history/${INIT}/demo/demo.json`;
+    assert.ok(uwi1.files_in_scope.includes(ssotPath), `files_in_scope carries ${ssotPath}`);
+    assert.ok(!uwi1.files_in_scope.includes(`demo/${INIT}/demo.json`), 'legacy path absent from scope');
+    assert.ok(text.includes(ssotPath), 'AC/body prose names the SSOT path');
+    assert.ok(!text.includes(`demo/${INIT}/demo.json`), 'AC/body prose does not name the legacy path');
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test('appendReviewUnifierItems (code-fix) scope + re-prep prose resolve the demo path via the SSOT', () => {
+  const wt = tmpArtifactRootWorktree();
+  try {
+    seedStaticUnifierItem(wt, { initiativeId: INIT, estimatedIterations: 8, qualityGateCmd: ['go', 'test', './...'] });
+    const { appended } = appendReviewUnifierItems({
+      worktreePath: wt,
+      initiativeId: INIT,
+      concern: {
+        rationale: 'fix the thing',
+        acceptanceCriteria: [{ given: 'a', when: 'b', then: 'c' }],
+        kind: 'code-fix',
+      },
+      projectGateCmd: ['go', 'test', './...'],
+      estimatedIterations: 3,
+    });
+    assert.equal(appended.length, 2, 'concern + terminal re-prep');
+    const ssotPath = `forge/history/${INIT}/demo/demo.json`;
+    const items = readUnifierItems(wt).items;
+    const concern = items.find((i) => i.work_item_id === appended[0])!;
+    const reprep = items.find((i) => i.work_item_id === appended[1])!;
+    assert.ok(concern.files_in_scope.includes(ssotPath), 'concern scope carries the SSOT path');
+    assert.ok(reprep.files_in_scope.includes(ssotPath), 're-prep scope carries the SSOT path');
+    const reprepText = readFileSync(join(unifierItemsDir(wt), `${reprep.work_item_id}.md`), 'utf8');
+    assert.ok(reprepText.includes(ssotPath), 're-prep AC/body prose names the SSOT path');
+    assert.ok(!reprepText.includes(`demo/${INIT}/demo.json`), 're-prep prose does not name the legacy path');
   } finally {
     rmSync(wt, { recursive: true, force: true });
   }

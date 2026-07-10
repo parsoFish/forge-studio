@@ -15,6 +15,7 @@
 
 import { join } from 'node:path';
 
+import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import {
   gateIsShellPipeline,
   readWorkItemsFromDir,
@@ -103,6 +104,11 @@ export function seedStaticUnifierItem(
   const existing = readWorkItemsFromDir(dir).items.find((w) => w.work_item_id === 'UWI-1');
   if (existing) return join(dir, 'UWI-1.md');
 
+  // Demo path via the SSOT (plan 2.5 / N3): the scope ceiling + prose must name
+  // the artifactRoot-resolved path the composed gate checks, or the agent is
+  // instructed to author the demo somewhere the gate never looks.
+  const demoJsonRel = worktreeDemoJsonRelPath(worktreePath, input.initiativeId);
+
   const uwi1: WorkItem = {
     work_item_id: 'UWI-1',
     initiative_id: input.initiativeId,
@@ -113,12 +119,12 @@ export function seedStaticUnifierItem(
         given: 'every dev work item is committed on the initiative branch',
         when: 'the unifier integrates the branch into one cohesive, self-contained PR',
         then:
-          'the project quality gate passes against branch tip, demo/' +
-          input.initiativeId +
-          '/demo.json + .forge/pr-description.md exist and are valid, every dev-WI creates[] path appears in the diff, and the local branch == origin HEAD',
+          'the project quality gate passes against branch tip, ' +
+          demoJsonRel +
+          ' + .forge/pr-description.md exist and are valid, every dev-WI creates[] path appears in the diff, and the local branch == origin HEAD',
       },
     ],
-    files_in_scope: ['.forge/pr-description.md', 'demo/' + input.initiativeId + '/demo.json'],
+    files_in_scope: ['.forge/pr-description.md', demoJsonRel],
     quality_gate_cmd: [...input.qualityGateCmd],
     kind: 'packaging',
     estimated_iterations: Math.max(1, input.estimatedIterations),
@@ -128,7 +134,7 @@ export function seedStaticUnifierItem(
       'The static first unifier work item. Treat the whole initiative branch as ONE PR:',
       '',
       '- Prove every dev-WI acceptance criterion against branch tip (the project quality gate).',
-      '- Author `demo/' + input.initiativeId + '/demo.json` (the structured demo) and `.forge/pr-description.md` (## Why / ## What / ## How).',
+      '- Author `' + demoJsonRel + '` (the structured demo) and `.forge/pr-description.md` (## Why / ## What / ## How).',
       '- Integrate, do NOT re-implement — every dev WI is already committed.',
       '- Commit (`feat(' + input.initiativeId + '): unify and demo`) and push so origin == local HEAD.',
       '- Do NOT open or merge the PR — the review phase does that.',
@@ -224,7 +230,9 @@ export function appendReviewUnifierItems(
   // (the initiative's touched code) ∪ the demo/PR paths, so a code-fix can reach
   // whatever the initiative built. Falls back to the demo/PR paths alone.
   const devScope = devWorkItemScopeUnion(worktreePath);
-  const packagingScope = ['.forge/pr-description.md', `demo/${initiativeId}/demo.json`];
+  // SSOT-resolved (plan 2.5 / N3) — same path the composed gate validates.
+  const demoJsonRel = worktreeDemoJsonRelPath(worktreePath, initiativeId);
+  const packagingScope = ['.forge/pr-description.md', demoJsonRel];
   const concernScope = Array.from(new Set([...devScope, ...packagingScope]));
 
   // Count existing UWIs against the cap (the concern + optional re-prep must fit).
@@ -270,14 +278,14 @@ export function appendReviewUnifierItems(
         {
           given: `${concernId} addressed the review concern on the branch`,
           when: 're-prepping the PR after the code fix',
-          then: `demo/${initiativeId}/demo.json + .forge/pr-description.md reflect the now-final branch and the composed unifier gate passes`,
+          then: `${demoJsonRel} + .forge/pr-description.md reflect the now-final branch and the composed unifier gate passes`,
         },
       ],
       files_in_scope: packagingScope,
       quality_gate_cmd: [...input.projectGateCmd],
       kind: 'packaging',
       estimated_iterations: estIters,
-      body: reprepBody(reprepId, concernId, initiativeId),
+      body: reprepBody(reprepId, concernId, demoJsonRel),
     };
     validateAppend([...existing, concernUwi, reprep]);
     writeWorkItem(reprep, worktreePath, { workItemsDir: dir });
@@ -344,14 +352,14 @@ function reviewConcernBody(
   ].join('\n');
 }
 
-function reprepBody(id: string, concernId: string, initiativeId: string): string {
+function reprepBody(id: string, concernId: string, demoJsonRel: string): string {
   return [
     `# ${id} — terminal re-prep (packaging)`,
     '',
     `> Auto-appended after ${concernId} (ADR 026). The code fix may have changed`,
     '> behaviour, so the demo + PR description must reflect the FINAL branch.',
     '',
-    `- Re-author \`demo/${initiativeId}/demo.json\` (and re-render DEMO.md).`,
+    `- Re-author \`${demoJsonRel}\` (and re-render DEMO.md).`,
     '- Update `.forge/pr-description.md` Why/What/How to match the now-final diff.',
     '- Do NOT re-implement code — integrate + re-prove the composed unifier gate.',
   ].join('\n');

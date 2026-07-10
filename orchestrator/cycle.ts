@@ -20,7 +20,7 @@ import { createLogger } from './logging.ts';
 import { classifyCycleFailure } from './failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, readManifestFlowId, readManifestCostCeiling, persistManifestCycleId, parseManifest } from './manifest.ts';
-import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
+import { worktreeDemoDir } from './demo-paths.ts';
 
 // Shared cycle types + cross-runner helpers live in cycle-context.ts (the
 // phase runners import them from there, never from this module — keeps the
@@ -356,8 +356,7 @@ export async function snapshotCycleArtefacts(
   // (Previously copied a stale `.forge/demos/` path into `_logs/<cycleId>/demo/`,
   // which nothing populated or served — the root cause of the blank review demo.)
   const artifactsDst = resolve(cycleLogDir, 'artifacts');
-  const artifactRoot = readArtifactRoot(input.worktreePath);
-  const demoSrc = resolve(input.worktreePath, projectDemoRelDir(input.initiativeId, artifactRoot));
+  const demoSrc = worktreeDemoDir(input.worktreePath, input.initiativeId);
   if (existsSync(demoSrc)) {
     cpSync(demoSrc, artifactsDst, { recursive: true, force: true });
   }

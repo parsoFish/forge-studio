@@ -6,8 +6,9 @@
  * Control flow reminder (short-circuit on first failure):
  *   1. initiative_gate  — runShellGate(qualityGateCmd)
  *   2. pr_self_contained — demo.json valid + pr-description.md present
- *   3. branches_in_sync — assertLocalRemoteSynced doesn't throw
- *   4. incomplete_delivery — all WI creates[] paths in git diff
+ *   3. demo_fanin_honesty — demo metadata matches post-fan-in reality (plan 2.5)
+ *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw
+ *   5. incomplete_delivery — all WI creates[] paths in git diff
  *
  * A failing sub-check aborts later ones, so a failure at gate N produces
  * exactly N sub-check events (no fabricated "skipped" events).
@@ -199,10 +200,11 @@ const BASE_INPUT = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Happy path: all 4 gates pass → 4 sub-check events, all pass:true
+// Happy path: all 5 gates pass → 5 sub-check events, all pass:true
+// (demo_fanin_honesty joined the composed gate — refinement plan 2.5)
 // ---------------------------------------------------------------------------
 
-test('composedUnifierGate happy-path: emits 4 sub-check events, all pass:true', async () => {
+test('composedUnifierGate happy-path: emits 5 sub-check events, all pass:true', async () => {
   const h = unifierGateHarness();
   try {
     writeDemoJson(h.worktreePath, INITIATIVE_ID);
@@ -226,12 +228,13 @@ test('composedUnifierGate happy-path: emits 4 sub-check events, all pass:true', 
     assert.equal(passed, true, 'gate should pass');
 
     const checks = h.subCheckEvents();
-    assert.equal(checks.length, 4, `expected 4 sub-check events, got ${checks.length}`);
+    assert.equal(checks.length, 5, `expected 5 sub-check events, got ${checks.length}`);
 
     const ids = checks.map((c) => (c.metadata as { check_id: string }).check_id);
     assert.deepEqual(ids, [
       'initiative_gate',
       'pr_self_contained',
+      'demo_fanin_honesty',
       'branches_in_sync',
       'complete_delivery',
     ]);
@@ -311,10 +314,10 @@ test('composedUnifierGate pr_self_contained fail: 2 events (g1 pass, g2 fail)', 
 });
 
 // ---------------------------------------------------------------------------
-// Failure at gate 4 (incomplete_delivery): 4 events, last one fail
+// Failure at the terminal gate (incomplete_delivery): 5 events, last one fail
 // ---------------------------------------------------------------------------
 
-test('composedUnifierGate incomplete_delivery fail: 4 events, last pass:false with missing paths', async () => {
+test('composedUnifierGate incomplete_delivery fail: 5 events, last pass:false with missing paths', async () => {
   const h = unifierGateHarness();
   try {
     writeDemoJson(h.worktreePath, INITIATIVE_ID);
@@ -338,9 +341,9 @@ test('composedUnifierGate incomplete_delivery fail: 4 events, last pass:false wi
     assert.equal(passed, false);
 
     const checks = h.subCheckEvents();
-    assert.equal(checks.length, 4, 'all 4 gates should emit before delivery fails');
+    assert.equal(checks.length, 5, 'all 5 gates should emit before delivery fails');
 
-    const last = checks[3]!;
+    const last = checks[4]!;
     const meta = last.metadata as { check_id: string; pass: boolean; detail: string };
     assert.equal(meta.check_id, 'complete_delivery');
     assert.equal(meta.pass, false);
@@ -545,8 +548,9 @@ test('composedUnifierGate spawns the orchestrated capture in the worktree and re
     assert.match(String(md.stdout_tail), /done/);
 
     // The orchestrator committed (and pushed) the capture-produced artifacts,
-    // so branches_in_sync still holds and the evidence is ON the branch.
-    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: h.worktreePath, encoding: 'utf8' });
+    // so branches_in_sync still holds and the evidence is ON the branch. (A
+    // demo-metadata refresh commit may follow it — plan 2.5 — so scan the log.)
+    const log = execFileSync('git', ['log', '--oneline', '-3'], { cwd: h.worktreePath, encoding: 'utf8' });
     assert.match(log, /orchestrated demo capture/i);
   } finally {
     h.cleanup();
@@ -604,6 +608,160 @@ test('composedUnifierGate orchestrated capture TIMEOUT is best-effort: recorded 
     assert.equal(md.capture_ok, false);
     assert.equal(md.timed_out, true);
     assert.equal(md.failure_kind, 'environment');
+  } finally {
+    h.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Plan 2.5 — demo fan-in honesty inside the composed gate.
+// Stale liveEvidence ids fail HONESTLY (specific event + feedback); stale
+// diffStat is mechanical git metadata and is refreshed + committed in place.
+// ---------------------------------------------------------------------------
+
+/** demo.json embedding a liveEvidence url (schema-valid). */
+function writeDemoJsonWithLiveEvidence(wt: string, initiativeId: string, url: string): void {
+  const demoDir = join(wt, 'demo', initiativeId);
+  mkdirSync(demoDir, { recursive: true });
+  writeFileSync(
+    join(demoDir, 'demo.json'),
+    JSON.stringify({
+      title: 'Test demo',
+      essence: 'Live-evidence identity check.',
+      project: 'test-project',
+      diffStat: '2 files changed, 10 insertions(+)',
+      checkpoints: [
+        {
+          label: 'acceptance-resource',
+          kind: 'harness',
+          caption: 'Live resource GET',
+          liveEvidence: { url },
+        },
+      ],
+    }),
+  );
+}
+
+test('composedUnifierGate stale liveEvidence id: demo_fanin_honesty fails with specific event, feedback + gate-failure callback', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJsonWithLiveEvidence(
+      h.worktreePath,
+      INITIATIVE_ID,
+      'https://dev.azure.com/org/_apis/notification/subscriptions/886543',
+    );
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+
+    // The CURRENT (orchestrator-run) acceptance gate persisted a NEWER resource.
+    const evDir = join(h.worktreePath, '.forge', 'live-evidence');
+    mkdirSync(evDir, { recursive: true });
+    writeFileSync(
+      join(evDir, 'acceptance-resource.json'),
+      JSON.stringify({
+        label: 'acceptance-resource',
+        url: 'https://dev.azure.com/org/_apis/notification/subscriptions/886548',
+      }),
+    );
+
+    const failures: Array<{ checkId: string; outputTail: string }> = [];
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+      onGateFailure: (f) => failures.push({ checkId: f.checkId, outputTail: f.outputTail }),
+    });
+    assert.equal(passed, false, 'a demo asserting a stale resource id must NOT pass');
+
+    // Sub-check trail: initiative_gate ✓, pr_self_contained ✓ (schema-valid),
+    // demo_fanin_honesty ✗ — then short-circuit.
+    const checks = h.subCheckEvents();
+    const ids = checks.map((c) => (c.metadata as { check_id: string }).check_id);
+    assert.deepEqual(ids, ['initiative_gate', 'pr_self_contained', 'demo_fanin_honesty']);
+    const lastMeta = checks[2]!.metadata as { pass: boolean; detail: string };
+    assert.equal(lastMeta.pass, false);
+    assert.match(lastMeta.detail, /886543/, 'sub-check detail names the stale id');
+
+    // The specific classified error event (never a vague fail).
+    const staleEvents = h
+      .events()
+      .filter((e) => e.message?.startsWith('unifier.gate.demo-stale-after-fanin'));
+    assert.equal(staleEvents.length, 1);
+    assert.equal(staleEvents[0]!.event_type, 'error');
+    const md = staleEvents[0]!.metadata as Record<string, unknown>;
+    assert.equal(md.failure_class, 'dev-loop-unifier-demo-stale');
+    assert.match(JSON.stringify(md.stale_evidence), /886543/);
+    assert.match(JSON.stringify(md.fresh_evidence_urls), /886548/);
+    assert.ok(staleEvents[0]!.message?.includes('demo.json'), 'message keeps the demo.json classifier token');
+
+    // Live-gate feedback tells the agent EXACTLY what went stale + the fix.
+    const fb = join(h.worktreePath, '.forge', 'last-gate-failure.md');
+    assert.ok(existsSync(fb), 'last-gate-failure.md written');
+    const fbText = readFileSync(fb, 'utf8');
+    assert.match(fbText, /886543/);
+    assert.match(fbText, /886548/);
+    assert.match(fbText, /forge demo render/);
+
+    // G4 seam: the loop-cap tracker sees the dedicated check id.
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0]!.checkId, 'demo_fanin_honesty');
+    assert.match(failures[0]!.outputTail, /886543/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('composedUnifierGate stale diffStat: refreshed with git truth, committed, unifier.demo-metadata-refreshed emitted, gate passes', async () => {
+  const h = unifierGateHarness();
+  try {
+    writeDemoJson(h.worktreePath, INITIATIVE_ID); // stored diffStat: "2 files changed…"
+    writePrDescription(h.worktreePath);
+    writeWI(h.wiDir, 'WI-1', []);
+    h.git('add', '-A');
+    h.git('commit', '-m', 'feat: add demo + pr-description');
+    h.git('push', 'origin', 'forge/init-test');
+    // Real diff main…HEAD now spans ≥3 files — the stored "2 files changed" is
+    // pre-fan-in metadata.
+
+    const passed = await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['true'],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    assert.equal(passed, true, 'a refreshable metadata drift must not fail the gate');
+
+    const refreshEvents = h.events().filter((e) => e.message === 'unifier.demo-metadata-refreshed');
+    assert.equal(refreshEvents.length, 1);
+    const md = refreshEvents[0]!.metadata as Record<string, unknown>;
+    assert.match(String(md.from), /2 files changed/);
+    assert.match(String(md.to), /files changed/);
+
+    // demo.json on the branch carries the re-derived git truth…
+    const realStat = execFileSync('git', ['diff', '--stat', 'main...HEAD'], {
+      cwd: h.worktreePath,
+      encoding: 'utf8',
+    }).trim();
+    const demoJson = JSON.parse(
+      readFileSync(join(h.worktreePath, 'demo', INITIATIVE_ID, 'demo.json'), 'utf8'),
+    ) as { diffStat: string };
+    assert.match(demoJson.diffStat, /files changed/);
+    assert.notEqual(demoJson.diffStat, '2 files changed, 10 insertions(+)');
+    // …and the refresh is COMMITTED (branches_in_sync passed after it).
+    const status = execFileSync('git', ['status', '--porcelain', '--', 'demo/'], {
+      cwd: h.worktreePath,
+      encoding: 'utf8',
+    }).trim();
+    assert.equal(status, '', 'refreshed demo artifacts are committed, not left dirty');
+    const log = execFileSync('git', ['log', '--oneline', '-2'], { cwd: h.worktreePath, encoding: 'utf8' });
+    assert.match(log, /refresh demo metadata after fan-in/i);
+    assert.ok(realStat.length > 0);
   } finally {
     h.cleanup();
   }

@@ -20,6 +20,8 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../orchestrator/demo-paths.ts';
+
 import type {
   HarnessMetricRow,
   DemoSummarySection,
@@ -479,7 +481,7 @@ export function renderDemoBundle(
   demoDir: string,
   worktreePath?: string,
 ): RenderDemoBundleResult {
-  const jsonPath = join(demoDir, 'demo.json');
+  const jsonPath = join(demoDir, DEMO_JSON_BASENAME);
   if (!existsSync(jsonPath)) {
     return { ok: false, errors: [`demo.json not found at ${jsonPath}`], wrote: [] };
   }
@@ -505,7 +507,7 @@ export function renderDemoBundle(
   const model = parsed as DemoModel;
   // F4: the demo OUTPUT is a single PR-facing markdown (+ the demo.json sidecar
   // the review surface renders natively). DEMO.html is retired.
-  const mdPath = join(demoDir, 'DEMO.md');
+  const mdPath = join(demoDir, DEMO_MD_BASENAME);
   writeFileSync(mdPath, renderDemoMarkdown(model));
   return { ok: true, errors: [], wrote: [mdPath] };
 }
@@ -513,8 +515,9 @@ export function renderDemoBundle(
 /** Scratch files written by forge orchestrators that should not appear in the demo. */
 const SCRATCH_FILE_PATTERNS = [/\bAGENT\.md\b/, /\bPROMPT\.md\b/, /\bfix_plan\.md\b/];
 
-/** Strip forge scratch files from a git diff --stat string. */
-function stripScratchFromDiffStat(diffStat: string): string {
+/** Strip forge scratch files from a git diff --stat string. Exported for the
+ *  unifier's fan-in honesty check, which re-derives diffStat as git truth. */
+export function stripScratchFromDiffStat(diffStat: string): string {
   return diffStat
     .split('\n')
     .filter((line) => !SCRATCH_FILE_PATTERNS.some((re) => re.test(line)))

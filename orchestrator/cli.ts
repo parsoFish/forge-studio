@@ -26,7 +26,7 @@ import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { runArchitectTurn } from './architect-runner.ts';
 import { runInstructionsTurn } from './instructions-runner.ts';
 import { runDemoBuilderTurn } from './demo-builder-runner.ts';
-import { projectDemoRelDir, readArtifactRoot } from './brain-paths.ts';
+import { worktreeDemoDir } from './demo-paths.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -688,8 +688,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     // the project's artifactRoot (legacy `demo/<id>` or `<artifactRoot>/history/<id>/demo`).
     // An explicit --dir overrides; otherwise the worktree root is INVOCATION_CWD.
     const dirFlag = flagValue(rest, '--dir');
-    const artifactRoot = readArtifactRoot(INVOCATION_CWD);
-    const demoDir = dirFlag ?? resolve(INVOCATION_CWD, projectDemoRelDir(initiativeId, artifactRoot));
+    const demoDir = dirFlag ?? worktreeDemoDir(INVOCATION_CWD, initiativeId);
     const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
     const { renderDemoBundle } = await import('../cli/demo-model.ts');
     // worktree root lets the bundle back-fill any live evidence the acceptance
@@ -718,8 +717,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const projectArg = flagValue(rest, '--project');
     const projectRepoPath = projectArg ? resolve('projects', projectArg) : INVOCATION_CWD;
     const dirFlag = flagValue(rest, '--dir');
-    const artifactRoot = readArtifactRoot(projectRepoPath);
-    const demoDir = dirFlag ?? resolve(projectRepoPath, projectDemoRelDir(initiativeId, artifactRoot));
+    const demoDir = dirFlag ?? worktreeDemoDir(projectRepoPath, initiativeId);
     const jsonPath = join(demoDir, 'demo.json');
     if (!existsSync(jsonPath)) {
       console.error(`forge demo capture: ${jsonPath} not found — author demo.json first. Skipping (best-effort).`);

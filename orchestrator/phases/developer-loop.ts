@@ -34,7 +34,8 @@ import {
 import { type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '../../loops/_adapters/registry.ts';
 import type { AgentInvocation } from '../../loops/_adapters/types.ts';
-import { projectDemoRelDir, readArtifactRoot } from '../brain-paths.ts';
+import { DEMO_JSON_BASENAME, worktreeDemoRelDir } from '../demo-paths.ts';
+import { checkDemoFanInHonesty } from './demo-fanin-honesty.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { matchesRateLimitSignature } from '../failure-classifier.ts';
@@ -1857,11 +1858,12 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
     cap: resolveUnifierGateFailureCap(),
   });
 
-  // Composed quality gate (4 gates after Wave B):
+  // Composed quality gate (5 gates since plan 2.5):
   //   1. initiative_gate (project quality_gate_cmd against branch tip)
   //   2. pr_self_contained (demo.json valid + pr-description.md present)
-  //   3. branches_in_sync (assertLocalRemoteSynced doesn't throw)
-  //   4. incomplete_delivery (every WI's creates[] paths in diff)
+  //   3. demo_fanin_honesty (demo metadata matches post-fan-in reality)
+  //   4. branches_in_sync (assertLocalRemoteSynced doesn't throw)
+  //   5. incomplete_delivery (every WI's creates[] paths in diff)
   const unifierGate = async (): Promise<boolean> =>
     composedUnifierGate({
       onGateFailure: gateFailureTracker.onGateFailure,
@@ -1872,9 +1874,12 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       initiativeIdForEvent: input.initiativeId,
       parentEventId: startEventId,
       workItemsDir: resolve(input.worktreePath, '.forge/work-items'),
-      // artifactRoot-resolved so the gate checks demo.json where the unifier was
-      // told to author it (same projectDemoRelDir the invocation/mirror use).
-      demoDir: projectDemoRelDir(input.initiativeId, readArtifactRoot(input.projectRepoPath)),
+      // Resolved through the demo-path SSOT from the WORKTREE's own
+      // project.json (N3): the gate must check demo.json exactly where the
+      // unifier prompt / snapshot / pr-open resolve it. Reading artifactRoot
+      // from the main project repo here (as before) could diverge from the
+      // branch being judged — the 2026-07-05 false-negative class.
+      demoDir: worktreeDemoRelDir(input.worktreePath, input.initiativeId),
       // N10: bound the initiative gate; a kill by this timeout classifies as
       // environment (unifier.gate.timeout), never work-failure.
       gateTimeoutMs: resolveGateTimeoutMs(),
@@ -2039,7 +2044,7 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
  * (initiative_gate), or the structural detail string otherwise.
  */
 export type UnifierGateFailure = {
-  checkId: 'initiative_gate' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery' | 'gate-timeout';
+  checkId: 'initiative_gate' | 'pr_self_contained' | 'demo_fanin_honesty' | 'branches_in_sync' | 'complete_delivery' | 'gate-timeout';
   /** The failing command's exit code; null for structural checks / killed commands. */
   exitCode: number | null;
   /** Tail of the failing sub-check's output / detail (bounded by the caller's event). */
@@ -2095,17 +2100,22 @@ type ComposedUnifierGateInput = {
 };
 
 /**
- * Four-gate composed check the unifier must clear to exit clean:
+ * Five-gate composed check the unifier must clear to exit clean:
  *   1. initiative_gate — project quality_gate_cmd against branch tip.
  *   2. pr_self_contained — demo.json valid + pr-description.md present.
- *   3. branches_in_sync — assertLocalRemoteSynced doesn't throw.
- *   4. incomplete_delivery — every WI's declared `creates[]` paths are
+ *   3. demo_fanin_honesty — demo.json metadata matches POST-fan-in branch
+ *      reality (plan 2.5): stale diffStat is re-derived + committed
+ *      (mechanical git truth, orchestrator-owned); a stale liveEvidence id
+ *      or foreign initiativeId FAILS honestly with a specific event
+ *      (the 2026-07-03 stale-metadata + live-evidence-id themes).
+ *   4. branches_in_sync — assertLocalRemoteSynced doesn't throw.
+ *   5. incomplete_delivery — every WI's declared `creates[]` paths are
  *      present in `git diff --name-only main...HEAD`. Fails the cycle
  *      before a PR opens when a WI's declared outputs were silently
  *      never written (the INIT-2 release_folder WI-3 scenario).
  *      WIs with empty `creates` are exempt.
  *
- * Returns true ONLY when all four pass. Emits a classified event on each
+ * Returns true ONLY when all five pass. Emits a classified event on each
  * sub-gate failure so the operator sees exactly which gate blocked.
  */
 
@@ -2132,7 +2142,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
 
   // Local helper: emit one structured sub-check observation (always — pass OR fail).
   // This is ADDITIVE: existing failure events below are untouched.
-  type CheckId = 'initiative_gate' | 'pr_self_contained' | 'branches_in_sync' | 'complete_delivery';
+  type CheckId = 'initiative_gate' | 'pr_self_contained' | 'demo_fanin_honesty' | 'branches_in_sync' | 'complete_delivery';
   const emitSubCheck = (checkId: CheckId, pass: boolean, detail: string): void => {
     logger.emit({
       initiative_id: input.initiativeIdForEvent,
@@ -2247,7 +2257,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   // whatever text the agent wrote. Best-effort by contract (same as the CLI):
   // a failed/timed-out capture is recorded but does not block — the demo
   // validation below judges whatever evidence exists.
-  const demoJsonPathForCapture = join(worktreePath, demoDir, 'demo.json');
+  const demoJsonPathForCapture = join(worktreePath, demoDir, DEMO_JSON_BASENAME);
   if (input.orchestratedCapture && demoJsonWantsCapture(demoJsonPathForCapture)) {
     const captureTimeoutMs = input.orchestratedCapture.timeoutMs ?? resolveDemoCaptureTimeoutMs();
     const cap = runOrchestratorCommand(input.orchestratedCapture.argv, {
@@ -2283,7 +2293,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   // 2. pr_self_contained (ADR 021: structured demo.json is the contract; DEMO.md
   //    is derived. The gate validates demo.json against the schema — the
   //    structural check that fixes free-form demo inconsistency.)
-  const demoJsonPath = join(worktreePath, demoDir, 'demo.json');
+  const demoJsonPath = join(worktreePath, demoDir, DEMO_JSON_BASENAME);
   const prDescPath = join(worktreePath, '.forge', 'pr-description.md');
   let demoErrors: string[] = ['demo.json missing'];
   if (existsSync(demoJsonPath)) {
@@ -2357,7 +2367,86 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('pr_self_contained', true, 'demo.json valid + pr-description.md has Why/What/How');
 
-  // 3. branches_in_sync
+  // 3. demo_fanin_honesty (plan 2.5) — the demo's metadata must describe the
+  //    POST-fan-in branch, not the state some earlier unifier pass authored it
+  //    against. Mechanical git metadata (diffStat) is re-derived and refreshed
+  //    in place by the ORCHESTRATOR (same ownership rule as capture, ADR 036);
+  //    identity claims (liveEvidence ids, the demo's initiativeId) are NEVER
+  //    silently fixed — stale ones fail the gate with the stale + fresh ids
+  //    named, so nothing merges asserting evidence the branch does not hold.
+  {
+    const honesty = checkDemoFanInHonesty({
+      worktreePath,
+      demoJsonPath,
+      initiativeId: input.initiativeId,
+    });
+    if (honesty.refreshedDiffStat) {
+      // Commit (and push) the refreshed metadata so the branch — and the PR —
+      // carry the re-derived truth, and branches_in_sync keeps holding.
+      const committed = commitOrchestratedCaptureArtifacts(
+        worktreePath,
+        demoDir,
+        input.initiativeId,
+        `chore(demo): refresh demo metadata after fan-in (${input.initiativeId})`,
+      );
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'log',
+        input_refs: [demoJsonPath],
+        output_refs: [demoJsonPath],
+        message: 'unifier.demo-metadata-refreshed',
+        metadata: {
+          field: 'diffStat',
+          from: honesty.refreshedDiffStat.from,
+          to: honesty.refreshedDiffStat.to,
+          committed,
+        },
+      });
+    }
+    if (!honesty.ok) {
+      const detail = honesty.failures.join(' | ');
+      emitSubCheck('demo_fanin_honesty', false, detail);
+      logger.emit({
+        initiative_id: input.initiativeIdForEvent,
+        parent_event_id: input.parentEventId,
+        phase: 'unifier',
+        skill: 'developer-unifier',
+        event_type: 'error',
+        input_refs: [demoJsonPath],
+        output_refs: [],
+        // Keep the 'demo.json' token so the failure-classifier catches it.
+        message: 'unifier.gate.demo-stale-after-fanin (demo.json)',
+        metadata: {
+          failure_class: 'dev-loop-unifier-demo-stale',
+          failures: honesty.failures,
+          stale_evidence: honesty.staleEvidence,
+          fresh_evidence_urls: honesty.freshEvidenceUrls,
+        },
+      });
+      failFeedback('demo_fanin_honesty', [
+        'demo.json is STALE against the post-fan-in branch — it asserts state from an earlier pass:',
+        ...honesty.failures.map((f) => `- ${f}`),
+        '',
+        `Fix: re-run \`forge demo render ${input.initiativeId}\` from the worktree root against branch tip`,
+        '(it back-fills the CURRENT .forge/live-evidence/), verify the demo describes THIS initiative,',
+        'then commit and push. Do NOT hand-edit evidence urls or outputs.',
+      ]);
+      input.onGateFailure?.({ checkId: 'demo_fanin_honesty', exitCode: null, outputTail: detail });
+      return false;
+    }
+    emitSubCheck(
+      'demo_fanin_honesty',
+      true,
+      honesty.refreshedDiffStat
+        ? 'demo metadata matches the post-fan-in branch (diffStat re-derived + refreshed)'
+        : 'demo metadata matches the post-fan-in branch',
+    );
+  }
+
+  // 4. branches_in_sync
   try {
     assertLocalRemoteSynced(worktreePath);
   } catch (err) {
@@ -2386,7 +2475,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   }
   emitSubCheck('branches_in_sync', true, 'local HEAD matches origin HEAD');
 
-  // 4. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
+  // 5. incomplete_delivery (Wave B, 2026-06-04): every WI's declared
   //    `creates[]` paths must appear in `git diff --name-only main...HEAD`.
   //    WIs with empty `creates` are exempt. This catches the INIT-2
   //    release_folder scenario: WI-3 was skipped (gate-too-loose misfire)

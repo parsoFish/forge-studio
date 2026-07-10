@@ -4,8 +4,9 @@
  * ADR 035: per-project brain + history + contract are forge-owned and CENTRAL
  * (in the forge repo), not in the managed project's repo. Brain 3 lives at
  * `brain/projects/<name>/themes/`; history + contract at
- * `project-artifacts/<name>/`. The in-PR demo (`projectDemoRelDir`,
- * worktree-relative) and `readArtifactRoot` are unchanged.
+ * `project-artifacts/<name>/`. `readArtifactRoot` is unchanged; the in-PR
+ * demo path helpers moved to demo-paths.ts (plan 2.5 / N3) and are tested in
+ * demo-paths.test.ts.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,7 +18,6 @@ import assert from 'node:assert/strict';
 import {
   projectBrainDir,
   projectThemesDir,
-  projectDemoRelDir,
   readArtifactRoot,
   resolveKbBrainDir,
 } from './brain-paths.ts';
@@ -125,23 +125,7 @@ test('brain-paths: the never-wired central-artifacts helpers stay deleted', () =
   }
 });
 
-// ---------------------------------------------------------------------------
-// projectDemoRelDir
-// ---------------------------------------------------------------------------
-
-test('projectDemoRelDir: default artifactRoot "." → legacy demo/<initiativeId>', () => {
-  assert.equal(projectDemoRelDir('INIT-001'), 'demo/INIT-001');
-  assert.equal(projectDemoRelDir('INIT-001', '.'), 'demo/INIT-001');
-});
-
-test('projectDemoRelDir: empty artifactRoot collapses to the legacy demo/<initiativeId>', () => {
-  assert.equal(projectDemoRelDir('INIT-001', ''), 'demo/INIT-001');
-  assert.equal(projectDemoRelDir('INIT-001', '  '), 'demo/INIT-001');
-});
-
-test('projectDemoRelDir: artifactRoot "forge" → forge/history/<initiativeId>/demo', () => {
-  assert.equal(projectDemoRelDir('INIT-001', 'forge'), 'forge/history/INIT-001/demo');
-});
+// projectDemoRelDir tests moved to demo-paths.test.ts (plan 2.5 / N3).
 
 // ---------------------------------------------------------------------------
 // readArtifactRoot

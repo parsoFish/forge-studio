@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 
 import type { EventLogger } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
+import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
 import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { decideFinalCiGate, execCommandVector } from './cycle.ts';
@@ -67,10 +68,15 @@ export async function openPrInline(
   });
 
   if (!prUrl) {
-    const demoMdPath = resolve(input.worktreePath, 'demo', input.initiativeId, 'DEMO.md');
+    // Resolved through the demo-path SSOT (plan 2.5 / N3): the diagnostic must
+    // name the path the unifier actually authors (artifactRoot-resolved), or a
+    // clean delivery on an artifactRoot project reads as "demo missing" at a
+    // location nothing writes to (the 2026-07-05 false-negative theme).
+    const demoMdPath = worktreeDemoMdPath(input.worktreePath, input.initiativeId);
+    const demoMdRel = `${worktreeDemoRelDir(input.worktreePath, input.initiativeId)}/${DEMO_MD_BASENAME}`;
     const prDescPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
     const missing: string[] = [];
-    if (!existsSync(demoMdPath)) missing.push(`demo/${input.initiativeId}/DEMO.md`);
+    if (!existsSync(demoMdPath)) missing.push(demoMdRel);
     if (!existsSync(prDescPath)) missing.push('.forge/pr-description.md');
     logger.emit({
       initiative_id: input.initiativeId,
