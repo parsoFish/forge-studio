@@ -8,12 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-06-19T23:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-06-19-unifier-cwd-forge-root-exploration.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-19-go-internal-package-main-cannot-import.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-19-go-module-vendor-write-code-before-tidy.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-19-mux-scaffold-architecture.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-19-plugin-go-sdk-interface-compat.md
+cited_by: []
 ---
 
 ## Summary

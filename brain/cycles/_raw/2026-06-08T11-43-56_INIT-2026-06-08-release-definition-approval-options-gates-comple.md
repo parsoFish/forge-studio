@@ -9,10 +9,9 @@ ingested_at: 2026-06-11T12:30:00Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-06-11-unifier-wedge-33hr-no-tool-progress.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-acceptance-test-wi-split-write-then-run.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-live-acc-wi-gate-errors-before-ralph-runs.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-unifier-rescue-of-gate-errored-wi.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-acceptance-test-wi-split-write-then-run.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-live-acc-wi-gate-errors-before-ralph-runs.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-unifier-rescue-of-gate-errored-wi.md
 ---
 
 # Cycle 2026-06-08T11-43-56 — approval-options-gates-completion

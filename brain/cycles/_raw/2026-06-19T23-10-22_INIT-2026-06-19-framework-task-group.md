@@ -9,10 +9,7 @@ ingested_at: 2026-06-20T02:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-06-20-pm-must-grep-test-name-before-gate.md
-  - brain/projects/terraform-provider-betterado/themes/2026-06-20-framework-configure-stub-mux-timebomb.md
-  - brain/projects/terraform-provider-betterado/themes/2026-06-20-framework-vendor-defaults-inline.md
-  - brain/projects/terraform-provider-betterado/themes/2026-06-20-pm-invented-gate-test-name.md
+  - brain/cycles/themes/2026-06-20-unifier-pr-not-self-contained-loop.md
 ---
 
 ## Summary

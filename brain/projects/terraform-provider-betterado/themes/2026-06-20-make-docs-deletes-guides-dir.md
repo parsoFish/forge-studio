@@ -1,36 +1,20 @@
 ---
-title: "make docs deletes docs/guides/ — must restore after tfplugindocs generate"
-description: "tfplugindocs generate clears the entire docs/ output directory including hand-written docs/guides/; GNUmakefile must restore guides after generation."
-category: pattern
+title: make docs deletes docs/guides/ — must restore manually
+description: tfplugindocs generate wipes the entire docs/ tree including hand-written guides; git checkout -- docs/guides/ required after every docs run.
+category: antipattern
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---
 
-## Context
+## Summary
 
-`tfplugindocs generate` outputs all generated docs to `docs/`. By design it removes stale files — including `docs/guides/`, which contains hand-written (non-generated) provider guides.
+`make docs` invokes `tfplugindocs generate --provider-name betterado`, which deletes and regenerates the entire `docs/` directory. This includes the hand-written `docs/guides/` files that are not auto-generated.
 
-## Problem
+**Pattern observed:** Every WI that runs `make docs` must follow with `git checkout -- docs/guides/` to restore the guides. In this cycle the command was run twice (once per agent session — the crash reset forced a second session).
 
-After running `make docs`, the `docs/guides/` directory is deleted. Committing at that point silently removes all hand-written guides from the repo.
-
-## Fix
-
-Append a restore step to the `docs` target in `GNUmakefile`:
-
-```makefile
-docs:
-    tfplugindocs generate
-    git checkout -- docs/guides/
-```
-
-This restores the guides from HEAD immediately after generation, so subsequent `git diff` shows only the generated changes.
-
-## Invariant
-
-Before merging any commit that runs `make docs`, verify `docs/guides/` is present and unmodified (or intentionally changed). `git status` should show no unexpected deletions in `docs/guides/`.
+**Fix vector:** Add `git checkout -- docs/guides/` to the `make docs` target in `GNUmakefile` so it is automatic.
 
 ## Sources
 
-- `_logs/2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples/events.jsonl` — WI-1 iteration metadata (`input_summary: make docs 2>&1; echo "Exit: $?"`, `GNUmakefile` in output_refs)
+- `_logs/2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples/events.jsonl` — seq 53 (first restore), seq 23 in crash-retry session (second restore)
 - `/home/parso/forge/brain/cycles/_raw/2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples.md`

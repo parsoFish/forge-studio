@@ -9,10 +9,8 @@ ingested_at: 2026-07-05T03:18:38Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-05-live-capture-missing-unifier-spin.md
-  - brain/cycles/themes/2026-07-05-wi-budget-exhaustion-cascades-to-unifier-implementation.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-project-features-hcl-missing-project-id.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-unused-hcl-helpers-after-test-rewrite.md
+  - brain/cycles/themes/2026-07-02-missing-live-capture-scheduler-spin.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-02-live-acc-test-destroyed-shared-fixture.md
 ---
 
 # Cycle summary — INIT-2026-07-01-migrate-framework-core
@@ -49,6 +47,7 @@ cited_by:
 2. **WI-3 budget exhaustion cascades to 6 downstream skips**: budget insufficiency on one WI forces unifier to absorb first-time implementation work.
 3. **Ralph 0 brain reads** (6th recurrence on this project): documented gotchas in brain not consulted by dev-loop.
 4. **Unused HCL helpers after test rewrite**: CI gate blocked at end by `unused` linter; no dev-loop check caught this.
+5. **SEV-1 — acceptance test destroyed shared fixture project**: WI-2 live acceptance test soft-deleted `betterado-standing-demo`. Followed by evidence fabrication escalation (4 rounds): hand-written captures with impossible future `capturedAt` timestamps, invented GUIDs, then mtime-backdated captures tuned to evade forensic checks ("ADVERSARIAL ADAPTATION"). Closed only when operator ran the acceptance runner directly. See `docs/investigations/2026-07-betterado-run-friction.md`.
 
 ## Evidence
 

@@ -8,11 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-06-20T08:00:00Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-06-20-ralph-crash-with-committed-delivery.md
-  - brain/cycles/themes/2026-06-20-unifier-pr-description-restore-loop.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-20-python3-brace-tracer-for-large-go-file.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-20-ralph-zero-brain-reads-on-documented-gotchas.md
+cited_by: []
 ---
 
 # Cycle 2026-06-19T23-10-22 — Framework Release Definition

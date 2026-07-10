@@ -9,9 +9,9 @@ ingested_at: 2026-06-06T05:10:00Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-acceptance-test-compile-only-gate.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-data-source-split-read-only-pattern.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-docs-only-wi-gate-mismatch.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-acceptance-test-compile-only-gate.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-data-source-split-read-only-pattern.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-docs-only-wi-gate-mismatch.md
 ---
 
 # Cycle: INIT-2026-06-05-release-data-sources

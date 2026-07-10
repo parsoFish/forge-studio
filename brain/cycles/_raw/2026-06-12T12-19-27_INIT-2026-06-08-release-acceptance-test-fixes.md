@@ -9,9 +9,7 @@ ingested_at: 2026-06-12T12:47:08Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-06-12-manifest-regrounding-annotation-as-operator-override.md
-  - brain/cycles/themes/2026-06-12-pm-ignores-manifest-regrounding-annotation.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-12-combined-write-and-run-wi-when-creds-available.md
+  - brain/cycles/themes/2026-06-12-pm-regrounding-annotation-no-structural-guarantee.md
 ---
 
 # Cycle 2026-06-12T12-19-27 — INIT-2026-06-08-release-acceptance-test-fixes

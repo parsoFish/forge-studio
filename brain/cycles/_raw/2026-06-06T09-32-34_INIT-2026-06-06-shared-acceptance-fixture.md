@@ -9,8 +9,9 @@ ingested_at: 2026-06-06T09:41:00Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-report-diff-stale-on-resume.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-shared-fixture-canonical-ado-validity.md
+  - brain/cycles/themes/2026-06-06-forge-demo-render-cwd-trap.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-report-diff-stale-on-resume.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-shared-fixture-canonical-ado-validity.md
 ---
 
 # Cycle 2026-06-06T09-32-34 — Shared acceptance-test fixture

@@ -8,7 +8,8 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-01T22:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by: []
+cited_by:
+  - brain/cycles/themes/2026-07-01-pm-must-embed-framework-migration-gotchas-as-acs.md
 ---
 
 ## Summary

@@ -9,10 +9,7 @@ ingested_at: 2026-07-04T00:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-04-unifier-incomplete-delivery-loop-cap-missing.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-permissions-batch-wi-too-coarse.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-security-permissions-framework-migration-complete.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-unifier-incomplete-delivery-loop-16-resumes.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-04-framework-migration-drops-sdkv2-validators-silently.md
 ---
 
 # Cycle summary — migrate-framework-security-permissions

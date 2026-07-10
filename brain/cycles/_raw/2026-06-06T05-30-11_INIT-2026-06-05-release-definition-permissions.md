@@ -9,10 +9,9 @@ ingested_at: 2026-06-06T06:04:52Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-acceptance-test-partial-delivery-gate-passes.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-releasemgmt2-token-format-confirmed.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-spike-wis-prevent-wrong-builds.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-06-wi-boundary-scope-creep-superset-gate.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-partial-acc-test-gate-passes-subset.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-release-definition-permissions-token-format.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-06-spike-wi-scope-bleed-into-successor.md
 ---
 
 # Cycle 2026-06-06T05-30-11 — INIT-2026-06-05-release-definition-permissions

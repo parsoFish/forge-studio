@@ -7,12 +7,8 @@ initiative_id: INIT-2026-06-21-ownership-hotspots-top-flag
 project: gitpulse
 ingested_at: 2026-06-21T05:25:00.000Z
 ingested_by: reflector
-retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-06-21-unifier-demo-render-discovery.md
-  - brain/projects/gitpulse/themes/2026-06-21-acceptance-gate-covers-only-headline-output.md
-  - brain/projects/gitpulse/themes/2026-06-21-gitignored-scratch-files-double-commit.md
-  - brain/projects/gitpulse/themes/2026-06-21-single-iteration-delivery-tdd-pure-modules.md
+retention: routine
+cited_by: []
 ---
 
 # Cycle 2026-06-21T04-52-20 — INIT-2026-06-21-ownership-hotspots-top-flag

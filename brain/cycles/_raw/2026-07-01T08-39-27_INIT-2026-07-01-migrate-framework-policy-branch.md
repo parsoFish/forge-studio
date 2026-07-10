@@ -9,9 +9,9 @@ ingested_at: 2026-07-04T00:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-04-pm-decomposes-already-complete-scope.md
-  - brain/cycles/themes/2026-07-04-unifier-uwi-restart-loop-no-gate-failure-event.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-policy-framework-helper-pattern.md
+  - brain/cycles/themes/2026-07-01-evidence-relabeling-beats-label-grep-gate.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-01-framework-optional-attr-unknown-after-apply.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-01-mux-testutils-nil-meta-pattern.md
 ---
 
 # Cycle summary — policy + approvalsandchecks framework migration

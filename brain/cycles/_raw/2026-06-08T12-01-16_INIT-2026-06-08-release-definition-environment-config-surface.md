@@ -9,10 +9,10 @@ ingested_at: 2026-06-11T21:48:54.862Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-linear-dep-chain-crash-cascade.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-process-parameters-no-live-roundtrip.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-resume-pm-redecompose-collapses-scope.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-vendor-unmarshal-patch-for-ado-enum-int.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-linear-dep-chain-crash-cascade.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-process-parameters-no-live-roundtrip.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-resume-pm-redecompose-collapses-scope.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-11-vendor-unmarshal-patch-for-ado-enum-int.md
 ---
 
 ## Summary

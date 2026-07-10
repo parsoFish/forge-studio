@@ -9,9 +9,8 @@ ingested_at: 2026-06-20T05:20:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-20-ado-org-project-limit-blocks-test-creates.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-20-framework-state-upgrader-v0-pattern.md
-  - projects/terraform-provider-betterado/forge/brain/themes/2026-06-20-unifier-demo-path-worktree-vs-root.md
+  - brain/cycles/themes/2026-06-20-pm-double-instantiation-wasted-cost.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-20-live-acc-wi-infra-cost-distribution.md
 ---
 
 # Cycle 2026-06-20T04-10-33 — framework-state-upgraders

@@ -9,9 +9,9 @@ ingested_at: 2026-06-11T12:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-gate-tightening-required-paths.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-golangci-lint-not-in-dev-gate.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-11-live-acc-tests-as-wi-gate.md
+  - brain/cycles/themes/2026-06-08-live-env-missing-gate-errored-terminal.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-08-golangci-lint-only-in-ci-gate-antipattern.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-08-live-acc-wi-as-separate-gate.md
 ---
 
 ## Summary

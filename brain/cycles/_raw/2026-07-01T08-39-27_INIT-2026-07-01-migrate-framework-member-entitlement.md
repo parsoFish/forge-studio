@@ -9,9 +9,7 @@ ingested_at: 2026-07-03T05:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-03-pm-max-turns-manifest-read-cascade.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-framework-config-validator-pattern-re-derived.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-sdkv2-dead-files-omission-4th-cycle.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-10-registration-file-merge-conflict-fan-in.md
 ---
 
 ## Summary

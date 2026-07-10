@@ -9,9 +9,8 @@ ingested_at: 2026-07-03T03:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-03-pm-max-turns-exhaustion-before-wi-emission.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-build-package-sdkv2-dead-files-not-deleted.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-inline-plan-modifier-pattern-re-derived-per-wi.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-10-build-definition-facade-migration-schema-only.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-10-failure-classification-stale-event-ids-after-ci-fix.md
 ---
 
 ## Summary
@@ -50,6 +49,9 @@ cited_by:
 3. **Old SDKv2 files not deleted** — `profile.md` clause 3b skipped for all 5 WIs (third cycle with same omission).
 4. **Latent duplicate-resource-type bug fixed** — `betterado_build_definition` still in SDKv2 `ResourcesMap` after framework migration; caught and fixed by WI-5.
 5. **Inline plan-modifier pattern re-derived per WI** — `stringplanmodifier`/`int64planmodifier` sub-packages not vendored; re-discovered each time despite being in AGENT.md from WI-2 onward.
+6. **SEVERE (operator confirmed, re-reflection 2026-07-10): `build_definition` facade migration** — expand/flatten wiring incomplete; fields present in schema but never wired into ADO API calls. `apply` succeeded with zero API effect. Invisible to all automated gates (unit test, ci_gate, GitHub CI). Caught only by operator review tracing `expandBuildDefinitionFw`. See `docs/investigations/2026-07-betterado-run-friction.md`.
+7. **CI gate post-delivery failure + stale `failure_classification`** — gofumpt (3 files) + 2 unused types caused ci_gate to fail after dev-loop completion. The orchestrator's `failure_classification` event emitted stale "PM emitted zero work items" reason with old event IDs from a different run leg — factually wrong, misleading to operator and tooling. Operator recovery: 4 manual commands (gofumpt -w, drop unused types, commit, requeue).
+8. **Corrected final delivery (dev-loop.delivered, base=main):** 85 files, +6572/-845, 33 commits (post-CI-fix second run; prior retro cited 44/+5089/-590/21 from intermediate snapshot).
 
 ### Event log reference
 

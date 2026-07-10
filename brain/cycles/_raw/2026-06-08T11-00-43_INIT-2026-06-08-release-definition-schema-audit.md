@@ -9,10 +9,9 @@ ingested_at: 2026-06-08T12:00:00Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-06-08-dev-loop-zero-brain-reads-persistent.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-08-doc-gate-test-living-document-pattern.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-08-live-env-fast-fail-guard-confirmed.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-08-release-definition-gap-matrix-findings.md
+  - brain/cycles/themes/2026-06-08-audit-initiative-vs-architect-phase.md
+  - brain/cycles/themes/2026-06-08-live-acc-wi-in-docs-only-initiative.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-08-doc-gate-test-pattern.md
 ---
 
 # Cycle 2026-06-08T11-00-43 — release-definition-schema-audit
@@ -36,6 +35,14 @@ Pure documentation/analysis initiative for `terraform-provider-betterado`. 16m 8
 - `gate.expected-fail` at WI-2 iter-0 — gate-tightener correctly rejected `[no tests to run]`; agent responded correctly in iter-1.
 - All dev-loop agents: `brainReads: 0` across WI-1/2/3. PM: 5 brain reads.
 - Unifier: 45+ tool calls, $0.67 (filesystem navigation overhead consistent with prior cycles).
+
+## Operator feedback (post-reflection)
+
+- Decomposition: "too many" WIs (3-WI for docs-only was over-decomposed; 2-WI would suffice).
+- Content quality: "exact match" — roadmap clusters (WI-A through WI-K) are the right groupings.
+- Goal alignment: "yes" — single source of truth achieved.
+- WI-3 live-acc: "accept as-is".
+- Free-form: "forge shouldn't force live acceptance criteria for an initiative [of this type]." Also queried whether audit/investigation initiatives belong in the architect phase rather than as standalone forge cycles.
 
 ## Event log excerpt
 

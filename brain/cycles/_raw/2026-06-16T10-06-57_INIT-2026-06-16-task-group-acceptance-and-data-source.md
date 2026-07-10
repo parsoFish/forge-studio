@@ -7,12 +7,9 @@ initiative_id: INIT-2026-06-16-task-group-acceptance-and-data-source
 project: terraform-provider-betterado
 ingested_at: 2026-06-16T11:00:00.000Z
 ingested_by: reflector
-retention: interesting
+retention: routine
 cited_by:
-  - brain/cycles/themes/2026-06-16-unifier-demo-render-undiscoverable.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-16-acceptance-test-fixture-discipline.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-16-agent-crash-work-survives.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-16-data-source-reader-pattern.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-16-gate-expected-fail-forces-test-write.md
 ---
 
 ## Summary

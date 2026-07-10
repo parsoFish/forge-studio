@@ -57,3 +57,8 @@ the prose `beforeNote`/`afterNote`. Two forge gaps combined:
 
 See [[2026-06-22-single-iteration-tdd-with-4-wi-chain]] for this cycle's build,
 and [[git-truth-and-pure-aggregation]] for the analytics contract the demo proves.
+
+## Sources
+
+- `_logs/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta/user-feedback.md` — operator note: "demo artifact reverted to prose descriptions instead of real before/after visual artifacts"
+- `/home/parso/forge/brain/cycles/_raw/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta.md`

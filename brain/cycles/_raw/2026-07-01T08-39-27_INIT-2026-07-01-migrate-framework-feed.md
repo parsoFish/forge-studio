@@ -9,10 +9,7 @@ ingested_at: 2026-07-03T12:00:00Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-03-unifier-branch-divergence-early-gate.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-ado-feed-soft-delete-checkdestroy.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-framework-null-vs-empty-string-optional-attrs.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-sdkv2-dead-file-deletion-unenforced.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-01-pr50-committed-scratch-and-broken-squash-merge.md
 ---
 
 # Cycle Archive — INIT-2026-07-01-migrate-framework-feed

@@ -9,8 +9,7 @@ ingested_at: 2026-06-22T09:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-06-22-demo-capture-missing-from-unifier-prompt.md
-  - brain/projects/gitpulse/themes/2026-06-22-model-rendering-wi-split-overgranular.md
+  - brain/projects/gitpulse/themes/2026-06-22-demo-visual-verification-prose-fallback.md
 ---
 
 # Cycle 2026-06-22T08-23-03 — INIT-2026-06-22-compare-ref-analytics-delta

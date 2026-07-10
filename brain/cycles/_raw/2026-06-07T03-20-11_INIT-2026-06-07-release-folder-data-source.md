@@ -7,10 +7,11 @@ initiative_id: INIT-2026-06-07-release-folder-data-source
 project: terraform-provider-betterado
 ingested_at: 2026-06-07T03:25:00Z
 ingested_by: reflector
-retention: load-bearing
+retention: routine
 cited_by:
-  - projects/terraform-provider-betterado/brain/themes/2026-06-07-data-source-parity-pattern-confirmed.md
-  - projects/terraform-provider-betterado/brain/themes/2026-06-07-report-diff-inverted-resume-third-occurrence.md
+  - brain/cycles/themes/2026-06-07-can-open-pr-ignores-wi-status.md
+  - brain/cycles/themes/2026-06-07-requeue-no-pr-state-guard.md
+  - brain/projects/terraform-provider-betterado/themes/2026-06-07-provider-count-test-mandatory-pair.md
 ---
 
 # Cycle 2026-06-07T03-20-11 — INIT-2026-06-07-release-folder-data-source

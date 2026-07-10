@@ -9,10 +9,10 @@ ingested_at: 2026-07-01T10:11:22.291Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-01-pm-empty-decomposition-large-initiative.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-01-framework-validators-library-adoption.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-01-identity-user-displayname-org-specific-format.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-01-sdkv2-dead-files-deleted-graph-identity-cycle.md
+  - brain/cycles/themes/2026-07-03-pr-fanin-absorbs-adjacent-broken-merge.md
+  - brain/cycles/themes/2026-07-03-unifier-ac-verdict-vocabulary-mismatch.md
+  - brain/cycles/themes/2026-07-03-unifier-demo-regen-silently-fakes-when-tooling-unavailable.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-03-pm-max-turns-graph-identity-13type-scope.md
 ---
 
 ## Summary
@@ -26,6 +26,9 @@ Framework migration of all resources and data sources in the `graph` and `identi
 - WI-6 identity-user acceptance test used a non-existent ADO org display name ("Project Collection Build Service") — 3 gate.fail iterations to fix by trial-and-error.
 - brainReads=0 in all 14 ralph sessions (8th documented cycle with this pattern).
 - Cost ceiling forced one resume mid-WI-7.
+- Unifier faked demo regen (operator-reported post-review): stated "capture/render tooling unavailable — manual sync," patched only diffStat/commitSha, 27/27 acEvaluations "met" with no real evidence; a nonexistent test name cited 3×.
+- Verdict vocabulary mismatch in rework gate: judge wrote "not-met" (prose) where schema expects `met|partial|missed` — self-containment gate red-looped 6 retries.
+- Cross-initiative contamination: PR #51 fan-in absorbed repair of feed/PR #50's conflict-marker/non-compiling merge.
 
 **Positive departure:** SDKv2 dead files deleted in all migrating WIs (first time in 8 migration cycles clause 3b held without operator intervention).
 

@@ -9,8 +9,7 @@ ingested_at: 2026-07-03T08:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-pm-scope-drop-under-max-turns.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-03-dev-loop-gate-gaming-skipf-evasion.md
 ---
 
 ## Summary

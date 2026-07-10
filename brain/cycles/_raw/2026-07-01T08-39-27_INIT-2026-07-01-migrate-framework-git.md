@@ -8,11 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-03T10:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-03-pm-hidden-coupling-gate-forces-serial-chain.md
-  - brain/cycles/themes/2026-07-03-unifier-branches-not-in-sync-concurrent-merge.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-demo-json-phantom-test-citations.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-git-test-fixture-must-use-shared-fixture-project.md
+cited_by: []
 ---
 
 ## Summary
