@@ -1,135 +1,213 @@
-# Forge Refinement Roadmap — post-betterado cycle (2026-07-04)
+# Forge Refinement Roadmap v2 — post-betterado holistic review (2026-07-10)
 
-**Inputs:** 40-entry friction log (`docs/investigations/2026-07-betterado-run-friction.md`), 47 new brain themes from the run, operator cycle notes, the platform user-flow diagram (Flows / Skills / Agents / Knowledge-base pillars), code-grounding of every observed UI defect, and a fresh survey of the Ralph-loop best-practice standard.
+**Supersedes** the 2026-07-04 partial-review version (git `b855941`). Rebased on
+the full-run evidence: 24/24 initiatives merged, betterado 2.0.0 cut and
+live-verified, and the six days of friction the original predated. Evidence
+base: [`docs/investigations/2026-07-betterado-holistic-review.md`](./docs/investigations/2026-07-betterado-holistic-review.md)
+(+ the five appendix reports beside it). Disposition of every v1 item is in the
+[friction-reconciliation report](./docs/investigations/2026-07-holistic-review/friction-reconciliation.md):
+34 still-needed · 4 rescoped · 2 invalidated · 2 dropped as adds-mechanism.
 
-**Lens (operator-set):** remove guardrails over adding new ones; simplify and tighten forge as an agentic flow-building platform. Every phase below is judged against that lens plus the north star (unattended operation, battle-tested tools, simplest thing that works).
+**Lens (operator-set, unchanged):** remove guardrails over adding new ones;
+tighten and simplify. Of the top-10 changes below, **six delete mechanism**.
 
 ---
 
-## 1. The cost verdict: complexity is not the root
+## 1. The cost verdict (corrected)
 
-The betterado roadmap cost **≈ $926 across 53 initiatives (44 merged)** — median ≈ $20/initiative, top item $59.76 (serviceendpoint). For full framework migrations of entire API surfaces per initiative, the baseline is *reasonable*. The waste is itemizable and has specific, fixable causes:
+Roadmap wave: **$1,134.57 / 24 initiatives** — median **$41.45** (v1 said ≈$20),
+range $13.69–$92.26. betterado program all-time: $1,431.36 / 60 attempted. v1's
+"$926" is unreproducible (+20.5% low; most plausibly merged-only scoping).
+Waste: **$228.28 conservative (20.1%)** to $517.93 broad (45.7%) — and **no
+downward trend inside the run**; the mid-run fixes improved outcome quality
+(first-pass-authentic evidence), not spend.
 
-| Waste class | Evidence | Approx. direct cost |
+Corrected waste classes: PM wasted attempts $30.30 across 16/24 cycles (v1
+undercounted 3–4×); unifier waste burns in *iteration* loops ($84.56 single
+overrun), crash-restarts cost ≈$0 directly — the cap interrupts iteration
+spend; dead-SDKv2 recurrence real per themes but only $10.76 confirmable from
+cost data; fabrication rework unquantifiable from cost events.
+
+**Verdict stands, harder:** complexity is not the root. The roots are (a) the
+knowledge-flow gap — the planner is the only legal carrier of brain/profile
+constraints into the dev loop and doesn't compile them into WI specs — and (b)
+missing honesty at failure boundaries. Both are simplification problems. The
+~$33–40 first-pass cost per API-surface migration is acceptable; the 20–46%
+rework band is the target.
+
+**Protect (do not regress):** front-loaded demo contracts (gallery cycle:
+first-pass-authentic evidence), iter-0 `already-complete` guard, decomposition
+completeness annotation (30+/30+ type coverage), nonce+artifact binding,
+**operator/orchestrator-run gate execution** (ended the fabrication arms race
+at round 5 — honest artifacts then passed every forensic gate first try).
+
+## 2. Guardrails to REMOVE (dispositions applied)
+
+| # | Guardrail | Disposition |
 |---|---|---|
-| PM max-turns / zero-WI runs (5 themes) | $1.45 + $0.89 + $1.11 + $3.20 + retries | ~$7–10 |
-| Unifier unbounded restart loops (16× twice, no events) | 2 themes, ~$8–16 each | ~$16–32 |
-| Dead-SDKv2-files recurrence — 7 consecutive cycles, incl. one full second dev-loop pass | 7 themes | ~$25–35 |
-| Re-derivation per WI (plan-modifier, config-validator, wiki API shapes, fixture rules — brainReads=0 by design, PM never compiled the rules into specs) | 5 themes, ≥4 extra iterations each occurrence | ~10–15% of dev spend |
-| Evidence-fabrication arms race (rounds 2–4, nonce/mtime escalation) | friction log | multi-$ rework rounds |
+| G1 | `autoCommitWorktreeIfDirty` commits dirty state on red gates | **keep-cut** — closes the scratch→branch vector; agent commits only after green |
+| G2 | `NO_WORK_INDICATORS`/`WORK_HAPPENED_PATTERNS` string heuristics | **keep-cut** — superseded by `requiredPaths` + demo contract; delete |
+| G3 | Identical retry of crash-before-first-tool (`tool_use_count===0`) | **keep-cut, validated** — recurred 07-03 and 07-05; escalate to cycle-restart instead |
+| G4 | Unbounded unifier resume loop | **keep-cut, top item** — cap ≈3 consecutive same-gate failures → `uwi.gate-failed` event; also treat **gate-timeout ≠ work-failure** (N10) |
+| G5 | Failure-classifier full-history first-match scan | **keep-cut, validated** — one stale event masked every later failure again (07-04); window to current phase/attempt |
+| G6 | fanOut-forbidden-on-entry-node lint | keep (low) — definition states truth, runtime honors |
+| G7 | Per-initiative architect plan-gates in a roadmap wave | **rescoped** — no false-block spam evidenced; folds into 3.2 (batched kickoff), not a standalone cut |
+| G8 | `headroom_retrieve` retry spiral in PM | **rescoped** — symptom. Real cut: **pin the agent-env allowlist at the SDK seam** so host proxy wrappers never leak into phase agents (caused the ~50% early max-turns rate) |
+| G9 | Hardcoded `gate='review'` for gated runs | keep (low) — derive from flow definition |
+| G10 | `parallel golangci-lint` treated as terminal | **keep-cut, validated** — transient class → bounded backoff |
 
-**Conclusion:** the root is not forge's complexity — it is (a) a **knowledge-flow gap** (the planner is the only legal carrier of brain/profile constraints into the dev loop, and it doesn't compile them into WI specs), and (b) **missing honesty at failure boundaries** (unbounded retries, no gate-failure events, a failure classifier that reports the wrong cause). Both are simplification problems, not add-more-guardrails problems.
+## 3. Phase 0 — Close-out ✅ EXECUTED (2026-07-10, this review campaign)
 
-**Positive signals to protect (do not regress):** front-loaded demo contracts produced first-pass-authentic evidence (gallery cycle); the iter-0 `already-complete` guard ($0 catch); the manifest "decomposition completeness annotation" (forced full 30-type coverage); nonce+artifact binding as the durable anti-fabrication fix.
+Done: brain themes + raw archives + profile committed; 07-04 plan baselined;
+brain INDEX regenerated; 166 reflection questions triaged (99 artifact-answered,
+33 operator-genuine surfaced); 50 reflector re-runs executed (back-filling 10
+missing archives + consuming 8 stranded operator answers); review PRs — v1's
+0.2 was already OBE (everything merged).
 
----
+Remaining operator input (from the triage report §4): the SDK
+v2.38.1→v2.40.1 acceptance call; whether acceptance gates may skip docs-only
+initiatives; the 5 open-ended catch-alls.
 
-## 2. Guardrails to REMOVE (the lens, applied)
+## 4. Phase 1 — Honest instruments
 
-| # | Guardrail | Why it fails | Replacement |
-|---|---|---|---|
-| G1 | `autoCommitWorktreeIfDirty` (`loops/ralph/runner.ts`) commits dirty state even when gates are red | Violates the Ralph hard rule "no commit unless everything passes"; how scratch/fabricated state reached branches | Agent commits only; auto-commit only after a green gate, else discard-or-surface |
-| G2 | `NO_WORK_INDICATORS` / `WORK_HAPPENED_PATTERNS` heuristic string scans (`loops/ralph/stop-conditions.ts:158-189`) | Heuristic; superseded by deterministic contracts (nonce/artifact binding, `requiredPaths`) | Keep `requiredPaths` + demo contract; delete the string heuristics they superseded |
-| G3 | Crash-retry of crash-before-first-tool (unifier, `tool_use_count:0`) | Retrying an identical launch cannot fix a process crash — both retries also crashed | Detect `tool_use_count===0` → skip retry, escalate to cycle-restart directly |
-| G4 | Unbounded unifier resume loop (16 restarts, zero events, 2 occurrences) | Implicit infinite retry is a guardrail pretending to be resilience | Cap ≈3 consecutive same-gate failures → emit `uwi.gate-failed` (gate name + output) → human gate |
-| G5 | Failure-classifier full-history scan, first-match-wins (`orchestrator/failure-classifier.ts:28-114`) | One stale `pm.empty-decomposition` event permanently masks every later failure ("PM emitted zero work items" shown for everything) | Window classification to the current phase/attempt only |
-| G6 | `fanOut`-forbidden-on-entry-node lint rule (`orchestrator/studio/validate.ts:262-278`) | Forces the flow definition to lie — dev node fans out at runtime, checkbox structurally stuck unchecked | Definition states truth: `fanOut: true` on the dev node; runtime honors the flag (see 4.2) |
-| G7 | Per-initiative architect plan-gates during a roadmap wave | 23 initiatives × operator block = false-block spam; holdover from the 1-flow→3-flow split | One roadmap-level PLAN gate; per-initiative kickoff moves to the roadmap page (see Phase 3) |
-| G8 | `headroom_retrieve` retry spiral in PM (4 runs, ~$3.2, ~18h) | Cache-miss fallback loops instead of degrading | Cap at 1 retry → plain `Read` fallback |
-| G9 | Hardcoded `gate = 'review'` for any gated run (`orchestrator/run-model.ts:419`) | Pre-split relic; architect `plan` gate lights the wrong node in the wrong flow | Derive gated node id from the flow definition |
-| G10 | `parallel golangci-lint is running` treated as terminal lint failure | Cost a full wasted dev-loop pass | Classify as transient → bounded backoff retry |
+All v1 items survive; two additions from this review. One PR each:
 
----
-
-## 3. Phase 0 — Close out the betterado run (baseline, before any refinement)
-
-1. **Reflection backlog:** 10 done initiatives have no `brain/cycles/_raw` archive (list in §9); run `forge-reflect` for each. **33 of 35 cycles have unanswered `user-questions.json`** — triage with a `reflection-triage` skill pass (batch-answerable from artifacts vs. genuinely-operator questions), answer, re-run reflectors.
-2. **Queue tail:** review/merge the 3 `ready-for-review` PRs (core, gallery-extensionmanagement, pipelinesapproval). Hold the 3 `pending` (taskagent, workitemtrackingprocess, mux-free-cutover) until after Phase 1–3 — they become the validation cycle (Phase 6).
-3. **Commit** the ~26 untracked brain themes + raw archives sitting in git status.
-
-## 4. Phase 1 — Honest instruments (fix the window before changing the machine)
-
-All grounded; none are mysteries. One PR-sized item each:
-
-1. **Failure classifier windowing** — G5. Kills the universal wrong error message.
-2. **Gate-node derivation** — G9. Kills architect false-blocks in the monitor.
-3. **Flow-swap flicker unification** — three compounding defects in `forge-ui/app/flows/[id]/page.tsx` + `orchestrator/run-model.ts:224-280`: stale `runs` state not reset on route change; sticky-selection key scoped per-flow (misses on tab swap → snaps to top); `buildFlowNodeSets` silently degrading to empty map on any read error, collapsing lineage (why completed-architect runs vanish). Fix as one "run-list model" consolidation. *(Note: the "different initiative constantly selected" observation is this — `pickDefaultRun` re-firing after lineage collapse — not agent monitoring actions.)*
-4. **Per-WI cost attribution** — events already carry `work_item_id`; bucket `cost_usd` by it in `run-model-derive.ts` (today WI cost doesn't exist and `PhaseDrawer.tsx:60-61` silently falls back to the aggregated dev-node meta — the observed bug).
-5. **WI dependency DAG layout** — `monitor-layout.ts:123-169` stacks WIs vertically in one column; `dependsOn` is already populated but unused. Apply the existing `dep-layout.ts` topo pass to the WI sub-graph: dependency chains left→right, parallel-eligible WIs stacked top→bottom, edges drawn. This also becomes the visual for Phase 4 parallel execution.
-6. **Roadmap page rework** —
-   - Real titles: architect emits `title:` frontmatter per initiative manifest; fix the `^##?` regex (grabs the boilerplate `## Goal` heading) in `cli/bridge-studio.ts:819` **and** `orchestrator/run-model.ts:503-506`.
-   - Dependency-ordered progress line: `topoLevels` is already computed then thrown away (`projects/[id]/page.tsx:524-541`); feed it to the serpentine ordering. Correct ordering beats drawing direction arrows.
-   - Eligible-to-start highlighting: `canStartDevelopment` must check `dependsOnInitiatives` are done, not just `status === 'pending'`; highlight the eligible set → enables batched kickoff.
-   - In-flight → active-flow link derived from manifest status, not same-session component state.
+1. **Failure-classifier windowing** — G5.
+2. **Gate-node derivation** — G9.
+3. **Flow-swap flicker unification** — the three compounding run-list defects
+   (`forge-ui/app/flows/[id]/page.tsx` + `orchestrator/run-model.ts:224-280`).
+4. **Per-WI cost attribution** — bucket `cost_usd` by `metadata.work_item_id`
+   in `run-model-derive.ts`. Prerequisite for Phase-4 parallel WIs.
+5. **WI dependency DAG layout** — apply existing `dep-layout.ts` topo pass to
+   the WI sub-graph.
+6. **Roadmap page rework** — real titles, dependency-ordered serpentine,
+   eligible-to-start highlighting, manifest-derived active links.
 7. **fanOut truth** — G6.
+8. **NEW: cost-rollup double-count fix** — `cli/metrics.ts per_skill` and
+   `run-model-derive.ts::buildNodeMeta()` double/triple-count (audit §3);
+   Studio's phase-hex cost badges have overstated all along. Align to the
+   correct `aggregate()` per-phase rule.
+9. **NEW: reflector-loss visibility** — nothing diffs `_queue/done/` against
+   the archive set; 10 initiatives silently lost reflection. A `forge brain
+   lint`-style check (instrument, not guardrail).
 
-## 5. Phase 2 — Engine honesty + simplification (orchestrator hot path)
+## 5. Phase 2 — Engine honesty (orchestrator hot path)
 
-1. Unifier restart cap + `uwi.gate-failed` structured event — G4 (two themes, both $8–16 wasted).
-2. Crash-before-first-tool → no identical retry — G3.
-3. Transient-lint-lock classification — G10.
-4. Unifier fan-in staleness: always re-derive `git diff --stat`/version at startup; validate `demo.json` liveEvidence id against `.forge/live-evidence/` on **every** re-prep pass (two themes + one operator send-back).
-5. Ralph commit discipline — G1, G2 (with the demo contract as the deterministic replacement).
-6. PM turn economy — G8 + write-WIs-incrementally + Grep-not-Read-for-large-files folded into the decomposition skill (Phase 3); emit partial WI graph near exhaustion rather than 0.
+Reordered; N1 first — it deletes the most mechanism.
 
-## 6. Phase 3 — Design-phase consolidation (the big one; operator's "general idea")
+1. **N1 — Orchestrator-owned gate execution for live evidence.** The
+   orchestrator runs the committed runner/gates and hands agents read-only
+   artifacts. Supersedes the entire forensic-escalation ladder (mtime
+   forensics, regen-clobber protection = N5/N12 resolved by construction).
+   The settled answer from fabrication round 5; codify it.
+2. **Unifier loop cap + `uwi.gate-failed` event** — G4+N10 (top waste item:
+   $84.56 + $15.34 + ≥6 affected cycles).
+3. **Crash-before-first-tool → no identical retry** — G3.
+4. **Transient-lint classification** — G10; plus **N9: rate-limit →
+   environment-failure** (stop the drain re-claiming doomed manifests on a
+   5-minute loop).
+5. **Demo fan-in honesty** — re-derive diff/version at startup; validate
+   liveEvidence ids every re-prep pass; **N3: demo-path single source of
+   truth** (recurred at the literal last cycle).
+6. **Ralph commit discipline** — G1+G2, demo contract as the deterministic
+   replacement; **N2: nonce+producibility folded into the demo contract**.
+7. **Send-back gate-script-body API (N8)** — reviewer send-backs carry an
+   executable gate body; ship **one hardened gate template** (errexit-exempt
+   `! grep` asserts fixed in the template — N4; explicitly **not a lint**).
+8. **N6 — post-merge main CI + conflict-marker check** — broken main shipped
+   undetected for a day.
+9. **N7 — requeue infers resume position from worktree/branch state** —
+   removes the operator dance and the destroy-per-WI-work failure mode.
+10. **Reflector pipeline honesty** — consume-feedback-before-regenerating,
+    `output_refs` must reflect actual writes (phantom retro), fix the
+    H1-title-as-question parse leak.
+11. **PM turn economy** — env-pin at the SDK seam (G8 rescoped),
+    write-WIs-incrementally, emit partial graph near exhaustion (large-package
+    starvation persisted to 07-05).
 
-**Update ADRs first** (touches the DEC-3 flow split and the architect/PM agent boundary).
+## 6. Phase 3 — Design-phase consolidation
 
-1. **One design agent.** Collapse `architect` + `project-manager` into a single agent whose stages (interview → roadmap draft → completeness critique → per-initiative WI decomposition) are expressed via **instructions, skills, hooks, and tools** — not separate runtime agents. Retire the `project-manager` agent; cull the unwired `code-reviewer` from the roster (or wire it deliberately); fold `release-finalizer` invocation into flow topology or document why it stays outside.
-2. **Plan-everything-before-kickoff.** Decomposition has no execution dependencies: a roadmap wave produces WI graphs for **all** initiatives up front. Operator (later: an agent/flow) reviews the complete initiative+WI state, then kicks off from the roadmap page — batched by dependency eligibility, with **zero further operator blocks** (G7: one roadmap-level PLAN gate total).
-3. **The contract-compiler stage — highest-leverage single change in this plan.** Dev-loop agents correctly read no brain (ADR-010); the WI spec is the *only* legal knowledge carrier. The decomposition stage must therefore **compile** project profile + brain constraints into each WI body: explicit file-deletion lists (proven fix — graph-identity cycle deleted all 4,423 dead lines when specs named them; 7 cycles failed when they didn't), deregistration checklists, API-shape rules, fixture rules, sizing (≤4–5 resources per WI — the 13-resource batch cost $5.21 and 139 bash calls), and per-WI provider-registration serialization (the hidden-coupling rule).
-4. **Completeness critic at FINALIZE** (from the 23-initiative judge review): coverage-closure diff over the full scope enumeration, pairwise-disjoint ownership, scope-ledger vs. interview answers, invariants as ACs not prose. A skill stage, not a runtime guardrail.
-5. **Architect page redesign:** align to current UI patterns (the page still reflects pre-Studio layouts); add file/image upload as design inputs; interview stays but feeds one agent's staged context.
+**Update ADRs first.** One change from v1: **3.3 leads; 3.1 waits for its
+evidence.**
+
+1. **Contract-compiler stage (was 3.3) — the proven, highest-leverage change.**
+   Decomposition compiles profile + brain constraints into every WI body:
+   file-deletion lists (graph-identity deleted all 4,423 dead lines "for the
+   first time in 8 cycles" when specs named them), deregistration checklists,
+   API-shape/fixture rules, sizing ≤4–5 resources/WI, per-WI
+   provider-registration serialization. The `framework-migration-checklist`
+   theme is the template. Ship as `wi-spec-compiler` skill.
+2. **Plan-everything-before-kickoff** (was 3.2, +G7): decompose all initiatives
+   up front; one roadmap-level PLAN gate; batched dependency-eligible kickoff
+   from the roadmap page.
+3. **Completeness critic at FINALIZE** (was 3.4, validated — the completeness
+   annotation forced full 30-type coverage; PR #47 caught the gap it exists to
+   catch). Ship as `architect-completeness-critic` skill.
+4. **One design agent** (was 3.1) — **rescoped: after 1–3 land.** Collapsing
+   architect+PM is justified only once the compiled-spec pipeline proves out;
+   don't restructure agents on the same evidence that fixes their contract.
+   Roster hygiene stands: cull the unwired `code-reviewer`, place
+   `release-finalizer` deliberately.
+5. **Architect page redesign** (low) — current UI patterns; file/image inputs.
 
 ## 7. Phase 4 — Ralph conformance + parallel work items
 
-Conformance audit vs. the researched standard (fresh-context-per-iteration ✅ via per-iteration agent invocation + `AGENT.md`/`fix_plan.md` disk state; independent gate re-execution ✅ via `stop-conditions.ts`):
+Conformance rows (updated): no-commit-on-red → Phase 2.6; gate-failure
+re-injection → verify the live-gate-feedback fix end-to-end (the 07-10
+demo-path false-negative says the loop isn't closed); spec lint → ship
+`ralph-spec-lint` **inside the decomposition stage** (planner-side check, not a
+runtime guardrail); distinct git identity — cheap, do it; sandbox for
+unattended runs — top of `docs/known-gaps.md`, own workstream; iteration cap ✅
+keep as financial governor.
 
-| Standard | Forge today | Action |
-|---|---|---|
-| No commit on red gates (MUST) | ❌ `autoCommitWorktreeIfDirty` unconditional | G1 (Phase 2) |
-| Precise gate-failure re-injection (SHOULD) | ⚠️ partial (live-gate-feedback fix exists) | Verify failure output (names + errors) reaches next iteration's prompt |
-| Specs: single-topic, outcome ACs, explicit stop condition + file list (MUST) | ⚠️ inconsistent — see dead-files/scope-drop themes | `ralph-spec-lint` skill (Phase 5) run by the decomposition stage |
-| Distinct agent git identity (SHOULD) | ❌ operator credentials | Cheap: dedicated git identity/service account |
-| Sandbox for unattended runs (MUST NOT run bare) | ❌ bare host — the SEV-1 fixture-project destruction | Log as top item in `docs/known-gaps.md`; container/scoped-creds is its own workstream |
-| Iteration cap as financial governor (MUST) | ✅ (per-WI USD deliberately ∞, C19) | Keep; revisit only if evidence demands |
+**Parallel WI execution** unchanged in substance: per-WI worktrees, ready-layer
+dispatch replacing the serial loop in `developer-loop.ts`, concurrency-safe
+`wiOutcomes`. Sequenced after Phase 1.4 (per-WI cost) + Phase 3.1
+(trustworthy specs).
 
-**Parallel WI execution** (operator ask; grounded requirements): per-WI git worktrees (already the CLAUDE.md-preferred isolation) replacing the shared-worktree + scratch-wipe design; ready-layer scheduler (dispatch WIs whose deps are done, bounded pool) replacing the serial `for…of` in `developer-loop.ts:317`; concurrency-safe `wiOutcomes`; per-WI cost/event attribution (Phase 1.4 is the prerequisite). Sequenced *after* Phase 1–3 so the instruments and specs are trustworthy first.
+## 8. Phase 5 — Platform pillars + skills (pruned)
 
-## 8. Phase 5 — Platform-pillar gaps (the diagram) + skills to create
+- KB pillar: **seed a project KB on new-project creation** (kept).
+- OOTB skills catalog: **deferred — adds-mechanism** without demonstrated pull;
+  revisit when a second managed project demands it.
+- Skills, consolidated (v1's six → four): `wi-spec-compiler` (Phase 3),
+  `architect-completeness-critic` (Phase 3), `ralph-spec-lint` (Phase 4,
+  planner-side), `project-scoped-review` (Phase 6 — codifies what this
+  review's end-state audit did by hand). Cut: `reflection-triage` (backlog
+  cleared; Phase 2.10 fixes the defects that created it) and `cost-autopsy`
+  (a review-time analysis, not a standing skill — this campaign ran it from a
+  prompt; the ledger method is documented in the audit report).
 
-Diagram conformance: Flows pillar ✅ (gates progressable in UI; monitoring fixed by Phase 1). Agents pillar ✅ (builders/templates from M2). KB pillar mostly ✅ (lint/index/ingest/guidance); gap: **seed a project KB on new-project creation** so it grows with the project. Skills pillar has the real gap: no curated OOTB library sourced from community skill libraries — build the catalog surface (source, rate, pin) rather than hand-rolling content.
+## 9. Phase 6 — Validation (rebuilt)
 
-**Skills to create** (consolidated):
+1. **Retrospective A/B — already in evidence, documented** (review §4): the
+   front-loaded-contract cohort (gallery #66 first-pass-authentic,
+   graph-identity, 30+/30+ completeness, new-package-7wi zero gate failures)
+   vs the early cohort's 2–4 rework rounds. This is the baseline against which
+   post-refinement cycles are judged.
+2. **Forward validation: the betterado auth initiative** — P0 from the
+   [end-state audit](./docs/investigations/2026-07-holistic-review/endstate-audit.md)
+   (wire non-PAT auth into framework `Configure()`; drafted with ACs, ~3–4
+   WIs). First post-refinement real cycle. P1 (protocol manifest `["6.0"]` +
+   v2.0.1) rides along — betterado is not publicly usable until both land.
+3. **Standing harnesses:** `verify:cycle` (mdtoc routine tier) + `ui:journey`
+   after each phase merge.
 
-| Skill | Purpose | Phase |
-|---|---|---|
-| `reflection-triage` | Work the reflection-question backlog; batch-answer from artifacts, surface only operator-genuine questions | 0 |
-| `wi-spec-compiler` | The contract-compiler: profile/brain constraints → WI bodies (deletion lists, checklists, sizing, coupling serialization) | 3 |
-| `architect-completeness-critic` | Coverage-closure diff + disjoint-ownership + scope-ledger at FINALIZE | 3 |
-| `ralph-spec-lint` | Validate every WI spec against the Ralph standard before dev kickoff (single topic, outcome ACs, stop condition, files enumerated, unfakeable gate cmd) | 4 |
-| `project-scoped-review` | Reusable managed-project audit: delivered code vs. initiative intent vs. live API docs | 6 |
-| `cost-autopsy` | Decompose a cycle's spend warranted-vs-waste from `events.jsonl`; feeds reflection | 5 |
-
-## 9. Phase 6 — Validation
-
-1. Run the 3 held pending initiatives (taskagent, workitemtrackingprocess, mux-free-cutover) as the **first post-refinement cycle** — direct A/B against this run's friction profile.
-2. `project-scoped-review` of betterado: intent-vs-delivered per initiative + live ADO API doc check → shapes the follow-on cycle (operator's assumption: issues likely; maybe not).
-3. Standing harnesses: `verify:cycle` (mdtoc routine tier) + `ui:journey` after each phase merge.
-
-**Unreflected done initiatives (Phase 0.1 work list):** environment-templates-spike, release-definition-artifact-trigger-enhancements, release-definition-coverage-gaps, release-definition-permissions-coverage, release-folder-coverage, release-stages-array-refactor, task-group-coverage (betterado ×7); gitpulse-code-churn; new-api-pipelines-v2; new-api-test.
+The rest of the betterado backlog (P2–P6: SDKv2 excision from the binary, acc
+test factory migration, CHANGELOG hygiene, doc phantoms, org residue) is
+project work, tracked in the end-state audit — **not forge plan items**.
 
 ## 10. Sequencing
 
 ```
-Phase 0 (close-out)        — now; no code changes
-Phase 1 (instruments)      — 7 small PRs, independent, parallelizable
-Phase 2 (engine honesty)   — after/alongside Phase 1; orchestrator hot path
-Phase 3 (design consol.)   — ADR updates first; the big structural change
-Phase 4 (ralph + parallel) — needs Phase 1.4 (per-WI cost) + Phase 3 specs
-Phase 5 (pillars + skills) — skills land with their consuming phase; catalog independent
-Phase 6 (validation)       — the 3 held initiatives + betterado scoped review
+Phase 0 (close-out)        — ✅ done 2026-07-10 (this campaign)
+Phase 1 (instruments)      — 9 small PRs, independent, parallelizable
+Phase 2 (engine honesty)   — N1 first; after/alongside Phase 1
+Phase 3 (design consol.)   — ADRs first; 3.1 (contract-compiler) leads; agent-collapse last
+Phase 4 (ralph + parallel) — needs 1.4 + 3.1
+Phase 5 (pillars + skills) — skills land with their consuming phase
+Phase 6 (validation)       — betterado auth cycle vs the §9.1 baseline
 ```
 
-Ordering follows the refinement methodology: fix instruments before engine, simplify before restructuring, validate on real cycles (no synthetic benches).
+Fix instruments before engine, simplify before restructuring, validate on real
+cycles. Six of the top-10 changes are deletions; keep it that way.
