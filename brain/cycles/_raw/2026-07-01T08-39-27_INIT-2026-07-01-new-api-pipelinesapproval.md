@@ -9,10 +9,7 @@ ingested_at: 2026-07-05T03:05:01Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-05-dev-loop-zero-brain-reads-persistent-8th-cycle.md
-  - brain/cycles/themes/2026-07-05-unifier-forge-demo-render-discovery-recurring.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-acceptance-test-gate-skip-semantics.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-new-package-7wi-decomposition-pattern.md
+  - brain/cycles/themes/2026-07-05-demo-json-producer-contract-path-mismatch.md
 ---
 
 ## Summary

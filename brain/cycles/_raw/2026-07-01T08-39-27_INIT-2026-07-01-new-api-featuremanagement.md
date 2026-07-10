@@ -8,10 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-03T09:10:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-03-forge-demo-render-cli-startup-bug.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-ado-featuremanagement-userscore-must-be-host.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-pm-spec-wrong-sdk-param-causes-extra-wi-iterations.md
+cited_by: []
 ---
 
 ## Summary

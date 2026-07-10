@@ -90,6 +90,16 @@ All v1 items survive; two additions from this review. One PR each:
 9. **NEW: reflector-loss visibility** — nothing diffs `_queue/done/` against
    the archive set; 10 initiatives silently lost reflection. A `forge brain
    lint`-style check (instrument, not guardrail).
+10. **NEW: reflector question re-emission** (found by the 07-10 rerun batch —
+   50/50 clean): the reflector emits its standard 4-question template on
+   *every* pass, including questions already answered via `user-feedback.md`
+   — so the open-question count in Studio regenerates after each rerun even
+   though answers WERE consumed into archives. Fix is a reflector-skill
+   prompt clause (skip questions the feedback file already answers), zero
+   new mechanism. Also: one rerun mis-routed a `decision`-category theme
+   into `brain/cycles/themes/` (caught by `checkCategoryScope`, moved by
+   hand) — the category→brain routing rule belongs in the reflector prompt
+   too, same clause.
 
 ## 5. Phase 2 — Engine honesty (orchestrator hot path)
 

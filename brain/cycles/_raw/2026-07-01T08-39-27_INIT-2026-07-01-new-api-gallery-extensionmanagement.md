@@ -8,10 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-05T00:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-05-zombie-ralph-frozen-tool-use-count.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-pm-hidden-coupling-repeats-despite-operator-guidance.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-unused-func-lint-gate-gap-extension-install.md
+cited_by: []
 ---
 
 ## Summary

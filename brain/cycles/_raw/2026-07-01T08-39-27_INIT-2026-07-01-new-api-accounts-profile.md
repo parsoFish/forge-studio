@@ -9,9 +9,7 @@ ingested_at: 2026-07-04T01:02:34.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-04-rate-limit-crash-prereq-failed-cascade.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-accounts-profile-data-source-pattern.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-04-vssps-accounts-org-scoped-pat-endpoint.md
+  - brain/cycles/themes/2026-07-04-stale-last-gate-failure-poisons-unifier.md
 ---
 
 ## Summary

@@ -22,6 +22,10 @@ The orchestrator or a manual resume triggered a new dev-loop session on an initi
 
 Guard condition: if all WIs are in `complete` state AND a PR URL exists in the event log for this initiative, do NOT start a new dev-loop session. The unifier should also not re-execute if its gates already pass (already implemented as `pending_uwis: []` → 0-iteration exit).
 
+## Operator confirmation (2026-07-03 reflector Stage 3)
+
+Operator identified this as the **highest-priority forge fix** from this cycle — ranked above PM max-turns and brainReads=0 (both longer-running structural issues). The operator described the guard condition as "precise and concretely fixable."
+
 ## Sources
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki/events.jsonl` — second dev-loop start at 2026-07-03T10:31 (EV_mr4smpnv); zero-delta WI-2 dev-loop.delivered at 2026-07-03T10:39 (EV_mr4swti0)

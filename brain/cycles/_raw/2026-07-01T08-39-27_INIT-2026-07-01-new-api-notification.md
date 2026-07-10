@@ -8,12 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-03T13:00:00Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-03-parallel-golangci-lint-ci-gate-failure.md
-  - brain/cycles/themes/2026-07-03-unifier-demo-json-live-evidence-id-validation.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-datasource-404-test-must-drive-read-not-just-mock.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-demo-json-live-evidence-id-must-match-branch-evidence.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-notification-subscription-framework-resource-pattern.md
+cited_by: []
 ---
 
 # Cycle 2026-07-01T08-39-27 — INIT-2026-07-01-new-api-notification

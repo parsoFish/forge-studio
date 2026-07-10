@@ -10,10 +10,6 @@ ingested_by: reflector
 retention: load-bearing
 cited_by:
   - brain/cycles/themes/2026-07-03-duplicate-dev-loop-after-pr-open.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-pm-max-turns-on-wiki-migration-initiative.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-wiki-api-shape-bugs-re-derived-zero-brain-reads.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-wiki-wiki-page-api-shapes.md
 ---
 
 ## Summary

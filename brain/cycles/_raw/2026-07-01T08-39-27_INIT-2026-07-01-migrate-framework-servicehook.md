@@ -9,10 +9,7 @@ ingested_at: 2026-07-03T11:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-03-pm-max-turns-from-large-file-read.md
-  - brain/cycles/themes/2026-07-03-unifier-overload-unchecked-checklist-items.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-multi-resource-provider-registration-coupling.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-servicehook-null-empty-string-inconsistency.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-01-dead-sdkv2-publisher-funcs-block-ci-gate-twice.md
 ---
 
 ## Summary

@@ -8,11 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-05T03:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-05-unifier-crash-before-tools-zero-tokens.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-framework-migration-checklist-not-in-wi-specs.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-pm-max-turns-large-package-migration.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-05-workitemtrackingprocess-process-is-enabled-api-quirk.md
+cited_by: []
 ---
 
 ## Summary

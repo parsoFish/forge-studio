@@ -8,11 +8,7 @@ project: terraform-provider-betterado
 ingested_at: 2026-07-03T14:30:00.000Z
 ingested_by: reflector
 retention: load-bearing
-cited_by:
-  - brain/cycles/themes/2026-07-03-pm-max-turns-large-initiative-decomp.md
-  - brain/cycles/themes/2026-07-03-unifier-process-crash-before-tools.md
-  - brain/cycles/themes/2026-07-03-unifier-stale-demo-metadata-after-fanin.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-workitemquery-folder-missing-live-evidence.md
+cited_by: []
 ---
 
 ## Summary
@@ -27,8 +23,8 @@ Initiative: migrate all resources/data-sources in `workitemtracking` package to 
 - PM run 3: 6 WIs with depends_on chain — success
 - Dev-loop: multiple ralph WI sessions, brainReads=0 in all sessions (known antipattern)
 - Unifier UWI-1: $7.63, 1 iter, succeeded; authored demo.json with version 1.2.1 and diffStat 84 files (accurate at time)
-- Unifier UWI-4: process crashed (exit code 1) twice before tools ran; stalled a full cycle
-- Unifier UWI-4+UWI-5 (final): 2 iterations, $5.45; corrected stale version (1.2.1 → 1.9.1) and stale diffStat (84→172 files) left by first unifier
+- Unifier UWI-4: process crashed 17 times (exit code 1 at startup, 0 tools used each time) over ~80 min before operator manually resumed; 34 total crash-retry events
+- Final unifier run: 2 iterations, $5.45; corrected stale version (1.2.1 → 1.9.1) and stale diffStat (84→172 files) left by first unifier
 - CI gate: passed; PR opened
 
 **Key patterns observed**:

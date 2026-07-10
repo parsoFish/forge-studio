@@ -9,9 +9,8 @@ ingested_at: 2026-07-03T22:00:00.000Z
 ingested_by: reflector
 retention: load-bearing
 cited_by:
-  - brain/cycles/themes/2026-07-03-unifier-go-build-catches-dead-sdkv2-helpers.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-decomposition-completeness-annotation-worked.md
-  - brain/projects/terraform-provider-betterado/themes/2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run.md
+  - brain/cycles/themes/2026-07-09-parallel-golangci-lint-transient-ci-gate-fail.md
+  - brain/projects/terraform-provider-betterado/themes/2026-07-09-serviceendpoint-usestateforunknown-computed-optional.md
 ---
 
 ## Summary
