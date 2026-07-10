@@ -64,11 +64,14 @@ pass `--dir`. It must carry:
   concrete diff change.
 - **Prefer REAL captured output over a prose note.** For a CLI tool, set `command` to
   the exact argv whose stdout IS the evidence (e.g. `node dist/cli.js churn .`); leave
-  `beforeOutput`/`afterOutput` empty — `forge demo capture` runs the command on `main`
-  (before) AND the branch HEAD (after) and back-fills the REAL terminal output,
-  rendered side-by-side. The operator wants to SEE the actual output, not a description
-  of it. Use `beforeNote`/`afterNote` only as a one-line caption, or when no command
-  can show the change (a pure type/internal refactor).
+  `beforeOutput`/`afterOutput` empty — the **orchestrator** runs `forge demo capture`
+  after the agent's iteration (ADR 036), executing the command on `main` (before) AND
+  the branch HEAD (after) and back-filling the REAL terminal output, rendered
+  side-by-side. The agent authors WHAT to capture; forge produces the evidence —
+  hand-written `beforeOutput`/`afterOutput` for a command checkpoint is overwritten by
+  the orchestrator's own run. The operator wants to SEE the actual output, not a
+  description of it. Use `beforeNote`/`afterNote` only as a one-line caption, or when
+  no command can show the change (a pure type/internal refactor).
 
 ### Rich structured sections (strongly recommended — prevents wall-of-text)
 
@@ -187,10 +190,15 @@ collapses them gracefully when absent, but their absence means a less useful dem
 3. **Derive the artefact:** `Bash forge demo render <initiative-id>` → writes
    `DEMO.md` from the JSON. **Never hand-write `DEMO.md`** — it is derived, so
    the PR artefact and the UI render stay identical.
-4. **Capture real before/after evidence:** `Bash forge demo capture <initiative-id>`
-   — for checkpoints with a `command`, captures the REAL stdout on `main` vs the branch
-   HEAD into `beforeOutput`/`afterOutput`; for browser checkpoints, captures screenshots.
-   Then re-renders DEMO.md. Best-effort (a capture failure leaves the checkpoint as-is).
+4. **Real before/after evidence is captured by the ORCHESTRATOR** (ADR 036 —
+   orchestrator-owned gate execution). After the agent's iteration, forge itself
+   spawns `forge demo capture <initiative-id>` in the worktree: for checkpoints
+   with a `command`, it captures the REAL stdout on `main` vs the branch HEAD
+   into `beforeOutput`/`afterOutput`; for browser checkpoints, screenshots. It
+   re-renders DEMO.md and commits the result. **The agent must NOT run
+   `forge demo capture` and must never hand-write `beforeOutput`/`afterOutput`**
+   — the orchestrator's run overwrites them. Best-effort (a capture failure
+   leaves the checkpoint as-is and is recorded as a `unifier.demo-capture` event).
 5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
    shadow).
 
@@ -202,7 +210,7 @@ the effort to the diff:
 
 | Diff shape | Demo effort |
 |------------|-------------|
-| **Trivial** (≤~2 files, no behavioural surface — a test add, a constant, a doc) | **Notes-only.** One checkpoint, `essence` + `beforeNote`/`afterNote`. **No media capture.** Do not invoke `forge demo capture`. |
+| **Trivial** (≤~2 files, no behavioural surface — a test add, a constant, a doc) | **Notes-only.** One checkpoint, `essence` + `beforeNote`/`afterNote`. **No media capture** — a demo with no `command`/screenshot checkpoints makes the orchestrator skip its capture run entirely. |
 | **Standard** (a feature or fix with a clear behavioural delta) | Full checkpoints grounded in ACs; `summary` + `apiDiff` + `testEvidence` when applicable; metrics if measurable; media only if the generated skill specifies screenshots. |
 | **Large / multi-feature** | A checkpoint per distinct delta (still tight per checkpoint); `summary` bullets for each sub-change; `apiDiff` for each changed surface; a metrics table for harness evidence. |
 
@@ -216,9 +224,10 @@ sections make the rendered DEMO.md genuinely useful without requiring media capt
 The generated project demo skill (from `skills/demo-design`) specifies one of
 these evidence forms based on what the project's code actually exposes:
 
-- **Portal/browser screenshot** — a rendered UI. Author checkpoints, then
-  `forge demo capture` to back-fill before/after screenshots. `kind: "screenshot"`
-  for a settled UI state; `kind: "video"` for time-dependent behaviour.
+- **Portal/browser screenshot** — a rendered UI. Author checkpoints; the
+  orchestrator's `forge demo capture` run back-fills before/after screenshots.
+  `kind: "screenshot"` for a settled UI state; `kind: "video"` for
+  time-dependent behaviour.
 - **Harness metrics** — behaviour measurable at the test layer. Run the project's
   measurement command against baseline AND HEAD, scrape stable result lines,
   encode them as a `kind: "harness"` checkpoint with
@@ -240,9 +249,10 @@ these evidence forms based on what the project's code actually exposes:
   block ("what changed and why it's correct"). Use `summary` bullets for the
   rationale. `apiDiff` to show any changed API/config surface.
 
-## Media capture (the optional, best-effort step)
+## Media capture (the optional, best-effort step — orchestrator-run)
 
-For projects with a renderable UI, after `demo.json` checkpoints are authored:
+For projects with a renderable UI, after `demo.json` checkpoints are authored,
+the **orchestrator** runs (ADR 036 — never the agent):
 
 ```
 forge demo capture <initiative-id>

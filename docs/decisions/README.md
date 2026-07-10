@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **035**).
+number (next free: **037**).
 
 ## Active
 
@@ -39,6 +39,8 @@ number (next free: **035**).
 | [032](./032-subsumption-proof.md) | Runtime-adapter swap surface | The as-built record of the runtime seam |
 | [033](./033-studio-first-flow-ux.md) | Studio first-flow UX (install → first flow) | The first-flow UX |
 | [034](./034-studio-aligned-contract.md) | Studio-aligned project contract (unified readiness + artifactRoot) | The unified project contract |
+| [035](./035-forge-owned-central-artifacts.md) | Brain 3 lives in the forge repo (forge-owned central artifacts) | Where per-project knowledge lives |
+| [036](./036-orchestrator-owned-gate-execution.md) | Orchestrator-owned gate execution (gates + demo capture run by forge, timeout = environment failure) | The anti-fabrication execution model |
 
 ## Retired / folded (numbers stay reserved)
 

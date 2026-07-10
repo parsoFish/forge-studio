@@ -85,9 +85,10 @@ what the code actually exposes. Use this decision tree:
    `present`/`capture` step in `demoProcess` that runs the tool. The change is visible
    by running a command and reading the output (a new column, a new flag, new rows).
    → Evidence form is **captured CLI output**: each checkpoint sets `command` to the
-     exact argv whose stdout IS the evidence; `forge demo capture` runs it on `main`
-     (before) AND the branch HEAD (after) and back-fills the REAL terminal output,
-     shown side-by-side. STRONGLY preferred over prose notes for any CLI tool — show
+     exact argv whose stdout IS the evidence; the orchestrator's `forge demo capture`
+     run (ADR 036 — forge spawns it, never the agent) executes it on `main` (before)
+     AND the branch HEAD (after) and back-fills the REAL terminal output, shown
+     side-by-side. STRONGLY preferred over prose notes for any CLI tool — show
      the actual output, do not describe it.
 
 5. **Default: notes-only evidence**
@@ -122,8 +123,10 @@ A Claude Code skill the unifier agent loads to produce `demo.json`. It must:
   configurable option exercised with a non-default value), the round-trip proof
   requirement (GET every written field), the idempotency gate (re-plan → no changes),
   and clean destroy. Encode these as hard gates the demo must pass.
-- For **portal/browser** evidence: include the preview command invocation, which
-  checkpoint labels map to which screenshots, and the `forge demo capture` step.
+- For **portal/browser** evidence: include the preview command invocation and which
+  checkpoint labels map to which screenshots (the orchestrator's `forge demo capture`
+  run performs the actual capture — ADR 036; the generated skill must NOT tell the
+  agent to run it).
 - For **harness metrics**: include the measurement command, which output lines are
   stable scalars, and the `metrics[]` format for `demo.json`.
 
