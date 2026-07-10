@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EventLogger } from '../logging.ts';
+import { classifyCrash } from '../failure-classifier.ts';
 import {
   DEV_ALLOWED_TOOLS,
   DEV_DISALLOWED_TOOLS,
@@ -439,6 +440,9 @@ export async function runDeveloperLoop(
 
     let result: LoopResult | null = null;
     let runnerError: { kind: string; message: string } | undefined;
+    // G3 (plan 2.3): remember the previous crash so classifyCrash can spot an
+    // IDENTICAL repeat — the deterministic no-third-attempt rule.
+    let priorCrashMessage: string | null = null;
     // F-44: bounded retry on transient agent-subprocess crash only.
     for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
       runnerError = undefined;
@@ -556,6 +560,34 @@ export async function runDeveloperLoop(
       // before. Quality-gate failures come back as `result` (not a throw)
       // and intentionally fall through here without retry.
       if (!runnerError || attempt === DEV_AGENT_CRASH_MAX_RETRIES) break;
+      // G3 (plan 2.3): classify the crash BEFORE an identical re-spawn.
+      // Deterministic (context overflow / same crash twice at the same point)
+      // → give up now with a terminal classified event; a further identical
+      // attempt provably repeats the crash and only wastes spend. Transient/
+      // unknown → retry with backoff as before (retry-with-cause).
+      const crashClass = classifyCrash(runnerError.message, priorCrashMessage);
+      if (crashClass.kind === 'deterministic') {
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: wiStart.event_id,
+          phase: 'developer-loop',
+          skill: 'developer-ralph',
+          event_type: 'error',
+          input_refs: [specPath],
+          output_refs: [],
+          message: 'dev-loop.crash-deterministic',
+          metadata: {
+            work_item_id: wi.work_item_id,
+            attempts_made: attempt + 1,
+            max_retries: DEV_AGENT_CRASH_MAX_RETRIES,
+            crash_class: crashClass.kind,
+            crash_reason: crashClass.reason,
+            runner_error: runnerError,
+          },
+        });
+        break;
+      }
+      priorCrashMessage = runnerError.message;
       logger.emit({
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
@@ -569,6 +601,8 @@ export async function runDeveloperLoop(
           work_item_id: wi.work_item_id,
           attempt: attempt + 1,
           max_retries: DEV_AGENT_CRASH_MAX_RETRIES,
+          crash_class: crashClass.kind,
+          crash_reason: crashClass.reason,
           runner_error: runnerError,
         },
       });
@@ -1357,8 +1391,32 @@ export async function runUnifier(
     // Observed: the unifier SDK process exiting 1 at iteration 0 right after a
     // multi-WI burst (gitpulse, 2026-06-21) — the dev-loop had this guard, the
     // unifier did not.
+    //
+    // G3 (plan 2.3): each re-spawn is IDENTICAL (same UWI spec, same context),
+    // so classify the crash first — deterministic (context overflow / same
+    // crash twice at the same point, brain/cycles/themes/2026-07-03-unifier-
+    // process-crash-before-tools.md) → give up with a terminal classified
+    // event instead of repeating the crash; transient/unknown → backoff retry.
     let itemOutcome = await runOnce();
+    let priorCrashMessage: string | null = null;
     for (let attempt = 1; itemOutcome.crashed && attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
+      const crashMessage = itemOutcome.runnerError ?? '';
+      const crashClass = classifyCrash(crashMessage, priorCrashMessage);
+      if (crashClass.kind === 'deterministic') {
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: start.event_id,
+          phase: 'unifier',
+          skill: 'developer-unifier',
+          event_type: 'error',
+          input_refs: [uwiPath],
+          output_refs: [],
+          message: 'unifier.crash-deterministic',
+          metadata: { work_item_id: uwi.work_item_id, attempts_made: attempt, max_retries: DEV_AGENT_CRASH_MAX_RETRIES, crash_class: crashClass.kind, crash_reason: crashClass.reason, runner_error: itemOutcome.runnerError },
+        });
+        break;
+      }
+      priorCrashMessage = crashMessage;
       logger.emit({
         initiative_id: input.initiativeId,
         parent_event_id: start.event_id,
@@ -1368,7 +1426,7 @@ export async function runUnifier(
         input_refs: [uwiPath],
         output_refs: [],
         message: 'unifier.crash-retry',
-        metadata: { work_item_id: uwi.work_item_id, attempt, max_retries: DEV_AGENT_CRASH_MAX_RETRIES, runner_error: itemOutcome.runnerError },
+        metadata: { work_item_id: uwi.work_item_id, attempt, max_retries: DEV_AGENT_CRASH_MAX_RETRIES, crash_class: crashClass.kind, crash_reason: crashClass.reason, runner_error: itemOutcome.runnerError },
       });
       await sleep(DEV_AGENT_CRASH_BACKOFF_MS);
       itemOutcome = await runOnce();

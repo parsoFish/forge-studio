@@ -25,6 +25,69 @@ const T = (kind: FailureKind, reason: string, evidence: string[]): FailureClassi
   kind, reason, recoverable: kind === 'transient', evidence_event_ids: evidence,
 });
 
+// ---------------------------------------------------------------------------
+// G3 (plan 2.3, crash-no-identical-retry): pre-retry crash classification.
+//
+// Evidence (brain/cycles/themes/2026-07-03-unifier-process-crash-before-tools.md
+// + 2026-07-04-rate-limit-crash-prereq-failed-cascade.md): the F-44 crash
+// retry re-spawned the agent IDENTICALLY — same binary, same spec, same
+// context — which repeats the crash when the cause is deterministic (context
+// overflow, a crash that already repeated at the same point) and wastes spend.
+// `classifyCrash` runs BEFORE each re-spawn:
+//   - transient      → environment/API pressure (rate-limit, OOM SIGKILL,
+//                       network); a bounded backoff retry is legitimate.
+//   - deterministic  → an identical re-spawn provably cannot succeed
+//                       (context-length overflow, or the SAME crash repeated
+//                       verbatim); stop with a terminal classified event.
+//   - unknown        → unrecognised signature; allow ONE bounded retry — if
+//                       it crashes identically again the repeat rule promotes
+//                       it to deterministic.
+// This only stops IDENTICAL futile re-spawns; ADR 012 resume-preserves-work
+// is untouched (committed work stays on the branch, crashed UWIs persist as
+// re-runnable `pending`).
+// ---------------------------------------------------------------------------
+
+export type CrashKind = 'transient' | 'deterministic' | 'unknown';
+
+export type CrashClassification = {
+  kind: CrashKind;
+  reason: string;
+};
+
+/** Environment/API-pressure signatures — a fresh spawn under better conditions can succeed. */
+const TRANSIENT_CRASH_SIGNATURES = [
+  'rate_limit', 'rate-limit', '429', '529',
+  'usage limit', 'hit your limit', 'overloaded',
+  'stream-deadline',
+  'sigkill', 'signal 9',
+  'econnreset', 'etimedout', 'enotfound', 'econnrefused', 'epipe',
+  'socket hang up', 'network error', 'fetch failed',
+] as const;
+
+/** Deterministic-from-the-first-crash signatures — the same inputs overflow again. */
+const DETERMINISTIC_CRASH_SIGNATURES = [
+  'prompt is too long', 'context length', 'context_length',
+  'maximum context', 'input length and `max_tokens` exceed',
+] as const;
+
+export function classifyCrash(message: string, priorMessage: string | null): CrashClassification {
+  const blob = message.toLowerCase();
+  for (const sig of TRANSIENT_CRASH_SIGNATURES) {
+    if (blob.includes(sig)) {
+      return { kind: 'transient', reason: `environment/API-pressure crash signature "${sig}" — a backoff retry can succeed` };
+    }
+  }
+  for (const sig of DETERMINISTIC_CRASH_SIGNATURES) {
+    if (blob.includes(sig)) {
+      return { kind: 'deterministic', reason: `deterministic crash signature "${sig}" — an identical re-spawn crashes at the same point` };
+    }
+  }
+  if (priorMessage !== null && priorMessage === message) {
+    return { kind: 'deterministic', reason: 'identical crash repeated at the same point — a further identical re-spawn is futile' };
+  }
+  return { kind: 'unknown', reason: 'unrecognised crash signature — one bounded retry allowed before the repeat rule applies' };
+}
+
 /**
  * G5 (2026-07-10 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): a cycle's event log accumulates across
@@ -65,6 +128,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false;
+  let crashDeterministic = false;
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -106,6 +170,11 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // (gate.timeout) and unifier (unifier.gate.timeout) paths via the
     // gate_timed_out metadata flag.
     if (md.gate_timed_out === true || msg === 'gate.timeout' || msg === 'unifier.gate.timeout') { gateTimedOut = true; ev(e); }
+    // G3 (plan 2.3): the dev-loop/unifier gave up on a crash classified as
+    // DETERMINISTIC (context overflow / identical crash repeated at the same
+    // point). An identical cycle-level retry re-runs the same spawn and
+    // crashes again — terminal, operator-visible.
+    if (msg === 'dev-loop.crash-deterministic' || msg === 'unifier.crash-deterministic') { crashDeterministic = true; ev(e); }
     if (e.event_type === 'error') {
       const blob = (msg + ' ' + JSON.stringify(md)).toLowerCase();
       // Transient API-pressure signatures: rate limits, usage limits, overload,
@@ -141,6 +210,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (gateTimedOut) return T('transient', 'a quality gate timed out (environment failure — machine load / hung step, NOT a work failure; the code may be complete). Auto-retry; raise FORGE_GATE_TIMEOUT_MS if this gate is legitimately slow.', evidence);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
+  if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
