@@ -389,6 +389,35 @@ test('aggregateRun: gated — gate=review, demo+pr artifactsReady gate mode', ()
   }
 });
 
+test('aggregateRun: gate names the node actually reached, not a hardcoded "review" (G9)', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-custom-gate';
+    const cycleId = '2026-01-01T01-30-00_INIT-2026-01-01-custom-gate';
+
+    // A user-authored flow (ADR-028) whose gate node is named 'human-check',
+    // not 'review' — eventToNodeId falls back to the phase as its own node
+    // id since 'human-check' isn't in the seed-flow mapping.
+    const manifestPath = writeManifest(root, 'ready-for-review', initId, { cycle_id: cycleId, flow_id: 'my-second-flow' });
+
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('plan', 'start'), ev('plan', 'end'),
+      ev('dev', 'start'), ev('dev', 'end'),
+      ev('human-check', 'start'),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'ready-for-review', manifestPath, nowMs: Date.now() });
+
+    assert.equal(run.status, 'gated');
+    assert.equal(run.phases['human-check'], 'active');
+    assert.equal(run.phases['review'], undefined, 'no review node ever ran in this flow');
+    assert.equal(run.gate, 'human-check', 'gate must name the node actually awaiting the operator, not a hardcoded "review"');
+  } finally {
+    cleanup(root);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Synthetic: complete (done queue)
 // ---------------------------------------------------------------------------

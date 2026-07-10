@@ -11,7 +11,7 @@
  *   - Per-node metadata derivation
  *   - Work item status derivation (ported from forge-ui/lib/wi-status.ts)
  *   - Artifact detection
- *   - Gate note extraction
+ *   - Gate node identity + note extraction
  *   - Failure info extraction
  *   - eventToNodeId mapping helper
  */
@@ -480,6 +480,35 @@ export function deriveArtifacts(
   }
 
   return artifacts;
+}
+
+// ---------------------------------------------------------------------------
+// Gate node identity
+// ---------------------------------------------------------------------------
+
+/**
+ * G9: the node id actually holding the gate, derived from the run's own
+ * event trail rather than assumed. A run reaches queueState `ready-for-review`
+ * (RunStatus 'gated') after its last node parked awaiting an operator verdict
+ * — for the seed forge-develop flow that is always the `review` node
+ * (review-loop + closure both fold into it, per CANONICAL_PHASE_OVERRIDES),
+ * but a user-authored flow (ADR-028) can name its gate node anything, and a
+ * flow with no review node at all (e.g. an architect hand-off parking in the
+ * same queue state) has no review gate to report. Trusting the last event
+ * whose phase resolves to a real node — the same array-order trust
+ * `deriveNodeStatuses` already places in `events` — names the node honestly
+ * instead of hardcoding the seed flow's node id.
+ */
+export function findGateNodeId(
+  events: readonly EventLogEntry[],
+  nodeMapping: Map<string, string | null>,
+): string | undefined {
+  let lastNodeId: string | undefined;
+  for (const e of events) {
+    const nodeId = eventToNodeId(e.phase, nodeMapping);
+    if (nodeId !== null) lastNodeId = nodeId;
+  }
+  return lastNodeId;
 }
 
 // ---------------------------------------------------------------------------

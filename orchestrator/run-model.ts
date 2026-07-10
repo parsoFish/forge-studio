@@ -35,6 +35,7 @@ import {
   deriveNodeMeta,
   deriveWorkItems,
   deriveArtifacts,
+  findGateNodeId,
   findGateNote,
   findFailure,
   WEDGE_THRESHOLD_MS,
@@ -72,7 +73,7 @@ export type Run = {
   phases: Record<string, RunPhaseStatus>;       // keyed by FLOW NODE id
   phaseMeta: Record<string, RunPhaseMeta>;
   artifactsReady: Partial<Record<'plan' | 'work-items' | 'pr' | 'demo' | 'verdict' | 'reflection', 'view' | 'gate'>>;
-  gate?: string;                     // node id awaiting human ('review')
+  gate?: string;                     // node id awaiting human, derived from the run's own events (G9)
   gateNote?: string;
   failedAt?: string;                 // node id
   failNote?: string;
@@ -416,7 +417,11 @@ function buildRun(args: {
   const origin = findOrigin(events) ?? manifest.origin;
 
   // --- Gate ---
-  const gate = runStatus === 'gated' ? 'review' : undefined;
+  // G9: name the node the run actually parked at, derived from its own event
+  // trail — not hardcoded to the seed flow's 'review' node id (a
+  // user-authored flow can name its gate node anything; some flows have no
+  // review node at all).
+  const gate = runStatus === 'gated' ? findGateNodeId(events, nodeMapping) : undefined;
   const gateNote = gate ? findGateNote(logDir) : undefined;
 
   // --- Failure ---
