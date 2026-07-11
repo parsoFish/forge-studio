@@ -167,3 +167,22 @@ test('deriveAgentSpec throws when model is not in MODEL_BY_TIER', () => {
     rmSync(dir, { recursive: true });
   }
 });
+
+// ----- 2026-07-11: cwd-independence -----
+// Surfaced by INIT-2026-07-10-framework-auth-parity: the orchestrated demo
+// capture spawns `forge demo capture` with cwd = the PROJECT WORKTREE; every
+// phase-invocation module calls deriveAgentSpec('skills/<phase>/SKILL.md') at
+// module load, and the old cwd default made that resolution explode
+// (ENOENT → capture_ok:false) in any process not started from the forge root.
+test('deriveAgentSpec default root is the forge install root, not process.cwd()', () => {
+  const prev = process.cwd();
+  const dir = mkdtempSync(join(tmpdir(), 'derive-cwd-'));
+  try {
+    process.chdir(dir);
+    const spec = deriveAgentSpec('skills/project-manager/SKILL.md');
+    assert.equal(spec.phase, 'project-manager', 'spec resolves from a non-forge cwd');
+  } finally {
+    process.chdir(prev);
+    rmSync(dir, { recursive: true });
+  }
+});

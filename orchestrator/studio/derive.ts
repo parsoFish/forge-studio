@@ -7,11 +7,22 @@
  * deep-equal assertion on every in-cycle agent.
  */
 
-import { resolve, join } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
 import { loadAgentDefinition, loadCatalog } from './registry.ts';
+
+/**
+ * The forge install root (this file lives at orchestrator/studio/). Used as
+ * the default resolution root for forge-root-relative skill paths: the phase
+ * invocation modules call deriveAgentSpec at module load, and processes like
+ * the orchestrated demo capture (`forge demo capture`) run with cwd set to a
+ * PROJECT WORKTREE — a cwd default made every such spawn crash on import
+ * (2026-07-11, INIT-2026-07-10-framework-auth-parity capture_ok:false).
+ */
+const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
   (Object.entries(MODEL_BY_TIER) as [ModelTier, string][]).map(([t, m]) => [m, t]),
@@ -25,7 +36,7 @@ const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
  *   returned spec's `skill` field, which is root-relative by contract
  *   (see PhaseAgentSpec doc). Do not pass absolute paths.
  */
-export function deriveAgentSpec(skillPathFromRoot: string, root = process.cwd()): PhaseAgentSpec {
+export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): PhaseAgentSpec {
   const def = loadAgentDefinition(resolve(root, skillPathFromRoot));
   if (!def.phase) throw new Error(`${def.path}: cannot derive spec — no phase field`);
 
