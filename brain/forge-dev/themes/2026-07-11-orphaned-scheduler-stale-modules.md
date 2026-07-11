@@ -1,7 +1,13 @@
+---
+title: Orphaned scheduler claims queue work with stale loaded modules
+description: A long-lived forge process from a dead session wins queue-claim races and runs phases on its boot-time module snapshot — hours behind disk; mixed-era evidence in one cycle log is the tell.
+category: reference
+created_at: 2026-07-11
+updated_at: 2026-07-11
+---
+
 # Orphaned scheduler claims queue work with stale loaded modules
 
-- **Category**: antipattern
-- **Date**: 2026-07-11
 - **Evidence**: Wave-1 gate runs, `_logs/2026-07-11T05-13-21_INIT-2026-07-11-json-output-flag`
 
 ## What happened

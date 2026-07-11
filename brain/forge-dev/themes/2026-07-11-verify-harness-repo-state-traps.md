@@ -1,7 +1,13 @@
+---
+title: "verify-cycle repo-state traps: frozen-SHA replay vs the live remote"
+description: Frozen-SHA replay of an already-remote-merged feature is structurally unmergeable, and a --base-sha run leaves local main frozen so later greenfield runs conflict too; gates use greenfield ideas on a synced main.
+category: reference
+created_at: 2026-07-11
+updated_at: 2026-07-11
+---
+
 # verify-cycle repo-state traps: frozen-SHA replay vs the live remote
 
-- **Category**: antipattern
-- **Date**: 2026-07-11
 - **Evidence**: Wave-1 gate runs R4/R5 (PRs parsoFish/gitpulse#5, #6 — both unmergeable)
 
 ## The two traps
