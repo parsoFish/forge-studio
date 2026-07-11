@@ -182,3 +182,43 @@ export function assertEnv(mode: EnvAssertionMode = 'warn'): string[] {
   }
   return issues;
 }
+
+/**
+ * G8 (2026-07 refinement): env vars that must never reach a spawned Claude
+ * Agent SDK child process. Each is a proven host-leakage vector (3 production
+ * incidents tracing back to the operator's shell/proxy setup bleeding into
+ * agent children) — none of them are forge-managed anywhere in orchestrator/
+ * or loops/, so on a spawned child their only possible effect is unintended
+ * inheritance. See `pinnedAgentEnv` below, the single scrub point.
+ *
+ * Explicitly OUT of scope here: GIT_* identity vars (a later wave).
+ */
+export const AGENT_ENV_DENYLIST: readonly string[] = [
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_CUSTOM_HEADERS',
+  'CLAUDE_EFFORT',
+];
+
+/** Prefix denylist: every `HEADROOM_*` var is a host-compression-proxy leakage vector. */
+const HEADROOM_ENV_PREFIX = /^HEADROOM_/;
+
+/**
+ * Return a NEW env object (never mutates `base`, never touches global
+ * `process.env`) with every `AGENT_ENV_DENYLIST` key and every
+ * `HEADROOM_*`-prefixed key removed. Defaults `base` to `process.env`.
+ *
+ * This is the seam every spawned Claude Agent SDK child's `options.env` must
+ * be derived from — see `pinnedSdkQuery` (orchestrator/pinned-sdk-query.ts),
+ * the wrapper around the SDK's `query` that every production import site
+ * uses instead of importing `query` directly.
+ */
+export function pinnedAgentEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = { ...base };
+  for (const key of AGENT_ENV_DENYLIST) {
+    delete result[key];
+  }
+  for (const key of Object.keys(result)) {
+    if (HEADROOM_ENV_PREFIX.test(key)) delete result[key];
+  }
+  return result;
+}

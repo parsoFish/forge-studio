@@ -14,7 +14,7 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
 import { createLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';

@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { parseManifest, type InitiativeManifest } from '../manifest.ts';

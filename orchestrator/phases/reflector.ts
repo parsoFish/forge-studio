@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseRetroMd } from '../../cli/reflection-doc.ts';
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger, EventLogEntry } from '../logging.ts';
 import { parseManifest } from '../manifest.ts';

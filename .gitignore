@@ -1,4 +1,7 @@
-node_modules/
+# No trailing slash: also matches a node_modules SYMLINK (agent worktrees
+# symlink the main checkout's node_modules; the slash form let `git add -A`
+# commit the symlink, and checking that out clobbered the real directory).
+node_modules
 dist/
 
 # Ephemeral diagnostic scripts (e.g., one-off probes / browser drives).

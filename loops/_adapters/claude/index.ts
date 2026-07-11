@@ -18,7 +18,7 @@
  */
 
 import { createClaudeAgent } from '../../ralph/claude-agent.ts';
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from '../../../orchestrator/pinned-sdk-query.ts';
 import type { RuntimeAdapter, AdapterAgentOptions, QueryFn } from '../types.ts';
 
 export const claudeAdapter: RuntimeAdapter = {

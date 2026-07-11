@@ -17,6 +17,8 @@ import {
   resolvePostMergeCiConfig,
   DEFAULT_POST_MERGE_CI_TIMEOUT_MS,
   DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS,
+  pinnedAgentEnv,
+  AGENT_ENV_DENYLIST,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -209,5 +211,75 @@ test('resolvePostMergeCiConfig: config values honoured; env overrides beat confi
     else process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS = origT;
     if (origP === undefined) delete process.env.FORGE_POST_MERGE_CI_POLL_MS;
     else process.env.FORGE_POST_MERGE_CI_POLL_MS = origP;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// G8 (2026-07 refinement): env-pin seam. `pinnedAgentEnv` is the single scrub
+// point every spawned Claude Agent SDK child's `options.env` must be derived
+// from — see orchestrator/pinned-sdk-query.ts.
+// ---------------------------------------------------------------------------
+
+test('AGENT_ENV_DENYLIST: names the known host-leakage vars', () => {
+  assert.deepEqual(
+    [...AGENT_ENV_DENYLIST].sort(),
+    ['ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS', 'CLAUDE_EFFORT'].sort(),
+  );
+});
+
+test('pinnedAgentEnv: scrubs every denylisted var and every HEADROOM_* var, preserves the rest', () => {
+  const poisoned: NodeJS.ProcessEnv = {
+    ANTHROPIC_API_KEY: 'sk-keep-me',
+    ANTHROPIC_BASE_URL: 'https://evil.example.com',
+    ANTHROPIC_CUSTOM_HEADERS: 'X-Injected: 1',
+    CLAUDE_EFFORT: 'max',
+    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
+    HEADROOM_ENABLED: 'true',
+    PATH: '/usr/bin:/bin',
+    HOME: '/home/operator',
+  };
+
+  const result = pinnedAgentEnv(poisoned);
+
+  assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'ANTHROPIC_BASE_URL is scrubbed');
+  assert.equal(result.ANTHROPIC_CUSTOM_HEADERS, undefined, 'ANTHROPIC_CUSTOM_HEADERS is scrubbed');
+  assert.equal(result.CLAUDE_EFFORT, undefined, 'CLAUDE_EFFORT is scrubbed');
+  assert.equal(result.HEADROOM_PROXY_URL, undefined, 'HEADROOM_* is scrubbed');
+  assert.equal(result.HEADROOM_ENABLED, undefined, 'HEADROOM_* is scrubbed');
+
+  assert.equal(result.ANTHROPIC_API_KEY, 'sk-keep-me', 'unrelated vars are preserved');
+  assert.equal(result.PATH, '/usr/bin:/bin', 'unrelated vars are preserved');
+  assert.equal(result.HOME, '/home/operator', 'unrelated vars are preserved');
+});
+
+test('pinnedAgentEnv: does not mutate the base object passed in', () => {
+  const poisoned: NodeJS.ProcessEnv = {
+    ANTHROPIC_BASE_URL: 'https://evil.example.com',
+    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
+    PATH: '/usr/bin:/bin',
+  };
+  const snapshot = { ...poisoned };
+
+  pinnedAgentEnv(poisoned);
+
+  assert.deepEqual(poisoned, snapshot, 'the base argument is untouched — a new object is returned');
+});
+
+test('pinnedAgentEnv: returns a different object identity than the base', () => {
+  const base: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
+  const result = pinnedAgentEnv(base);
+  assert.notEqual(result, base, 'pinnedAgentEnv must return a NEW object, never the input reference');
+});
+
+test('pinnedAgentEnv: defaults to process.env when called with no argument', () => {
+  const original = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_BASE_URL = 'https://evil.example.com';
+  try {
+    const result = pinnedAgentEnv();
+    assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'defaults to process.env and scrubs it');
+    assert.equal(process.env.ANTHROPIC_BASE_URL, 'https://evil.example.com', 'process.env itself is never mutated');
+  } finally {
+    if (original === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = original;
   }
 });

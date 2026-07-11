@@ -22,7 +22,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { loadProjectConfig } from '../project-config.ts';

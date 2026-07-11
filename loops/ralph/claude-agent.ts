@@ -13,7 +13,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { pinnedSdkQuery as sdkQuery } from '../../orchestrator/pinned-sdk-query.ts';
 
 import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
