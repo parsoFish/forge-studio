@@ -40,12 +40,16 @@ origin: architect
 Given the resource, when applied, then it persists in the external system.
 `;
 
-type StubWi = { wiId: string; filename?: string; gate?: string[] };
+type StubWi = { wiId: string; filename?: string; gate?: string[]; omitCreates?: boolean };
 
 /** A WI fixture with a configurable quality_gate_cmd. */
 function makeWi(initiativeId: string, wi: StubWi): string {
   const fname = wi.filename ?? `azuredevops/internal/service/release/${wi.wiId.toLowerCase()}.go`;
   const gate = wi.gate ?? ['node', '--test', `tests/${wi.wiId.toLowerCase()}.test.ts`];
+  // ADR 037: `creates:` is mandatory-with-escape; `omitCreates` exercises the
+  // compile-stage rejection of a WI that declares neither creates nor
+  // verification_artifact.
+  const creates = wi.omitCreates ? '' : `creates:\n  - ${fname}\n`;
   return `---
 work_item_id: ${wi.wiId}
 initiative_id: ${initiativeId}
@@ -57,7 +61,7 @@ acceptance_criteria:
     then: "it returns a value"
 files_in_scope:
   - ${fname}
-quality_gate_cmd: ${JSON.stringify(gate)}
+${creates}quality_gate_cmd: ${JSON.stringify(gate)}
 estimated_iterations: 1
 ---
 
@@ -337,4 +341,101 @@ test('M2-3: advisory brainAccess condition — gate passes when brainAccess !== 
   assert.ok(!mandatoryGateFires('advisory', 0), 'advisory + 0 reads should NOT fire');
   assert.ok(!mandatoryGateFires('mandatory', 1), 'mandatory + 1 read should NOT fire');
   assert.ok(!mandatoryGateFires('advisory', 1), 'advisory + 1 read should NOT fire');
+});
+
+// ---------- ADR 037: wi-spec-compiler seam through runOnePmPass ----------
+
+test('ADR-037: malformed constraint block in profile.md → controlled PM failure outcome, not an unhandled throw', async () => {
+  const h = setupHarness(BASE_CONFIG);
+  const sourcesRoot = mkdtempSync(join(tmpdir(), 'forge-pm-constraint-sources-'));
+  try {
+    const projectDir = join(sourcesRoot, 'brain', 'projects', 'testproj');
+    mkdirSync(projectDir, { recursive: true });
+    // Missing mandatory id: → parseConstraintBlocks throws; runOnePmPass must
+    // catch it and funnel the message into its normal failure outcome + the
+    // same final error event other validation failures use.
+    writeFileSync(
+      join(projectDir, 'profile.md'),
+      ['<!-- forge:constraint applies_to: all -->', 'clause body', '<!-- /forge:constraint -->'].join('\n'),
+    );
+
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { queryFn, constraintSourcesRoot: sourcesRoot }),
+      /project-manager phase failed:[\s\S]*missing mandatory id/,
+    );
+
+    const events = readEvents(h.logger);
+    const end = events.find(
+      (e) => e.phase === 'project-manager' && e.event_type === 'error' && Array.isArray(e.metadata?.set_errors),
+    );
+    assert.ok(end, 'expected the standard PM final error event');
+    const setErrors = (end!.metadata as { set_errors: string[] }).set_errors;
+    assert.ok(
+      setErrors.some((msg) => /missing mandatory id/.test(msg)),
+      `compile throw should fold into set_errors, got: ${JSON.stringify(setErrors)}`,
+    );
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+    rmSync(sourcesRoot, { recursive: true, force: true });
+  }
+});
+
+test('ADR-037: valid constraint block is injected through the full PM pass into the final validated set', async () => {
+  const h = setupHarness(BASE_CONFIG);
+  const sourcesRoot = mkdtempSync(join(tmpdir(), 'forge-pm-constraint-sources-'));
+  try {
+    const projectDir = join(sourcesRoot, 'brain', 'projects', 'testproj');
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(
+      join(projectDir, 'profile.md'),
+      [
+        '<!-- forge:constraint id: go-conventions applies_to: all -->',
+        'Always run gofmt before committing.',
+        '<!-- /forge:constraint -->',
+      ].join('\n'),
+    );
+
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    // Must not throw: injection happens, then the injected set validates green.
+    await runProjectManager(h.input, h.logger, { queryFn, constraintSourcesRoot: sourcesRoot });
+
+    for (const wiId of ['WI-1', 'WI-2']) {
+      const onDisk = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wiId}.md`), 'utf8');
+      assert.match(onDisk, /## Compiled constraints \(project & brain, ADR 037\)/);
+      assert.match(onDisk, /Always run gofmt before committing\./);
+      assert.match(onDisk, /<!-- forge:compiled clause="go-conventions" -->/);
+    }
+
+    const events = readEvents(h.logger);
+    assert.equal(
+      events.filter((e) => e.message === 'pm.constraint-injected').length,
+      2,
+      'one pm.constraint-injected event per WI',
+    );
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+    rmSync(sourcesRoot, { recursive: true, force: true });
+  }
+});
+
+test('ADR-037: WI with neither creates nor verification_artifact → compileErrors fold into setErrors and fail the pass', async () => {
+  const h = setupHarness(BASE_CONFIG);
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1', omitCreates: true }]);
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { queryFn }),
+      /project-manager phase failed:[\s\S]*creates is required \(ADR 037\)/,
+    );
+
+    const events = readEvents(h.logger);
+    const end = events.find(
+      (e) => e.phase === 'project-manager' && e.event_type === 'error' && Array.isArray(e.metadata?.set_errors),
+    );
+    assert.ok(end, 'expected the standard PM final error event');
+    const setErrors = (end!.metadata as { set_errors: string[] }).set_errors;
+    assert.ok(setErrors.some((msg) => /creates is required/.test(msg)));
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
 });
