@@ -104,7 +104,7 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
 // Agent definitions
 // ---------------------------------------------------------------------------
 
-test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB library agents)', () => {
+test('listAgentDefinitions returns the studio agent roster', () => {
   const agents = listAgentDefinitions(join(ROOT, 'skills'));
   const slugs = agents.map((a) => a.slug).sort();
 
@@ -113,7 +113,6 @@ test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB libr
     [
       'architect',
       'brain-ingest',
-      'code-reviewer',
       'developer-ralph',
       'developer-unifier',
       'project-manager',
@@ -122,7 +121,7 @@ test('listAgentDefinitions returns the studio agent roster (7 seed + 3 OOTB libr
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 8-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 7-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 
