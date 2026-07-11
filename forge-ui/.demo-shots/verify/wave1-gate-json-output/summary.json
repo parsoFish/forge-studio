@@ -1,0 +1,61 @@
+{
+  "runHandle": "wave1-gate-json-output",
+  "initiatives": [
+    {
+      "initiativeId": "INIT-2026-07-11-json-output-flag",
+      "cycleId": "2026-07-11T06-14-32_INIT-2026-07-11-json-output-flag",
+      "finalStatus": null,
+      "totalEvents": 395,
+      "costUsd": 9.3809,
+      "workItems": {
+        "total": 2,
+        "complete": 2,
+        "failed": 0
+      }
+    }
+  ],
+  "project": "gitpulse",
+  "baseSha": "8cfa7b9e0c62731bc0790d34906651dff47ebc24",
+  "costUsd": 9.3809,
+  "costCeilingUsd": 35,
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": false,
+      "detail": "finalStatus=null, manifest not in done/"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "2/2 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$9.38 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": false,
+      "detail": "no theme in /home/parso/forge/brain/projects/gitpulse/themes written/updated since run start"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.4.0)"
+    },
+    {
+      "name": "aggregate cost under ceiling",
+      "pass": true,
+      "detail": "$9.38 across 1 initiative(s) ≤ $35"
+    }
+  ],
+  "gate": "fail",
+  "framesCaptured": 7,
+  "completedAt": "2026-07-11T06:34:21.938Z"
+}
