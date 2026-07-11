@@ -68,9 +68,16 @@ A **deterministic-first hybrid compiler stage** at the PM seam, extending
 the existing post-PM pipeline (`appendStandingAcs` is the direct precedent).
 
 1. **Structured constraint blocks.** `profile.md` and brain themes carry
-   machine-readable clauses: tagged sections with an `applies_to:` selector
-   keyed on WI kind / initiative type (e.g. `applies_to: kind=framework-migrate`).
+   machine-readable clauses: tagged sections with a **mandatory `id:`**
+   (stable clause identity — injection is keyed on it, so editing a clause
+   *replaces* the compiled section instead of duplicating it) and an
+   `applies_to:` selector keyed on WI kind / initiative type
+   (e.g. `<!-- forge:constraint id: dereg-checklist applies_to: wi.kind=framework-migrate -->`).
    Convention only — greppable, markdown-native, no new storage engine.
+   *(As-built note, 2026-07-11: selector fields match any parsed WI/manifest
+   frontmatter field generically; until the PM populates a dedicated domain
+   field, clauses target `manifest.<field>` globs — e.g. `initiative_id` —
+   or `all`.)*
 
 2. **Deterministic injector (code, not LLM)**, sequenced alongside
    `appendStandingAcs` before `validateWorkItemSet`:
