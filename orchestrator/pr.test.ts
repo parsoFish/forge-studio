@@ -178,7 +178,12 @@ test('stripForgeScratchFromBranch: drops cycle-introduced root Ralph scratch (PR
     sh(proj, 'git', ['commit', '-q', '-m', 'forge-autocommit: iter 1 WIP']);
     assert.equal(sh(proj, 'git', ['ls-files', '--', 'AGENT.md']).trim(), 'AGENT.md');
 
-    stripForgeScratchFromBranch(proj);
+    const stripped = stripForgeScratchFromBranch(proj);
+    assert.deepEqual(
+      [...stripped].sort(),
+      ['AGENT.md', 'PROMPT.md', 'fix_plan.md'],
+      'the stripped-path list is returned, not just applied',
+    );
 
     // No longer tracked on the branch (so it cannot leak into the PR / main) …
     for (const f of ['PROMPT.md', 'AGENT.md', 'fix_plan.md']) {
@@ -214,7 +219,8 @@ test('stripForgeScratchFromBranch: preserves a project-owned AGENT.md present on
     sh(proj, 'git', ['add', '-A']);
     sh(proj, 'git', ['commit', '-q', '-m', 'forge-autocommit: WIP']);
 
-    stripForgeScratchFromBranch(proj);
+    const stripped = stripForgeScratchFromBranch(proj);
+    assert.deepEqual(stripped, ['fix_plan.md'], 'only the cycle-introduced scratch is reported as stripped');
 
     // AGENT.md is on the base → a project file, preserved.
     assert.equal(sh(proj, 'git', ['ls-files', '--', 'AGENT.md']).trim(), 'AGENT.md');
@@ -234,7 +240,8 @@ test('stripForgeScratchFromBranch: drops .forge/ scratch but keeps protected pro
     sh(proj, 'git', ['add', '.forge/project.json', '.forge/pr-description.md']);
     sh(proj, 'git', ['commit', '-q', '-m', 'add forge config + scratch']);
 
-    stripForgeScratchFromBranch(proj);
+    const stripped = stripForgeScratchFromBranch(proj);
+    assert.deepEqual(stripped, ['.forge/pr-description.md'], 'protected config is excluded from the returned list');
 
     assert.equal(
       sh(proj, 'git', ['ls-files', '--', '.forge/project.json']).trim(),
