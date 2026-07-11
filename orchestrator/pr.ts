@@ -514,7 +514,16 @@ function isTrackedAtRef(worktreePath: string, ref: string, file: string): boolea
   }
 }
 
-export function stripForgeScratchFromBranch(worktreePath: string): void {
+/**
+ * Strips gitignored forge scratch (`.forge/*` minus `PROTECTED_FORGE_CONFIG`,
+ * plus cycle-introduced `ROOT_RALPH_SCRATCH`) that leaked onto the CURRENTLY
+ * CHECKED-OUT branch at `worktreePath`, as a new commit on that branch.
+ * Returns the list of paths actually stripped (empty when the tree was
+ * already clean — a no-op, no empty commit). Also the shared core the WI
+ * merge-back path (`wi-merge-back.ts`) reuses to strip a WI branch's tip
+ * BEFORE it fans into the cycle branch, not just at PR-push time.
+ */
+export function stripForgeScratchFromBranch(worktreePath: string): string[] {
   try {
     const toStrip: string[] = [];
 
@@ -550,7 +559,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
       toStrip.push(f);
     }
 
-    if (toStrip.length === 0) return; // only protected config / clean tree — nothing to strip
+    if (toStrip.length === 0) return []; // only protected config / clean tree — nothing to strip
     execFileSync('git', ['rm', '--cached', '--quiet', '--ignore-unmatch', ...toStrip], {
       cwd: worktreePath,
       stdio: 'pipe',
@@ -565,8 +574,10 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
       ],
       { cwd: worktreePath, stdio: 'pipe' },
     );
+    return toStrip;
   } catch {
     /* best-effort — scratch cleanup must never block a push */
+    return [];
   }
 }
 

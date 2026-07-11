@@ -38,11 +38,28 @@
  * caller (`developer-loop.ts`) feeds this into the requeued attempt's fresh
  * worktree via the same `.forge/last-gate-failure.md` seam the dev prompt
  * already reads first.
+ *
+ * Forge-scratch-at-fan-in fix (2026-07-12, live cycle 2026-07-11T16-18-59,
+ * gitpulse): a WI branch that leaked a COMMITTED `.forge/last-gate-failure.md`
+ * (ralph scratch leak — brain/forge-dev/themes/2026-06-06-ralph-scratch-leak-
+ * pre-pr-strip.md) collided with the cycle worktree's own UNTRACKED copy of
+ * the same path (unifier-level gate feedback). Git refused the merge with
+ * "untracked working tree files would be overwritten by merge" — a non-code
+ * refusal that got misclassified as a merge conflict, burning the bounded
+ * requeue twice before the WI (and its dependents) terminal-failed for
+ * nothing. `mergeWiIntoCycle` now closes this with two independent layers:
+ * root-cause stripping of the WI branch's own forge scratch before it ever
+ * merges (`wiWorktreePath` + `stripForgeScratchFromBranch`, `pr.ts`), and a
+ * defensive in-place remediation of an untracked-overwrite refusal when
+ * every named file is forge scratch. See `mergeWiIntoCycle`'s own doc for
+ * the mechanics.
  */
 
 import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
-import { pushInitiativeBranch, type PushResult } from './pr.ts';
+import { pushInitiativeBranch, stripForgeScratchFromBranch, type PushResult } from './pr.ts';
 import { writeWorkItemStatus } from './work-item.ts';
 
 // Bounds on the conflict-detail capture below — a pathological conflict
@@ -157,17 +174,80 @@ function captureMergeConflictDetail(opts: {
 }
 
 export type MergeBackResult =
-  | { merged: true }
-  | { merged: false; detail: string; conflict: MergeConflictDetail };
+  | { merged: true; scratchStripped?: string[]; untrackedRemediated?: string[] }
+  | {
+      merged: false;
+      detail: string;
+      conflict: MergeConflictDetail;
+      scratchStripped?: string[];
+      untrackedRemediated?: string[];
+    };
+
+/**
+ * Git's own header line when a merge refuses to run because it would
+ * clobber untracked files sitting in the working tree — printed to stderr,
+ * BEFORE the merge itself starts (no `MERGE_HEAD`, nothing for `--diff
+ * --diff-filter=U` to see). Distinct from a real content conflict, which
+ * only ever happens once the merge has actually begun.
+ */
+const UNTRACKED_OVERWRITE_MARKER = 'would be overwritten by merge:';
+
+/**
+ * Parses the file list out of git's "The following untracked working tree
+ * files would be overwritten by merge:\n\t<file>\n\t<file>..." stderr, one
+ * tab-indented path per line immediately after the marker. Returns `null`
+ * when the error isn't this specific refusal (e.g. a real content conflict,
+ * or a hard failure like an unresolvable branch ref) — every other case
+ * stays on the existing conflict-classification path, untouched.
+ */
+function parseUntrackedOverwriteFiles(gitOutput: string): string[] | null {
+  const markerIdx = gitOutput.indexOf(UNTRACKED_OVERWRITE_MARKER);
+  if (markerIdx === -1) return null;
+  const lines = gitOutput.slice(markerIdx).split('\n');
+  const files: string[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.startsWith('\t')) break;
+    const file = line.trim();
+    if (file.length > 0) files.push(file);
+  }
+  return files.length > 0 ? files : null;
+}
+
+/** Forge scratch — the only class of untracked file the merge-back path is ever allowed to delete. */
+function isForgeScratchPath(path: string): boolean {
+  // Defense-in-depth: never treat a path with a `..` segment as deletable
+  // scratch, even though git's own refusal output cannot produce one.
+  return path.startsWith('.forge/') && !path.split('/').includes('..');
+}
 
 /**
  * Merge `wiBranch` into the cycle worktree's currently-checked-out branch
  * with `--no-ff`, so the fan-in is always its own commit in history (never a
- * fast-forward that would hide which WI contributed what). Any failure —
- * content conflict or otherwise — aborts the merge so the working tree is
- * left clean, and is reported uniformly as `{ merged: false, detail }`; this
- * step treats every merge failure as terminal for the WI (conflict-specific
- * recovery is a later step).
+ * fast-forward that would hide which WI contributed what).
+ *
+ * Two forge-scratch layers wrap the merge itself (2026-07-12, live cycle
+ * 2026-07-11T16-18-59, gitpulse — see the file header):
+ *
+ *   1. BEFORE merging, `opts.wiWorktreePath` (when supplied — the WI's own
+ *      still-alive worktree) has any leaked forge scratch stripped from the
+ *      branch tip via `stripForgeScratchFromBranch`, the SAME mechanism the
+ *      PR-push boundary uses (`pr.ts`) — the root-cause fix, so a WI branch
+ *      can never introduce `.forge/last-gate-failure.md` et al. into the
+ *      cycle branch at all.
+ *   2. If the merge STILL refuses because untracked files in the cycle
+ *      worktree collide with the incoming tree, and EVERY named file is
+ *      forge scratch (`.forge/*`), those untracked files are deleted (they
+ *      are regenerable feedback artifacts, not user/project state) and the
+ *      merge is retried ONCE in place — no requeue, no attempt burned. A
+ *      collision naming even one non-scratch file is never remediated; it
+ *      falls through to the normal failure path with a distinct detail.
+ *
+ * Any OTHER failure — a real content conflict, or a hard git error — aborts
+ * the merge so the working tree is left clean, and is reported uniformly as
+ * `{ merged: false, detail, conflict }`; this step treats every unremediated
+ * merge failure as terminal for the WI (conflict-specific recovery is a
+ * later step).
  *
  * Pure git plumbing — NOT single-flight itself. Callers serialize concurrent
  * invocations against the SAME cycle worktree through `createMergeQueue()`.
@@ -183,46 +263,107 @@ export function mergeWiIntoCycle(opts: {
    * omitted, conflict capture still runs but `siblingCommits` stays empty.
    */
   startPointRef?: string;
+  /**
+   * The WI's OWN worktree (still alive — the caller removes it only after
+   * this merge/publish turn concludes). When supplied, forge scratch is
+   * stripped from `wiBranch`'s tip there BEFORE the merge is attempted.
+   * Optional so existing merge-only tests/call sites are unaffected; every
+   * real dispatch supplies it.
+   */
+  wiWorktreePath?: string;
 }): MergeBackResult {
-  try {
-    execFileSync(
-      'git',
-      [
-        '-C',
-        opts.cycleWorktreePath,
-        ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
-        'merge',
-        '--no-ff',
-        opts.wiBranch,
-        '-m',
-        `wi(${opts.workItemId}): merge`,
-      ],
-      { stdio: 'pipe' },
-    );
-    return { merged: true };
-  } catch (err) {
-    const detail = extractStderr(err);
-    // Capture WHY before aborting — `--diff-filter=U` only resolves while
-    // the merge is still in progress.
-    const conflict = captureMergeConflictDetail({
-      cycleWorktreePath: opts.cycleWorktreePath,
-      wiBranch: opts.wiBranch,
-      startPointRef: opts.startPointRef,
-    });
+  const scratchStripped = opts.wiWorktreePath ? stripForgeScratchFromBranch(opts.wiWorktreePath) : [];
+
+  const mergeArgs = [
+    '-C',
+    opts.cycleWorktreePath,
+    ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
+    'merge',
+    '--no-ff',
+    opts.wiBranch,
+    '-m',
+    `wi(${opts.workItemId}): merge`,
+  ];
+  const attemptMerge = (): { ok: true } | { ok: false; err: unknown } => {
     try {
-      execFileSync('git', ['-C', opts.cycleWorktreePath, 'merge', '--abort'], { stdio: 'pipe' });
-    } catch {
-      /* best-effort — a merge that failed before entering conflict state (e.g.
-         the branch ref didn't resolve) leaves nothing to abort; the working
-         tree is already clean in that case. */
+      execFileSync('git', mergeArgs, { stdio: 'pipe' });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, err };
     }
-    return { merged: false, detail, conflict };
+  };
+
+  let attempt = attemptMerge();
+  let untrackedRemediated: string[] | undefined;
+  let overrideDetail: string | undefined;
+
+  if (!attempt.ok) {
+    const untrackedFiles = parseUntrackedOverwriteFiles(extractStderr(attempt.err));
+    if (untrackedFiles) {
+      const nonScratch = untrackedFiles.filter((f) => !isForgeScratchPath(f));
+      if (nonScratch.length === 0) {
+        // Every named file is forge scratch — delete + retry once in place.
+        const removed: string[] = [];
+        for (const f of untrackedFiles) {
+          try {
+            rmSync(join(opts.cycleWorktreePath, f), { force: true });
+            removed.push(f);
+          } catch {
+            /* best-effort — a file that can't be removed just fails the retry below */
+          }
+        }
+        untrackedRemediated = removed;
+        attempt = attemptMerge();
+      } else {
+        // At least one named file is NOT forge scratch — never delete
+        // user/project files. Distinct, clearly-named failure detail.
+        overrideDetail = `untracked working tree files would be overwritten by merge and are not forge scratch (left in place): ${nonScratch.join(', ')}`;
+      }
+    }
   }
+
+  if (attempt.ok) {
+    return {
+      merged: true,
+      ...(scratchStripped.length > 0 ? { scratchStripped } : {}),
+      ...(untrackedRemediated ? { untrackedRemediated } : {}),
+    };
+  }
+
+  const detail = overrideDetail ?? extractStderr(attempt.err);
+  // Capture WHY before aborting — `--diff-filter=U` only resolves while
+  // the merge is still in progress (a no-op, empty capture for the
+  // untracked-overwrite refusal above, which never entered a conflict state).
+  const conflict = captureMergeConflictDetail({
+    cycleWorktreePath: opts.cycleWorktreePath,
+    wiBranch: opts.wiBranch,
+    startPointRef: opts.startPointRef,
+  });
+  try {
+    execFileSync('git', ['-C', opts.cycleWorktreePath, 'merge', '--abort'], { stdio: 'pipe' });
+  } catch {
+    /* best-effort — a merge that failed before entering conflict state (e.g.
+       the branch ref didn't resolve, or the untracked-overwrite refusal)
+       leaves nothing to abort; the working tree is already clean in that case. */
+  }
+  return {
+    merged: false,
+    detail,
+    conflict,
+    ...(scratchStripped.length > 0 ? { scratchStripped } : {}),
+    ...(untrackedRemediated ? { untrackedRemediated } : {}),
+  };
 }
 
 export type MergeAndPublishResult =
-  | { merged: true; push: PushResult }
-  | { merged: false; detail: string; conflict: MergeConflictDetail };
+  | { merged: true; push: PushResult; scratchStripped?: string[]; untrackedRemediated?: string[] }
+  | {
+      merged: false;
+      detail: string;
+      conflict: MergeConflictDetail;
+      scratchStripped?: string[];
+      untrackedRemediated?: string[];
+    };
 
 /**
  * The full "land a WI" sequence, run as ONE turn inside the shared merge
@@ -254,18 +395,32 @@ export function mergeAndPublish(opts: {
   specPath: string;
   /** See `mergeWiIntoCycle`'s `startPointRef` — threaded through unchanged. */
   startPointRef?: string;
+  /** See `mergeWiIntoCycle`'s `wiWorktreePath` — threaded through unchanged. */
+  wiWorktreePath?: string;
 }): MergeAndPublishResult {
   const mergeResult = mergeWiIntoCycle({
     cycleWorktreePath: opts.cycleWorktreePath,
     wiBranch: opts.wiBranch,
     workItemId: opts.workItemId,
     startPointRef: opts.startPointRef,
+    wiWorktreePath: opts.wiWorktreePath,
   });
   if (!mergeResult.merged) {
-    return { merged: false, detail: mergeResult.detail, conflict: mergeResult.conflict };
+    return {
+      merged: false,
+      detail: mergeResult.detail,
+      conflict: mergeResult.conflict,
+      ...(mergeResult.scratchStripped ? { scratchStripped: mergeResult.scratchStripped } : {}),
+      ...(mergeResult.untrackedRemediated ? { untrackedRemediated: mergeResult.untrackedRemediated } : {}),
+    };
   }
   writeWorkItemStatus(opts.specPath, 'complete');
-  return { merged: true, push: pushInitiativeBranch(opts.cycleWorktreePath) };
+  return {
+    merged: true,
+    push: pushInitiativeBranch(opts.cycleWorktreePath),
+    ...(mergeResult.scratchStripped ? { scratchStripped: mergeResult.scratchStripped } : {}),
+    ...(mergeResult.untrackedRemediated ? { untrackedRemediated: mergeResult.untrackedRemediated } : {}),
+  };
 }
 
 /**

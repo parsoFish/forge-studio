@@ -873,8 +873,35 @@ export async function runDeveloperLoop(
           workItemId: wi.work_item_id,
           specPath,
           startPointRef: wiBaseSha,
+          wiWorktreePath: wiWorktree.path,
         }),
       );
+      if (outcome.scratchStripped && outcome.scratchStripped.length > 0) {
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: wiStart.event_id,
+          phase: 'developer-loop',
+          skill: 'developer-ralph',
+          event_type: 'log',
+          input_refs: [wiWorktree.path],
+          output_refs: [],
+          message: 'dev-loop.scratch-stripped',
+          metadata: { work_item_id: wi.work_item_id, files: outcome.scratchStripped },
+        });
+      }
+      if (outcome.untrackedRemediated && outcome.untrackedRemediated.length > 0) {
+        logger.emit({
+          initiative_id: input.initiativeId,
+          parent_event_id: wiStart.event_id,
+          phase: 'developer-loop',
+          skill: 'developer-ralph',
+          event_type: 'log',
+          input_refs: [input.worktreePath],
+          output_refs: [],
+          message: 'dev-loop.merge-untracked-remediated',
+          metadata: { work_item_id: wi.work_item_id, files: outcome.untrackedRemediated, merged: outcome.merged },
+        });
+      }
       if (outcome.merged) {
         finalStatus = 'complete';
         pushResult = outcome.push;

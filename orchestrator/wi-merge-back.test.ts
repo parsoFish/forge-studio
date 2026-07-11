@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -77,6 +77,31 @@ function writeWiSpec(proj: string, id: string): string {
 function remoteHeadOf(proj: string, origin: string, branch: string): string | undefined {
   const line = sh(proj, ['ls-remote', origin, branch]).trim();
   return line.length > 0 ? line.split(/\s+/)[0] : undefined;
+}
+
+/**
+ * A REAL second `git worktree` checked out on `branch` — mirrors the actual
+ * shape a per-WI Ralph loop's own worktree has at merge time (still alive;
+ * `developer-loop.ts`'s `runWiDispatchTask` only removes it in a `finally`
+ * AFTER the merge/publish turn completes). Needed (unlike `setup()`'s
+ * single-worktree shortcut) for the scratch-strip tests below, which must
+ * commit ONTO the WI branch while it's checked out somewhere.
+ */
+function addWiWorktree(proj: string, branch: string): { path: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'forge-merge-back-wi-'));
+  const path = join(root, 'wi');
+  sh(proj, ['worktree', 'add', '-q', path, branch]);
+  return {
+    path,
+    cleanup: () => {
+      try {
+        sh(proj, ['worktree', 'remove', '--force', path]);
+      } catch {
+        /* best-effort */
+      }
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
 }
 
 test('mergeWiIntoCycle: merges a clean WI branch into the cycle branch with --no-ff', () => {
@@ -175,6 +200,231 @@ test('mergeWiIntoCycle: a nonexistent WI branch fails without leaving a mid-merg
     assert.equal(result.merged, false);
     const status = sh(proj, ['status', '--porcelain']).trim();
     assert.equal(status, '', 'working tree must be clean');
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Forge-scratch handling at fan-in (2026-07-12, live cycle 2026-07-11T16-18-59,
+// gitpulse): a WI branch that leaked a COMMITTED `.forge/last-gate-failure.md`
+// (ralph scratch leak) collided with the cycle worktree's own UNTRACKED copy
+// of the same path (unifier-level gate feedback), and git's "untracked
+// working tree files would be overwritten by merge" refusal was misclassified
+// as a merge conflict — burning the bounded requeue twice before terminal
+// failure. Two independent layers close this: (1) strip the WI branch's own
+// forge scratch BEFORE merging (root cause), (2) remediate an untracked-
+// overwrite refusal in place when every named file is forge scratch (defense).
+// ---------------------------------------------------------------------------
+
+test('mergeWiIntoCycle: strips committed .forge/ scratch from the WI branch before merging (layer 1, root cause)', () => {
+  const { proj, cleanup } = setup();
+  try {
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    writeFileSync(join(proj, '.forge', 'last-gate-failure.md'), 'wi-side gate feedback\n');
+    writeFileSync(join(proj, 'wi-1.txt'), 'wi work\n');
+    sh(proj, ['add', '.']);
+    sh(proj, ['commit', '-q', '-m', 'wi: work (incl scratch leak)']);
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    const { path: wiWorktreePath, cleanup: cleanupWi } = addWiWorktree(proj, 'wi-branch');
+    try {
+      const result = mergeWiIntoCycle({
+        cycleWorktreePath: proj,
+        wiBranch: 'wi-branch',
+        workItemId: 'WI-2',
+        wiWorktreePath,
+      });
+
+      assert.equal(result.merged, true);
+      assert.deepEqual(result.merged && result.scratchStripped, ['.forge/last-gate-failure.md']);
+      assert.equal(
+        sh(proj, ['ls-files', '--', '.forge/last-gate-failure.md']).trim(),
+        '',
+        'scratch must never land on the cycle branch',
+      );
+      assert.equal(readFileSync(join(proj, 'wi-1.txt'), 'utf8'), 'wi work\n');
+    } finally {
+      cleanupWi();
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('mergeWiIntoCycle: a WI branch with no forge scratch gets no strip commit (tree untouched)', () => {
+  const { proj, cleanup } = setup();
+  try {
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+    writeFileSync(join(proj, 'wi-1.txt'), 'wi work\n');
+    sh(proj, ['add', '.']);
+    sh(proj, ['commit', '-q', '-m', 'wi: work']);
+    const wiTipBefore = sh(proj, ['rev-parse', 'wi-branch']).trim();
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    const { path: wiWorktreePath, cleanup: cleanupWi } = addWiWorktree(proj, 'wi-branch');
+    try {
+      const result = mergeWiIntoCycle({
+        cycleWorktreePath: proj,
+        wiBranch: 'wi-branch',
+        workItemId: 'WI-4',
+        wiWorktreePath,
+      });
+
+      assert.equal(result.merged, true);
+      assert.equal(result.merged && result.scratchStripped, undefined, 'no scratch → key omitted, no strip attempted');
+      assert.equal(
+        sh(proj, ['rev-parse', 'wi-branch']).trim(),
+        wiTipBefore,
+        'wi-branch tip must be unchanged — no strip commit added',
+      );
+    } finally {
+      cleanupWi();
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('mergeWiIntoCycle: an untracked forge-scratch collision is remediated in place — no requeue (layer 2, defense)', () => {
+  const { proj, cleanup } = setup();
+  try {
+    // The WI branch "somehow still carries" committed scratch (layer 1 not
+    // exercised here — no wiWorktreePath passed — isolating layer 2).
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    writeFileSync(join(proj, '.forge', 'last-gate-failure.md'), 'wi-side committed copy\n');
+    sh(proj, ['add', '.forge/last-gate-failure.md']);
+    sh(proj, ['commit', '-q', '-m', 'wi: work (still carries scratch)']);
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    // The cycle worktree independently holds an UNTRACKED copy at the same
+    // path (unifier-level gate feedback) — the exact live-cycle collision.
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    writeFileSync(join(proj, '.forge', 'last-gate-failure.md'), 'unifier-side untracked feedback\n');
+
+    const result = mergeWiIntoCycle({ cycleWorktreePath: proj, wiBranch: 'wi-branch', workItemId: 'WI-2' });
+
+    assert.equal(result.merged, true, 'the untracked-overwrite refusal must be remediated, not treated as a conflict');
+    assert.deepEqual(result.merged && result.untrackedRemediated, ['.forge/last-gate-failure.md']);
+    assert.equal(
+      readFileSync(join(proj, '.forge', 'last-gate-failure.md'), 'utf8'),
+      'wi-side committed copy\n',
+      'the WI branch content wins post-merge (the untracked copy was regenerable feedback, deleted then overwritten by the merge)',
+    );
+    const status = sh(proj, ['status', '--porcelain']).trim();
+    assert.equal(status, '', 'working tree must be clean after the in-place retry');
+  } finally {
+    cleanup();
+  }
+});
+
+test('mergeWiIntoCycle: a non-scratch untracked-overwrite collision is a real failure — nothing deleted', () => {
+  const { proj, cleanup } = setup();
+  try {
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+    writeFileSync(join(proj, 'config.json'), '{"wi":"value"}\n');
+    sh(proj, ['add', 'config.json']);
+    sh(proj, ['commit', '-q', '-m', 'wi: adds config.json']);
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    // An untracked, NON-forge-scratch file collides at the same path — never
+    // a candidate for deletion, regardless of the merge outcome.
+    writeFileSync(join(proj, 'config.json'), 'unrelated untracked content\n');
+
+    const result = mergeWiIntoCycle({ cycleWorktreePath: proj, wiBranch: 'wi-branch', workItemId: 'WI-3' });
+
+    assert.equal(result.merged, false);
+    if (!result.merged) {
+      assert.match(result.detail, /config\.json/, 'the failure detail names the offending file');
+    }
+    assert.equal(existsSync(join(proj, 'config.json')), true, 'the untracked project file must never be deleted');
+    assert.equal(
+      readFileSync(join(proj, 'config.json'), 'utf8'),
+      'unrelated untracked content\n',
+      'untouched content',
+    );
+    const status = sh(proj, ['status', '--porcelain']).trim();
+    assert.notEqual(status, '', 'the untracked collision is still sitting there — nothing was silently cleaned up');
+  } finally {
+    cleanup();
+  }
+});
+
+test('mergeWiIntoCycle: a real content conflict is still classified merge-conflict, untouched by the untracked-overwrite path', () => {
+  // Guards the existing conflict-classification path (diff --diff-filter=U)
+  // against regression from the new untracked-overwrite branch added above —
+  // a genuine conflict must never be misrouted into scratch remediation.
+  const { proj, cleanup } = setup();
+  try {
+    writeFileSync(join(proj, 'README.md'), 'cycle change\n');
+    sh(proj, ['add', '.']);
+    sh(proj, ['commit', '-q', '-m', 'cycle: change readme']);
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch', 'main']);
+    writeFileSync(join(proj, 'README.md'), 'wi change\n');
+    sh(proj, ['add', '.']);
+    sh(proj, ['commit', '-q', '-m', 'wi: change readme']);
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    const result = mergeWiIntoCycle({ cycleWorktreePath: proj, wiBranch: 'wi-branch', workItemId: 'WI-5' });
+
+    assert.equal(result.merged, false);
+    if (!result.merged) {
+      assert.deepEqual(result.conflict.conflictingFiles, ['README.md']);
+      assert.equal(result.untrackedRemediated, undefined, 'a real conflict is never routed through remediation');
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('mergeAndPublish: strips WI-branch scratch before merging so it never reaches the pushed cycle branch', () => {
+  const { proj, cleanup } = setup();
+  try {
+    const { origin, cleanup: cleanupOrigin } = addOrigin(proj);
+    try {
+      sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+      mkdirSync(join(proj, '.forge'), { recursive: true });
+      writeFileSync(join(proj, '.forge', 'last-gate-failure.md'), 'wi-side gate feedback\n');
+      writeFileSync(join(proj, 'wi-6.txt'), 'wi work\n');
+      sh(proj, ['add', '.']);
+      sh(proj, ['commit', '-q', '-m', 'wi: work (incl scratch leak)']);
+      sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+      // The WI spec file belongs to the CYCLE worktree's `.forge/work-items/`
+      // (real dev-loop shape) — written here, AFTER the wi-branch checkout
+      // above, so it's never sitting in the shared working directory while
+      // `wi-branch`'s `git add .` runs (which would sweep it onto the WI
+      // branch and then have it stripped alongside the deliberate scratch).
+      const specPath = writeWiSpec(proj, 'WI-6');
+
+      const { path: wiWorktreePath, cleanup: cleanupWi } = addWiWorktree(proj, 'wi-branch');
+      try {
+        const result = mergeAndPublish({
+          cycleWorktreePath: proj,
+          wiBranch: 'wi-branch',
+          workItemId: 'WI-6',
+          specPath,
+          wiWorktreePath,
+        });
+
+        assert.equal(result.merged, true);
+        assert.deepEqual(result.merged && result.scratchStripped, ['.forge/last-gate-failure.md']);
+
+        const localHead = sh(proj, ['rev-parse', 'HEAD']).trim();
+        assert.equal(remoteHeadOf(proj, origin, 'cycle-branch'), localHead, 'the stripped merge commit must reach origin');
+        assert.equal(
+          sh(origin, ['ls-tree', '-r', '--name-only', 'cycle-branch']).includes('.forge/last-gate-failure.md'),
+          false,
+          'the scratch file must never appear on origin',
+        );
+      } finally {
+        cleanupWi();
+      }
+    } finally {
+      cleanupOrigin();
+    }
   } finally {
     cleanup();
   }
