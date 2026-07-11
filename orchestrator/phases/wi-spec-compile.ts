@@ -22,7 +22,7 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import type { EventLogger } from '../logging.ts';
 import type { InitiativeManifest } from '../manifest.ts';
@@ -39,6 +39,7 @@ import {
   type ConstraintBlock,
   type ConstraintMatchContext,
 } from '../constraint-blocks.ts';
+import { ralphSpecLintWorkItems } from './ralph-spec-lint.ts';
 
 /** ADR 037: sizing bound on a WI's `creates:` list — the evidence base is the
  * migration-checklist cycles' oversized WIs (docs/decisions/037-compiled-wi-contracts.md). */
@@ -349,6 +350,12 @@ export type WiSpecCompileResult = {
   unresolvedCoupling: CouplingPair[];
   /** Compiler-stage validation + write failures — folded into the PM pass's setErrors. */
   compileErrors: string[];
+  /**
+   * ralph-spec-lint downgrades (truncated search / dynamically-named tests):
+   * things the lint could not PROVE either way. Surfaced on the `pm.spec-lint`
+   * event; never folded into compileErrors, never fail the pass.
+   */
+  lintWarnings: string[];
 };
 
 export type WiSpecCompileOptions = {
@@ -356,6 +363,16 @@ export type WiSpecCompileOptions = {
   projectName: string;
   manifest: InitiativeManifest;
   workItemsDir: string;
+  /**
+   * The PROJECT's worktree root (NOT forgeRoot) — ralph-spec-lint (ADR 037 /
+   * REFINEMENT-PLAN §7) searches it for existing test files. Defaults to two
+   * levels up from `workItemsDir` (`<worktree>/.forge/work-items` →
+   * `<worktree>`), the nesting `work-item.ts`'s `writeWorkItem` uses; pass
+   * explicitly when `workItemsDir` doesn't follow that convention.
+   */
+  projectRoot?: string;
+  /** ralph-spec-lint walk-cap override (defaults to its MAX_FILES_WALKED); primarily a test seam. */
+  lintMaxFilesWalked?: number;
   items: ReadonlyArray<WorkItem>;
   logger: EventLogger;
   initiativeId: string;
@@ -397,6 +414,48 @@ export function compileWorkItemSpecs(opts: WiSpecCompileOptions): WiSpecCompileR
     });
   }
 
+  // ralph-spec-lint (ADR 037 / REFINEMENT-PLAN §7): after injection, before
+  // hidden-coupling compile — neither of those steps touches `quality_gate_cmd`
+  // / `creates` / `files_in_scope`, so running the lint here vs. after coupling
+  // is equivalent; "after injection" is the sequencing the check was designed
+  // against. Deterministic, no SDK — proves whether each WI's named test
+  // selector can match an existing test OR a test file in the WI's ENFORCED
+  // write set (gateRequiredPaths priority chain); a selector proven to match
+  // neither is a vacuous-pass risk (PM names a test function that doesn't
+  // exist yet — `go test -run <no-match>` exits 0) and folds straight into
+  // compileErrors, same channel every other compile-stage failure uses.
+  // Anything the lint CANNOT prove (truncated walk, `.each` dynamic names)
+  // is a warning on the pm.spec-lint event, never a pass failure. A bad
+  // projectRoot is a call-site config bug → compileError, not a WI verdict.
+  const projectRoot = opts.projectRoot ?? resolve(workItemsDir, '..', '..');
+  const lint = ralphSpecLintWorkItems(injection.items, {
+    projectRoot,
+    maxFilesWalked: opts.lintMaxFilesWalked,
+  });
+  logger.emit({
+    initiative_id: initiativeId,
+    parent_event_id: parentEventId,
+    phase: 'project-manager',
+    skill: 'project-manager',
+    event_type: 'log',
+    input_refs: [],
+    output_refs: [],
+    message: 'pm.spec-lint',
+    metadata: {
+      checked: lint.checked,
+      flagged: lint.flagged,
+      warned: lint.warned,
+      warnings: lint.warnings,
+      truncated: lint.truncated,
+      skipped_files: lint.skippedFiles,
+      ...(lint.configError !== null && { config_error: lint.configError }),
+    },
+  });
+  const lintErrors = [
+    ...(lint.configError !== null ? [`ralph-spec-lint: ${lint.configError}`] : []),
+    ...lint.errors,
+  ];
+
   const coupling = compileHiddenCoupling(workItemsDir, injection.items);
   for (const edge of coupling.compiledEdges) {
     logger.emit({
@@ -436,6 +495,7 @@ export function compileWorkItemSpecs(opts: WiSpecCompileOptions): WiSpecCompileR
   return {
     items: coupling.items,
     unresolvedCoupling: coupling.unresolved,
-    compileErrors: [...writeErrors, ...invariantErrors],
+    compileErrors: [...writeErrors, ...invariantErrors, ...lintErrors],
+    lintWarnings: lint.warnings,
   };
 }
