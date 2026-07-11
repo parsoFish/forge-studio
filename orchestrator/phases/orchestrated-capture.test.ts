@@ -183,6 +183,12 @@ test('commitOrchestratedCaptureArtifacts: commits + pushes changed demo artifact
     const localSha = git(wt, 'rev-parse', 'HEAD').trim();
     const remoteSha = git(origin, 'rev-parse', 'main').trim();
     assert.equal(remoteSha, localSha);
+
+    // G8 wave 2 (2026-07-12): orchestrator-issued commit → forge-orchestrator
+    // identity via -c flags, not the `t@t`/`t` local identity configured
+    // above (deliberately distinct, so this proves the override).
+    assert.equal(git(wt, 'log', '-1', '--pretty=%an').trim(), 'forge-orchestrator');
+    assert.equal(git(wt, 'log', '-1', '--pretty=%ae').trim(), 'forge-orchestrator@forge.local');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

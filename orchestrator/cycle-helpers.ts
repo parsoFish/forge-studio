@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 import type { EventLogger } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
@@ -231,6 +232,7 @@ export function commitDevLoopBoundary(
     execFileSync(
       'git',
       [
+        ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
         'commit',
         '--allow-empty',
         '-m',
@@ -333,10 +335,11 @@ function commitAndPushCiFix(
     } catch {
       /* best-effort — not staged */
     }
-    execFileSync('git', ['commit', '-m', 'style: apply ci_fix_cmd (auto-format)'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-    });
+    execFileSync(
+      'git',
+      [...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'commit', '-m', 'style: apply ci_fix_cmd (auto-format)'],
+      { cwd: worktreePath, stdio: 'pipe' },
+    );
     let pushed = true;
     let pushReason: string | null = null;
     try {

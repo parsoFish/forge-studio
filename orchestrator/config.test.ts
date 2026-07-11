@@ -22,6 +22,11 @@ import {
   resolveDevWiConcurrency,
   DEFAULT_DEV_WI_CONCURRENCY,
   DEV_WI_CONCURRENCY_CEILING,
+  ralphGitIdentity,
+  UNIFIER_GIT_IDENTITY,
+  ORCHESTRATOR_GIT_IDENTITY,
+  pinnedAgentEnvWithGitIdentity,
+  gitIdentityConfigArgs,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -342,4 +347,66 @@ test('pinnedAgentEnv: defaults to process.env when called with no argument', () 
     if (original === undefined) delete process.env.ANTHROPIC_BASE_URL;
     else process.env.ANTHROPIC_BASE_URL = original;
   }
+});
+
+// ---------------------------------------------------------------------------
+// G8 wave 2 (2026-07-12): distinct git identity for forge-authored commits.
+// ---------------------------------------------------------------------------
+
+test('ralphGitIdentity: name is forge-ralph, email is tagged with the work item id', () => {
+  const identity = ralphGitIdentity('WI-7');
+  assert.deepEqual(identity, { name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' });
+});
+
+test('ralphGitIdentity: distinct work item ids produce distinct emails (per-WI attribution)', () => {
+  const a = ralphGitIdentity('WI-1');
+  const b = ralphGitIdentity('WI-2');
+  assert.notEqual(a.email, b.email);
+});
+
+test('UNIFIER_GIT_IDENTITY: flat forge-unifier identity', () => {
+  assert.deepEqual(UNIFIER_GIT_IDENTITY, { name: 'forge-unifier', email: 'forge-unifier@forge.local' });
+});
+
+test('ORCHESTRATOR_GIT_IDENTITY: flat forge-orchestrator identity', () => {
+  assert.deepEqual(ORCHESTRATOR_GIT_IDENTITY, { name: 'forge-orchestrator', email: 'forge-orchestrator@forge.local' });
+});
+
+test('gitIdentityConfigArgs: -c user.name=... -c user.email=... in that order', () => {
+  assert.deepEqual(
+    gitIdentityConfigArgs({ name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' }),
+    ['-c', 'user.name=forge-ralph', '-c', 'user.email=forge-ralph+WI-7@forge.local'],
+  );
+});
+
+test('pinnedAgentEnvWithGitIdentity: sets GIT_AUTHOR_*/GIT_COMMITTER_* to the given identity', () => {
+  const result = pinnedAgentEnvWithGitIdentity(
+    { name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' },
+    { PATH: '/usr/bin' },
+  );
+  assert.equal(result.GIT_AUTHOR_NAME, 'forge-ralph');
+  assert.equal(result.GIT_AUTHOR_EMAIL, 'forge-ralph+WI-7@forge.local');
+  assert.equal(result.GIT_COMMITTER_NAME, 'forge-ralph');
+  assert.equal(result.GIT_COMMITTER_EMAIL, 'forge-ralph+WI-7@forge.local');
+  assert.equal(result.PATH, '/usr/bin', 'unrelated vars are preserved');
+});
+
+test('pinnedAgentEnvWithGitIdentity: the denylist/HEADROOM_* scrub still applies underneath the identity overlay', () => {
+  const poisoned: NodeJS.ProcessEnv = {
+    ANTHROPIC_BASE_URL: 'https://evil.example.com',
+    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
+    PATH: '/usr/bin',
+  };
+  const result = pinnedAgentEnvWithGitIdentity(UNIFIER_GIT_IDENTITY, poisoned);
+  assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'denylist scrub still applies');
+  assert.equal(result.HEADROOM_PROXY_URL, undefined, 'HEADROOM_* scrub still applies');
+  assert.equal(result.GIT_AUTHOR_EMAIL, 'forge-unifier@forge.local');
+});
+
+test('pinnedAgentEnvWithGitIdentity: defaults to process.env when base is omitted, without mutating it', () => {
+  const original = process.env.PATH;
+  const result = pinnedAgentEnvWithGitIdentity(UNIFIER_GIT_IDENTITY);
+  assert.equal(result.GIT_AUTHOR_NAME, 'forge-unifier');
+  assert.equal(result.PATH, original, 'process.env values still flow through');
+  assert.equal(process.env.GIT_AUTHOR_NAME, undefined, 'process.env itself is never mutated');
 });

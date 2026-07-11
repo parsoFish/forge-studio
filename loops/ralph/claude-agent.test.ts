@@ -263,6 +263,72 @@ test('createClaudeAgent: cacheable knob defaults to true and is forwarded to que
   }
 });
 
+// ---------------------------------------------------------------------------
+// G8 wave 2 (2026-07-12): gitIdentity → GIT_AUTHOR_*/GIT_COMMITTER_* env vars
+// on the spawned child, proven by spike to take precedence over local
+// gitconfig for the CLI child's own Bash-tool `git commit` calls.
+// ---------------------------------------------------------------------------
+
+test('createClaudeAgent: gitIdentity sets GIT_AUTHOR_*/GIT_COMMITTER_* on options.env', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      gitIdentity: { name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' },
+      queryFn: fakeQuery(
+        [{ type: 'result', subtype: 'success', total_cost_usd: 0.01, num_turns: 1 }],
+        captured,
+      ),
+    });
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    const env = captured[0]!.options.env as Record<string, string> | undefined;
+    assert.ok(env, 'options.env is set when gitIdentity is supplied');
+    assert.equal(env!.GIT_AUTHOR_NAME, 'forge-ralph');
+    assert.equal(env!.GIT_AUTHOR_EMAIL, 'forge-ralph+WI-7@forge.local');
+    assert.equal(env!.GIT_COMMITTER_NAME, 'forge-ralph');
+    assert.equal(env!.GIT_COMMITTER_EMAIL, 'forge-ralph+WI-7@forge.local');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: no gitIdentity → options.env is left unset (unchanged pre-wave behaviour)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const captured: CapturedCall[] = [];
+    const agent = createClaudeAgent({
+      queryFn: fakeQuery(
+        [{ type: 'result', subtype: 'success', total_cost_usd: 0.01, num_turns: 1 }],
+        captured,
+      ),
+    });
+    await agent({
+      promptPath,
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    assert.equal(captured[0]!.options.env, undefined, 'options.env untouched when gitIdentity is omitted');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('createClaudeAgent: zero cost when result message is missing or errored', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-'));
   try {

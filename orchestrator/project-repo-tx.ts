@@ -16,6 +16,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
+
 export const STUDIO_BRANCH = 'forge-studio';
 
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
@@ -90,7 +92,7 @@ export function commitStudioChange(projectDir: string, message: string, paths?: 
   }
   const staged = git(projectDir, ['diff', '--cached', '--name-only'], { allowFail: true });
   if (!staged) return false;
-  git(projectDir, ['commit', '--no-verify', '-m', message]);
+  git(projectDir, [...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'commit', '--no-verify', '-m', message]);
   return true;
 }
 
@@ -126,7 +128,15 @@ export function saveProjectRepo(projectDir: string): SaveResult {
     git(projectDir, ['branch', '-D', STUDIO_BRANCH], { allowFail: true });
     return { merged: false, pushed: false, detail: 'no pending forge-studio changes' };
   }
-  git(projectDir, ['merge', '--no-ff', '--no-verify', '-m', 'forge-studio: apply project configuration', STUDIO_BRANCH]);
+  git(projectDir, [
+    ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
+    'merge',
+    '--no-ff',
+    '--no-verify',
+    '-m',
+    'forge-studio: apply project configuration',
+    STUDIO_BRANCH,
+  ]);
 
   let pushed = false;
   let detail = `merged ${STUDIO_BRANCH} → ${base}`;

@@ -56,7 +56,13 @@ import {
   unifierItemsDir,
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
-import { resolveUnifierGateFailureCap, resolveDevWiConcurrency } from '../config.ts';
+import {
+  resolveUnifierGateFailureCap,
+  resolveDevWiConcurrency,
+  ralphGitIdentity,
+  UNIFIER_GIT_IDENTITY,
+  type GitIdentity,
+} from '../config.ts';
 import { runConcurrentDispatch, type DispatchOutcome } from '../wi-dispatch-scheduler.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
@@ -168,6 +174,25 @@ function sdkFallbackEventSink(
 }
 
 /**
+ * G8 wave 2 (2026-07-12) — resolve which git identity a `makeAgentWithTelemetry`
+ * call's agent commits should carry. The phase alone discriminates: the
+ * per-WI dev-loop call site (`phase: 'developer-loop'`) always sets
+ * `workItemId`; both unifier item roles (packaging — no workItemId — and
+ * code-fix — has a UWI workItemId) share the SAME flat unifier identity, so
+ * `workItemId` presence is NOT the discriminator for the unifier phase.
+ *
+ * Exported for direct unit testing (no SDK, no git) — same pattern as
+ * `assertNonEmptyDelivery` in cycle-helpers.ts.
+ */
+export function resolveGitIdentity(sinkCtx: { phase: 'developer-loop' | 'unifier'; workItemId?: string }): GitIdentity {
+  if (sinkCtx.phase === 'unifier') return UNIFIER_GIT_IDENTITY;
+  if (!sinkCtx.workItemId) {
+    throw new Error('resolveGitIdentity: developer-loop phase requires a workItemId');
+  }
+  return ralphGitIdentity(sinkCtx.workItemId);
+}
+
+/**
  * Change C — shared factory for tool-event-sink + Claude agent pairs.
  *
  * Both the per-WI dev-loop and the unifier follow the identical pattern:
@@ -220,6 +245,7 @@ function makeAgentWithTelemetry(
 
   const agent = getAdapter(sdkId).createAgent({
     ...agentOpts,
+    gitIdentity: resolveGitIdentity(sinkCtx),
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
     ...(onReasoning !== undefined ? { onReasoning } : {}),

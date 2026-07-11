@@ -10,6 +10,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '../../orchestrator/config.ts';
+
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
   | { kind: 'iteration-budget'; max: number }
@@ -528,11 +530,14 @@ function runGateCapturing(
  * what is otherwise a complete WI.
  *
  * `forge-autocommit:` prefix lets reflectors trivially distinguish these
- * from agent-authored commits in cycle-recap.
+ * from agent-authored commits in cycle-recap. G8 wave 2 (2026-07-12): this
+ * is an orchestrator-issued commit (no agent in the loop) so it carries
+ * `ORCHESTRATOR_GIT_IDENTITY` via explicit `-c` flags rather than relying on
+ * whatever git identity happens to be configured in the worktree.
  *
  * Returns true if a commit was created; false if there was nothing to
- * commit OR git failed (e.g., no identity). Failures are non-fatal —
- * the gate's normal check runs whether we committed or not.
+ * commit OR git failed. Failures are non-fatal — the gate's normal check
+ * runs whether we committed or not.
  */
 export function autoCommitWorktreeIfDirty(
   worktreePath: string,
@@ -545,7 +550,11 @@ export function autoCommitWorktreeIfDirty(
     execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe' });
     const wiTag = workItemId ? ` ${workItemId}` : '';
     const msg = `forge-autocommit:${wiTag} iter ${iteration} WIP (safety-net for missed agent commit)`;
-    execFileSync('git', ['commit', '-m', msg, '--no-verify'], { cwd: worktreePath, stdio: 'pipe' });
+    execFileSync(
+      'git',
+      [...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'commit', '-m', msg, '--no-verify'],
+      { cwd: worktreePath, stdio: 'pipe' },
+    );
     return true;
   } catch {
     return false;

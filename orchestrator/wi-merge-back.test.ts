@@ -105,6 +105,31 @@ test('mergeWiIntoCycle: merges a clean WI branch into the cycle branch with --no
   }
 });
 
+test('mergeWiIntoCycle: merge commit carries forge-orchestrator identity, not the local gitconfig', () => {
+  // G8 wave 2 (2026-07-12): mergeWiIntoCycle is orchestrator-issued (no agent
+  // in the loop) — the merge commit must carry ORCHESTRATOR_GIT_IDENTITY via
+  // explicit -c flags. `setup()` configures `t@forge`/`forge-test` locally,
+  // deliberately distinct so this proves the override, not a passive match.
+  const { proj, cleanup } = setup();
+  try {
+    sh(proj, ['checkout', '-q', '-b', 'wi-branch']);
+    writeFileSync(join(proj, 'wi-1.txt'), 'wi work\n');
+    sh(proj, ['add', '.']);
+    sh(proj, ['commit', '-q', '-m', 'wi: work']);
+    sh(proj, ['checkout', '-q', 'cycle-branch']);
+
+    const result = mergeWiIntoCycle({ cycleWorktreePath: proj, wiBranch: 'wi-branch', workItemId: 'WI-1' });
+    assert.deepEqual(result, { merged: true });
+
+    const authorName = sh(proj, ['log', '-1', '--pretty=%an']).trim();
+    const authorEmail = sh(proj, ['log', '-1', '--pretty=%ae']).trim();
+    assert.equal(authorName, 'forge-orchestrator');
+    assert.equal(authorEmail, 'forge-orchestrator@forge.local');
+  } finally {
+    cleanup();
+  }
+});
+
 test('mergeWiIntoCycle: a content conflict aborts cleanly — merged:false, working tree clean', () => {
   const { proj, cleanup } = setup();
   try {

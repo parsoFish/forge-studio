@@ -16,7 +16,10 @@ import { readFileSync, existsSync } from 'node:fs';
 import { pinnedSdkQuery as sdkQuery } from '../../orchestrator/pinned-sdk-query.ts';
 
 import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
+import { pinnedAgentEnvWithGitIdentity, type GitIdentity } from '../../orchestrator/config.ts';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
+
+export type { GitIdentity };
 
 /** Subset of the SDK's `query` shape we depend on — keeps the tests independent of SDK internals. */
 export type QueryFn = (params: {
@@ -58,6 +61,15 @@ export type ClaudeAgentOptions = {
    * cycle.
    */
   cacheable?: boolean;
+  /**
+   * G8 wave 2 (2026-07-12) — the git author/committer identity this agent's
+   * commits should carry, injected as GIT_AUTHOR_* / GIT_COMMITTER_* env vars
+   * on the spawned Claude Code CLI child (proven by spike 2026-07-11: these
+   * take precedence over local/global gitconfig, no worktree-config plumbing
+   * needed). When unset, `options.env` is left untouched and the child
+   * inherits the ambient identity exactly like before this wave.
+   */
+  gitIdentity?: GitIdentity;
   /** Inject a fake `query` for testing. */
   queryFn?: QueryFn;
   /**
@@ -207,6 +219,12 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;
     if (opts.systemPrompt !== undefined) options.systemPrompt = opts.systemPrompt;
+    // G8 wave 2 — compose the git identity overlay on top of the pinned env
+    // scrub (see pinnedAgentEnvWithGitIdentity). Only set options.env at all
+    // when a gitIdentity was supplied, so an unset gitIdentity leaves the SDK
+    // call's env exactly as it was before this wave (pinnedSdkQuery's own
+    // default of `pinnedAgentEnv(process.env)`).
+    if (opts.gitIdentity !== undefined) options.env = pinnedAgentEnvWithGitIdentity(opts.gitIdentity);
     // Idle-deadline safety net: pass an AbortController the SDK honours so a
     // stalled stream can be cancelled (kills the CLI subprocess) rather than
     // hanging the iteration forever (known-gaps 2026-06-01).

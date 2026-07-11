@@ -29,6 +29,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 
 import {
   existsSync,
@@ -557,10 +558,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): void {
     execFileSync(
       'git',
       [
-        '-c',
-        'user.email=forge@local',
-        '-c',
-        'user.name=forge',
+        ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
         'commit',
         '-m',
         'chore: drop forge scratch from branch (.forge/ + root Ralph PROMPT/AGENT/fix_plan; keeps tracked .forge/project.json + quality_gate_cmd)',
