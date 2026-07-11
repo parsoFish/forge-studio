@@ -1,0 +1,61 @@
+{
+  "runHandle": "wave2-gate-csv-output",
+  "initiatives": [
+    {
+      "initiativeId": "INIT-2026-07-11-csv-output-flag",
+      "cycleId": "2026-07-11T14-57-10_INIT-2026-07-11-csv-output-flag",
+      "finalStatus": "done",
+      "totalEvents": 648,
+      "costUsd": 15.5332,
+      "workItems": {
+        "total": 4,
+        "complete": 2,
+        "failed": 1
+      }
+    }
+  ],
+  "project": "gitpulse",
+  "baseSha": null,
+  "costUsd": 15.5332,
+  "costCeilingUsd": 35,
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "finalStatus=done"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": false,
+      "detail": "2/4 complete, 1 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$15.53 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": true,
+      "detail": "1 theme(s) written this run (e.g. 2026-07-11-csv-output-flag-delivery.md)"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.7.0)"
+    },
+    {
+      "name": "aggregate cost under ceiling",
+      "pass": true,
+      "detail": "$15.53 across 1 initiative(s) ≤ $35"
+    }
+  ],
+  "gate": "fail",
+  "framesCaptured": 6,
+  "completedAt": "2026-07-11T15:30:39.167Z"
+}
