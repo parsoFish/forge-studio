@@ -179,6 +179,22 @@ evidence.**
 
 ## 7. Phase 4 — Ralph conformance + parallel work items
 
+> **STATUS 2026-07-12: SHIPPED + gate-validated** on
+> `feat/phase3-design-consolidation`. Honest delivery events
+> (delivered/discarded + outcome); wi-worktree bootstrap; Map outcomes +
+> completeness invariant; per-WI worktrees w/ single-flight merge-back
+> fan-in; concurrent dispatcher behind `FORGE_DEV_WI_CONCURRENCY` (default
+> 1); bounded merge-conflict requeue WITH conflict-context injection into
+> the retry's feedback file; distinct git identities (forge-ralph+<wi>/
+> forge-unifier/forge-orchestrator — SDK env seam, spike-proven); cycle-start
+> self-heal of stale per-WI worktrees; gate-feedback loop PROVEN end-to-end
+> by integration test; scratch-safe merge-back (pre-merge strip + untracked-
+> overwrite remediation — killed the 5x-recurring ralph scratch-leak class
+> at the seam). Gate: verify:cycle PASS 7/7 (gitpulse --sort, $12.98,
+> 3/3 WIs, merge+reflect). Suite 1862→1974. Concurrent dispatch proven live
+> in the tags-cadence run (overlapping WI executions). REMAINING: step 10 —
+> raising the default cap — deliberately deferred until a multi-cycle soak.
+
 Conformance rows (updated): no-commit-on-red → Phase 2.6; gate-failure
 re-injection → verify the live-gate-feedback fix end-to-end (the 07-10
 demo-path false-negative says the loop isn't closed); spec lint → ship
