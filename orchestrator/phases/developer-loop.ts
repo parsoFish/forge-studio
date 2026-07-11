@@ -717,7 +717,13 @@ export async function runDeveloperLoop(
 
     // M5: per-WI delivered — this WI's net git delta (carries work_item_id so the
     // monitor shows real per-WI stats, not the cycle aggregate on every hex).
+    // Phase 4/2 (honest delivery events, brain/cycles/themes/2026-07-11-dev-
+    // loop-delivered-event-fires-for-failed-wi.md): `dev-loop.delivered` is
+    // SUCCESS-ONLY. A failed WI carries the SAME diff-stat fields on
+    // `dev-loop.discarded` instead — nothing is lost, but the event name never
+    // implies a shipped WI when it wasn't.
     const wiDelta = gitNetDelta(input.worktreePath, wiBaseSha);
+    const deliveryEvent = wiDeliveryEvent(finalStatus, wi.work_item_id, wiDelta);
     logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: wiStart.event_id,
@@ -726,14 +732,8 @@ export async function runDeveloperLoop(
       event_type: 'log',
       input_refs: [input.worktreePath],
       output_refs: [],
-      message: 'dev-loop.delivered',
-      metadata: {
-        work_item_id: wi.work_item_id,
-        files_changed: wiDelta.files,
-        insertions: wiDelta.insertions,
-        deletions: wiDelta.deletions,
-        commits: wiDelta.commits,
-      },
+      message: deliveryEvent.message,
+      metadata: deliveryEvent.metadata,
     });
 
     // G8: push the initiative branch to origin after every WI so local ==
@@ -758,9 +758,12 @@ export async function runDeveloperLoop(
       input_refs: [input.worktreePath],
       output_refs: [],
       message: push.pushed ? 'dev-loop.branch-pushed' : 'dev-loop.branch-push-failed',
+      // Phase 4/2: carry the same explicit outcome field as the delivered/
+      // discarded pair above — push behavior itself is unchanged (still fires
+      // regardless of finalStatus; only the metadata gains context).
       metadata: push.pushed
-        ? { work_item_id: wi.work_item_id, branch: push.branch }
-        : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true },
+        ? { work_item_id: wi.work_item_id, branch: push.branch, outcome: finalStatus }
+        : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true, outcome: finalStatus },
     });
 
     wiOutcomes.push({
@@ -982,6 +985,35 @@ function gitNetDelta(wt: string, fromRef: string): { files: number; insertions: 
     insertions: Number(ss.match(/(\d+) insertions?/)?.[1] ?? 0),
     deletions: Number(ss.match(/(\d+) deletions?/)?.[1] ?? 0),
     commits: Number(git(['rev-list', '--count', `${fromRef}..HEAD`]) || '0') || 0,
+  };
+}
+
+/**
+ * Phase 4/2 (honest delivery events) — decide the per-WI delivery event's
+ * message + metadata from the WI's final status. `dev-loop.delivered` is
+ * SUCCESS-ONLY (`finalStatus === 'complete'`); any other outcome carries the
+ * SAME diff-stat fields on `dev-loop.discarded` instead, so a failed WI's
+ * partial work is never silently lost from the log — it just is never
+ * misnamed as a shipped delivery. Both variants carry an explicit `outcome`
+ * field so a consumer never has to infer success from the message name
+ * alone (brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-
+ * failed-wi.md). Pure — no I/O. Exported for unit testing.
+ */
+export function wiDeliveryEvent(
+  finalStatus: WorkItem['status'],
+  workItemId: string,
+  delta: { files: number; insertions: number; deletions: number; commits: number },
+): { message: 'dev-loop.delivered' | 'dev-loop.discarded'; metadata: Record<string, unknown> } {
+  return {
+    message: finalStatus === 'complete' ? 'dev-loop.delivered' : 'dev-loop.discarded',
+    metadata: {
+      work_item_id: workItemId,
+      files_changed: delta.files,
+      insertions: delta.insertions,
+      deletions: delta.deletions,
+      commits: delta.commits,
+      outcome: finalStatus,
+    },
   };
 }
 
