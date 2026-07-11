@@ -25,23 +25,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { add } from '../worktree.ts';
 import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '../wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeQueue } from '../wi-merge-back.ts';
+import { createMergeQueue, mergeAndPublish, type MergeConflictDetail, type MergeQueue } from '../wi-merge-back.ts';
 import {
   assertOutcomesSettled,
+  GATE_FAILURE_FEEDBACK_HEADING,
   gitNetDelta,
+  MERGE_CONFLICT_FEEDBACK_HEADING,
   prerequisiteBlockage,
   settleWiOutcome,
   wiDeliveryEvent,
+  writeGateFeedback,
+  writeMergeConflictFeedback,
   type WiOutcome,
 } from './developer-loop.ts';
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '../work-item.ts';
 import { run as runRalph, type AgentInvocation } from '../../loops/ralph/runner.ts';
+import { makeQualityGateFromCmd } from '../../loops/ralph/stop-conditions.ts';
 import { runConcurrentDispatch, type DispatchOutcome } from '../wi-dispatch-scheduler.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 
@@ -158,8 +163,19 @@ function makeDispatch(opts: {
   mergeQueue: MergeQueue;
   outcomes: Map<string, WiOutcome>;
   mergeConflictAttempts: Map<string, number>;
+  mergeConflictDetails: Map<string, MergeConflictDetail>;
   agentFor: (item: WorkItem, attempt: number) => AgentInvocation;
   beforeRalph?: (item: WorkItem, attempt: number, worktreePath: string) => void;
+  afterRalph?: (item: WorkItem, attempt: number, worktreePath: string) => void;
+  /**
+   * When provided, the REAL production gate wiring replaces the always-pass
+   * stub: `runWiDispatchTask`'s own shape — a `makeQualityGateFromCmd` gate
+   * whose `onRun` feeds `writeGateFeedback`, with `failOnHollowIter0Gate`
+   * left at the runner's DEFAULT (true), so the iter-0 sharp-gate pre-check
+   * genuinely fires against the injected conflict note (the re-review
+   * CRITICAL the stubbed tests above bypass).
+   */
+  gateFor?: (item: WorkItem, attempt: number, wiWorktreePath: string) => (ctx?: { iteration: number }) => boolean | Promise<boolean>;
 }): (item: WorkItem) => Promise<DispatchOutcome> {
   const workItemsDir = resolve(opts.f.cycleWorktreePath, '.forge', 'work-items');
   return async (item: WorkItem): Promise<DispatchOutcome> => {
@@ -189,12 +205,25 @@ function makeDispatch(opts: {
       cycleWorktreePath: opts.f.cycleWorktreePath,
     });
 
+    // Conflict-context injection, mirroring `runWiDispatchTask`'s own wiring
+    // in developer-loop.ts exactly: a prior conflict for this WI id means
+    // this dispatch IS the requeued attempt — seed the fresh worktree with
+    // the SAME `.forge/last-gate-failure.md` seam the gate-feedback loop
+    // uses, before the Ralph run below. Consumed exactly once (the entry is
+    // deleted), also mirroring production.
+    const priorConflict = opts.mergeConflictDetails.get(item.work_item_id);
+    if (priorConflict) {
+      opts.mergeConflictDetails.delete(item.work_item_id);
+      writeMergeConflictFeedback(wiWt.path, opts.mergeConflictAttempts.get(item.work_item_id) ?? 1, priorConflict);
+    }
+
     let finalStatus: WorkItem['status'] = 'failed';
     let mergeConflict = false;
     let requeue = false;
     try {
       opts.beforeRalph?.(item, attempt, wiWt.path);
 
+      const productionGate = opts.gateFor?.(item, attempt, wiWt.path);
       const result = await runRalph(
         {
           workItemSpecPath: resolve(wiWt.path, '.forge', 'work-items', `${item.work_item_id}.md`),
@@ -203,11 +232,16 @@ function makeDispatch(opts: {
           brainQueryResults: '',
           cycleId: opts.f.logger.cycleId,
           initiativeId: opts.initiativeId,
-          qualityGate: () => true,
-          failOnHollowIter0Gate: false,
+          // Production wiring when `gateFor` is supplied (real gate cmd +
+          // onRun→writeGateFeedback + runner-DEFAULT failOnHollowIter0Gate);
+          // otherwise the always-pass stub the fan-in scenarios use.
+          ...(productionGate
+            ? { qualityGate: productionGate }
+            : { qualityGate: () => true, failOnHollowIter0Gate: false }),
         },
         opts.agentFor(item, attempt),
       );
+      opts.afterRalph?.(item, attempt, wiWt.path);
       assert.equal(
         result.status,
         'complete',
@@ -220,6 +254,7 @@ function makeDispatch(opts: {
           wiBranch: wiWt.branch,
           workItemId: item.work_item_id,
           specPath,
+          startPointRef: wiBaseSha,
         }),
       );
 
@@ -229,6 +264,7 @@ function makeDispatch(opts: {
         mergeConflict = true;
         if (attempt <= MAX_RETRIES) {
           opts.mergeConflictAttempts.set(item.work_item_id, attempt);
+          opts.mergeConflictDetails.set(item.work_item_id, mergeOutcome.conflict);
           requeue = true;
         } else {
           finalStatus = 'failed';
@@ -302,6 +338,7 @@ test('merge-conflict requeue: a first fan-in conflict requeues, a clean second m
     const outcomes = new Map<string, WiOutcome>();
     const mergeQueue = createMergeQueue();
     const mergeConflictAttempts = new Map<string, number>();
+    const mergeConflictDetails = new Map<string, MergeConflictDetail>();
     const wi1AttemptCalls: number[] = [];
 
     const dispatch = makeDispatch({
@@ -310,6 +347,7 @@ test('merge-conflict requeue: a first fan-in conflict requeues, a clean second m
       mergeQueue,
       outcomes,
       mergeConflictAttempts,
+      mergeConflictDetails,
       agentFor: (item, attempt) => {
         if (item.work_item_id === 'WI-1') {
           wi1AttemptCalls.push(attempt);
@@ -322,14 +360,29 @@ test('merge-conflict requeue: a first fan-in conflict requeues, a clean second m
         }
         return fileWritingAgent('wi2.txt', 'wi-2 content\n');
       },
-      beforeRalph: (item, attempt) => {
+      beforeRalph: (item, attempt, worktreePath) => {
+        const failureFile = join(worktreePath, '.forge', 'last-gate-failure.md');
         if (item.work_item_id === 'WI-1' && attempt === 1) {
+          // Conflict-context injection: attempt 1 is a FIRST attempt — no
+          // prior conflict is known yet, so nothing should have been written
+          // into this fresh worktree.
+          assert.equal(existsSync(failureFile), false, 'a first attempt (no prior conflict) must get no feedback file');
           // Simulate the cycle branch moving independently while WI-1's
           // first attempt is in flight — the only way a merge conflict
           // arises at all.
           writeFileSync(join(f.cycleWorktreePath, 'shared.txt'), 'cycle change\n');
           sh(f.cycleWorktreePath, ['add', '.']);
           sh(f.cycleWorktreePath, ['commit', '-q', '-m', 'cycle: diverge']);
+        }
+        if (item.work_item_id === 'WI-1' && attempt === 2) {
+          // Conflict-context injection: the requeued attempt's FRESH
+          // worktree must already carry the conflict-guidance feedback file,
+          // naming the file that conflicted — written before this hook (and
+          // therefore before ANY ralph iteration) runs.
+          assert.ok(existsSync(failureFile), 'the requeued attempt must find the merge-conflict feedback file');
+          const body = readFileSync(failureFile, 'utf8');
+          assert.match(body, /^# MERGE CONFLICT \(attempt 1\)/);
+          assert.match(body, /shared\.txt/, 'the conflicting file must be named in the feedback');
         }
         if (item.work_item_id === 'WI-2') {
           // WI-2 forks its own worktree in `makeDispatch` right before this
@@ -340,6 +393,9 @@ test('merge-conflict requeue: a first fan-in conflict requeues, a clean second m
           const wtPath = wiWorktreePath({ worktreesRoot: f.worktreesRoot, initiativeId, workItemId: 'WI-2' });
           assert.equal(readFileSync(join(wtPath, 'wi1.txt'), 'utf8'), 'wi-1 attempt 2\n');
           assert.equal(readFileSync(join(wtPath, 'shared.txt'), 'utf8'), 'cycle change\n');
+          // WI-2 never conflicts — a clean WI's first (and only) attempt
+          // must get no feedback file at all.
+          assert.equal(existsSync(failureFile), false, 'a WI that never conflicts must get no merge-conflict feedback file');
         }
       },
     });
@@ -383,6 +439,7 @@ test('merge-conflict requeue: two consecutive conflicts exhaust the retry — te
     const outcomes = new Map<string, WiOutcome>();
     const mergeQueue = createMergeQueue();
     const mergeConflictAttempts = new Map<string, number>();
+    const mergeConflictDetails = new Map<string, MergeConflictDetail>();
     const wi1AttemptCalls: number[] = [];
     let wi2Dispatched = false;
 
@@ -392,6 +449,7 @@ test('merge-conflict requeue: two consecutive conflicts exhaust the retry — te
       mergeQueue,
       outcomes,
       mergeConflictAttempts,
+      mergeConflictDetails,
       agentFor: (item, attempt) => {
         if (item.work_item_id === 'WI-1') {
           wi1AttemptCalls.push(attempt);
@@ -400,8 +458,18 @@ test('merge-conflict requeue: two consecutive conflicts exhaust the retry — te
         wi2Dispatched = true;
         return fileWritingAgent('wi2.txt', 'wi-2 content\n');
       },
-      beforeRalph: (item, attempt) => {
+      beforeRalph: (item, attempt, worktreePath) => {
         if (item.work_item_id === 'WI-1') {
+          const failureFile = join(worktreePath, '.forge', 'last-gate-failure.md');
+          if (attempt === 1) {
+            assert.equal(existsSync(failureFile), false, 'a first attempt (no prior conflict) must get no feedback file');
+          } else {
+            // attempt 2 is the requeued attempt from attempt 1's conflict —
+            // it must carry the conflict feedback even though attempt 2
+            // itself is about to conflict again (terminally this time).
+            assert.ok(existsSync(failureFile), 'the requeued attempt must find the merge-conflict feedback file');
+            assert.match(readFileSync(failureFile, 'utf8'), /^# MERGE CONFLICT \(attempt 1\)/);
+          }
           // A FRESH divergent commit on every attempt — "against the fresh
           // cycle-branch tip" per Phase 4 step 7, and this attempt conflicts
           // again regardless.
@@ -436,6 +504,140 @@ test('merge-conflict requeue: two consecutive conflicts exhaust the retry — te
     const discardedForWi1 = events.filter((e) => e.message === 'dev-loop.discarded' && e.metadata?.work_item_id === 'WI-1');
     assert.equal(discardedForWi1.length, 1, 'the terminal attempt reports exactly one discarded event, not one per attempt');
     assert.equal(discardedForWi1[0]?.metadata?.outcome, 'failed');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('merge-conflict requeue through the REAL gate wiring: the iter-0 sharp-gate pre-check appends beneath the conflict note (agent turn 1 sees both), an iteration-1 failure replaces it, and the passing gate deletes it', async () => {
+  const initiativeId = 'INIT-2026-07-12-merge-conflict-iter0-gate';
+  const f = setup(initiativeId);
+  try {
+    const items = [wi('WI-1', [])];
+    for (const item of items) writeWorkItem(item, f.cycleWorktreePath);
+
+    const outcomes = new Map<string, WiOutcome>();
+    const mergeQueue = createMergeQueue();
+    const mergeConflictAttempts = new Map<string, number>();
+    const mergeConflictDetails = new Map<string, MergeConflictDetail>();
+
+    // Every agent turn snapshots what `.forge/last-gate-failure.md` held
+    // when the turn STARTED — the exact read the dev system prompt mandates
+    // as the agent's first act. `iteration` here is the runner's own
+    // numbering: the agent's first turn is iteration 1 (iteration 0 is the
+    // sharp-gate pre-check, which runs BEFORE the agent exists).
+    const seen: { attempt: number; iteration: number; feedback: string | null }[] = [];
+    const snapshotFeedback = (worktreePath: string): string | null => {
+      const p = join(worktreePath, '.forge', 'last-gate-failure.md');
+      return existsSync(p) ? readFileSync(p, 'utf8') : null;
+    };
+
+    const dispatch = makeDispatch({
+      f,
+      initiativeId,
+      mergeQueue,
+      outcomes,
+      mergeConflictAttempts,
+      mergeConflictDetails,
+      // THE REAL PRODUCTION PATH (re-review CRITICAL): a real gate command
+      // run by makeQualityGateFromCmd, its onRun feeding writeGateFeedback,
+      // and failOnHollowIter0Gate left at the runner's default (true) — so
+      // the iter-0 pre-check genuinely runs the gate against the fresh fork
+      // and reports a failure into the same file as the conflict note.
+      gateFor: (_item, _attempt, wiWtPath) =>
+        makeQualityGateFromCmd(wiWtPath, ['test', '-f', 'wi1.txt'], (info) => writeGateFeedback(wiWtPath, info)),
+      agentFor: (_item, attempt) =>
+        async ({ worktreePath, iteration }) => {
+          seen.push({ attempt, iteration, feedback: snapshotFeedback(worktreePath) });
+          if (attempt === 1) {
+            // One turn: satisfy the gate AND make the edit that will collide
+            // with the cycle branch's divergent change staged in beforeRalph.
+            writeFileSync(join(worktreePath, 'shared.txt'), 'wi-1 change\n');
+            writeFileSync(join(worktreePath, 'wi1.txt'), 'wi-1 attempt 1\n');
+            return { filesChanged: ['shared.txt', 'wi1.txt'], costUsd: 0.01 };
+          }
+          if (iteration === 1) {
+            // Requeued attempt, first REAL turn: leave the gate failing so
+            // the post-turn iteration-1 gate check exercises the
+            // replace-entirely contract on the next turn's read.
+            writeFileSync(join(worktreePath, 'notes.txt'), 'orienting on the conflict feedback\n');
+            return { filesChanged: ['notes.txt'], costUsd: 0.01 };
+          }
+          // Second turn: satisfy the gate WITHOUT touching shared.txt — the
+          // rebased approach the conflict note instructs — so the retry
+          // merges clean.
+          writeFileSync(join(worktreePath, 'wi1.txt'), 'wi-1 attempt 2\n');
+          return { filesChanged: ['wi1.txt'], costUsd: 0.01 };
+        },
+      beforeRalph: (_item, attempt) => {
+        if (attempt === 1) {
+          // Diverge the cycle branch so attempt 1's merge-back conflicts.
+          writeFileSync(join(f.cycleWorktreePath, 'shared.txt'), 'cycle change\n');
+          sh(f.cycleWorktreePath, ['add', '.']);
+          sh(f.cycleWorktreePath, ['commit', '-q', '-m', 'cycle: diverge']);
+        }
+      },
+      afterRalph: (_item, attempt, worktreePath) => {
+        // Each attempt ends on a passing gate — the passing write must have
+        // DELETED the feedback file, conflict note included.
+        assert.equal(
+          snapshotFeedback(worktreePath),
+          null,
+          `attempt ${attempt}: a passing gate must delete the feedback file (conflict note included)`,
+        );
+      },
+    });
+
+    await runConcurrentDispatch({
+      items: topologicalOrder(items),
+      idOf: (item) => item.work_item_id,
+      dependsOn: (item) => item.depends_on,
+      cap: 1,
+      dispatch,
+    });
+
+    assertOutcomesSettled(outcomes, items);
+    assert.equal(outcomes.get('WI-1')?.status, 'complete');
+    assert.equal(
+      f.readEvents().filter((e) => e.message === 'dev-loop.merge-conflict-requeue').length,
+      1,
+      'exactly one requeue — attempt 2 merges clean',
+    );
+
+    // Attempt 1 turn 1 (no prior conflict): the iter-0 pre-check failed and
+    // wrote PLAIN gate feedback — nothing to preserve.
+    const a1t1 = seen.find((s) => s.attempt === 1 && s.iteration === 1);
+    assert.ok(a1t1?.feedback, 'attempt 1 turn 1 must see the iter-0 gate failure');
+    assert.ok(a1t1.feedback.startsWith(GATE_FAILURE_FEEDBACK_HEADING), 'a first attempt gets a plain gate-failure body');
+    assert.ok(a1t1.feedback.includes('(forge, iteration 0)'));
+    assert.ok(!a1t1.feedback.includes(MERGE_CONFLICT_FEEDBACK_HEADING));
+
+    // THE CRITICAL ASSERTION: attempt 2 (requeued), the agent's ACTUAL first
+    // turn (runner iteration 1) — the iter-0 pre-check already ran the real
+    // gate and failed, and the conflict note must have SURVIVED it, with the
+    // gate detail appended beneath.
+    const a2t1 = seen.find((s) => s.attempt === 2 && s.iteration === 1);
+    assert.ok(a2t1?.feedback, "the requeued attempt's first agent turn must find the feedback file");
+    assert.ok(
+      a2t1.feedback.startsWith(`${MERGE_CONFLICT_FEEDBACK_HEADING} (attempt 1)`),
+      'the conflict note must survive the iter-0 gate pre-check and stay FIRST',
+    );
+    assert.match(a2t1.feedback, /shared\.txt/, 'the conflicting file must still be named');
+    assert.ok(
+      a2t1.feedback.includes(`${GATE_FAILURE_FEEDBACK_HEADING} (forge, iteration 0)`),
+      'the iter-0 gate detail must be appended beneath the conflict note',
+    );
+
+    // Iteration ≥ 1 contract: the second turn's read sees the iteration-1
+    // gate failure having REPLACED the file entirely (the agent has had its
+    // mandated first read; freshest live truth wins).
+    const a2t2 = seen.find((s) => s.attempt === 2 && s.iteration === 2);
+    assert.ok(a2t2?.feedback, 'attempt 2 turn 2 must see the iteration-1 gate failure');
+    assert.ok(a2t2.feedback.startsWith(GATE_FAILURE_FEEDBACK_HEADING));
+    assert.ok(a2t2.feedback.includes('(forge, iteration 1)'));
+    assert.ok(!a2t2.feedback.includes(MERGE_CONFLICT_FEEDBACK_HEADING), 'an iteration ≥ 1 failure replaces the conflict note entirely');
+
+    assert.equal(seen.length, 3, 'attempt 1 = one turn; attempt 2 = two turns');
   } finally {
     f.cleanup();
   }
