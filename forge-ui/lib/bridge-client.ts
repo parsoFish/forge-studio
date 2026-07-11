@@ -197,6 +197,9 @@ export type RoadmapInitiative = {
   title: string;
   status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
   dependsOnInitiatives: string[];
+  /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
+  ready: boolean;
+  blockedBy: string[];
   workItems?: RoadmapWorkItem[];
 };
 
@@ -318,27 +321,34 @@ export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boo
 
 // ---- Start development (S7 / DEC-3) --------------------------------------
 
+export type DevelopStartItemResult = {
+  ok: boolean;
+  initiativeId: string;
+  status?: 'enqueued' | 'not-found' | 'already-developing' | 'error';
+  cycleId?: string;
+  flowId?: string;
+  detail?: string;
+};
+
 export type StartDevelopmentResult = {
   ok: boolean;
   error?: string;
-  status?: 'enqueued' | 'not-found' | 'already-developing';
-  cycleId?: string;
-  flowId?: string;
+  results?: DevelopStartItemResult[];
 };
 
 /**
- * Trigger the forge-develop flow for a decomposed initiative (the roadmap
- * "start development" button). Repoints the manifest at forge-develop +
- * threads its cycle_id, then the scheduler claims it.
+ * Trigger the forge-develop flow for one or more decomposed initiatives (the
+ * roadmap "start development" / "start eligible" buttons). Repoints each
+ * manifest at forge-develop + threads its cycle_id, then the scheduler
+ * claims it. plan-everything-before-kickoff: batch — one request, one
+ * result per id (no single HTTP status can represent N outcomes).
  */
-export async function startDevelopment(initiativeId: string): Promise<StartDevelopmentResult> {
-  const r = await bridgePost('/api/develop/start', { initiativeId });
+export async function startDevelopment(initiativeIds: string[]): Promise<StartDevelopmentResult> {
+  const r = await bridgePost('/api/develop/start', { initiativeIds });
   return {
     ok: r.ok,
     error: r.error,
-    status: r.data?.status as StartDevelopmentResult['status'],
-    cycleId: r.data?.cycleId as string | undefined,
-    flowId: r.data?.flowId as string | undefined,
+    results: r.data?.results as DevelopStartItemResult[] | undefined,
   };
 }
 

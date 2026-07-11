@@ -965,27 +965,44 @@ async function handleHttp(
   }
 
   // Start development (S7 / DEC-3) — the roadmap "start development" button.
-  // Repoints the initiative's manifest at the forge-develop flow and makes it
-  // claimable (the real enqueue behind the develop trigger). The global CSRF
-  // guard above (x-forge-csrf) already gates this POST.
+  // Repoints each initiative's manifest at the forge-develop flow and makes it
+  // claimable (the real enqueue behind the develop trigger). Batch (plan-
+  // everything-before-kickoff): the roadmap can decompose N initiatives up
+  // front, so kickoff accepts N ids at once and reports a per-id result
+  // rather than one HTTP status for the whole request. The global CSRF guard
+  // above (x-forge-csrf) already gates this POST.
   if (method === 'POST' && url === '/api/develop/start') {
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
-      const initiativeId = typeof body['initiativeId'] === 'string' ? body['initiativeId'] : '';
-      if (!initiativeId) {
-        sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      const rawIds = body['initiativeIds'];
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        sendJson(res, 400, { error: 'initiativeIds required (non-empty string array)' }, origin);
         return;
       }
-      const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
-      if (result.status === 'not-found') {
-        sendJson(res, 404, result, origin);
+      // Validate the WHOLE batch before any enqueue — a mixed-validity request
+      // is rejected outright (no silent filtering, no partial side effects).
+      const invalid = rawIds
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => typeof v !== 'string' || v.length === 0);
+      if (invalid.length > 0) {
+        const named = invalid.map(({ v, i }) => `[${i}]=${JSON.stringify(v)}`).join(', ');
+        sendJson(res, 400, { error: `initiativeIds contains invalid entries (must be non-empty strings): ${named}` }, origin);
         return;
       }
-      if (result.status === 'already-developing') {
-        sendJson(res, 409, result, origin);
-        return;
-      }
-      sendJson(res, 200, { ok: true, ...result }, origin);
+      // Dedupe, preserving first-occurrence order — one enqueue + one result per id.
+      const initiativeIds = [...new Set(rawIds as string[])];
+      const results = initiativeIds.map((initiativeId) => {
+        // Per-item isolation: a throw on one item must not 500 away the
+        // results of items whose side effects already applied.
+        try {
+          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
+          return { ...result, ok: result.status === 'enqueued' };
+        } catch (err) {
+          return { status: 'error' as const, initiativeId, ok: false, detail: sanitizeError(err) };
+        }
+      });
+      const ok = results.every((r) => r.ok);
+      sendJson(res, 200, { ok, results }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

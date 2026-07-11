@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import {
   checkInitiativeDeps,
+  UNPARSEABLE_MANIFEST_BLOCKER,
   decideAutoRetry,
   dispatchTerminalStatus,
   MAX_AUTO_RETRIES,
@@ -35,6 +36,7 @@ import {
 } from './scheduler.ts';
 import { getPaths } from './queue.ts';
 import type { NotifyEvent } from './notify.ts';
+import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 
 function setupQueue(): { dir: string; paths: ReturnType<typeof getPaths> } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sched-disp-'));
@@ -196,7 +198,7 @@ test('dispatchTerminalStatus: failed but manifest not in in-flight → no move, 
 
 // ---- F-25: initiative-level dependency enforcement ----
 
-function manifestWithDeps(id: string, deps: string[]): string {
+function manifestWithDeps(id: string, deps: string[], flowId: string = DEVELOP_FLOW_ID): string {
   const depsBlock =
     deps.length > 0
       ? `depends_on_initiatives:\n${deps.map((d) => `  - ${d}`).join('\n')}\n`
@@ -209,6 +211,7 @@ created_at: 2026-05-10T18:00:00Z
 iteration_budget: 1
 cost_budget_usd: 1.0
 phase: pending
+flow_id: ${flowId}
 ${depsBlock}---
 
 # ${id}
@@ -287,6 +290,47 @@ test('checkInitiativeDeps: missing manifest file → empty (best-effort)', () =>
   try {
     // No manifest written. Nothing to do.
     assert.deepEqual(checkInitiativeDeps('INIT-2026-05-10-nonexistent.md', paths), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checkInitiativeDeps: flow_id=forge-architect (decompose) → never blocked, even with unmet deps', () => {
+  const { dir, paths } = setupQueue();
+  try {
+    // Dep never created in done/ or anywhere — would block a build-flow manifest.
+    writeFileSync(
+      join(paths.pending, 'INIT-2026-05-10-d.md'),
+      manifestWithDeps('INIT-2026-05-10-d', ['INIT-2026-05-10-b'], 'forge-architect'),
+    );
+    assert.deepEqual(checkInitiativeDeps('INIT-2026-05-10-d.md', paths), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checkInitiativeDeps: malformed frontmatter → blocking sentinel (fail safe, never claimable)', () => {
+  const { dir, paths } = setupQueue();
+  try {
+    // No frontmatter at all — parseManifest throws on the missing required
+    // fields. The gate must fail SAFE (blocked), not fail open (claimable).
+    writeFileSync(join(paths.pending, 'INIT-2026-05-10-bad.md'), '# not a manifest\n');
+    assert.deepEqual(
+      checkInitiativeDeps('INIT-2026-05-10-bad.md', paths),
+      [UNPARSEABLE_MANIFEST_BLOCKER],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checkInitiativeDeps: no flow_id declared → gated as a build flow (deps still enforced)', () => {
+  const { dir, paths } = setupQueue();
+  try {
+    const raw = manifestWithDeps('INIT-2026-05-10-e', ['INIT-2026-05-10-b'])
+      .replace(/^flow_id: .*\n/m, '');
+    writeFileSync(join(paths.pending, 'INIT-2026-05-10-e.md'), raw);
+    assert.deepEqual(checkInitiativeDeps('INIT-2026-05-10-e.md', paths), ['INIT-2026-05-10-b']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -761,13 +761,20 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
 }
 
 /** Stage 2 hand-off — POST /api/develop/start to repoint the initiative onto
- *  forge-develop (same cycle_id, reusing the architect worktree + work items). */
+ *  forge-develop (same cycle_id, reusing the architect worktree + work items).
+ *  plan-everything-before-kickoff: the endpoint is now batch-shaped
+ *  ({initiativeIds: string[]} -> {ok, results}); this caller sends a single-
+ *  id batch and unwraps the one result. */
 async function handoffToDevelop(bridgeUrl, initiativeId) {
   log(`hand-off — POST /api/develop/start ${initiativeId}…`);
-  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeId });
+  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeIds: [initiativeId] });
   if (!r.ok) throw new Error(`develop start failed (${r.status}): ${JSON.stringify(r.body)}`);
-  log(`develop run enqueued (cycle_id ${r.body?.cycleId ?? '?'})`);
-  return r.body;
+  const result = r.body?.results?.[0];
+  if (!result || !result.ok) {
+    throw new Error(`develop start failed for ${initiativeId}: ${JSON.stringify(result ?? r.body)}`);
+  }
+  log(`develop run enqueued (cycle_id ${result.cycleId ?? '?'})`);
+  return result;
 }
 
 /** Spawn `forge serve --once` for one spine stage, capturing phase-transition

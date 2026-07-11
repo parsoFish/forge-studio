@@ -30,6 +30,7 @@ import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
 import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
+import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
 import type { Run } from '../orchestrator/run-model.ts';
 import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
@@ -762,6 +763,14 @@ export type RoadmapInitiative = {
   title: string;
   status: QueueState;
   dependsOnInitiatives: string[];
+  /**
+   * plan-everything-before-kickoff: whether this initiative's build deps are
+   * satisfied yet (reuses the scheduler's own `checkInitiativeDeps` gate —
+   * only meaningful while `status === 'pending'`; other states default to
+   * ready/unblocked since the gate only ever applies at pending-claim time).
+   */
+  ready: boolean;
+  blockedBy: string[];
   /** Present when the initiative has been decomposed (non-pending). */
   workItems?: RoadmapWorkItem[];
 };
@@ -823,11 +832,15 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
         ? undefined
         : readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
 
+      const blockedBy = checkInitiativeDeps(file, queuePaths);
+
       initiatives.push({
         initiativeId: initId,
         title,
         status,
         dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
+        ready: blockedBy.length === 0,
+        blockedBy,
         ...(workItems !== undefined ? { workItems } : {}),
       });
     }

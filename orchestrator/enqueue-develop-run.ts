@@ -35,7 +35,7 @@ export const DEVELOP_FLOW_ID = 'forge-develop';
 /** Matches the manifest id convention (INIT-YYYY-MM-DD-slug); also a path-traversal guard. */
 const INIT_ID_RE = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export type EnqueueDevelopStatus = 'enqueued' | 'not-found' | 'already-developing';
+export type EnqueueDevelopStatus = 'enqueued' | 'not-found' | 'already-developing' | 'error';
 
 export type EnqueueDevelopResult = {
   status: EnqueueDevelopStatus;
@@ -55,9 +55,12 @@ export type EnqueueDevelopResult = {
  * - `in-flight` / `ready-for-review` → a cycle is already running or parked for
  *   review; do NOT enqueue a sibling (`already-developing`).
  * - absent / malformed id → `not-found`.
+ * - a filesystem failure while writing the repointed manifest → `error`
+ *   (with the underlying message in `detail`).
  *
- * Never throws — a malformed id resolves to `not-found` (defence in depth; the
- * bridge validates too).
+ * Never throws — a malformed id resolves to `not-found`, a write failure to
+ * `error` (defence in depth; the bridge validates too and additionally wraps
+ * each batch item in its own try/catch).
  */
 export function enqueueDevelopRun(
   initiativeId: string,
@@ -111,16 +114,22 @@ export function enqueueDevelopRun(
   delete repointed.claimed_by;
 
   const pendingPath = join(paths.pending, file);
-  mkdirSync(paths.pending, { recursive: true });
-  writeFileSync(pendingPath, serializeManifest(repointed));
-  // Remove the source manifest if it was claimed from a different state dir.
-  if (sourcePath !== pendingPath) {
-    try { rmSync(sourcePath, { force: true }); } catch { /* best-effort — the pending copy is authoritative */ }
-  }
+  try {
+    mkdirSync(paths.pending, { recursive: true });
+    writeFileSync(pendingPath, serializeManifest(repointed));
+    // Remove the source manifest if it was claimed from a different state dir.
+    if (sourcePath !== pendingPath) {
+      try { rmSync(sourcePath, { force: true }); } catch { /* best-effort — the pending copy is authoritative */ }
+    }
 
-  // DEC-2: thread the existing cycle_id, or mint one now. Idempotent — never
-  // re-stamps an architect-minted id.
-  mintAndPersistManifestCycleId(pendingPath, initiativeId);
+    // DEC-2: thread the existing cycle_id, or mint one now. Idempotent — never
+    // re-stamps an architect-minted id.
+    mintAndPersistManifestCycleId(pendingPath, initiativeId);
+  } catch (err) {
+    // Honor the never-throws contract: a filesystem failure comes back as an
+    // error-shaped result the (batch) caller can report per-item.
+    return { status: 'error', initiativeId, detail: err instanceof Error ? err.message : String(err) };
+  }
   const cycleId = readManifestCycleId(pendingPath) ?? undefined;
 
   return { status: 'enqueued', initiativeId, cycleId, flowId: DEVELOP_FLOW_ID };
