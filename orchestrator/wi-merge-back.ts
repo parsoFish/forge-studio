@@ -7,10 +7,16 @@
  * module owns the ONE point where that isolated work re-joins the cycle
  * branch: a `git merge --no-ff` of the WI branch into the cycle worktree.
  *
- * Serialized through `createMergeQueue()` — a no-op serializer today (the
- * dev-loop dispatches WIs one at a time, so the queue never actually
- * contends), load-bearing once concurrent WI dispatch lands (a later step):
- * only one merge may touch the cycle worktree's working tree at a time.
+ * Serialized through `createMergeQueue()` — load-bearing since Phase 4 step 6
+ * (concurrent WI dispatch): only one merge may touch the cycle worktree's
+ * working tree at a time. `mergeAndPublish` (below) folds the status write +
+ * origin push into the SAME queued critical section as the merge itself
+ * (Phase 4 step 6 review fix): every operation that touches the shared cycle
+ * worktree's working tree/branch for a landed WI — merge, status file,
+ * push — happens inside ONE `mergeQueue.enqueue()` turn, so "only one op
+ * touches the cycle worktree at a time" is structural (the queue itself
+ * enforces it) rather than an emergent property of the caller never
+ * `await`-ing between the merge resolving and the push completing.
  *
  * A merge conflict is TERMINAL for the WI at this step (bounded requeue is a
  * later step): `git merge --abort` restores the cycle worktree to a clean
@@ -19,6 +25,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { pushInitiativeBranch, type PushResult } from './pr.ts';
+import { writeWorkItemStatus } from './work-item.ts';
 
 export type MergeBackResult = { merged: true } | { merged: false; detail: string };
 
@@ -57,6 +65,51 @@ export function mergeWiIntoCycle(opts: {
     }
     return { merged: false, detail };
   }
+}
+
+export type MergeAndPublishResult =
+  | { merged: true; push: PushResult }
+  | { merged: false; detail: string };
+
+/**
+ * The full "land a WI" sequence, run as ONE turn inside the shared merge
+ * queue: merge the WI branch into the cycle worktree, and — only on a clean
+ * merge — write the WI's status file to `complete` and push the cycle branch
+ * to origin, all before the queue frees up for the next WI. On a failed
+ * merge, nothing is published: `writeWorkItemStatus`/`pushInitiativeBranch`
+ * are the caller's job for that path (there is nothing new on the cycle
+ * branch to publish, and the caller may want a different status than a bare
+ * `failed`, e.g. distinguishing a merge conflict from a plain ralph
+ * failure).
+ *
+ * Phase 4 step 6 review fix: previously the status write + push ran in the
+ * caller AFTER `mergeQueue.enqueue(() => mergeWiIntoCycle(...))` had already
+ * resolved — safe only because every statement in between happened to be a
+ * synchronous, non-`await`-ing call, an invariant nothing enforced or
+ * tested. Folding all three operations into the SAME queued callback makes
+ * "only one op touches the cycle worktree's working tree/branch at a time"
+ * structural: the merge queue's serialization guarantee now covers the
+ * entire landed-WI sequence, not just the merge.
+ *
+ * Callers still own serialization: like `mergeWiIntoCycle`, this is pure
+ * plumbing — pass it to `createMergeQueue().enqueue()`.
+ */
+export function mergeAndPublish(opts: {
+  cycleWorktreePath: string;
+  wiBranch: string;
+  workItemId: string;
+  specPath: string;
+}): MergeAndPublishResult {
+  const mergeResult = mergeWiIntoCycle({
+    cycleWorktreePath: opts.cycleWorktreePath,
+    wiBranch: opts.wiBranch,
+    workItemId: opts.workItemId,
+  });
+  if (!mergeResult.merged) {
+    return { merged: false, detail: mergeResult.detail };
+  }
+  writeWorkItemStatus(opts.specPath, 'complete');
+  return { merged: true, push: pushInitiativeBranch(opts.cycleWorktreePath) };
 }
 
 /**

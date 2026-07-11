@@ -93,7 +93,24 @@ export async function runConcurrentDispatch<T>(opts: DispatchScheduleOptions<T>)
       );
     }
 
-    const finishedId = await Promise.race(inFlight.values());
+    let finishedId: string;
+    try {
+      finishedId = await Promise.race(inFlight.values());
+    } catch (err) {
+      // A fatal dispatch rejection. `Promise.race` settles on the first
+      // promise to reject, but any OTHER item still in `inFlight` is
+      // genuinely running (still mutating whatever shared state its
+      // `dispatch` callback touches) — abandoning it here would return
+      // control to the caller (who may treat this as "the whole loop is
+      // done, cycle failed") while a sibling task keeps running completely
+      // unsupervised. Wait for every in-flight sibling to settle (success or
+      // its own failure — we don't care which; the caller's `dispatch`
+      // already owns its own outcome bookkeeping) so the "still mutating
+      // shared state after we gave up" window is bounded to this one
+      // `await`, then propagate the original fatal error.
+      await Promise.allSettled(inFlight.values());
+      throw err;
+    }
     inFlight.delete(finishedId);
     completed.add(finishedId);
   }

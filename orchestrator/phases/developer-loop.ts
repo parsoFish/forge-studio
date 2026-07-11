@@ -41,7 +41,7 @@ import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { matchesRateLimitSignature } from '../failure-classifier.ts';
 import { createWiWorktree, removeWiWorktree } from '../wi-worktree.ts';
-import { createMergeQueue, mergeWiIntoCycle } from '../wi-merge-back.ts';
+import { createMergeQueue, mergeAndPublish } from '../wi-merge-back.ts';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch, type PushResult } from '../pr.ts';
 import {
@@ -363,6 +363,18 @@ export async function runDeveloperLoop(
   // at a time, as the scheduler would have dispatched it anyway. At
   // `cap: 1` this reproduces the old code's event sequence byte-for-byte
   // (see wi-dispatch-scheduler.test.ts's cap-1 equivalence coverage).
+  //
+  // NOT fully equivalent at `cap > 1`, though: a WI that is already in
+  // flight when a sibling's push sets this flag runs to completion —
+  // including its OWN merge and push — rather than being retroactively
+  // skipped. At `cap: 1` nothing can be "already in flight" when the flag
+  // flips (strictly serial dispatch), so this edge case is structurally
+  // impossible there; under real concurrency it is possible for an in-flight
+  // sibling to still land a successful push after a peer's push already
+  // failed. Not unsafe (each WI's own merge/push is still correct in
+  // isolation), just a real behavioral difference from cap 1 that a full
+  // WI-level cancellation (this file's top-of-function AbortSignal note)
+  // would close.
   const pushFailedRef = { current: false };
 
   /**
@@ -759,31 +771,43 @@ export async function runDeveloperLoop(
 
     // Phase 4 step 5 fan-in: a clean ralph run merges its isolated branch
     // back into the cycle worktree, single-flight through the shared queue
-    // (serial today; load-bearing once concurrent WI dispatch lands). A
-    // ralph FAILURE never attempts a merge at all — nothing merges, nothing
+    // — load-bearing since Phase 4 step 6's concurrent WI dispatch. A ralph
+    // FAILURE never attempts a merge at all — nothing merges, nothing
     // pushes. A merge CONFLICT is terminal for the WI at this step (bounded
     // requeue is a later step): `mergeWiIntoCycle` already ran `merge
     // --abort`, so the cycle worktree is clean before the next WI dispatches.
+    //
+    // Phase 4 step 6 review fix: the status write + origin push run INSIDE
+    // the same queued turn as the merge (`mergeAndPublish`, wi-merge-back.ts)
+    // rather than after `mergeQueue.enqueue()` resolves — folding them into
+    // the merge queue's critical section makes "only one op touches the
+    // cycle worktree's working tree/branch at a time" structural, not an
+    // emergent property of every statement between the merge resolving and
+    // the push completing happening to be synchronous.
     let mergeDetail: string | undefined;
     if (ralphStatus === 'complete') {
-      const mergeResult = await mergeQueue.enqueue(() =>
-        mergeWiIntoCycle({
+      const outcome = await mergeQueue.enqueue(() =>
+        mergeAndPublish({
           cycleWorktreePath: input.worktreePath,
           wiBranch: wiWorktree.branch,
           workItemId: wi.work_item_id,
+          specPath,
         }),
       );
-      if (mergeResult.merged) {
+      if (outcome.merged) {
         finalStatus = 'complete';
+        pushResult = outcome.push;
       } else {
         finalStatus = 'failed';
         mergeConflict = true;
-        mergeDetail = mergeResult.detail;
+        mergeDetail = outcome.detail;
       }
     } else {
       finalStatus = 'failed';
     }
-    writeWorkItemStatus(specPath, finalStatus);
+    if (finalStatus !== 'complete') {
+      writeWorkItemStatus(specPath, finalStatus);
+    }
 
     // N9: a failed WI whose death carries a rate/usage-limit signature (seen
     // in the reasoning stream, or in the thrown error itself) failed for an
@@ -852,20 +876,23 @@ export async function runDeveloperLoop(
       metadata: deliveryEvent.metadata,
     });
 
-    // G8: push the CYCLE branch to origin after a successful merge-back only
-    // (Phase 4 step 5 — replaces the old unconditional per-WI push: a ralph
-    // failure or a merge conflict never touched the cycle worktree, so
+    // G8: the CYCLE branch is pushed to origin after a successful merge-back
+    // only (Phase 4 step 5 — replaces the old unconditional per-WI push: a
+    // ralph failure or a merge conflict never touched the cycle worktree, so
     // there is nothing new to publish). The agent's per-iteration commit
     // (backstopped by commitDevLoopBoundary) plus the fan-in merge commit
     // are already on the branch; publishing now keeps origin in lock-step.
+    //
+    // Phase 4 step 6 review fix: the push itself now runs INSIDE
+    // `mergeAndPublish` above, in the same merge-queue turn as the merge
+    // (`pushResult` was set there) — this block only logs the outcome.
     //
     // Push failure is still a HARD EARLY-EXIT (post-2026-05-23 dogfood
     // pushback): if the push fails (e.g. remote ahead from a prior cycle's
     // stale state), every subsequent WI would dispatch from a branch that
     // won't merge cleanly.
-    if (finalStatus === 'complete') {
-      const push = pushInitiativeBranch(input.worktreePath);
-      pushResult = push;
+    if (finalStatus === 'complete' && pushResult) {
+      const push = pushResult;
       logger.emit({
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,

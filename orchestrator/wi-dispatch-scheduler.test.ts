@@ -239,3 +239,52 @@ test('runConcurrentDispatch: rejects a non-positive/non-finite cap', async () =>
     /cap must be a finite number >= 1/,
   );
 });
+
+test('runConcurrentDispatch: a fatal dispatch rejection waits for other in-flight siblings to settle before propagating', async () => {
+  // Regression for a review finding on Step 6: a rejecting `dispatch` used
+  // to reject `Promise.race` immediately, leaving any OTHER in-flight
+  // dispatch promise unawaited — at cap>1 that orphans a genuinely-running
+  // sibling task (still mutating whatever shared state its `dispatch`
+  // callback touches) with nobody left listening for how it finishes. The
+  // fix: on a fatal rejection, `Promise.allSettled` every still in-flight
+  // dispatch before re-throwing, so the caller only ever regains control
+  // once every dispatched item has genuinely concluded.
+  const items = [wi('SLOW'), wi('FATAL')];
+  const order: string[] = [];
+  let resolveSlow: (() => void) | undefined;
+  const slowGate = new Promise<void>((resolve) => {
+    resolveSlow = resolve;
+  });
+
+  const runPromise = runConcurrentDispatch({
+    items,
+    idOf: (item) => item.work_item_id,
+    dependsOn: (item) => item.depends_on,
+    cap: 2,
+    dispatch: async (item) => {
+      if (item.work_item_id === 'SLOW') {
+        await slowGate;
+        order.push('SLOW:settled');
+        return;
+      }
+      order.push('FATAL:rejected');
+      throw new Error('boom');
+    },
+  });
+
+  let settled = false;
+  runPromise.catch(() => undefined).then(() => {
+    settled = true;
+  });
+
+  // FATAL rejects almost immediately; SLOW stays gated open. Flush enough
+  // microtasks for FATAL's rejection to land without ever resolving SLOW.
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+
+  assert.deepEqual(order, ['FATAL:rejected']);
+  assert.equal(settled, false, 'must not propagate the fatal rejection while SLOW is still in flight');
+
+  resolveSlow?.();
+  await assert.rejects(runPromise, /boom/);
+  assert.deepEqual(order, ['FATAL:rejected', 'SLOW:settled']);
+});
