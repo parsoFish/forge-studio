@@ -1578,8 +1578,13 @@ function emitGateEvent(
  * PROMPT tells the agent to read first — lets the next iteration fix the exact
  * live failure instead of re-confirming offline-green and burning the iteration
  * budget. `.forge/` is stripped pre-PR, so this scratch file never lands on the branch.
+ *
+ * Exported (2026-07-12, Wave 2 gate-feedback-loop conformance item) so the
+ * integration test can drive the EXACT production write/clear path against a
+ * real per-WI worktree and `runRalph` call, rather than re-implementing it —
+ * behaviour is otherwise unchanged.
  */
-function writeGateFeedback(worktreePath: string, info: GateRunInfo): void {
+export function writeGateFeedback(worktreePath: string, info: GateRunInfo): void {
   const filePath = join(worktreePath, '.forge', 'last-gate-failure.md');
   try {
     if (info.passed) {
