@@ -329,7 +329,16 @@ export async function runDeveloperLoop(
 
   // N9: `environment` marks a WI that died for an environment reason (rate-
   // limit hit) — its dependents are left queued, not cascaded to failed.
-  const wiOutcomes: Array<{ id: string; status: WorkItem['status']; result: LoopResult | null; environment?: boolean }> = [];
+  //
+  // Step 3 (2026-07-10 false-total-failure race): outcomes settle into a Map
+  // keyed by work_item_id instead of a push-array. Every WI that enters the
+  // loop below — success, skip-for-prerequisite, or early-exit skip — must
+  // settle EXACTLY ONCE via `settleWiOutcome` (hard-throws on a double-settle
+  // for the same id). `assertOutcomesSettled`, run before any complete/failed
+  // count is derived, hard-throws if the map is a partial snapshot of the WIs
+  // actually run — a partial-snapshot read as "N failed" was the false-total-
+  // failure race; it is now structurally impossible.
+  const wiOutcomes = new Map<string, WiOutcome>();
 
   for (const wi of toRun) {
     const wiStart = logger.emit({
@@ -347,7 +356,7 @@ export async function runDeveloperLoop(
     // delivered summary at its end (vs the one cycle-level aggregate).
     const wiBaseSha = gitHeadSha(input.worktreePath);
 
-    const blockage = prerequisiteBlockage(wi, wiOutcomes);
+    const blockage = prerequisiteBlockage(wi, [...wiOutcomes.values()]);
     if (blockage === 'work-failure') {
       writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
       logger.emit({
@@ -361,7 +370,7 @@ export async function runDeveloperLoop(
         message: 'ralph.skipped',
         metadata: { work_item_id: wi.work_item_id, reason: 'prerequisite-failed' },
       });
-      wiOutcomes.push({ id: wi.work_item_id, status: 'failed', result: null });
+      settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'failed', result: null });
       continue;
     }
     if (blockage === 'environment-failure') {
@@ -384,7 +393,7 @@ export async function runDeveloperLoop(
           failure_kind: 'environment',
         },
       });
-      wiOutcomes.push({ id: wi.work_item_id, status: 'pending', result: null, environment: true });
+      settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'pending', result: null, environment: true });
       continue;
     }
 
@@ -766,7 +775,7 @@ export async function runDeveloperLoop(
         : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true, outcome: finalStatus },
     });
 
-    wiOutcomes.push({
+    settleWiOutcome(wiOutcomes, {
       id: wi.work_item_id,
       status: finalStatus,
       result,
@@ -794,14 +803,18 @@ export async function runDeveloperLoop(
           message: 'ralph.skipped',
           metadata: { work_item_id: skipped.work_item_id, reason: 'branch-push-failed-early-exit' },
         });
-        wiOutcomes.push({ id: skipped.work_item_id, status: 'failed', result: null });
+        settleWiOutcome(wiOutcomes, { id: skipped.work_item_id, status: 'failed', result: null });
       }
       break;
     }
   }
 
-  const completeCount = wiOutcomes.filter((o) => o.status === 'complete').length;
-  const totalCost = wiOutcomes.reduce((acc, o) => acc + (o.result?.cost_usd ?? 0), 0);
+  // Step 3: assert the outcome snapshot is COMPLETE for every WI actually run
+  // (toRun — [] on a unifier-only resume) before deriving any count. See
+  // assertOutcomesSettled's doc for the race this closes.
+  assertOutcomesSettled(wiOutcomes, toRun);
+  const completeCount = [...wiOutcomes.values()].filter((o) => o.status === 'complete').length;
+  const totalCost = [...wiOutcomes.values()].reduce((acc, o) => acc + (o.result?.cost_usd ?? 0), 0);
 
   logger.emit({
     initiative_id: input.initiativeId,
@@ -1144,6 +1157,63 @@ export function prerequisiteBlockage(
     if (outcome.status === 'pending') environmentBlocked = true;
   }
   return environmentBlocked ? 'environment-failure' : 'none';
+}
+
+/**
+ * Phase 4 / Step 3 (2026-07-10 false-total-failure race): the per-WI outcome
+ * a work item settles into exactly once — success, work-failure,
+ * environment-skip, or early-exit skip all funnel through the same shape.
+ * Carries `id` even though it also keys the Map (prerequisiteBlockage's
+ * signature is unchanged and expects a flat `{id, status, environment?}`
+ * array — `[...outcomes.values()]` reconstructs that shape without touching
+ * the pure function).
+ */
+export type WiOutcome = {
+  id: string;
+  status: WorkItem['status'];
+  result: LoopResult | null;
+  environment?: boolean;
+};
+
+/**
+ * Record a work item's terminal outcome exactly once. Every WI that enters
+ * the dev-loop — whether it runs Ralph, is skipped for a failed/environment
+ * prerequisite, or is skipped by the branch-push-failed early exit — must
+ * settle here precisely once. A second settle for the same `id` is an
+ * internal-invariant violation (two code paths raced to conclude the same
+ * WI, or a skip/complete path double-fired) — hard-throw rather than
+ * silently overwrite, since silently overwriting would hide exactly that
+ * bug and could also quietly resurrect the false-total-failure race this
+ * step closes.
+ */
+export function settleWiOutcome(outcomes: Map<string, WiOutcome>, outcome: WiOutcome): void {
+  if (outcomes.has(outcome.id)) {
+    throw new Error(
+      `developer-loop: internal error — work item '${outcome.id}' settled twice (double-settle)`,
+    );
+  }
+  outcomes.set(outcome.id, outcome);
+}
+
+/**
+ * Completeness invariant (closes the 2026-07-10 false-total-failure race):
+ * the aggregate phase-end event and the total-failure verdict must never
+ * derive complete/failed counts from a PARTIAL outcome snapshot — a WI that
+ * hasn't settled yet would silently read as "not complete", producing a
+ * truncated summary or a false 0/N total-failure throw. Assert every WI
+ * actually run has settled BEFORE any count is computed; hard-throw naming
+ * the missing WIs otherwise so the gap is loud instead of silently wrong.
+ */
+export function assertOutcomesSettled(
+  outcomes: ReadonlyMap<string, WiOutcome>,
+  wisRun: ReadonlyArray<WorkItem>,
+): void {
+  if (outcomes.size === wisRun.length) return;
+  const missing = wisRun.filter((wi) => !outcomes.has(wi.work_item_id)).map((wi) => wi.work_item_id);
+  throw new Error(
+    `developer-loop: internal error — incomplete outcome snapshot before summary ` +
+      `(${outcomes.size}/${wisRun.length} settled)${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`,
+  );
 }
 
 /**
