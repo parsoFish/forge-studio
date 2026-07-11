@@ -913,8 +913,22 @@ async function main() {
   const idea = resolveIdea();
   if (!idea) process.exit(1);
   cleanProjectRunState(PROJECT, repoPath);
-  if (BASE_SHA) { if (!resetRepo(repoPath)) process.exit(1); }
-  else { log('no --base-sha: running against the current repo state'); }
+  if (BASE_SHA) {
+    if (!resetRepo(repoPath)) process.exit(1);
+  } else {
+    // Greenfield tier: a prior --base-sha run leaves local main frozen weeks
+    // behind origin — branching from it makes every PR unmergeable on GitHub
+    // (2026-07-11 R5: fresh feature, conflict anyway). Sync main first.
+    const clean = git(repoPath, ['status', '--porcelain']).stdout === '';
+    if (clean) {
+      git(repoPath, ['fetch', 'origin']);
+      git(repoPath, ['checkout', 'main']);
+      const ff = git(repoPath, ['merge', '--ff-only', 'origin/main']);
+      log(ff.ok ? 'no --base-sha: synced local main to origin/main (greenfield tier)' : `WARNING: local main could not fast-forward to origin/main — ${ff.stderr.slice(0, 200)}`);
+    } else {
+      log('WARNING: project repo dirty — skipping main sync (pass --force-reset with --base-sha to reset)');
+    }
+  }
 
   log('starting forge watch…');
   let watch = await startWatch();
