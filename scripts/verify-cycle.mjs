@@ -672,14 +672,17 @@ function readJsonFileSafe(path) {
 /** Discover the architect-promoted initiative for a project: the newest manifest
  *  in _queue/pending with flow_id: forge-architect. Returns { initiativeId, cycleId }. */
 function discoverPromotedInitiative(project) {
-  const dir = join(FORGE_ROOT, '_queue', 'pending');
-  if (!existsSync(dir)) return null;
-  const cands = readdirSync(dir)
-    .filter((f) => f.endsWith('.md'))
-    .map((f) => ({ id: f.replace(/\.md$/, ''), raw: readFileSync(join(dir, f), 'utf8') }))
-    .filter((x) => manifestField(x.raw, 'project') === project && manifestField(x.raw, 'flow_id') === 'forge-architect')
-    .map((x) => ({ initiativeId: x.id, cycleId: manifestField(x.raw, 'cycle_id'), createdAt: manifestField(x.raw, 'created_at') ?? '' }))
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  // The live scheduler can claim a promoted manifest (pending → in-flight)
+  // faster than our post-commit poll runs, so scan both states.
+  const cands = ['pending', 'in-flight'].flatMap((state) => {
+    const dir = join(FORGE_ROOT, '_queue', state);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => ({ id: f.replace(/\.md$/, ''), raw: readFileSync(join(dir, f), 'utf8') }))
+      .filter((x) => manifestField(x.raw, 'project') === project && manifestField(x.raw, 'flow_id') === 'forge-architect')
+      .map((x) => ({ initiativeId: x.id, cycleId: manifestField(x.raw, 'cycle_id'), createdAt: manifestField(x.raw, 'created_at') ?? '' }));
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   return cands[0] ?? null;
 }
 
@@ -743,11 +746,31 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   if (!verdict.ok) throw new Error(`plan-verdict approve failed (${verdict.status}): ${JSON.stringify(verdict.body)}`);
 
   // The approve spawns a finalize turn (async) that promotes manifests → committed.
+  // The completeness critic (ADR 037 era, REFINEMENT-PLAN §6.3) may block the
+  // first finalize with findings and re-gate the session at awaiting-verdict;
+  // the harness plays the operator's acknowledge role: log the findings and
+  // re-approve exactly once (the critic is one-shot per session).
   let committed = false;
-  while (Date.now() < deadline) {
+  let criticAcknowledged = false;
+  const finalizeDeadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < finalizeDeadline) {
     const status = readJsonFileSafe(join(sessionDir, 'status.json'));
     if (status?.phase === 'committed') { committed = true; break; }
     if (status?.phase === 'rejected') throw new Error('architect session rejected during finalize');
+    const findings = status?.completenessCritic?.findings ?? [];
+    if (status?.phase === 'awaiting-verdict' && findings.length > 0 && !criticAcknowledged) {
+      criticAcknowledged = true;
+      log(`completeness critic blocked finalize with ${findings.length} finding(s):`);
+      for (const f of findings) log(`  - [${f.severity}] ${f.gap}`);
+      log('re-approving to acknowledge (one-shot critic semantics)…');
+      const ack = await bridgePost(watch.bridgeUrl, '/api/plan-verdict', {
+        project,
+        sessionId,
+        kind: 'approve',
+        rationale: 'auto-acknowledge of completeness-critic findings by scripts/verify-cycle.mjs (spine verification)',
+      });
+      if (!ack.ok) throw new Error(`critic-acknowledge re-approve failed (${ack.status}): ${JSON.stringify(ack.body)}`);
+    }
     await sleep(3000);
   }
   if (!committed) throw new Error('architect never reached committed after plan approval');
