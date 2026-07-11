@@ -428,7 +428,23 @@ async function startWatch() {
         if (!m) continue;
         try {
           const { bridgeUrl, uiUrl } = JSON.parse(m[1]);
-          if (bridgeUrl && uiUrl) { settled = true; res({ proc, uiUrl, bridgeUrl }); return; }
+          if (bridgeUrl && uiUrl) {
+            settled = true;
+            // Keep streaming the watch's output into the run log — a watch
+            // that dies mid-run otherwise takes its dying words with it
+            // (2026-07-11: bridge vanished between hand-off and approve with
+            // zero diagnostic trail).
+            const tee = (chunk) => {
+              for (const l of chunk.toString().split('\n')) {
+                if (l.trim()) log(`[watch] ${l}`);
+              }
+            };
+            proc.stdout.off('data', onData); proc.stderr.off('data', onData);
+            proc.stdout.on('data', tee); proc.stderr.on('data', tee);
+            proc.on('exit', (code, signal) => log(`[watch] EXITED code=${code} signal=${signal}`));
+            res({ proc, uiUrl, bridgeUrl });
+            return;
+          }
         } catch { /* not the signal line */ }
       }
     };
@@ -437,6 +453,21 @@ async function startWatch() {
     proc.on('error', rej);
     setTimeout(() => { if (!settled) rej(new Error('forge studio not ready within 30s')); }, 30000);
   });
+}
+
+/** Health-probe the watch bridge; restart it if it died mid-run. The bridge
+ *  is stateless over disk, so a restart is safe — but it must be LOUD, since
+ *  a silently-vanishing watch is how approve/finalize/reflect get lost. */
+async function ensureWatch(watch) {
+  try {
+    const r = await fetch(`${watch.bridgeUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) return watch;
+  } catch { /* dead — fall through to restart */ }
+  log('!! watch bridge is DOWN mid-run — restarting it (state is disk-backed, safe)…');
+  try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* already gone */ }
+  const fresh = await startWatch();
+  activeWatchProc = fresh.proc;
+  return fresh;
 }
 
 function stopWatch(proc) {
@@ -874,7 +905,7 @@ async function main() {
   else { log('no --base-sha: running against the current repo state'); }
 
   log('starting forge watch…');
-  const watch = await startWatch();
+  let watch = await startWatch();
   activeWatchProc = watch.proc;
   log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
 
@@ -920,6 +951,7 @@ async function main() {
   for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
     await runServeStage(page, `develop-pass-${pass}`);
     await sleep(2000);
+    watch = await ensureWatch(watch);
     for (const init of [...remaining.values()]) {
       let status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
       log(`develop status for ${init.initiativeId} after pass ${pass}: ${status}`);
