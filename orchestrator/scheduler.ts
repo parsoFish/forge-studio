@@ -33,6 +33,7 @@ import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingUnifierItems } from './drain-unifier-items.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
+import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import type { EventLogEntry } from './logging.ts';
 import { notify, type NotifyConfig } from './notify.ts';
 import { loadConfig } from './config.ts';
@@ -379,12 +380,29 @@ function makeProgressTee(): (entry: EventLogEntry) => void {
 }
 
 /**
+ * Sentinel blocker returned by `checkInitiativeDeps` when a manifest's
+ * frontmatter cannot be parsed. Fail SAFE: an unreadable manifest must never
+ * be treated as ungated/claimable — the scheduler skips it (blocked) and the
+ * roadmap shows it as not-ready until the operator repairs it.
+ */
+export const UNPARSEABLE_MANIFEST_BLOCKER = '<unparseable-manifest>';
+
+/**
  * F-25: read a pending manifest's `depends_on_initiatives` and return the
  * subset that are NOT yet in `_queue/done/`. An empty result means all deps
- * are satisfied (or there were no deps) and the scheduler may claim. Best-
- * effort: a malformed manifest returns no blocking deps (the existing
- * validate-on-claim path will reject it for other reasons). Exported for
- * unit-test access — the scheduler is the only production caller.
+ * are satisfied (or there were no deps) and the scheduler may claim. A
+ * manifest whose frontmatter fails to parse returns the blocking
+ * `UNPARSEABLE_MANIFEST_BLOCKER` sentinel (fail safe — never dispatch what
+ * we can't read) with a loud log. Exported for unit-test access — the
+ * scheduler and the roadmap/planned-initiatives builders are the production
+ * callers.
+ *
+ * plan-everything-before-kickoff: the gate applies only to build flows
+ * (forge-develop). A decompose run (flow_id 'forge-architect') must be free
+ * to draft its whole roadmap up front without waiting on a prerequisite
+ * initiative's merge — only the later build kickoff respects merge order.
+ * A manifest with no flow_id is treated as a build flow (the pre-existing,
+ * safe default).
  */
 export function checkInitiativeDeps(filename: string, paths: QueuePaths): string[] {
   const pendingPath = join(paths.pending, filename);
@@ -392,9 +410,16 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
   let deps: string[];
   try {
     const full = parseFullManifest(readFileSync(pendingPath, 'utf8'));
+    const flowId = full.flow_id ?? DEVELOP_FLOW_ID;
+    if (flowId !== DEVELOP_FLOW_ID) return [];
     deps = full.depends_on_initiatives ?? [];
-  } catch {
-    return [];
+  } catch (err) {
+    console.error(
+      `[scheduler] ${filename}: manifest frontmatter failed to parse — blocking claim (fail safe): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return [UNPARSEABLE_MANIFEST_BLOCKER];
   }
   if (deps.length === 0) return [];
   return deps.filter((depId) => {

@@ -127,3 +127,21 @@ test('enqueueDevelopRun: a stale resume_from is cleared when re-enqueueing for a
     assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the develop run starts the full dev→unifier→review spine');
   });
 });
+
+test('enqueueDevelopRun: a write failure is contained → status error, never throws (contract)', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'done', manifest());
+    // Sabotage: `pending` exists as a FILE, so the enqueue's mkdirSync /
+    // writeFileSync must fail. The doc contract says the function never
+    // throws — the failure must come back as an error-shaped result.
+    writeFileSync(join(queueRoot, 'pending'), 'not a directory');
+
+    let result: ReturnType<typeof enqueueDevelopRun> | undefined;
+    assert.doesNotThrow(() => {
+      result = enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
+    });
+    assert.equal(result?.status, 'error');
+    assert.equal(result?.initiativeId, 'INIT-2026-06-21-toc');
+    assert.ok(result?.detail, 'the underlying filesystem error is surfaced in detail');
+  });
+});

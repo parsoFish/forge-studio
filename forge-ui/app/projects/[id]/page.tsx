@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
@@ -91,6 +91,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     const result = await fetchRoadmap(id);
     if (!signal.cancelled) setRoadmap(result);
   }, [id]);
+
+  // plan-everything-before-kickoff: RoadmapView refetches after kickoff so
+  // status/ready/blockedBy (and the eligible count) reflect queue reality.
+  const refreshRoadmap = useCallback(async () => {
+    await loadRoadmap({ cancelled: false });
+  }, [loadRoadmap]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -299,7 +305,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       )}
 
       {tab === 'roadmap' && (
-        <RoadmapView projectId={id} roadmap={roadmap} />
+        <RoadmapView projectId={id} roadmap={roadmap} onRefresh={refreshRoadmap} />
       )}
     </main>
   );
@@ -491,9 +497,90 @@ const STATUS_COLOURS: Record<string, string> = {
   'pending': 'var(--faint)',
 };
 
-function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: ProjectRoadmap | null }) {
+// plan-everything-before-kickoff: per-card develop state, lifted to RoadmapView
+// so the batch "start eligible" button and individual card buttons share one
+// source of truth (both funnel through the same startDevelopment() call).
+type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
+const IDLE_DEVELOP: DevelopCardState = { status: 'idle', error: null };
+
+/** Map a batch item result onto the per-card develop state. */
+function developStateFromResult(
+  item: { ok: boolean; status?: string; detail?: string } | undefined,
+  requestError: string | undefined,
+): DevelopCardState {
+  return item?.ok
+    ? { status: 'started', error: null }
+    : { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
+}
+
+function RoadmapView({
+  projectId,
+  roadmap,
+  onRefresh,
+}: {
+  projectId: string;
+  roadmap: ProjectRoadmap | null;
+  onRefresh: () => Promise<void>;
+}) {
   // Node selected in the serpentine timeline → highlight + scroll to its card.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
+  const [batchStarting, setBatchStarting] = useState(false);
+
+  const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
+
+  // Toggle the selected dot; clicking the open one again (or × / Escape) closes.
+  const handleSelect = useCallback(
+    (initiativeId: string): void =>
+      setSelectedId((prev) => (prev === initiativeId ? null : initiativeId)),
+    [],
+  );
+
+  // plan-everything-before-kickoff: the whole roadmap can be decomposed up
+  // front (the flow_id-aware gate), so any number of initiatives may already
+  // be pending AND ready at once. "Start eligible" kicks all of them off in a
+  // single batched POST rather than one click per card. Ids already starting/
+  // started this session are excluded so the button can't re-fire them before
+  // the refetched roadmap catches up.
+  const eligible = useMemo(
+    () =>
+      initiatives.filter((i) => {
+        const dev = developByInitiative[i.initiativeId]?.status ?? 'idle';
+        return i.status === 'pending' && i.ready && dev !== 'starting' && dev !== 'started';
+      }),
+    [initiatives, developByInitiative],
+  );
+
+  const startOne = useCallback(async (initiativeId: string): Promise<void> => {
+    setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
+    const r = await startDevelopment([initiativeId]);
+    const item = r.results?.find((x) => x.initiativeId === initiativeId);
+    setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
+    // Refetch so status/ready/blockedBy reflect the queue's new reality.
+    await onRefresh();
+  }, [onRefresh]);
+
+  const startEligible = useCallback(async (): Promise<void> => {
+    const ids = eligible.map((i) => i.initiativeId);
+    if (ids.length === 0) return;
+    setBatchStarting(true);
+    setDevelopByInitiative((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = { status: 'starting', error: null };
+      return next;
+    });
+    const r = await startDevelopment(ids);
+    setDevelopByInitiative((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        next[id] = developStateFromResult(r.results?.find((x) => x.initiativeId === id), r.error);
+      }
+      return next;
+    });
+    setBatchStarting(false);
+    // Refetch (success or partial) so eligibility + statuses reflect reality.
+    await onRefresh();
+  }, [eligible, onRefresh]);
 
   if (!roadmap) {
     return (
@@ -507,7 +594,6 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
     );
   }
 
-  const { initiatives } = roadmap;
   if (initiatives.length === 0) {
     return (
       <div
@@ -530,10 +616,6 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
     (i) => i.dependsOnInitiatives,
   );
 
-  // Toggle the selected dot; clicking the open one again (or × / Escape) closes.
-  const handleSelect = (initiativeId: string): void =>
-    setSelectedId((prev) => (prev === initiativeId ? null : initiativeId));
-
   return (
     <div
       data-section="project-roadmap"
@@ -544,18 +626,42 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
       {/* The roadmap-over-time: a serpentine arrow, oldest → newest. Clicking a
           dot pops that initiative's detail card up off the dot. */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 16px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
-          Progression over time
-          <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
-            click a dot for detail
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+            Progression over time
+            <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
+              click a dot for detail
+            </span>
+          </div>
+          <button
+            data-action="kickoff-eligible"
+            data-eligible-count={eligible.length}
+            disabled={eligible.length === 0 || batchStarting}
+            onClick={() => void startEligible()}
+            style={{
+              fontSize: 11, fontWeight: 600, color: '#fff',
+              background: eligible.length === 0 ? 'var(--faint)' : '#238636',
+              border: '1px solid var(--line)', borderRadius: 6, padding: '4px 12px',
+              cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
+              opacity: batchStarting ? 0.6 : 1,
+            }}
+          >
+            {batchStarting ? 'starting…' : `Start eligible (${eligible.length}) →`}
+          </button>
         </div>
         <SerpentineTimeline
           initiatives={initiatives}
           selectedId={selectedId}
           onSelect={handleSelect}
           onClose={() => setSelectedId(null)}
-          renderCard={(init) => <InitiativeCard initiative={init} selected />}
+          renderCard={(init) => (
+            <InitiativeCard
+              initiative={init}
+              selected
+              develop={developByInitiative[init.initiativeId] ?? IDLE_DEVELOP}
+              onStart={startOne}
+            />
+          )}
         />
       </div>
 
@@ -563,29 +669,28 @@ function RoadmapView({ projectId, roadmap }: { projectId: string; roadmap: Proje
   );
 }
 
-function InitiativeCard({ initiative, selected = false }: { initiative: RoadmapInitiative; selected?: boolean }) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems } = initiative;
+function InitiativeCard({
+  initiative,
+  selected = false,
+  develop,
+  onStart,
+}: {
+  initiative: RoadmapInitiative;
+  selected?: boolean;
+  develop: DevelopCardState;
+  onStart: (initiativeId: string) => void | Promise<void>;
+}) {
+  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
   const router = useRouter();
 
   // S7 / DEC-3: "start development" runs the forge-develop flow on a decomposed,
   // not-yet-developing initiative (pending = architect hand-off). It repoints the
   // manifest at forge-develop + threads the cycle_id, then the scheduler claims it.
-  const [develop, setDevelop] = useState<'idle' | 'starting' | 'started' | 'error'>('idle');
-  const [developError, setDevelopError] = useState<string | null>(null);
-  const canStartDevelopment = status === 'pending';
-
-  async function onStartDevelopment(): Promise<void> {
-    setDevelop('starting');
-    setDevelopError(null);
-    const r = await startDevelopment(initiativeId);
-    if (r.ok && r.status === 'enqueued') {
-      setDevelop('started');
-    } else {
-      setDevelop('error');
-      setDevelopError(r.error ?? r.status ?? 'failed to start development');
-    }
-  }
+  // plan-everything-before-kickoff: gated on `ready` too — a pending initiative
+  // can still be blocked by an unmet build-flow dependency (item 1's gate).
+  const canStartDevelopment = status === 'pending' && ready;
+  const blocked = status === 'pending' && !ready;
 
   // WI topo levels (for sub-graph ordering).
   const wiLevels = workItems && workItems.length > 0
@@ -596,7 +701,9 @@ function InitiativeCard({ initiative, selected = false }: { initiative: RoadmapI
     <div
       data-initiative-id={initiativeId}
       data-initiative-status={status}
-      data-develop-state={develop}
+      data-develop-state={develop.status}
+      data-initiative-ready={String(ready)}
+      data-blocked-by={blockedBy.join(',')}
       style={{
         background: 'var(--panel)',
         border: `1px solid ${selected ? colour : 'var(--line)'}`,
@@ -627,6 +734,15 @@ function InitiativeCard({ initiative, selected = false }: { initiative: RoadmapI
         </div>
       )}
 
+      {/* plan-everything-before-kickoff: pending-but-blocked — the whole
+          roadmap can decompose up front, but this initiative's build-flow
+          dep(s) haven't merged yet, so kickoff is withheld. */}
+      {blocked && (
+        <div data-section="initiative-blocked" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
+          Blocked by: {blockedBy.join(', ')}
+        </div>
+      )}
+
       {wiLevels && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Work Items</div>
@@ -641,27 +757,27 @@ function InitiativeCard({ initiative, selected = false }: { initiative: RoadmapI
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing
           initiative. Runs the forge-develop flow (dev → unifier → review). */}
-      {canStartDevelopment && develop !== 'started' && (
+      {canStartDevelopment && develop.status !== 'started' && (
         <button
           data-action="start-development"
           data-initiative-id={initiativeId}
-          disabled={develop === 'starting'}
-          onClick={() => void onStartDevelopment()}
+          disabled={develop.status === 'starting'}
+          onClick={() => void onStart(initiativeId)}
           style={{
             marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: develop === 'error' ? '#9e6a03' : '#238636',
+            color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
             border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: develop === 'starting' ? 'default' : 'pointer',
-            opacity: develop === 'starting' ? 0.6 : 1,
+            fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
+            opacity: develop.status === 'starting' ? 0.6 : 1,
           }}
         >
-          {develop === 'starting' ? 'starting…' : develop === 'error' ? 'retry — start development' : 'Start development →'}
+          {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
         </button>
       )}
-      {develop === 'error' && developError && (
-        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{developError}</div>
+      {develop.status === 'error' && develop.error && (
+        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
       )}
-      {develop === 'started' && (
+      {develop.status === 'started' && (
         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
           <button
