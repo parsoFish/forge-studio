@@ -143,6 +143,17 @@ Reordered; N1 first — it deletes the most mechanism.
 
 ## 6. Phase 3 — Design-phase consolidation
 
+> **STATUS 2026-07-11: items 1–3 SHIPPED + gate-validated** on
+> `feat/phase3-design-consolidation` (ADR 037; wi-spec-compiler deterministic
+> core + ralph-spec-lint at the PM seam; architect-completeness-critic at
+> finalize; plan-everything-before-kickoff: flow_id-aware dep gate + roadmap
+> eligibility + batch develop kickoff; roster hygiene). Item 4
+> (architect+PM collapse) remains deferred per this section. G8 env-pin also
+> landed this wave (`pinnedAgentEnv` + pinned-sdk-query seam + structural
+> import lock). Validated on a real gitpulse cycle: verify:cycle gate PASS
+> 7/7 (merge+reflect done, $12.14, `pm.spec-lint` + critic events live).
+> The wi-spec-compiler LLM assist pass (skill) is the remaining follow-up.
+
 **Update ADRs first.** One change from v1: **3.3 leads; 3.1 waits for its
 evidence.**
 
