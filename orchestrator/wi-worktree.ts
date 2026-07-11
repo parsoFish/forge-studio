@@ -44,10 +44,11 @@
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
-import { add, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
+import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
 import { linkProjectDeps } from './scheduler.ts';
+import { createLogger } from './logging.ts';
 
 export type WiWorktreeHandle = {
   path: string;
@@ -199,4 +200,128 @@ export function removeWiWorktree(opts: {
       /* branch already deleted, or never existed */
     }
   }
+}
+
+export type PruneStaleWiWorktreesResult = {
+  prunedPaths: string[];
+  prunedBranches: string[];
+};
+
+/**
+ * Phase 4 step 9 (plan risk R7) — self-heal for leftover per-WI worktrees.
+ *
+ * A mid-fan-out crash (or an operator `forge requeue`) can leave per-WI
+ * worktrees/branches behind for an initiative: the cycle-level preserve
+ * logic (`scheduler.ts`, ADR-019) protects only the CYCLE worktree.
+ * Per-WI worktrees are pure scratch — merged WI work already lives on the
+ * cycle branch after merge-back, and any UNMERGED work from a crashed
+ * attempt is simply re-run by the next attempt's own dev-loop dispatch —
+ * so a leftover here can only cause harm (confusing worktree-state
+ * inference, or colliding with the next attempt's `createWiWorktree`
+ * call), never lose anything of value.
+ *
+ * Called once per cycle start/requeue, BEFORE the new attempt dispatches
+ * any of its own per-WI worktrees (see `scheduler.ts`, alongside
+ * `linkProjectDeps`/`decideWorktreeStrategy`) — `createWiWorktree`'s own
+ * per-call `selfHealWiCollision` stays as a second line of defense for
+ * whatever this sweep misses.
+ *
+ * Strictly scoped to `initiativeId`: worktrees/branches belonging to a
+ * DIFFERENT initiative are never touched, even when they are themselves
+ * leftover — each initiative's sweep only prunes its own scratch.
+ *
+ * A no-op (nothing to prune) never throws and never logs — the event log
+ * would otherwise fill with a "pruned nothing" entry on every ordinary
+ * cycle start.
+ */
+export function pruneStaleWiWorktrees(opts: {
+  projectRepoPath: string;
+  worktreesRoot: string;
+  initiativeId: string;
+  /** JSONL event-log root; same convention/default as `logging.ts`'s `createLogger`. */
+  logsRoot?: string;
+}): PruneStaleWiWorktreesResult {
+  const prunedPaths: string[] = [];
+  const prunedBranches: string[] = [];
+
+  const wiRoot = resolve(opts.worktreesRoot, 'wi', opts.initiativeId);
+  const registered = list(opts.projectRepoPath).filter((w) => {
+    const p = resolve(w.path);
+    return p === wiRoot || p.startsWith(wiRoot + sep);
+  });
+  for (const entry of registered) {
+    removeWiWorktree({
+      projectRepoPath: opts.projectRepoPath,
+      path: entry.path,
+      branch: entry.branch,
+      deleteBranch: true,
+    });
+    prunedPaths.push(entry.path);
+    prunedBranches.push(entry.branch);
+  }
+
+  // Orphan branches: a per-WI branch can survive with no registered
+  // worktree left to key off — e.g. the worktree dir was already gone and
+  // an earlier `worktree prune` (anyone's) reclaimed the registry entry
+  // while the branch, a wholly separate git object, was untouched. Sweep
+  // by naming convention so the next `createWiWorktree` for this
+  // initiative never hits "branch already exists" for a WI it isn't even
+  // retrying yet.
+  const branchPrefix = `forge/wi/${opts.initiativeId}/`;
+  let branchListing = '';
+  try {
+    branchListing = execFileSync(
+      'git',
+      ['-C', opts.projectRepoPath, 'branch', '--list', `${branchPrefix}*`],
+      { encoding: 'utf8' },
+    );
+  } catch {
+    /* no matching branches, or repo not initialised — nothing to sweep */
+  }
+  for (const rawLine of branchListing.split('\n')) {
+    // `git branch --list` prefixes each line with `* ` (current branch),
+    // `+ ` (checked out in another worktree), or two plain spaces —
+    // strip whichever marker is present before comparing the name.
+    const name = rawLine.replace(/^[*+]?\s+/, '').trim();
+    if (!name || !name.startsWith(branchPrefix) || prunedBranches.includes(name)) continue;
+    try {
+      execFileSync('git', ['-C', opts.projectRepoPath, 'branch', '-D', name], { stdio: 'pipe' });
+      prunedBranches.push(name);
+    } catch {
+      /* best-effort — a branch delete failure here must not block the sweep */
+    }
+  }
+
+  // Sweep stale `git worktree` ADMIN entries for the whole project repo —
+  // a worktree dir removed out-of-band (manual `rm -rf`, or a crash before
+  // `removeWiWorktree` got to run its own prune) leaves a dangling
+  // registry entry that only `worktree prune` clears.
+  try {
+    execFileSync('git', ['-C', opts.projectRepoPath, 'worktree', 'prune'], { stdio: 'pipe' });
+  } catch {
+    /* non-fatal */
+  }
+
+  if (prunedPaths.length > 0 || prunedBranches.length > 0) {
+    try {
+      createLogger(opts.initiativeId, opts.logsRoot ?? '_logs').emit({
+        initiative_id: opts.initiativeId,
+        phase: 'orchestrator',
+        skill: 'scheduler',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'wi-worktrees.pruned',
+        metadata: {
+          reason: 'stale per-WI worktree/branch left behind by a prior attempt',
+          paths: prunedPaths,
+          branches: prunedBranches,
+        },
+      });
+    } catch {
+      /* best-effort — a logging failure must never block the self-heal sweep */
+    }
+  }
+
+  return { prunedPaths, prunedBranches };
 }
