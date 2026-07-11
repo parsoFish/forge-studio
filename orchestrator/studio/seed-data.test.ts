@@ -116,12 +116,17 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       'developer-ralph',
       'developer-unifier',
       'project-manager',
+      // REFINEMENT-PLAN Phase 5 (§8): project-scoped-review is a library
+      // roster agent with no invocation module and no flow wiring — launched
+      // directly by the operator on demand against a named project, not
+      // dispatched by another phase.
+      'project-scoped-review',
       'reflector',
       // WS-A: the release-finalizer is a phase agent (full studio frontmatter,
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 7-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 8-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 
