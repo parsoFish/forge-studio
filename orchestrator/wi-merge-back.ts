@@ -18,10 +18,13 @@
  * enforces it) rather than an emergent property of the caller never
  * `await`-ing between the merge resolving and the push completing.
  *
- * A merge conflict is TERMINAL for the WI at this step (bounded requeue is a
- * later step): `git merge --abort` restores the cycle worktree to a clean
- * state before returning, so the cycle worktree is never left mid-conflict
- * for the next WI's merge attempt.
+ * A merge conflict is reported here, not retried — `git merge --abort`
+ * restores the cycle worktree to a clean state before returning, so the
+ * cycle worktree is never left mid-conflict for the next WI's merge
+ * attempt. Phase 4 step 7's bounded requeue (one retry against a fresh
+ * cycle-branch tip before a conflict is terminal for the WI) is a caller
+ * concern, layered on top in `developer-loop.ts`'s `runWiDispatchTask` —
+ * this module has no notion of "attempt" and stays a single merge try.
  */
 
 import { execFileSync } from 'node:child_process';

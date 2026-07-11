@@ -57,7 +57,7 @@ import {
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
 import { resolveUnifierGateFailureCap, resolveDevWiConcurrency } from '../config.ts';
-import { runConcurrentDispatch } from '../wi-dispatch-scheduler.ts';
+import { runConcurrentDispatch, type DispatchOutcome } from '../wi-dispatch-scheduler.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import {
@@ -131,6 +131,14 @@ const DEV_LIVE_MAX_TURNS_PER_ITERATION = 120;
 const DEV_AGENT_CRASH_MAX_RETRIES = 2;
 const DEV_AGENT_CRASH_BACKOFF_MS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Phase 4 step 7: a WI's fan-in merge conflict is not immediately terminal —
+// a sibling that merged concurrently (or a stale start point) can make a
+// SECOND attempt against the fresh cycle-branch tip succeed cleanly. Bounded
+// to ONE retry (two attempts total): a second conflict for the same WI is a
+// real, persistent conflict — not a race — and stays terminal exactly like
+// the un-bounded step-5 behavior.
+const DEV_WI_MERGE_CONFLICT_MAX_RETRIES = 1;
 
 /**
  * Adapt an EventLogger into the `resolveSdkId` log callback (ADR 029). When a
@@ -351,6 +359,15 @@ export async function runDeveloperLoop(
   const worktreesRoot = dirname(input.worktreePath);
   const mergeQueue = createMergeQueue();
 
+  // Phase 4 step 7: how many times EACH WI has hit a fan-in merge conflict
+  // so far, keyed by work_item_id. `runWiDispatchTask` reads this at the top
+  // of its merge-decision to tell a retry apart from a first attempt — a
+  // fresh top-level call from the scheduler (after a `{ requeue: true }`
+  // resolution) has no other way to know it's attempt 2. Never reset; a WI
+  // id is dispatched at most `DEV_WI_MERGE_CONFLICT_MAX_RETRIES + 1` times
+  // in one dev-loop run.
+  const mergeConflictAttempts = new Map<string, number>();
+
   // Phase 4 step 6: the branch-push-failure early exit (see the end of
   // `runWiDispatchTask` below) used to be a synchronous `break` out of the
   // serial for-loop plus a dedicated tail loop marking every remaining WI
@@ -387,7 +404,7 @@ export async function runDeveloperLoop(
    * `runConcurrentDispatch`, below, does that lazily per-WI so it works
    * under concurrency too).
    */
-  async function runWiDispatchTask(wi: WorkItem): Promise<void> {
+  async function runWiDispatchTask(wi: WorkItem): Promise<DispatchOutcome> {
     const wiStart = logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -418,7 +435,7 @@ export async function runDeveloperLoop(
         metadata: { work_item_id: wi.work_item_id, reason: 'prerequisite-failed' },
       });
       settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'failed', result: null });
-      return;
+      return { requeue: false };
     }
     if (blockage === 'environment-failure') {
       // N9: the prerequisite died for an ENVIRONMENT reason (rate-limit) — this
@@ -441,7 +458,7 @@ export async function runDeveloperLoop(
         },
       });
       settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'pending', result: null, environment: true });
-      return;
+      return { requeue: false };
     }
 
     const specPath = resolve(workItemsDir, `${wi.work_item_id}.md`);
@@ -475,6 +492,11 @@ export async function runDeveloperLoop(
       commits: 0,
     };
     let pushResult: PushResult | null = null;
+    // Phase 4 step 7: set inside the try block below when this attempt hits
+    // a fan-in conflict that hasn't exhausted its retry yet — threaded out
+    // here (same reasoning as the rest of this block) so the settle/return
+    // logic after the `finally` can see it.
+    let requeueForMergeConflict = false;
 
     try {
     // F-40: wipe AGENT.md / fix_plan.md / PROMPT.md between WIs. The dev-loop
@@ -785,6 +807,9 @@ export async function runDeveloperLoop(
     // emergent property of every statement between the merge resolving and
     // the push completing happening to be synchronous.
     let mergeDetail: string | undefined;
+    // Phase 4 step 7: this attempt's merge-conflict ordinal (1 = this is the
+    // first time this WI has conflicted), 0 when it never conflicts.
+    let mergeConflictAttempt = 0;
     if (ralphStatus === 'complete') {
       const outcome = await mergeQueue.enqueue(() =>
         mergeAndPublish({
@@ -798,14 +823,26 @@ export async function runDeveloperLoop(
         finalStatus = 'complete';
         pushResult = outcome.push;
       } else {
-        finalStatus = 'failed';
         mergeConflict = true;
         mergeDetail = outcome.detail;
+        // Step 7: bounded requeue — the FIRST conflict for this WI does not
+        // conclude its outcome. It goes back to the scheduler for exactly
+        // ONE retry (a fresh worktree + ralph run + merge, against whatever
+        // the cycle-branch tip is once a slot next opens); only a SECOND
+        // conflict for the same WI is terminal (`finalStatus` stays its
+        // initial 'failed' default in both cases).
+        mergeConflictAttempt = (mergeConflictAttempts.get(wi.work_item_id) ?? 0) + 1;
+        if (mergeConflictAttempt <= DEV_WI_MERGE_CONFLICT_MAX_RETRIES) {
+          mergeConflictAttempts.set(wi.work_item_id, mergeConflictAttempt);
+          requeueForMergeConflict = true;
+        } else {
+          finalStatus = 'failed';
+        }
       }
     } else {
       finalStatus = 'failed';
     }
-    if (finalStatus !== 'complete') {
+    if (!requeueForMergeConflict && finalStatus !== 'complete') {
       writeWorkItemStatus(specPath, finalStatus);
     }
 
@@ -851,6 +888,29 @@ export async function runDeveloperLoop(
       },
     });
 
+    // Phase 4 step 7: the requeue DECISION gets its own distinct event,
+    // separate from the ralph.end result above — attempt metadata lets
+    // recovery/observability see the retry happening without inferring it
+    // from a second ralph.start for the same WI id.
+    if (requeueForMergeConflict) {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [specPath],
+        output_refs: [],
+        message: 'dev-loop.merge-conflict-requeue',
+        metadata: {
+          work_item_id: wi.work_item_id,
+          attempt: mergeConflictAttempt,
+          max_retries: DEV_WI_MERGE_CONFLICT_MAX_RETRIES,
+          merge_detail: mergeDetail,
+        },
+      });
+    }
+
     // M5: per-WI delivered — this WI's net git delta (carries work_item_id so the
     // monitor shows real per-WI stats, not the cycle aggregate on every hex).
     // Phase 4/2 (honest delivery events, brain/cycles/themes/2026-07-11-dev-
@@ -862,19 +922,26 @@ export async function runDeveloperLoop(
     // Phase 4 step 5: computed against the per-WI worktree (not the cycle
     // worktree) so the stats are correct whether or not this WI ever merged
     // — and read here, BEFORE the `finally` below removes the worktree.
-    wiDelta = gitNetDelta(wiWorktree.path, wiBaseSha);
-    const deliveryEvent = wiDeliveryEvent(finalStatus, wi.work_item_id, wiDelta);
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: wiStart.event_id,
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: 'log',
-      input_refs: [wiWorktree.path],
-      output_refs: [],
-      message: deliveryEvent.message,
-      metadata: deliveryEvent.metadata,
-    });
+    //
+    // Phase 4 step 7: skipped entirely on a requeue — this attempt's outcome
+    // isn't concluded (it's being retried), so neither `delivered` nor
+    // `discarded` honestly describes it; the eventual terminal attempt fires
+    // exactly one of the two, same as before Step 7.
+    if (!requeueForMergeConflict) {
+      wiDelta = gitNetDelta(wiWorktree.path, wiBaseSha);
+      const deliveryEvent = wiDeliveryEvent(finalStatus, wi.work_item_id, wiDelta);
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [wiWorktree.path],
+        output_refs: [],
+        message: deliveryEvent.message,
+        metadata: deliveryEvent.metadata,
+      });
+    }
 
     // G8: the CYCLE branch is pushed to origin after a successful merge-back
     // only (Phase 4 step 5 — replaces the old unconditional per-WI push: a
@@ -911,16 +978,23 @@ export async function runDeveloperLoop(
       });
     }
 
-    settleWiOutcome(wiOutcomes, {
-      id: wi.work_item_id,
-      status: finalStatus,
-      result,
-      // A merge conflict cascades to dependents the SAME way an environment
-      // failure does (they stay pending, not failed) — prerequisiteBlockage
-      // generalizes over this single flag regardless of which non-work
-      // reason set it.
-      ...(environmentFailure || mergeConflict ? { environment: true } : {}),
-    });
+    // Phase 4 step 7: a requeued attempt never settles — `settleWiOutcome`'s
+    // own double-settle guard would otherwise hard-throw on the terminal
+    // attempt's settle later. Skipping the settle here is what makes this
+    // an "attempt-scoped" settle: exactly one settle per WI id, always on
+    // whichever attempt actually concludes it.
+    if (!requeueForMergeConflict) {
+      settleWiOutcome(wiOutcomes, {
+        id: wi.work_item_id,
+        status: finalStatus,
+        result,
+        // A merge conflict cascades to dependents the SAME way an environment
+        // failure does (they stay pending, not failed) — prerequisiteBlockage
+        // generalizes over this single flag regardless of which non-work
+        // reason set it.
+        ...(environmentFailure || mergeConflict ? { environment: true } : {}),
+      });
+    }
     } finally {
       // Phase 4 step 5: per-WI worktrees are pure scratch — remove them on
       // EVERY outcome (success, ralph failure, merge conflict) so the next
@@ -945,6 +1019,10 @@ export async function runDeveloperLoop(
       // declaration above `runWiDispatchTask` for the full rationale).
       pushFailedRef.current = true;
     }
+
+    // Phase 4 step 7: tells the scheduler whether this WI's outcome
+    // concluded (settled above) or needs a fresh re-dispatch.
+    return { requeue: requeueForMergeConflict };
   }
 
   // Phase 4 step 6: the dispatch wrapper handed to `runConcurrentDispatch`.
@@ -953,7 +1031,7 @@ export async function runDeveloperLoop(
   // `ralph.start` event — the lazy per-WI equivalent of the old tail loop's
   // synchronous "mark everything remaining failed" (see `pushFailedRef`'s
   // declaration above).
-  async function dispatchWi(wi: WorkItem): Promise<void> {
+  async function dispatchWi(wi: WorkItem): Promise<DispatchOutcome> {
     if (pushFailedRef.current) {
       writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
       logger.emit({
@@ -968,9 +1046,9 @@ export async function runDeveloperLoop(
         metadata: { work_item_id: wi.work_item_id, reason: 'branch-push-failed-early-exit' },
       });
       settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'failed', result: null });
-      return;
+      return { requeue: false };
     }
-    await runWiDispatchTask(wi);
+    return runWiDispatchTask(wi);
   }
 
   // Phase 4 step 6: dispatch every WI over the dependency graph, up to the

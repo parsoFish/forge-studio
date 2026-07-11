@@ -288,3 +288,86 @@ test('runConcurrentDispatch: a fatal dispatch rejection waits for other in-fligh
   await assert.rejects(runPromise, /boom/);
   assert.deepEqual(order, ['FATAL:rejected', 'SLOW:settled']);
 });
+
+// Phase 4 step 7 — bounded merge-conflict requeue. The generic
+// `{ requeue: true }` re-entry mechanic itself (not the merge-conflict
+// domain logic, which lives in developer-loop.ts and is covered by
+// `developer-loop.merge-conflict-requeue.test.ts`'s real-git integration
+// coverage) is exercised here with fake dispatch callbacks, matching every
+// other test in this file.
+
+test('runConcurrentDispatch: a requeued item is redispatched, and its dependent stays blocked until the retry\'s terminal (non-requeue) outcome', async () => {
+  const items = [wi('WI-1'), wi('WI-2', ['WI-1'])];
+  const outcomes = new Map<string, WiOutcome>();
+  const dispatchOrder: string[] = [];
+  let wi1Attempts = 0;
+
+  await runConcurrentDispatch({
+    items,
+    idOf: (item) => item.work_item_id,
+    dependsOn: (item) => item.depends_on,
+    cap: 2,
+    dispatch: async (item) => {
+      dispatchOrder.push(item.work_item_id);
+      if (item.work_item_id === 'WI-1') {
+        wi1Attempts += 1;
+        if (wi1Attempts === 1) {
+          // First attempt "conflicts" — does not settle, asks to requeue.
+          return { requeue: true };
+        }
+        settleWiOutcome(outcomes, { id: 'WI-1', status: 'complete', result: null });
+        return { requeue: false };
+      }
+      // WI-2 depends on WI-1 — it must never be dispatched before WI-1's
+      // terminal (second) attempt has concluded, even though cap 2 leaves a
+      // free slot the whole time WI-1's retry is pending.
+      assert.equal(wi1Attempts, 2, 'WI-2 dispatched before WI-1\'s retry concluded');
+      settleWiOutcome(outcomes, { id: 'WI-2', status: 'complete', result: null });
+      return { requeue: false };
+    },
+  });
+
+  assert.equal(wi1Attempts, 2);
+  assert.deepEqual(dispatchOrder, ['WI-1', 'WI-1', 'WI-2']);
+  // The aggregate is only ever computable once every WI has genuinely
+  // settled — proving the retry's terminal outcome, not its requeue, is
+  // what the completeness invariant waited for.
+  assertOutcomesSettled(outcomes, items);
+  assert.equal(outcomes.get('WI-1')?.status, 'complete');
+  assert.equal(outcomes.get('WI-2')?.status, 'complete');
+});
+
+test('runConcurrentDispatch: a requeue never pushes concurrently in-flight dispatches above `cap`', async () => {
+  // Three independent roots at cap 2, so one is always left waiting for a
+  // slot — a requeue re-entering the ready pool must compete for a slot the
+  // SAME way, never granted an extra "free" one.
+  const items = [wi('A'), wi('B'), wi('C')];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  let aAttempts = 0;
+
+  await runConcurrentDispatch({
+    items,
+    idOf: (item) => item.work_item_id,
+    dependsOn: (item) => item.depends_on,
+    cap: 2,
+    dispatch: async (item) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        if (item.work_item_id === 'A') {
+          aAttempts += 1;
+          await sleep(5);
+          return { requeue: aAttempts === 1 };
+        }
+        await sleep(15);
+        return { requeue: false };
+      } finally {
+        inFlight -= 1;
+      }
+    },
+  });
+
+  assert.equal(aAttempts, 2, 'A must be redispatched exactly once after its requeue');
+  assert.ok(maxInFlight <= 2, `expected at most 2 concurrently in-flight, saw ${maxInFlight}`);
+});
