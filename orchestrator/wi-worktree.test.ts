@@ -11,7 +11,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { createWiWorktree, removeWiWorktree, wiBranchName, wiWorktreePath } from './wi-worktree.ts';
+import {
+  createWiWorktree,
+  pruneStaleWiWorktrees,
+  removeWiWorktree,
+  wiBranchName,
+  wiWorktreePath,
+} from './wi-worktree.ts';
 import { list } from './worktree.ts';
 
 function initRepo(): { dir: string; repo: string } {
@@ -279,6 +285,208 @@ test('removeWiWorktree: deleteBranch omitted → worktree removed but branch sur
     assert.equal(existsSync(wt.path), false);
     // Branch survives when deleteBranch is falsy.
     assert.equal(branchRef(repo, wt.branch), startPointRef);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// pruneStaleWiWorktrees — Phase 4 step 9 (plan risk R7): cycle-start self-heal
+// ---------------------------------------------------------------------------
+
+/** Read every parsed JSONL entry for `initiativeId`'s claim-time log, or []. */
+function readPruneEvents(logsRoot: string, initiativeId: string): Array<Record<string, unknown>> {
+  const logPath = join(logsRoot, initiativeId, 'events.jsonl');
+  if (!existsSync(logPath)) return [];
+  return readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
+test('pruneStaleWiWorktrees: leftover per-WI worktree + branch from a prior attempt → pruned + event emitted → createWiWorktree succeeds cleanly after', () => {
+  const { dir, repo } = initRepo();
+  try {
+    const worktreesRoot = join(dir, '_wt');
+    const logsRoot = join(dir, '_logs');
+    const initiativeId = 'INIT-heal';
+    const workItemId = 'WI-1';
+    const cycleWorktreePath = join(dir, 'cycle-wt');
+    mkdirSync(cycleWorktreePath, { recursive: true });
+    writeCycleWorkItems(cycleWorktreePath, { 'WI-1.md': 'attempt 1 spec\n' });
+
+    // Simulate attempt 1's leftover per-WI worktree: created normally, then
+    // the dir is ripped out from under git (a killed process), leaving the
+    // registry entry + branch behind — exactly the mid-fan-out-crash shape.
+    const first = createWiWorktree({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId,
+      workItemId,
+      startPointRef: headRef(repo),
+      cycleWorktreePath,
+    });
+    rmSync(first.path, { recursive: true, force: true });
+    assert.ok(
+      list(repo).some((w) => resolve(w.path) === resolve(first.path)),
+      'precondition: a dangling registry entry survives the dir removal',
+    );
+    assert.doesNotThrow(() =>
+      execFileSync('git', ['-C', repo, 'rev-parse', '--verify', first.branch], { stdio: 'pipe' }),
+    );
+
+    const result = pruneStaleWiWorktrees({ projectRepoPath: repo, worktreesRoot, initiativeId, logsRoot });
+
+    assert.deepEqual(result.prunedPaths, [first.path]);
+    assert.deepEqual(result.prunedBranches, [first.branch]);
+
+    // Registry entry AND branch are both gone.
+    assert.equal(list(repo).some((w) => resolve(w.path) === resolve(first.path)), false);
+    assert.throws(() =>
+      execFileSync('git', ['-C', repo, 'rev-parse', '--verify', first.branch], { stdio: 'pipe' }),
+    );
+
+    // Loudly: a JSONL event names exactly what was pruned.
+    const events = readPruneEvents(logsRoot, initiativeId);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]!.message, 'wi-worktrees.pruned');
+    assert.deepEqual((events[0]!.metadata as Record<string, unknown>).paths, [first.path]);
+    assert.deepEqual((events[0]!.metadata as Record<string, unknown>).branches, [first.branch]);
+
+    // Attempt 2 (a fresh dispatch of the SAME work item) creates cleanly —
+    // no collision, no self-heal warning path needed.
+    writeCycleWorkItems(cycleWorktreePath, { 'WI-1.md': 'attempt 2 spec\n' });
+    const second = createWiWorktree({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId,
+      workItemId,
+      startPointRef: headRef(repo),
+      cycleWorktreePath,
+    });
+    assert.ok(existsSync(second.path));
+    assert.equal(
+      readFileSync(join(second.path, '.forge', 'work-items', 'WI-1.md'), 'utf8'),
+      'attempt 2 spec\n',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pruneStaleWiWorktrees: leftovers from a DIFFERENT initiative are left untouched', () => {
+  const { dir, repo } = initRepo();
+  try {
+    const worktreesRoot = join(dir, '_wt');
+    const logsRoot = join(dir, '_logs');
+    const cycleWorktreePath = join(dir, 'cycle-wt');
+    mkdirSync(cycleWorktreePath, { recursive: true });
+
+    const targetWt = createWiWorktree({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-target',
+      workItemId: 'WI-1',
+      startPointRef: headRef(repo),
+      cycleWorktreePath,
+    });
+    const otherWt = createWiWorktree({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-other',
+      workItemId: 'WI-1',
+      startPointRef: headRef(repo),
+      cycleWorktreePath,
+    });
+    // The target initiative crashed mid-fan-out (dir gone, registry +
+    // branch left behind). The OTHER initiative's worktree is left FULLY
+    // INTACT on disk — as if it is a completely unrelated, still-running
+    // (or merely also-idle) initiative that just happens to share the same
+    // `worktreesRoot`. This is the real test of isolation: does a sweep
+    // scoped to `initiativeId` leave a live sibling's actual worktree
+    // directory alone, not just its branch ref?
+    rmSync(targetWt.path, { recursive: true, force: true });
+    assert.ok(existsSync(otherWt.path), 'precondition: the other initiative\'s worktree is untouched, live');
+
+    const result = pruneStaleWiWorktrees({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-target',
+      logsRoot,
+    });
+
+    assert.deepEqual(result.prunedPaths, [targetWt.path]);
+    assert.deepEqual(result.prunedBranches, [targetWt.branch]);
+
+    // The OTHER initiative's worktree dir, registry entry, and branch all
+    // survive completely untouched.
+    assert.ok(existsSync(otherWt.path));
+    assert.ok(list(repo).some((w) => resolve(w.path) === resolve(otherWt.path)));
+    assert.doesNotThrow(() =>
+      execFileSync('git', ['-C', repo, 'rev-parse', '--verify', otherWt.branch], { stdio: 'pipe' }),
+    );
+
+    // Only the target initiative's log gets an entry.
+    assert.equal(readPruneEvents(logsRoot, 'INIT-target').length, 1);
+    assert.equal(readPruneEvents(logsRoot, 'INIT-other').length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pruneStaleWiWorktrees: no leftovers (clean state) → no-op, no throw, no event', () => {
+  const { dir, repo } = initRepo();
+  try {
+    const worktreesRoot = join(dir, '_wt');
+    const logsRoot = join(dir, '_logs');
+
+    const result = pruneStaleWiWorktrees({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-clean',
+      logsRoot,
+    });
+
+    assert.deepEqual(result.prunedPaths, []);
+    assert.deepEqual(result.prunedBranches, []);
+    // No noisy event on a no-op sweep — not even an empty log dir.
+    assert.equal(existsSync(join(logsRoot, 'INIT-clean', 'events.jsonl')), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pruneStaleWiWorktrees: an ACTIVE (non-leftover) per-WI worktree from the SAME initiative is also swept — it always runs before the new attempt dispatches its own WIs', () => {
+  const { dir, repo } = initRepo();
+  try {
+    const worktreesRoot = join(dir, '_wt');
+    const logsRoot = join(dir, '_logs');
+    const cycleWorktreePath = join(dir, 'cycle-wt');
+    mkdirSync(cycleWorktreePath, { recursive: true });
+
+    // A worktree left fully intact on disk (not rm -rf'd) — the shape of a
+    // requeue racing a still-registered-but-abandoned prior attempt.
+    const wt = createWiWorktree({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-requeue',
+      workItemId: 'WI-1',
+      startPointRef: headRef(repo),
+      cycleWorktreePath,
+    });
+    assert.ok(existsSync(wt.path));
+
+    const result = pruneStaleWiWorktrees({
+      projectRepoPath: repo,
+      worktreesRoot,
+      initiativeId: 'INIT-requeue',
+      logsRoot,
+    });
+
+    assert.deepEqual(result.prunedPaths, [wt.path]);
+    assert.equal(existsSync(wt.path), false);
+    assert.equal(readPruneEvents(logsRoot, 'INIT-requeue').length, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -43,6 +43,7 @@ import {
   MAX_AUTO_RETRIES,
 } from './scheduler-dispatch.ts';
 import { validateClaimable, isNonTerminalRefused } from './claim-validator.ts';
+import { pruneStaleWiWorktrees } from './wi-worktree.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
@@ -709,6 +710,28 @@ async function runOne(
     // looks like a broken codebase. Idempotent — missing source is a no-op.
     linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
     annotateManifest(manifestPath, { worktree_path: wtHandle.path });
+
+    // Phase 4 step 9 (plan risk R7): before this attempt dispatches any of
+    // its OWN per-WI worktrees, sweep any left behind by a PRIOR attempt of
+    // the SAME initiative — a mid-fan-out crash, or an operator `forge
+    // requeue` (which only ever preserves/wipes the CYCLE worktree; it has
+    // no notion of per-WI scratch). Per-WI worktrees are pure scratch
+    // (ADR-019 preserves only the cycle worktree), so it is always safe to
+    // sweep them here, before any WI has been dispatched for this fresh
+    // attempt — regardless of whether `strategy` above was 'reuse' or
+    // 'add'. `createWiWorktree`'s own per-call self-heal (wi-worktree.ts)
+    // stays as the second line of defense for anything this sweep misses.
+    const wiSweep = pruneStaleWiWorktrees({
+      projectRepoPath: manifest.projectRepoPath,
+      worktreesRoot: cfg.worktreesRoot,
+      initiativeId: manifest.initiativeId,
+      logsRoot: resolve(forgeRoot, '_logs'),
+    });
+    if (tee && (wiSweep.prunedPaths.length > 0 || wiSweep.prunedBranches.length > 0)) {
+      console.log(
+        `[serve] ${manifest.initiativeId} — pruned ${wiSweep.prunedPaths.length} leftover per-WI worktree(s) and ${wiSweep.prunedBranches.length} branch(es) from a prior attempt`,
+      );
+    }
 
     const result = await runCycle({
       initiativeId: manifest.initiativeId,
