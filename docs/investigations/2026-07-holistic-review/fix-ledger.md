@@ -72,7 +72,11 @@
 | # | Item | Surface | Status |
 |---|---|---|---|
 | W5.1 | 2.10 reflector pipeline honesty (consumes 1.10; unreflected-cycle event on crash) — opus | orchestrator reflector invocation | done |
-| W5.2 | 2.11 PM turn economy (env-pin at SDK seam G8, write-WIs-incrementally, partial graph on exhaustion) — opus | orchestrator PM invocation + PM skill | done |
+| W5.2 | 2.11 PM turn economy (write-WIs-incrementally, partial graph on exhaustion) — opus | orchestrator PM invocation + PM skill | done |
+
+**Correction (2026-07-11 close-out audit):** W5.2's original row also claimed "env-pin at SDK seam (G8)" — that part did NOT land (commit cca2c17 contains no env handling; no pin/scrub exists anywhere in the SDK spawn seam). Confirmed live the same day: a bridge launched from an unscrubbed shell leaked `ANTHROPIC_BASE_URL`/headroom vars into SDK children — the 3rd occurrence of this leak class. G8 env-pin remains OPEN (deferred; ask-first scheduler-surface mechanism per the fix-loop deferral list).
+
+**Scope note:** the W1–W5 labels above are the fix loop's overnight *wave* numbers, not REFINEMENT-PLAN phases. Every item in this ledger is a plan-item 1.x or 2.x (Phases 1–2). Plan Phases 3–5 (design-phase consolidation / ralph conformance + parallel WIs / pillars + skills) were NOT part of this loop and remain unexecuted as of 2026-07-11.
 
 ## Close-out gates (after Wave 5)
 
