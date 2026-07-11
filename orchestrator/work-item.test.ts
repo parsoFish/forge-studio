@@ -17,6 +17,7 @@ import {
   writeWorkItem,
   readWorkItemsFromDir,
   detectHiddenCoupling,
+  gateRequiredPaths,
   type WorkItem,
 } from './work-item.ts';
 
@@ -412,3 +413,26 @@ test('validateWorkItem: accepts pure-docs WI', () => {
   assert.deepEqual(errors, []);
 });
 
+
+// ----- 2026-07-11: gateRequiredPaths — the gate-tightening path source -----
+// Surfaced by INIT-2026-07-10-framework-auth-parity WI-1: the PM omitted
+// `creates`, so the gate tightening got `requiredPaths: []` and a vacuous
+// `go test -run <NoMatch>` (exit 0, "[no tests to run]") passed at iter-0 →
+// gate-too-loose killed the WI. The gate's diff-touch requirement must fall
+// back to what the WI DOES declare: creates → verification_artifact →
+// files_in_scope.
+
+test('gateRequiredPaths: prefers creates when non-empty', () => {
+  const w = fixture({ creates: ['src/a.ts', 'src/a.test.ts'], verification_artifact: 'src/v.ts' });
+  assert.deepEqual([...gateRequiredPaths(w)], ['src/a.ts', 'src/a.test.ts']);
+});
+
+test('gateRequiredPaths: falls back to verification_artifact when creates absent', () => {
+  const w = fixture({ creates: undefined, verification_artifact: 'src/v.ts' });
+  assert.deepEqual([...gateRequiredPaths(w)], ['src/v.ts']);
+});
+
+test('gateRequiredPaths: falls back to files_in_scope when neither declared', () => {
+  const w = fixture({ creates: undefined, verification_artifact: undefined, files_in_scope: ['pkg/auth.go', 'pkg/auth_test.go'] });
+  assert.deepEqual([...gateRequiredPaths(w)], ['pkg/auth.go', 'pkg/auth_test.go']);
+});

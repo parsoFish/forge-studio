@@ -320,6 +320,8 @@ export function renderProjectContextBlock(
     '',
     'The live cycle harness reads the following from the worktree at PM-invocation time and inlines them here. Do NOT draft a `quality_gate_cmd` that references tooling absent from these files — the orchestrator runs the gate at iter 0 and hard-fails the WI with `gate-too-loose` when it passes trivially (which happens when the gate references `jest` in a project that uses `node:test`, `npm run build` when there\'s no build script, etc.).',
     '',
+    'When a WI creates files from scratch (new source/test files), declare them in `creates:`. The gate only counts as passed once the branch diff contains the WI\'s declared paths (`creates`, else `verification_artifact`, else all of `files_in_scope`) — that diff requirement is what keeps a scoped test gate (e.g. `go test -run <NewTestPrefix>`) honest while the new tests do not exist yet, instead of exit-0 "[no tests to run]" false-passing at iter 0.',
+    '',
   ];
   if (ctx.packageJson) {
     parts.push('### package.json', '', '```json', ctx.packageJson.trim(), '```', '');
@@ -346,7 +348,7 @@ export function renderProjectContextBlock(
       '',
     );
   }
-  if (parts.length <= 4) return ''; // header only — nothing actually inlined
+  if (parts.length <= 6) return ''; // header only — nothing actually inlined
   return parts.join('\n');
 }
 

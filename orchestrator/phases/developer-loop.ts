@@ -25,6 +25,7 @@ import {
   type DevToolUseSummary,
 } from '../dev-invocation.ts';
 import {
+  gateRequiredPaths,
   readWorkItemsFromDir,
   topologicalOrder,
   validateWorkItemSet,
@@ -535,12 +536,17 @@ export async function runDeveloperLoop(
               // so the scheduler retries instead of failing the work as wrong.
               (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(input.worktreePath, gateInfo); },
               // Wave B (2026-06-04): enforce that declared output paths land.
-              // If the WI declares `creates` paths those MUST appear in the
-              // branch diff before the gate can pass — independently of whether
-              // a sibling WI already produced tests. The `already-complete`
-              // 3-way runner check handles the "sibling beat us" case upstream;
-              // this layer catches "agent exited without writing declared files".
-              { requiredPaths: wi.creates ?? [], ...(requiredEnv ? { requiredEnv } : {}), timeoutMs: resolveGateTimeoutMs() },
+              // The WI's declared paths MUST appear in the branch diff before
+              // the gate can pass — independently of whether a sibling WI
+              // already produced tests. The `already-complete` 3-way runner
+              // check handles the "sibling beat us" case upstream; this layer
+              // catches "agent exited without writing declared files".
+              // 2026-07-11: creates → verification_artifact → files_in_scope
+              // fallback (gateRequiredPaths) — a PM that omits `creates` no
+              // longer disables the check, which let a vacuous scoped go-test
+              // (exit 0, "[no tests to run]") false-pass at iter-0 and kill
+              // the WI as gate-too-loose.
+              { requiredPaths: gateRequiredPaths(wi), ...(requiredEnv ? { requiredEnv } : {}), timeoutMs: resolveGateTimeoutMs() },
             );
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut

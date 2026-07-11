@@ -175,6 +175,27 @@ export function serializeWorkItem(w: WorkItem): string {
   return matter.stringify('\n' + w.body.replace(/^\n+/, ''), data);
 }
 
+/**
+ * Paths the gate-tightening layer requires in the branch diff before an
+ * exit-0 gate may count as passed. Prefers the WI's explicit `creates`
+ * declaration, then `verification_artifact`, then `files_in_scope` (which is
+ * mandatory, so the result is never empty). Surfaced 2026-07-11
+ * (INIT-2026-07-10-framework-auth-parity WI-1): the PM omitted `creates`, the
+ * tightening got `[]`, and a vacuous `go test -run <NoMatchYet>` (exit 0,
+ * "[no tests to run]") passed at iter-0 — killing the WI as `gate-too-loose`
+ * instead of letting the agent write the declared files. A WI whose branch
+ * diff touches NONE of its declared files cannot have done its work, so
+ * files_in_scope is a sound floor. NOTE: this feeds the gate diff-touch check
+ * only — the runner's `already-complete` shortcut stays `creates`-based
+ * (requiring ALL of a broader path set would false-skip WIs whose scope files
+ * were touched by siblings).
+ */
+export function gateRequiredPaths(w: WorkItem): readonly string[] {
+  if (w.creates !== undefined && w.creates.length > 0) return w.creates;
+  if (w.verification_artifact !== undefined && w.verification_artifact.length > 0) return [w.verification_artifact];
+  return w.files_in_scope;
+}
+
 export type ValidateOptions = {
   /** WI-ids known to exist in the same initiative; depends_on entries must resolve here. */
   knownWorkItemIds?: ReadonlySet<string>;
