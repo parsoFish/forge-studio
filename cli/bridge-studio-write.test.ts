@@ -517,7 +517,8 @@ test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, rep
   });
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
-    ok: boolean; id: string; ready: boolean; scaffolded: string[]; failingClauses: Array<{ id: string }>;
+    ok: boolean; id: string; ready: boolean; scaffolded: string[];
+    brainSeed: Array<{ path: string; action: string }>; failingClauses: Array<{ id: string }>;
   };
   assert.equal(body.ok, true);
   assert.equal(body.id, 'onboard-me');
@@ -537,11 +538,32 @@ test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, rep
   assert.ok(body.scaffolded.includes('roadmap.md'), 'scaffolded list reports roadmap.md');
   assert.ok(Array.isArray(body.failingClauses), 'failingClauses is an array');
 
+  // Phase 5 §8: the CENTRAL Brain-3 stub was seeded alongside the local
+  // C4 artifacts — kb.yaml + profile.md + themes/README.md, all reported
+  // "created" (brand-new project, nothing pre-existing to skip).
+  const centralBrainDir = join(forgeRoot, 'brain', 'projects', 'onboard-me');
+  assert.ok(existsSync(join(centralBrainDir, 'kb.yaml')), 'central kb.yaml seeded');
+  assert.ok(existsSync(join(centralBrainDir, 'profile.md')), 'central profile.md seeded');
+  assert.ok(existsSync(join(centralBrainDir, 'themes', 'README.md')), 'central themes/README.md seeded');
+  assert.equal(body.brainSeed.length, 3, 'brainSeed reports all 3 seeded files');
+  assert.ok(body.brainSeed.every((f) => f.action === 'created'), 'every file reported as created');
+  assert.ok(
+    body.scaffolded.includes('brain/projects/onboard-me/kb.yaml'),
+    'scaffolded list also reports the central kb.yaml',
+  );
+  // C4 requires exactly this central profile.md — seeding it means a
+  // freshly onboarded project is no longer C4-blocked on the brain half.
+  assert.ok(
+    !body.failingClauses.some((c) => c.id === 'C4'),
+    `C4 should be satisfied once the central brain is seeded, got: ${JSON.stringify(body.failingClauses)}`,
+  );
+
   // The project is now auto-discovered (B1) — GET lists it.
   const list = await (await fetch(`${bridgeUrl}/api/studio/projects`)).json() as { projects: Array<{ id: string }> };
   assert.ok(list.projects.some((p) => p.id === 'onboard-me'), 'onboarded project is discovered');
 
   rmSync(projDir, { recursive: true, force: true });
+  rmSync(centralBrainDir, { recursive: true, force: true });
 });
 
 test('POST /api/studio/projects rejects a duplicate id (already discovered) → 409', async () => {
@@ -553,6 +575,37 @@ test('POST /api/studio/projects rejects a duplicate id (already discovered) → 
   assert.equal(res.status, 409);
   const body = (await res.json()) as { error: string };
   assert.ok(body.error.includes('already exists'), `expected duplicate error, got: ${body.error}`);
+});
+
+test('POST /api/studio/projects never overwrites a pre-existing central brain (idempotent per-file)', async () => {
+  // Simulate an operator (or a prior partial onboarding) who already hand-
+  // authored a central profile.md before the project itself was created.
+  const centralBrainDir = join(forgeRoot, 'brain', 'projects', 'pre-seeded');
+  mkdirSync(centralBrainDir, { recursive: true });
+  const handAuthoredProfile = '# pre-seeded — hand-authored, do not clobber\n';
+  writeFileSync(join(centralBrainDir, 'profile.md'), handAuthoredProfile, 'utf8');
+
+  const res = await postJson(`${bridgeUrl}/api/studio/projects`, {
+    name: 'Pre Seeded',
+    qualityGateCmd: 'npm test',
+    northStar: 'Prove the brain seed is idempotent per file.',
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { brainSeed: Array<{ path: string; action: string }> };
+
+  // profile.md was skipped (untouched); the two siblings were still created.
+  const byPath = new Map(body.brainSeed.map((f) => [f.path, f.action]));
+  assert.equal(byPath.get('brain/projects/pre-seeded/profile.md'), 'skipped-existing');
+  assert.equal(byPath.get('brain/projects/pre-seeded/kb.yaml'), 'created');
+  assert.equal(byPath.get('brain/projects/pre-seeded/themes/README.md'), 'created');
+  assert.equal(
+    readFileSync(join(centralBrainDir, 'profile.md'), 'utf8'),
+    handAuthoredProfile,
+    'hand-authored profile.md content must survive untouched',
+  );
+
+  rmSync(join(forgeRoot, 'projects', 'pre-seeded'), { recursive: true, force: true });
+  rmSync(centralBrainDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------

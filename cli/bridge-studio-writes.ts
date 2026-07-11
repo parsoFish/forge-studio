@@ -38,6 +38,7 @@ import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/typ
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
+import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
 import { listRuns } from '../orchestrator/run-model.ts';
@@ -495,7 +496,18 @@ export async function handleStudioWriteRoutes(
       // onboarded project is preflight-green (or at least clear about what is
       // missing). All writes are idempotent — never clobber an existing
       // operator file, and the stubs are clearly marked as TODO scaffolding.
-      const scaffolded = scaffoldContractArtifacts(projectRoot, name);
+      const scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+
+      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
+      // profile.md + themes/) so the KB pillar — and the C4 preflight clause,
+      // which requires the central profile.md — are never empty for a
+      // freshly onboarded project. Idempotent per file (never clobbers an
+      // operator-authored brain).
+      const brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
+      const scaffolded = [
+        ...scaffoldedLocal,
+        ...brainSeed.files.filter((f) => f.action === 'created').map((f) => f.path),
+      ];
 
       // Re-run preflight and surface the clauses that still fail so the UI can
       // either celebrate (ready) or hand off to forge-onboard-project.
@@ -504,7 +516,12 @@ export async function handleStudioWriteRoutes(
         .filter((c) => c.hard && !c.pass)
         .map((c) => ({ id: c.clause, title: c.title, detail: c.detail }));
 
-      sendJson(res, 200, { ok: true, id, ready: report.ok, scaffolded, failingClauses: failing }, origin);
+      sendJson(
+        res,
+        200,
+        { ok: true, id, ready: report.ok, scaffolded, brainSeed: brainSeed.files, failingClauses: failing },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
