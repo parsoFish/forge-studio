@@ -35,6 +35,16 @@ export type ForgeConfig = {
      */
     maxConsecutiveGateFailures?: number;
   };
+  /** Dev-loop tuning (Phase 4 step 6 — concurrent WI dispatch). */
+  dev?: {
+    /**
+     * Max concurrently in-flight per-WI Ralph loops (each in its own
+     * worktree — see `wi-worktree.ts` / `wi-dispatch-scheduler.ts`). Default
+     * `DEFAULT_DEV_WI_CONCURRENCY` (1 — the pre-step-6 serial behavior).
+     * Never unbounded — clamped to `DEV_WI_CONCURRENCY_CEILING`.
+     */
+    maxConcurrentWorkItems?: number;
+  };
   /**
    * N6 (plan 2.8): post-merge CI watch tuning. After a confirmed merge the
    * closure phase polls the merged commit's GitHub Actions runs, bounded by
@@ -114,6 +124,40 @@ export function resolveUnifierGateFailureCap(cfg: ForgeConfig = loadConfig()): n
   const fromCfg = cfg.unifier?.maxConsecutiveGateFailures;
   if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) return Math.floor(fromCfg);
   return DEFAULT_UNIFIER_GATE_FAILURE_CAP;
+}
+
+/**
+ * Phase 4 step 6 — the pre-step-6 behavior (one WI's Ralph loop at a time)
+ * is the default; concurrency is opt-in.
+ */
+export const DEFAULT_DEV_WI_CONCURRENCY = 1;
+/**
+ * Hard ceiling regardless of env/config input — "never unbounded" (each
+ * concurrent slot is its own worktree + Ralph agent invocation; an
+ * unbounded cap would let a large initiative fan out to N simultaneous
+ * agent processes with no resource guard).
+ */
+export const DEV_WI_CONCURRENCY_CEILING = 8;
+
+/**
+ * Resolve the dev-loop's per-WI concurrency cap. Precedence (mirrors
+ * `resolveUnifierGateFailureCap`):
+ *   1. `FORGE_DEV_WI_CONCURRENCY` env var (operator/CI override)
+ *   2. `dev.maxConcurrentWorkItems` from `forge.config.json`
+ *   3. `DEFAULT_DEV_WI_CONCURRENCY` (1 — serial, byte-identical to pre-step-6)
+ *
+ * Non-finite / zero / negative values are ignored (fall through — a cap
+ * below 1 would dispatch nothing). The resolved value is always clamped to
+ * `DEV_WI_CONCURRENCY_CEILING`.
+ */
+export function resolveDevWiConcurrency(cfg: ForgeConfig = loadConfig()): number {
+  const fromEnv = Number(process.env.FORGE_DEV_WI_CONCURRENCY);
+  if (Number.isFinite(fromEnv) && fromEnv >= 1) return Math.min(Math.floor(fromEnv), DEV_WI_CONCURRENCY_CEILING);
+  const fromCfg = cfg.dev?.maxConcurrentWorkItems;
+  if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) {
+    return Math.min(Math.floor(fromCfg), DEV_WI_CONCURRENCY_CEILING);
+  }
+  return DEFAULT_DEV_WI_CONCURRENCY;
 }
 
 /** N6: default post-merge CI watch window (bounded — forge never waits forever). */

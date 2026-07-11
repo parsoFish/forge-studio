@@ -57,8 +57,13 @@ test('createWiWorktree: fresh → sibling path (never nested), branch@startPoint
     const initiativeId = 'INIT-parallel';
     const workItemId = 'WI-1';
 
-    // The "cycle worktree" — a real dir carrying the untracked PM spec.
-    const cycleWorktreePath = join(dir, 'cycle-wt');
+    // The "cycle worktree" — a real dir carrying the untracked PM spec, at
+    // the SAME `<worktreesRoot>/<initiativeId>` shape `scheduler.ts`'s own
+    // `add()` uses in production. A decoupled/unrelated path here would let
+    // the sibling-path assertion below pass trivially without proving
+    // anything — this is the exact relationship that must hold for the
+    // "never nested" claim to mean something.
+    const cycleWorktreePath = resolve(worktreesRoot, initiativeId);
     mkdirSync(cycleWorktreePath, { recursive: true });
     writeCycleWorkItems(cycleWorktreePath, { 'WI-1.md': '# WI-1\nDo the thing.\n' });
 
@@ -79,9 +84,9 @@ test('createWiWorktree: fresh → sibling path (never nested), branch@startPoint
     });
 
     // Path shape + helpers agree.
-    assert.equal(wt.path, resolve(worktreesRoot, initiativeId, 'wi', workItemId));
+    assert.equal(wt.path, resolve(worktreesRoot, 'wi', initiativeId, workItemId));
     assert.equal(wt.path, wiWorktreePath({ worktreesRoot, initiativeId, workItemId }));
-    assert.equal(wt.branch, `forge/${initiativeId}/wi/${workItemId}`);
+    assert.equal(wt.branch, `forge/wi/${initiativeId}/${workItemId}`);
     assert.equal(wt.branch, wiBranchName({ initiativeId, workItemId }));
     assert.ok(existsSync(wt.path));
 

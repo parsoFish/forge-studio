@@ -1,6 +1,6 @@
 # ADR 009 — Minimal `forge.config.json`; settings live in skills/ADRs
 
-**Status:** Accepted (scaffold); amended 2026-07-11 (G4 unifier cap)
+**Status:** Accepted (scaffold); amended 2026-07-11 (G4 unifier cap, Phase 4 step 6 dev-loop concurrency)
 **Date:** 2026-04-24
 
 ## Context
@@ -23,6 +23,9 @@ The prior `forge.config.json` accumulated knobs: model overrides, concurrency se
   },
   "unifier": {
     "maxConsecutiveGateFailures": 4        // G4 fix-loop ceiling (default 4)
+  },
+  "dev": {
+    "maxConcurrentWorkItems": 1            // Phase 4 step 6 dispatch cap (default 1, serial)
   }
 }
 ```
@@ -37,6 +40,19 @@ The prior `forge.config.json` accumulated knobs: model overrides, concurrency se
 > autonomously, with no forge-level bound. Resolved by
 > `resolveUnifierGateFailureCap` (env `FORGE_UNIFIER_GATE_FAILURE_CAP` >
 > config > default 4).
+
+> **Amendment 2026-07-11 (Phase 4 step 6, concurrent WI dispatch):** added
+> `dev.maxConcurrentWorkItems` — the cap on how many work items' Ralph loops
+> `runDeveloperLoop` runs at once (the running scheduler in
+> `wi-dispatch-scheduler.ts`, `runConcurrentDispatch`). Default is `1`,
+> reproducing the pre-step-6 serial loop's event sequence byte-for-byte;
+> raising it lets independent WIs (siblings in the dependency graph) run
+> concurrently, each in its own worktree, fanning back into the cycle
+> worktree through the single-flight merge queue from step 5. Never
+> unbounded — clamped to `DEV_WI_CONCURRENCY_CEILING` (8) regardless of
+> input, since each concurrent slot is its own worktree + agent process.
+> Resolved by `resolveDevWiConcurrency` (env `FORGE_DEV_WI_CONCURRENCY` >
+> config > default 1).
 
 > Per-skill model override was specified here originally but never wired
 > into the SDK invocation contracts. Per the simplification mandate it
