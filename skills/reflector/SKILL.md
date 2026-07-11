@@ -100,7 +100,7 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
    tokens with no tool progress, hit a rate limit, or needed a recovery/resume. For each,
    capture what unblocked it (or that it stayed blocked).
 5. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
-   - **Delivery truth = the `dev-loop.delivered` event (git diff-stat) + the merged tree, NOT per-WI status counts.** Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
+   - **Delivery truth = the `dev-loop.delivered` / `dev-loop.discarded` events (git diff-stat) + the merged tree, NOT per-WI status counts.** `dev-loop.delivered` fires ONLY for a WI that shipped (`outcome: 'complete'`); a failed WI's diff-stat carries the SAME fields on `dev-loop.discarded` (`outcome: 'failed'`) — attempted but not delivered. Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
 6. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving. Lead with the **repeated actions** and **roadblocks** found in 3-4 (or `_(none observed)_` for either).
 
 ### Stage 2 — Agent-prompted user questions (file-based handoff)

@@ -948,11 +948,12 @@ test('M5: per-WI delivered stats are distinct (not the cycle aggregate on every 
       ev('developer-loop', 'start'),
       ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-1' }),
       ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1', status: 'complete' }),
-      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-1', files_changed: 2, insertions: 30, commits: 1 }),
+      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-1', files_changed: 2, insertions: 30, commits: 1, outcome: 'complete' }),
       ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-2' }),
       ev('developer-loop', 'end', undefined, { work_item_id: 'WI-2', status: 'complete' }),
-      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-2', files_changed: 5, insertions: 90, commits: 3 }),
-      // cycle-level aggregate (no work_item_id)
+      ev('developer-loop', 'log', 'dev-loop.delivered', { work_item_id: 'WI-2', files_changed: 5, insertions: 90, commits: 3, outcome: 'complete' }),
+      // cycle-level aggregate (no work_item_id, no outcome field — emitDeliverySummary
+      // is unchanged by Phase 4/2, only the per-WI event gained the field)
       ev('developer-loop', 'log', 'dev-loop.delivered', { files_changed: 7, insertions: 120, commits: 4 }),
       ev('developer-loop', 'end'),
       ev('review-loop', 'start'),
@@ -964,6 +965,39 @@ test('M5: per-WI delivered stats are distinct (not the cycle aggregate on every 
     assert.deepEqual(wi2?.delivered, { files: 5, insertions: 90, commits: 3 }, 'WI-2 shows its own delta');
     // the dev phase keeps the cycle aggregate (the no-work_item_id event)
     assert.deepEqual(run.phaseMeta['dev']?.delivered, { files: 7, insertions: 120, commits: 4 });
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('Phase 4/2: a failed WI emits dev-loop.discarded (not delivered) — its delta never surfaces as delivered', () => {
+  // brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-failed-wi.md:
+  // before this fix a failed WI's `dev-loop.delivered` (files_changed: 0) was
+  // indistinguishable in the log from a real success. The honest shape is
+  // `dev-loop.discarded` with the SAME diff-stat fields plus outcome:'failed'.
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-discarded';
+    const cycleId = '2026-01-01T04-00-00_INIT-2026-01-01-discarded';
+    const manifestPath = writeManifest(root, 'in-flight', initId, { cycle_id: cycleId });
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('project-manager', 'log', 'pm.work-item-emitted', { work_item_id: 'WI-1' }),
+      ev('developer-loop', 'start'),
+      ev('developer-loop', 'log', 'ralph.start', { work_item_id: 'WI-1' }),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1', status: 'failed' }),
+      // failed WI: SAME fields as a delivered event would carry, but on
+      // dev-loop.discarded with outcome:'failed' — nothing is lost, but it
+      // never reads as a shipped delivery.
+      ev('developer-loop', 'log', 'dev-loop.discarded', {
+        work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'failed',
+      }),
+      ev('developer-loop', 'end'),
+    ]);
+    const run = aggregateRun({ root, queueState: 'in-flight', manifestPath, nowMs: Date.now() });
+    const wi1 = run.workItems?.find((w) => w.id === 'WI-1');
+    assert.ok(wi1, 'WI-1 still materialises from its ralph.start/end lifecycle events');
+    assert.equal(wi1?.delivered, undefined, 'a failed WI must never surface a delivered stat');
   } finally {
     cleanup(root);
   }

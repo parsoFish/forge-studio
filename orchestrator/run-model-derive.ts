@@ -268,31 +268,111 @@ export function computeIterations(
   };
 }
 
+/**
+ * Internal: the WI's (or the cycle-level aggregate's) most recent delivery
+ * VERDICT — the last `dev-loop.delivered` or `dev-loop.discarded` event in
+ * array order, whichever message it actually is. Message-agnostic on
+ * purpose: a WI can be resumed/reworked, so its delivery message can flip
+ * either direction across attempts (discarded→delivered on a successful
+ * retry, or delivered→discarded if a later rework attempt fails) — only the
+ * LATEST verdict is ever the true state. Matching strictly on one message
+ * name (as `findDelivered` alone used to) makes a later `dev-loop.discarded`
+ * invisible to a backward scan and falls through to a STALE earlier
+ * `dev-loop.delivered`; `deriveWorkItems`' crash-retry override needs the
+ * latest verdict's stats regardless of which message carries them. See
+ * brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-failed-
+ * wi.md.
+ *
+ * Only the crash-retry override in `deriveWorkItems` uses this now —
+ * `findDelivered` (below) needs a different scan (it must see PAST a
+ * trivial all-zero `dev-loop.delivered` re-run to an earlier meaningful one,
+ * whereas the override only cares whether the WI's single latest verdict
+ * carries any commits at all) so it no longer delegates to this helper.
+ */
+function findLatestWiVerdict(
+  events: readonly EventLogEntry[],
+  wiId?: string,
+): { message: 'dev-loop.delivered' | 'dev-loop.discarded'; outcome?: string; files: number; insertions: number; commits: number } | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.message !== 'dev-loop.delivered' && e.message !== 'dev-loop.discarded') continue;
+    if (!e.metadata) continue;
+    const m = e.metadata;
+    // M5: a wiId selects that WI's per-WI event; the phase aggregate (no
+    // wiId) selects the cycle-level summary (the one without work_item_id).
+    if (wiId !== undefined) {
+      if (m.work_item_id !== wiId) continue;
+    } else if (typeof m.work_item_id === 'string') {
+      continue;
+    }
+    // Accept both files_changed and files
+    const files =
+      typeof m.files_changed === 'number' ? m.files_changed :
+      typeof m.files === 'number' ? m.files : 0;
+    const insertions = typeof m.insertions === 'number' ? m.insertions : 0;
+    const commits = typeof m.commits === 'number' ? m.commits : 0;
+    const outcome = typeof m.outcome === 'string' ? m.outcome : undefined;
+    return { message: e.message as 'dev-loop.delivered' | 'dev-loop.discarded', outcome, files, insertions, commits };
+  }
+  return undefined;
+}
+
+/**
+ * Phase 4/2 (honest delivery events): `findDelivered` treats delivery as
+ * SUCCESS-ONLY, scanning backward through the WI's (or the cycle
+ * aggregate's) `dev-loop.delivered`/`dev-loop.discarded` events for the
+ * latest MEANINGFUL verdict:
+ *
+ *   - A `dev-loop.discarded` event — or a `dev-loop.delivered` event whose
+ *     explicit `outcome` isn't `'complete'` (defense-in-depth) — is decisive:
+ *     the WI is not delivered, full stop. Per the ordering guarantee this
+ *     also establishes, it is never overridden by falling through to an
+ *     earlier, now-stale `dev-loop.delivered` event.
+ *   - A `dev-loop.delivered` event with a genuine (non-zero) diff is the
+ *     WI's delivered stat.
+ *   - A `dev-loop.delivered` event whose diff is ALL ZERO carries no
+ *     information — a dev-loop re-run after the PR is already open can
+ *     emit a harmless 0/0/0 `dev-loop.delivered` for a WI that already
+ *     shipped real work (brain/cycles/themes/2026-07-03-duplicate-dev-loop-
+ *     after-pr-open.md) — so the scan continues PAST it to find the last
+ *     meaningful delivered stat, same as the pre-Phase-4/2 baseline did.
+ *     FIX ROUND 2: an earlier version of this function delegated to
+ *     `findLatestWiVerdict` (single latest event, no zero-diff skip), which
+ *     regressed this exact case — a trivial zero-diff re-run silently
+ *     erased a real earlier delivery.
+ *
+ * See brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-
+ * failed-wi.md.
+ */
 export function findDelivered(
   events: readonly EventLogEntry[],
   wiId?: string,
 ): { files: number; insertions: number; commits: number } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    if (e.message === 'dev-loop.delivered' && e.metadata) {
-      const m = e.metadata;
-      // M5: a wiId selects that WI's per-WI delivered event; the phase aggregate
-      // (no wiId) selects the cycle-level summary (the one without work_item_id).
-      if (wiId !== undefined) {
-        if (m.work_item_id !== wiId) continue;
-      } else if (typeof m.work_item_id === 'string') {
-        continue;
-      }
-      // Accept both files_changed and files
-      const files =
-        typeof m.files_changed === 'number' ? m.files_changed :
-        typeof m.files === 'number' ? m.files : 0;
-      const insertions = typeof m.insertions === 'number' ? m.insertions : 0;
-      const commits = typeof m.commits === 'number' ? m.commits : 0;
-      if (files > 0 || insertions > 0 || commits > 0) {
-        return { files, insertions, commits };
-      }
+    if (e.message !== 'dev-loop.delivered' && e.message !== 'dev-loop.discarded') continue;
+    if (!e.metadata) continue;
+    const m = e.metadata;
+    // M5: a wiId selects that WI's per-WI event; the phase aggregate (no
+    // wiId) selects the cycle-level summary (the one without work_item_id).
+    if (wiId !== undefined) {
+      if (m.work_item_id !== wiId) continue;
+    } else if (typeof m.work_item_id === 'string') {
+      continue;
     }
+    // A discarded verdict is decisive — never delivered, never overridden
+    // by an earlier delivered event.
+    if (e.message === 'dev-loop.discarded') return undefined;
+    const outcome = typeof m.outcome === 'string' ? m.outcome : undefined;
+    if (outcome !== undefined && outcome !== 'complete') return undefined;
+    // Accept both files_changed and files
+    const files =
+      typeof m.files_changed === 'number' ? m.files_changed :
+      typeof m.files === 'number' ? m.files : 0;
+    const insertions = typeof m.insertions === 'number' ? m.insertions : 0;
+    const commits = typeof m.commits === 'number' ? m.commits : 0;
+    if (files === 0 && insertions === 0 && commits === 0) continue; // non-informative — keep scanning for the last meaningful delivered stat
+    return { files, insertions, commits };
   }
   return undefined;
 }
@@ -384,14 +464,23 @@ export function deriveWorkItems(
   const iterationPhases = phasesWithIterationEvents(events);
 
   return wiOrder.map((id) => {
-    const delivered = findDelivered(events, id); // M5: this WI's own net delta
+    const delivered = findDelivered(events, id); // M5: this WI's own net delta (success-only)
     const costUsd = sumAuthoritativeCostUsd(buckets.get(id) ?? [], iterationPhases);
     let status = wiStatusFor(buckets.get(id) ?? []);
-    // A WI that auto-committed real work then crashed on a later retry is
-    // recoverable, not a red failure — show 'retrying' so the hex matches its
-    // green delivery stats (the agent-crash-retry case).
-    if (status === 'failed' && delivered && delivered.commits > 0) {
-      status = 'retrying';
+    // A WI that auto-committed real work then crashed (or is on a later
+    // retry) is recoverable, not a red failure — show 'retrying'. Phase 4/2
+    // routes a non-'complete' WI's diff-stat to `dev-loop.discarded` instead
+    // of `dev-loop.delivered`, so `findDelivered` (success-only, above)
+    // never sees it — the override must read the WI's LATEST verdict
+    // directly, regardless of which of the two messages carries it, or a
+    // WI that crashed after committing real work is misread as a hard
+    // failure. See brain/cycles/themes/2026-07-11-dev-loop-delivered-event-
+    // fires-for-failed-wi.md.
+    if (status === 'failed') {
+      const verdict = findLatestWiVerdict(events, id);
+      if (verdict !== undefined && verdict.commits > 0) {
+        status = 'retrying';
+      }
     }
     return { id, status, costUsd, ...wiSpec.get(id), delivered };
   });
