@@ -416,6 +416,10 @@ async function startWatch() {
       ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
       { cwd: FORGE_ROOT, env: forgeSpawnEnv(), stdio: ['ignore', 'pipe', 'pipe'], detached: true },
     );
+    // Track from SPAWN, not from ready: a boot-timeout rejection must still
+    // let the fatal handler kill what was spawned (the half-booted studio
+    // already holds ports 4123/4124).
+    activeWatchProc = proc;
     let buf = '';
     let settled = false;
     const onData = (chunk) => {
@@ -451,7 +455,15 @@ async function startWatch() {
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready within 30s')); }, 30000);
+    // 120s: a cold `next dev` recompile after UI changes can far exceed 30s.
+    // On timeout, kill what we spawned — the half-booted studio HOLDS the
+    // port, and rejecting without killing it strands a zombie that blocks
+    // every subsequent run (2026-07-11 R3).
+    setTimeout(() => {
+      if (settled) return;
+      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* */ } }
+      rej(new Error(`forge studio not ready within 120s; spawned watch killed. Last output:\n${buf.slice(-2000)}`));
+    }, 120000);
   });
 }
 
