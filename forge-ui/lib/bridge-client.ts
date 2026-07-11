@@ -460,6 +460,21 @@ export type ArchitectQuestion = {
   options?: { label: string; description: string }[];
 };
 
+export type CompletenessCriticFinding = {
+  severity: 'high' | 'medium' | 'low';
+  /** Omitted for a finding that spans the whole plan (no single owner). */
+  initiativeId?: string;
+  gap: string;
+};
+
+/** Result of the architect-completeness-critic FINALIZE gate. Presence means
+ *  the critic already ran for this session (one-shot-per-session). */
+export type CompletenessCriticStatus = {
+  ranAt: string;
+  findings: CompletenessCriticFinding[];
+  crashed?: boolean;
+};
+
 export type ArchitectSessionSummary = {
   sessionId: string;
   project: string;
@@ -472,6 +487,8 @@ export type ArchitectSessionSummary = {
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
    *  Use this to detect a stalled runner. */
   staleMs?: number;
+  /** Null until the critic has run for this session. */
+  completenessCritic: CompletenessCriticStatus | null;
 };
 
 export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {

@@ -54,13 +54,20 @@ after(async () => {
 
 test('GET /api/architect/sessions lists the session with planUrl (no escalations field)', async () => {
   const body = (await (await fetch(`${url}/api/architect/sessions`)).json()) as {
-    sessions: Array<{ sessionId: string; phase: string; escalations?: unknown; planUrl: string | null }>;
+    sessions: Array<{
+      sessionId: string;
+      phase: string;
+      escalations?: unknown;
+      planUrl: string | null;
+      completenessCritic: unknown;
+    }>;
   };
   const s = body.sessions.find((x) => x.sessionId === sid);
   assert.ok(s, 'session present');
   assert.equal(s!.phase, 'awaiting-verdict');
   assert.ok(!('escalations' in s!), 'escalations field must be absent from session summary');
   assert.ok(s!.planUrl);
+  assert.equal(s!.completenessCritic, null, 'critic has not run yet for this fixture session');
 });
 
 test('GET /api/architect/file serves PLAN.html as text/html with a path-escape guard', async () => {
@@ -173,4 +180,68 @@ test('POST /api/architect/start creates a session dir + status', async () => {
   assert.ok(existsSync(join(dir, 'idea.md')));
   const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
   assert.equal(status.phase, 'interviewing');
+});
+
+// ---------------------------------------------------------------------------
+// Double-finalize guard (completeness-critic hardening): plan verdicts are
+// serialized by a status.json lock and rejected once the session has left
+// `awaiting-verdict`.
+// ---------------------------------------------------------------------------
+
+function seedVerdictSession(sid: string): string {
+  const dir = sessionDir(sid);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      session_id: sid,
+      project: 'demo',
+      project_repo_path: dir,
+      phase: 'awaiting-verdict',
+      round: 2,
+      idea: 'guarded idea',
+      updated_at: new Date().toISOString(),
+    }),
+  );
+  return dir;
+}
+
+function postApprove(sid: string): Promise<Response> {
+  return fetch(`${url}/api/plan-verdict`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: sid, kind: 'approve' }),
+  });
+}
+
+test('POST /api/plan-verdict on a session no longer awaiting a verdict → 409 (double-finalize guard)', async () => {
+  const sid3 = '2026-05-29T14-00-00';
+  const dir3 = seedVerdictSession(sid3);
+
+  const first = await postApprove(sid3);
+  assert.equal(first.status, 200);
+  const afterFirst = JSON.parse(readFileSync(join(dir3, 'status.json'), 'utf8'));
+  assert.equal(afterFirst.phase, 'finalizing');
+
+  // Second approve while the first finalize is in flight → conflict; the
+  // status must NOT be re-written (no second spawn / critic run / promotion).
+  const second = await postApprove(sid3);
+  assert.equal(second.status, 409);
+  const body = (await second.json()) as { error?: string };
+  assert.match(body.error ?? '', /not awaiting a verdict/);
+  const afterSecond = JSON.parse(readFileSync(join(dir3, 'status.json'), 'utf8'));
+  assert.equal(afterSecond.phase, 'finalizing', 'the rejected verdict must not touch session status');
+});
+
+test('POST /api/plan-verdict concurrent double-approve → exactly one 200 (status lock serializes)', async () => {
+  const sid4 = '2026-05-29T15-00-00';
+  seedVerdictSession(sid4);
+
+  const [a, b] = await Promise.all([postApprove(sid4), postApprove(sid4)]);
+  const codes = [a.status, b.status];
+  assert.equal(codes.filter((c) => c === 200).length, 1, `exactly one approve wins (got ${codes})`);
+  assert.ok(
+    codes.every((c) => c === 200 || c === 409 || c === 503),
+    `loser must get a conflict-shaped rejection (got ${codes})`,
+  );
 });

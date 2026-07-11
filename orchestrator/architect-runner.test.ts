@@ -449,10 +449,15 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
   writeFileSync(join(manifestsDir, 'INIT-2026-05-29-seeded.md'), seeded);
   // Seed feedback.md (operator rationale written by the bridge on approve).
   writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- Default theme: Follow OS\n');
-  // A queryFn that FAILS the test if any draft/SDK turn is attempted.
+  // A queryFn that FAILS the test if any DRAFT turn is attempted. The
+  // completeness critic (a distinct, intentionally-gated call) is expected to
+  // run exactly once — it returns null structured_output here (a clean pass,
+  // zero findings) so finalize still proceeds to promote deterministically.
   let sdkCalls = 0;
-  const queryFn: QueryFn = () => {
+  let draftCalls = 0;
+  const queryFn: QueryFn = ({ prompt }) => {
     sdkCalls += 1;
+    if (prompt.includes('draft the initiative')) draftCalls += 1;
     async function* gen(): AsyncGenerator<unknown> {
       yield { type: 'result', total_cost_usd: 0, structured_output: null };
     }
@@ -469,7 +474,8 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
   });
 
   assert.equal(result.phase, 'committed');
-  assert.equal(sdkCalls, 0, 'deterministic finalize must NOT run a second LLM draft');
+  assert.equal(draftCalls, 0, 'deterministic finalize must NOT run a second LLM draft');
+  assert.equal(sdkCalls, 1, 'exactly one completeness-critic call is expected on first finalize');
   const pending = join(queueRoot, 'pending');
   const queued = readdirSync(pending).filter((f) => f.endsWith('.md'));
   assert.deepEqual(queued, ['INIT-2026-05-29-seeded.md'], 'promotes EXACTLY the approved draft');
@@ -477,6 +483,302 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
   assert.match(m.body, /## Seeded body/, 'keeps the approved body');
   assert.match(m.body, /Resolved design decisions/, 'appends the resolved decisions');
   assert.match(m.body, /Follow OS/);
+});
+
+// ---------------------------------------------------------------------------
+// Completeness critic (FINALIZE gate)
+// ---------------------------------------------------------------------------
+
+/** Seed an approved draft manifest + resolved feedback.md so `runFinalizeStep`
+ *  takes the deterministic (no-draft-call) branch, isolating the critic call. */
+function seedApprovedManifest(sessionDir: string, projectRoot: string): void {
+  const manifestsDir = join(sessionDir, 'manifests');
+  mkdirSync(manifestsDir, { recursive: true });
+  const seeded = [
+    '---',
+    'initiative_id: INIT-2026-05-29-seeded',
+    'project: demo',
+    `project_repo_path: ${projectRoot}`,
+    "created_at: '2026-05-29T10:00:00.000Z'",
+    'iteration_budget: 4',
+    'cost_budget_usd: 6',
+    'phase: pending',
+    'origin: architect',
+    '---',
+    '',
+    '## Seeded body',
+    '',
+    'Given x exists, when y is done, then z is observable.',
+  ].join('\n');
+  writeFileSync(join(manifestsDir, 'INIT-2026-05-29-seeded.md'), seeded);
+  writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- none\n');
+}
+
+test('completeness critic: findings block promotion and reset the session to awaiting-verdict', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  seedApprovedManifest(sessionDir, projectRoot);
+
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'result',
+        total_cost_usd: 0,
+        structured_output: {
+          findings: [{ severity: 'high', gap: 'data_source_x is never covered by any initiative.' }],
+        },
+      };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  assert.deepEqual(result.wrote, []);
+  assert.equal(result.promotedManifestPaths, undefined);
+
+  const pending = join(queueRoot, 'pending');
+  const queued = existsSync(pending) ? readdirSync(pending).filter((f) => f.endsWith('.md')) : [];
+  assert.deepEqual(queued, [], 'manifest must NOT promote while findings are unacknowledged');
+
+  const status = readStatus(sessionDir);
+  assert.equal(status?.phase, 'awaiting-verdict');
+  assert.equal(status?.completenessCritic?.findings.length, 1);
+  assert.equal(status?.completenessCritic?.findings[0].severity, 'high');
+  assert.ok(status?.completenessCritic?.ranAt);
+});
+
+test('completeness critic: a clean pass (zero findings) promotes normally and stamps status', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  seedApprovedManifest(sessionDir, projectRoot);
+
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0, structured_output: { findings: [] } };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'committed');
+  assert.equal(result.promotedManifestPaths?.length, 1);
+
+  const status = readStatus(sessionDir);
+  assert.equal(status?.phase, 'committed');
+  assert.deepEqual(status?.completenessCritic?.findings, []);
+  assert.ok(status?.completenessCritic?.ranAt);
+});
+
+test('completeness critic: a re-approve after findings SKIPS the critic and promotes straight through', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  seedApprovedManifest(sessionDir, projectRoot);
+
+  let firstTurnCalls = 0;
+  const findingsQueryFn: QueryFn = () => {
+    firstTurnCalls += 1;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'result',
+        total_cost_usd: 0,
+        structured_output: { findings: [{ severity: 'medium', gap: 'ambiguous ownership of release_folder.' }] },
+      };
+    }
+    return gen();
+  };
+
+  const firstResult = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn: findingsQueryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+  assert.equal(firstResult.phase, 'awaiting-verdict');
+  assert.equal(firstTurnCalls, 1);
+
+  // The bridge's re-approve always sets phase → 'finalizing' regardless of
+  // prior findings (applyPlanVerdict); `completenessCritic` stays on status.
+  const afterFirst = readStatus(sessionDir)!;
+  writeStatus(sessionDir, { ...afterFirst, phase: 'finalizing' });
+
+  const secondQueryFn: QueryFn = () => {
+    throw new Error('the critic must NOT be called again on a second finalize turn');
+  };
+
+  const secondResult = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn: secondQueryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(secondResult.phase, 'committed');
+  assert.equal(secondResult.promotedManifestPaths?.length, 1);
+  const status = readStatus(sessionDir);
+  assert.equal(status?.completenessCritic?.findings.length, 1, 'the acknowledged finding is preserved on status');
+});
+
+test('completeness critic: a crash is advisory — finalize still promotes and a loud error event is emitted', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  seedApprovedManifest(sessionDir, projectRoot);
+
+  const queryFn: QueryFn = () => {
+    throw new Error('sdk unavailable');
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'committed');
+  assert.equal(result.promotedManifestPaths?.length, 1, 'a critic crash must not block promotion');
+
+  const status = readStatus(sessionDir);
+  assert.deepEqual(status?.completenessCritic?.findings, []);
+  assert.equal(status?.completenessCritic?.crashed, true);
+
+  const logPath = join(logsRoot, `_architect-${sessionId}`, 'events.jsonl');
+  const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const errEv = events.find(
+    (e) => e.event_type === 'error' && e.skill === 'architect-completeness-critic',
+  );
+  assert.ok(errEv, 'a loud error event must be emitted on crash');
+  assert.match(errEv.message, /architect\.completeness-critic\.crashed/);
+  assert.equal(errEv.metadata.error, 'sdk unavailable', 'the crash event carries the bounded error detail');
+});
+
+test('completeness critic: the one-shot flag is durable — a promotion crash after a clean pass does not re-arm the critic', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  seedApprovedManifest(sessionDir, projectRoot);
+
+  let sdkCalls = 0;
+  const queryFn: QueryFn = () => {
+    sdkCalls += 1;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0, structured_output: { findings: [] } };
+    }
+    return gen();
+  };
+
+  // A queueRoot that is a regular FILE makes promoteManifests throw AFTER the
+  // critic has already run — simulating a crash between critic and promotion.
+  const blockedQueueRoot = join(sessionDir, 'queue-root-as-file');
+  writeFileSync(blockedQueueRoot, 'not a directory');
+
+  await assert.rejects(() =>
+    runArchitectTurn({
+      sessionId,
+      projectRoot,
+      logsRoot,
+      queueRoot: blockedQueueRoot,
+      queryFn,
+      logger: logger(logsRoot, sessionId),
+    }),
+  );
+  assert.equal(sdkCalls, 1, 'the critic ran once before the promotion crash');
+
+  // The one-shot flag must already be durable on disk (persisted BEFORE promotion).
+  const afterCrash = readStatus(sessionDir);
+  assert.ok(
+    afterCrash?.completenessCritic,
+    'status.completenessCritic must be persisted before promoteManifests runs',
+  );
+
+  // Retry the finalize turn with a working queue — the critic must NOT re-run.
+  const retry = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+  assert.equal(retry.phase, 'committed');
+  assert.equal(retry.promotedManifestPaths?.length, 1);
+  assert.equal(sdkCalls, 1, 'the retry turn must NOT re-invoke the critic');
+});
+
+test('completeness critic: oversized manifest bodies are truncated in the critic prompt', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({
+    phase: 'finalizing',
+  });
+  const manifestsDir = join(sessionDir, 'manifests');
+  mkdirSync(manifestsDir, { recursive: true });
+  const hugeBody = `## Huge scope\n\n${'x'.repeat(60_000)}\n\nGiven a, when b, then c.`;
+  const seeded = [
+    '---',
+    'initiative_id: INIT-2026-05-29-huge',
+    'project: demo',
+    `project_repo_path: ${projectRoot}`,
+    "created_at: '2026-05-29T10:00:00.000Z'",
+    'iteration_budget: 4',
+    'cost_budget_usd: 6',
+    'phase: pending',
+    'origin: architect',
+    '---',
+    '',
+    hugeBody,
+  ].join('\n');
+  writeFileSync(join(manifestsDir, 'INIT-2026-05-29-huge.md'), seeded);
+  writeFileSync(join(sessionDir, 'feedback.md'), '## Resolved design decisions\n\n- none\n');
+
+  let captured = '';
+  const queryFn: QueryFn = ({ prompt }) => {
+    captured = prompt;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0, structured_output: { findings: [] } };
+    }
+    return gen();
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'committed');
+  assert.match(captured, /\[truncated \d+ chars\]/, 'the oversized body carries an explicit truncation marker');
+  assert.ok(
+    captured.length < 60_000,
+    `the 60k-char manifest body must not pass through unbounded (prompt was ${captured.length} chars)`,
+  );
 });
 
 // ---------------------------------------------------------------------------
