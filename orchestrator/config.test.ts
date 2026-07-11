@@ -19,6 +19,9 @@ import {
   DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS,
   pinnedAgentEnv,
   AGENT_ENV_DENYLIST,
+  resolveDevWiConcurrency,
+  DEFAULT_DEV_WI_CONCURRENCY,
+  DEV_WI_CONCURRENCY_CEILING,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -158,6 +161,63 @@ test('resolveUnifierGateFailureCap: garbage values fall back to the default (nev
   } finally {
     if (original === undefined) delete process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
     else process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = original;
+  }
+});
+
+test('resolveDevWiConcurrency: defaults to DEFAULT_DEV_WI_CONCURRENCY (1 — serial)', () => {
+  const original = process.env.FORGE_DEV_WI_CONCURRENCY;
+  delete process.env.FORGE_DEV_WI_CONCURRENCY;
+  try {
+    assert.equal(resolveDevWiConcurrency({}), DEFAULT_DEV_WI_CONCURRENCY);
+    assert.equal(DEFAULT_DEV_WI_CONCURRENCY, 1);
+  } finally {
+    if (original !== undefined) process.env.FORGE_DEV_WI_CONCURRENCY = original;
+  }
+});
+
+test('resolveDevWiConcurrency: honours dev.maxConcurrentWorkItems from forge.config.json', () => {
+  const original = process.env.FORGE_DEV_WI_CONCURRENCY;
+  delete process.env.FORGE_DEV_WI_CONCURRENCY;
+  try {
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 3 } }), 3);
+  } finally {
+    if (original !== undefined) process.env.FORGE_DEV_WI_CONCURRENCY = original;
+  }
+});
+
+test('resolveDevWiConcurrency: env var overrides config (operator/CI escape hatch)', () => {
+  const original = process.env.FORGE_DEV_WI_CONCURRENCY;
+  process.env.FORGE_DEV_WI_CONCURRENCY = '2';
+  try {
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 5 } }), 2);
+  } finally {
+    if (original === undefined) delete process.env.FORGE_DEV_WI_CONCURRENCY;
+    else process.env.FORGE_DEV_WI_CONCURRENCY = original;
+  }
+});
+
+test('resolveDevWiConcurrency: never unbounded — clamps to DEV_WI_CONCURRENCY_CEILING', () => {
+  const original = process.env.FORGE_DEV_WI_CONCURRENCY;
+  process.env.FORGE_DEV_WI_CONCURRENCY = '1000';
+  try {
+    assert.equal(resolveDevWiConcurrency({}), DEV_WI_CONCURRENCY_CEILING);
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 1000 } }), DEV_WI_CONCURRENCY_CEILING);
+  } finally {
+    if (original === undefined) delete process.env.FORGE_DEV_WI_CONCURRENCY;
+    else process.env.FORGE_DEV_WI_CONCURRENCY = original;
+  }
+});
+
+test('resolveDevWiConcurrency: garbage values fall back to the default (never 0/negative/NaN)', () => {
+  const original = process.env.FORGE_DEV_WI_CONCURRENCY;
+  process.env.FORGE_DEV_WI_CONCURRENCY = 'not-a-number';
+  try {
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 0 } }), DEFAULT_DEV_WI_CONCURRENCY);
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: -3 } }), DEFAULT_DEV_WI_CONCURRENCY);
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: Number.NaN } }), DEFAULT_DEV_WI_CONCURRENCY);
+  } finally {
+    if (original === undefined) delete process.env.FORGE_DEV_WI_CONCURRENCY;
+    else process.env.FORGE_DEV_WI_CONCURRENCY = original;
   }
 });
 

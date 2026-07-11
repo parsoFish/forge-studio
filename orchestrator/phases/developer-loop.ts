@@ -56,7 +56,8 @@ import {
   unifierItemsDir,
 } from '../unifier-items.ts';
 import { modelForSpec } from '../phase-agent.ts';
-import { resolveUnifierGateFailureCap } from '../config.ts';
+import { resolveUnifierGateFailureCap, resolveDevWiConcurrency } from '../config.ts';
+import { runConcurrentDispatch } from '../wi-dispatch-scheduler.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
 import { validateDemoModel, coerceDemoModel } from '../../cli/demo-model.ts';
 import {
@@ -342,15 +343,39 @@ export async function runDeveloperLoop(
   // failure race; it is now structurally impossible.
   const wiOutcomes = new Map<string, WiOutcome>();
 
-  // Phase 4 step 5: each WI now runs in its own sibling worktree
+  // Phase 4 step 5: each WI runs in its own sibling worktree
   // (`wi-worktree.ts`), and the fan-in point back into the cycle worktree —
-  // `git merge --no-ff` — must be single-flight even though this loop is
-  // still serial (load-bearing once concurrent dispatch lands). One queue
-  // instance is shared across every WI dispatched by this run.
+  // `git merge --no-ff` — is single-flight through this ONE shared queue
+  // instance, even though step 6 now dispatches WIs concurrently: only one
+  // merge may ever touch the cycle worktree's working tree at a time.
   const worktreesRoot = dirname(input.worktreePath);
   const mergeQueue = createMergeQueue();
 
-  for (const wi of toRun) {
+  // Phase 4 step 6: the branch-push-failure early exit (see the end of
+  // `runWiDispatchTask` below) used to be a synchronous `break` out of the
+  // serial for-loop plus a dedicated tail loop marking every remaining WI
+  // failed. Under concurrent dispatch there is no single tail loop to run —
+  // instead this flag is checked at the TOP of every dispatch (before
+  // `runWiDispatchTask` even starts, so no `ralph.start` event fires for a
+  // WI that never got a chance to run), and every WI that becomes ready
+  // after the flag flips gets the exact same 'branch-push-failed-early-exit'
+  // skip treatment the old tail loop gave it — just applied lazily, one WI
+  // at a time, as the scheduler would have dispatched it anyway. At
+  // `cap: 1` this reproduces the old code's event sequence byte-for-byte
+  // (see wi-dispatch-scheduler.test.ts's cap-1 equivalence coverage).
+  const pushFailedRef = { current: false };
+
+  /**
+   * Run ONE work item's full dev-loop turn: prerequisite check, isolated
+   * worktree + Ralph loop, fan-in merge, push, and outcome settlement.
+   * Mechanically unchanged from the pre-step-6 serial for-loop body — the
+   * only behavioral difference is that a branch-push failure now sets
+   * `pushFailedRef.current` instead of directly marking every subsequent
+   * `ordered` WI failed (the dispatch wrapper passed to
+   * `runConcurrentDispatch`, below, does that lazily per-WI so it works
+   * under concurrency too).
+   */
+  async function runWiDispatchTask(wi: WorkItem): Promise<void> {
     const wiStart = logger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -381,7 +406,7 @@ export async function runDeveloperLoop(
         metadata: { work_item_id: wi.work_item_id, reason: 'prerequisite-failed' },
       });
       settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'failed', result: null });
-      continue;
+      return;
     }
     if (blockage === 'environment-failure') {
       // N9: the prerequisite died for an ENVIRONMENT reason (rate-limit) — this
@@ -404,7 +429,7 @@ export async function runDeveloperLoop(
         },
       });
       settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'pending', result: null, environment: true });
-      continue;
+      return;
     }
 
     const specPath = resolve(workItemsDir, `${wi.work_item_id}.md`);
@@ -884,31 +909,58 @@ export async function runDeveloperLoop(
     }
 
     if (pushResult && !pushResult.pushed) {
-      // Mark every WI we won't reach as 'failed' with reason
-      // 'branch-push-failed-early-exit' — mirrors the prerequisite-blockage
-      // work-failure path's shape so metrics + cycle report stay accurate. Then break
-      // out of the loop; the close-step invariant + failure classifier
-      // take it from here.
-      const currentIndex = ordered.findIndex((w) => w.work_item_id === wi.work_item_id);
-      for (let i = currentIndex + 1; i < ordered.length; i++) {
-        const skipped = ordered[i]!;
-        writeWorkItemStatus(resolve(workItemsDir, `${skipped.work_item_id}.md`), 'failed');
-        logger.emit({
-          initiative_id: input.initiativeId,
-          parent_event_id: start.event_id,
-          phase: 'developer-loop',
-          skill: 'developer-ralph',
-          event_type: 'log',
-          input_refs: [resolve(workItemsDir, `${skipped.work_item_id}.md`)],
-          output_refs: [],
-          message: 'ralph.skipped',
-          metadata: { work_item_id: skipped.work_item_id, reason: 'branch-push-failed-early-exit' },
-        });
-        settleWiOutcome(wiOutcomes, { id: skipped.work_item_id, status: 'failed', result: null });
-      }
-      break;
+      // Phase 4 step 6: under concurrent dispatch there is no single tail
+      // loop of "everything remaining" to mark failed synchronously — set
+      // the shared flag instead. `dispatchWi` (below) checks it at the top
+      // of every subsequent dispatch and applies the exact same
+      // 'branch-push-failed-early-exit' skip treatment lazily, one WI at a
+      // time, as the scheduler would have reached it anyway (see the flag's
+      // declaration above `runWiDispatchTask` for the full rationale).
+      pushFailedRef.current = true;
     }
   }
+
+  // Phase 4 step 6: the dispatch wrapper handed to `runConcurrentDispatch`.
+  // Checked BEFORE `runWiDispatchTask` so a WI that will never get to run
+  // (because an earlier sibling's branch-push already failed) never emits a
+  // `ralph.start` event — the lazy per-WI equivalent of the old tail loop's
+  // synchronous "mark everything remaining failed" (see `pushFailedRef`'s
+  // declaration above).
+  async function dispatchWi(wi: WorkItem): Promise<void> {
+    if (pushFailedRef.current) {
+      writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
+        output_refs: [],
+        message: 'ralph.skipped',
+        metadata: { work_item_id: wi.work_item_id, reason: 'branch-push-failed-early-exit' },
+      });
+      settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'failed', result: null });
+      return;
+    }
+    await runWiDispatchTask(wi);
+  }
+
+  // Phase 4 step 6: dispatch every WI over the dependency graph, up to the
+  // configured concurrency cap (default 1 — byte-identical to the pre-
+  // step-6 serial loop; see wi-dispatch-scheduler.test.ts's cap-1
+  // equivalence coverage). Readiness is keyed off a dependency's dispatch
+  // PROMISE settling, which for `runWiDispatchTask` only resolves after that
+  // WI's fan-in merge (step 5's single-flight `mergeQueue`) has already run
+  // — so a dependent's worktree always branches from a tip that contains
+  // every prerequisite (see `wiBaseSha` inside `runWiDispatchTask`).
+  await runConcurrentDispatch({
+    items: toRun,
+    idOf: (wi) => wi.work_item_id,
+    dependsOn: (wi) => wi.depends_on,
+    cap: resolveDevWiConcurrency(),
+    dispatch: dispatchWi,
+  });
 
   // Step 3: assert the outcome snapshot is COMPLETE for every WI actually run
   // (toRun — [] on a unifier-only resume) before deriving any count. See
