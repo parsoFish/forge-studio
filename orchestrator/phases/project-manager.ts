@@ -25,10 +25,10 @@ import {
   type PmToolUseSummary,
 } from '../pm-invocation.ts';
 import {
-  detectHiddenCoupling,
   readWorkItemsFromDir,
   serializeWorkItem,
   validateWorkItemSet,
+  type CouplingPair,
   type WorkItem,
 } from '../work-item.ts';
 import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
@@ -37,6 +37,7 @@ import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
 import { withIdleDeadline } from '../stream-deadline.ts';
+import { compileWorkItemSpecs } from './wi-spec-compile.ts';
 
 /**
  * Injection seam for tests. The live cycle uses `sdkQuery` from the
@@ -57,6 +58,12 @@ export type RunProjectManagerOptions = {
    * immediately, but the race has already rejected so the cycle moves on.
    */
   signal?: AbortSignal;
+  /**
+   * ADR 037 test seam (same DI category as `queryFn`): overrides the root the
+   * wi-spec-compiler loads `forge:constraint` sources from
+   * (`<root>/brain/projects/<project>/…`). Defaults to the forge repo root.
+   */
+  constraintSourcesRoot?: string;
 };
 
 /**
@@ -119,6 +126,7 @@ export async function runProjectManager(
     parentEventId: start.event_id,
     queryFn,
     signal: options.signal,
+    constraintSourcesRoot: options.constraintSourcesRoot,
   });
 
   if (result.kind === 'success') return;
@@ -134,6 +142,8 @@ type PmPassInput = {
   parentEventId: string;
   queryFn: PmQueryFn;
   signal?: AbortSignal;
+  /** ADR 037 test seam — see RunProjectManagerOptions.constraintSourcesRoot. */
+  constraintSourcesRoot?: string;
 };
 
 type PmPassOutcome =
@@ -409,14 +419,45 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     items = appendStandingAcs(workItemsDir, items, standingAcs);
   }
 
-  const { perItem, setErrors } = validateWorkItemSet(items, {
+  // ADR 037 (wi-spec-compiler, deterministic core): parse profile.md + the
+  // project's Brain-3 themes for `forge:constraint` blocks, inject every
+  // matching clause verbatim into the WI(s) it applies to, compile any
+  // resolvable hidden-coupling overlap into an explicit `depends_on` edge
+  // (F-05 upgraded reject → compile), and enforce the `creates:`
+  // mandatory-with-escape + sizing invariants. Sequenced right after
+  // appendStandingAcs and before validateWorkItemSet, the same seam
+  // appendStandingAcs already occupies. A compiler THROW (malformed
+  // constraint source, unreadable file) is a loud-but-controlled failure:
+  // it funnels into compileErrors → setErrors → the same failure outcome +
+  // final error event every other validation failure uses — runOnePmPass's
+  // no-throw contract holds.
+  let compileErrors: string[] = [];
+  let couplingViolations: CouplingPair[] = [];
+  if (items.length > 0) {
+    try {
+      const compiled = compileWorkItemSpecs({
+        forgeRoot: p.constraintSourcesRoot ?? forgeRoot,
+        projectName: manifest.project,
+        manifest,
+        workItemsDir,
+        items,
+        logger,
+        initiativeId: input.initiativeId,
+        parentEventId,
+      });
+      items = compiled.items;
+      couplingViolations = compiled.unresolvedCoupling;
+      compileErrors = compiled.compileErrors;
+    } catch (err) {
+      compileErrors = [`wi-spec-compile: ${(err as Error).message}`];
+    }
+  }
+
+  const { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,
   });
+  const setErrors = [...validationSetErrors, ...compileErrors];
   const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
-
-  // F-05: hidden-coupling check. Two WIs whose `files_in_scope` overlap
-  // without a `depends_on` edge between them will conflict at merge time.
-  const couplingViolations = items.length > 0 ? detectHiddenCoupling(items) : [];
 
   // A2a (2026-06-06): live-acceptance-WI requirement (contract C7). When the
   // project declares `acceptance_gate.required`, the decomposition MUST include
