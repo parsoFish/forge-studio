@@ -10,11 +10,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { openPrInline } from './cycle-helpers.ts';
+import { commitDevLoopBoundary, openPrInline } from './cycle-helpers.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
 
@@ -72,5 +73,73 @@ test('openPrInline missing-prereq diagnostics use the SSOT demo path on an artif
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// commitDevLoopBoundary — G8 wave 2 (2026-07-12): the boundary commit is
+// orchestrator-issued (no agent in the loop), so it must carry
+// ORCHESTRATOR_GIT_IDENTITY via explicit `-c` flags rather than whatever
+// identity happens to be configured locally in the worktree.
+// ---------------------------------------------------------------------------
+
+function sh(cwd: string, args: string[]): string {
+  return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
+}
+
+/** A tiny repo with a base commit and a LOCAL identity distinct from forge's — proves the -c override actually takes effect rather than passively matching. */
+function setupRepoWithLocalIdentity(): { wt: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-devloop-boundary-'));
+  const wt = join(dir, 'wt');
+  mkdirSync(wt, { recursive: true });
+  sh(wt, ['init', '-q', '-b', 'main']);
+  sh(wt, ['config', 'user.email', 'poisoned@example.com']);
+  sh(wt, ['config', 'user.name', 'Poisoned Local Identity']);
+  writeFileSync(join(wt, 'README.md'), 'base\n');
+  sh(wt, ['add', '.']);
+  sh(wt, ['commit', '-q', '-m', 'base']);
+  return { wt, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('commitDevLoopBoundary: boundary commit carries forge-orchestrator identity, not the local gitconfig', () => {
+  const { wt, cleanup } = setupRepoWithLocalIdentity();
+  try {
+    writeFileSync(join(wt, 'work.txt'), 'dev-loop work\n');
+
+    const logsDir = mkdtempSync(join(tmpdir(), 'forge-devloop-boundary-logs-'));
+    const logger = createLogger('TEST-boundary', logsDir);
+
+    commitDevLoopBoundary(wt, logger, 'INIT-boundary-test');
+
+    const authorName = sh(wt, ['log', '-1', '--pretty=%an']).trim();
+    const authorEmail = sh(wt, ['log', '-1', '--pretty=%ae']).trim();
+    const committerName = sh(wt, ['log', '-1', '--pretty=%cn']).trim();
+    const committerEmail = sh(wt, ['log', '-1', '--pretty=%ce']).trim();
+
+    assert.equal(authorName, 'forge-orchestrator');
+    assert.equal(authorEmail, 'forge-orchestrator@forge.local');
+    assert.equal(committerName, 'forge-orchestrator');
+    assert.equal(committerEmail, 'forge-orchestrator@forge.local');
+
+    rmSync(logsDir, { recursive: true, force: true });
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitDevLoopBoundary: --allow-empty boundary snapshot on a clean tree also carries forge-orchestrator identity', () => {
+  const { wt, cleanup } = setupRepoWithLocalIdentity();
+  try {
+    const logsDir = mkdtempSync(join(tmpdir(), 'forge-devloop-boundary-logs-'));
+    const logger = createLogger('TEST-boundary-empty', logsDir);
+
+    commitDevLoopBoundary(wt, logger, 'INIT-boundary-empty-test');
+
+    const authorEmail = sh(wt, ['log', '-1', '--pretty=%ae']).trim();
+    assert.equal(authorEmail, 'forge-orchestrator@forge.local');
+
+    rmSync(logsDir, { recursive: true, force: true });
+  } finally {
+    cleanup();
   }
 });

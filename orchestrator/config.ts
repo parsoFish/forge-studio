@@ -235,7 +235,10 @@ export function assertEnv(mode: EnvAssertionMode = 'warn'): string[] {
  * or loops/, so on a spawned child their only possible effect is unintended
  * inheritance. See `pinnedAgentEnv` below, the single scrub point.
  *
- * Explicitly OUT of scope here: GIT_* identity vars (a later wave).
+ * GIT_* identity vars are explicitly OUT of scope for this denylist — they
+ * are not a leakage vector to block, they're an explicit identity overlay.
+ * See `pinnedAgentEnvWithGitIdentity` below (G8 wave 2, 2026-07-12 — this WAS
+ * "a later wave", now landed).
  */
 export const AGENT_ENV_DENYLIST: readonly string[] = [
   'ANTHROPIC_BASE_URL',
@@ -265,4 +268,88 @@ export function pinnedAgentEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Pr
     if (HEADROOM_ENV_PREFIX.test(key)) delete result[key];
   }
   return result;
+}
+
+/**
+ * G8 wave 2 (2026-07-12): distinct git identity for forge-authored commits.
+ *
+ * PROVEN by spike (2026-07-11, $0.25, control-tested against a deliberately
+ * poisoned local gitconfig): SDK `options.env` GIT_AUTHOR_* / GIT_COMMITTER_*
+ * vars reach the Claude Code CLI child's own Bash-tool `git commit` calls and
+ * take precedence over local/global gitconfig — no worktree-config plumbing
+ * needed. This is the identity policy the rest of forge composes on top of:
+ * SDK-spawned agents via `pinnedAgentEnvWithGitIdentity` below, direct
+ * orchestrator-issued `git commit` invocations via `gitIdentityConfigArgs`.
+ */
+export type GitIdentity = {
+  readonly name: string;
+  readonly email: string;
+};
+
+/**
+ * Ralph (the per-WI dev agent)'s commit identity. Distinct PER WORK ITEM
+ * (the email is tagged with `workItemId`) so `git log` / `git blame` on a
+ * merged initiative branch can attribute exactly which WI authored which
+ * commit even when several WIs land on the same branch.
+ */
+export function ralphGitIdentity(workItemId: string): GitIdentity {
+  return { name: 'forge-ralph', email: `forge-ralph+${workItemId}@forge.local` };
+}
+
+/**
+ * The unifier agent's commit identity. Flat (NOT per-UWI) — the unifier
+ * composes/finishes a cycle's work items, it isn't itself one, so every UWI
+ * (the packaging role and the code-fix role alike) shares this one identity.
+ */
+export const UNIFIER_GIT_IDENTITY: GitIdentity = {
+  name: 'forge-unifier',
+  email: 'forge-unifier@forge.local',
+};
+
+/**
+ * Commits the orchestrator process issues directly (no agent in the loop —
+ * dev-loop boundary snapshots, CI auto-fix commits, PR-branch scratch
+ * stripping, demo-capture artifact commits, forge-studio project-config
+ * writes, the Ralph-loop autocommit safety net). Distinct from the agent
+ * identities above so `git log` can tell "an agent wrote this" from "forge's
+ * own orchestration code wrote this" at a glance.
+ */
+export const ORCHESTRATOR_GIT_IDENTITY: GitIdentity = {
+  name: 'forge-orchestrator',
+  email: 'forge-orchestrator@forge.local',
+};
+
+/**
+ * Compose `pinnedAgentEnv` with an explicit git author/committer identity
+ * overlay for an SDK-spawned agent child. Applied AFTER the denylist/
+ * `HEADROOM_*` scrub so the scrub never touches it (GIT_* is not on
+ * `AGENT_ENV_DENYLIST` — it's an explicit overlay, not a leakage block).
+ * `base` defaults to `process.env` exactly like `pinnedAgentEnv`, so a caller
+ * that only needs identity injection (the common case) can omit it.
+ */
+export function pinnedAgentEnvWithGitIdentity(
+  identity: GitIdentity,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...pinnedAgentEnv(base),
+    GIT_AUTHOR_NAME: identity.name,
+    GIT_AUTHOR_EMAIL: identity.email,
+    GIT_COMMITTER_NAME: identity.name,
+    GIT_COMMITTER_EMAIL: identity.email,
+  };
+}
+
+/**
+ * `-c user.name=... -c user.email=...` flags for a DIRECT (non-SDK) `git
+ * commit` / `git merge` invocation the orchestrator process issues itself via
+ * `execFileSync`. The SDK path uses `pinnedAgentEnvWithGitIdentity` (env
+ * vars) instead because those commits happen inside a spawned Claude Code CLI
+ * child, not in this process; a direct `execFileSync('git', ...)` call has no
+ * such child env to set, so a per-invocation gitconfig override is the
+ * equivalent mechanism. Spread immediately after `'git'` in the args array,
+ * before the subcommand.
+ */
+export function gitIdentityConfigArgs(identity: GitIdentity): string[] {
+  return ['-c', `user.name=${identity.name}`, '-c', `user.email=${identity.email}`];
 }

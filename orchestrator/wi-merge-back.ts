@@ -28,6 +28,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 import { pushInitiativeBranch, type PushResult } from './pr.ts';
 import { writeWorkItemStatus } from './work-item.ts';
 
@@ -53,7 +54,16 @@ export function mergeWiIntoCycle(opts: {
   try {
     execFileSync(
       'git',
-      ['-C', opts.cycleWorktreePath, 'merge', '--no-ff', opts.wiBranch, '-m', `wi(${opts.workItemId}): merge`],
+      [
+        '-C',
+        opts.cycleWorktreePath,
+        ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
+        'merge',
+        '--no-ff',
+        opts.wiBranch,
+        '-m',
+        `wi(${opts.workItemId}): merge`,
+      ],
       { stdio: 'pipe' },
     );
     return { merged: true };

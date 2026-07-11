@@ -17,7 +17,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeQualityGateFromCmd, readWorktreeSecretsEnv, resolveGateTimeoutMs, type GateRunInfo } from './stop-conditions.ts';
+import {
+  autoCommitWorktreeIfDirty,
+  makeQualityGateFromCmd,
+  readWorktreeSecretsEnv,
+  resolveGateTimeoutMs,
+  type GateRunInfo,
+} from './stop-conditions.ts';
 
 test('makeQualityGateFromCmd: returns true when command exits 0', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-qg-'));
@@ -467,6 +473,46 @@ test('makeQualityGateFromCmd: real dogfood-shape — go-test-no-tests + missing 
     );
     assert.equal(gate(), false, 'dogfood scenario must be caught by the gate now');
     assert.equal(captured?.rejectReason, 'required-paths-missing');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// autoCommitWorktreeIfDirty — G8 wave 2 (2026-07-12): this safety-net commit
+// is orchestrator-issued (no agent in the loop), so it must carry
+// ORCHESTRATOR_GIT_IDENTITY via explicit -c flags rather than whatever git
+// identity happens to be configured in the worktree.
+// ---------------------------------------------------------------------------
+
+test('autoCommitWorktreeIfDirty: dirty tree → commits with forge-orchestrator identity, not the local gitconfig', () => {
+  const dir = setupTinyRepo();
+  try {
+    writeFileSync(join(dir, 'uncommitted.txt'), 'missed agent commit\n');
+
+    const committed = autoCommitWorktreeIfDirty(dir, 3, 'WI-9');
+    assert.equal(committed, true);
+
+    const run = (...args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'pipe', encoding: 'utf8' }).trim();
+    assert.match(run('log', '-1', '--pretty=%s'), /^forge-autocommit: WI-9 iter 3 WIP/);
+    // setupTinyRepo configures a LOCAL identity of test@example.com/forge-test
+    // — deliberately distinct, so asserting forge-orchestrator here proves the
+    // -c override actually took effect rather than passively matching.
+    assert.equal(run('log', '-1', '--pretty=%an'), 'forge-orchestrator');
+    assert.equal(run('log', '-1', '--pretty=%ae'), 'forge-orchestrator@forge.local');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('autoCommitWorktreeIfDirty: clean tree → returns false, no commit created', () => {
+  const dir = setupTinyRepo();
+  try {
+    const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+    const committed = autoCommitWorktreeIfDirty(dir, 1);
+    assert.equal(committed, false);
+    const after = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+    assert.equal(after, before, 'no new commit on a clean tree');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

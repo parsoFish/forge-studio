@@ -25,6 +25,7 @@ import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '../config.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -279,7 +280,13 @@ export function commitOrchestratedCaptureArtifacts(
     git(['add', '--', ...paths]);
     const staged = git(['diff', '--cached', '--name-only']).trim();
     if (staged.length === 0) return false;
-    git(['commit', '-m', message ?? `chore(demo): orchestrated demo capture (${initiativeId})`, '--no-verify']);
+    git([
+      ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
+      'commit',
+      '-m',
+      message ?? `chore(demo): orchestrated demo capture (${initiativeId})`,
+      '--no-verify',
+    ]);
     // Push so the sync gate (local HEAD == origin HEAD) keeps holding.
     git(['push', 'origin', 'HEAD']);
     return true;

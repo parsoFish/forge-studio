@@ -134,3 +134,41 @@ test('save with no pending forge-studio branch is a no-op', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// G8 wave 2 (2026-07-12): forge-studio writes are orchestrator-issued (no
+// agent in the loop) — the commit AND the save-merge must carry
+// forge-orchestrator identity via -c flags, not the `test@forge.dev`/
+// `Forge Test` local identity `setupRepo` configures (deliberately distinct,
+// so this proves the override rather than a passive match).
+// ---------------------------------------------------------------------------
+
+test('withStudioWrite: the forge-studio commit carries forge-orchestrator identity', () => {
+  const dir = setupRepo();
+  try {
+    withStudioWrite(dir, 'forge-studio: add AGENTS.md', () => {
+      writeFileSync(join(dir, 'AGENTS.md'), '# Agents\n');
+    }, ['AGENTS.md']);
+
+    assert.equal(g(dir, ['log', '-1', '--pretty=%an']), 'forge-orchestrator');
+    assert.equal(g(dir, ['log', '-1', '--pretty=%ae']), 'forge-orchestrator@forge.local');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('saveProjectRepo: the merge commit onto main carries forge-orchestrator identity', () => {
+  const dir = setupRepo();
+  try {
+    withStudioWrite(dir, 'forge-studio: add config', () => {
+      writeFileSync(join(dir, 'AGENTS.md'), '# Agents\n');
+    }, ['AGENTS.md']);
+
+    const r = saveProjectRepo(dir);
+    assert.equal(r.merged, true);
+    assert.equal(g(dir, ['log', '-1', '--pretty=%an']), 'forge-orchestrator');
+    assert.equal(g(dir, ['log', '-1', '--pretty=%ae']), 'forge-orchestrator@forge.local');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -186,6 +186,13 @@ test('stripForgeScratchFromBranch: drops cycle-introduced root Ralph scratch (PR
     }
     // … but the working-tree copies survive (rm --cached only) so an in-flight loop keeps its state.
     assert.ok(existsSync(join(proj, 'AGENT.md')), 'working-tree AGENT.md preserved');
+
+    // G8 wave 2 (2026-07-12): the strip commit is orchestrator-issued (no
+    // agent in the loop) — it must carry forge-orchestrator identity via -c
+    // flags, not the `t@forge`/`forge-test` local identity makeRepoWithOrigin
+    // configures (deliberately distinct, so this proves the override).
+    assert.equal(sh(proj, 'git', ['log', '-1', '--pretty=%an']).trim(), 'forge-orchestrator');
+    assert.equal(sh(proj, 'git', ['log', '-1', '--pretty=%ae']).trim(), 'forge-orchestrator@forge.local');
   } finally {
     cleanup();
   }
