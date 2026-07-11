@@ -671,10 +671,12 @@ function readJsonFileSafe(path) {
 
 /** Discover the architect-promoted initiative for a project: the newest manifest
  *  in _queue/pending with flow_id: forge-architect. Returns { initiativeId, cycleId }. */
-function discoverPromotedInitiative(project) {
+function discoverPromotedInitiatives(project) {
   // The live scheduler can claim a promoted manifest (pending → in-flight)
-  // faster than our post-commit poll runs, so scan both states.
-  const cands = ['pending', 'in-flight'].flatMap((state) => {
+  // faster than our post-commit poll runs, so scan both states. Returns ALL
+  // of the session's promoted initiatives (a roadmap-shaped plan promotes
+  // several dependent manifests at once), oldest-first.
+  return ['pending', 'in-flight'].flatMap((state) => {
     const dir = join(FORGE_ROOT, '_queue', state);
     if (!existsSync(dir)) return [];
     return readdirSync(dir)
@@ -682,8 +684,7 @@ function discoverPromotedInitiative(project) {
       .map((f) => ({ id: f.replace(/\.md$/, ''), raw: readFileSync(join(dir, f), 'utf8') }))
       .filter((x) => manifestField(x.raw, 'project') === project && manifestField(x.raw, 'flow_id') === 'forge-architect')
       .map((x) => ({ initiativeId: x.id, cycleId: manifestField(x.raw, 'cycle_id'), createdAt: manifestField(x.raw, 'created_at') ?? '' }));
-  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  return cands[0] ?? null;
+  }).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 }
 
 /**
@@ -775,12 +776,16 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   }
   if (!committed) throw new Error('architect never reached committed after plan approval');
 
-  const init = discoverPromotedInitiative(project);
-  if (!init) throw new Error(`no architect-promoted manifest found in _queue/pending for ${project}`);
-  if (!init.cycleId) throw new Error(`promoted manifest ${init.initiativeId} has no cycle_id (DEC-2 threading broken)`);
-  log(`architect promoted ${init.initiativeId} (cycle_id ${init.cycleId})`);
+  // Plan-everything-before-kickoff: one architect session may promote N
+  // dependent initiatives; the spine must drive ALL of them, not cands[0].
+  const inits = discoverPromotedInitiatives(project);
+  if (inits.length === 0) throw new Error(`no architect-promoted manifest found in _queue for ${project}`);
+  for (const init of inits) {
+    if (!init.cycleId) throw new Error(`promoted manifest ${init.initiativeId} has no cycle_id (DEC-2 threading broken)`);
+    log(`architect promoted ${init.initiativeId} (cycle_id ${init.cycleId})`);
+  }
   await captureFrame(page, 'plan-approved');
-  return { initiativeId: init.initiativeId, sessionId, cycleId: init.cycleId };
+  return { initiatives: inits, sessionId };
 }
 
 /** Stage 2 hand-off — POST /api/develop/start to repoint the initiative onto
@@ -788,16 +793,16 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
  *  plan-everything-before-kickoff: the endpoint is now batch-shaped
  *  ({initiativeIds: string[]} -> {ok, results}); this caller sends a single-
  *  id batch and unwraps the one result. */
-async function handoffToDevelop(bridgeUrl, initiativeId) {
-  log(`hand-off — POST /api/develop/start ${initiativeId}…`);
-  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeIds: [initiativeId] });
+async function handoffToDevelop(bridgeUrl, initiativeIds) {
+  log(`hand-off — POST /api/develop/start [${initiativeIds.join(', ')}]…`);
+  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeIds });
   if (!r.ok) throw new Error(`develop start failed (${r.status}): ${JSON.stringify(r.body)}`);
-  const result = r.body?.results?.[0];
-  if (!result || !result.ok) {
-    throw new Error(`develop start failed for ${initiativeId}: ${JSON.stringify(result ?? r.body)}`);
+  const results = r.body?.results ?? [];
+  for (const result of results) {
+    if (!result.ok) throw new Error(`develop start failed for ${result.initiativeId}: ${JSON.stringify(result)}`);
+    log(`develop run enqueued: ${result.initiativeId} (cycle_id ${result.cycleId ?? '?'})`);
   }
-  log(`develop run enqueued (cycle_id ${result.cycleId ?? '?'})`);
-  return result;
+  return results;
 }
 
 /** Spawn `forge serve --once` for one spine stage, capturing phase-transition
@@ -851,6 +856,8 @@ async function waitForReflectorEnd(cycleId, deadlineMs) {
   return false;
 }
 
+let activeWatchProc = null;
+
 async function main() {
   const runStartMs = Date.now();
   rmSync(OUT_DIR, { recursive: true, force: true });
@@ -868,6 +875,7 @@ async function main() {
 
   log('starting forge watch…');
   const watch = await startWatch();
+  activeWatchProc = watch.proc;
   log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
 
   const browser = await chromium.launch();
@@ -887,78 +895,75 @@ async function main() {
   await captureFrame(page, 'initial-load');
 
   // ===== STAGE 1: architect (interview + plan gate) → forge-architect serve =====
-  const { initiativeId, cycleId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
-  // Serve the architect flow (pm decomposes the initiative into work items).
+  // Plan-everything-before-kickoff: the session may promote N dependent
+  // initiatives; ONE serve pass decomposes them all (the dependency gate is
+  // flow_id-aware — decompose flows never wait on prerequisite merges).
+  const { initiatives } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
   await runServeStage(page, 'architect');
-  // Focus the threaded cycle in the dashboard for the frame gallery.
+  // Focus the first threaded cycle in the dashboard for the frame gallery.
   try {
     await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-cycle-id="${cycleId}"]`, { timeout: 10000 });
-    await page.locator(`[data-cycle-id="${cycleId}"]`).first().click();
+    await page.waitForSelector(`[data-cycle-id="${initiatives[0].cycleId}"]`, { timeout: 10000 });
+    await page.locator(`[data-cycle-id="${initiatives[0].cycleId}"]`).first().click();
     await captureFrame(page, 'decision-pm-work-items');
   } catch (err) { log(`cycle focus failed: ${err.message}`); }
 
-  // ===== STAGE 2: hand-off → forge-develop serve → verdict gate =====
-  await handoffToDevelop(watch.bridgeUrl, initiativeId);
-  await runServeStage(page, 'develop');
+  // ===== STAGE 2+3: batch hand-off → serve/approve loop until all initiatives land =====
+  // All initiatives enqueue for develop at once; the scheduler's merge-gate
+  // holds dependents until their prerequisite reaches done/. Each serve pass
+  // builds whatever is eligible; each ready-for-review cycle gets the verdict
+  // approve; the loop repeats until every initiative merged (or passes run out).
+  await handoffToDevelop(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
+  const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
+  let sendBackDone = !SEND_BACK;
+  const maxPasses = initiatives.length + 2;
+  for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
+    await runServeStage(page, `develop-pass-${pass}`);
+    await sleep(2000);
+    for (const init of [...remaining.values()]) {
+      let status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+      log(`develop status for ${init.initiativeId} after pass ${pass}: ${status}`);
+      if (status === 'done') { remaining.delete(init.initiativeId); continue; }
+      if (status !== 'ready-for-review') continue;
+      await captureFrame(page, `after-develop-${init.initiativeId}`);
 
-  await sleep(2000);
-  let status = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
-  log(`develop status after serve exit: ${status}`);
-  await captureFrame(page, `after-develop-${status ?? 'unknown'}`);
+      // Optional send-back pass (ADR-026 in-place drain) — first initiative only.
+      if (!sendBackDone) {
+        sendBackDone = true;
+        await captureDecisionReviewEvaluation(page, watch.uiUrl, init.cycleId);
+        log('posting send-back verdict to /api/verdict…');
+        const sendBackOk = await postSendBack(watch.bridgeUrl, init.initiativeId);
+        if (sendBackOk) {
+          await captureFrame(page, 'decision-send-back');
+          await runServeStage(page, 'sendback-drain');
+          await sleep(2000);
+          try {
+            await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(init.cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
+            await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
+              .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
+          } catch (err) { log(`decision-re-review: navigation error — ${err.message}`); }
+          await captureFrame(page, 'decision-re-review');
+          try { await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }); } catch { /* */ }
+          status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+          if (status !== 'ready-for-review') continue;
+        } else {
+          log('send-back was skipped (POST failed); continuing to auto-approve');
+        }
+      }
 
-  // Optional send-back pass (exercises the ADR-026 in-place drain) before approve.
-  if (status === 'ready-for-review' && SEND_BACK) {
-    await captureDecisionReviewEvaluation(page, watch.uiUrl, cycleId);
-    log('posting send-back verdict to /api/verdict…');
-    const sendBackOk = await postSendBack(watch.bridgeUrl, initiativeId);
-    if (sendBackOk) {
-      await captureFrame(page, 'decision-send-back');
-      await runServeStage(page, 'sendback-drain');
+      const ok = await autoApprove(watch.bridgeUrl, init.initiativeId);
+      if (!ok) continue;
+      // The bridge merges + runs finalize/reflect detached — wait for
+      // reflector.end before counting this initiative as landed (S9).
+      log(`verdict approved for ${init.initiativeId} — waiting for finalize + reflector.end…`);
+      await waitForReflectorEnd(init.cycleId, Date.now() + 12 * 60_000);
       await sleep(2000);
-      try {
-        await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
-          .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
-      } catch (err) { log(`decision-re-review: navigation error — ${err.message}`); }
-      await captureFrame(page, 'decision-re-review');
-      try { await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }); } catch { /* */ }
-      status = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
-    } else {
-      log('send-back was skipped (POST failed); continuing to auto-approve');
+      await captureFrame(page, `final-state-${init.initiativeId}`);
+      remaining.delete(init.initiativeId);
     }
   }
-
-  // ===== STAGE 3: approve the VERDICT GATE → merge → finalize → reflect =====
-  if (status === 'ready-for-review') {
-    const ok = await autoApprove(watch.bridgeUrl, initiativeId);
-    if (ok) {
-      // The bridge merged the PR and fired finalize (→ reflect) DETACHED in its
-      // own process. Wait for reflector.end specifically — the old harness waited
-      // on the develop cycle's orchestrator.end (already emitted at ready-for-review)
-      // and tore the bridge down mid-reflect, leaving the central brain unwritten.
-      log('verdict approved — waiting for finalize + reflector.end (S9: bridge runs reflect detached)…');
-      const reflectDeadline = Date.now() + 12 * 60_000;
-      let lastEventCount = 0;
-      const reflected = (async () => {
-        // Capture progress frames while we wait.
-        while (Date.now() < reflectDeadline) {
-          const count = await cycleEventCountFromLog(cycleId);
-          if (count > lastEventCount + 4) {
-            lastEventCount = count;
-            await captureFrame(page, `post-approve-events-${count}`);
-          }
-          await sleep(3000);
-        }
-      })();
-      await waitForReflectorEnd(cycleId, reflectDeadline);
-      // Stop the frame poller (deadline already reached or reflect done).
-      await Promise.race([reflected, sleep(100)]);
-      await sleep(2000);
-      await captureFrame(page, 'final-state');
-    }
-  } else {
-    log(`develop reached non-ready-for-review state (${status}) — no auto-approve`);
+  if (remaining.size > 0) {
+    log(`unfinished initiatives after ${maxPasses} serve passes: ${[...remaining.keys()].join(', ')}`);
   }
 
   // Capture the video path BEFORE closing.
@@ -984,10 +989,28 @@ async function main() {
   log(`index → ${join(OUT_DIR, 'index.html')}`);
 
   // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
-  const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, cycleId);
-  const finalEvents = await cycleEventCountFromLog(cycleId);
-  const cost = sumCycleCost(cycleId);
-  const { checks, wi } = assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project: PROJECT, runStartMs });
+  // Per-initiative assertions plus an aggregate cost-ceiling check (the
+  // ceiling is per RUN; a multi-initiative plan shares one budget).
+  const perInit = [];
+  for (const init of initiatives) {
+    const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+    const finalEvents = await cycleEventCountFromLog(init.cycleId);
+    const cost = sumCycleCost(init.cycleId);
+    const { checks, wi } = assessOutcomes({
+      finalStatus, cost, repoPath,
+      cycleId: init.cycleId, initiativeId: init.initiativeId,
+      project: PROJECT, runStartMs,
+    });
+    perInit.push({ init, finalStatus, finalEvents, cost, checks, wi });
+  }
+  const totalCost = perInit.reduce((acc, r) => acc + r.cost, 0);
+  const checks = perInit.flatMap((r) =>
+    r.checks.map((c) => ({ ...c, name: perInit.length > 1 ? `${r.init.initiativeId}: ${c.name}` : c.name })));
+  checks.push({
+    name: 'aggregate cost under ceiling',
+    pass: totalCost <= COST_CEILING,
+    detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}`,
+  });
   const gatePassed = checks.every((c) => c.pass);
 
   log('--- verdict (3-stage spine) ---');
@@ -995,15 +1018,18 @@ async function main() {
 
   const summary = {
     runHandle: RUN_HANDLE,
-    initiativeId,
-    cycleId,
+    initiatives: perInit.map((r) => ({
+      initiativeId: r.init.initiativeId,
+      cycleId: r.init.cycleId,
+      finalStatus: r.finalStatus,
+      totalEvents: r.finalEvents,
+      costUsd: Number(r.cost.toFixed(4)),
+      workItems: r.wi,
+    })),
     project: PROJECT,
     baseSha: BASE_SHA,
-    finalStatus,
-    totalEvents: finalEvents,
-    costUsd: Number(cost.toFixed(4)),
+    costUsd: Number(totalCost.toFixed(4)),
     costCeilingUsd: COST_CEILING,
-    workItems: wi,
     checks,
     gate: gatePassed ? 'pass' : 'fail',
     framesCaptured: readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.png')).length,
@@ -1011,7 +1037,7 @@ async function main() {
   };
   writeFileSync(join(OUT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
   log(`summary → ${join(OUT_DIR, 'summary.json')}`);
-  log(`final status: ${finalStatus}, $${cost.toFixed(2)}, ${finalEvents} events, ${summary.framesCaptured} frames`);
+  log(`final: ${perInit.map((r) => `${r.init.initiativeId}=${r.finalStatus}`).join(', ')}, $${totalCost.toFixed(2)}, ${summary.framesCaptured} frames`);
   log(`done — gate ${gatePassed ? 'PASS ✓' : 'FAIL ✗'}`);
   if (!gatePassed) process.exitCode = 1;
 }
@@ -1019,5 +1045,11 @@ async function main() {
 main().catch((err) => {
   console.error('[verify] fatal');
   console.error(err.stack ?? err.message);
+  // Never leave the spawned watch behind: an orphaned scheduler from a dead
+  // harness keeps claiming _queue work with STALE loaded modules (2026-07-11
+  // incident — a pre-merge `forge serve` orphan ran the PM on hours-old code).
+  if (activeWatchProc && !activeWatchProc.killed) {
+    try { activeWatchProc.kill('SIGTERM'); } catch { /* best effort */ }
+  }
   process.exit(1);
 });
