@@ -438,7 +438,10 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
  * Currently links Node's `node_modules`. Generalise here when forge picks up
  * Python (`.venv`) or Rust (`target`) projects that need similar.
  */
-function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
+// Exported (not just module-local) so orchestrator/wi-worktree.ts (Phase 4
+// per-WI worktree bootstrap) can reuse it verbatim rather than duplicating
+// the node_modules symlink + git-exclude dance.
+export function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
   for (const dir of ['node_modules']) {
     const src = resolve(projectRepoPath, dir);
     const dst = resolve(worktreePath, dir);
