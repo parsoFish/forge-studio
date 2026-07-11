@@ -7,15 +7,33 @@
  * worktree scoped to one work item. It does NOT decide *when* to create one
  * (the dispatcher) or invoke ralph — those are later steps.
  *
- * Layout: `<worktreesRoot>/<initiativeId>/wi/<workItemId>` — a SIBLING
- * subtree next to the cycle worktree (`<worktreesRoot>/<initiativeId>`),
- * never nested inside its working tree (git worktrees may not nest inside
- * another worktree's tracked working directory).
+ * Layout: `<worktreesRoot>/wi/<initiativeId>/<workItemId>` — a SIBLING
+ * subtree next to the cycle worktree (`<worktreesRoot>/<initiativeId>`,
+ * see `scheduler.ts`), never nested inside its working tree (git worktrees
+ * may not live inside another worktree's own working directory — and
+ * concretely, a scratch dir nested under the cycle worktree gets swept into
+ * ANY `git add -A`/`git add .` run against the cycle worktree as a stray
+ * gitlink, corrupting its history). The `wi/` segment sits directly under
+ * `worktreesRoot`, a TRUE sibling of `<initiativeId>` rather than a child of
+ * it — `<worktreesRoot>/<initiativeId>/wi/<workItemId>` (the earlier shape)
+ * would have been nested inside the cycle worktree's own directory, since
+ * the cycle worktree's path IS `<worktreesRoot>/<initiativeId>`.
  *
- * Branch: `forge/<initiativeId>/wi/<workItemId>`, created at the EXPLICIT
+ * Branch: `forge/wi/<initiativeId>/<workItemId>`, created at the EXPLICIT
  * `startPointRef` supplied by the caller (the cycle branch tip captured at
  * dispatch time) — never at whatever `HEAD` happens to be when this runs,
  * since parallel WI dispatch must not race on a moving ref.
+ *
+ * NOTE on the `wi/` segment placement: the cycle/initiative branch itself is
+ * literally named `forge/<initiativeId>` (see `scheduler.ts`). Git stores
+ * refs as paths, and a single ref cannot be both a leaf AND a directory
+ * prefix — so `forge/<initiativeId>/wi/<workItemId>` would collide with the
+ * existing `forge/<initiativeId>` leaf ref ("cannot lock ref ... exists").
+ * Nesting `wi/` directly under `forge/` instead (`forge/wi/<initiativeId>/…`)
+ * keeps every WI branch a sibling of the initiative's OWN leaf ref rather
+ * than a child of it — collision-free because `initiativeId` is validated to
+ * always start with `INIT-` (see `work-item.ts`/`manifest.ts`), so it can
+ * never literally equal `wi`.
  *
  * Mirrors orchestrator/worktree.ts's conventions: `execFileSync` with arg
  * arrays (no shell interpolation), self-heal-before-create, best-effort
@@ -46,11 +64,11 @@ export function wiWorktreePath(opts: {
   initiativeId: string;
   workItemId: string;
 }): string {
-  return resolve(opts.worktreesRoot, opts.initiativeId, 'wi', opts.workItemId);
+  return resolve(opts.worktreesRoot, 'wi', opts.initiativeId, opts.workItemId);
 }
 
 export function wiBranchName(opts: { initiativeId: string; workItemId: string }): string {
-  return `forge/${opts.initiativeId}/wi/${opts.workItemId}`;
+  return `forge/wi/${opts.initiativeId}/${opts.workItemId}`;
 }
 
 /**
@@ -121,14 +139,14 @@ export function createWiWorktree(opts: {
   });
 
   // Reuse add(): its path formula is `resolve(worktreesRoot, initiativeId)`,
-  // so passing the compound `<initiativeId>/wi/<workItemId>` as its
+  // so passing the compound `wi/<initiativeId>/<workItemId>` as its
   // `initiativeId` lands on exactly the sibling path computed above, and we
   // get its own self-heal + branch-exists handling for free.
   const handle: WorktreeHandle = add({
     projectRepoPath: opts.projectRepoPath,
     branch,
     worktreesRoot: opts.worktreesRoot,
-    initiativeId: join(opts.initiativeId, 'wi', opts.workItemId),
+    initiativeId: join('wi', opts.initiativeId, opts.workItemId),
   });
 
   linkProjectDeps(opts.projectRepoPath, handle.path);

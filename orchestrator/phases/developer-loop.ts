@@ -9,7 +9,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
@@ -40,8 +40,10 @@ import { checkDemoFanInHonesty } from './demo-fanin-honesty.ts';
 import { makeToolEventSink } from '../tool-event-emit.ts';
 import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
 import { matchesRateLimitSignature } from '../failure-classifier.ts';
+import { createWiWorktree, removeWiWorktree } from '../wi-worktree.ts';
+import { createMergeQueue, mergeWiIntoCycle } from '../wi-merge-back.ts';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from '../pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch, type PushResult } from '../pr.ts';
 import {
   buildUnifierSystemPrompt,
   prepareUnifierWorkspace,
@@ -340,6 +342,14 @@ export async function runDeveloperLoop(
   // failure race; it is now structurally impossible.
   const wiOutcomes = new Map<string, WiOutcome>();
 
+  // Phase 4 step 5: each WI now runs in its own sibling worktree
+  // (`wi-worktree.ts`), and the fan-in point back into the cycle worktree —
+  // `git merge --no-ff` — must be single-flight even though this loop is
+  // still serial (load-bearing once concurrent dispatch lands). One queue
+  // instance is shared across every WI dispatched by this run.
+  const worktreesRoot = dirname(input.worktreePath);
+  const mergeQueue = createMergeQueue();
+
   for (const wi of toRun) {
     const wiStart = logger.emit({
       initiative_id: input.initiativeId,
@@ -400,6 +410,36 @@ export async function runDeveloperLoop(
     const specPath = resolve(workItemsDir, `${wi.work_item_id}.md`);
     const wiToolUse: DevToolUseSummary = { reads: 0, brainReads: 0, writes: 0, bashCalls: 0, testRuns: 0 };
 
+    // Phase 4 step 5: this WI runs in its OWN sibling worktree/branch, cut
+    // from the cycle branch's tip AT DISPATCH (wiBaseSha, captured above
+    // before this WI's blockage check) — never from a moving HEAD. Status
+    // truth (writeWorkItemStatus below) still targets the CYCLE worktree's
+    // spec path; only the ralph run itself is isolated.
+    const wiWorktree = createWiWorktree({
+      projectRepoPath: input.projectRepoPath,
+      worktreesRoot,
+      initiativeId: input.initiativeId,
+      workItemId: wi.work_item_id,
+      startPointRef: wiBaseSha,
+      cycleWorktreePath: input.worktreePath,
+    });
+
+    // Outcome-shaping state, threaded out of the try block below so the
+    // finally can clean up the worktree unconditionally (success, ralph
+    // failure, or merge conflict all reach it) while the settle/skip logic
+    // after the finally still sees the resolved status.
+    let finalStatus: WorkItem['status'] = 'failed';
+    let mergeConflict = false;
+    let environmentFailure = false;
+    let wiDelta: { files: number; insertions: number; deletions: number; commits: number } = {
+      files: 0,
+      insertions: 0,
+      deletions: 0,
+      commits: 0,
+    };
+    let pushResult: PushResult | null = null;
+
+    try {
     // F-40: wipe AGENT.md / fix_plan.md / PROMPT.md between WIs. The dev-loop
     // runs N WIs sequentially against the same worktree; without this, WI-2's
     // agent inherits WI-1's institutional memory and ticked-off fix_plan,
@@ -408,14 +448,15 @@ export async function runDeveloperLoop(
     // wipeRalphScratch for the same reason (different role, different state);
     // the dev-loop needs the same treatment per WI. Diagnosed from the
     // 2026-05-10T21:32 cycle where WI-2..7 had 0 writes each because the
-    // agent read WI-1.md, not WI-2.md.
-    wipeRalphScratch(input.worktreePath);
+    // agent read WI-1.md, not WI-2.md. (Step 5: now scoped to the per-WI
+    // worktree, which is freshly created per WI anyway — kept for safety.)
+    wipeRalphScratch(wiWorktree.path);
 
     prepareDevWorkspace({
       initiativeId: input.initiativeId,
       workItemSpecPath: specPath,
       workItemSpecRelPath: `.forge/work-items/${wi.work_item_id}.md`,
-      worktreePath: input.worktreePath,
+      worktreePath: wiWorktree.path,
       iterationBudget: wi.estimated_iterations > 0
         ? Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI)
         : DEV_LIVE_DEFAULT_ITERATIONS_PER_WI,
@@ -503,7 +544,7 @@ export async function runDeveloperLoop(
         result = await runRalph(
         {
           workItemSpecPath: specPath,
-          worktreePath: input.worktreePath,
+          worktreePath: wiWorktree.path,
           initiativeBudget: {
             iterations: Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI),
             // Per CONTRACTS.md C19: no $ cap. Pass Infinity so the runner's
@@ -537,13 +578,13 @@ export async function runDeveloperLoop(
                 ? accGate.requires_env
                 : undefined;
             return makeQualityGateFromCmd(
-              input.worktreePath,
+              wiWorktree.path,
               effective,
               // N10: a TIMED-OUT gate also stops the loop early (iterating
               // doesn't fix machine load and burns agent spend) — but its
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
-              (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(input.worktreePath, gateInfo); },
+              (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(wiWorktree.path, gateInfo); },
               // Wave B (2026-06-04): enforce that declared output paths land.
               // The WI's declared paths MUST appear in the branch diff before
               // the gate can pass — independently of whether a sibling WI
@@ -580,7 +621,7 @@ export async function runDeveloperLoop(
               initiativeId: input.initiativeId,
               parentEventId: wiStart.event_id,
               workItemId: wi.work_item_id,
-              worktreePath: input.worktreePath,
+              worktreePath: wiWorktree.path,
               phase: 'developer-loop',
               skill: 'developer-ralph',
             }, iteration),
@@ -685,19 +726,50 @@ export async function runDeveloperLoop(
     // patterns instead of focusing on the WI, producing trivial-pass exits
     // (see WI-2 of the 12:01 simplification-tests cycle). brainReads are
     // still TALLIED for telemetry — just no longer gated.
-    const finalStatus: WorkItem['status'] = runnerError
+    const ralphStatus: WorkItem['status'] = runnerError
       ? 'failed'
       : result?.status === 'complete'
         ? 'complete'
         : 'failed';
+
+    // Phase 4 step 5 fan-in: a clean ralph run merges its isolated branch
+    // back into the cycle worktree, single-flight through the shared queue
+    // (serial today; load-bearing once concurrent WI dispatch lands). A
+    // ralph FAILURE never attempts a merge at all — nothing merges, nothing
+    // pushes. A merge CONFLICT is terminal for the WI at this step (bounded
+    // requeue is a later step): `mergeWiIntoCycle` already ran `merge
+    // --abort`, so the cycle worktree is clean before the next WI dispatches.
+    let mergeDetail: string | undefined;
+    if (ralphStatus === 'complete') {
+      const mergeResult = await mergeQueue.enqueue(() =>
+        mergeWiIntoCycle({
+          cycleWorktreePath: input.worktreePath,
+          wiBranch: wiWorktree.branch,
+          workItemId: wi.work_item_id,
+        }),
+      );
+      if (mergeResult.merged) {
+        finalStatus = 'complete';
+      } else {
+        finalStatus = 'failed';
+        mergeConflict = true;
+        mergeDetail = mergeResult.detail;
+      }
+    } else {
+      finalStatus = 'failed';
+    }
     writeWorkItemStatus(specPath, finalStatus);
 
     // N9: a failed WI whose death carries a rate/usage-limit signature (seen
     // in the reasoning stream, or in the thrown error itself) failed for an
     // ENVIRONMENT reason — stamp it so the failure classifier retries the
     // cycle and dependents below stay queued instead of cascading to failed.
-    const environmentFailure =
+    // A merge conflict is never also stamped environment here — it carries
+    // its OWN failure_kind below and is folded into the environment CLASS
+    // only via the `settleWiOutcome` outcome flag further down.
+    environmentFailure =
       finalStatus === 'failed' &&
+      !mergeConflict &&
       (wiSawRateLimit || (runnerError !== undefined && matchesRateLimitSignature(runnerError.message)));
 
     logger.emit({
@@ -721,6 +793,12 @@ export async function runDeveloperLoop(
         // N9: structured environment marker (mirrors the N10 gate.timeout
         // convention) — the failure classifier keys on `rate_limited`.
         ...(environmentFailure ? { failure_kind: 'environment', rate_limited: true } : {}),
+        // Phase 4 step 5: a clean ralph run that only failed at the fan-in
+        // merge gets its OWN failure_kind — distinct from both a work
+        // failure and an environment failure for observability, even though
+        // it cascades to dependents the SAME way (see `settleWiOutcome`
+        // below + prerequisiteBlockage's environment-failure class).
+        ...(mergeConflict ? { failure_kind: 'merge-conflict', merge_detail: mergeDetail } : {}),
       },
     });
 
@@ -731,7 +809,11 @@ export async function runDeveloperLoop(
     // SUCCESS-ONLY. A failed WI carries the SAME diff-stat fields on
     // `dev-loop.discarded` instead — nothing is lost, but the event name never
     // implies a shipped WI when it wasn't.
-    const wiDelta = gitNetDelta(input.worktreePath, wiBaseSha);
+    //
+    // Phase 4 step 5: computed against the per-WI worktree (not the cycle
+    // worktree) so the stats are correct whether or not this WI ever merged
+    // — and read here, BEFORE the `finally` below removes the worktree.
+    wiDelta = gitNetDelta(wiWorktree.path, wiBaseSha);
     const deliveryEvent = wiDeliveryEvent(finalStatus, wi.work_item_id, wiDelta);
     logger.emit({
       initiative_id: input.initiativeId,
@@ -739,50 +821,69 @@ export async function runDeveloperLoop(
       phase: 'developer-loop',
       skill: 'developer-ralph',
       event_type: 'log',
-      input_refs: [input.worktreePath],
+      input_refs: [wiWorktree.path],
       output_refs: [],
       message: deliveryEvent.message,
       metadata: deliveryEvent.metadata,
     });
 
-    // G8: push the initiative branch to origin after every WI so local ==
-    // remote throughout the dev-loop (no divergence → no stacked-PR merge
-    // conflict at the review boundary). The agent's per-iteration commit
-    // (backstopped by commitDevLoopBoundary) is already on the branch;
-    // publishing it now keeps origin in lock-step.
+    // G8: push the CYCLE branch to origin after a successful merge-back only
+    // (Phase 4 step 5 — replaces the old unconditional per-WI push: a ralph
+    // failure or a merge conflict never touched the cycle worktree, so
+    // there is nothing new to publish). The agent's per-iteration commit
+    // (backstopped by commitDevLoopBoundary) plus the fan-in merge commit
+    // are already on the branch; publishing now keeps origin in lock-step.
     //
-    // Push failure is a HARD EARLY-EXIT (post-2026-05-23 dogfood pushback):
-    // if the push fails (e.g. remote ahead from a prior cycle's stale
-    // state), every subsequent WI runs on a branch that won't merge
-    // cleanly. The previous best-effort posture wasted tokens by
-    // continuing through 4-5 more WIs on a broken branch before the close
-    // invariant caught it.
-    const push = pushInitiativeBranch(input.worktreePath);
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: wiStart.event_id,
-      phase: 'developer-loop',
-      skill: 'developer-ralph',
-      event_type: push.pushed ? 'log' : 'error',
-      input_refs: [input.worktreePath],
-      output_refs: [],
-      message: push.pushed ? 'dev-loop.branch-pushed' : 'dev-loop.branch-push-failed',
-      // Phase 4/2: carry the same explicit outcome field as the delivered/
-      // discarded pair above — push behavior itself is unchanged (still fires
-      // regardless of finalStatus; only the metadata gains context).
-      metadata: push.pushed
-        ? { work_item_id: wi.work_item_id, branch: push.branch, outcome: finalStatus }
-        : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true, outcome: finalStatus },
-    });
+    // Push failure is still a HARD EARLY-EXIT (post-2026-05-23 dogfood
+    // pushback): if the push fails (e.g. remote ahead from a prior cycle's
+    // stale state), every subsequent WI would dispatch from a branch that
+    // won't merge cleanly.
+    if (finalStatus === 'complete') {
+      const push = pushInitiativeBranch(input.worktreePath);
+      pushResult = push;
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: wiStart.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: push.pushed ? 'log' : 'error',
+        input_refs: [input.worktreePath],
+        output_refs: [],
+        message: push.pushed ? 'dev-loop.branch-pushed' : 'dev-loop.branch-push-failed',
+        // Phase 4/2: carry the same explicit outcome field as the delivered/
+        // discarded pair above — push behavior itself is unchanged (still fires
+        // regardless of finalStatus; only the metadata gains context).
+        metadata: push.pushed
+          ? { work_item_id: wi.work_item_id, branch: push.branch, outcome: finalStatus }
+          : { work_item_id: wi.work_item_id, reason: push.reason, early_exit: true, outcome: finalStatus },
+      });
+    }
 
     settleWiOutcome(wiOutcomes, {
       id: wi.work_item_id,
       status: finalStatus,
       result,
-      ...(environmentFailure ? { environment: true } : {}),
+      // A merge conflict cascades to dependents the SAME way an environment
+      // failure does (they stay pending, not failed) — prerequisiteBlockage
+      // generalizes over this single flag regardless of which non-work
+      // reason set it.
+      ...(environmentFailure || mergeConflict ? { environment: true } : {}),
     });
+    } finally {
+      // Phase 4 step 5: per-WI worktrees are pure scratch — remove them on
+      // EVERY outcome (success, ralph failure, merge conflict) so the next
+      // WI never inherits stale state. No ADR-019 preserve semantics here;
+      // the WI's outcome lives on in the cycle branch (merge) or the event
+      // log (failure), never in the per-WI worktree itself.
+      removeWiWorktree({
+        projectRepoPath: input.projectRepoPath,
+        path: wiWorktree.path,
+        branch: wiWorktree.branch,
+        deleteBranch: true,
+      });
+    }
 
-    if (!push.pushed) {
+    if (pushResult && !pushResult.pushed) {
       // Mark every WI we won't reach as 'failed' with reason
       // 'branch-push-failed-early-exit' — mirrors the prerequisite-blockage
       // work-failure path's shape so metrics + cycle report stay accurate. Then break
@@ -985,8 +1086,11 @@ function gitHeadSha(wt: string): string {
   }
 }
 
-/** Net diff stats from `fromRef..HEAD` in a worktree (M5). Best-effort → zeros. */
-function gitNetDelta(wt: string, fromRef: string): { files: number; insertions: number; deletions: number; commits: number } {
+/** Net diff stats from `fromRef..HEAD` in a worktree (M5). Best-effort → zeros.
+ *  Exported for unit testing (Phase 4 step 5's fan-in test proves this is
+ *  read against the per-WI worktree, before its `finally`-block cleanup,
+ *  on the ralph-FAILURE path too — not just the merged-success path). */
+export function gitNetDelta(wt: string, fromRef: string): { files: number; insertions: number; deletions: number; commits: number } {
   const git = (args: string[]): string => {
     try { return execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' }).toString().trim(); }
     catch { return ''; }

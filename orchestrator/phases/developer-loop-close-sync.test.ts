@@ -162,3 +162,50 @@ test('assertDevLoopCloseSync: silent OK when local == remote (no throw, no error
     h.cleanup();
   }
 });
+
+test('assertDevLoopCloseSync: silent OK when local == remote even with --no-ff merge commits in history (Phase 4 step 5 fan-in shape)', () => {
+  // Phase 4 step 5 replaces the old per-WI push with a push after every
+  // successful merge-back (`git merge --no-ff <wiBranch>`), so a real
+  // initiative branch's history is no longer linear — it carries one merge
+  // commit per fanned-in WI. `assertLocalRemoteSynced` compares ref hashes
+  // (`git rev-parse`), which is graph-shape-agnostic, but this proves it
+  // end-to-end against a branch that actually LOOKS like a post-step-5
+  // initiative branch, not just a straight-line commit chain.
+  const h = setup(true);
+  try {
+    // Simulate a second WI branch, forked from initiative-x's tip, whose
+    // work fans back in via --no-ff — the exact shape `mergeWiIntoCycle`
+    // produces (see `wi-merge-back.ts`).
+    sh(h.proj, ['checkout', '-q', '-b', 'wi-branch']);
+    writeFileSync(join(h.proj, 'wi-work.txt'), 'wi content\n');
+    sh(h.proj, ['add', '.']);
+    sh(h.proj, ['commit', '-q', '-m', 'wi: work']);
+    sh(h.proj, ['checkout', '-q', 'initiative-x']);
+    sh(h.proj, ['merge', '--no-ff', 'wi-branch', '-m', 'wi(WI-1): merge']);
+    sh(h.proj, ['push', '-q', 'origin', 'initiative-x']);
+
+    // Sanity: the merge commit really does have two parents (not silently
+    // fast-forwarded), so this test actually exercises non-linear history.
+    const parents = execFileSync('git', ['-C', h.proj, 'log', '-1', '--pretty=%P'], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+    })
+      .trim()
+      .split(/\s+/);
+    assert.equal(parents.length, 2, 'setup must produce a real --no-ff merge commit');
+
+    assert.doesNotThrow(() => assertDevLoopCloseSync(h.proj, h.logger, 'INIT-x'));
+    const events = h.events();
+    assert.equal(
+      events.filter((e) => e.message === 'dev-loop.branch-divergence').length,
+      0,
+      'a merge-commit-bearing history must not be misread as a divergence',
+    );
+    const ok = events.find((e) => e.message === 'dev-loop.branch-sync-ok');
+    assert.ok(ok, 'expected a dev-loop.branch-sync-ok event');
+    const md = (ok!.metadata ?? {}) as Record<string, unknown>;
+    assert.equal(md.origin_head, md.local_head);
+  } finally {
+    h.cleanup();
+  }
+});
