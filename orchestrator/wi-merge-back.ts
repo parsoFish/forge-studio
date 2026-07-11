@@ -25,6 +25,19 @@
  * cycle-branch tip before a conflict is terminal for the WI) is a caller
  * concern, layered on top in `developer-loop.ts`'s `runWiDispatchTask` —
  * this module has no notion of "attempt" and stays a single merge try.
+ *
+ * Conflict-context injection (2026-07-12, live cycle 2026-07-11T14-57-10_
+ * INIT-2026-07-11-csv-output-flag): a blind requeue against a deterministic
+ * conflict can never succeed — a fresh per-WI worktree forks from the new
+ * cycle tip with the same spec and zero knowledge of what sibling work just
+ * landed, so ralph reproduces the same overlapping edit. `mergeWiIntoCycle`
+ * now captures WHY a conflict happened — the unmerged files, the WI branch's
+ * own last commit, and the sibling commits that touched those files since
+ * the WI's fork point — BEFORE `git merge --abort` discards the conflicted
+ * state (`--diff-filter=U` only resolves while a merge is in progress). The
+ * caller (`developer-loop.ts`) feeds this into the requeued attempt's fresh
+ * worktree via the same `.forge/last-gate-failure.md` seam the dev prompt
+ * already reads first.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -32,7 +45,120 @@ import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 import { pushInitiativeBranch, type PushResult } from './pr.ts';
 import { writeWorkItemStatus } from './work-item.ts';
 
-export type MergeBackResult = { merged: true } | { merged: false; detail: string };
+// Bounds on the conflict-detail capture below — a pathological conflict
+// (huge rename, generated-file blowup) must never produce an unbounded
+// feedback payload. Named per CLAUDE.md's no-hardcoded-values rule so the
+// bound is a single edit, and so unit tests can assert against it directly
+// rather than a magic number.
+export const MERGE_CONFLICT_MAX_FILES = 20;
+export const MERGE_CONFLICT_MAX_SIBLING_COMMITS = 20;
+export const MERGE_CONFLICT_MAX_LINE_CHARS = 300;
+
+/**
+ * WHY a fan-in merge conflicted: the unmerged files, the WI branch's own tip
+ * (what it was trying to land), and the sibling commits already merged into
+ * the cycle branch (since the WI's fork point) that touched the same files —
+ * i.e. the concrete "someone else already changed this" evidence a requeued
+ * attempt needs to avoid reproducing the identical overlapping edit.
+ */
+export type MergeConflictDetail = {
+  /** Files git reports as unmerged (`diff --diff-filter=U`), bounded to `MERGE_CONFLICT_MAX_FILES`. */
+  conflictingFiles: string[];
+  /** True when more files were unmerged than `MERGE_CONFLICT_MAX_FILES` captured. */
+  filesTruncated: boolean;
+  /** The WI branch's own last commit subject — best-effort, `''` if it cannot be read. */
+  wiBranchTipSubject: string;
+  /**
+   * `git log --oneline <startPointRef>..HEAD -- <conflictingFiles>` — sibling
+   * commits landed on the cycle branch after the WI's fork point that touched
+   * the conflicting files, bounded to `MERGE_CONFLICT_MAX_SIBLING_COMMITS`.
+   * Empty when `startPointRef` isn't supplied or no files conflicted.
+   */
+  siblingCommits: string[];
+  /** True when more sibling commits touched the files than the bound captured. */
+  commitsTruncated: boolean;
+};
+
+function truncateLine(s: string): string {
+  return s.length > MERGE_CONFLICT_MAX_LINE_CHARS ? `${s.slice(0, MERGE_CONFLICT_MAX_LINE_CHARS)}…` : s;
+}
+
+/**
+ * Best-effort capture of WHY a merge conflicted, run BEFORE `git merge
+ * --abort` discards the conflict state (`--diff-filter=U` and a mid-merge
+ * `MERGE_HEAD` only exist while the merge is actually in progress). Never
+ * throws — every git call is independently tolerant of failure so a capture
+ * problem (e.g. no `startPointRef`, or a merge that failed before entering a
+ * conflicted state at all, like an unknown revision) can never prevent the
+ * abort/cleanup that follows it.
+ */
+function captureMergeConflictDetail(opts: {
+  cycleWorktreePath: string;
+  wiBranch: string;
+  startPointRef?: string;
+}): MergeConflictDetail {
+  let conflictingFiles: string[] = [];
+  try {
+    const out = execFileSync(
+      'git',
+      ['-C', opts.cycleWorktreePath, 'diff', '--name-only', '--diff-filter=U'],
+      { stdio: 'pipe', encoding: 'utf8' },
+    );
+    conflictingFiles = out
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+  } catch {
+    /* best-effort — a merge failure that never entered a conflicted state
+       (e.g. unknown revision) leaves nothing to diff */
+  }
+  const filesTruncated = conflictingFiles.length > MERGE_CONFLICT_MAX_FILES;
+  // Unbounded pathspec used for the sibling-commit lookup below (bounded,
+  // untruncated file names — the truncated/ellipsised display form is only
+  // for the returned/rendered value, never for a git argument).
+  const boundedFiles = conflictingFiles.slice(0, MERGE_CONFLICT_MAX_FILES);
+
+  let wiBranchTipSubject = '';
+  try {
+    wiBranchTipSubject = execFileSync(
+      'git',
+      ['-C', opts.cycleWorktreePath, 'log', '-1', '--format=%s', opts.wiBranch],
+      { stdio: 'pipe', encoding: 'utf8' },
+    ).trim();
+  } catch {
+    /* best-effort — branch ref may not resolve on a non-conflict merge failure */
+  }
+
+  let siblingCommits: string[] = [];
+  if (opts.startPointRef && boundedFiles.length > 0) {
+    try {
+      const out = execFileSync(
+        'git',
+        ['-C', opts.cycleWorktreePath, 'log', '--oneline', `${opts.startPointRef}..HEAD`, '--', ...boundedFiles],
+        { stdio: 'pipe', encoding: 'utf8' },
+      );
+      siblingCommits = out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+    } catch {
+      /* best-effort — a bad/unresolvable startPointRef must not break capture */
+    }
+  }
+  const commitsTruncated = siblingCommits.length > MERGE_CONFLICT_MAX_SIBLING_COMMITS;
+
+  return {
+    conflictingFiles: boundedFiles.map(truncateLine),
+    filesTruncated,
+    wiBranchTipSubject: truncateLine(wiBranchTipSubject),
+    siblingCommits: siblingCommits.slice(0, MERGE_CONFLICT_MAX_SIBLING_COMMITS).map(truncateLine),
+    commitsTruncated,
+  };
+}
+
+export type MergeBackResult =
+  | { merged: true }
+  | { merged: false; detail: string; conflict: MergeConflictDetail };
 
 /**
  * Merge `wiBranch` into the cycle worktree's currently-checked-out branch
@@ -50,6 +176,13 @@ export function mergeWiIntoCycle(opts: {
   cycleWorktreePath: string;
   wiBranch: string;
   workItemId: string;
+  /**
+   * The WI's fork point (the cycle-branch tip at WI dispatch time) — used
+   * only to bound the sibling-commit lookup on a conflict to commits
+   * genuinely concurrent with this WI's isolated work. Optional: when
+   * omitted, conflict capture still runs but `siblingCommits` stays empty.
+   */
+  startPointRef?: string;
 }): MergeBackResult {
   try {
     execFileSync(
@@ -69,6 +202,13 @@ export function mergeWiIntoCycle(opts: {
     return { merged: true };
   } catch (err) {
     const detail = extractStderr(err);
+    // Capture WHY before aborting — `--diff-filter=U` only resolves while
+    // the merge is still in progress.
+    const conflict = captureMergeConflictDetail({
+      cycleWorktreePath: opts.cycleWorktreePath,
+      wiBranch: opts.wiBranch,
+      startPointRef: opts.startPointRef,
+    });
     try {
       execFileSync('git', ['-C', opts.cycleWorktreePath, 'merge', '--abort'], { stdio: 'pipe' });
     } catch {
@@ -76,13 +216,13 @@ export function mergeWiIntoCycle(opts: {
          the branch ref didn't resolve) leaves nothing to abort; the working
          tree is already clean in that case. */
     }
-    return { merged: false, detail };
+    return { merged: false, detail, conflict };
   }
 }
 
 export type MergeAndPublishResult =
   | { merged: true; push: PushResult }
-  | { merged: false; detail: string };
+  | { merged: false; detail: string; conflict: MergeConflictDetail };
 
 /**
  * The full "land a WI" sequence, run as ONE turn inside the shared merge
@@ -112,14 +252,17 @@ export function mergeAndPublish(opts: {
   wiBranch: string;
   workItemId: string;
   specPath: string;
+  /** See `mergeWiIntoCycle`'s `startPointRef` — threaded through unchanged. */
+  startPointRef?: string;
 }): MergeAndPublishResult {
   const mergeResult = mergeWiIntoCycle({
     cycleWorktreePath: opts.cycleWorktreePath,
     wiBranch: opts.wiBranch,
     workItemId: opts.workItemId,
+    startPointRef: opts.startPointRef,
   });
   if (!mergeResult.merged) {
-    return { merged: false, detail: mergeResult.detail };
+    return { merged: false, detail: mergeResult.detail, conflict: mergeResult.conflict };
   }
   writeWorkItemStatus(opts.specPath, 'complete');
   return { merged: true, push: pushInitiativeBranch(opts.cycleWorktreePath) };
