@@ -440,6 +440,10 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
         projectName: manifest.project,
         manifest,
         workItemsDir,
+        // ralph-spec-lint (ADR 037 / REFINEMENT-PLAN §7) searches the PROJECT
+        // tree for existing/created test files — that's the worktree, not
+        // forgeRoot (which has no project source at all).
+        projectRoot: input.worktreePath,
         items,
         logger,
         initiativeId: input.initiativeId,

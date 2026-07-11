@@ -611,3 +611,312 @@ test('compileWorkItemSpecs: WRITE FAILURE folds into compileErrors, emits an err
     unwritable.cleanup();
   }
 });
+
+// ---------- compileWorkItemSpecs: ralph-spec-lint integration (ADR 037 / REFINEMENT-PLAN §7) ----------
+
+test('compileWorkItemSpecs: vacuous gate (named test that neither exists nor is created) folds into compileErrors and emits pm.spec-lint', () => {
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const workItemsDir = mkTmp('forge-wi-spec-compile-witems-');
+  const projectRoot = mkTmp('forge-wi-spec-compile-project-'); // empty project tree — no tests exist
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['go', 'test', '-run', 'TestResolveFrameworkAuth', './pkg/'],
+        creates: ['pkg/handler.go'], // not a test file — no write-first escape
+        files_in_scope: ['pkg/handler.go'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-1', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      projectRoot,
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    assert.equal(result.compileErrors.length, 1);
+    assert.match(result.compileErrors[0]!, /WI-1/);
+    assert.match(result.compileErrors[0]!, /TestResolveFrameworkAuth/);
+    assert.match(result.compileErrors[0]!, /vacuous pass risk/);
+
+    const events = readFileSync(logger.logFilePath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+    const lintEvents = events.filter((e) => e.message === 'pm.spec-lint');
+    assert.equal(lintEvents.length, 1);
+    assert.equal(lintEvents[0]!.phase, 'project-manager');
+    assert.equal(lintEvents[0]!.event_type, 'log');
+    assert.equal(lintEvents[0]!.metadata?.checked, 1);
+    assert.equal(lintEvents[0]!.metadata?.flagged, 1);
+    assert.equal(lintEvents[0]!.metadata?.warned, 0);
+    assert.equal(lintEvents[0]!.metadata?.truncated, false);
+    assert.equal(lintEvents[0]!.metadata?.skipped_files, 0);
+    assert.deepEqual(result.lintWarnings, []);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(workItemsDir, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('compileWorkItemSpecs: write-first gate (selector not yet present, but creates: declares the test file) — no spec-lint error', () => {
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const workItemsDir = mkTmp('forge-wi-spec-compile-witems-');
+  const projectRoot = mkTmp('forge-wi-spec-compile-project-'); // empty project tree
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['go', 'test', '-run', 'TestResolveFrameworkAuth', './pkg/'],
+        creates: ['pkg/handler.go', 'pkg/handler_test.go'],
+        files_in_scope: ['pkg/handler.go', 'pkg/handler_test.go'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-2', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      projectRoot,
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    assert.deepEqual(result.compileErrors, []);
+
+    const events = readFileSync(logger.logFilePath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+    const lintEvents = events.filter((e) => e.message === 'pm.spec-lint');
+    assert.equal(lintEvents.length, 1);
+    assert.equal(lintEvents[0]!.metadata?.checked, 1);
+    assert.equal(lintEvents[0]!.metadata?.flagged, 0);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(workItemsDir, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('compileWorkItemSpecs: projectRoot defaults to two levels up from workItemsDir when not passed explicitly', () => {
+  // Mirrors the real call site's convention: workItemsDir = <worktree>/.forge/work-items.
+  const worktree = mkTmp('forge-wi-spec-compile-worktree-');
+  const workItemsDir = join(worktree, '.forge', 'work-items');
+  mkdirSync(workItemsDir, { recursive: true });
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    // The default-derived projectRoot (== worktree) DOES contain the test.
+    mkdirSync(join(worktree, 'pkg'), { recursive: true });
+    writeFileSync(
+      join(worktree, 'pkg', 'handler_test.go'),
+      'package pkg\n\nfunc TestResolveFrameworkAuth(t *testing.T) {}\n',
+    );
+
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['go', 'test', '-run', 'TestResolveFrameworkAuth', './pkg/'],
+        creates: ['pkg/handler.go'],
+        files_in_scope: ['pkg/handler.go'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-3', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      // projectRoot deliberately omitted — must derive from workItemsDir.
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    assert.deepEqual(result.compileErrors, []);
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('compileWorkItemSpecs: lint WARNING (.each sentinel) lands on lintWarnings + the pm.spec-lint event, NOT compileErrors', () => {
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const workItemsDir = mkTmp('forge-wi-spec-compile-witems-');
+  const projectRoot = mkTmp('forge-wi-spec-compile-project-');
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    mkdirSync(join(projectRoot, 'src'), { recursive: true });
+    writeFileSync(join(projectRoot, 'src', 'dyn.test.ts'), "test.each([[1]])('gen %i', () => {});\n");
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['npx', 'vitest', 'run', '-t', 'gen 7'],
+        creates: ['src/dyn.ts'],
+        files_in_scope: ['src/dyn.ts'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-4', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      projectRoot,
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    // Warning channel only — the pass does NOT fail.
+    assert.deepEqual(result.compileErrors, []);
+    assert.equal(result.lintWarnings.length, 1);
+    assert.match(result.lintWarnings[0]!, /WI-1/);
+    assert.match(result.lintWarnings[0]!, /\.each/);
+
+    const events = readFileSync(logger.logFilePath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+    const lintEvents = events.filter((e) => e.message === 'pm.spec-lint');
+    assert.equal(lintEvents.length, 1);
+    assert.equal(lintEvents[0]!.metadata?.warned, 1);
+    assert.equal(lintEvents[0]!.metadata?.flagged, 0);
+    const eventWarnings = lintEvents[0]!.metadata?.warnings as string[];
+    assert.equal(eventWarnings.length, 1);
+    assert.match(eventWarnings[0]!, /WI-1/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(workItemsDir, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('compileWorkItemSpecs: truncated walk flagged in the pm.spec-lint event, downgrade to warning (no compileErrors)', () => {
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const workItemsDir = mkTmp('forge-wi-spec-compile-witems-');
+  const projectRoot = mkTmp('forge-wi-spec-compile-project-');
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    mkdirSync(join(projectRoot, 'pkg'), { recursive: true });
+    writeFileSync(join(projectRoot, 'pkg', 'a_test.go'), 'package p\n\nfunc TestAlpha(t *testing.T) {}\n');
+    writeFileSync(join(projectRoot, 'pkg', 'b_test.go'), 'package p\n\nfunc TestBeta(t *testing.T) {}\n');
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['go', 'test', '-run', 'TestNoSuch', './pkg/'],
+        creates: ['pkg/handler.go'],
+        files_in_scope: ['pkg/handler.go'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-5', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      projectRoot,
+      lintMaxFilesWalked: 1,
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    assert.deepEqual(result.compileErrors, []);
+    assert.equal(result.lintWarnings.length, 1);
+    assert.match(result.lintWarnings[0]!, /truncated/);
+
+    const events = readFileSync(logger.logFilePath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+    const lintEvents = events.filter((e) => e.message === 'pm.spec-lint');
+    assert.equal(lintEvents.length, 1);
+    assert.equal(lintEvents[0]!.metadata?.truncated, true);
+    assert.equal(lintEvents[0]!.metadata?.warned, 1);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(workItemsDir, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('compileWorkItemSpecs: nonexistent projectRoot is a loud CONFIG error in compileErrors (not a WI verdict)', () => {
+  const forgeRoot = mkTmp('forge-wi-spec-compile-forgeroot-');
+  const workItemsDir = mkTmp('forge-wi-spec-compile-witems-');
+  const logsDir = mkTmp('forge-wi-spec-compile-logs-');
+  try {
+    const items = [
+      fixture({
+        work_item_id: 'WI-1',
+        quality_gate_cmd: ['go', 'test', '-run', 'TestNoSuch', './pkg/'],
+        creates: ['pkg/handler.go'],
+        files_in_scope: ['pkg/handler.go'],
+      }),
+    ];
+    const manifest = manifestFixture({ project: 'no-such-project' });
+    const logger = createLogger('TEST-wi-spec-compile-lint-6', logsDir);
+
+    const result = compileWorkItemSpecs({
+      forgeRoot,
+      projectName: 'no-such-project',
+      manifest,
+      workItemsDir,
+      projectRoot: '/no/such/dir/anywhere-forge-lint',
+      items,
+      logger,
+      initiativeId: manifest.initiative_id,
+      parentEventId: 'evt-parent',
+    });
+
+    assert.equal(result.compileErrors.length, 1);
+    assert.match(result.compileErrors[0]!, /^ralph-spec-lint: projectRoot/);
+    assert.match(result.compileErrors[0]!, /does not exist or is not a directory/);
+    // No WI verdict was produced — the config bug is the only failure.
+    assert.ok(!result.compileErrors[0]!.includes('WI-1'));
+
+    const events = readFileSync(logger.logFilePath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+    const lintEvents = events.filter((e) => e.message === 'pm.spec-lint');
+    assert.equal(lintEvents.length, 1);
+    assert.equal(lintEvents[0]!.metadata?.checked, 0);
+    assert.match(String(lintEvents[0]!.metadata?.config_error), /does not exist/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(workItemsDir, { recursive: true, force: true });
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
