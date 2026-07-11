@@ -210,6 +210,22 @@ dispatch replacing the serial loop in `developer-loop.ts`, concurrency-safe
 
 ## 8. Phase 5 — Platform pillars + skills (pruned)
 
+> **STATUS 2026-07-12: SHIPPED + gate-validated** on
+> `feat/phase3-design-consolidation`. KB pillar: `seedProjectBrain` at the
+> Studio creation seam (kb.yaml self-verified, profile.md with an inert
+> documented ADR-037 constraint example, themes/README — per-file
+> idempotent, brain-lint clean, KB graph pickup with no special-casing).
+> `project-scoped-review` shipped as a `library: true` roster agent
+> codifying the end-state-audit method (evidence-per-claim contract).
+> Gates: suite 1983, studio+brain lint 0 errors, ui:journey 70 frames incl.
+> the new palette + creation path. verify:cycle deliberately NOT re-run for
+> this phase (zero cycle-machinery delta — Wave 2's pass covers it;
+> operator may veto). Review follow-ups logged in the session handoff:
+> forge-onboard-project skill doesn't mention kb.yaml; legacy local
+> profile.md stub still written beside the central seed; `forge brain index`
+> still walks the pre-ADR-035 local layout; new projects get no `kb` binding
+> in project.json.
+
 - KB pillar: **seed a project KB on new-project creation** (kept).
 - OOTB skills catalog: **deferred — adds-mechanism** without demonstrated pull;
   revisit when a second managed project demands it.
