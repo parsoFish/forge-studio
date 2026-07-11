@@ -70,6 +70,12 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import {
+  runCompletenessCritic,
+  truncateWithMarker,
+  CRITIC_MAX_MANIFEST_BODY_CHARS,
+  type CompletenessCriticFinding,
+} from './completeness-critic-runner.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
@@ -97,6 +103,22 @@ export type ArchitectPhase =
   | 'committed'
   | 'rejected';
 
+/**
+ * Result of the architect-completeness-critic FINALIZE gate (ADR ref:
+ * brain/forge-dev/themes/2026-07-01-architect-coverage-scope-fidelity.md).
+ * Presence on `ArchitectStatus` means the critic has ALREADY run for this
+ * session — one-shot-per-session: a subsequent finalize turn skips the critic
+ * and promotes straight through. The operator's re-approve after findings IS
+ * the acknowledgement; there is no separate UI action.
+ */
+export type CompletenessCriticStatus = {
+  ranAt: string;
+  findings: CompletenessCriticFinding[];
+  /** True when the critic turn crashed (advisory infra; treated as zero
+   *  findings — finalize still proceeds to promote). */
+  crashed?: boolean;
+};
+
 export type ArchitectStatus = {
   session_id: string;
   project: string;
@@ -107,6 +129,7 @@ export type ArchitectStatus = {
   /** The operator's raw idea (also persisted to `idea.md`). */
   idea: string;
   updated_at: string;
+  completenessCritic?: CompletenessCriticStatus;
 };
 
 /** One operator-facing question — the reflector's `StructuredQuestion` shape so
@@ -693,6 +716,138 @@ async function runDraftStep(args: {
 }
 
 // ---------------------------------------------------------------------------
+// Completeness critic (FINALIZE gate)
+// ---------------------------------------------------------------------------
+
+/** Render the flattened interview Q/A into a numbered markdown block for the
+ *  critic prompt. Returns a placeholder when the session had no interview. */
+function renderInterviewSummary(rounds: InterviewRound[]): string {
+  if (rounds.length === 0) return '(no interview — the operator drafted directly)';
+  return rounds
+    .map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`)
+    .join('\n');
+}
+
+/** Render every manifest about to be promoted (id, dependencies, full body)
+ *  into one block per initiative for the critic prompt. Reads fresh from disk
+ *  so the critic reviews EXACTLY what `promoteManifests` is about to move. */
+function buildManifestsSummary(manifestsDir: string): string {
+  if (!existsSync(manifestsDir)) return '(no manifests found)';
+  const files = readdirSync(manifestsDir).filter((f) => f.endsWith('.md'));
+  if (files.length === 0) return '(no manifests found)';
+  return files
+    .map((f) => {
+      const m = parseManifest(readFileSync(join(manifestsDir, f), 'utf8'));
+      const deps = m.depends_on_initiatives?.length ? m.depends_on_initiatives.join(', ') : '(none)';
+      // Roadmap-scale sessions promote 20+ manifests — bound each body so the
+      // assembled critic prompt cannot blow the context window.
+      const body = truncateWithMarker(m.body, CRITIC_MAX_MANIFEST_BODY_CHARS);
+      return `### ${m.initiative_id}\ndepends_on: ${deps}\n\n${body}`;
+    })
+    .join('\n\n---\n\n');
+}
+
+/**
+ * Run the completeness critic once and fold the result onto the session
+ * status. Never throws — a crash is advisory infra (treated as zero findings,
+ * loudly logged) so `runFinalizeStep` always proceeds to promotion in that
+ * case. Returns `blockPromotion: true` only when the critic surfaced at least
+ * one finding on a session that had not yet run it.
+ */
+async function runFinalizeCompletenessCritic(args: {
+  input: RunArchitectTurnInput;
+  paths: ReturnType<typeof sessionPaths>;
+  status: ArchitectStatus;
+  logger: EventLogger;
+  queryFn: QueryFn;
+}): Promise<{ status: ArchitectStatus; blockPromotion: boolean }> {
+  const { input, paths, status, logger, queryFn } = args;
+  const initiativeId = `architect-session-${input.sessionId}`;
+
+  const critStart = logger.emit({
+    initiative_id: initiativeId,
+    phase: 'architect',
+    skill: 'architect-completeness-critic',
+    event_type: 'start',
+    input_refs: [paths.planPath],
+    output_refs: [],
+    message: 'architect.completeness-critic.start',
+    metadata: { session_id: input.sessionId },
+  });
+
+  const interviewSummary = renderInterviewSummary(readInterview(paths.sessionDir));
+  const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;
+  const manifestsSummary = buildManifestsSummary(paths.manifestsDir);
+
+  const critic = await runCompletenessCritic({
+    idea: status.idea,
+    interviewSummary,
+    planMarkdown,
+    manifestsSummary,
+    queryFn,
+  });
+
+  if (critic.crashed) {
+    // Advisory infra — never brick finalize, but log loudly.
+    logger.emit({
+      initiative_id: initiativeId,
+      parent_event_id: critStart.event_id,
+      phase: 'architect',
+      skill: 'architect-completeness-critic',
+      event_type: 'error',
+      input_refs: [paths.planPath],
+      output_refs: [],
+      message: 'architect.completeness-critic.crashed — proceeding to promote (advisory infra, zero findings)',
+      metadata: { session_id: input.sessionId, error: critic.error ?? null },
+    });
+  } else {
+    logger.emit({
+      initiative_id: initiativeId,
+      parent_event_id: critStart.event_id,
+      phase: 'architect',
+      skill: 'architect-completeness-critic',
+      event_type: 'end',
+      input_refs: [paths.planPath],
+      output_refs: [],
+      message: `architect.completeness-critic.end (findings=${critic.findings.length})`,
+      metadata: { session_id: input.sessionId, findings_count: critic.findings.length },
+    });
+    for (const f of critic.findings) {
+      logger.emit({
+        initiative_id: f.initiativeId ?? initiativeId,
+        parent_event_id: critStart.event_id,
+        phase: 'architect',
+        skill: 'architect-completeness-critic',
+        event_type: 'log',
+        input_refs: [paths.planPath],
+        output_refs: [],
+        message: `architect.completeness-critic.finding (${f.severity}): ${f.gap}`,
+        metadata: {
+          session_id: input.sessionId,
+          severity: f.severity,
+          initiativeId: f.initiativeId,
+          gap: f.gap,
+        },
+      });
+    }
+  }
+
+  const nextStatus: ArchitectStatus = {
+    ...status,
+    completenessCritic: {
+      ranAt: new Date().toISOString(),
+      findings: critic.findings,
+      ...(critic.crashed ? { crashed: true } : {}),
+    },
+  };
+
+  if (critic.findings.length > 0) {
+    return { status: { ...nextStatus, phase: 'awaiting-verdict' }, blockPromotion: true };
+  }
+  return { status: nextStatus, blockPromotion: false };
+}
+
+// ---------------------------------------------------------------------------
 // Finalize step (approve → bake resolved decisions → promote to queue)
 // ---------------------------------------------------------------------------
 
@@ -760,6 +915,32 @@ async function runFinalizeStep(args: {
     }
   }
 
+  // Completeness critic (architect-completeness-critic, ADR ref:
+  // brain/forge-dev/themes/2026-07-01-architect-coverage-scope-fidelity.md).
+  // One-shot-per-session: runs ONCE, right before the operator-approved
+  // manifests promote. Findings send the session back to `awaiting-verdict`
+  // instead of promoting; the operator's re-approve IS the acknowledgement —
+  // `status.completenessCritic` being already set on the next finalize turn
+  // skips the critic entirely and promotes straight through.
+  let workingStatus: ArchitectStatus = status;
+  if (!status.completenessCritic) {
+    const criticResult = await runFinalizeCompletenessCritic({
+      input,
+      paths,
+      status,
+      logger,
+      queryFn: args.queryFn,
+    });
+    workingStatus = criticResult.status;
+    // Persist the one-shot flag durably BEFORE promotion (all three outcomes:
+    // findings, clean, crashed) — a crash inside promoteManifests below must
+    // not re-arm the critic on the operator's retry turn.
+    writeStatus(paths.sessionDir, workingStatus);
+    if (criticResult.blockPromotion) {
+      return { phase: 'awaiting-verdict', wrote: [] };
+    }
+  }
+
   const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
@@ -773,7 +954,7 @@ async function runFinalizeStep(args: {
     if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
   }
 
-  writeStatus(paths.sessionDir, { ...status, phase: 'committed' });
+  writeStatus(paths.sessionDir, { ...workingStatus, phase: 'committed' });
 
   logger.emit({
     initiative_id: writtenInitiativeIds[0] ?? `architect-session-${input.sessionId}`,

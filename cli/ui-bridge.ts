@@ -1158,6 +1158,7 @@ async function handleArchitect(
         questions,
         planUrl,
         staleMs,
+        completenessCritic: s.completenessCritic ?? null,
       };
     });
     sendJson(res, 200, { sessions }, origin);

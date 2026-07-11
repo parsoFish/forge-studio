@@ -378,29 +378,60 @@ export async function applyPlanVerdict(
   }
 
   const dir = _architectSessionDir(ctx.projectsRoot, project, sessionId);
-  const status = _readStatus(dir);
-  if (!status) {
+  if (!_readStatus(dir)) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     return;
   }
 
-  const spawnTurn = ctx.spawnArchitectTurnFn ?? _spawnArchitectTurn;
-
-  if (kind === 'approve') {
-    if (rationale) {
-      writeFileSync(join(dir, 'feedback.md'), rationale.trim() + '\n');
-    }
-    _writeStatus(dir, { ...status, phase: 'finalizing' });
-    spawnTurn(ctx.forgeRoot, project, sessionId);
-  } else if (kind === 'revise') {
-    writeFileSync(join(dir, 'feedback.md'), (rationale ?? '').trim() + '\n');
-    _writeStatus(dir, { ...status, phase: 'interviewing', round: status.round + 1 });
-    spawnTurn(ctx.forgeRoot, project, sessionId);
-  } else {
-    _writeStatus(dir, { ...status, phase: 'rejected' });
+  // Double-finalize guard: serialize verdicts on the session's status.json
+  // (the same proper-lockfile pattern applyReviewVerdict uses on the manifest)
+  // and re-check the phase UNDER the lock — a verdict is only actionable while
+  // the session still awaits one. The loser of a double-approve gets a 409
+  // instead of re-arming finalize (a second critic run / double promotion).
+  const statusPath = join(dir, 'status.json');
+  let release: (() => Promise<void>) | null = null;
+  try {
+    release = await lockfile.lock(statusPath, { retries: { retries: 5, minTimeout: 50 } });
+  } catch (lockErr) {
+    sendJson(res, 503, { error: 'session status is locked by another writer', detail: String(lockErr) }, origin);
+    return;
   }
-  ctx.broadcastArchitectChanged();
-  sendJson(res, 200, { ok: true, kind }, origin);
+  try {
+    const status = _readStatus(dir);
+    if (!status) {
+      sendJson(res, 404, { error: 'session not found', sessionId }, origin);
+      return;
+    }
+    if (status.phase !== 'awaiting-verdict') {
+      sendJson(
+        res,
+        409,
+        { error: `session is not awaiting a verdict (phase: ${status.phase})`, sessionId },
+        origin,
+      );
+      return;
+    }
+
+    const spawnTurn = ctx.spawnArchitectTurnFn ?? _spawnArchitectTurn;
+
+    if (kind === 'approve') {
+      if (rationale) {
+        writeFileSync(join(dir, 'feedback.md'), rationale.trim() + '\n');
+      }
+      _writeStatus(dir, { ...status, phase: 'finalizing' });
+      spawnTurn(ctx.forgeRoot, project, sessionId);
+    } else if (kind === 'revise') {
+      writeFileSync(join(dir, 'feedback.md'), (rationale ?? '').trim() + '\n');
+      _writeStatus(dir, { ...status, phase: 'interviewing', round: status.round + 1 });
+      spawnTurn(ctx.forgeRoot, project, sessionId);
+    } else {
+      _writeStatus(dir, { ...status, phase: 'rejected' });
+    }
+    ctx.broadcastArchitectChanged();
+    sendJson(res, 200, { ok: true, kind }, origin);
+  } finally {
+    if (release) { try { await release(); } catch { /* ignore */ } }
+  }
 }
 
 // ---------------------------------------------------------------------------

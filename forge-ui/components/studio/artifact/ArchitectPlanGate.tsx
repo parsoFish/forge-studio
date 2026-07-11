@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import { PlanGate } from '@/components/PlanGate';
 import type { ArchitectSessionSummary } from '@/lib/bridge-client';
+import { isCriticBlocked, shouldResetApproval, planGateKey } from '@/lib/plan-gate-state';
 
 /**
  * The native Studio PLAN-gate surface for an architect session (M7-4, ADR-031).
@@ -37,11 +38,22 @@ export function ArchitectPlanGate({
   // local approval there so the "Watch it build →" payoff cannot leak across
   // rounds. Do NOT reset on `committed` — that IS the approved terminal state and
   // is what keeps the payoff visible after the poll updates the phase.
+  //
+  // A completeness-critic BLOCK also resets: finalizing bounces straight back to
+  // `awaiting-verdict` (same round, findings on status), and the poll may never
+  // observe the short-lived `finalizing` phase — without this, the stale
+  // `approved` flag rendered a false "Approved — building" payoff next to a
+  // re-armed gate. The page-level data-gate-state is bubbled back to idle too.
+  const criticBlocked = isCriticBlocked(session.phase, session.completenessCritic);
   useEffect(() => {
-    if (session.phase !== 'awaiting-verdict' && session.phase !== 'committed') {
+    if (shouldResetApproval(session.phase, session.completenessCritic)) {
       setApproved(false);
+      if (criticBlocked) onGateState?.('idle');
     }
-  }, [session.phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed
+    // on the phase + blocked FLAG (not the per-poll critic object identity) so a
+    // stale poll tick cannot clear a fresh optimistic re-approval.
+  }, [session.phase, criticBlocked]);
 
   const showPayoff = approved || session.phase === 'committed';
 
@@ -49,12 +61,13 @@ export function ArchitectPlanGate({
     <>
       {session.phase === 'awaiting-verdict' && (
         <PlanGate
-          key={`plan-gate-r${session.round}`}
+          key={planGateKey(session.round, session.completenessCritic)}
           fullPage
           project={session.project}
           sessionId={session.sessionId}
           planUrl={session.planUrl}
           idea={session.idea}
+          criticFindings={session.completenessCritic?.findings}
           onVerdict={(kind) => {
             onGateState?.(kind === 'approve' ? 'approved' : 'idle');
             if (kind === 'approve') setApproved(true);

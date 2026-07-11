@@ -5,7 +5,56 @@ import { useEffect, useState } from 'react';
 import {
   postPlanVerdict,
   architectFileUrl,
+  type CompletenessCriticFinding,
 } from '@/lib/bridge-client';
+
+const SEVERITY_COLOR: Record<CompletenessCriticFinding['severity'], string> = {
+  high: '#f85149',
+  medium: '#d29922',
+  low: '#8b949e',
+};
+
+/**
+ * The architect-completeness-critic findings block (REFINEMENT-PLAN §6.3).
+ * Rendered above the PLAN iframe when the critic ran and reported at least
+ * one gap. Purely informational — the existing Approve button IS the
+ * operator's acknowledge action; there is no separate dismiss control.
+ */
+function CriticFindings({ findings }: { findings: CompletenessCriticFinding[] }) {
+  if (findings.length === 0) return null;
+  return (
+    <div
+      data-section="critic-findings"
+      data-critic-finding-count={findings.length}
+      style={{
+        border: '1px solid #d29922',
+        borderRadius: 8,
+        padding: '10px 12px',
+        marginBottom: 14,
+        background: 'rgba(210,153,34,.08)',
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#e6edf3', marginBottom: 6 }}>
+        Completeness critic found {findings.length} potential gap{findings.length === 1 ? '' : 's'} — review before re-approving
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        {findings.map((f, i) => (
+          <li
+            key={i}
+            data-critic-severity={f.severity}
+            style={{ fontSize: 12, color: '#e6edf3', marginBottom: 4 }}
+          >
+            <span style={{ color: SEVERITY_COLOR[f.severity], fontWeight: 600, textTransform: 'uppercase', fontSize: 10, marginRight: 6 }}>
+              {f.severity}
+            </span>
+            {f.initiativeId && <span style={{ color: '#8b949e' }}>[{f.initiativeId}] </span>}
+            {f.gap}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /**
  * ADR 020 — the in-UI PLAN gate. Shows the PLAN.html in a `sandbox=""` iframe
@@ -18,6 +67,7 @@ export function PlanGate({
   planUrl,
   idea,
   fullPage = false,
+  criticFindings,
   onVerdict,
 }: {
   project: string;
@@ -26,6 +76,11 @@ export function PlanGate({
   idea: string;
   /** Dedicated plan screen — render the PLAN.html iframe tall (its own page). */
   fullPage?: boolean;
+  /** Findings from the architect-completeness-critic FINALIZE gate (ADR
+   *  REFINEMENT-PLAN §6.3), present once the critic has run for this
+   *  session. A re-approve with findings still present skips the critic and
+   *  proceeds — this block is advisory only. */
+  criticFindings?: CompletenessCriticFinding[];
   /** Fired after a verdict POST succeeds — lets the host surface a follow-on
    *  affordance (e.g. the /artifact gate's "Watch it build →" link on approve). */
   onVerdict?: (kind: 'approve' | 'revise' | 'reject') => void;
@@ -75,6 +130,8 @@ export function PlanGate({
         Plan ready — review &amp; approve
       </div>
       <div style={{ fontSize: 12, color: '#8b949e', marginBottom: 12 }}>{idea}</div>
+
+      <CriticFindings findings={criticFindings ?? []} />
 
       {iframeSrc ? (
         <iframe
