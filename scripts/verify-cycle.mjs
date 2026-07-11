@@ -958,6 +958,7 @@ async function main() {
   // approve; the loop repeats until every initiative merged (or passes run out).
   await handoffToDevelop(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
   const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
+  const approveFailures = new Map();
   let sendBackDone = !SEND_BACK;
   const maxPasses = initiatives.length + 2;
   for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
@@ -996,7 +997,16 @@ async function main() {
       }
 
       const ok = await autoApprove(watch.bridgeUrl, init.initiativeId);
-      if (!ok) continue;
+      if (!ok) {
+        // A rejected verdict (e.g. gh merge conflict) will not fix itself by
+        // re-running serve passes — retry once (transient bridge blips), then
+        // abort loudly instead of burning passes against a 409.
+        approveFailures.set(init.initiativeId, (approveFailures.get(init.initiativeId) ?? 0) + 1);
+        if ((approveFailures.get(init.initiativeId) ?? 0) >= 2) {
+          throw new Error(`verdict approve failed twice for ${init.initiativeId} — aborting (see [watch] mergePullRequest output above)`);
+        }
+        continue;
+      }
       // The bridge merges + runs finalize/reflect detached — wait for
       // reflector.end before counting this initiative as landed (S9).
       log(`verdict approved for ${init.initiativeId} — waiting for finalize + reflector.end…`);
@@ -1008,6 +1018,21 @@ async function main() {
   }
   if (remaining.size > 0) {
     log(`unfinished initiatives after ${maxPasses} serve passes: ${[...remaining.keys()].join(', ')}`);
+  }
+
+  // Collect gate inputs BEFORE tearing the bridge down — cycleStatusFromBridge
+  // against a stopped watch reads null and fails the merge gate spuriously.
+  const perInit = [];
+  for (const init of initiatives) {
+    const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+    const finalEvents = await cycleEventCountFromLog(init.cycleId);
+    const cost = sumCycleCost(init.cycleId);
+    const { checks, wi } = assessOutcomes({
+      finalStatus, cost, repoPath,
+      cycleId: init.cycleId, initiativeId: init.initiativeId,
+      project: PROJECT, runStartMs,
+    });
+    perInit.push({ init, finalStatus, finalEvents, cost, checks, wi });
   }
 
   // Capture the video path BEFORE closing.
@@ -1033,20 +1058,9 @@ async function main() {
   log(`index → ${join(OUT_DIR, 'index.html')}`);
 
   // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
-  // Per-initiative assertions plus an aggregate cost-ceiling check (the
-  // ceiling is per RUN; a multi-initiative plan shares one budget).
-  const perInit = [];
-  for (const init of initiatives) {
-    const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
-    const finalEvents = await cycleEventCountFromLog(init.cycleId);
-    const cost = sumCycleCost(init.cycleId);
-    const { checks, wi } = assessOutcomes({
-      finalStatus, cost, repoPath,
-      cycleId: init.cycleId, initiativeId: init.initiativeId,
-      project: PROJECT, runStartMs,
-    });
-    perInit.push({ init, finalStatus, finalEvents, cost, checks, wi });
-  }
+  // Per-initiative assertions (collected pre-teardown above) plus an
+  // aggregate cost-ceiling check (the ceiling is per RUN; a multi-initiative
+  // plan shares one budget).
   const totalCost = perInit.reduce((acc, r) => acc + r.cost, 0);
   const checks = perInit.flatMap((r) =>
     r.checks.map((c) => ({ ...c, name: perInit.length > 1 ? `${r.init.initiativeId}: ${c.name}` : c.name })));
