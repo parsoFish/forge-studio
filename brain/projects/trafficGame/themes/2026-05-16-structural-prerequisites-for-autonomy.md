@@ -1,13 +1,11 @@
 ---
 title: trafficGame — the structural prerequisites that unblocked unattended forge cycles
-description: What trafficGame needed before forge could run it unattended: lean fast test suite, .forge/ gitignore, god-file decomposition (Game.ts 1,732 LOC), seeded brain themes + roadmap, and harness respect for the locked-core git/test mandates. C1–C5 are now met; the merge model (C6) is the residual blocker.
+description: 'What trafficGame needed before forge could run it unattended: lean fast test suite, .forge/ gitignore, god-file decomposition (Game.ts 1,732 LOC), seeded brain themes + roadmap, and harness respect for the locked-core git/test mandates. C1–C5 are now met; the merge model (C6) is the residual blocker.'
 category: reference
 keywords: [trafficgame, prerequisites, simplification, test-stack, gitignore, decomposition, locked-core, git-ownership, roadmap, autonomy]
 created_at: 2026-05-16T00:00:00Z
 updated_at: 2026-05-16T00:00:00Z
-related_themes:
-  - merge-boundary-stacked-initiative-failure
-  - objective-gate-autonomous-closure
+related_themes: []
 ---
 
 # trafficGame — structural prerequisites for autonomy

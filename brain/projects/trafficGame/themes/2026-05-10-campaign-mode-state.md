@@ -9,7 +9,7 @@ description: >-
   sources always unlocked). The hub renders a spatial map-of-maps with
   two-way-road exit/entry ports. This is what any campaign/world/unlock
   initiative starts from now.
-category: snapshot
+category: reference
 keywords:
   - trafficgame
   - campaign

@@ -11,6 +11,7 @@ keywords:
   - single-iteration
   - pure-modules
   - quality-gate
+related_themes: [2026-06-21-single-iteration-4wi-milestone-delivery, 2026-06-21-single-iteration-delivery-tdd-pure-modules, 2026-06-22-model-rendering-wi-split-overgranular]
 created_at: 2026-06-22T00:00:00.000Z
 updated_at: 2026-06-22T00:00:00.000Z
 ---
@@ -43,3 +44,9 @@ No WI needed a second iteration. Zero wedge events, zero send-back rounds.
 
 - `_logs/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta/events.jsonl` — `gate.expected-fail` at WI-1 iter 0, `gate.pass` at WI-1 iter 1; same pattern for WI-2, WI-3, WI-4
 - `/home/parso/forge/brain/cycles/_raw/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta.md`
+
+## See also
+
+- [[2026-06-21-single-iteration-4wi-milestone-delivery]] — same single-iteration 4-WI TDD rhythm
+- [[2026-06-21-single-iteration-delivery-tdd-pure-modules]] — sibling single-iteration TDD delivery
+- [[2026-06-22-model-rendering-wi-split-overgranular]] — the over-granular critique of this decomposition

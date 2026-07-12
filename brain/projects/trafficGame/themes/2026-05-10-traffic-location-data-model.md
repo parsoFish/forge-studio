@@ -7,7 +7,7 @@ description: >-
   separate entryPoint and exitPoint ConnectionPoints offset by edge direction
   (top/bottom/left/right). This is the natural seam for any "link maps at
   entry/exit" non-linear campaign work.
-category: snapshot
+category: reference
 keywords:
   - trafficgame
   - traffic-location

@@ -13,6 +13,7 @@ keywords:
   - repeated-actions
   - skill-fix-not-applied
   - forge/history
+related_themes: [2026-06-21-gitignored-scratch-files-recurrence, 2026-07-11-gitignored-scratch-fourth-cycle]
 created_at: 2026-06-22T00:00:00.000Z
 updated_at: 2026-06-22T00:00:00.000Z
 ---
@@ -64,3 +65,8 @@ Add to the per-worktree `AGENT.md` template:
 - `_logs/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta/events.jsonl` — seq 21–22 (WI-1), seq 22–23 (WI-2), seq ~283–286 (WI-3), seq ~461–464 (WI-4), seq 41–47 (unifier)
 - `/home/parso/forge/brain/cycles/_raw/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta.md`
 - Prior cycles: `brain/projects/gitpulse/themes/2026-06-21-gitignored-scratch-files-recurrence.md`
+
+## See also
+
+- [[2026-06-21-gitignored-scratch-files-recurrence]] — the prior (second) cycle of this recurrence
+- [[2026-07-11-gitignored-scratch-fourth-cycle]] — the next (fourth) cycle of this recurrence

@@ -17,9 +17,7 @@ keywords:
   - cost-distribution
 created_at: 2026-05-10T03:23:11.000Z
 updated_at: 2026-05-10T03:23:11.000Z
-related_themes:
-  - review-phase-target-design
-  - phase-isolation-benchmarks
+related_themes: []
 ---
 
 # Review-loop overhead dominates cost for trivial initiatives

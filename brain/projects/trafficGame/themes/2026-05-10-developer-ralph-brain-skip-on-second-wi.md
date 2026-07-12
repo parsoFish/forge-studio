@@ -15,9 +15,7 @@ keywords:
   - WI-2
 created_at: 2026-05-10T03:23:11.000Z
 updated_at: 2026-05-10T03:23:11.000Z
-related_themes:
-  - brain-read-policy
-  - ralph-loop-pattern
+related_themes: []
 ---
 
 # developer-ralph skips brain-first on second WI in multi-WI runs

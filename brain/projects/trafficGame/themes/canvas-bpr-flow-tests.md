@@ -15,7 +15,7 @@ keywords:
   - regression
 created_at: 2026-05-04T19:30:00.000Z
 updated_at: 2026-05-04T19:30:00.000Z
-related_themes: []
+related_themes: [2026-05-23-grading-frontier-infrastructure]
 ---
 
 # trafficGame — canvas + BPR flow regressions need visual tests

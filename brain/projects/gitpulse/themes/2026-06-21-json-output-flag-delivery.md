@@ -12,6 +12,7 @@ keywords:
   - cli.ts
   - acceptance-gate
   - single-iteration
+related_themes: [2026-07-11-csv-output-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -39,3 +40,8 @@ updated_at: 2026-06-21T00:00:00.000Z
 
 - `_logs/2026-06-21T08-01-50_INIT-2026-06-21-json-output-flag/events.jsonl` — `ralph.end` WI-1 (iter=1, stop=quality-gates-pass), `ralph.end` WI-2 (iter=1, stop=quality-gates-pass), `dev-loop.delivered` (files_changed=8)
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T08-01-50_INIT-2026-06-21-json-output-flag.md`
+
+## See also
+
+- [[2026-07-11-csv-output-flag-delivery]] — `--csv` follows the same symmetric renderer-pair pattern
+- [[2026-06-21-acceptance-gate-covers-only-headline-output]] — this delivery closed the JSON acceptance-gate gap

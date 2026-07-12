@@ -19,9 +19,7 @@ keywords:
   - developer-ralph
 created_at: 2026-05-17T14:30:00.000Z
 updated_at: 2026-05-17T14:30:00.000Z
-related_themes:
-  - spec-driven-work-items
-  - dependency-ordered-work
+related_themes: []
 ---
 
 # trafficGame — one-file-per-WI constraint correlated with single-iteration dev-loop success

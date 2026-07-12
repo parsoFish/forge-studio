@@ -23,9 +23,7 @@ keywords:
   - target-elevation
 created_at: 2026-05-23T00:00:00.000Z
 updated_at: 2026-05-23T00:00:00.000Z
-related_themes:
-  - 2026-05-23-grading-frontier-infrastructure
-  - 2026-05-10-traffic-physics-and-flow
+related_themes: [2026-05-10-traffic-physics-and-flow, 2026-05-23-grading-frontier-infrastructure]
 ---
 
 # Binary elevation model

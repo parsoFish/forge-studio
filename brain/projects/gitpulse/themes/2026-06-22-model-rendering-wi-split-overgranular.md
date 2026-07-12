@@ -12,6 +12,7 @@ keywords:
   - model-rendering
   - wi-split
   - pm
+related_themes: [2026-06-22-single-iteration-tdd-with-4-wi-chain, 2026-06-21-single-iteration-4wi-milestone-delivery]
 created_at: 2026-06-22T00:00:00.000Z
 updated_at: 2026-06-22T00:00:00.000Z
 ---
@@ -48,3 +49,8 @@ Maintain the WI-3 (CLI wiring) and WI-4 (acceptance) as separate WIs — those h
 
 - `_logs/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta/user-feedback.md` — operator answer: "Too many — could have merged compare.ts + format additions into one WI"
 - `/home/parso/forge/brain/cycles/_raw/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta.md`
+
+## See also
+
+- [[2026-06-22-single-iteration-tdd-with-4-wi-chain]] — critiques that same 4-WI decomposition as over-granular
+- [[2026-06-21-single-iteration-4wi-milestone-delivery]] — the multi-WI delivery this granularity lesson bounds

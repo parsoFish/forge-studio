@@ -15,6 +15,7 @@ keywords:
   - acceptance-gate
   - renderer-pair
   - single-iteration
+related_themes: [2026-06-21-json-output-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output, 2026-07-11-tags-command-delivery]
 created_at: 2026-07-11T00:00:00.000Z
 updated_at: 2026-07-11T00:00:00.000Z
 ---
@@ -44,3 +45,9 @@ updated_at: 2026-07-11T00:00:00.000Z
 
 - `_logs/2026-07-11T14-57-10_INIT-2026-07-11-csv-output-flag/events.jsonl` — `ralph.end` WI-1 (iter=1, cost=$0.39), `ralph.end` WI-2 (iter=1, cost=$1.13), `unifier.end` (iter=1, stop=quality-gates-pass, cost=$5.73), `dev-loop.delivered` (files=9, +1436/-2)
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T14-57-10_INIT-2026-07-11-csv-output-flag.md`
+
+## See also
+
+- [[2026-06-21-json-output-flag-delivery]] — `--csv` extends the `--json` symmetric renderer-pair pattern
+- [[2026-06-21-acceptance-gate-covers-only-headline-output]] — this delivery extended the read-back acceptance gate
+- [[2026-07-11-tags-command-delivery]] — tags reuses the CSV renderer family (tagsToCSV)

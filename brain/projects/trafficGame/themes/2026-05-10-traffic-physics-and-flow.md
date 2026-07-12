@@ -20,7 +20,7 @@ keywords:
   - time_headway
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-10T15:30:00.000Z
-related_themes: []
+related_themes: [2026-05-23-binary-elevation-model]
 ---
 
 # trafficGame — traffic physics, IDM model, and BPR flow prediction

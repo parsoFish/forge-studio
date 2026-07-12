@@ -11,6 +11,7 @@ keywords:
   - TDD
   - churn
   - dependency-graph
+related_themes: [2026-06-21-single-iteration-delivery-tdd-pure-modules, 2026-06-22-single-iteration-tdd-with-4-wi-chain, 2026-06-22-model-rendering-wi-split-overgranular]
 created_at: 2026-07-10T11:08:20.000Z
 updated_at: 2026-07-10T11:08:20.000Z
 ---
@@ -47,3 +48,9 @@ Milestone 2 (ownership/hotspots) and Milestone 3 (dashboard) follow the same pro
 
 - `_logs/2026-06-21T02-08-23_INIT-2026-06-21-gitpulse-code-churn/events.jsonl` — `ralph.end` events for WI-1 through WI-4 showing `iterations=1`
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T02-08-23_INIT-2026-06-21-gitpulse-code-churn.md`
+
+## See also
+
+- [[2026-06-21-single-iteration-delivery-tdd-pure-modules]] — sibling single-iteration TDD delivery
+- [[2026-06-22-single-iteration-tdd-with-4-wi-chain]] — same single-iteration 4-WI TDD rhythm
+- [[2026-06-22-model-rendering-wi-split-overgranular]] — the WI-granularity counter-lesson (when 4 WIs is too many)
