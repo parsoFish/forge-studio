@@ -2,6 +2,8 @@
 title: SDKv2 dead files not deleted — wiki migration (6th documented cycle)
 description: The wiki migration PR did not delete the superseded SDKv2 resource/data-source files despite profile.md checklist 3b; this is the 6th cycle where this omission has recurred.
 category: antipattern
+keywords: [sdkv2-dead-files, wiki-migration, dedup, deregister-and-delete, recurring-omission, checklist-3b]
+related_themes: [provider-registration-dedup-index, 2026-07-01-sdkv2-deregister-omission-duplicate-resource-type, 2026-07-03-sdkv2-dead-files-omission-4th-cycle, 2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension, 2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run, 2026-07-03-sdkv2-dead-file-deletion-unenforced, 2026-07-03-build-package-sdkv2-dead-files-not-deleted]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---
@@ -27,3 +29,14 @@ PM should include an explicit `files_to_delete` list in each migration WI — li
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki/events.jsonl` — dev-loop.delivered events (no deletions of SDKv2 wiki files observed)
 - `/home/parso/forge/brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki.md`
+
+## See also
+
+Same saga — sdkv2 dead-file "deregister AND delete" saga:
+
+- [[2026-07-01-sdkv2-deregister-omission-duplicate-resource-type]]
+- [[2026-07-03-sdkv2-dead-files-omission-4th-cycle]]
+- [[2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension]]
+- [[2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run]]
+- [[2026-07-03-sdkv2-dead-file-deletion-unenforced]]
+- [[2026-07-03-build-package-sdkv2-dead-files-not-deleted]]

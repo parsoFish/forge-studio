@@ -2,6 +2,8 @@
 title: Hollow acceptance gate still catches HCL schema errors — not purely compile-only
 description: The betterado hollow gate (go test without TF_ACC) is not purely a compile check. resource.ParallelTest internally runs terraform plan, so Terraform schema validation fires. Incorrect block names in HCL fixtures cause plan-time failures even without live ADO credentials.
 category: pattern
+keywords: [hollow-gate, terraform-plan, hcl-fixture, "resource.parallel-test", schema-validation, block-names]
+related_themes: [gate-mechanics-index]
 created_at: 2026-07-10T10:45:06.472Z
 updated_at: 2026-07-10T10:45:06.472Z
 ---

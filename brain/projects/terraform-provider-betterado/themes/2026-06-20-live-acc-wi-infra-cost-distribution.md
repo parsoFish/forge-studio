@@ -2,6 +2,8 @@
 title: Live acceptance test WI can consume 57% of cycle cost on infra-discovery iterations
 description: WI-5 (TestAccTaskGroupStateUpgradeSmoke) cost $5.59 of $9.7 total — 57% — entirely in 2 iterations resolving the ADO 1000-project org limit. Spec assumed free project creates; org was at cap. A pre-flight env-audit WI (verify org capacity; confirm project-reuse strategy) could isolate infra-discovery cost and unblock parallelism.
 category: pattern
+keywords: [live-acceptance-test, cost-distribution, org-project-cap, infra-discovery, pre-flight-audit, state-upgrader, iteration-cost]
+related_themes: [live-evidence-demo-index, fixture-discipline-index]
 created_at: 2026-06-20
 updated_at: 2026-07-10
 ---

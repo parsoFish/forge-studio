@@ -2,6 +2,8 @@
 title: Spike WI scope bleed — agent implements successor WI's scope during spike
 description: WI-1 (token spike) wrote the full permissions implementation AND tests, so WI-2 (impl) was already-complete at iter-0 ($0, zero tool use) — the WI boundary was ceremonial.
 category: antipattern
+keywords: [spike-wi, scope-bleed, wi-boundary, gate-superset, already-complete, iteration-zero, wi-collapse]
+related_themes: [pm-decomposition-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

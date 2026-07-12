@@ -11,6 +11,7 @@ keywords:
   - gitignore
   - chore-commit
   - repeated-actions
+related_themes: [2026-06-21-gitignored-scratch-files-recurrence]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -55,3 +56,7 @@ invocation and do not need to be tracked by git.
 
 - `_logs/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag/events.jsonl` — events at lines ~150-165 (WI-2), ~260-275 (WI-3), ~390-410 (WI-4) showing double `git add` + commit pattern.
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag.md`
+
+## See also
+
+- [[2026-06-21-gitignored-scratch-files-recurrence]] — the same scratch-file antipattern recurring in the next cycle

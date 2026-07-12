@@ -2,6 +2,8 @@
 title: Framework provider Metadata.TypeName must equal the registry provider name ("betterado"), or derived resources mis-register
 description: A framework resource whose Metadata sets resp.TypeName = req.ProviderTypeName + "_x" registers under the WRONG type unless the framework provider's Metadata().TypeName is "betterado". With it set to "azuredevops", release_definition registered as azuredevops_release_definition on main — unusable — and every unit/acc gate passed anyway.
 category: antipattern
+keywords: [typename, metadata, provider-registration, resource-naming, betterado-vs-azuredevops, muxed-provider, terraform-providers-schema]
+related_themes: [framework-migration-index, provider-registration-dedup-index]
 created_at: 2026-06-20T00:00:00.000Z
 updated_at: 2026-06-20T00:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: Wiki API-shape bugs re-derived from scratch with brainReads=0 across all WIs
 description: All 8 dev-loop WI sessions for the wiki migration had brainReads=0; three API-shape bugs known from prior work were re-derived from runtime error messages, costing ~4 extra iterations.
 category: antipattern
+keywords: [brainreads-zero, wiki-api, versiondescriptor, etag, project-cap, re-derived, zero-brain-reads]
+related_themes: [ralph-brain-reads-index, ado-api-shapes-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

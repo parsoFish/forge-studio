@@ -21,9 +21,7 @@ keywords:
   - brain-accuracy
 created_at: 2026-05-17T14:30:00.000Z
 updated_at: 2026-05-17T14:30:00.000Z
-related_themes:
-  - brain-read-policy
-  - brain-gap-feedback-loop
+related_themes: []
 ---
 
 # trafficGame — stale brain themes that contradict the codebase cause PM-phase failure

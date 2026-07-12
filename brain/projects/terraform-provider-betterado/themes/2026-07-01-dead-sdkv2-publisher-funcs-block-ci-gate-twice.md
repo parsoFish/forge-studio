@@ -7,6 +7,8 @@ description: >-
   (same error both times), forcing 3 additional unifier passes before the lint was
   cleared. Per-WI gate never catches this (go test is lint-blind).
 category: antipattern
+keywords: [unused-func, golangci-lint, ci-gate, dead-code, publisher-helpers, servicehook, lint-blind]
+related_themes: [build-tooling-index, provider-registration-dedup-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

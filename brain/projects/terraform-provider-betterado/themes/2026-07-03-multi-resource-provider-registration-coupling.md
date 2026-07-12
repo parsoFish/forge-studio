@@ -2,6 +2,8 @@
 title: Multi-resource framework migration — provider registration files always couple WIs
 description: When migrating 2+ resources in one initiative, any decomposition that puts each resource's migration in a separate WI will always fail the hidden-coupling check because all WIs must edit provider.go and framework_provider.go for deregistration/registration. Batch registration edits into one shared WI.
 category: antipattern
+keywords: [provider-registration, hidden-coupling, framework-provider, multi-resource-migration, wi-decomposition, sequential-dependency]
+related_themes: [provider-registration-dedup-index, pm-decomposition-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

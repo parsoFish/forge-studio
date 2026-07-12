@@ -2,6 +2,8 @@
 title: failure_classification emits stale event IDs from prior failure leg after CI-gate failure
 description: After CI-gate failed post dev-loop completion, orchestrator re-emitted failure_classification with event IDs from an earlier PM-failure leg, reporting wrong failure mode.
 category: antipattern
+keywords: [failure_classification, stale-event-ids, ci-gate-failure, gofumpt, misclassification, orchestrator, recovery-commands]
+related_themes: [cycle-recovery-index]
 created_at: 2026-07-10
 updated_at: 2026-07-10
 ---

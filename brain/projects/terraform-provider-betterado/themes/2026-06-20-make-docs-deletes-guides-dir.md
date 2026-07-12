@@ -2,6 +2,8 @@
 title: make docs deletes docs/guides/ — must restore manually
 description: tfplugindocs generate wipes the entire docs/ tree including hand-written guides; git checkout -- docs/guides/ required after every docs run.
 category: antipattern
+keywords: [make-docs, tfplugindocs, docs-guides, git-checkout, guides-dir, docs-regeneration]
+related_themes: [build-tooling-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

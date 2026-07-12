@@ -2,6 +2,8 @@
 title: Identity user display name is org-specific — "Project Collection Build Service" doesn't exist
 description: ADO identity lookup with DisplayName filter requires the org-specific format "{ProjectName} Build Service ({OrgName})" — the generic "Project Collection Build Service" name is not resolvable in this org.
 category: antipattern
+keywords: [identity-user, displayname, build-service, org-specific-format, contains-match, acceptance-test]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-07-01T10:11:22.291Z
 updated_at: 2026-07-01T10:11:22.291Z
 ---

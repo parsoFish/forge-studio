@@ -2,6 +2,8 @@
 title: SDKv2 dead files deleted correctly in graph+identity migration (first time in 8 cycles)
 description: Unlike 7 prior migration cycles, the graph+identity initiative deleted all superseded SDKv2 source files in the same WIs — clause 3b held without operator intervention.
 category: pattern
+keywords: [sdkv2-dead-files, deregister-and-delete, wi-spec, file-deletion, graph-identity-migration, deletion-discipline]
+related_themes: [provider-registration-dedup-index]
 created_at: 2026-07-01T10:11:22.291Z
 updated_at: 2026-07-01T10:11:22.291Z
 ---

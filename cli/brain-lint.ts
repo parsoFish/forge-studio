@@ -325,6 +325,86 @@ export function checkIndexSync(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- checkProjectBrainIndexes ----------
+
+/**
+ * Project-brain (Brain 3) category-index sync. Mirrors checkIndexSync, but each
+ * project brain (`brain/projects/<name>/`) resolves its category indexes in its
+ * OWN dir (patterns.md / antipatterns.md / decisions.md / reference.md), not the
+ * forge sub-wikis. ADR 035 made project brains forge-owned central, so lint now
+ * covers them. Flag severity — advisory, never gates.
+ */
+export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  const projectsRoot = join(forgeRoot, 'brain', 'projects');
+  if (!existsSync(projectsRoot)) return findings;
+
+  for (const name of readdirSync(projectsRoot)) {
+    const projectDir = join(projectsRoot, name);
+    const themesDir = join(projectDir, 'themes');
+    if (!existsSync(themesDir)) continue;
+
+    const themeFiles = readdirSync(themesDir).filter(
+      (e) => e.endsWith('.md') && e !== 'README.md',
+    );
+    if (themeFiles.length === 0) continue;
+
+    // A project brain with themes but no category index files is unindexed — its
+    // themes are unreachable from the meta-index and invisible to the
+    // category-first brain-query read. Flag once (does not gate).
+    const hasAnyIndex = Object.values(CATEGORY_TO_INDEX_FILE).some((f) =>
+      existsSync(join(projectDir, f)),
+    );
+    if (!hasAnyIndex) {
+      findings.push({
+        category: 'flag',
+        file: relative(forgeRoot, themesDir),
+        message: `project brain "${name}" has ${themeFiles.length} theme(s) but no category index files (patterns.md/antipatterns.md/decisions.md/reference.md); themes are unindexed`,
+        check: 'checkProjectBrainIndexes',
+      });
+      continue;
+    }
+
+    for (const entry of themeFiles) {
+      const file = join(themesDir, entry);
+      const parsed = parseTheme(file);
+      if (!parsed) continue;
+      const cat = String(parsed.data.category ?? '');
+      if (!ALLOWED_CATEGORIES.has(cat)) continue;
+      const indexFile = CATEGORY_TO_INDEX_FILE[cat];
+      if (!indexFile) continue;
+      const indexPath = join(projectDir, indexFile);
+      if (!existsSync(indexPath)) {
+        findings.push({
+          category: 'flag',
+          file,
+          message: `category index missing: ${relative(forgeRoot, indexPath)}`,
+          check: 'checkProjectBrainIndexes',
+        });
+        continue;
+      }
+      const slug = basename(file, '.md');
+      const hit = readIndexEntries(indexPath).filter((e) => e === slug).length;
+      if (hit === 0) {
+        findings.push({
+          category: 'flag',
+          file,
+          message: `not listed in project category index: ${relative(forgeRoot, indexPath)}`,
+          check: 'checkProjectBrainIndexes',
+        });
+      } else if (hit > 1) {
+        findings.push({
+          category: 'flag',
+          file,
+          message: `listed ${hit} times in project category index: ${relative(forgeRoot, indexPath)}`,
+          check: 'checkProjectBrainIndexes',
+        });
+      }
+    }
+  }
+  return findings;
+}
+
 // ---------- checkSourceLinks ----------
 
 /** Extract relative-link targets and wikilink slugs from a theme body. */
@@ -869,6 +949,8 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       return { kind: 'cleanup.untriaged', resolution: 'user' };
     case 'checkReflectorLoss':
       return { kind: 'reflector.loss', resolution: 'user' };
+    case 'checkProjectBrainIndexes':
+      return { kind: 'index.project', resolution: 'agent', fixHint: 'In the project brain dir (brain/projects/<name>/), ensure this theme is listed exactly once under its category index (patterns/antipatterns/decisions/reference.md), creating the index from the cycles-index template if absent.' };
     default:
       return { kind: 'unknown', resolution: 'user' };
   }
@@ -954,6 +1036,7 @@ export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
     ...checkSourceLinks(opts.cwd),
     ...checkStaleness(opts.cwd),
     ...checkOrphans(opts.cwd),
+    ...checkProjectBrainIndexes(opts.cwd),
     ...checkLengthSoftCap(opts.cwd),
     ...checkContradictions(opts.cwd),
     ...checkCategoryScope(opts.cwd),

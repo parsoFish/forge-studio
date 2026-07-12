@@ -2,6 +2,8 @@
 title: terraform-plugin-framework-validators v0.19.0 adopted — hand-rolled validators.go deleted
 description: The graph+identity migration replaced the hand-rolled validators.go with the official terraform-plugin-framework-validators library; go.mod + vendor updated in-WI; 7 offline unit tests confirm conflict-triangle and mode-enum validators.
 category: pattern
+keywords: [terraform-plugin-framework-validators, stringvalidator, resourcevalidator, validators.go, vendor, sdkv2-to-framework-mapping]
+related_themes: [framework-migration-index]
 created_at: 2026-07-01T10:11:22.291Z
 updated_at: 2026-07-01T10:11:22.291Z
 ---

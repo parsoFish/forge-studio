@@ -2,6 +2,8 @@
 title: Agent crash after work done — recovery marks already-complete
 description: WI-3 had an agent crash (exit code 1) after the acceptance test was written and committed; recovery scan found gate already green and marked stop_reason already-complete with zero rework.
 category: pattern
+keywords: [agent-crash, exit-code-1, recovery-scan, already-complete, gate-already-green, dev-loop-crash]
+related_themes: [cycle-recovery-index]
 created_at: 2026-06-16T00:00:00.000Z
 updated_at: 2026-06-16T00:00:00.000Z
 ---

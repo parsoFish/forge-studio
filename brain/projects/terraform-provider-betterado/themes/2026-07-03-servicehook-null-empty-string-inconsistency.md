@@ -2,6 +2,8 @@
 title: Servicehook framework resources — null vs empty-string state inconsistency
 description: Both servicehook framework resources needed extra iterations to fix attributes (stage_name, pipeline_id, git_push branch/pushed_by/repository_id) that the ADO API returns as empty string but were stored as null in Terraform state, causing "inconsistent result after apply".
 category: antipattern
+keywords: [servicehook, null-vs-empty-string, "inconsistent result after apply", stage_name, pipeline_id, git_push]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

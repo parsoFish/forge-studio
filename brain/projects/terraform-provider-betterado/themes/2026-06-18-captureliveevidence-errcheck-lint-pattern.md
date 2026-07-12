@@ -2,6 +2,8 @@
 title: CaptureLiveEvidence errcheck lint — checked discard required
 description: golangci-lint errcheck flags `_ = testutils.CaptureLiveEvidence(...)` even with explicit blank assignment. The correct pattern wraps the error or uses a lint-exemption comment. This is not caught by the per-WI hollow gate (no golangci-lint) and surfaces only at the CI gate.
 category: antipattern
+keywords: [errcheck, golangci-lint, captureliveevidence, blank-assignment, ci-gate, nolint]
+related_themes: [gate-mechanics-index, live-evidence-demo-index]
 created_at: 2026-07-10T10:45:06.472Z
 updated_at: 2026-07-10T10:45:06.472Z
 ---

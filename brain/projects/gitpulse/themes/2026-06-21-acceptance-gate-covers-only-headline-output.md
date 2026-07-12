@@ -12,6 +12,7 @@ keywords:
   - ownership
   - hotspot
   - format
+related_themes: [2026-06-21-json-output-flag-delivery, 2026-07-11-csv-output-flag-delivery]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -56,3 +57,8 @@ drop/miscount is caught.
 - `_logs/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag/events.jsonl` — `gate.pass` event for WI-4 showing `npm run acceptance` passes; iteration metadata in the `dev-loop.end` for WI-4.
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag.md`
 - `projects/gitpulse/test/acceptance/run.ts` — current gate scope.
+
+## See also
+
+- [[2026-06-21-json-output-flag-delivery]] — the `--json` delivery extended this same read-back acceptance gate
+- [[2026-07-11-csv-output-flag-delivery]] — the `--csv` delivery also extended the read-back acceptance gate

@@ -2,6 +2,8 @@
 title: ADO feed soft-delete — CheckDestroy must assert DeletedDate
 description: DeleteFeed is a soft-delete; GetFeed returns the feed until explicitly purged, so naive CheckDestroy must assert DeletedDate != nil or a 404, not just a non-error response.
 category: antipattern
+keywords: [feed-soft-delete, checkdestroy, deleteddate, false-green, purge, acceptance-test]
+related_themes: [fixture-discipline-index, ado-api-shapes-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

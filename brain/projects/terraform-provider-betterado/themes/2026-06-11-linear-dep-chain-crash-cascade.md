@@ -2,6 +2,8 @@
 title: Fully-linear WI dependency chain amplifies single crash to total failure
 description: A 5-WI fully sequential dependency chain (WI-1 → WI-2 → ... → WI-5) caused 0/5 delivery when WI-1 crashed twice; all 4 downstream WIs skipped as prerequisite-failed. Re-decomposed to 2 WIs on resume — same scope, delivered in 1 iteration each.
 category: antipattern
+keywords: [linear-dependency-chain, crash-cascade, prerequisite-failed, over-granulated, fan-out-then-merge, decompose-shape, resilience]
+related_themes: [cycle-recovery-index, pm-decomposition-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
 ---

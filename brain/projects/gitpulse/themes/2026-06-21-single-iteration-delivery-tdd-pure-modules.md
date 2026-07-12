@@ -11,6 +11,7 @@ keywords:
   - single-iteration
   - quality-gate
   - zero-wedge
+related_themes: [2026-06-21-single-iteration-4wi-milestone-delivery, 2026-06-22-single-iteration-tdd-with-4-wi-chain, git-truth-and-pure-aggregation]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -54,3 +55,9 @@ The TDD loop (expected-fail gate → implement → gate pass) is short: typicall
 
 - `_logs/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag/events.jsonl` — `ralph.end` events for WI-1 through WI-4, all with `iterations: 1` and `stop_reason: quality-gates-pass`.
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag.md`
+
+## See also
+
+- [[2026-06-21-single-iteration-4wi-milestone-delivery]] — sibling single-iteration TDD delivery
+- [[2026-06-22-single-iteration-tdd-with-4-wi-chain]] — same single-iteration 4-WI TDD rhythm
+- [[git-truth-and-pure-aggregation]] — the pure-aggregation contract this pattern relies on

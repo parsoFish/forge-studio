@@ -8,7 +8,7 @@ description: >-
   time-based waits. Quality gates for any forge initiative against trafficGame
   must include both npm test and npm run test:visual where canvas/physics is
   touched.
-category: process
+category: operation
 keywords:
   - trafficgame
   - vitest
@@ -22,9 +22,7 @@ keywords:
   - fixed-timestep
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-10T15:30:00.000Z
-related_themes:
-  - tdd-with-agents
-  - quality-gates-orchestrator-verified
+related_themes: [2026-05-23-grading-frontier-infrastructure]
 ---
 
 # trafficGame — test stack and quality gates

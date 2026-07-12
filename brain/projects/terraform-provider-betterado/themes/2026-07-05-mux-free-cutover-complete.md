@@ -2,6 +2,8 @@
 title: Mux-free cutover complete — pure framework provider achieved
 description: The mux scaffold (tf6muxserver + tf5to6server) was removed; main.go now serves only the framework provider. All 16 remaining serviceendpoint types migrated in 5 WIs; provider.go ResourcesMap/DataSourcesMap empty.
 category: reference
+keywords: [mux-free, cutover, tf6server, providerserver, serviceendpoint, framework-provider, sdkv2-removal]
+related_themes: [framework-migration-index]
 created_at: 2026-07-09T22:03:49.533Z
 updated_at: 2026-07-09T22:03:49.533Z
 ---

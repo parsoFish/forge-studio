@@ -12,6 +12,7 @@ keywords:
   - git-truth-seam
   - zero-deps
   - filter
+related_themes: [2026-07-12-sort-flag-delivery, git-truth-and-pure-aggregation, 2026-07-11-tags-command-delivery]
 created_at: 2026-07-11T00:00:00.000Z
 updated_at: 2026-07-11T00:00:00.000Z
 ---
@@ -39,3 +40,9 @@ WI-1→WI-2→WI-3 linear chain, each completed in 1 iteration. 992 insertions, 
 
 - `_logs/2026-07-11T07-29-19_INIT-2026-07-11-exclude-path-filter/events.jsonl` — `gate.pass` for WI-1/WI-2/WI-3; `dev-loop.delivered` final totals
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T07-29-19_INIT-2026-07-11-exclude-path-filter.md`
+
+## See also
+
+- [[2026-07-12-sort-flag-delivery]] — the single-code-path twin (apply once before any renderer)
+- [[git-truth-and-pure-aggregation]] — filters right at the git-truth seam it defines
+- [[2026-07-11-tags-command-delivery]] — tags reuses this exclude-path filtering

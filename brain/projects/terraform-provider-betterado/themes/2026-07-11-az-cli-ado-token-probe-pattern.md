@@ -2,6 +2,8 @@
 title: Azure CLI ADO token probe — single cheap check before iterating
 description: Probe az account get-access-token with the ADO audience once; non-zero exit means CLI unavailable — take the documented fallback immediately, never iterate against live CLI failures.
 category: pattern
+keywords: [az-cli, token-probe, get-access-token, tenant, auth-fallback, tskip]
+related_themes: [configure-auth-index]
 created_at: 2026-07-11
 updated_at: 2026-07-11
 ---

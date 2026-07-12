@@ -2,6 +2,8 @@
 title: release_definition framework resource has a `revision` idempotency bug (surfaced once acc tests could run live)
 description: TestAccReleaseDefinition_basic fails live on revision — no-op re-plan shows `revision = N -> (known after apply)` (Step 4, non-empty plan). UseStateForUnknown fixes the no-op but breaks the update step (Step 6 "inconsistent result after apply") because ADO bumps revision on every update. Needs a proper Read/flatten + plan design, not a one-line modifier. NOT yet fixed.
 category: antipattern
+keywords: [revision, idempotency, useforstateunknown, plan-modifier, "inconsistent result after apply", release_definition, no-op-replan]
+related_themes: [framework-migration-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

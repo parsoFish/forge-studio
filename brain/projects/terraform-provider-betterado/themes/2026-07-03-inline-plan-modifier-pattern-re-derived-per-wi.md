@@ -2,6 +2,8 @@
 title: Inline plan-modifier pattern re-derived each migration WI despite AGENT.md handoff
 description: The vendored terraform-plugin-framework does not include stringplanmodifier/int64planmodifier sub-packages; ralph re-explores vendor/ for this fact every WI because AGENT.md knowledge doesn't survive between isolated ralph sessions.
 category: antipattern
+keywords: [plan-modifier, stringplanmodifier, int64planmodifier, vendor-probe, agent.md, requires-replace]
+related_themes: [framework-migration-index, ralph-brain-reads-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

@@ -6,6 +6,8 @@ description: >-
   conditional update to pass CreateDisabled acceptance test without idempotency
   regression.
 category: pattern
+keywords: [workitemtrackingprocess, isenabled, process-create, computed-true, post-create-update, createdisabled]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-07-05T00:00:00.000Z
 updated_at: 2026-07-05T00:00:00.000Z
 ---

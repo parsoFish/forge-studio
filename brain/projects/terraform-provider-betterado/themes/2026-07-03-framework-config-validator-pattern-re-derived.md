@@ -2,6 +2,8 @@
 title: Framework config-validator pattern re-derived by unifier each migration cycle
 description: The terraform-plugin-framework config-validator API (ConflictsWith/RequiredWith/ExactlyOneOf equivalents) is re-explored from vendor/ each time, adding ~8 bash calls per run; the pattern should be recorded in profile.md or WI spec ACs.
 category: antipattern
+keywords: [config-validator, configvalidators, conflictswith, requiredwith, resourcevalidator, framework-validators, unifier]
+related_themes: [framework-migration-index, ralph-brain-reads-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

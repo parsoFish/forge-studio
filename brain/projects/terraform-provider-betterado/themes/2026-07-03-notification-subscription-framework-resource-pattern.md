@@ -2,6 +2,8 @@
 title: betterado_notification_subscription framework resource implementation pattern
 description: Notification subscription resource is framework-native only; NotificationClient wired to AggregatedClient; flat schema (no TypeList filter block needed); validator stringvalidator.OneOf for channel_type.
 category: reference
+keywords: [notification-subscription, notificationclient, aggregatedclient, flat-schema, stringvalidator-oneof, channel-type]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

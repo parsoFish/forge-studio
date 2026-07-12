@@ -2,6 +2,8 @@
 title: Release definition permissions — confirmed ADO token format
 description: The ReleaseManagement2 token format is `{projectId}/{releaseDefinitionId}` — no namespace prefix; identical to the Build namespace. The manifest's hypothesised format was wrong.
 category: reference
+keywords: [release-definition-permissions, releasemanagement2, token-format, security-namespace, permissions-token, ado-api]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: ADO ProcessParameters does not round-trip on basic release definitions — unit test only
 description: ADO does not reliably return ProcessParameters on basic pipeline definitions; it is consumed by task-group template inheritance, not stored as a per-definition field. Correct coverage is expand/flatten unit test only; a live round-trip test would assert against an ADO limitation.
 category: reference
+keywords: [process-parameters, task-group-template, release-definition, round-trip, expand-flatten, ado-limitation]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
 ---

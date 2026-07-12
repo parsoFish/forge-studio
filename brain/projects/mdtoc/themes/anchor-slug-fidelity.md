@@ -1,3 +1,13 @@
+---
+title: anchor-slug fidelity is the load-bearing correctness surface
+description: For a TOC generator the links must resolve; slug drift (host slugging rules) and duplicate-heading disambiguation are the two dominant failure modes, both invisible to a "does it produce a list" test — so the acceptance fixture carries a duplicated heading + a fenced fake heading and the read-back asserts the -1 suffix and the fenced exclusion.
+category: pattern
+keywords: [anchor, slug, toc, github, heading, slugger, acceptance-fixture, fidelity, read-back]
+created_at: 2026-06-19T00:00:00.000Z
+updated_at: 2026-06-19T00:00:00.000Z
+related_themes: []
+---
+
 # Theme: anchor-slug fidelity is the load-bearing correctness surface
 
 ## Pattern

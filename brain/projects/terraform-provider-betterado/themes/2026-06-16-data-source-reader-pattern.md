@@ -2,6 +2,8 @@
 title: Data source reader pattern mirrors resource schema
 description: New data sources follow data_release_folder.go — Read (not ReadContext), 5-min timeout, mirrored schema, 404 surfaces as error.
 category: pattern
+keywords: [data-source, read-not-readcontext, timeout, flatten, 404-error, task-group, build-tag]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-06-16T00:00:00.000Z
 updated_at: 2026-06-16T00:00:00.000Z
 ---

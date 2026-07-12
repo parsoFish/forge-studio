@@ -2,6 +2,8 @@
 title: Framework migration silently drops SDKv2 validators — caught by review, not gate
 description: Two independent initiatives (git PR #46, security-permissions PR #48) delivered framework resources with 0 of the SDKv2 IsUUID/StringIsNotWhiteSpace/OneOf validators; the per-WI live-acc gate does not enforce validator parity; the gap surfaces at review.
 category: antipattern
+keywords: [validator-parity, isuuid, stringisnotwhitespace, oneof, validators, framework-migration, gate-gap]
+related_themes: [framework-migration-index, gate-mechanics-index]
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
 ---

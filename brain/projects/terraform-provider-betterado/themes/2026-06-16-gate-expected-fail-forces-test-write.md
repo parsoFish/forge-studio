@@ -2,6 +2,8 @@
 title: Gate expected-fail is the correct signal for test-first WIs
 description: 3/4 WIs hit gate.expected-fail (no-work-indicator) on iteration 0; in every case this correctly forced the agent to write the test file before exiting — no false positives.
 category: pattern
+keywords: [gate.expected-fail, no-work-indicator, test-first, iteration-0, dev-loop-gate, task-group]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-16T00:00:00.000Z
 updated_at: 2026-06-16T00:00:00.000Z
 ---

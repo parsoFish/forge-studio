@@ -2,6 +2,8 @@
 title: Resume PM re-decomposes correctly — collapsing over-granular WIs without losing scope
 description: When Run 1 produced a 5-WI over-granular linear chain that crashed, the resume PM run re-decomposed to 2 WIs covering identical scope. Both WIs passed at iteration 1. PM correctly identified AC consolidation without operator hand-holding.
 category: pattern
+keywords: [resume-pm, redecompose, over-granular-wi, scope-consolidation, linear-chain, ac-consolidation]
+related_themes: [pm-decomposition-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
 ---

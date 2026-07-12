@@ -2,6 +2,8 @@
 title: Framework StateUpgrader V0→V1 pattern for betterado resources
 description: Pattern for wiring StateVersion=1 and a V0→V1 upgrader into plugin-framework resources in this provider; includes file layout, upgrade function signature, and unit test shape.
 category: pattern
+keywords: [state-upgrader, stateupgraders, v0-to-v1, schema-version, framework-resource, migration-pattern]
+related_themes: [framework-migration-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

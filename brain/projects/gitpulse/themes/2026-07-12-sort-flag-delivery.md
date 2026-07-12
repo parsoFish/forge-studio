@@ -11,6 +11,7 @@ keywords:
   - single-code-path
   - pure-module
   - tdd
+related_themes: [2026-07-11-exclude-path-filter-single-seam]
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
 ---
@@ -43,3 +44,7 @@ updated_at: 2026-07-12T00:00:00.000Z
 
 - `_logs/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag/events.jsonl`
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag.md`
+
+## See also
+
+- [[2026-07-11-exclude-path-filter-single-seam]] — the single-seam twin (apply once before any renderer)

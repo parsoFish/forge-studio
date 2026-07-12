@@ -2,6 +2,8 @@
 title: Policy framework helper pattern — shared helpers.go per package
 description: The branch and repository policy framework migrations both adopted a shared framework_helpers.go within each package to hold common schema attribute builders and flatten/expand utilities, enabling ralph to converge without brain reads.
 category: pattern
+keywords: [framework_helpers.go, branch-policy, repository-policy, shared-helpers, flatten-expand, schema-attribute-builders, self-bootstrapping]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-04
 updated_at: 2026-07-04
 ---

@@ -2,6 +2,8 @@
 title: ralph brainReads=0 — 7th consecutive cycle on betterado
 description: All 6 ralph sessions in this cycle had brainReads=0; the live-acc auth error (WI-6, 173 bash calls) and per-type CaptureLiveEvidence requirement were re-derived from scratch despite being documented in profile.md and prior themes.
 category: antipattern
+keywords: [brainreads, ralph-sessions, zero-brain-reads, re-derived, profile-md, dev-loop]
+related_themes: [ralph-brain-reads-index]
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
 ---

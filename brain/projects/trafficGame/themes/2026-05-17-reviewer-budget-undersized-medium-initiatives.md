@@ -23,9 +23,7 @@ created_at: 2026-05-17T14:30:00.000Z
 updated_at: 2026-05-23T00:00:00.000Z
 retention: archived
 supersedes_by: CONTRACTS.md C19
-related_themes:
-  - wedged-loop-detector
-  - cost-aware-model-routing
+related_themes: []
 ---
 
 > **Historical (C19 superseded).** The per-iteration $/turn budget guard

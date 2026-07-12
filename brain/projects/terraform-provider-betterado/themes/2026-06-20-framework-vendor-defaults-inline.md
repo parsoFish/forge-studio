@@ -2,6 +2,8 @@
 title: terraform-plugin-framework v1.19.0 — default sub-packages not vendored; implement inline
 description: stringdefault, booldefault, int64default sub-packages are absent from the vendored terraform-plugin-framework; defaults must be inline structs. Default field also requires Computed true.
 category: reference
+keywords: [stringdefault, booldefault, int64default, vendored, terraform-plugin-framework, computed-default]
+related_themes: [framework-migration-index]
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
 ---

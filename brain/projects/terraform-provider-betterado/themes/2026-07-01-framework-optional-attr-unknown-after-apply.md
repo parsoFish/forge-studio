@@ -2,6 +2,8 @@
 title: Framework optional attrs return unknown value after apply
 description: Framework resources migrated from SDKv2 return "Provider returned invalid result object after apply — unknown value" for optional attrs that were Computed+Optional in SDKv2; fix is UseStateForUnknown plan modifier or equivalent.
 category: antipattern
+keywords: [usestateforunknown, unknown-value, plan-modifier, optional-computed, framework-migration, apply-error]
+related_themes: [framework-migration-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

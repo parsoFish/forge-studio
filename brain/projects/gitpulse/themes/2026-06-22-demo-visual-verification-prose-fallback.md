@@ -11,6 +11,7 @@ keywords:
   - before-after
   - forge-demo-capture
   - cli-diff
+related_themes: [git-truth-and-pure-aggregation]
 created_at: 2026-06-22T00:00:00.000Z
 updated_at: 2026-06-23T00:00:00.000Z
 ---
@@ -62,3 +63,7 @@ and [[git-truth-and-pure-aggregation]] for the analytics contract the demo prove
 
 - `_logs/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta/user-feedback.md` — operator note: "demo artifact reverted to prose descriptions instead of real before/after visual artifacts"
 - `/home/parso/forge/brain/cycles/_raw/2026-06-22T08-23-03_INIT-2026-06-22-compare-ref-analytics-delta.md`
+
+## See also
+
+- [[git-truth-and-pure-aggregation]] — the analytics contract the demo is meant to prove

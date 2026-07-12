@@ -2,6 +2,8 @@
 title: Ralph zero brain reads — documented gotchas re-derived from scratch
 description: Ralph read brainReads=0 across all WIs despite project brain profile.md encoding the exact patterns needed (stale-revision retry, artifact key filtering); knowledge was re-derived via 60+ bash calls.
 category: antipattern
+keywords: [brainreads, profile.md, gotchas, re-derivation, artifact-filtering, stale-revision-retry, dev-spec]
+related_themes: [ralph-brain-reads-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

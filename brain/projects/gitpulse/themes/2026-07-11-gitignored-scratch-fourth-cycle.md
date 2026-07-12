@@ -2,6 +2,8 @@
 title: Gitignored scratch files — fourth consecutive cycle recurrence
 description: ralph writes fix_plan.md and AGENT.md after every WI commit in the tags-command cycle — the 4th gitpulse cycle in a row with this pattern; SKILL.md and AGENT.md still not updated.
 category: antipattern
+keywords: [fix_plan, AGENT.md, gitignore, chore-commit, repeated-actions, scratch-files, skill-fix-not-applied]
+related_themes: [2026-06-22-gitignored-scratch-file-third-cycle, 2026-07-12-gitignored-scratch-fifth-cycle]
 created_at: 2026-07-11
 updated_at: 2026-07-11
 ---
@@ -33,3 +35,8 @@ Add to `projects/gitpulse/AGENT.md` (or enforce in developer-ralph SKILL.md):
 
 - `_logs/2026-07-11T16-18-59_INIT-2026-07-11-init-2026-07-12-tags-command/events.jsonl` (lines 117–124, 183–189, 249)
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T16-18-59_INIT-2026-07-11-init-2026-07-12-tags-command.md`
+
+## See also
+
+- [[2026-06-22-gitignored-scratch-file-third-cycle]] — the prior (third) cycle of this recurrence
+- [[2026-07-12-gitignored-scratch-fifth-cycle]] — the next (fifth) cycle of this recurrence

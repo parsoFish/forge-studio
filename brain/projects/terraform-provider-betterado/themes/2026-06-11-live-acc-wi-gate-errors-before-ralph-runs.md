@@ -2,6 +2,8 @@
 title: Live-acc WI gate-errors before ralph runs when TF_ACC absent
 description: A live-acceptance WI whose quality_gate_cmd requires TF_ACC will gate-error (exit -5, live-env-missing) at iteration 0 if secrets.env is not exported — ralph runs 0 iterations and produces no work.
 category: antipattern
+keywords: [tf_acc, secrets.env, gate-errored, live-env-missing, ralph-zero-iterations, unifier-rescue]
+related_themes: [gate-mechanics-index, cycle-recovery-index]
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
 ---

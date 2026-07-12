@@ -2,6 +2,8 @@
 title: HCL fixtures under ConfigModeAttr must include explicit null for every Optional attr
 description: Under SchemaConfigModeAttr (array syntax), every Optional attribute in every TypeList element must be set to null in the HCL fixture — omitting them produces HCL validation errors, unlike block syntax where Optional sub-blocks can be absent.
 category: pattern
+keywords: [configmode-attr, hcl-fixture, optional-attribute, null, typelist, schemaconfigmode]
+related_themes: [framework-migration-index]
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
 ---

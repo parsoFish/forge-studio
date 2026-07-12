@@ -2,6 +2,8 @@
 title: Tags command — release-cadence subcommand delivery
 description: gitpulse tags subcommand (release-cadence table with JSON/CSV/filter support) delivered via 4-WI TDD chain; WI-1+WI-2 in 1 iter each, WI-3+WI-4 absorbed by unifier in 1 iter.
 category: pattern
+keywords: [tags, release-cadence, subcommand, readTags, computeTagSpans, git-seam, single-iteration, tdd]
+related_themes: [2026-07-11-csv-output-flag-delivery, 2026-07-11-exclude-path-filter-single-seam]
 created_at: 2026-07-11
 updated_at: 2026-07-11
 ---
@@ -31,3 +33,8 @@ Final delivery: 11 files, +1481 −4 lines, 7 commits.
 
 - `_logs/2026-07-11T16-18-59_INIT-2026-07-11-init-2026-07-12-tags-command/events.jsonl`
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T16-18-59_INIT-2026-07-11-init-2026-07-12-tags-command.md`
+
+## See also
+
+- [[2026-07-11-csv-output-flag-delivery]] — tags reuses the CSV renderer family (tagsToCSV)
+- [[2026-07-11-exclude-path-filter-single-seam]] — tags reuses the exclude-path filtering per commit

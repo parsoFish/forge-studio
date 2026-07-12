@@ -2,6 +2,8 @@
 title: terraform-plugin-mux scaffold — architecture for coexisting SDKv2 + framework providers
 description: The mux scaffold wraps the SDKv2 provider via tf5to6server.UpgradeServer, muxes it with the framework provider via tf6muxserver.NewMuxServer, and serves via tf6server.Serve. Extension points are in azuredevops/internal/provider/framework_provider.go.
 category: pattern
+keywords: [terraform-plugin-mux, tf5to6server, tf6muxserver, sdkv2, framework-provider, extension-point, mux-scaffold]
+related_themes: [framework-migration-index]
 created_at: 2026-06-19T00:00:00.000Z
 updated_at: 2026-06-19T00:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: terrafmt-check only covers azuredevops/ test files, not examples/ or docs/
 description: make terrafmt-check targets ./azuredevops/**/*_test.go only; HCL in examples/resources/ and docs/resources/ is not validated by CI or the per-WI quality gate.
 category: antipattern
+keywords: [terrafmt-check, makefile, examples-dir, docs-dir, hcl-formatting, ci-gate-gap]
+related_themes: [build-tooling-index]
 created_at: 2026-06-18
 updated_at: 2026-06-18
 ---

@@ -2,6 +2,8 @@
 title: Python3 brace-depth tracer as navigation tool for large Go files
 description: When resource_release_definition_framework.go exceeded ~600 lines, ralph resorted to inline python3 brace-depth scripts to locate struct/function closure points; normal Read/Edit pattern produced misplaced insertions.
 category: pattern
+keywords: [python3, brace-depth-tracer, large-go-file, navigation, resource_release_definition_framework]
+related_themes: [build-tooling-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

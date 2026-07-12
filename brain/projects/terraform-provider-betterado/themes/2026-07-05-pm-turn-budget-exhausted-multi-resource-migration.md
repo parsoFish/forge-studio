@@ -2,6 +2,8 @@
 title: PM turn budget exhausted on large multi-resource migration packages
 description: PM hit error_max_turns twice on the 11-WI taskagent migration; hidden-coupling validation over 8+ shared-file resource types consumed the full budget before WIs were written.
 category: antipattern
+keywords: [pm-turn-budget, error_max_turns, hidden-coupling, taskagent, multi-resource-migration, coupling-validator]
+related_themes: [pm-decomposition-index, 2026-07-03-pm-max-turns-graph-identity-13type-scope, 2026-07-03-pm-max-turns-on-wiki-migration-initiative, 2026-07-05-pm-max-turns-large-package-migration]
 created_at: 2026-07-05T00:00:00.000Z
 updated_at: 2026-07-05T00:00:00.000Z
 ---
@@ -33,3 +35,11 @@ Same class as `2026-07-05-pm-max-turns-large-package-migration.md` (workitemtrac
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-taskagent/events.jsonl` (lines 29-33 PM run 1, lines 154 PM run 2, line 222 PM run 3)
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-taskagent.md`
+
+## See also
+
+Same saga — PM error_max_turns chain:
+
+- [[2026-07-03-pm-max-turns-graph-identity-13type-scope]]
+- [[2026-07-03-pm-max-turns-on-wiki-migration-initiative]]
+- [[2026-07-05-pm-max-turns-large-package-migration]]

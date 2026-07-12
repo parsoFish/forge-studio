@@ -2,6 +2,8 @@
 title: Provider count test is a mandatory pair for every new data source
 description: Every new data source added to betterado must also update TestProvider_HasChildDataSources — this count assertion has fired on 3 consecutive data-source additions.
 category: pattern
+keywords: [testprovider-haschilddatasources, data-source-registration, count-test, mandatory-pair, provider-test]
+related_themes: [provider-registration-dedup-index]
 created_at: 2026-06-07
 updated_at: 2026-06-07
 ---

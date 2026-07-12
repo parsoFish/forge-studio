@@ -12,6 +12,7 @@ keywords:
   - chore-commit
   - repeated-actions
   - skill-fix-not-applied
+related_themes: [2026-06-21-gitignored-scratch-files-double-commit, 2026-06-22-gitignored-scratch-file-third-cycle]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -55,3 +56,8 @@ OR in the per-project `AGENT.md` that the agent reads at Ralph start:
 - `_logs/2026-06-21T08-01-50_INIT-2026-06-21-json-output-flag/events.jsonl` — `git add fix_plan.md AGENT.md` events at WI-1 and WI-2 (seq 29–31 WI-1, seq 16–19 WI-2); `git add … demo/pulse-capture.md` WI-2 seq 15
 - `/home/parso/forge/brain/cycles/_raw/2026-06-21T08-01-50_INIT-2026-06-21-json-output-flag.md`
 - Prior cycle: `_logs/2026-06-21T04-52-20_INIT-2026-06-21-ownership-hotspots-top-flag/events.jsonl`
+
+## See also
+
+- [[2026-06-21-gitignored-scratch-files-double-commit]] — the originating cycle-1 observation of this antipattern
+- [[2026-06-22-gitignored-scratch-file-third-cycle]] — the third-cycle recurrence of the same pattern

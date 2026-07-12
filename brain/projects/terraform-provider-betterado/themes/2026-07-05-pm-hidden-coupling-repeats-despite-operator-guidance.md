@@ -2,6 +2,8 @@
 title: PM hidden-coupling violation repeats even with explicit decompose-shape guidance
 description: PM produced framework_provider.go shared-file violations in run 3 despite an operator annotation listing the exact rule; only the 4th run succeeded — operator guidance must name the shared file explicitly AND the coupling gate must exist.
 category: antipattern
+keywords: [hidden-coupling, framework_provider.go, decompose-shape-guidance, coupling-gate, shared-file-ownership, pm-repeated-failure]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

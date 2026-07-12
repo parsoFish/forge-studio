@@ -2,6 +2,8 @@
 title: Registration-file merge conflicts when concurrent migrations fan in
 description: When multiple framework-migration PRs touch provider.go / framework_provider.go / provider_test.go concurrently, the second PR to merge goes CONFLICTING; naive union-patch produces duplicate map keys that the operator must catch manually.
 category: antipattern
+keywords: [provider.go, framework_provider.go, merge-conflict, resourcesmap, union-patch, duplicate-map-keys, worktree-cwd, fan-in]
+related_themes: [provider-registration-dedup-index]
 created_at: 2026-07-10T00:00:00.000Z
 updated_at: 2026-07-10T00:00:00.000Z
 ---

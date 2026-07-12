@@ -2,6 +2,8 @@
 title: betterado_workitemquery_folder acceptance test passes live but CaptureLiveEvidence not called
 description: TestAccWorkItemQueryFolder_UnderArea passed live during the workitemtracking migration cycle but CaptureLiveEvidence('acceptance-resource-workitemquery-folder', ...) was never called in the WI-4 test — no live-evidence file produced.
 category: antipattern
+keywords: [captureliveevidence, workitemquery-folder, live-evidence-missing, unifier-partial-ac, acceptance-test, workitemtracking]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

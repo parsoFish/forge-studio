@@ -2,6 +2,8 @@
 title: CaptureLiveEvidence must use per-type label — shared label fails unifier gate
 description: Dev-loop used the shared label "acceptance-resource" for CaptureLiveEvidence in TestAccTestPlan; review-gate-r2.sh asserts per-type labels — gate failed with "missing per-type capture endpoint"; unifier fixed in iteration 2 with 112 tool calls.
 category: antipattern
+keywords: [captureliveevidence, per-type-label, review-gate-r2, unifier-gate, testacctestplan, missing-capture-endpoint]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
 ---

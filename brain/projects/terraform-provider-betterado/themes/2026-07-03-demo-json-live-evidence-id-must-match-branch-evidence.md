@@ -2,6 +2,8 @@
 title: demo.json liveEvidence subscription ID must match .forge/live-evidence/ at PR time
 description: Terminal unifier re-prep updated only a diffStat line; demo.json retained subscription 886543 while branch held 886548 — ID mismatch caused operator send-back.
 category: antipattern
+keywords: [demo-json, liveevidence, subscription-id, evidence-mismatch, unifier-reprep, send-back]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

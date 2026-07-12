@@ -6,7 +6,7 @@ description: >-
   archived MCP server, removed 264-line dead TrafficPointEntity. Game.ts is
   still ~1,732 lines and TrafficMap.ts is still 517 — these are the priority
   extractions left.
-category: snapshot
+category: reference
 keywords:
   - trafficgame
   - refactor

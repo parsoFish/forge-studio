@@ -2,6 +2,8 @@
 title: "tfplugindocs TypeName must match the desired provider prefix"
 description: "framework_provider.go Metadata() must return TypeName matching the re-branded provider name; wrong value produces double-prefixed resource names and fails make docs."
 category: pattern
+keywords: [tfplugindocs, typename, provider-prefix, make-docs, resource-naming, framework-metadata]
+related_themes: [build-tooling-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

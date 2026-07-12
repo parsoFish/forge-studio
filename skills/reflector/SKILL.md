@@ -48,7 +48,7 @@ Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`G
 ## Outputs
 
 - `_logs/<cycle-id>/retro.md` — three sections: `## Self-reflection`, `## User questions`, `## User feedback`.
-- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category` (`pattern` | `antipattern` | `decision` | `operation` | `reference`), `created_at`, `updated_at`. Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`.
+- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category` (`pattern` | `antipattern` | `decision` | `operation` | `reference`), `keywords` (flow-style list of 5–10 lowercase search terms — feeds brain-query slug/one-liner matching and the contradiction lint), `created_at`, `updated_at`, and `related_themes` (flow-style list of sibling theme slugs — see Stage 4 linking; `[]` only if genuinely standalone). Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`, and — when `related_themes` is non-empty — a `## See also` section mirroring it as `[[slug]] — why` bullets. This matches the canonical format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md).
 - `brain/cycles/_raw/<cycle-id>.md` (cycle log archived). Required frontmatter (write these placeholder values exactly — the orchestrator post-processes to compute `retention` and populate `cited_by`; do NOT compute these yourself):
   ```yaml
   ---
@@ -145,10 +145,13 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
     Set `category` first, then place the file per this table — do not default a `decision` or `reference` theme into `brain/cycles/themes/` (a real rerun mis-routed a `decision`-category theme there; caught only by hand-running `checkCategoryScope`). Project-scoped themes (a) are exempt from this table — they always go under `brain/projects/<project>/themes/` regardless of category.
 
     - Required frontmatter + `## Sources` listing ≥1 path resolving to the cycle log or archive.
-11. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full provenance frontmatter.
-12. Validate: every theme file has valid frontmatter + valid `category` + ≥1 resolvable evidence path. Fix before exiting.
+11. **Link + index the new theme (do not leave it an island).** You already read the prior related themes in Stage 1 — record the connection instead of discarding it into prose:
+    - **`related_themes`:** set it to the slugs of the prior themes this one extends, repeats, or contradicts (e.g. the earlier cycle in a recurring saga, or the topical `*-index` hub page for its cluster). For each slug you add, add the **reciprocal** entry to that theme's `related_themes` too, and add a `## See also` `[[slug]] — why` bullet to both. A brand-new standalone lesson may use `related_themes: []`.
+    - **Category index:** append the theme's one-line entry (`- [\`<slug>\`](./themes/<slug>.md) — <description>`) under the `### Auto-linked` tail of the owning category index in the same brain dir — `patterns.md` / `antipatterns.md` / `decisions.md` / `reference.md` (project brains carry these four; create the file from the cycles-index template if absent). This is what `checkCategoryIndex` gates and what brain-query reads first.
+12. Archive the cycle log to `brain/cycles/_raw/<cycle-id>.md` with full provenance frontmatter.
+13. Validate: every theme file has valid frontmatter (incl. `keywords` + `related_themes`) + valid `category` + ≥1 resolvable evidence path + a category-index entry + reciprocal `related_themes`. Fix before exiting.
 
-> **Direct-write brain.** The reflector writes theme files directly; `brain-ingest` is NOT invoked. The orchestrator calls `regenerateBrainIndex` after you exit — do not update `brain/INDEX.md` yourself.
+> **Direct-write brain.** The reflector writes theme files directly; `brain-ingest` is NOT invoked. The orchestrator calls `regenerateBrainIndex` after you exit — that regenerates `brain/INDEX.md` only, **not** the per-category indexes; you maintain those (step 11). Do not update `brain/INDEX.md` yourself.
 
 ## Constraints
 

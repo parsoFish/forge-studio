@@ -2,6 +2,8 @@
 title: PR #50 committed framework validators + 56MB test binary + broken squash-merge
 description: Feed migration PR #50 (1) committed framework_validators.go, a 56MB test binary, and phantom demo citations (4th gitignored-scratch instance), and (2) the squash-merge shipped a broken main — CHANGELOG had raw conflict markers, two orphaned SDKv2 test files referenced deleted sources, feed package non-compiling for a day.
 category: antipattern
+keywords: [squash-merge, conflict-markers, orphaned-sdkv2-files, test-binary, phantom-citations, changelog, pre-pr-strip]
+related_themes: [provider-registration-dedup-index, live-evidence-demo-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

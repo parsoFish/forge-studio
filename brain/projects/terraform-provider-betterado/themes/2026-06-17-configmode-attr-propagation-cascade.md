@@ -2,6 +2,8 @@
 title: ConfigMode SchemaConfigModeAttr cascades to all child TypeList schemas
 description: Adding ConfigMode:SchemaConfigModeAttr to a top-level block is not sufficient — every TypeList child in the hierarchy must also carry it, or HCL validation rejects any fixture that omits Optional sub-block attributes.
 category: antipattern
+keywords: [configmode, schemaconfigmodeattr, typelist, hcl-null-attrs, nested-schema, attribute-syntax, plan-modifier]
+related_themes: [framework-migration-index]
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
 ---

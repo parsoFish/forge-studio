@@ -11,6 +11,7 @@ keywords:
   - read-back
   - deterministic-fixture
   - zero-dependency
+related_themes: [2026-06-21-single-iteration-delivery-tdd-pure-modules, 2026-06-22-demo-visual-verification-prose-fallback, 2026-07-11-exclude-path-filter-single-seam]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -43,3 +44,9 @@ ties broken by name ascending, so reports + demos are reproducible.
 - `projects/gitpulse/src/git.ts`, `src/stats.ts` — the seam + the pure core.
 - `projects/gitpulse/test/acceptance/run.ts` — the deterministic read-back gate.
 - `projects/gitpulse/.forge/skills/git-log-analysis/SKILL.md` — the encoded rules.
+
+## See also
+
+- [[2026-06-21-single-iteration-delivery-tdd-pure-modules]] — embodies this pure-aggregation discipline
+- [[2026-06-22-demo-visual-verification-prose-fallback]] — the demo is meant to prove this analytics contract
+- [[2026-07-11-exclude-path-filter-single-seam]] — filters at this git-truth seam

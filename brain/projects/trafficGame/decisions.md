@@ -1,6 +1,18 @@
 # trafficGame — Decisions
 
-> Project-specific decisions. `brain-lint` ensures every theme page with `category: decision` (project-scoped) appears here exactly once.
+> Category index. Lists theme pages describing **per-project architectural/design decisions**.
 
-- [`per-map-calibrated-thresholds`](./themes/per-map-calibrated-thresholds.md) — Star thresholds are hand-tuned via playtesting, not auto-generated. Agents must not rewrite without playtest data.
-- [`2026-05-23-binary-elevation-model`](./themes/2026-05-23-binary-elevation-model.md) — vehicle.currentElevation is the single source of truth; three update rules (locked-to-target on transitions, early-lift on next waypoint, early-lift on ramp CPs); all consumers read this one value; future-walk segments evaluated at TARGET, not source-to-target span. Unlocks +72% throughput on the crossroads map.
+`brain-lint` ensures every theme page with `category: decision` appears here exactly once.
+
+## Theme pages
+
+- [`2026-05-23-binary-elevation-model`](./themes/2026-05-23-binary-elevation-model.md) — >-
+- [`per-map-calibrated-thresholds`](./themes/per-map-calibrated-thresholds.md) — >-
+
+## Format
+
+Each entry on this index is one line:
+
+```markdown
+- [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
+```

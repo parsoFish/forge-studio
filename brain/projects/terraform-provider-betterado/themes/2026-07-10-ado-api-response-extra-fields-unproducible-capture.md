@@ -2,6 +2,8 @@
 title: ADO API response extra fields cause unproducible live-evidence capture bodies
 description: UWI-4 gate failed twice with "unproducible capture bodies" for testCases/nulls, allowedValues, revision — fields returned by ADO that are absent from the user-managed Terraform config; the unifier needed 2 crash-retries to resolve.
 category: antipattern
+keywords: [live-evidence, unproducible-capture, extra-fields, revision, allowedvalues, "testcases/nulls", unifier-crash]
+related_themes: [ado-api-shapes-index, live-evidence-demo-index]
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
 ---

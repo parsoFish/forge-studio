@@ -2,6 +2,8 @@
 title: terrafmt omitted from agent's offline self-check — caught late at CI gate
 description: The ralph dev-loop agent's ad-hoc offline pre-gate check chain (go build, go vet, gofmt -l) consistently omits ./scripts/terrafmt.sh; terrafmt failures in HCL blocks inside acceptance test files are caught at gate time or at the CI gate, not by the agent's own pass.
 category: antipattern
+keywords: [terrafmt, offline-self-check, hcl-format, ci-gate, gofmt, quality_gate_cmd]
+related_themes: [build-tooling-index]
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
 ---

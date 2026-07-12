@@ -6,6 +6,8 @@ description: >-
   were absent from WI-3 through WI-5 specs, causing SDKv2-deregister and
   nil-AggregatedClient failures across 5 WIs before the pattern self-corrected.
 category: antipattern
+keywords: [framework-migration-checklist, wi-specs, brainreads, deregister, configure-stub, workitemtrackingprocess]
+related_themes: [framework-migration-index, ralph-brain-reads-index]
 created_at: 2026-07-05T00:00:00.000Z
 updated_at: 2026-07-05T00:00:00.000Z
 ---

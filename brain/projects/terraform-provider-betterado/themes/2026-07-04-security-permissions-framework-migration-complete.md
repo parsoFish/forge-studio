@@ -2,6 +2,8 @@
 title: Security/securityroles/permissions framework migration pattern — all 17 types landed
 description: Full SDKv2→framework migration of betterado_security_permissions, betterado_security_namespace*, betterado_securityrole_assignment, betterado_securityrole_definitions, and all 13 betterado_*_permissions types merged as PR #48; gap matrices produced for all three API areas.
 category: pattern
+keywords: [security-permissions, securityrole, security-namespace, framework-migration, gap-matrix, single-owner-package]
+related_themes: [framework-migration-index]
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
 ---

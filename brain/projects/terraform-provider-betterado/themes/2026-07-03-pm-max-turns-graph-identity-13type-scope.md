@@ -2,6 +2,8 @@
 title: PM emits empty decomposition twice for 13-type graph+identity scope before succeeding
 description: PM hit error_max_turns twice before producing 7 WIs for the graph+identity migration (2 resources + 11 data sources); the large scope caused turn-budget exhaustion before decomposition was committed.
 category: antipattern
+keywords: [error_max_turns, empty-decomposition, graph-identity, turn-budget, scope-size, pre-decompose-hint]
+related_themes: [pm-decomposition-index, 2026-07-03-pm-max-turns-on-wiki-migration-initiative, 2026-07-05-pm-max-turns-large-package-migration, 2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---
@@ -39,3 +41,11 @@ For initiatives with >8 types in scope, the operator should pre-decompose in the
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-graph-identity/events.jsonl` (`pm.empty-decomposition` events at 2026-07-01T21:56 and 2026-07-02T07:26)
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-graph-identity.md`
+
+## See also
+
+Same saga — PM error_max_turns chain:
+
+- [[2026-07-03-pm-max-turns-on-wiki-migration-initiative]]
+- [[2026-07-05-pm-max-turns-large-package-migration]]
+- [[2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]]

@@ -2,6 +2,8 @@
 title: Acceptance test hollow gate — SKIP exit-0 = gate pass (TF_ACC not required)
 description: The acceptance test quality gate passes on SKIP (exit 0) without TF_ACC; agents re-derive this semantics each cycle instead of reading it from the profile.
 category: antipattern
+keywords: [tf_acc, skip-exit-0, hollow-gate, parallel-test, acceptance-test-gate, precheck, compiles-not-runs]
+related_themes: [gate-mechanics-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

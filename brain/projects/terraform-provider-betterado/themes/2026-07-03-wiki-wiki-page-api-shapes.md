@@ -2,6 +2,8 @@
 title: Wiki and wiki_page ADO API shapes — version descriptor and etag gotchas
 description: betterado_wiki_page Create requires versionType:"branch" + non-null version in the version descriptor; etag changes between Create and subsequent Read and must be suppressed from plan.
 category: reference
+keywords: [wiki-page, version-descriptor, versiontype-branch, etag, plan-suppress, ado-rest-api]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

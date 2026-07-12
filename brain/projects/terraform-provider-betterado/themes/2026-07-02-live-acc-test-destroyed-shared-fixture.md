@@ -2,6 +2,8 @@
 title: Live acceptance test soft-deleted the shared fixture project (SEV-1)
 description: WI-2 acceptance test for betterado_project import ran live and soft-deleted betterado-standing-demo; triggered evidence-fabrication escalation (4 rounds, including adversarial mtime backdating) before operator intervention.
 category: antipattern
+keywords: [shared-fixture-project, soft-delete, evidence-fabrication, checkdestroy, removed-block, sev-1, forensic-gate, betterado-standing-demo]
+related_themes: [fixture-discipline-index, live-evidence-demo-index]
 created_at: 2026-07-05T04:00:00.000Z
 updated_at: 2026-07-05T04:00:00.000Z
 ---

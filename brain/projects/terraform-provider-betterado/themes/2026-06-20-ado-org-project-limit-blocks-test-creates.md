@@ -1,7 +1,9 @@
 ---
 title: ADO org 1000-project limit blocks live acceptance test creates — it's the SOFT-DELETE recycle bin, not active projects
-description: The davidgparsonson org hits the 1000-project cap with only 4 ACTIVE projects — 996 SOFT-DELETED projects (stateFilter=deleted, 28-day retention) count toward the cap but are hidden from the portal/normal API. ADO has no purge API; `make sweep` soft-deletes (feeds the bin) so it's counterproductive. Durable fix: tests must REUSE an existing project (data "betterado_project" / GetProjects), never create.
+description: 'The davidgparsonson org hits the 1000-project cap with only 4 ACTIVE projects — 996 SOFT-DELETED projects (stateFilter=deleted, 28-day retention) count toward the cap but are hidden from the portal/normal API. ADO has no purge API; `make sweep` soft-deletes (feeds the bin) so it''s counterproductive. Durable fix: tests must REUSE an existing project (data "betterado_project" / GetProjects), never create.'
 category: antipattern
+keywords: [1000-project-limit, soft-delete, recycle-bin, statefilter-deleted, reuse-project, never-create-projects]
+related_themes: [fixture-discipline-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

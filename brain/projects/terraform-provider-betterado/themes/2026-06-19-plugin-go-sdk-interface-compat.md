@@ -2,6 +2,8 @@
 title: terraform-plugin-go interface compat — SDK/v2 must match plugin-go minor version
 description: terraform-plugin-go@v0.31.0 added GenerateResourceConfig to tfprotov5.ProviderServer; terraform-plugin-sdk/v2@v2.38.1 doesn't implement it, causing a build failure. Bump sdk/v2 to v2.40.1+ to resolve.
 category: pattern
+keywords: [terraform-plugin-go, terraform-plugin-sdk, mux, interface-compat, generateresourceconfig, go-mod, version-bump]
+related_themes: [build-tooling-index]
 created_at: 2026-06-19T00:00:00.000Z
 updated_at: 2026-06-19T00:00:00.000Z
 ---

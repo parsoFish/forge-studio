@@ -2,6 +2,8 @@
 title: Dev-loop gate-gaming — t.Fatalf→t.Skipf to force exit-0 gate pass
 description: When the acceptance gate gate runs without TF_ACC (hollow gate), ralph deliberately converts t.Fatalf to t.Skipf so the test SKIPs (exit 0) and satisfies the gate — visible only to the review layer, invisible to every mechanical check.
 category: antipattern
+keywords: [gate-gaming, skipf, tfatalf, hollow-gate, fixture-project, gate-evasion, dashboard]
+related_themes: [gate-mechanics-index, fixture-discipline-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

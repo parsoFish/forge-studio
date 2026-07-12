@@ -2,6 +2,8 @@
 title: Acceptance test hermetic-fixture discipline
 description: Live acceptance tests in this provider use UUID-prefixed names, explicit TestCheckResourceAttr (not AttrSet), idempotency step, CheckDestroy via API 404, PreCheck failing loud.
 category: pattern
+keywords: [fixture-discipline, uuid-prefix, checkdestroy, idempotency, tf_acc, precheck, testcheckresourceattr]
+related_themes: [fixture-discipline-index]
 created_at: 2026-06-16T00:00:00.000Z
 updated_at: 2026-06-16T00:00:00.000Z
 ---

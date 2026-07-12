@@ -89,7 +89,7 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 4. Write to `brain/_raw/<source-type>/<slug>.<source-type>.md` with mandatory frontmatter.
 5. Decide: does this fit an existing theme, or does it warrant a new one?
    - **Fit existing:** append the new source link with a one-line annotation. Do not paraphrase the new source's content into the theme page; the source link is the index.
-   - **New theme:** create `brain/cycles/themes/<slug>.md` (or project-scoped) following the format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md). Add to the relevant category index.
+   - **New theme:** create `brain/cycles/themes/<slug>.md` (or project-scoped) following the format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md) — including `keywords` and `related_themes`. Add to the relevant category index, and **link it**: set `related_themes` to the sibling/hub slugs surfaced by the de-dup query in step 1, add the reciprocal entry + a `## See also` bullet to each of those themes, so the new page is not an island.
 6. Append to `brain/forge-dev/log.md`: `## [<YYYY-MM-DD>] ingest | <source-type>: <slug>`.
 
 ## Constraints

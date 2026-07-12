@@ -2,6 +2,8 @@
 title: release_folder gap matrix and sentinel test pattern
 description: The release_folder resource gap matrix (docs/release-folder-gap-matrix.md) + TestReleaseFolderGapMatrixAudit sentinel establishes the same API-coverage discipline as release_definition. WI-1 produced the matrix in 1 iteration; WI-2 added the live acc test TestAccReleaseFolder in 1 iteration. Both used the expected-fail gate pattern correctly.
 category: reference
+keywords: [gap-matrix, sentinel-test, release-folder, api-coverage, testreleasefoldergapmatrixaudit, expected-fail-gate]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-10T10:39:32.000Z
 updated_at: 2026-07-10T10:39:32.000Z
 ---

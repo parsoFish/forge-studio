@@ -22,10 +22,7 @@ keywords:
   - fanout
 created_at: 2026-05-23T00:00:00.000Z
 updated_at: 2026-05-23T00:00:00.000Z
-related_themes:
-  - 2026-05-23-binary-elevation-model
-  - 2026-05-10-test-stack-and-gates
-  - canvas-bpr-flow-tests
+related_themes: [2026-05-10-test-stack-and-gates, 2026-05-23-binary-elevation-model, canvas-bpr-flow-tests]
 ---
 
 # Grading-frontier infrastructure

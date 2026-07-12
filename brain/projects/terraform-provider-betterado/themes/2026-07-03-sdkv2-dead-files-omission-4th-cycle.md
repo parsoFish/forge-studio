@@ -2,6 +2,8 @@
 title: SDKv2 dead-file omission — 4th consecutive migration cycle (member-entitlement)
 description: WI-2/3/4 each created a framework .go file and deregistered the SDKv2 type but did not delete the old implementation files; unifier UWI-2 was required to delete them, adding ~$3.1 cost. This is the 4th consecutive migration cycle with this pattern.
 category: antipattern
+keywords: [sdkv2-dead-files, deregister-and-delete, deletion-ac, unifier-cost, framework-migration, cleanup]
+related_themes: [provider-registration-dedup-index, 2026-07-01-sdkv2-deregister-omission-duplicate-resource-type, 2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension, 2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle, 2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run, 2026-07-03-sdkv2-dead-file-deletion-unenforced, 2026-07-03-build-package-sdkv2-dead-files-not-deleted]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---
@@ -50,3 +52,14 @@ The list is derivable at PM time: iterate `provider.go` ResourcesMap entries tha
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-member-entitlement/events.jsonl` (WI-2, WI-3, WI-4 `ralph.end` events — file.add only, no file.delete; UWI-2 gate.pass at `2026-07-03T04:07:08`)
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-member-entitlement.md`
 - Prior evidence: `brain/projects/terraform-provider-betterado/themes/2026-07-03-build-package-sdkv2-dead-files-not-deleted.md`
+
+## See also
+
+Same saga — sdkv2 dead-file "deregister AND delete" saga:
+
+- [[2026-07-01-sdkv2-deregister-omission-duplicate-resource-type]]
+- [[2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension]]
+- [[2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle]]
+- [[2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run]]
+- [[2026-07-03-sdkv2-dead-file-deletion-unenforced]]
+- [[2026-07-03-build-package-sdkv2-dead-files-not-deleted]]

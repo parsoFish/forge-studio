@@ -2,6 +2,8 @@
 title: Framework data-source registration pattern — DataSources() in framework_provider.go
 description: First-mover pattern for registering framework datasource.DataSource implementations in DataSources() — the release family (5 data-sources) establishes the template that all future data-source migrations copy.
 category: pattern
+keywords: [datasources, framework-provider, registration-pattern, release-family, datasource-metadata, sdkv2-removal]
+related_themes: [resource-datasource-patterns-index, provider-registration-dedup-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

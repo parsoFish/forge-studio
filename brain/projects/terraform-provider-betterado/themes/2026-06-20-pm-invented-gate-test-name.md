@@ -2,6 +2,8 @@
 title: PM inventing a nonexistent test name in quality_gate_cmd causes hard no-work failures
 description: PM invented TestProvider_HasCorrectResources in quality_gate_cmd; forge no-work guard fired 5 times causing WI-2 to exhaust its iteration budget and the pipeline to dead-end.
 category: antipattern
+keywords: [quality-gate-cmd, invented-test-name, no-work-guard, gate-tightening, pm-fabrication, iteration-budget]
+related_themes: [pm-decomposition-index]
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
 ---

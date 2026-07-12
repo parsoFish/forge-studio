@@ -11,6 +11,7 @@ keywords:
   - gitignore
   - repeated-actions
   - scratch-files
+related_themes: [2026-07-11-gitignored-scratch-fourth-cycle]
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
 ---
@@ -54,3 +55,7 @@ The pattern of documenting this in the brain without propagating the fix to the 
 
 - `_logs/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag/events.jsonl`
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag.md`
+
+## See also
+
+- [[2026-07-11-gitignored-scratch-fourth-cycle]] — the prior (fourth) cycle of this recurrence

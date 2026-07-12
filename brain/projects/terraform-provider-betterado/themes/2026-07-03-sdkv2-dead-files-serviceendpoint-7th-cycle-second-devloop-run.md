@@ -2,6 +2,8 @@
 title: SDKv2 dead helper functions in serviceendpoint — 7th cycle, triggered second dev-loop run
 description: Serviceendpoint migration left 5 dead SDKv2 helper functions; unifier go-build failure forced a complete second dev-loop run of all 10 WIs (~$15-20 extra). This is the 7th framework-migration cycle with this omission; severity escalated from dead-code lint warnings to a build break.
 category: antipattern
+keywords: [serviceendpoint, dead-helper-functions, go-build-failure, second-devloop-run, sdkv2-dead-files, dedup]
+related_themes: [provider-registration-dedup-index, 2026-07-01-sdkv2-deregister-omission-duplicate-resource-type, 2026-07-03-sdkv2-dead-files-omission-4th-cycle, 2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension, 2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle, 2026-07-03-sdkv2-dead-file-deletion-unenforced, 2026-07-03-build-package-sdkv2-dead-files-not-deleted]
 created_at: 2026-07-03T22:00:00.000Z
 updated_at: 2026-07-03T22:00:00.000Z
 ---
@@ -64,3 +66,14 @@ AC-cleanup: Run `go build ./azuredevops/internal/service/serviceendpoint/...` su
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-serviceendpoint/events.jsonl` — unifier gate.fail event, second dev-loop baseline-green event
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-serviceendpoint.md`
+
+## See also
+
+Same saga — sdkv2 dead-file "deregister AND delete" saga:
+
+- [[2026-07-01-sdkv2-deregister-omission-duplicate-resource-type]]
+- [[2026-07-03-sdkv2-dead-files-omission-4th-cycle]]
+- [[2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension]]
+- [[2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle]]
+- [[2026-07-03-sdkv2-dead-file-deletion-unenforced]]
+- [[2026-07-03-build-package-sdkv2-dead-files-not-deleted]]

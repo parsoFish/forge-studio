@@ -5,7 +5,7 @@ description: >-
   NetworkOptimizer split, VisibilityManager, GameToolManager), and what survives
   unchanged from the MVP doc. Use this to ground any architect proposal in the
   real present-day shape.
-category: snapshot
+category: reference
 keywords:
   - trafficgame
   - architecture
@@ -18,9 +18,7 @@ keywords:
   - mvp
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-17T00:00:00.000Z
-related_themes:
-  - karpathy-three-layer-wiki
-  - forge-current-architecture-as-built
+related_themes: []
 ---
 
 # trafficGame — MVP architecture snapshot (May 2026)

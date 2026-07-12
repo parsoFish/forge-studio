@@ -2,6 +2,8 @@
 title: Bundling 13 permissions resources into one WI drives high iteration count and deferred gap coverage
 description: WI-4 migrated all 13 betterado_*_permissions types in one work item; 4 dev-loop iterations in run 1, re-ran entirely in run 2; gap-matrix coverage for individual types was implicit, not verified per-type.
 category: antipattern
+keywords: [permissions, batch-wi, coarse-decomposition, gap-matrix-coverage, iteration-count, wi-4]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
 ---
