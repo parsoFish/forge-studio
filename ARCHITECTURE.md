@@ -25,12 +25,14 @@
 
 ## Overview
 
-Forge is six phases backed by a brain. The flow engine
+Forge's work is carried by three composable flows backed by a brain. The flow engine
 ([`orchestrator/flow-runner.ts`](./orchestrator/flow-runner.ts)) walks a
 `FlowDefinition` (a YAML-declared DAG, ADR 028) in topological order, dispatching
 each node through a **node-executor registry** — no `classifyNode` switch. The
-forge cycle flow (`studio/flows/forge-cycle/flow.yaml`) defines the canonical
-PM → dev → unifier → review → reflect sequence; `runCycle` reduces to "load
+forge cycle ships as three chained flows — `studio/flows/forge-architect/`
+(plan + decompose), `studio/flows/forge-develop/` (dev → unifier → review), and
+`studio/flows/forge-reflect/` (retrospective) — handing off Architect → Develop
+(operator-selected) → Reflect (auto on merge); `runCycle` reduces to "load
 flow.yaml → runFlow". The brain is read by the **planning** phases and the
 reflector; the dev-loop and reviewer take their intent solely from the planner's
 work items.
