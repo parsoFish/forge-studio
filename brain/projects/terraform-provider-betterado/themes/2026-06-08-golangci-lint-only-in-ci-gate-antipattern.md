@@ -1,6 +1,6 @@
 ---
 title: golangci-lint only in ci_gate_cmd — not in per-WI quality_gate_cmd — antipattern
-description: Lint errors introduced by the agent survive all per-WI dev-loop gates and are caught only at the post-dev-close CI gate, forcing a full terminal re-run. Operator-confirmed fix for this project: include golangci-lint in WI acceptance criteria.
+description: 'Lint errors introduced by the agent survive all per-WI dev-loop gates and are caught only at the post-dev-close CI gate, forcing a full terminal re-run. Operator-confirmed fix for this project: include golangci-lint in WI acceptance criteria.'
 category: antipattern
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-06-08T00:00:00.000Z

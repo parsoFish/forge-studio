@@ -1,6 +1,6 @@
 ---
 title: SDKv2 deregister omission causes Duplicate resource type at mux time
-description: Registering a resource in framework_provider.go without removing it from provider.go ResourcesMap causes "Invalid Provider Server Combination: Duplicate resource type" at terraform apply — invisible to offline CI gates, only caught by live acceptance tests.
+description: 'Registering a resource in framework_provider.go without removing it from provider.go ResourcesMap causes "Invalid Provider Server Combination: Duplicate resource type" at terraform apply — invisible to offline CI gates, only caught by live acceptance tests.'
 category: antipattern
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
