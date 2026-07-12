@@ -25,6 +25,7 @@ import {
   checkIndexSync,
   checkLengthSoftCap,
   checkOrphans,
+  checkProjectBrainIndexes,
   checkReflectorLoss,
   checkSourceLinks,
   checkStaleness,
@@ -771,4 +772,65 @@ test('checkReflectorLoss: classifies as an advisory user-tier finding', () => {
   );
   assert.equal(kind, 'reflector.loss');
   assert.equal(resolution, 'user');
+});
+
+// ---------- checkProjectBrainIndexes ----------
+
+function writeProjectTheme(root: string, project: string, slug: string, category: string): void {
+  const themes = join(root, 'brain', 'projects', project, 'themes');
+  mkdirSync(themes, { recursive: true });
+  writeFileSync(
+    join(themes, `${slug}.md`),
+    `---\ntitle: ${slug}\ndescription: d\ncategory: ${category}\ncreated_at: 2026-01-01\nupdated_at: 2026-01-01\n---\nbody\n`,
+  );
+}
+
+function writeProjectIndex(root: string, project: string, file: string, body: string): void {
+  writeFileSync(join(root, 'brain', 'projects', project, file), body);
+}
+
+test('checkProjectBrainIndexes: theme listed in its project category index → no finding', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brainpb-'));
+  try {
+    writeProjectTheme(root, 'demo', 'x-thing', 'antipattern');
+    writeProjectIndex(root, 'demo', 'antipatterns.md', '# demo — Antipatterns\n\n- [`x-thing`](./themes/x-thing.md) — d\n');
+    assert.equal(checkProjectBrainIndexes(root).length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkProjectBrainIndexes: theme absent from an existing category index → flag', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brainpb-'));
+  try {
+    writeProjectTheme(root, 'demo', 'x-thing', 'antipattern');
+    writeProjectIndex(root, 'demo', 'antipatterns.md', '# demo — Antipatterns\n\n- [`other`](./themes/other.md) — d\n');
+    const findings = checkProjectBrainIndexes(root);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].category, 'flag');
+    assert.equal(findings[0].check, 'checkProjectBrainIndexes');
+    assert.match(findings[0].message, /not listed in project category index/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checkProjectBrainIndexes: project with themes but no index files → single flag', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brainpb-'));
+  try {
+    writeProjectTheme(root, 'demo', 'a', 'pattern');
+    writeProjectTheme(root, 'demo', 'b', 'pattern');
+    const findings = checkProjectBrainIndexes(root);
+    assert.equal(findings.length, 1);
+    assert.match(findings[0].message, /no category index files/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('classifyFinding: checkProjectBrainIndexes → agent tier with fixHint', () => {
+  const f = classifyFinding(cf('checkProjectBrainIndexes', 'not listed in project category index: x'));
+  assert.equal(f.resolution, 'agent');
+  assert.equal(f.kind, 'index.project');
+  assert.ok(f.fixHint && f.fixHint.length > 0);
 });
