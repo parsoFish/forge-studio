@@ -2,6 +2,8 @@
 title: betterado_project_features HCL fixture must include project_id
 description: The framework resource betterado_project_features requires project_id as a required attribute; if the acceptance test HCL fixture omits it, terraform fails at plan time with "Missing Configuration for Required Attribute".
 category: antipattern
+keywords: [project_features, hcl-fixture, project_id, required-attribute, missing-configuration, acceptance-test]
+related_themes: [fixture-discipline-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

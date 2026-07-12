@@ -2,6 +2,8 @@
 title: Operator dead-code sweep after 24-initiative framework migration
 description: After the 24-initiative roadmap merged to 2.0.0, 113 orphaned SDKv2 files and a bloated commons.go required a manual operator sweep the dev-loop fleet couldn't execute due to weekly usage limits; no dev-loop iteration ever cleaned the entire package in one pass.
 category: antipattern
+keywords: [dead-code-sweep, sdkv2-orphan-files, cross-wi-residue, go-vet, commons-go, operator-cleanup]
+related_themes: [provider-registration-dedup-index, build-tooling-index]
 created_at: 2026-07-10T00:00:00.000Z
 updated_at: 2026-07-10T00:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: PM max-turns failure on wiki framework-migration initiative
 description: First PM run for the wiki migration hit error_max_turns before writing any WI files; required operator re-queue; second run succeeded in 3.8 min by writing sooner.
 category: antipattern
+keywords: [pm-max-turns, error_max_turns, wiki-migration, decomposition, turn-budget, re-queue]
+related_themes: [pm-decomposition-index, 2026-07-03-pm-max-turns-graph-identity-13type-scope, 2026-07-05-pm-max-turns-large-package-migration, 2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---
@@ -25,3 +27,11 @@ PM used ~31 coalesced tool calls before writing a single WI. Complex multi-resou
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki/events.jsonl` — events EV_mr2mxviv_z048wsgz (error_max_turns), EV_mr2mxviw_ncmwjg9i (PM end cost $0.88, brainReads 6, writes 0)
 - `/home/parso/forge/brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki.md`
+
+## See also
+
+Same saga — PM error_max_turns chain:
+
+- [[2026-07-03-pm-max-turns-graph-identity-13type-scope]]
+- [[2026-07-05-pm-max-turns-large-package-migration]]
+- [[2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]]

@@ -7,6 +7,8 @@ description: >-
   cascade from a single rate-limit event. The gate had already passed for WI-6
   (acceptance test passed at 12:49:20); the failure was pure infrastructure, not code.
 category: antipattern
+keywords: [rate-limit, crash, prerequisite-failed, cascade, dev-loop, dependent-wi-skip, gate-already-passed]
+related_themes: [cycle-recovery-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

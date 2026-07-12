@@ -2,6 +2,8 @@
 title: Port-fidelity reviewer send-back on Configure() attribute nil-handling
 description: When porting Configure() credential logic from SDKv2 to framework, reviewer comparison against legacy provider.go caught nil-handling gaps for boolean attrs (use_cli, use_msi, use_oidc) and other MEDIUM findings; one send-back round resolved all 5 findings without restructuring.
 category: pattern
+keywords: [configure, port-fidelity, nil-handling, use_cli, use_msi, use_oidc, reviewer-send-back, auth-parity]
+related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback]
 created_at: 2026-07-11
 updated_at: 2026-07-11
 ---
@@ -35,3 +37,13 @@ When porting a credential-resolution function with many attributes and env-var f
 
 - `_logs/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity/events.jsonl` — `reviewer.verdict.send-back` event (EV_mrfnx88l), UWI-2/UWI-3 items
 - `brain/cycles/_raw/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity.md`
+
+## See also
+
+Same saga — framework Configure() auth-parity chain:
+
+- [[2026-06-20-framework-configure-stub-mux-timebomb]]
+- [[2026-06-20-framework-provider-configure-not-stub]]
+- [[2026-07-10-framework-configure-pat-only-aad-gap]]
+- [[2026-07-11-framework-configure-auth-parity-complete]]
+- [[2026-07-11-az-cli-auth-wrong-tenant-fallback]]

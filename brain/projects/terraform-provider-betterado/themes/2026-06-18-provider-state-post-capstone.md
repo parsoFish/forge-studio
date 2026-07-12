@@ -2,6 +2,8 @@
 title: Provider state — post-capstone (v0.2.0)
 description: "Snapshot of terraform-provider-betterado after the release/task-group capstone: net-new surface (release_definition/folder/permissions, task_group + data sources), writable-parity coverage posture, the block-vs-array limitation deferred to the framework migration, and the two-gate quality posture."
 category: reference
+keywords: [release_definition, release_folder, task_group, capstone, v0.2.0, provider-state, coverage-posture, configmode]
+related_themes: [framework-migration-index]
 created_at: 2026-06-18T00:00:00.000Z
 updated_at: 2026-06-18T00:00:00.000Z
 ---

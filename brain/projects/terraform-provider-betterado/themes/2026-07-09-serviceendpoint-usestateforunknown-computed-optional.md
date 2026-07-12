@@ -2,6 +2,8 @@
 title: Serviceendpoint framework resources need UseStateForUnknown on computed-optional string attrs
 description: Migrated serviceendpoint framework resources hit "inconsistent result after apply" for server_url, service_principal_id, workload_identity_federation_issuer, workload_identity_federation_subject — fixed by adding UseStateForUnknown plan modifier.
 category: pattern
+keywords: [usestateforunknown, plan-modifiers, computed-optional, serviceendpoint, inconsistent-result-after-apply, workload-identity-federation]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-09T22:30:00.000Z
 updated_at: 2026-07-09T22:30:00.000Z
 ---

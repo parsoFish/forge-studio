@@ -2,6 +2,8 @@
 title: Docs-only WI gate must verify docs, not reuse a code-test gate
 description: WI-4 (docs + examples) ran Go unit tests as its quality_gate_cmd — gate passed because prior WIs' tests were green, but zero doc files were verified.
 category: antipattern
+keywords: [docs-only-wi, quality-gate-cmd, gate-mismatch, hollow-gate, doc-verification, false-pass]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

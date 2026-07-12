@@ -2,6 +2,8 @@
 title: Acceptance test gate passes on partial delivery — missing UpdatePermissions test not caught
 description: WI-4 gate `-run TestAccReleaseDefinitionPermissions` matched the committed SetPermissions test but missed the required UpdatePermissions test; spec required both.
 category: antipattern
+keywords: [acceptance-test, prefix-match, gate-pass, partial-delivery, testaccreleasedefinitionpermissions, missing-test, run-flag]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

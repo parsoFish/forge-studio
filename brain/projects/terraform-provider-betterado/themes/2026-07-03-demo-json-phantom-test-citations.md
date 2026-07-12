@@ -2,6 +2,8 @@
 title: WI-6 ralph invents test function names in demo.json — unifier catches via go build gate
 description: When ralph writes demo.json checkpoints citing live-evidence test names, it invents plausible but non-existent function names; the unifier CI gate (`go build ./...` + citation check) is the catch, not the per-WI gate.
 category: antipattern
+keywords: [demo.json, phantom-citations, invented-test-names, unifier-gate, go-build, live-evidence, citation-validator]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

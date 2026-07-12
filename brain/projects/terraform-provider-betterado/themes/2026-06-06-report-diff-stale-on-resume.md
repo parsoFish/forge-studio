@@ -2,6 +2,8 @@
 title: report.md diff inverts delivery on resume
 description: On a resume-from-failed cycle, report.md's diff section shows the added files as deleted because the diff snapshot is captured before the unifier's final commit — dev-loop.delivered is authoritative.
 category: antipattern
+keywords: [report-diff, resume, stale-diff, dev-loop-delivered, unifier-commit, cycle-recovery]
+related_themes: [cycle-recovery-index]
 created_at: '2026-06-06T09:41:00Z'
 updated_at: '2026-07-10T09:46:00Z'
 ---

@@ -2,6 +2,8 @@
 title: ADO FeatureManagement SDK — UserScope must be "host" not scope name
 description: SetFeatureStateForScope / GetFeatureStateForScope require UserScope "host" (org-wide) or "me" (current user) as a routing discriminator, NOT the scope name ("project"). Passing the scope name produces invalid REST URLs rejected by ADO.
 category: pattern
+keywords: [featuremanagement, userscope, scopename, setfeaturestateforscope, host, rest-url, contributedfeature]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

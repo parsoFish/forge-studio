@@ -2,6 +2,8 @@
 title: New framework resource package — 7-WI single-responsibility decomposition pattern
 description: Gap-matrix → client-wiring → resource → data-source → provider-registration → acceptance-test → changelog decomposition for a brand-new API package; every WI passed first iteration.
 category: pattern
+keywords: [7-wi-decomposition, gap-matrix, client-wiring, new-package, single-responsibility, changelog]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

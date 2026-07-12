@@ -2,6 +2,8 @@
 title: doc-gate-test-pattern — Go test that gates on doc file existence + line count
 description: A Go unit test asserting a doc file exists and has ≥N non-empty lines is a cheap, durable gate for doc-only WIs; runs without TF_ACC in the standard test suite.
 category: pattern
+keywords: [doc-gate, quality-gate, go-test, doc-only-wi, line-count-threshold, runtime-caller, gate-tightener]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-06-08T00:00:00.000Z
 ---

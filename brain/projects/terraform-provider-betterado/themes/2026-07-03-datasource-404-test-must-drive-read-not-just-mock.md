@@ -2,6 +2,8 @@
 title: Data source 404 unit test must drive the datasource Read(), not just assert the utility helper
 description: TestDataSource_404NotFound mocked GetSubscription and checked ResponseWasNotFound only — never called datasource Read(), leaving resp.State.RemoveResource unexercised; sent-back by operator.
 category: antipattern
+keywords: [404, data-source, read, removeresource, unit-test, mock, notification-subscription]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

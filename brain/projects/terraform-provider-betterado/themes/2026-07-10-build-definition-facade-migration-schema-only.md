@@ -2,6 +2,8 @@
 title: Facade migration — schema present, expand/flatten not wired, invisible to all gates
 description: build_definition framework migration passed all automated gates but expand/flatten was unwired; apply had zero API effect; caught only by operator review.
 category: antipattern
+keywords: [facade-migration, expand-flatten, schema-only, hollow-gate, build-definition, invisible-defect]
+related_themes: [framework-migration-index, gate-mechanics-index]
 created_at: 2026-07-10
 updated_at: 2026-07-10
 ---

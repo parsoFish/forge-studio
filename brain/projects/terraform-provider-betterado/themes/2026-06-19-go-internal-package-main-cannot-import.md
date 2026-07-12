@@ -2,6 +2,8 @@
 title: Go internal/ package rule — root main.go cannot import azuredevops/internal/
 description: The root main.go (module root) cannot import azuredevops/internal/provider because Go's internal/ rule restricts importers to the subtree rooted at the parent of internal/. Fix is a thin public re-export in azuredevops/framework.go.
 category: pattern
+keywords: [go-internal-package, main-go, import-restriction, framework-go, public-re-export]
+related_themes: [build-tooling-index]
 created_at: 2026-06-19T00:00:00.000Z
 updated_at: 2026-06-19T00:00:00.000Z
 ---

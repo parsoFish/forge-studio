@@ -2,6 +2,8 @@
 title: terraform-plugin-framework null vs empty-string for optional string attributes
 description: Absent optional string attributes are StringNull() in framework, not StringValue(""); SDKv2 normalised both to "" causing drift on plan diff when switching.
 category: antipattern
+keywords: [stringnull, stringvalue, optional-string, drift, plan-diff, sdkv2-normalization]
+related_themes: [framework-migration-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

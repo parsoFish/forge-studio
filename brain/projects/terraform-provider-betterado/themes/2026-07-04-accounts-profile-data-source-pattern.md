@@ -2,6 +2,8 @@
 title: Accounts and Profile data source implementation pattern
 description: betterado_accounts uses direct HTTP to Collections/Me (org-scoped VSSPS); betterado_profile uses direct HTTP to app.vssps.visualstudio.com/_apis/profile/profiles/{id} with BasicAuth from AggregatedClient.
 category: pattern
+keywords: [accounts, profile, vssps, basicauth, data-source, direct-http, aggregatedclient]
+related_themes: [resource-datasource-patterns-index]
 created_at: 2026-07-04T01:02:34.000Z
 updated_at: 2026-07-04T01:02:34.000Z
 ---

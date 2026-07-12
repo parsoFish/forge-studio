@@ -2,6 +2,8 @@
 title: Unused function lint error passes per-WI gate, caught by CI gate
 description: expandExtensionInstall left unused in resource_extension_install_framework.go; go test passed per-WI gate but golangci-lint caught it at CI gate, blocking PR — same gate-gap pattern as 2026-06-06.
 category: antipattern
+keywords: [unused-func, golangci-lint, ci-gate, lint-blind, extension-install, auto-fixer]
+related_themes: [build-tooling-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

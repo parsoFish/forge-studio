@@ -2,6 +2,8 @@
 title: ADO SDK numeric-enum fields need unmarshal patch — now formalized as third_party/ fork
 description: ADO returns daysToRelease as a JSON integer bitmask but the Go SDK declares ScheduleDays as a string enum. Raw vendor edit was the initial fix; now formalized as a tracked third_party/ fork with go.mod replace — survives go mod vendor regeneration.
 category: reference
+keywords: [enum-int-unmarshal, releaseschedule, scheduledays, third_party-fork, go.mod-replace, vendor, unmarshaljson]
+related_themes: [ado-api-shapes-index, build-tooling-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
 ---

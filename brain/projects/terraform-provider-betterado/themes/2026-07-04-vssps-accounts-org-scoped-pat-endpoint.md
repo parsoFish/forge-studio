@@ -2,6 +2,8 @@
 title: ADO Accounts API requires Collections/Me endpoint for org-scoped PATs
 description: For org-scoped PATs, app.vssps.visualstudio.com/_apis/accounts returns 401 and vssps.dev.azure.com/{org}/_apis/accounts returns 404; the working path is vssps.dev.azure.com/{org}/_apis/Organization/Collections/Me.
 category: antipattern
+keywords: [vssps, accounts-api, org-scoped-pat, collections-me, 401, 404, endpoint-discovery]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-07-04T01:02:34.000Z
 updated_at: 2026-07-04T01:02:34.000Z
 ---

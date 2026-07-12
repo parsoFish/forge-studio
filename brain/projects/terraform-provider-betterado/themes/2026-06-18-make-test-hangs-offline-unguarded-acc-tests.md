@@ -2,6 +2,8 @@
 title: make test hangs offline — unguarded acceptance tests make live ADO connections
 description: The GNUmakefile `test` target runs `go test -v ./...`, which includes acceptancetests/. At least two upstream tests lack a TF_ACC build-tag guard and attempt live ADO calls offline, causing multi-minute hangs. Use package-scoped commands for offline CI verification.
 category: antipattern
+keywords: [make-test, tf_acc-guard, offline-ci, acceptance-tests, gnumakefile, hang]
+related_themes: [build-tooling-index]
 created_at: 2026-07-10T10:39:32.000Z
 updated_at: 2026-07-10T10:39:32.000Z
 ---

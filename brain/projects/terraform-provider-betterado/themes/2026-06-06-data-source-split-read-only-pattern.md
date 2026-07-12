@@ -2,6 +2,8 @@
 title: Sibling data source split — per-data-source WI is the right default
 description: Release data sources proved that per-data-source WI (single-lookup + list as separate WIs) is the right default; first WI pays scaffolding cost, siblings are cheap.
 category: pattern
+keywords: [data-source, sibling-split, wi-decomposition, scaffolding-cost, release-definition, list-vs-lookup, acceptance-test-shape]
+related_themes: [pm-decomposition-index, resource-datasource-patterns-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

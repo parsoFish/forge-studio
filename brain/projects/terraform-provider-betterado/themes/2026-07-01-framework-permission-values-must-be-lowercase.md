@@ -2,6 +2,8 @@
 title: Framework permissions resource — ACL values must be lowercase in HCL config
 description: betterado_release_definition_permissions framework resource stores plan values verbatim (no post-Create Read); HCL test config must use lowercase "allow"/"deny"/"notset" matching PermissionTypeValues constants or TestCheckResourceAttr assertions fail.
 category: pattern
+keywords: [release-definition-permissions, permissiontypevalues, lowercase, hcl-config, testcheckresourceattr, plan-diff]
+related_themes: [framework-migration-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---

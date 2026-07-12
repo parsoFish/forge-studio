@@ -2,6 +2,7 @@
 title: Spike-parked-with-reason is a valid clean closure for this provider's roadmap
 description: Pre-authorizing STOP as a spike outcome in the manifest lets the operator close an initiative cleanly when build scope proves heavier than assumed, without wasted iterations on a half-built resource.
 category: pattern
+keywords: [spike, park, stop-condition, manifest, clean-closure, pm-decomposition, environment-templates]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

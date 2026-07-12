@@ -2,6 +2,8 @@
 title: WI spec referenced non-existent SharedFixtureResult field — agent self-corrected
 description: WI-5 spec explicitly named fixture.BuildDefinitionAlias as the field to use for container_image_trigger artifact_alias, but that field does not exist on SharedFixtureResult; agent detected the mismatch via grep and substituted "_build".
 category: antipattern
+keywords: [wi-spec, stale-fixture-ref, sharedfixtureresult, field-mismatch, self-correction, pm-fabrication]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
 ---

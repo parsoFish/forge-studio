@@ -2,6 +2,8 @@
 title: Framework Configure() auth parity — all 17 attributes + env fallbacks wired
 description: The pure-framework Configure() now resolves PAT/CLI/MSI/OIDC/client-secret/cert credentials with full ARM_*/AZDO_* env-var fallbacks, matching the SDKv2 GetAuthProvider() surface; auth.go helper is the shared unit-testable entry point.
 category: reference
+keywords: [configure, auth-parity, pat, cli, msi, oidc, client-secret, cert, env-fallback, auth-go]
+related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: 2026-07-11
 updated_at: 2026-07-11
 ---
@@ -41,3 +43,13 @@ No-credential path: `Configure()` appends an `AddError` diagnostic with a human-
 - `_logs/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity/events.jsonl` — dev-loop.delivered: 20 files, +1429/−42, 14 commits
 - `_queue/done/INIT-2026-07-10-framework-auth-parity.md` — full AC set
 - `brain/cycles/_raw/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity.md`
+
+## See also
+
+Same saga — framework Configure() auth-parity chain:
+
+- [[2026-06-20-framework-configure-stub-mux-timebomb]]
+- [[2026-06-20-framework-provider-configure-not-stub]]
+- [[2026-07-10-framework-configure-pat-only-aad-gap]]
+- [[2026-07-11-az-cli-auth-wrong-tenant-fallback]]
+- [[2026-07-11-port-fidelity-reviewer-send-back-auth-configure]]

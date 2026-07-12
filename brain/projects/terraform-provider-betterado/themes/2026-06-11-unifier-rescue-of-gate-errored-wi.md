@@ -2,6 +2,8 @@
 title: Unifier rescue of gate-errored WI — authors missing implementation
 description: When ralph exits with gate-errored (0 iterations, no code), the unifier detects the missing implementation and authors it as UWI-1 recovery — preventing an empty acceptance test slot on the branch.
 category: pattern
+keywords: [unifier, gate-errored, tf-acc, missing-implementation, acceptance-test-authoring, recovery, uwi]
+related_themes: [cycle-recovery-index]
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
 ---

@@ -2,6 +2,8 @@
 title: PM WI spec can include new-project HCL fixture violating org cap
 description: PM decomposition for WI-2 (task-group-coverage) generated sample HCL using resource "betterado_project" — a new ADO project create — violating the org project-cap constraint. Ralph self-corrected silently by reading existing tests.
 category: antipattern
+keywords: [wi-spec, betterado_project, org-project-cap, shared-fixture, task-group, hcl-fixture, pm-decomposition]
+related_themes: [fixture-discipline-index, pm-decomposition-index]
 created_at: 2026-06-18
 updated_at: 2026-06-18
 ---

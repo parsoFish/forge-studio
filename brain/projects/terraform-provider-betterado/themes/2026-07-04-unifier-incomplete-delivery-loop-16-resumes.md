@@ -2,6 +2,8 @@
 title: Unifier incomplete-delivery gate loop — 16 resume attempts on large permissions migration
 description: The unifier fired 16 resume-branch-pushed events over ~2h 45m on a 65-commit permissions initiative; unifier.crash-retry and unifier.failed events present; PR opened 4 times; gate cleared only after second full dev-loop run and operator requeue.
 category: antipattern
+keywords: [unifier, incomplete-delivery, resume-loop, crash-retry, max-resume-cap, dead-file-check]
+related_themes: [cycle-recovery-index]
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
 ---

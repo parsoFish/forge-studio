@@ -2,6 +2,8 @@
 title: Unused HCL helper functions after acceptance-test rewrite
 description: When acceptance tests are rewritten to use the import path instead of create path, the original HCL helper functions (e.g. hclTeamBasic) become unreachable; golangci-lint unused check blocks CI gate at the end.
 category: antipattern
+keywords: [unused-func, golangci-lint, hcl-helper, acceptance-test-rewrite, ci-gate, dead-code]
+related_themes: [build-tooling-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
 ---

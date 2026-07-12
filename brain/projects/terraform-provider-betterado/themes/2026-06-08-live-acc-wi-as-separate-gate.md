@@ -2,6 +2,8 @@
 title: Live acceptance WI as separate gate — passes iteration 0 when implementation already complete
 description: For betterado data sources, separating live TF_ACC acceptance into its own WI (after the implementation WI) is the correct two-gate pattern; WI-2 passed iteration 0 with zero code changes because WI-1's implementation was already correct.
 category: pattern
+keywords: [live-acceptance, tf_acc, two-wi-split, hollow-gate, live-gate, gate-pattern, data-source]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-06-08T00:00:00.000Z
 ---

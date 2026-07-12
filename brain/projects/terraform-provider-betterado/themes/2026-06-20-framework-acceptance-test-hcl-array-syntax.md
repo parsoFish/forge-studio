@@ -2,6 +2,8 @@
 title: Framework ListNestedAttribute requires array HCL syntax in acceptance tests
 description: When betterado_task_group migrates from SDKv2 TypeList blocks to framework ListNestedAttribute, all acceptance test HCL must change from block syntax (task { … }) to array-attribute syntax (task = [{ … }]).
 category: pattern
+keywords: [listnestedattribute, hcl-array-syntax, task-group, protov6providerfactories, idempotency, computed-optional-default, block-to-attribute]
+related_themes: [framework-migration-index]
 created_at: 2026-06-20T00:00:00.000Z
 updated_at: 2026-06-20T00:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: Framework Configure() wires PAT auth only — AAD/OIDC/MSI/CLI non-functional
 description: After the mux-free cutover the framework Configure() only wires PAT auth; AAD/OIDC/MSI/CLI schema attributes are accepted but non-functional — a pre-existing gap deferred as a follow-up initiative before any public 2.0.0 release.
 category: reference
+keywords: [pat-auth, aad, oidc, msi, configure, mux-free-cutover, auth-gap]
+related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: 2026-07-10T00:00:00.000Z
 updated_at: 2026-07-10T00:00:00.000Z
 ---
@@ -26,3 +28,13 @@ Any user of betterado 2.0.0 who relies on AAD/OIDC/MSI/CLI auth (not PAT) will a
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-mux-free-cutover/user-feedback.md` — operator Q2 answer
 - `/home/parso/forge/brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-mux-free-cutover.md` — cycle archive
+
+## See also
+
+Same saga — framework Configure() auth-parity chain:
+
+- [[2026-06-20-framework-configure-stub-mux-timebomb]]
+- [[2026-06-20-framework-provider-configure-not-stub]]
+- [[2026-07-11-framework-configure-auth-parity-complete]]
+- [[2026-07-11-az-cli-auth-wrong-tenant-fallback]]
+- [[2026-07-11-port-fidelity-reviewer-send-back-auth-configure]]

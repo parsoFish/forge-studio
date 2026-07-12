@@ -2,6 +2,8 @@
 title: SDKv2 deregister omission causes Duplicate resource type at mux time
 description: 'Registering a resource in framework_provider.go without removing it from provider.go ResourcesMap causes "Invalid Provider Server Combination: Duplicate resource type" at terraform apply — invisible to offline CI gates, only caught by live acceptance tests.'
 category: antipattern
+keywords: [deregister, duplicate-resource-type, resourcesmap, mux-invalid-provider-server, framework-provider-go, dedup]
+related_themes: [provider-registration-dedup-index, 2026-07-03-sdkv2-dead-files-omission-4th-cycle, 2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension, 2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle, 2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run, 2026-07-03-sdkv2-dead-file-deletion-unenforced, 2026-07-03-build-package-sdkv2-dead-files-not-deleted]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
 ---
@@ -40,3 +42,14 @@ When moving a resource from SDKv2 to framework, `TestProvider_HasChildResources`
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-release-folder-permissions/events.jsonl` (lines 480-482: gate.fail with "Duplicate resource type", ralph.end WI-1 run 1 status:failed)
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-release-folder-permissions.md`
+
+## See also
+
+Same saga — sdkv2 dead-file "deregister AND delete" saga:
+
+- [[2026-07-03-sdkv2-dead-files-omission-4th-cycle]]
+- [[2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension]]
+- [[2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle]]
+- [[2026-07-03-sdkv2-dead-files-serviceendpoint-7th-cycle-second-devloop-run]]
+- [[2026-07-03-sdkv2-dead-file-deletion-unenforced]]
+- [[2026-07-03-build-package-sdkv2-dead-files-not-deleted]]

@@ -2,6 +2,8 @@
 title: framework provider TypeName must be "betterado" not "azuredevops"
 description: BetteradoFrameworkProvider.Metadata() must set TypeName = "betterado"; "azuredevops" causes tfplugindocs to emit wrong-prefixed resource docs.
 category: antipattern
+keywords: [typename, metadata, tfplugindocs, framework-provider, betterado-prefix, resource-naming]
+related_themes: [build-tooling-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

@@ -2,6 +2,8 @@
 title: "ConfigFile + in-process provider: required_providers block not auto-injected"
 description: "terraform-plugin-testing does NOT prepend the required_providers terraform block when ConfigFile is used instead of Config; TF_REATTACH_PROVIDERS is used for binary injection but the source block must still be in the HCL file, or use Config string instead."
 category: pattern
+keywords: [configfile, required_providers, tf_reattach_providers, terraform-plugin-testing, in-process-provider, mergedconfig, config-string]
+related_themes: [configure-auth-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

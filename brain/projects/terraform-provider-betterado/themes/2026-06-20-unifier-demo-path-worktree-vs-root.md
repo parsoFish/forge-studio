@@ -2,6 +2,8 @@
 title: forge demo render must run from forge root, not worktree — DEMO.md path conflict
 description: The unifier placed demo.json/DEMO.md under forge/history/<id>/demo/ (worktree-relative) but the reviewer gate expects demo/<id>/DEMO.md at the worktree root. forge demo render called from worktree has a pm-invocation CWD bug; must be called from forge root with --dir.
 category: antipattern
+keywords: [forge-demo-render, demo.json, demo.md, worktree-cwd, pm-invocation-bug, reviewer-gate, artifact-path]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---

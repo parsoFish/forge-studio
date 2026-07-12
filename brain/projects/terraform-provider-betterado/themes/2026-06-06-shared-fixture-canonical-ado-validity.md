@@ -2,6 +2,8 @@
 title: Shared fixture enforces canonical ADO API validity
 description: Per-test hand-rolled minimal HCL fragments hide API validity bugs; a shared fixture locks in the valid structure once and exposes VS402877, VS402982, and permission key constraints provider-wide.
 category: pattern
+keywords: [sharedreleasefixture, vs402877, vs402982, approvals, retention-policy, permission-key-case, fixture, release-definition]
+related_themes: [fixture-discipline-index]
 created_at: '2026-06-06T09:41:00Z'
 updated_at: '2026-07-10T09:46:00Z'
 ---

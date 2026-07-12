@@ -2,6 +2,8 @@
 title: Acceptance test compile-only gate — write and compile in dev-loop, run live at pre-merge
 description: WI-5 acceptance test files compiled under go test without TF_ACC=1; gate validated compilation + registration in 3.9s without a live ADO call.
 category: pattern
+keywords: [acceptance-test, compile-only-gate, tf_acc, testaccprecheck, dev-loop-gate, gate-pass, go-test]
+related_themes: [gate-mechanics-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

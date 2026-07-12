@@ -2,6 +2,8 @@
 title: Framework provider Configure() no-op stub panics at acceptance-test time
 description: BetteradoFrameworkProvider.Configure() was a no-op stub after the mux-entrypoint cycle; WI-3 discovered this when GetProvider().Meta() returned nil under ProtoV6ProviderFactories.
 category: antipattern
+keywords: [configure-stub, mux-timebomb, aggregatedclient, protov6providerfactories, panic, framework-provider]
+related_themes: [framework-migration-index, 2026-06-20-framework-provider-configure-not-stub, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
 ---
@@ -20,3 +22,13 @@ New `testutils/mux_provider.go` added `GetMuxedProviderFactories()` returning `P
 
 - `_logs/2026-06-19T23-10-22_INIT-2026-06-19-framework-task-group/events.jsonl` — WI-3 iteration events; ralph.end at `EV_mqlnvhs0_svjwwe5r` status=complete.
 - `/home/parso/forge/brain/cycles/_raw/2026-06-19T23-10-22_INIT-2026-06-19-framework-task-group.md`
+
+## See also
+
+Same saga — framework Configure() auth-parity chain:
+
+- [[2026-06-20-framework-provider-configure-not-stub]]
+- [[2026-07-10-framework-configure-pat-only-aad-gap]]
+- [[2026-07-11-framework-configure-auth-parity-complete]]
+- [[2026-07-11-az-cli-auth-wrong-tenant-fallback]]
+- [[2026-07-11-port-fidelity-reviewer-send-back-auth-configure]]

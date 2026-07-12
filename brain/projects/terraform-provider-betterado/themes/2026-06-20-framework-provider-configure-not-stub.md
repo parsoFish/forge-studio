@@ -2,6 +2,8 @@
 title: Framework provider Configure() must wire AggregatedClient — not a stub
 description: After mux-entrypoint, BetteradoFrameworkProvider.Configure() was a no-op stub. Acceptance tests under ProtoV6ProviderFactories received nil from GetProvider().Meta(), causing panic. Configure() must read AZDO_ORG_SERVICE_URL + AZDO_PERSONAL_ACCESS_TOKEN, create *client.AggregatedClient, and store via resp.ResourceData.
 category: pattern
+keywords: [configure, aggregatedclient, framework-provider, mux, protov6, resourcedata, stub]
+related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: 2026-06-20T00:00:00.000Z
 updated_at: 2026-06-20T00:00:00.000Z
 ---
@@ -60,3 +62,13 @@ All task-group acceptance tests use `ProtoV6ProviderFactories: testutils.GetMuxe
 - `/home/parso/forge/brain/cycles/_raw/2026-06-19T23-10-22_INIT-2026-06-19-framework-task-group.md`
 - `projects/terraform-provider-betterado/azuredevops/internal/provider/framework_provider.go`
 - `projects/terraform-provider-betterado/azuredevops/internal/acceptancetests/testutils/mux_provider.go`
+
+## See also
+
+Same saga — framework Configure() auth-parity chain:
+
+- [[2026-06-20-framework-configure-stub-mux-timebomb]]
+- [[2026-07-10-framework-configure-pat-only-aad-gap]]
+- [[2026-07-11-framework-configure-auth-parity-complete]]
+- [[2026-07-11-az-cli-auth-wrong-tenant-fallback]]
+- [[2026-07-11-port-fidelity-reviewer-send-back-auth-configure]]

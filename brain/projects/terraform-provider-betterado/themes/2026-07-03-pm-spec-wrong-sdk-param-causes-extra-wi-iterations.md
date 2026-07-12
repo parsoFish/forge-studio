@@ -2,6 +2,8 @@
 title: PM WI spec with wrong ADO SDK parameter value forces extra ralph iterations
 description: When a PM work-item specifies an ADO SDK parameter value without verifying the SDK source, the dev-loop agent must spend 1-2 extra iterations re-deriving the correct value from vendor source. Seen with UserScope in the FeatureManagement WI-3/WI-4 pair.
 category: antipattern
+keywords: [wi-spec, userscope, sdk-parameter, featuremanagement, extra-iterations, vendor-source-verification]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
 ---

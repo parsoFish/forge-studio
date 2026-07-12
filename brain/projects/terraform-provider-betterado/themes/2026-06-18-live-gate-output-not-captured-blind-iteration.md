@@ -2,6 +2,8 @@
 title: Live gate output not captured in events — agent iterates blind on live test failures
 description: When the WI live acceptance gate (TF_ACC=1) exits non-zero, no gate_output is written to events.jsonl; the agent cannot distinguish "compilation error" from "live ADO call failed" from "test assertion failed" and must re-run from scratch each iteration.
 category: antipattern
+keywords: [live-gate, gate-output, blind-iteration, tf_acc, error-event, gate-exit-code, events-jsonl]
+related_themes: [live-evidence-demo-index]
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
 ---

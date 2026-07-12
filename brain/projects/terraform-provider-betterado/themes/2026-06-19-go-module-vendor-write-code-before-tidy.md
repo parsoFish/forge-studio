@@ -2,6 +2,8 @@
 title: go mod tidy removes imports not yet referenced — write code before tidying
 description: In vendor-mode Go modules, running go mod tidy before writing the importing code drops the new deps; the correct order is write code → go get → go mod tidy → go mod vendor.
 category: pattern
+keywords: [go-mod-tidy, go-mod-vendor, go-get, vendor-mode, dependency-order, terraform-plugin-framework]
+related_themes: [build-tooling-index]
 created_at: 2026-06-19T00:00:00.000Z
 updated_at: 2026-06-19T00:00:00.000Z
 ---

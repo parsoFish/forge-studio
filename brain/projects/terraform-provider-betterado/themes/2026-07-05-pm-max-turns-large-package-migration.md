@@ -6,6 +6,8 @@ description: >-
   completeness annotation in the manifest forced a second PM run that correctly
   emitted all 9 WIs covering all 17 types.
 category: antipattern
+keywords: [pm-max-turns, decomposition-completeness, workitemtrackingprocess, scope-enumeration, turn-budget]
+related_themes: [pm-decomposition-index, 2026-07-03-pm-max-turns-graph-identity-13type-scope, 2026-07-03-pm-max-turns-on-wiki-migration-initiative, 2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]
 created_at: 2026-07-05T00:00:00.000Z
 updated_at: 2026-07-05T00:00:00.000Z
 ---
@@ -36,3 +38,11 @@ The pattern is also consistent with `2026-07-03-pm-max-turns-large-initiative-de
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-workitemtrackingprocess/events.jsonl` (PM end 2026-07-01T22:21 `result_subtype: error_max_turns`, PM end 2026-07-03T04:57 `result_subtype: success`)
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-workitemtrackingprocess.md`
 - Manifest: `/home/parso/forge/_queue/done/INIT-2026-07-01-migrate-framework-workitemtrackingprocess.md` (decomposition completeness contract block)
+
+## See also
+
+Same saga — PM error_max_turns chain:
+
+- [[2026-07-03-pm-max-turns-graph-identity-13type-scope]]
+- [[2026-07-03-pm-max-turns-on-wiki-migration-initiative]]
+- [[2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]]

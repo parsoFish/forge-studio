@@ -2,6 +2,8 @@
 title: JFrog serviceendpoint test files reference undefined symbols after SDKv2 deletion
 description: When the JFrog v2 serviceendpoint SDKv2 source was deleted, its unit test files still referenced helper variables and flatten functions by the old name; the package failed to build until Ralph added aliases.
 category: antipattern
+keywords: [jfrog, serviceendpoint, undefined-symbols, sdkv2-deletion, test-file-orphans, expected-fail, mux-free-cutover]
+related_themes: [provider-registration-dedup-index]
 created_at: 2026-07-09T22:03:49.533Z
 updated_at: 2026-07-09T22:03:49.533Z
 ---

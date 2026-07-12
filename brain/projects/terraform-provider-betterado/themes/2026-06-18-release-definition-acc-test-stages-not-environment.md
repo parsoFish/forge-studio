@@ -2,6 +2,8 @@
 title: betterado_release_definition acceptance test fixture must use stages block, not environment
 description: Any acceptance test that wraps a betterado_release_definition resource must use a `stages {}` block, not `environment {}`. Using `environment {}` triggers a Terraform schema validation error at plan time, failing the hollow gate before any ADO call.
 category: antipattern
+keywords: [stages-block, environment-block, schema-validation, hollow-gate, release-definition, hcl-fixture]
+related_themes: [gate-mechanics-index]
 created_at: 2026-07-10T10:45:06.472Z
 updated_at: 2026-07-10T10:45:06.472Z
 ---

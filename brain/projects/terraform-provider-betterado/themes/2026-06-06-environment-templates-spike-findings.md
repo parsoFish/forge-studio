@@ -2,6 +2,8 @@
 title: Environment templates spike — vsrm raw-HTTP viable; full blueprint requirement makes build heavy
 description: GET /environmenttemplates via raw-HTTP on vsrm.dev.azure.com returns 200; create requires a full ReleaseDefinitionEnvironment blueprint (heaviest provider type); initiative parked.
 category: reference
+keywords: [environmenttemplates, vsrm, raw-http, release-definition-environment, spike, blueprint, deploy-phases, retention-policy]
+related_themes: [ado-api-shapes-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
 ---

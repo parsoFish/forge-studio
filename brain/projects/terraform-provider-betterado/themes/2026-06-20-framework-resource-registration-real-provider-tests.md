@@ -2,6 +2,8 @@
 title: Framework resource registration WI must update existing provider tests, not invent new ones
 description: When registering a framework resource in framework_provider.go and removing the SDKv2 registration from provider.go, the WI must update TestProvider_HasChildResources (not a guessed name) so the expected resource count still matches.
 category: pattern
+keywords: [provider-registration, testprovider_haschildresources, gate-design, resourcesmap, deregister, framework-migration]
+related_themes: [framework-migration-index, provider-registration-dedup-index]
 created_at: 2026-06-20T00:00:00.000Z
 updated_at: 2026-06-20T00:00:00.000Z
 ---

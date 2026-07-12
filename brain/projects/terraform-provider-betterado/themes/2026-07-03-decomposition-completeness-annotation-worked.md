@@ -2,6 +2,8 @@
 title: Operator decomposition-completeness annotation in manifest forced full scope coverage
 description: A "Decomposition completeness contract" prose annotation added to the initiative manifest by the operator (2026-07-02) successfully prevented PM from dropping in-scope types; all 30+ serviceendpoint types were covered in 10 WIs — contrasting with the prior run that dropped 15 types.
 category: pattern
+keywords: [decomposition-completeness, manifest-annotation, scope-coverage, operator-override, pm-decomposition, serviceendpoint]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-03T22:00:00.000Z
 updated_at: 2026-07-03T22:00:00.000Z
 ---

@@ -2,6 +2,8 @@
 title: PM scope-drop under max-turns pressure — headline resource missing from decomposition
 description: PM exhausted its turn budget before verifying all in-scope resources had a covering WI; betterado_extension (the headline resource) was absent from the first two valid decompositions. Operator manifest annotation was the unblock.
 category: antipattern
+keywords: [scope-drop, max-turns, error_max_turns, decomposition-completeness, headline-resource, coverage-closure]
+related_themes: [pm-decomposition-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
 ---

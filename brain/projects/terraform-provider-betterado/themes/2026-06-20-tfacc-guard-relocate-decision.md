@@ -2,6 +2,8 @@
 title: TF_ACC guard — RELOCATE decision (DEC-7); keep as safety interlock, review/unifier is the only TF_ACC=1 context
 description: The TF_ACC skip guard on SharedReleaseFixture and the acceptance_gate requires_env list are permanent safety interlocks — never remove them. TF_ACC=1 is set only in the forge review/unifier phase and the operator's live shell. The CI gate always strips TF_ACC. This prevents false-pass (dogfood 2026-06-06/07) and avoids stray live resource creation.
 category: decision
+keywords: [tf_acc, safety-interlock, requires_env, two-gate-model, ci-gate, unifier, project-cap]
+related_themes: [gate-mechanics-index, fixture-discipline-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
 ---
