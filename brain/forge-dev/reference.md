@@ -29,4 +29,8 @@ Each entry on this index is one line:
 
 ### Auto-linked (re-file under a curated heading when convenient)
 
+- [`2026-07-11-verify-harness-repo-state-traps`](./themes/2026-07-11-verify-harness-repo-state-traps.md) — Frozen-SHA replay of an already-remote-merged feature is structurally unmergeable, and a --base-sha run leaves local main frozen so later greenfield runs conflict too; gates use greenfield ideas on a synced main.
+
+- [`2026-07-11-orphaned-scheduler-stale-modules`](./themes/2026-07-11-orphaned-scheduler-stale-modules.md) — A long-lived forge process from a dead session wins queue-claim races and runs phases on its boot-time module snapshot — hours behind disk; mixed-era evidence in one cycle log is the tell.
+
 - [`m7-studio-consolidation-arc`](./themes/m7-studio-consolidation-arc.md) — How the M7 consolidation (Studio becomes the one product — delete /dashboard, fold the moment-screens, collapse the CLI, harden the launcher) was executed as per-WI multi-agent workflows, and the durable lessons: migrate-the-harness-before- you-delete, ui:journey as the integration oracle, adversarial review earns its cost.

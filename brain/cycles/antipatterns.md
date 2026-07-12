@@ -39,6 +39,12 @@ Each entry on this index is one line:
 
 ### Auto-linked (re-file under a curated heading when convenient)
 
+- [`2026-07-12-pm-adr037-set-error-cycle-restart`](./themes/2026-07-12-pm-adr037-set-error-cycle-restart.md) — When PM emits a WI without `creates` or `verification_artifact` (ADR 037), the orchestrator classifies it terminal/non-recoverable and restarts the full cycle — costing a wasted PM run instead of an in-place correction.
+
+- [`2026-07-11-last-gate-failure-untracked-merge-conflict`](./themes/2026-07-11-last-gate-failure-untracked-merge-conflict.md) — The untracked .forge/last-gate-failure.md file in the worktree blocks the WI fan-in merge, triggering dev-loop.merge-conflict-requeue and discarding the WI's work — a variant of the stale-last-gate-failure antipattern.
+
+- [`2026-07-11-last-gate-failure-blocks-fanin-merge`](./themes/2026-07-11-last-gate-failure-blocks-fanin-merge.md) — After a per-WI gate run, .forge/last-gate-failure.md lands on disk but is gitignored (untracked). When the dev-loop fan-in rebases the WI branch onto accumulated prior-WI commits, git refuses with "untracked working tree files would be overwritten by merge", triggering dev-loop.merge-conflict-requeue and forcing a full WI re-implementation.
+
 - [`2026-07-10-pm-error-max-turns-new-api-exploration`](./themes/2026-07-10-pm-error-max-turns-new-api-exploration.md) — PM first run for INIT-2026-07-01-new-api-test hit error_max_turns before writing any WI; 6 Glob scans + client.go reads exhausted the turn budget; second run (re-queue) succeeded by reading manifest then writing WIs immediately. Same pattern seen in wiki and permissions migrations.
 
 - [`2026-07-09-parallel-golangci-lint-transient-ci-gate-fail`](./themes/2026-07-09-parallel-golangci-lint-transient-ci-gate-fail.md) — When a prior cycle's golangci-lint is still running, the orchestrator's CI gate exits with "parallel golangci-lint is running" and classifies the cycle terminal/non-recoverable — a transient resource conflict that should auto-retry.
