@@ -1702,7 +1702,7 @@ async function main() {
 
     // ── R2.2: Approve → watch it build ────────────────────────────────────────
     console.log('\n[R2.2] Approve → watch it build');
-    await caption(page, "You're done. The autonomous loop takes over.");
+    await caption(page, "Plan approved — the second flow, Forge Develop, picks it up from here.");
     await sleep(ACT);
     await frame(page, 'r2-2-approve', 'R2 — operator approves the plan (human decision #1 complete)');
     await page.locator('[data-action="approve-plan"]').click();
@@ -1853,7 +1853,7 @@ async function main() {
     cycleEvent('review-loop', 'start', 'review-loop start');
     cycleEvent('review-loop', 'log', 'reviewer.pr-opened');
     moveManifest('in-flight', 'ready-for-review');
-    await caption(page, 'Every phase is costed: architect $0.46 / PM $0.31 / dev-loop $0.92 / unifier $0.18.');
+    await caption(page, 'Forge Develop, costed per phase — dev-loop $0.92, unifier $0.18 — under its ceiling. (The Architect flow bills separately.)');
     await openStudioMonitor(page, watch);
     await sleep(READ);
     await frame(page, 'r3-5-cost-rollup', 'R3 — cost rollup across the spine (Studio monitor)');
@@ -2003,7 +2003,7 @@ async function main() {
 
     // ── R4.4: Approve & merge → completed spine ───────────────────────────────
     console.log('\n[R4.4] Approve & merge → completed spine');
-    await caption(page, 'Comment resolved → the page derives "approve". Six phases, every one accountable.');
+    await caption(page, 'Comment resolved → the page derives "approve". Every acceptance criterion accountable at the Forge Develop gate.');
     await sleep(ACT);
     await frame(page, 'r4-4-approve', 'R4 — operator approves (human decision #2 complete)');
     await page.locator('[data-component="verdict-form"] [data-action="approve-and-merge"]').click();
@@ -2054,6 +2054,8 @@ async function main() {
         document.querySelector('[data-mon-node][data-node-id="dev"]') === null),
       'Model B: /flows/forge-architect renders the architect slice (architect+pm, not dev) of the threaded run',
     );
+    await caption(page, 'The same run, seen on the Forge Architect flow — its own monitor, architect + PM only.');
+    await frame(page, 'r4-4d-architect-flow', 'The Forge Architect flow on its own monitor — architect + PM hexes only, no dev or unifier');
     await openStudioMonitor(page, watch); // back to the develop slice
     try {
       await page.waitForFunction(
@@ -2112,6 +2114,8 @@ async function main() {
     await openStudioMonitor(page, watch, 'forge-reflect');
     await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
     await sleep(ACT);
+    await caption(page, 'And on the Forge Reflect flow — the reflect step that fired automatically on merge.');
+    await frame(page, 'r5-1-reflect-flow', 'The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge');
     try {
       await page.waitForFunction(
         () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
@@ -2708,12 +2712,12 @@ async function main() {
             Author a flow. Run it. Swap its engine.
           </div>
           <div style="margin-top:32px;font:12px ui-monospace,monospace;color:#6e7681">
-            The forge cycle is one flow definition. Everything is data you can edit.
+            The forge cycle is three chained flows now. Everything is data you can edit.
           </div>`;
         document.body.appendChild(card);
       }
     });
-    await caption(page, 'Forge Studio — author a flow, run it, swap its engine. The forge cycle is just one flow definition.');
+    await caption(page, 'Forge Studio — author a flow, run it, swap its engine. The forge cycle is three chained flows now, not one.');
     await frame(page, 'end-card', 'End card — "Author a flow. Run it. Swap its engine."');
     await sleep(READ);
 
