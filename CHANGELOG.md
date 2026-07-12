@@ -7,6 +7,61 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-12
+
+Refinement campaign **Phases 3–5** — the post-betterado "remove guardrails over
+adding new ones" tightening pass. Delivered as four waves, each review-gated and
+real-cycle-validated (verify:cycle 7/7 on gitpulse for Waves 1 & 2).
+
+### Wave 0 — SDK env-pin (G8)
+
+- **`pinnedAgentEnv` + `pinnedSdkQuery` are the sole entry seam** to the agent
+  SDK, with a structural import lock banning every bypass form — host proxy
+  wrappers can no longer leak into phase agents (the cause of the early
+  max-turns spiral). 29 stale worktrees swept.
+
+### Wave 1 — Phase 3: design-phase consolidation
+
+- **ADR 037 compiled WI contracts.** `wi-spec-compiler` deterministic core turns
+  profile/Brain-3 constraints into mandatory-id constraint blocks injected at the
+  PM seam; `creates:` is mandatory (with a `verification_artifact` escape),
+  coupling violations reject→compile.
+- **`ralph-spec-lint`** (prove-or-warn) shares `gateRequiredPaths` with the
+  runtime — no spec/runtime drift possible.
+- **`architect-completeness-critic`** one-shot acknowledge — blocked a real
+  finalize with 3 valid findings on its first production run.
+- **Plan-everything-before-kickoff** — flow_id-aware dependency gate; roadmap
+  `ready`/`blockedBy` + batched develop start.
+
+### Wave 2 — Phase 4: ralph conformance + parallel work items
+
+- **Honest delivered/discarded events** at the dev-loop boundary.
+- **Per-WI worktrees + single-flight merge-back fan-in**; Map outcomes with a
+  completeness invariant.
+- **Concurrent dispatcher** (`FORGE_DEV_WI_CONCURRENCY`, default 1 — concurrency
+  proven live).
+- **Bounded merge-conflict requeue** with conflict-context injection (iter-0
+  sharp-gate append semantics).
+- **Git identities** (`forge-ralph+<wi>` / `forge-unifier` / `forge-orchestrator`)
+  via the SDK env seam.
+- **Per-WI worktree self-heal** at cycle start; **scratch-safe merge-back**
+  (pre-merge strip + untracked-overwrite remediation) — killed the 5×-recurring
+  gitpulse scratch-leak class at the seam.
+
+### Wave 3 — Phase 5: platform pillars + skills
+
+- **`seedProjectBrain` at the Studio creation seam** — seeds
+  `kb.yaml`/`profile.md`/themes per ADR 035, idempotent and lint-clean.
+- **`project-scoped-review`** library skill — end-state audit method, evidence
+  per claim.
+
+### verify-cycle harness
+
+- Multi-initiative spine (batch hand-off, serve/approve loop, per-init gates +
+  aggregate ceiling); critic-acknowledge round-trip; watch teed/reaped/
+  self-healing (orphan prevention from spawn); greenfield tier auto-syncs project
+  main; abort-fast on repeated verdict 409s.
+
 ## [0.4.0] - 2026-06-24
 
 ### Knowledge base — guided lint resolution
