@@ -56,6 +56,36 @@ shipped but its **theme-quality regression check (R1) is unrun**. Validate via a
 `brain/_raw/cycles/`, theme diff + Opus/operator sign-off — the next time
 brain-ingest is invoked manually. This is **not** a `verify:cycle`.
 
+### 4. Post-Phase-5 refinement follow-ups (2026-07-12)
+
+Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.0
+(the deterministic cores shipped; these are the deferred long-tails):
+
+1. **wi-spec-compiler LLM assist pass** (ADR 037 item 3) — the deterministic
+   core is live; the sonnet judgment skill is unbuilt.
+2. **Raise `FORGE_DEV_WI_CONCURRENCY` default** (from 1) after a multi-cycle
+   soak proves the concurrent dispatcher stable (Phase 4 step 10).
+3. **Wave-3 KB-seam loose ends:** `forge-onboard-project` skill doesn't mention
+   `kb.yaml`; a legacy local `<artifactRoot>/brain/profile.md` stub is still
+   written beside the central seed (superfluous post-seam); `forge brain index
+   --write` still walks the pre-ADR-035 LOCAL project-brain layout (seeded
+   projects invisible to `INDEX.md`); new projects get no `kb` binding in
+   `project.json` (ContractReadiness shows unbound).
+4. **Architect+PM collapse** (§6 item 4) — still deferred per plan; needs
+   post-refinement cycle evidence before committing.
+5. **Watch SIGKILL mystery** — 4 occurrences mid-dev-loop, suspected WSL2
+   memory pressure; self-heal absorbs it, not root-caused.
+6. **PM never populates a WI `domain` field** — constraint selectors currently
+   match `manifest.<field>` globs or `all` only (ADR 037 as-built note).
+7. **e2e-journey cleanup gap:** the creation-seam KB seed writes
+   `brain/projects/<journey-demo-project>/` + a raw cycle archive during the
+   AUTHOR section, and the harness cleanup sweep doesn't remove either (one
+   seeded brain dir + one raw archive were left behind this session, removed by
+   hand). Add both to the sweep.
+8. **Untracked `forge-ui/.demo-shots/verify/<handle>/` gate artifacts**
+   (summaries + videos) — decide keep/commit/clean (currently absent; tree was
+   clean at close).
+
 ---
 
 ## Strengths worth preserving (don't regress these)
