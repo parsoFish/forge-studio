@@ -54,8 +54,6 @@ forge studio             # health-probes the bridge + UI, then opens the browser
 
 # Runtime spine (the bridge/UI is the operator API; the CLI is recovery + CI)
 forge serve [--once]     # run the unattended scheduler in the foreground
-forge cycle <init-id>    # run one initiative end-to-end (foreground)
-forge enqueue <project> <spec>   # drop an initiative into the queue
 forge preflight <project>        # check the forge↔project contract
 forge studio lint        # validate studio definitions (agents/flows/catalog/kb)
 forge brain lint         # structural integrity checks on the brain

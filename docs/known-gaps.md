@@ -32,10 +32,10 @@ cheapest counter.
 
 ### 1. M4 flow edit-lock false-negative (latent)
 
-The M4 flow edit-lock produces false-negatives for **non-forge-cycle** flows
-until the run-model stamps the real `flowId` (`orchestrator/run-model.ts`
-`FLOW_ID`). **Latent** — no non-forge-cycle runs exist today, and the lock is
-fully effective for the forge-cycle flow. Surfaces only when a second
+The M4 flow edit-lock produces false-negatives for flows **other than the seeded
+cycle flows** until the run-model stamps the real `flowId` (`orchestrator/run-model.ts`
+`FLOW_ID`). **Latent** — the lock is fully effective for the shipped seed flows
+(`forge-architect`/`forge-develop`/`forge-reflect`); it surfaces only when a second,
 operator-authored flow is actually run.
 
 ### 2. Architect hex shows `$0.00` cost in `ui:journey` (architect cost-observability gap)

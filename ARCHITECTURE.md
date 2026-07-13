@@ -173,7 +173,7 @@ extended by [ADR 031](./docs/decisions/031-studio-consolidation.md)).
 
 Responsibility: turn ideas + existing roadmap + brain knowledge into **initiatives** — coherent units of work, each carrying Given/When/Then acceptance criteria in its body, that move a project to a desired state.
 
-The architect uses the **LLM Council pattern** ([`skills/architect-llm-council/`](./skills/architect-llm-council/)) — a chain of perspectives (CEO, eng, design, DX) that auto-resolves mechanical questions and only escalates the taste decisions. The PLAN gate (a human approval step on the Studio screen) is satisfied before the scheduler picks up the run.
+The architect uses the **LLM Council pattern** — a chain of perspectives (CEO, eng, design, DX) that auto-resolves mechanical questions and only escalates the taste decisions — run inside [`skills/architect/`](./skills/architect/) via [`orchestrator/architect-runner.ts`](./orchestrator/architect-runner.ts). The PLAN gate (a human approval step on the Studio screen) is satisfied before the scheduler picks up the run.
 
 **Intentionally out-of-cycle (by design, not a gap).** The architect is
 **not** wired into `runCycle` and is **not** auto-invoked: it is a

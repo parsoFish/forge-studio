@@ -13,9 +13,11 @@ The journey is centralised on Forge Studio. The operator never leaves it.
 ## The reframe: the platform is the hero
 
 Pre-M8 the journey's hero was one linear cycle (idea → merged PR). Post-M8 the
-forge cycle is **just one flow definition** (`studio/flows/forge-cycle/flow.yaml`)
-interpreted by the node-executor registry (ADR-028), with swappable runtime
-adapters (ADR-029); the KB is filesystem-only (ADR-027). So the journey is
+forge cycle is **three composable flow definitions** — `studio/flows/forge-architect/`
+(plan + decompose), `studio/flows/forge-develop/` (dev → unifier → review), and
+`studio/flows/forge-reflect/` (retrospective) — interpreted by the node-executor
+registry (ADR-028), with swappable runtime adapters (ADR-029); the KB is
+filesystem-only (ADR-027). So the journey is
 organised around the three things the platform now does — **author a flow, run
 it, swap its engine** — with the cycle as the proof case inside RUN.
 
@@ -23,11 +25,11 @@ it, swap its engine** — with the cycle as the proof case inside RUN.
 
 1. **The library** (`/`) lists flows, agents, projects and KBs as cards, with the
    operator pulse (what needs you). All of it is editable definitions.
-2. **Build the forge cycle from scratch.** Author the cycle as a flow definition —
-   six agents, five artifact edges, two human gates (`plan`, `verdict`). The
+2. **Build a cycle flow from scratch.** Author a cycle flow as a definition — its
+   agents, its artifact edges, and its human gates (`plan`, `verdict`). The
    platform validates it (`forge studio lint`), it is structurally identical to
-   the production seed (subsumption), and the flow builder renders it live. The
-   hardcoded cycle is subsumed by data.
+   the production seed flows (subsumption), and the flow builder renders it live.
+   The hardcoded cycle is subsumed by data.
 3. **The agent builder** (`/agents/<id>`) edits an agent's composition (skills /
    tools / MCPs / hooks), runtime SDK + budgets, and brain access.
 4. **The project builder** (`/projects/<id>`) edits a project's north star, its
@@ -44,10 +46,10 @@ it, swap its engine** — with the cycle as the proof case inside RUN.
    costed, stalls/crashes surface inline.
 7. **PLAN gate** (`/artifact?…type=plan&mode=gate`) — the operator reviews the
    rich plan, sends back for revision, then approves (human decision #1).
-8. **Autonomous build on `/flows/forge-cycle`** — the PM decomposes the ACs into
-   dependency-ordered work items, the dev-loop runs TDD (red → grind → gate.pass)
-   per WI fanned off the dev hex, then the **unifier** (its own hex) reviews the
-   branch and authors the demo.
+8. **Autonomous build on the develop flow (`/flows/forge-develop`)** — the PM
+   decomposes the ACs into dependency-ordered work items, the dev-loop runs TDD
+   (red → grind → gate.pass) per WI fanned off the dev hex, then the **unifier**
+   (its own hex) reviews the branch and authors the demo.
 9. **Verdict gate** (`/artifact?…type=verdict&mode=gate`) — the operator reviews
    the per-AC evaluated demo (for live projects: real REST evidence), authors a
    new acceptance criterion on send-back, the dev-loop reruns, and on re-review

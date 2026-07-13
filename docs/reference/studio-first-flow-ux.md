@@ -1,7 +1,6 @@
 # Forge Studio — install-to-first-flow UX spec
 
-**Date:** 2026-06-16 · **ADR:** [033](../../decisions/033-studio-first-flow-ux.md) ·
-**Campaign plan:** `~/.claude/plans/crystalline-brewing-liskov.md`
+**Date:** 2026-06-16 · **ADR:** [033](../../decisions/033-studio-first-flow-ux.md)
 
 The single canonical journey this spec serves:
 
