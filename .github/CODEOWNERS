@@ -1,0 +1,33 @@
+# CODEOWNERS — declares the three-scope boundary in a machine-readable form.
+# Full map + the cross-scope rule: docs/repo-map.md
+#
+# Single maintainer today (@parsoFish); the GROUPING is the load-bearing signal —
+# it declares "core vs data vs managed content" without moving a file. CODEOWNERS is
+# last-match-wins, so more-specific Scope-3 paths below correctly override their
+# Scope-2 parents.
+
+# ── Scope 1 — Framework / seams / orchestration (the hot path) ───────────────
+# Rule: never special-case a project or a specific cycle-agent.
+/orchestrator/   @parsoFish
+/cli/            @parsoFish
+/loops/          @parsoFish
+/forge-ui/       @parsoFish
+/bin/            @parsoFish
+/scripts/        @parsoFish
+
+# ── Scope 2 — Cycles / agents / flows (OOTB + authoring) ─────────────────────
+# Rule: never assume a particular managed project.
+/skills/            @parsoFish
+/studio/            @parsoFish
+/brain/forge-dev/   @parsoFish
+/brain/cycles/      @parsoFish
+
+# ── Scope 3 — Projects forge develops ────────────────────────────────────────
+# Rule: respect the forge↔project contract; never edit orchestrator/cli/loops.
+/projects/                       @parsoFish
+/brain/projects/                 @parsoFish
+/docs/forge-project-contract.md  @parsoFish
+/skills/forge-onboard-project/   @parsoFish
+
+# ── Cross-cutting ────────────────────────────────────────────────────────────
+/docs/    @parsoFish

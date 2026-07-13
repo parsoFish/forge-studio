@@ -1,5 +1,9 @@
 # Forge Studio — Market Analysis & Differentiation
 
+> ⚠️ **Dated positioning (2026-06-14) — not current-state reference.** A perishable
+> competitive-analysis snapshot; market and competitor claims drift. For what forge
+> *is* today, see [ARCHITECTURE.md](../ARCHITECTURE.md) and [the repo map](./repo-map.md).
+
 > **Single source of truth** for Forge Studio's competitive position and differentiation. Consolidates the prior `market-analysis-forge-studio.md` (long-form landscape) and `forge-studio-differentiation-seed.md` (verified scorecard + matrix), and folds in the operator's **modularity-as-subsumption** thesis (§3) as the unifying strategic frame.
 >
 > **Method (2026-06-14):** internal product map (repo / brain / ADRs, 2 grounding agents) + a deep-research web harness (5 angles → 22 sources → 101 claims → adversarial verification). A first harness pass hit a session limit mid-verify; a second pass re-verified all 18 abstained claims on Haiku and profiled 5 under-covered competitors on Sonnet, with synthesis on Opus (deliberate model tiering to avoid an all-Opus spend).

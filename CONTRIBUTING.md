@@ -1,5 +1,9 @@
 # Contributing to Forge
 
+> **New here?** Read [`docs/repo-map.md`](./docs/repo-map.md) first — it maps every path
+> to one of forge's three scopes (framework · cycles/agents · projects) and states the
+> cross-scope rule. Which scope a file is in tells you the rule that governs changes there.
+
 ## Prerequisites
 
 - Node.js via [nvm](https://github.com/nvm-sh/nvm) — `nvm use` in the repo root picks the right version.

@@ -6,27 +6,36 @@ Forge Studio is a visual SWE pipeline that develops your projects autonomously b
 
 ## Using Forge Studio (operators)
 
-| Doc | What it covers |
-|-----|----------------|
-| [Getting started](./getting-started.md) | Install → onboard a project → first merged PR. Projects are auto-discovered from disk — there is no registry file to edit. |
-| [Project contract](./forge-project-contract.md) | The forge↔project contract every managed repo must satisfy (acceptance tiers, demo shapes, the C10 release final-loop). The SSOT. |
-| [Operator journey](./operator-journey.md) | The AUTHOR / RUN / SWAP narrative — what Studio actually does end to end. |
-| [Product vision](./product/minimum-viable-user-story.md) | The canonical user story: idea → autonomous build → review → release → reflect. |
-| [What makes it different](./forge-studio-market-and-differentiation.md) | Positioning and competitive analysis. |
-| [Licensing & dependencies](./licensing-and-dependencies.md) | What AGPL-3.0 means for you, plus the dependency audit. |
-| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference schema for a project's config, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
+Docs are labelled by [Diátaxis](https://diataxis.fr/) type — **Tutorial** (learning-oriented), **How-to** (task-oriented), **Reference** (information lookup), **Explanation** (understanding).
+
+| Doc | Type | What it covers |
+|-----|------|----------------|
+| [Getting started](./getting-started.md) | Tutorial | Install → onboard a project → first merged PR. Projects are auto-discovered from disk — there is no registry file to edit. |
+| [Project contract](./forge-project-contract.md) | How-to · Reference | The forge↔project contract every managed repo must satisfy (acceptance tiers, demo shapes, the C10 release final-loop). The SSOT. |
+| [Operator journey](./operator-journey.md) | Explanation | The AUTHOR / RUN / SWAP narrative — what Studio actually does end to end. |
+| [Product vision](./product/minimum-viable-user-story.md) | Explanation | The canonical user story: idea → autonomous build → review → release → reflect. |
+| [Licensing & dependencies](./licensing-and-dependencies.md) | Reference | What AGPL-3.0 means for you, plus the dependency audit. |
+| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference | Reference schema for a project's config, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
 
 The human moments: **architect interview** (shape the work), **review verdict** (approve / send back), and **release approve** (sign off the changelog before forge merges). Everything between runs unattended.
+
+## Vision & positioning
+
+Perishable strategy docs (dated; not onboarding material):
+
+- [What makes it different](./forge-studio-market-and-differentiation.md) — *Explanation.* Competitive position + the modularity-as-subsumption thesis. **Dated 2026-06-14 positioning**, not current-state reference.
 
 ---
 
 ## Developing Forge Studio (contributors)
 
 **Orientation**
+- [Repository map](./repo-map.md) — *Explanation.* The three scopes and which rule governs each path. Start here.
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — narrative as-built architecture (repo root).
 - [PRINCIPLES.md](../PRINCIPLES.md) — the five non-negotiable principles (repo root).
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — build/test gates and how to extend forge (repo root).
 - [Architecture overview](./architecture/overview.md) — internal index into phases, decisions, and the contract.
+- [CLI reference](./reference/cli.md) — *Reference.* The committed `forge --help` plus the daemon / scaffolding / phase verbs.
 
 **Decisions**
 - [ADR index](./decisions/README.md) — every load-bearing choice plus the retirement ledger.

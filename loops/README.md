@@ -1,6 +1,6 @@
 # Loops
 
-> Agentic loop runtimes. Default: `ralph/` (Ralph loop pattern over Claude Agent SDK).
+> **Scope 1 — framework** ([repo map](../docs/repo-map.md)). Agentic loop runtimes. Default: `ralph/` (Ralph loop pattern over Claude Agent SDK).
 
 ## Why a loop abstraction at all
 
