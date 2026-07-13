@@ -27,10 +27,9 @@ budgets: {}
 
 Audit ONE project's real end state against what it was supposed to become, and
 report the drift. This codifies — as a re-runnable skill — the method the
-2026-07 holistic review's end-state audit ran by hand:
-[`docs/investigations/2026-07-holistic-review/endstate-audit.md`](../../docs/investigations/2026-07-holistic-review/endstate-audit.md)
-(read it first; it is both the method reference and a worked example of the
-output shape). That audit found a genuinely-shipped, CI-green, fully-migrated
+2026-07 holistic review's end-state audit ran by hand (that worked example is preserved
+in git history at `docs/investigations/2026-07-holistic-review/endstate-audit.md`; audit
+outputs are written to the gitignored `docs/investigations/` working area, not committed). That audit found a genuinely-shipped, CI-green, fully-migrated
 release that STILL had a silently-dead auth path and a broken protocol
 manifest — gaps invisible to per-initiative review because no single
 initiative owned "does the finished thing actually work end to end." This

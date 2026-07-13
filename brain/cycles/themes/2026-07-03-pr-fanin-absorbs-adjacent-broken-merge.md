@@ -12,7 +12,7 @@ Cycle: `2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-graph-identity` (t
 
 PR #50 (feed package migration, different initiative) was squash-merged to main with a conflict marker and non-compiling code. PR #51 (this initiative) was the next to merge. Its unifier fan-in had to absorb the repair of PR #50's breakage — the fix appeared in PR #51's diff as unexplained changes to the feed package.
 
-Operator: "this same PR's fan-in had to absorb a repair of a *different* initiative's broken main." Also documented in `docs/investigations/2026-07-betterado-run-friction.md`: "merge integrity — the feed (#50) squash-merge shipped a broken main."
+Operator: "this same PR's fan-in had to absorb a repair of a *different* initiative's broken main." Also documented in the betterado 2026-07 run-friction report (git history): "merge integrity — the feed (#50) squash-merge shipped a broken main."
 
 ## Why this matters
 

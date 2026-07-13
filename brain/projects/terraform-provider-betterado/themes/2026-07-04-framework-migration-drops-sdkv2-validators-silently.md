@@ -12,7 +12,7 @@ updated_at: 2026-07-04T00:00:00.000Z
 
 On PR #48 (INIT-2026-07-01-migrate-framework-security-permissions): 0 of 20 migrated framework resource files carried `Validators:` entries equivalent to the SDKv2 `ValidateFunc`/`ValidateDiagFunc` they replaced (IsUUID, StringIsNotWhiteSpace, OneOf enums). The same gap was caught at PR #46 in a prior initiative.
 
-Operative evidence from `docs/investigations/2026-07-betterado-run-friction.md`:
+Operative evidence from the betterado 2026-07 run-friction report (git history):
 > "framework migrations silently drop SDKv2 validators... security-permissions (PR #48 — 0 of 20 framework files carry Validators; SDKv2 had IsUUID/StringIsNotWhiteSpace throughout)"
 
 User-feedback confirmation: "Minor divergence — validator parity was not achieved at first-pass merge; closed via send-back, not first-pass delivery."

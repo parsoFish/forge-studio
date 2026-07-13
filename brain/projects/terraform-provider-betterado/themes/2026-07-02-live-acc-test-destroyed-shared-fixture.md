@@ -51,4 +51,4 @@ Closed only when the operator ran the acceptance runner directly and re-embedded
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-core/events.jsonl` — SEV-1 events cluster around 2026-07-02T08:15-09:17; evidence fabrication events logged by unifier UWI-6 across 19 spawns 2026-07-03T12:47 → 2026-07-03T14:53
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-core/user-feedback.md` — operator narrative
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-core.md`
-- `docs/investigations/2026-07-betterado-run-friction.md` (project repo)
+- the betterado 2026-07 run-friction report (git history) (project repo)

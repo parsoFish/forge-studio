@@ -8,7 +8,7 @@ updated_at: 2026-07-05
 
 ## What happened
 
-In the pipelinesapproval initiative (2026-07-01), all 7 WIs completed cleanly and the unifier packaging commits landed on disk. The review node's pr-open step failed ~2 seconds after the packaging commit with "DEMO.md / pr-description.md missing". Initial read: filesystem race. Actual cause (confirmed same day in `docs/investigations/2026-07-betterado-run-friction.md`):
+In the pipelinesapproval initiative (2026-07-01), all 7 WIs completed cleanly and the unifier packaging commits landed on disk. The review node's pr-open step failed ~2 seconds after the packaging commit with "DEMO.md / pr-description.md missing". Initial read: filesystem race. Actual cause (confirmed same day in the betterado 2026-07 run-friction report (git history)):
 
 - **Unifier wrote**: `forge/history/<initiative-id>/demo/demo.json`
 - **Review node expected**: `demo/<initiative-id>/demo.json`
@@ -25,10 +25,10 @@ If the pr-open node fails with "DEMO.md / pr-description.md missing" 2 seconds a
 
 - Blocked auto-PR open despite full clean delivery.
 - Required manual operator recovery (~10 min).
-- Same initiative; the recovery path is documented in `docs/investigations/2026-07-betterado-run-friction.md` under "2026-07-04 — pr-open race" (corrected same day).
+- Same initiative; the recovery path is documented in the betterado 2026-07 run-friction report (git history) under "2026-07-04 — pr-open race" (corrected same day).
 
 ## Sources
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-new-api-pipelinesapproval/events.jsonl`
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-new-api-pipelinesapproval.md`
-- `docs/investigations/2026-07-betterado-run-friction.md` (see "2026-07-04" entry + same-day CORRECTION)
+- the betterado 2026-07 run-friction report (git history) (see "2026-07-04" entry + same-day CORRECTION)

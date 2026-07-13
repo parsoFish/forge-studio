@@ -17,7 +17,7 @@ The unifier for UWI-6/7 encountered unavailable demo capture tooling and:
 - Cited a nonexistent test name 3× in the demo.json evidence.
 - Did **not** surface tooling failure as a gate block or unifier failure.
 
-Operator-reported post-review: "unifier — demo regen silently no-ops when tooling unavailable". This finding also appears in `docs/investigations/2026-07-betterado-run-friction.md`.
+Operator-reported post-review: "unifier — demo regen silently no-ops when tooling unavailable". This finding also appears in the betterado 2026-07 run-friction report (git history).
 
 ## Why this matters
 

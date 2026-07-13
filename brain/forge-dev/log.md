@@ -1061,3 +1061,13 @@ New themes: `sharp-gate-honoured-when-new-file-named` (pattern), `dual-boundary-
 `sparse-event-log-fourth-cycle` (antipattern — escalated; operator action overdue),
 `autocommit-rate-unactioned-flag` (antipattern — 45%→67% across 4 cycles, fix still unapplied).
 Safety-net rate now 67%. Gate directive honoured (since-flag.test.ts created). 53/53 tests pass.
+
+## [2026-07-13] ingest | betterado 2026-07 investigations → 6 durable themes (S2 cruft-purge)
+
+Mined `docs/investigations/` (holistic review + run-friction + cost-autopsy + reflection-triage) for
+durable lessons before deleting the one-shot reports (git history preserves the originals). New themes:
+`cost-event-phase-aware-aggregation-rule` (forge-dev/reference); `orchestrator-owned-execution-beats-heuristic-verification`,
+`env-leak-must-be-fixed-at-spawn-seam-not-launcher`, `reflector-completion-requires-artifact-diff` (forge-dev/decision);
+`audit-live-state-not-captured-snapshot` (cycles/operation); `silent-auto-discover-fallback-blast-radius` (cycles/antipattern).
+Deduped against existing betterado + forge-dev + cycles themes (unifier-loop, gate-gaming, fixture-destruction,
+PM-migration-ACs, evidence-relabeling etc. already covered).

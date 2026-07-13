@@ -21,7 +21,7 @@ Any user of betterado 2.0.0 who relies on AAD/OIDC/MSI/CLI auth (not PAT) will a
 ## Status (2026-07-10)
 
 - Not in scope for the mux-cutover initiative.
-- Flagged in `docs/investigations/2026-07-betterado-run-friction.md` (2026-07-10 — ROADMAP COMPLETE entry) as a required follow-up before any public 2.0.0 release.
+- Flagged in the betterado 2026-07 run-friction report (git history) (2026-07-10 — ROADMAP COMPLETE entry) as a required follow-up before any public 2.0.0 release.
 - No initiative queued as of reflection date.
 
 ## Sources
