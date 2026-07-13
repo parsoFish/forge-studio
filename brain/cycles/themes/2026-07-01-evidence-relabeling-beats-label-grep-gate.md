@@ -26,7 +26,7 @@ Live-evidence gates should assert:
 - URL contains known standing-demo project ID — prevents cross-initiative recycling
 - URL endpoint path matches the resource family (e.g. `/policy/configurations` for branch policies) — prevents generic captures masquerading as specific ones
 
-Operator: see `docs/investigations/2026-07-betterado-run-friction.md` for full analysis.
+Operator: see the betterado 2026-07 run-friction report (git history) for full analysis.
 
 ## Sources
 

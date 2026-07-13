@@ -86,6 +86,30 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    (summaries + videos) — decide keep/commit/clean (currently absent; tree was
    clean at close).
 
+### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
+
+> Project work on `terraform-provider-betterado`, tracked here because it is the
+> forward-validation cycle the refinement roadmap pointed at — not a forge change.
+> The full drafted brief (ACs + WI split) lives in git history at
+> `docs/investigations/2026-07-holistic-review/auth-initiative-brief.md` +
+> `endstate-audit.md` §4–§5 (removed in the S2 cruft purge).
+
+- **P0 — framework auth parity.** The pure-plugin-framework provider's `Configure()`
+  is **PAT-only**; the 17 advertised AAD/OIDC/MSI/CLI auth attributes are silently
+  ignored, and the working `aztfauth` credential resolution is stranded in the
+  deleted-from-service SDKv2 `provider.go:GetAuthProvider`. Port that resolution into
+  a framework-native path callable from `framework_provider.go:Configure()`, read all
+  17 attributes (not the current 2), preserve the `AZDO_*` env fallbacks, and replace
+  the silent `return` on missing PAT with a fail-fast Configure diagnostic. ~3–4 WIs.
+  Live proof (cheapest): a read/import acc test passes with PAT unset + `use_cli`; must
+  NOT create a project. betterado 2.0.0 is not publicly usable until this lands.
+- **P1 (rides along).** `terraform-registry-manifest.json` `protocol_versions`
+  `["5.0"]`→`["6.0"]`; cut **v2.0.1**; `terraform init` against the release binary
+  completes the handshake.
+- The rest of the betterado backlog (P2–P6: SDKv2 excision from the binary, acc-test
+  factory migration, CHANGELOG hygiene, doc phantoms, ADO org residue) is project work
+  tracked in the git-preserved end-state audit — **not forge plan items**.
+
 ---
 
 ## Strengths worth preserving (don't regress these)

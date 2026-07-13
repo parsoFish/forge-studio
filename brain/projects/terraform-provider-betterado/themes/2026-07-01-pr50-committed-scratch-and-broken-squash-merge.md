@@ -46,4 +46,4 @@ The operator squash-merged PR #50. Result:
 
 - `_logs/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-feed/events.jsonl` — user-feedback Q2 answer describing scope drift and broken squash-merge
 - `brain/cycles/_raw/2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-feed.md`
-- `docs/investigations/2026-07-betterado-run-friction.md` (review-gate scoreboard + merge integrity sections)
+- the betterado 2026-07 run-friction report (git history) (review-gate scoreboard + merge integrity sections)

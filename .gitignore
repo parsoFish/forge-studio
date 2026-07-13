@@ -94,3 +94,7 @@ npm-debug.log*
 # graphify output — the graphify tooling was removed, but an external/global
 # graphify hook may still regenerate this at the repo root. Output-ignore only.
 graphify-out/
+
+# One-shot audit/investigation reports (project-scoped-review output) — working
+# artifacts, not source; durable lessons are extracted to the brain + ADRs.
+docs/investigations/

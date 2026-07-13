@@ -41,7 +41,7 @@ The human moments: **architect interview** (shape the work), **review verdict** 
 **Operations & backlog**
 - [Serve supervision](./operations/serve-supervision.md) — running `forge serve` under a supervisor.
 - [Known gaps](./known-gaps.md) — the open hardening backlog (internal).
-- [Investigations](./investigations/) · [UX reference](./reference/studio-first-flow-ux.md)
+- [UX reference](./reference/studio-first-flow-ux.md)
 
 ---
 

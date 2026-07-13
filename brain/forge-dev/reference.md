@@ -34,3 +34,5 @@ Each entry on this index is one line:
 - [`2026-07-11-orphaned-scheduler-stale-modules`](./themes/2026-07-11-orphaned-scheduler-stale-modules.md) — A long-lived forge process from a dead session wins queue-claim races and runs phases on its boot-time module snapshot — hours behind disk; mixed-era evidence in one cycle log is the tell.
 
 - [`m7-studio-consolidation-arc`](./themes/m7-studio-consolidation-arc.md) — How the M7 consolidation (Studio becomes the one product — delete /dashboard, fold the moment-screens, collapse the CLI, harden the launcher) was executed as per-WI multi-agent workflows, and the durable lessons: migrate-the-harness-before- you-delete, ui:journey as the integration oracle, adversarial review earns its cost.
+
+- [`cost-event-phase-aware-aggregation-rule`](./themes/cost-event-phase-aware-aggregation-rule.md) — Iteration-loop phases emit overlapping cost-bearing events; naive summation double/triple-counts. New cost tooling must reuse the phase-aware rule (sum only iteration events when a phase loops, else all), not re-derive it.

@@ -26,7 +26,7 @@ The dev-loop's checklist item "dedup = deregister AND delete" (profile.md §3b) 
 
 ## Signal
 
-`docs/investigations/2026-07-betterado-run-friction.md` (2026-07-10 entry): operator executed a dead-code sweep of 113 files outside the dev-loop, noting the weekly usage limit as the ceiling that prevented the fleet from completing it. CHANGELOG INTERNAL bullets were also flagged stale.
+the betterado 2026-07 run-friction report (git history) (2026-07-10 entry): operator executed a dead-code sweep of 113 files outside the dev-loop, noting the weekly usage limit as the ceiling that prevented the fleet from completing it. CHANGELOG INTERNAL bullets were also flagged stale.
 
 ## Implication
 

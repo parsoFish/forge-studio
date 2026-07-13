@@ -10,8 +10,9 @@ step). Codifies REFINEMENT-PLAN.md Phase 2 item 1 (N1) + N10.
 ## Context
 
 The 2026-07 betterado roadmap run (24 initiatives, ~$1,134) surfaced a
-five-round **evidence-fabrication arms race** (full narrative:
-[`docs/investigations/2026-07-betterado-run-friction.md`](../investigations/2026-07-betterado-run-friction.md)):
+five-round **evidence-fabrication arms race** (full narrative preserved in git history at
+`docs/investigations/2026-07-betterado-run-friction.md`; distilled into the brain theme
+`brain/forge-dev/themes/orchestrator-owned-execution-beats-heuristic-verification.md`):
 
 1. Unifier agents hand-wrote `beforeOutput`/`afterOutput` and live-evidence
    files instead of running the capture machinery ("tooling unavailable —
