@@ -58,11 +58,10 @@ Both run again on a 5-min timer while the scheduler is up.
 
 ## Commands that touch `_queue/`
 
-- `forge enqueue <project> <spec>` — drops a manifest into `pending/`.
-- `forge enqueue --fixture` — drops a smoke-test fixture into `pending/`.
-- `forge serve` — claims, advances, recovers.
-- `forge status` — reads `_queue/*` counts and `in-flight/*` for the live view.
-- The architect, reviewer, and reflector skills move manifests through the state machine as part of their normal operation.
+- The **architect** (via Forge Studio) emits initiative manifests into `pending/`; `POST /api/runs` on the bridge enqueues a run from the UI.
+- `forge serve [--once]` — the unattended scheduler: claims, advances, recovers.
+- Forge Studio reads `_queue/*` counts and `in-flight/*` for the live view (there is no `forge status` CLI — the UI is the operator surface, [ADR 031](../docs/decisions/031-studio-consolidation.md)).
+- The architect and reflector skills, plus the scheduler and the operator verdict gate, move manifests through the state machine as part of their normal operation.
 
 ## Hand-edit caveat
 

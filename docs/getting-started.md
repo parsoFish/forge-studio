@@ -126,12 +126,12 @@ Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
 across parallel work items.
 
-S9/DEC-6: the **UI is the sole operator surface** — author + run a cycle, review/approve,
-and recover stuck initiatives all from `forge studio` (the Recovery screen replaces
-`forge review`/`forge requeue`; new runs go through the architect flow or `POST
-/api/initiatives`). The only operator CLI verbs left are `forge init`, `forge studio`,
-and `forge studio lint`. The scheduler daemon (`forge serve`) is still spawnable for
-CI/headless use but is no longer an operator command.
+The **UI is the sole operator surface** ([ADR 031](./decisions/031-studio-consolidation.md))
+— author + run a cycle, review/approve, and recover stuck initiatives all from
+`forge studio`; the Recovery screen replaces the old `review`/`requeue` verbs, and new
+runs go through the architect flow or `POST /api/initiatives`. The only operator CLI
+verbs are `forge init`, `forge studio`, and `forge studio lint`. The scheduler daemon
+(`forge serve`) is still spawnable for CI/headless use but is no longer an operator command.
 
 ---
 

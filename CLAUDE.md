@@ -207,8 +207,9 @@ only — sibling units stay in their own state independently. See
 [`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts).
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change. The harness surface is
-**two scripts only** (2026-05-30 consolidation), sharing one extracted
+`data-*` attribute** alongside any visual change. The harness surface centres on
+**two primary scripts** (2026-05-30 consolidation) — plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
+(`npm run ui:deadpaths`), the dead-route/no-op sweep — sharing one extracted
 assertion module — [`scripts/lib/journey-assertions.mjs`](./scripts/lib/journey-assertions.mjs)
 (the soft `check()` + the `data-*` DOM-as-metrics helpers) — so the demo
 video and the regression layer stop entangling:
@@ -216,10 +217,10 @@ video and the regression layer stop entangling:
 1. **UI-emulation harness** — [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs)
    (`npm run ui:journey`) is the **canonical Studio walkthrough**, organised
    platform-first (post-M8) around the three things Studio does, not one linear
-   cycle: **AUTHOR** (library; build the forge-cycle flow from scratch as data —
+   cycle: **AUTHOR** (library; build the cycle flow from scratch as data —
    `forge studio lint` validates it + structural parity vs the seed; agent +
    project builders) → **RUN** (idea → architect interview → PLAN gate →
-   autonomous build on `/flows/forge-cycle` → verdict gate send-back/payoff →
+   autonomous build on the develop flow (`/flows/forge-develop`) → verdict gate send-back/payoff →
    approve+merge → reflect) → **SWAP** (the seams: flow-engine controls, the
    runtime-adapter registry SDK picker — the live swap surface — plus the
    filesystem-only KB-backend seam). It is
@@ -232,7 +233,7 @@ video and the regression layer stop entangling:
    unifier own-node, gate surfaces, the author-from-scratch parity + lint proof,
    etc.) — the video always finishes; a non-zero exit flags any DOM-as-metrics
    regression. Cleans up all seeded state (architect session, cycle logs, queue
-   manifests, the `forge-cycle-scratch` flow, any `_guidance/*.md`) afterwards.
+   manifests, the scratch cycle flow it created, any `_guidance/*.md`) afterwards.
 
 2. **Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
    (`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed

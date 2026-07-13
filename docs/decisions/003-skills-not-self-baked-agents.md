@@ -24,6 +24,8 @@ Forge ships nine skills at scaffold time:
 - `skills/brain-query/` — wiki lookup; mandated as the first action of every other skill.
 - `skills/developer-ralph/` — launches the developer loop (calls into `loops/ralph/`).
 
+*(The scaffold set has since grown to 24 skills and some names changed — e.g. the separate architect-council skill folded into `skills/architect/`, and the standalone reviewer skill was retired. Current inventory: [`skills/README.md`](../../skills/README.md).)*
+
 Every `SKILL.md` follows the same shape: single responsibility, declared inputs (file/folder paths), declared outputs (artifacts written), `brain-query`-first, declared event-log entries.
 
 The orchestrator spawns each phase as a clean, model-tiered **agent** that composes skills/CLIs/MCP — the agent→skill composition layer is formalised in [ADR 024](./024-phases-as-subagents-invoking-skills.md).

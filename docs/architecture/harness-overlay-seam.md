@@ -26,12 +26,12 @@ SDK. The pattern is uniform:
 // loops/ralph/claude-agent.ts:179  (dev-loop / Ralph)
 const queryFn: QueryFn = opts.queryFn ?? (sdkQuery as unknown as QueryFn);
 
-// orchestrator/architect-runner.ts:187  (architect + council)
-const queryFn: CouncilQueryFn = input.queryFn ?? (sdkQuery as unknown as CouncilQueryFn);
+// orchestrator/architect-runner.ts  (architect + council)
+const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
 ```
 
 - **`QueryFn`** — [loops/ralph/claude-agent.ts:22](../../loops/ralph/claude-agent.ts#L22): the dev-loop's per-turn agent driver.
-- **`CouncilQueryFn`** — re-exported by [orchestrator/architect-runner.ts:55](../../orchestrator/architect-runner.ts#L55) from `skills/architect-llm-council/council.ts`.
+- **Architect + council** — the architect runner resolves the same injectable `queryFn` (defaulting to `sdkQuery`); the council transcript type (`CouncilTranscript`) is defined in [`cli/architect-plan.ts`](../../cli/architect-plan.ts), and the council runs inside [`skills/architect/`](../../skills/architect/) — there is no separate `council.ts`.
 - PM / reflector take the same `{ queryFn }` options shape
   (`runProjectManager(input, logger, { queryFn })`).
 
