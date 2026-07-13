@@ -110,6 +110,32 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
   factory migration, CHANGELOG hygiene, doc phantoms, ADO org residue) is project work
   tracked in the git-preserved end-state audit — **not forge plan items**.
 
+### 6. `skills/` physical role-subfolder move — deferred (2026-07-13, campaign S4)
+
+The production-repo cleanup considered physically splitting `skills/` into
+`skills/cycle|system|project/`. **Deferred — the physical move is not a clean change,
+and the legibility goal it served is already met without it.**
+
+- **Blast radius:** ~35 `.ts`/`.mjs` files hardcode literal skill paths
+  (`deriveAgentSpec('skills/<name>/SKILL.md')`, `resolve(FORGE_ROOT,'skills',<name>,'SKILL.md')`)
+  — each phase runner resolves its own skill by a hardcoded string, with **no shared
+  resolver** to change in one place. `orchestrator/studio/registry.ts:listAgentDefinitions`
+  additionally requires skills as **flat** direct children (`readdirSync(skillsDir)` +
+  `join(skillsDir, entry, 'SKILL.md')`), so the move also needs a real discovery-behaviour
+  change on the hot path.
+- **No clean split criterion:** the `library` frontmatter flag (the intended
+  cycle=`true` / system=`false` divider) is set on only 7 of 24 skills (1 `true`, 6
+  `false`, 17 unset) — the three-way role split has no mechanical rule today.
+- **Legibility already delivered without moving:** `skills/README.md` groups all 24 by
+  role (S1), and the scope READMEs + `docs/repo-map.md` (S3) place `skills/` in Scope 2.
+
+**Revisit only after introducing a single shared skill-path resolver** (e.g. a
+`skillPath(name)` helper every runner + `registry.ts` route through). Once resolution is
+centralised, the physical move becomes a one-place change that can ride the full gate +
+`ui:journey` safely. Until then the flat layout + roles-table is the simplest thing that
+works — moving 35 hot-path files for a cosmetic reorg would grow the capped orchestrator
+surface and risk a skill mis-pathing that only surfaces at real-cycle time.
+
 ---
 
 ## Strengths worth preserving (don't regress these)
