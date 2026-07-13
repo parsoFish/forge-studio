@@ -1,6 +1,6 @@
 # `projects/` — Managed Projects
 
-> Gitignored. Each subdirectory is a managed project; forge auto-discovers them
+> **Scope 3 — projects forge develops** ([repo map](../docs/repo-map.md)). Gitignored. Each subdirectory is a managed project; forge auto-discovers them
 > from disk — any sub-directory carrying a `.forge/project.json` contract file
 > is a managed project (no registry file to edit). The projects root is
 > configurable via `FORGE_PROJECTS_DIR` or `projectsDir` in `forge.config.json`

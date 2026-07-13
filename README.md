@@ -93,18 +93,21 @@ Forge runs unattended **between** exactly three deliberate human interaction poi
 
 ## Repository layout
 
-| Path | What lives here |
-|---|---|
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Narrative architecture |
-| [`PRINCIPLES.md`](./PRINCIPLES.md) | The five principles that gate every decision |
-| [`docs/decisions/`](./docs/decisions/) | ADRs for every load-bearing choice |
-| [`studio/`](./studio/) | Studio definitions as data — flows, agents, catalog, KBs |
-| [`forge-ui/`](./forge-ui/) | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
-| [`loops/`](./loops/) | Agentic loop runtimes + the runtime-adapter seam (`loops/_adapters/`) |
-| [`orchestrator/`](./orchestrator/) | Scheduler, cycle runner, flow engine, the KB backend seam, logging |
-| [`skills/`](./skills/) | Claude Code skills — the agent surface |
-| [`brain/`](./brain/) | The compounding engineering wiki (three scoped graphs) |
-| [`cli/`](./cli/) | The runtime spine + the operator bridge |
+Every path belongs to one of **three scopes** — framework (1), cycles/agents/flows (2), projects (3). See **[docs/repo-map.md](./docs/repo-map.md)** for the full map and the cross-scope rule.
+
+| Path | Scope | What lives here |
+|---|---|---|
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
+| [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
+| [`docs/`](./docs/) | — | Docs — [repo map](./docs/repo-map.md), ADRs, phase docs, guides |
+| [`orchestrator/`](./orchestrator/) | 1 | Scheduler, cycle runner, flow engine, the KB backend seam, logging (+ the Studio engine) |
+| [`cli/`](./cli/) | 1 | Operator utilities, `forge` subcommands, the UI bridge |
+| [`loops/`](./loops/) | 1 | Agentic loop runtimes + the runtime-adapter seam (`loops/_adapters/`) |
+| [`forge-ui/`](./forge-ui/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
+| [`studio/`](./studio/) | 2 | Studio definitions as data — flows, agents, catalog, KBs |
+| [`skills/`](./skills/) | 2 | Claude Code skills — the agent surface |
+| [`brain/`](./brain/) | 2·3 | The compounding engineering wiki (three scoped graphs) |
+| [`projects/`](./projects/) | 3 | Managed projects forge develops (gitignored; contract-driven) |
 
 ## Extending Forge
 

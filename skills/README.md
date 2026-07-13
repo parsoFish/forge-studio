@@ -1,6 +1,6 @@
 # Skills
 
-> Every "agent" in forge is a Claude Code skill. See [ADR 003](../docs/decisions/003-skills-not-self-baked-agents.md).
+> **Scope 2 — cycles / agents / flows** ([repo map](../docs/repo-map.md)). Every "agent" in forge is a Claude Code skill. See [ADR 003](../docs/decisions/003-skills-not-self-baked-agents.md).
 
 ## How to use
 
