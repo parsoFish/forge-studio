@@ -228,7 +228,7 @@ video and the regression layer stop entangling:
    artifacts read true), emulates the architect turns + autonomous cycle by
    seeding the same files/events the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`),
    and is BOTH the watchable demo (records a **video** + frame gallery +
-   `index.html` under `forge-ui/.demo-shots/e2e/`) AND the **UI regression
+   `index.html` under `demos/e2e/`) AND the **UI regression
    harness** (≥5 phase hexes, materialised WI hexes, per-phase cost rollup,
    unifier own-node, gate surfaces, the author-from-scratch parity + lint proof,
    etc.) — the video always finishes; a non-zero exit flags any DOM-as-metrics

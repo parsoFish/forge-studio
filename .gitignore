@@ -14,11 +14,13 @@ forge-ui/.next/
 forge-ui/out/
 forge-ui/tsconfig.tsbuildinfo
 forge-ui/next-env.d.ts
-# forge-ui/.demo-shots/ PNG frame galleries + HIGHLIGHTS/index are version-tracked
-# (the watchable demo + DOM-as-metrics regression artifact). The .webm VIDEOS are
-# NOT — they are regenerable and too large for git (a verify cycle.webm hit 110MB,
-# past GitHub's 100MB cap). Regenerate locally via `npm run ui:journey` / `verify:cycle`.
-forge-ui/.demo-shots/**/*.webm
+# demos/ PNG frame galleries + index.html + the short building/generating CLIPS
+# (demos/e2e/clips/*.webm, each <400K — the autoplay-loop "GIFs") are version-tracked.
+# The big full-run VIDEOS are NOT — regenerable + too large for git (a verify
+# cycle.webm hit 110MB, past GitHub's 100MB cap). Regenerate locally via
+# `npm run ui:journey` / `verify:cycle`.
+demos/e2e/video/*.webm
+demos/verify/**/*.webm
 
 # Runtime state — not source. Ignore contents but keep .gitkeep so structure
 # is preserved in git.

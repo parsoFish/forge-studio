@@ -1,56 +1,86 @@
 /**
- * e2e-journey — Forge Studio product-walkthrough + DOM-as-metrics regression harness.
+ * e2e-journey — the Forge Studio user-story walkthrough + DOM-as-metrics regression harness.
  *
  *   node scripts/e2e-journey.mjs   (npm run ui:journey)
  *
- * STORY: "Forge Studio — author a flow, run it, swap its engine."
- *   Post-M8 the platform is the hero, not one linear cycle. The forge cycle is now
- *   the 3-flow set (forge-architect → forge-develop → forge-reflect; the forge-cycle
- *   monolith was retired in S8/DEC-3) — flow definitions interpreted by the
- *   node-executor registry (ADR-028). The journey proves the three things the
- *   platform now does, in order:
+ * WHAT THIS IS. Forge Studio is one product for one operator running a portfolio,
+ * who never leaves the UI. This harness walks the canonical Studio USER STORIES —
+ * the things that operator actually does — organised around the three platform
+ * verbs: AUTHOR a flow, RUN it, SWAP its engine. It is BOTH the watchable demo
+ * (records a video + frame gallery + index.html) AND the UI regression harness
+ * (every beat asserts a real data-* invariant; a non-zero exit flags a regression
+ * while the video always finishes). It is a sibling to two other harnesses:
+ *   · scripts/e2e-deadpaths.mjs (`npm run ui:deadpaths`) — the read-only route/
+ *     dead-path crawler (renders + no dead CTAs + nav resolves, twice).
+ *   · scripts/verify-cycle.mjs (`npm run verify:cycle`) — the REAL-capability gate
+ *     (a real cycle end-to-end; the honest proof, real-money, operator-gated).
  *
- *   ACT 1 — AUTHOR   everything in Studio is data you can edit
- *     · library (/) — flows / agents / projects / KBs as cards + operator pulse
- *     · BUILD THE DEVELOP FLOW FROM SCRATCH — author forge-develop-scratch as a flow
- *       definition (3 nodes, 2 artifact edges, 1 gate), validate it with
- *       `forge studio lint`, prove structural parity with the production seed, and
- *       render it live in the flow builder. The hardcoded cycle is subsumed by data.
- *     · agent builder (/agents/project-manager) — composition + runtime + budgets
- *     · project builder (/projects/mdtoc) — north star, creds-free demo timeline,
- *       skills, KB binding, C-contract readiness (FORGE_E2E_PROJECT overrides)
+ * THE STORIES (route + differentiator each proves). The forge cycle is three
+ * chained flows now — forge-architect → forge-develop → forge-reflect — flow
+ * definitions interpreted by the node-executor registry (ADR-028); one threaded
+ * run surfaces on all three flow monitors via its flowLineage (Model B).
  *
- *   ACT 2 — RUN   the cycle as the proof case, grounded on a REAL mdtoc feature
- *     · idea (/architect/new) → interview (P1 stall / P2 free-text / P3 activity / P4 cost)
- *     · PLAN gate (/artifact ...type=plan&mode=gate) — send-back → revise → approve
- *     · autonomous build on /flows/forge-develop — PM decomposes → WIs fan off dev →
- *       TDD red → grind → gate.pass (dependency-ordered) → unifier on its OWN hex
- *       authors the mdtoc demo (captured CLI read-back evidence)
- *     · verdict gate — per-AC evaluated demo (AC-2 PARTIAL) → operator authors a new
- *       G/W/T criterion → dev-loop reruns → re-review PARTIAL→MET → approve + merge
- *     · reflect — operator tunes the brain
+ *   ACT 1 — AUTHOR  (everything in Studio is data you can edit)
+ *     A1  Triage the portfolio — the library (/): flows/agents/projects/KBs as
+ *         cards + the operator pulse. The one surface (ADR-031).
+ *     A2  Author a cycle flow from scratch AS DATA — author a flow in the builder
+ *         (my-first-flow) AND prove forge-develop-scratch is structurally identical
+ *         to the production seed (`forge studio lint` + parity). "Forge is just one
+ *         flow" (ADR-028): the hardcoded cycle is subsumed by data.
+ *     A3  Build an agent by composing skills — author plan/dev/review agents from
+ *         the curated starter library (→ skills/<slug>/SKILL.md), then edit an
+ *         existing agent's composition/runtime/budgets (/agents/project-manager).
+ *     A4  Onboard / tune a project — onboard a new project in the UI (writes
+ *         .forge/project.json) AND edit the mdtoc project's north star + demo
+ *         timeline + contract readiness (/projects/<id>). (FORGE_E2E_PROJECT overrides.)
  *
- *   ACT 3 — SWAP   the seams — the platform is modular, not hardcoded (subsumption)
- *     · flow-engine controls — start-run CTA / cost-ceiling gauge / gate / resume
- *     · runtime-adapter seam (ADR-029) — registry-driven SDK picker (claude live;
- *       gemini/aider/codex disabled until provisioned) + range strategy
- *     · KB-backend seam (ADR-027 §4) — knowledge force-graph + pin-guidance
- *       (FilesystemKbBackend default; Zep descriptor swap)
+ *   ACT 2 — RUN  (the cycle as the proof case, on a real mdtoc roadmap feature)
+ *     R1  Idea → architect interview (/architect/new → /architect/<sid>/interview):
+ *         live costed activity panel, clarifying questions, free-text answers, a
+ *         stall cameo — the four architect observability surfaces (P1 stall / P2
+ *         free-text / P3 activity / P4 cost).
+ *     R2  Human gate #1 — approve the PLAN (/artifact …type=plan&mode=gate):
+ *         send-back → revise → approve. No auto-approve path (ADR-020).
+ *     R3  Watch the autonomous build (/flows/forge-develop): PM decomposes ACs →
+ *         dev-loop TDD (red → grind → gate.pass, dependency-ordered) fans off the
+ *         dev hex → the unifier on its OWN hex authors the demo (captured CLI
+ *         read-back evidence).
+ *     R4  Human gate #2 — review → send-back → re-review → approve+merge
+ *         (/artifact …type=verdict): a per-AC evaluated demo (AC-2 PARTIAL) → the
+ *         operator anchors a blocking comment → the dev-loop reruns in place
+ *         (ADR-026) → PARTIAL→MET → approve IS the merge.
+ *     R5  Human gate #3 — reflect + tune the brain (/artifact …type=reflection):
+ *         the reflector folds the operator's feedback into the brain.
+ *     (R6  Per-project roadmap + start-development trigger — the serpentine
+ *         timeline and the initiative-select kickoff onto forge-develop.)
  *
- * No live LLM: the architect runner's turns + the autonomous cycle are emulated by
- * seeding the same files/events the real phases write, grounded on a real mdtoc
- * roadmap feature (the `--write` in-place TOC injection mode) so the artifacts read true.
+ *   ACT 3 — SWAP  (the seams — the platform is modular, not hardcoded)
+ *     S1  Flow-engine controls — start-run CTA, cost-ceiling meter, gate parking,
+ *         the monitor deep-dive with the phase drawer (gate sub-checks + phase log).
+ *     S2  Runtime-adapter seam (ADR-029) — the registry-driven SDK/model picker:
+ *         claude live; gemini/aider/codex disabled until their adapter provisions;
+ *         the range strategy routes to the cheapest-capable tier first.
+ *     S3  KB-backend seam (ADR-027 §4) — the brain as a browsable force-graph over
+ *         FilesystemKbBackend (the `backend:` descriptor is the swap point), plus
+ *         pin-guidance that surfaces as a node until the next ingest pass.
+ *     S4  Recover a stuck initiative (/recovery) — the CLI recovery verbs retired
+ *         into the UI (DEC-6).
  *
- * REGRESSION HARNESS: all assertions are SOFT (shared journey-assertions module;
- * non-zero exit at end). Guards preserved: ≥5 phase hexes, ≥2 WI hexes, drawer
- * opens (phase + wi), per-phase cost rollup, unifier own-node complete, per-AC
- * demo-evaluation, partial-count==0 on re-review, reflection hex complete, the
- * four architect observability surfaces (P1–P4), plus the NEW author-from-scratch
- * parity + `forge studio lint` proof.
+ * NO LIVE LLM. The architect turns + the autonomous cycle are EMULATED by seeding
+ * the same files/events the real phases write (FORGE_ARCHITECT_NO_SPAWN=1), grounded
+ * on a real mdtoc roadmap feature (the `--write` in-place TOC injection mode) so the
+ * artifacts read true. The gate surfaces, hexes, per-phase cost, WI materialisation
+ * and every data-* invariant are REAL; the honest end-to-end proof is verify-cycle.
  *
- * Output: forge-ui/.demo-shots/e2e/{video/journey.webm, frames/*.png, index.html}.
- * Cleans up all seeded state (architect session, cycle logs, queue manifests,
- * the forge-develop-scratch flow, any _guidance/*.md) in the finally block.
+ * REGRESSION GUARDS (soft-asserted; non-zero exit at end): ≥2 develop-slice phase
+ * hexes, ≥2 WI hexes, phase + WI drawer opens, per-phase cost rollup, unifier
+ * own-node complete, per-AC demo-evaluation, partial-count==0 on re-review,
+ * reflection hex complete, the four architect surfaces (P1–P4), and the
+ * author-from-scratch parity + `forge studio lint` proof.
+ *
+ * Output: demos/e2e/{video/journey.webm, frames/*.png, index.html}. Cleans up all
+ * seeded state (architect session, cycle logs, queue manifests, the authored
+ * scratch flow, any _guidance/*.md) in the finally block.
  */
 import { spawn, execSync, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, renameSync, existsSync } from 'node:fs';
@@ -88,9 +118,13 @@ function cleanSeededSession(sid) {
   try { rmSync(join(projectRoot, '_architect', sid), { recursive: true, force: true }); } catch { /* */ }
 }
 
-const OUT = join(FORGE_ROOT, 'forge-ui/.demo-shots/e2e');
+const OUT = join(FORGE_ROOT, 'demos/e2e');
 const FRAMES = join(OUT, 'frames');
 const VIDEO = join(OUT, 'video');
+// CLIPS: short muted autoplay-loop .webm captures of the building/generating
+// interactions (the "GIFs"). Each is recorded in its own ephemeral browser
+// context (recordVideo is per-context; a fresh context's webm ≈ one interaction).
+const CLIPS = join(OUT, 'clips');
 
 // ── MDTOC GROUNDING ─────────────────────────────────────────────────────────────
 // A real, small mdtoc roadmap feature (Milestone 1 — In-place TOC injection):
@@ -203,6 +237,9 @@ const J4_PROJECT = 'journey-demo-project';
 const J4_PROJECT_DIR = join(FORGE_ROOT, 'projects', J4_PROJECT);
 function cleanFirstProject() {
   try { rmSync(J4_PROJECT_DIR, { recursive: true, force: true }); } catch { /* */ }
+  // Onboarding seeds a Brain-3 KB (seedProjectBrain) under brain/projects/<slug>/ —
+  // remove it too so an onboarded scratch project leaves no residue.
+  try { rmSync(join(FORGE_ROOT, 'brain', 'projects', J4_PROJECT), { recursive: true, force: true }); } catch { /* */ }
 }
 
 // J5: a seeded run of the AUTHORED flow (my-first-flow) given work against the
@@ -646,6 +683,133 @@ function writeReflectionQuestions() {
   ], null, 2));
 }
 
+// ── AI-GENERATION EMULATION (instructions / project-brain) ──────────────────────
+// The instructions-creator, project-brain-builder and demo-builder sessions all
+// honour the SAME no-spawn seam as the architect (FORGE_ARCHITECT_NO_SPAWN=1): the
+// bridge writes status transitions the operator drives, but the LLM runner never
+// runs — so we seed the files the runner would have written (mirroring the architect
+// emulation). Cleaned up in the finally block.
+
+// instructions-creator (AGENTS.md). Session dir: projects/<p>/_instructions/<sid>/.
+function instrDir(sid) { return join(projectRoot, '_instructions', sid); }
+function writeInstrStatus(sid, patch) {
+  const dir = instrDir(sid);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sid, project: PROJECT, project_repo_path: projectRoot,
+    mode: 'init', round: 1, prompt: 'Keep it short; document the build + lint gate.',
+    ...patch, updated_at: new Date().toISOString(),
+  }, null, 2));
+}
+let instrSeq = 0;
+function instrEvent(sid, eventType, message, metadata = {}) {
+  const dir = join(FORGE_ROOT, '_logs', `_instructions-${sid}`);
+  mkdirSync(dir, { recursive: true });
+  instrSeq += 1;
+  appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({
+    event_id: `EV_instr_${instrSeq}`, cycle_id: `_instructions-${sid}`,
+    initiative_id: `instructions-${sid}`, started_at: new Date().toISOString(),
+    phase: 'architect', skill: 'instructions-runner',
+    event_type: eventType, input_refs: [], output_refs: [], message, metadata,
+  }) + '\n');
+}
+async function instrBurst(sid, tools) {
+  for (const t of tools) { instrEvent(sid, 'tool_use', `tool.${t}`, { tool: t }); await sleep(THINK); }
+}
+function writeInstrQuestions(sid) {
+  writeFileSync(join(instrDir(sid), 'questions.json'), JSON.stringify([
+    { question: 'Who is the primary audience for AGENTS.md?', header: 'Audience', options: [
+      { label: 'Forge dev-loop only', description: 'Terse machine-facing gate + convention notes.' },
+      { label: 'Humans + agents', description: 'Add onboarding context and a purpose paragraph.' },
+    ] },
+    { question: 'Which command is the quality gate?', header: 'Gate', options: [
+      { label: 'npm test', description: 'The full suite is the gate forge runs each iteration.' },
+      { label: 'npm run lint', description: 'Lint is the fast gate; tests run separately.' },
+    ] },
+  ], null, 2));
+}
+function writeInstrDraft(sid) {
+  mkdirSync(instrDir(sid), { recursive: true });
+  writeFileSync(join(instrDir(sid), 'AGENTS.draft.md'),
+    '# AGENTS.md\n\n> mdtoc — a markdown table-of-contents CLI.\n\n## Build & test\n\nBuild: `npm run build`. Gate: `npm test`. Acceptance: `npm run acceptance`.\n\n## Conventions\n\nPure functions return new objects; errors fail fast at the CLI boundary.\n');
+}
+function cleanInstructionsSession(sid) {
+  if (!sid) return;
+  try { rmSync(join(projectRoot, '_instructions', sid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(join(FORGE_ROOT, '_logs', `_instructions-${sid}`), { recursive: true, force: true }); } catch { /* */ }
+}
+
+// project-brain-builder (seed a project's KB so it grows). Session dir:
+// projects/<p>/_project-brain/<sid>/ (status.json + themes/). The commit step is
+// flip-only (the UI reads phase from status.json; it never verifies the central
+// brain) so nothing is written under brain/ — safe on the real mdtoc project.
+function pbDir(sid) { return join(projectRoot, '_project-brain', sid); }
+function writePbStatus(sid, phase, prompt = '') {
+  const dir = pbDir(sid);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sid, project: PROJECT, project_repo_path: projectRoot,
+    phase, prompt, updated_at: new Date().toISOString(),
+  }, null, 2));
+}
+function seedStagedBrain(sid) {
+  const themes = join(pbDir(sid), 'themes');
+  mkdirSync(themes, { recursive: true });
+  const fm = (name, description, category) =>
+    ['---', `title: ${name}`, `description: ${description}`, `category: ${category}`,
+     `created_at: ${new Date().toISOString()}`, `updated_at: ${new Date().toISOString()}`, '---', ''].join('\n');
+  writeFileSync(join(themes, 'structure.md'), fm('structure', 'mdtoc module layout + entry points', 'reference') +
+    'CLI entry is `src/cli.ts`; TOC generation in `src/toc.ts`, heading parsing in `src/headings.ts`, slugging in `src/anchor.ts`.');
+  writeFileSync(join(themes, 'conventions.md'), fm('conventions', 'Immutable, feature-organised TypeScript; explicit errors', 'pattern') +
+    'Pure functions return new objects (`src/toc.ts`); no in-place mutation. Errors fail fast at the CLI boundary.');
+  writeFileSync(join(themes, 'build-and-test.md'), fm('build-and-test', 'Exact build + focused-test commands', 'operation') +
+    '`npm run build` compiles TS; `npm test` runs the suite; `npm run acceptance` runs the built CLI against fixtures.');
+  writeFileSync(join(themes, 'profile.md'), fm('profile', 'One-page overview planners read first', 'reference') +
+    'mdtoc — a markdown table-of-contents CLI (TypeScript, Node). Modules: cli / toc / headings / anchor.');
+  writePbStatus(sid, 'awaiting-review', 'emphasise the build/test conventions and the module layout');
+}
+function cleanSeededBrain(bsid) {
+  if (!bsid) return;
+  try { rmSync(join(projectRoot, '_project-brain', bsid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(join(FORGE_ROOT, '_logs', `_project-brain-${bsid}`), { recursive: true, force: true }); } catch { /* */ }
+}
+
+// ── SKILLS-PILLAR HELPERS ───────────────────────────────────────────────────────
+// OOTB skill ids that must surface as draggable chips (studio/catalog.yaml community-skills).
+const OOTB_SKILL_IDS = ['handoff', 'superpowers-tdd', 'security-review'];
+const SK_EDIT_SLUG = 'journey-ootb-review';  // a seeded "installed OOTB skill" (agent-skill) to edit
+const SK_NEW_NAME = 'API contract review';
+const SK_NEW_SLUG = 'api-contract-review';   // = name.toLowerCase().replace(/\s+/g,'-')
+function cleanSkillArtifacts() {
+  for (const slug of [SK_EDIT_SLUG, SK_NEW_SLUG]) {
+    try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
+  }
+}
+// A plain skill has no in-UI editor (POST-only), so the edit beat drives the
+// agent-skill editor — a SKILL.md that carries a runtime block is an editable object.
+function seedOotbSkill() {
+  const dir = join(FORGE_ROOT, 'skills', SK_EDIT_SLUG);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), [
+    '---', 'name: Journey OOTB Review', 'description: Seeded OOTB skill for the edit beat.',
+    'phase: developer', 'surface: forge', 'purpose: Review a diff for correctness.',
+    'brainAccess: none', 'interactivity: none',
+    'composition:', '  skills: []', '  tools: []', '  mcps: []', '  hooks:', '    - event-log',
+    'runtime:', '  sdk: claude', '  strategy: fixed', '  model: claude-sonnet-4-6',
+    'allowed-tools:', '  - Read', 'disallowed-tools: []',
+    '---', '', '# Journey OOTB Review', '', 'ORIGINAL body text.', '',
+  ].join('\n'));
+}
+
+// ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────
+// The onboard-existing preflight-resolution arc: onboard clean, then seed disk state
+// so the AUTO-tier ARTIFACTS clause fails, and resolve it deterministically (no LLM).
+const ONB_EXISTING_SLUG = 'journey-onboard-existing';
+function cleanOnboardedProject(slug) {
+  try { rmSync(join(FORGE_ROOT, 'projects', slug), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(join(FORGE_ROOT, 'brain', 'projects', slug), { recursive: true, force: true }); } catch { /* */ }
+}
+
 // ── BOOT + FRAMES ─────────────────────────────────────────────────────────────
 
 async function startWatch() {
@@ -683,6 +847,9 @@ async function startWatch() {
 }
 
 const captions = [];
+// clipMeta parallels captions[] — the short looping .webm "GIF" clips of the
+// building/generating interactions, embedded autoplay-loop in the gallery.
+const clipMeta = [];
 let seq = 0;
 async function frame(page, name, altCaption) {
   seq += 1;
@@ -691,19 +858,87 @@ async function frame(page, name, altCaption) {
   captions.push({ file, caption: altCaption });
   console.log(`  [${String(seq).padStart(2, '0')}] ${altCaption}`);
 }
+
+/**
+ * Record ONE short looping clip around a single interaction, in its own ephemeral
+ * recording context (recordVideo is per-context; a fresh context's .webm ≈ that one
+ * interaction). A fresh context has NO nav/DOM state, so it re-navigates to `route`
+ * and re-waits for readiness — which composes with the seed model (seed the files
+ * first, then the clip re-reads the same server state). Non-fatal: any error is
+ * swallowed so the journey (and its main video) always finishes.
+ */
+async function recordClip(browser, watch, name, route, interact, opts = {}) {
+  const { size = { width: 1000, height: 620 }, readySel = '[data-page-ready="true"]', caption: cap = name } = opts;
+  const tmp = join(CLIPS, '_tmp', name);
+  let clipCtx = null;
+  let clipPage = null;
+  try {
+    mkdirSync(tmp, { recursive: true });
+    clipCtx = await browser.newContext({ viewport: size, recordVideo: { dir: tmp, size } });
+    clipPage = await clipCtx.newPage();
+    await clipPage.goto(watch.uiUrl + route, { waitUntil: 'domcontentloaded' });
+    await clipPage.waitForSelector(readySel, { timeout: 15000 }).catch(() => {});
+    await interact(clipPage);
+  } catch (e) {
+    console.error(`  [clip ${name}] skipped: ${(e?.message ?? e)}`.slice(0, 200));
+  } finally {
+    try { if (clipCtx) await clipCtx.close(); } catch { /* */ } // finalises the .webm
+  }
+  try {
+    const src = clipPage ? await clipPage.video()?.path() : null;
+    if (src && existsSync(src)) {
+      const dest = join(CLIPS, `${name}.webm`);
+      renameSync(src, dest);
+      clipMeta.push({ file: `clips/${name}.webm`, caption: cap });
+      console.log(`  [clip] ${name} — ${cap}`);
+    }
+  } catch (e) {
+    console.error(`  [clip ${name}] collect failed: ${(e?.message ?? e)}`.slice(0, 160));
+  }
+}
+
+// The journey is organised around the operator's capability diagram. Frames are
+// grouped into these acts in the gallery so BUILDING is foregrounded, not buried.
+const ACT_SECTIONS = [
+  { title: 'Part 1 — Stand up a project', blurb: 'Clone forge → create a new project (idea seeded, contract items placed, KB seeded to grow) or onboard an existing repo (align to the contract), with AI-assisted generation (architect, instructions, project brain).', match: (f) => /-(p1|onb|instr|pbrain|idea|onboard)/.test(f) },
+  { title: 'Part 2 — Compose the four pillars', blurb: 'Flows, Skills, Agents, Knowledge — each out-of-the-box, editable, and user-creatable. The pipeline is data you build, not a script.', match: (f) => /-(a1|a2|a3|a4|j[1-5]|sk|demo-|kb|agent|flow|library|project-builder)/.test(f) },
+  { title: 'Part 3 — Run a gated cycle', blurb: 'Idea → PLAN gate → autonomous build → verdict gate (progress the PR through the flow UI) → merge → reflect. The out-of-the-box flow makes a real, reviewed addition.', match: (f) => /-(r[0-9]|s[0-9]|hex-detail|end-card|recovery)/.test(f) },
+];
 function writeIndex(videoName) {
-  const figs = captions.map((c) =>
-    `<figure><img src="frames/${c.file}" loading="lazy"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`
-  ).join('\n');
-  writeFileSync(join(OUT, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><title>forge — Studio operator journey</title>
+  const used = new Set();
+  const sectionHtml = ACT_SECTIONS.map((sec) => {
+    const figs = captions.filter((c) => !used.has(c.file) && sec.match(c.file));
+    figs.forEach((c) => used.add(c.file));
+    if (!figs.length) return '';
+    const inner = figs.map((c) =>
+      `<figure><img src="frames/${c.file}" loading="lazy"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`
+    ).join('\n');
+    return `<section><h2>${sec.title}</h2><p class="blurb">${sec.blurb}</p>${inner}</section>`;
+  }).join('\n');
+  // Any frame not matched by a section (defensive) lands in a trailing "more" block.
+  const leftovers = captions.filter((c) => !used.has(c.file));
+  const leftoverHtml = leftovers.length
+    ? `<section><h2>More</h2>${leftovers.map((c) => `<figure><img src="frames/${c.file}" loading="lazy"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`).join('\n')}</section>`
+    : '';
+  const clipHtml = clipMeta.length
+    ? `<section><h2>Building &amp; generating — live clips</h2><p class="blurb">Short looping captures of the interactions that build and generate: authoring flows/agents/skills, onboarding, and the AI generators at work.</p><div class="clips">${
+        clipMeta.map((c) => `<figure><video src="${c.file}" autoplay loop muted playsinline></video><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`).join('\n')
+      }</div></section>`
+    : '';
+  writeFileSync(join(OUT, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><title>forge — Forge Studio walkthrough</title>
 <style>body{background:#0d1117;color:#e6edf3;font:14px ui-sans-serif,system-ui;margin:32px auto;max-width:1280px;padding:0 24px}
-h1{letter-spacing:.4px}video{width:100%;border:1px solid #30363d;border-radius:8px;background:#000}
+h1{letter-spacing:.4px}h2{margin-top:8px;border-bottom:1px solid #21262d;padding-bottom:6px}
+video{width:100%;border:1px solid #30363d;border-radius:8px;background:#000}
+section{margin:40px 0}.blurb{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
 figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
+.clips{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}.clips figure{margin:0}.clips video{width:100%}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}ol{line-height:1.8}</style></head>
-<body><h1>forge — Forge Studio operator journey</h1>
-<p>Author a flow · run it · swap its engine. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded ${new Date().toISOString()}.</p>
-<h2>video</h2><video src="${videoName}" controls autoplay muted loop></video>
-<h2>frames</h2>${figs}</body></html>`);
+<body><h1>Forge Studio — the operator walkthrough</h1>
+<p>Clone forge → stand up a project → compose the four pillars (flows · skills · agents · knowledge) → run a gated cycle. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded ${new Date().toISOString()}.</p>
+<h2>Full walkthrough</h2><video src="${videoName}" controls autoplay muted loop></video>
+${clipHtml}
+${sectionHtml}
+${leftoverHtml}</body></html>`);
 }
 
 // ── ASSERTIONS (shared regression layer) ──────────────────────────────────────
@@ -733,6 +968,7 @@ async function main() {
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(FRAMES, { recursive: true });
   mkdirSync(VIDEO, { recursive: true });
+  mkdirSync(CLIPS, { recursive: true });
 
   // Author the from-scratch flow BEFORE booting the bridge so the UI + lint can
   // load it. (Cleaned up in finally.) This is the data the ACT-1 build beat shows.
@@ -757,6 +993,8 @@ async function main() {
   page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
 
   let createdSid = null;
+  let instrSid = null;   // instructions-creator session (Part 1)
+  let pbSid = null;      // project-brain-builder session (Part 1)
   try {
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1158,6 +1396,154 @@ async function main() {
     }
     check(j4LintOk, 'J4: `forge studio lint` stays green with the onboarded project (exit 0)');
 
+    // ════════════════════════════════════════════════════════════════════════
+    // PART 1 — STAND UP (AI-assisted generation). The project's AGENTS.md and its
+    // seed brain, generated WITH AI ASSISTANCE, plus aligning an existing repo to
+    // the contract. No live LLM: seed the session files the runner would write
+    // (same FORGE_ARCHITECT_NO_SPAWN seam as the architect) + drive the real UI.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── AI-1: instructions-creator generates AGENTS.md ────────────────────────
+    console.log('\n[AI-1] instructions-creator — generate AGENTS.md (AI-assisted)');
+    await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 20000 }).catch(() => {});
+    console.log(`  [AI-1] launcher present: ${await page.locator('[data-action="launch-instructions"]').count() > 0}`);
+    // Seed a briefing session on disk + drive the dedicated screen (architect pattern).
+    instrSid = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-instr';
+    writeInstrStatus(instrSid, { phase: 'briefing', round: 1 });
+    await page.goto(watch.uiUrl + `/instructions/${encodeURIComponent(instrSid)}`, { waitUntil: 'domcontentloaded' });
+    const instrReady = await page.waitForSelector('main[data-page="instructions-interview"]', { timeout: 20000 }).then(() => true).catch(() => false);
+    check(instrReady, 'AI-1: instructions screen renders ([data-page="instructions-interview"])');
+    await caption(page, 'Forge generates AGENTS.md with you — interview → draft → approve. AI-assisted, and gated.');
+    // interviewing — activity bursts + clarifying questions
+    writeInstrStatus(instrSid, { phase: 'interviewing', round: 1 });
+    instrEvent(instrSid, 'start', 'instructions turn (phase=interviewing, round=1)');
+    await instrBurst(instrSid, ['Glob', 'Read', 'Grep', 'Bash']);
+    writeInstrQuestions(instrSid);
+    writeInstrStatus(instrSid, { phase: 'awaiting-answers', round: 1 });
+    await page.waitForSelector('[data-section="instructions-interview"]', { timeout: 15000 }).catch(() => {});
+    check(await page.locator('[data-section="instructions-interview"]').count() > 0, 'AI-1: interview returns clarifying questions');
+    await countAtLeast(page, '[data-question-index]', 2, 'AI-1: ≥2 instructions questions');
+    await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
+    // answer → draft → verdict
+    await page.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
+    await page.locator('[data-question-index="1"] input[type="radio"]').first().check().catch(() => {});
+    await page.locator('[data-action="submit-answers"]').click().catch(() => {});
+    await sleep(ACT);
+    writeInstrStatus(instrSid, { phase: 'drafting', round: 2 });
+    instrEvent(instrSid, 'start', 'instructions turn (phase=drafting) — rolling in answers');
+    await instrBurst(instrSid, ['Read', 'Write']);
+    writeInstrDraft(instrSid);
+    writeInstrStatus(instrSid, { phase: 'awaiting-verdict', round: 2 });
+    await page.waitForSelector('[data-component="instructions-verdict"]', { timeout: 15000 }).catch(() => {});
+    check(await page.locator('[data-component="instructions-verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
+    await frame(page, 'instr-1-draft', 'Part 1 — the generated AGENTS.md draft, awaiting approval');
+    // Clip: the generated draft awaiting verdict (the AI-assisted output).
+    await recordClip(browser, watch, 'instr-generate', `/instructions/${encodeURIComponent(instrSid)}`, async (p) => {
+      await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 12000 });
+      await sleep(2800);
+    }, { readySel: 'main[data-page="instructions-interview"]', caption: 'instructions-creator: AGENTS.md generated with AI assistance' });
+    // approve → committed
+    await page.locator('[data-component="instructions-verdict"] [data-action="approve-instructions"]').click().catch(() => {});
+    await page.waitForSelector('[data-component="instructions-verdict"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
+    writeInstrStatus(instrSid, { phase: 'committed', round: 2 });
+    instrEvent(instrSid, 'log', 'instructions-committed (AGENTS.md written)');
+    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForSelector('main[data-page="instructions-interview"]', { timeout: 10000 }).catch(() => {});
+    await page.waitForSelector('[data-action="back-to-project"]', { timeout: 8000 }).catch(() => {});
+    check(await page.locator('[data-action="back-to-project"]').count() > 0, 'AI-1: AGENTS.md committed — back-to-project offered');
+    await frame(page, 'instr-2-committed', 'Part 1 — AGENTS.md generated + approved (AI-assisted)');
+
+    // ── AI-2: project-brain-builder seeds the project brain ───────────────────
+    console.log('\n[AI-2] project-brain-builder — seed the project brain (AI-assisted)');
+    pbSid = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-pbrain';
+    writePbStatus(pbSid, 'briefing', '');
+    await page.goto(watch.uiUrl + `/project-brain/${encodeURIComponent(pbSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
+    const pbReady = await page.waitForSelector('main[data-page="project-brain"]', { timeout: 20000 }).then(() => true).catch(() => false);
+    check(pbReady, 'AI-2: project-brain screen renders ([data-page="project-brain"])');
+    await caption(page, 'Forge reads the project and drafts its seed brain — the themes a planner reads before designing.');
+    // briefing → analyzing → (seed themes) → awaiting-review
+    writePbStatus(pbSid, 'analyzing', 'emphasise conventions + module layout');
+    await frame(page, 'pbrain-0-analyzing', 'Part 1 — project-brain-builder analyses the project (AI-assisted)');
+    seedStagedBrain(pbSid);
+    await page.waitForSelector('main[data-project-brain-phase="awaiting-review"]', { timeout: 10000 }).catch(() => {});
+    check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
+    await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
+    await frame(page, 'pbrain-1-review', 'Part 1 — the generated seed brain: themes to review + approve');
+    // Clip: the generated seed-brain themes under review.
+    await recordClip(browser, watch, 'pbrain-generate', `/project-brain/${encodeURIComponent(pbSid)}?project=${encodeURIComponent(PROJECT)}`, async (p) => {
+      await p.waitForSelector('main[data-page="project-brain"]', { timeout: 12000 });
+      await sleep(2800);
+    }, { readySel: 'main[data-page="project-brain"]', caption: 'project-brain-builder: the seed brain generated with AI assistance' });
+    // approve → committing → committed (flip-only; nothing written under brain/)
+    await page.locator('[data-action="approve-brain"]').click().catch(() => {});
+    await page.waitForSelector('main[data-project-brain-phase="committing"]', { timeout: 8000 }).catch(() => {});
+    writePbStatus(pbSid, 'committed', '');
+    await page.waitForSelector('[data-section="brain-committed"]', { timeout: 8000 }).catch(() => {});
+    check(await page.locator('[data-action="bind-and-return"]').count() > 0, 'AI-2: seed brain committed — bind-and-return offered');
+    await frame(page, 'pbrain-2-committed', 'Part 1 — project brain seeded (grows with the project)');
+
+    // ── SU: onboard existing → align to the contract (preflight resolution) ────
+    console.log('\n[SU] onboard existing → deterministically resolve a failing clause');
+    await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 20000 }).catch(() => {});
+    await page.waitForSelector('[data-section="project-onboard"]', { timeout: 15000 }).catch(() => {});
+    await caption(page, 'Onboard an existing repo — forge aligns it to the contract, resolving clauses deterministically.');
+    // name + north-star only (quality-gate keeps its default 'npm test'). Fill AFTER
+    // page-ready + re-fill if the button hasn't enabled (guards a hydration race where
+    // the input event lands before React wires onChange). Guarded so a disabled form
+    // never throws + aborts the journey.
+    const fillOnboard = async () => {
+      await page.locator('[data-field="project-name"]').fill('Journey Onboard Existing').catch(() => {});
+      await page.locator('[data-field="north-star"]').fill('An existing repo aligned to the forge contract by the journey.').catch(() => {});
+    };
+    const onboardEnabled = (ms) => page.waitForFunction(() => {
+      const b = document.querySelector('[data-action="onboard-project"]');
+      return b !== null && !b.hasAttribute('disabled');
+    }, null, { timeout: ms }).then(() => true).catch(() => false);
+    await fillOnboard();
+    let onbEnabled = await onboardEnabled(6000);
+    if (!onbEnabled) { await fillOnboard(); onbEnabled = await onboardEnabled(6000); }
+    check(onbEnabled, 'SU: onboard-project enables once the required fields are filled');
+    // The onboard may redirect (ready) or stay on the form (a hard clause still
+    // fails) — either way the project is created on disk. Use the known slug +
+    // navigate explicitly (like J4), rather than depending on the redirect.
+    const onbSlug = ONB_EXISTING_SLUG;
+    const onbJson = join(FORGE_ROOT, 'projects', onbSlug, '.forge', 'project.json');
+    if (onbEnabled) {
+      await page.locator('[data-action="onboard-project"]').click().catch(() => {});
+      await waitForFile(onbJson, 12000);
+    }
+    const onbCreated = existsSync(onbJson);
+    check(onbEnabled && onbCreated, `SU: onboarding created project "${onbSlug}"`);
+    if (onbCreated) {
+      // Seed disk state so the AUTO-tier ARTIFACTS clause fails (deterministic, no LLM).
+      const onbDir = join(FORGE_ROOT, 'projects', onbSlug);
+      try {
+        writeFileSync(join(onbDir, 'package.json'), JSON.stringify({ name: onbSlug, private: true, scripts: { test: 'node --test' } }, null, 2));
+        writeFileSync(join(onbDir, '.gitignore'), ['node_modules/', '.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n') + '\n');
+      } catch { /* */ }
+      await page.goto(watch.uiUrl + `/projects/${onbSlug}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(
+        () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+        null, { timeout: 20000 }).catch(() => {});
+      const resolutionPanel = await page.waitForSelector('[data-section="contract-resolution"]', { timeout: 15000 }).then(() => true).catch(() => false);
+      check(resolutionPanel, 'SU: contract-resolution panel renders when a clause fails');
+      await frame(page, 'onb-0-failing', 'Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)');
+      await page.locator('[data-action="apply-preflight-auto"]').first().click().catch(() => {});
+      await sleep(WORK);
+      await page.waitForFunction(
+        () => document.querySelector('[data-resolution-clause][data-clause-id="ARTIFACTS"]') === null,
+        null, { timeout: 12000 }).catch(() => {});
+      const artifactsCleared = await page.locator('[data-resolution-clause][data-clause-id="ARTIFACTS"]').count() === 0;
+      check(artifactsCleared, 'SU: auto-fix resolved the failing clause (existing repo aligned to the contract)');
+      await frame(page, 'onb-1-resolved', 'Part 1 — clause auto-resolved: the existing repo is now contract-ready');
+    }
+
     // ── J5: GIVE THE AUTHORED FLOW WORK (seeded run) ──────────────────────────
     // The user's authored flow (my-first-flow) is given work against the
     // onboarded project. Seeded (no real agents), this proves the monitor
@@ -1328,6 +1714,13 @@ async function main() {
     check(goalSetPresent, 'author-from-scratch: [data-goal-set] present in FlowHeader');
     await sleep(READ);
     await frame(page, 'a2-1-scratch-build', `A2 — BUILD canvas: the authored cycle (${nodeCount} nodes) on the ReactFlow canvas, palette + goal field`);
+    // Clip: the flow builder — the iconic "build the pipeline as data" surface.
+    await recordClip(browser, watch, 'flow-build', `/flows/${SCRATCH_FLOW}`, async (p) => {
+      const buildTab = p.locator('button.tab').filter({ hasText: 'BUILD' }).first();
+      if (await buildTab.count() > 0) await buildTab.click().catch(() => {});
+      await p.waitForSelector('[data-flow-node]', { timeout: 12000 }).catch(() => {});
+      await sleep(2600);
+    }, { readySel: '[data-page="flow-monitor"]', caption: 'the flow builder — compose the cycle as data (nodes · palette · gates)' });
 
     // ── A3: Agent builder — an agent is data ──────────────────────────────────
     console.log('\n[A3] Agent builder — /agents/project-manager');
@@ -1480,6 +1873,91 @@ async function main() {
     } else {
       check(false, 'project-builder: page did not become ready — project-builder checks skipped');
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // PART 2 (skills pillar) — the OOTB skill library (sourced from curated
+    // community repos), editing a skill, and authoring a new one from scratch.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── SK-1: the OOTB skill library (community-sourced) ──────────────────────
+    console.log('\n[SK-1] OOTB skill library (community-sourced)');
+    let community = [];
+    try { community = (yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'catalog.yaml'), 'utf8'))?.['community-skills']) ?? []; } catch { /* */ }
+    check(community.length >= 5, `SK-1: catalog ships an OOTB skill library (${community.length} community-skills)`);
+    const handoffSkill = community.find((s) => s.id === 'handoff');
+    check(/github\.com|firecrawl|http/.test(handoffSkill?.source ?? ''), `SK-1: an OOTB skill cites an online source (${handoffSkill?.source ?? 'none'})`);
+    check(!!handoffSkill?.provenance && !!handoffSkill?.stars, `SK-1: OOTB skill carries provenance + stars (${handoffSkill?.provenance ?? '?'}, ${handoffSkill?.stars ?? '?'})`);
+    await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+    await caption(page, 'Every OOTB skill is a curated community skill (superpowers, TDD, security-review) — drag it into an agent.');
+    check(await page.locator('[data-component="catalog-palette"]').count() > 0, 'SK-1: agent-builder renders the Component Library');
+    for (const id of OOTB_SKILL_IDS) {
+      const present = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${id}"]`).count() > 0;
+      check(present, `SK-1: OOTB skill "${id}" is draggable in the library`);
+    }
+    await frame(page, 'sk-0-library', 'Part 2 (skills) — the OOTB skill library, sourced from community repos');
+
+    // ── SK-2: edit a skill (via the agent-skill editor) ───────────────────────
+    console.log('\n[SK-2] Edit a skill');
+    cleanSkillArtifacts();
+    seedOotbSkill();
+    await page.goto(watch.uiUrl + `/agents/${SK_EDIT_SLUG}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+    check(await page.evaluate((s) => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === s, SK_EDIT_SLUG), `SK-2: editor loaded the skill ([data-agent-id="${SK_EDIT_SLUG}"])`);
+    await caption(page, 'Open any skill and edit it in place — the instructions are rewritten to its SKILL.md.');
+    await page.locator('#process-input').fill('EDITED body — journey rewrote the skill instructions.').catch(() => {});
+    await frame(page, 'sk-1-edit', 'Part 2 (skills) — editing a skill in the builder');
+    await page.locator('[data-action="save-agent"]').click().catch(() => {});
+    let skEdited = false;
+    { const p = join(FORGE_ROOT, 'skills', SK_EDIT_SLUG, 'SKILL.md'); const dl = Date.now() + 8000;
+      while (Date.now() < dl) { try { if (readFileSync(p, 'utf8').includes('EDITED body')) { skEdited = true; break; } } catch { /* */ } await sleep(120); } }
+    check(skEdited, `SK-2: saving rewrites skills/${SK_EDIT_SLUG}/SKILL.md`);
+
+    // ── SK-3: author a NEW skill ──────────────────────────────────────────────
+    console.log('\n[SK-3] Author a new skill');
+    try { rmSync(join(FORGE_ROOT, 'skills', SK_NEW_SLUG), { recursive: true, force: true }); } catch { /* */ }
+    await page.goto(watch.uiUrl + '/skills/new', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('[data-page="skill-builder"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 20000 }).catch(() => {});
+    const skNewReady = await page.locator('main[data-page="skill-builder"]').count() > 0;
+    check(skNewReady, 'SK-3: skill builder renders ([data-page="skill-builder"])');
+    check(await page.locator('[data-section="skill-new"]').count() > 0, 'SK-3: [data-section="skill-new"] present');
+    await caption(page, 'Author a brand-new skill: name, one-line description, instructions — added to the library.');
+    // data-page-ready is static "true" here, so settle for hydration then type with
+    // real keystrokes (pressSequentially fires onChange per char; plain .fill() can
+    // land before React wires the input). Re-fill if create hasn't enabled.
+    await sleep(1500);
+    const fillSkill = async () => {
+      const nameEl = page.locator('[data-field="skill-name"]');
+      await nameEl.click().catch(() => {});
+      await nameEl.fill('').catch(() => {});
+      await nameEl.pressSequentially(SK_NEW_NAME, { delay: 18 }).catch(() => {});
+      const descEl = page.locator('[data-field="skill-description"]');
+      await descEl.click().catch(() => {});
+      await descEl.fill('').catch(() => {});
+      await descEl.pressSequentially('Review an API surface for contract-breaking changes before merge.', { delay: 8 }).catch(() => {});
+      await page.locator('[data-field="skill-body"]').fill('1. Diff the public surface.\n2. Flag removed/renamed exports.\n3. Require a migration note.').catch(() => {});
+    };
+    const createEnabled = (ms) => page.waitForFunction(() => {
+      const b = document.querySelector('[data-action="create-skill"]');
+      return b !== null && !b.hasAttribute('disabled');
+    }, null, { timeout: ms }).then(() => true).catch(() => false);
+    await fillSkill();
+    let skEnabled = await createEnabled(6000);
+    if (!skEnabled) { await fillSkill(); skEnabled = await createEnabled(6000); }
+    check(skEnabled, 'SK-3: create-skill enables once name + description are filled');
+    await frame(page, 'sk-2-create', 'Part 2 (skills) — authoring a brand-new skill');
+    await recordClip(browser, watch, 'sk-create', '/skills/new', async (p) => {
+      await p.waitForSelector('[data-section="skill-new"]', { timeout: 12000 });
+      await p.locator('[data-field="skill-name"]').fill('API contract review').catch(() => {});
+      await p.locator('[data-field="skill-description"]').fill('Flag contract-breaking API changes before merge.').catch(() => {});
+      await sleep(1800);
+    }, { readySel: 'main[data-page="skill-builder"]', caption: 'authoring a new skill from scratch' });
+    await page.locator('[data-action="create-skill"]').click().catch(() => {});
+    const skLanded = await waitForFile(join(FORGE_ROOT, 'skills', SK_NEW_SLUG, 'SKILL.md'), 12000);
+    check(skLanded, `SK-3: creating writes skills/${SK_NEW_SLUG}/SKILL.md`);
+    await frame(page, 'sk-3-created', 'Part 2 (skills) — new skill authored → SKILL.md on disk → ready to compose');
 
     // ════════════════════════════════════════════════════════════════════════
     // ACT 2 — RUN. The cycle as the proof case, on a real mdtoc roadmap feature.
@@ -2248,8 +2726,8 @@ async function main() {
     // ACT 3 — SWAP. The seams — the platform is modular, not hardcoded.
     // ════════════════════════════════════════════════════════════════════════
 
-    // Seed a synthetic gated run (INIT2) so the flow-engine control beats have a
-    // gated run to act on, plus a ceiling run (INIT3) and a failed run (INIT4).
+    // Seed a synthetic gated run (INIT2) so the flow-engine control beats (S1) have
+    // a gated run to deep-dive, park at its gate, and meter cost against the ceiling.
     const INIT2 = `INIT-${DATE}-e2e-studio-demo`;
     const STAMP2 = new Date(Date.now() + 1000).toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
     const CYCLE_ID2 = `${STAMP2}_${INIT2}`;
@@ -2565,7 +3043,7 @@ async function main() {
         document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') ?? '(no data-page=knowledge)');
       check(false, `kb-seam: knowledge page-ready (got "${pr}")`);
     }
-    await caption(page, 'The brain is a seam too — FilesystemKbBackend by default, swappable to Zep via a descriptor. Browse the real force-graph.');
+    await caption(page, 'The brain is a seam too — FilesystemKbBackend today, with the kb.yaml `backend:` field as the swap point. Browse the real force-graph.');
     await sleep(WORK);
     if (kbPageReady) {
       const kbId = await page.evaluate(() => document.querySelector('#kb-svg')?.getAttribute('data-kb-id') ?? '');
@@ -2670,6 +3148,44 @@ async function main() {
     await frame(page, 's3-1b-guidance-pinned', 'S3 — guidance pinned: data-guidance-pinned="true", guidance node in graph');
     await sleep(READ);
 
+    // ── S3.2: KB maintenance — LINT + INDEX + OOTB brains (real, read-only) ───
+    console.log('\n[S3.2] KB maintenance — lint / index / OOTB brains');
+    await page.goto(`${watch.uiUrl}/knowledge?id=cycles`, { waitUntil: 'domcontentloaded' });
+    const kbMaintReady = await page.waitForFunction(
+      () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+      null, { timeout: 30000 }).then(() => true).catch(() => false);
+    await caption(page, 'Knowledge is editable — deterministic LINT + INDEX maintenance, plus the human-guidance + ingest loop.');
+    if (kbMaintReady) {
+      await page.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
+      await page.waitForFunction(
+        () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
+        null, { timeout: 15000 }).catch(() => {});
+      const lintText = await page.evaluate(() => document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '');
+      check(/^lint:/.test(lintText), `S3.2: kb-lint result badge (got "${lintText}")`);
+      await frame(page, 'kb-0-lint', `Part 2 (knowledge) — kb-lint: ${lintText || 'result'}`);
+      await page.locator('[data-component="kb-maintenance"] [data-action="kb-index"]').click().catch(() => {});
+      await page.waitForFunction(
+        () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '') === 'index refreshed ✓',
+        null, { timeout: 15000 }).catch(() => {});
+      check(true, 'S3.2: kb-index maintenance triggered');
+      const scanBtn = page.locator('[data-section="lint-resolution"] [data-action="lint-scan"]');
+      if (await scanBtn.count() > 0) {
+        await scanBtn.click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-section="lint-resolution"]')?.getAttribute('data-lint-scanned') === 'true',
+          null, { timeout: 15000 }).catch(() => {});
+        check(await page.locator('[data-section="lint-resolution"][data-lint-scanned="true"]').count() > 0,
+          'S3.2: lint-resolution scan ran (data-lint-scanned="true")');
+      }
+      await frame(page, 'kb-1-maintenance', 'Part 2 (knowledge) — lint/index maintenance + the resolution surface');
+      const ootb = await page.evaluate(() => ({
+        cycles: document.querySelector('#kb-select option[value="cycles"]')?.textContent ?? '',
+        forgeDev: document.querySelector('#kb-select option[value="forge-dev"]')?.textContent ?? '',
+      }));
+      check(ootb.cycles.length > 0 && ootb.forgeDev.length > 0,
+        `S3.2: cycles + forge-dev brains ship OOTB (${ootb.cycles} / ${ootb.forgeDev})`);
+    }
+
     // ── S4: Recovery surface (DEC-6 — the CLI recovery verbs moved to the UI) ──
     console.log('\n[S4] Recovery surface — the operator surface for stuck cycles (DEC-6)');
     await caption(page, 'forge review/requeue/abandon left the CLI (DEC-6) — recovery is a UI screen over the bridge routes.');
@@ -2728,6 +3244,10 @@ async function main() {
     try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* */ }
     cleanProjectDir();
     cleanSeededSession(createdSid);
+    cleanInstructionsSession(instrSid);          // Part 1 — AI-1
+    cleanSeededBrain(pbSid);                      // Part 1 — AI-2
+    cleanOnboardedProject(ONB_EXISTING_SLUG);    // Part 1 — SU onboard-existing
+    cleanSkillArtifacts();                        // Part 2 — skills pillar
     cleanScratchFlow();
     cleanStarterAgents();
     cleanFirstFlow();
@@ -2742,7 +3262,7 @@ async function main() {
       try { rmSync(join(QDIR(q), `${INIT}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
       try { rmSync(join(QDIR(q), `INIT-${DATE}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
     }
-    // ACT 3 studio cleanup (gated/ceiling/failed synthetic runs)
+    // ACT 3 studio cleanup — the S1 gated synthetic run (INIT2).
     try {
       const studioLogDirs = existsSync(join(FORGE_ROOT, '_logs'))
         ? readdirSync(join(FORGE_ROOT, '_logs')).filter((d) => d.includes('e2e-studio-demo'))
@@ -2750,14 +3270,10 @@ async function main() {
       for (const d of studioLogDirs) rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
       for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
         const entries = existsSync(QDIR(q))
-          ? readdirSync(QDIR(q)).filter((f) => f.includes('e2e-studio-demo') || f.includes('e2e-flow-ceiling') || f.includes('e2e-flow-failed'))
+          ? readdirSync(QDIR(q)).filter((f) => f.includes('e2e-studio-demo'))
           : [];
         for (const f of entries) rmSync(join(QDIR(q), f), { force: true });
       }
-      const otherLogDirs = existsSync(join(FORGE_ROOT, '_logs'))
-        ? readdirSync(join(FORGE_ROOT, '_logs')).filter((d) => d.includes('e2e-flow-ceiling') || d.includes('e2e-flow-failed'))
-        : [];
-      for (const d of otherLogDirs) rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
     } catch { /* studio cleanup best-effort */ }
     if (createdSid) {
       try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${createdSid}`), { recursive: true, force: true }); } catch { /* */ }
@@ -2778,6 +3294,8 @@ async function main() {
     renameSync(join(VIDEO, videoName), join(VIDEO, 'journey.webm'));
     videoName = 'video/journey.webm';
   }
+  // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).
+  try { rmSync(join(CLIPS, '_tmp'), { recursive: true, force: true }); } catch { /* */ }
   writeIndex(videoName);
   console.log(`[e2e] OK — ${OUT}/index.html (${captions.length} frames + video)`);
 

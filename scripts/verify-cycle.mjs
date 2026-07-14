@@ -60,7 +60,7 @@
  *                           real send-back verdict, re-serve to drain the re-queued
  *                           UWIs, then fall through to auto-approve.
  *
- * Output: forge-ui/.demo-shots/verify/<run-handle>/ (video, frames, index.html,
+ * Output: demos/verify/<run-handle>/ (video, frames, index.html,
  * summary.json with the verdict). Exits non-zero if the gate fails.
  */
 
@@ -106,7 +106,7 @@ const REQUIRE_LIVE_EVIDENCE =
   argv.includes('--require-live-evidence') || (IS_LIVE_PROJECT && !argv.includes('--no-live-evidence'));
 const FORCE_RESET = argv.includes('--force-reset');
 
-const OUT_DIR = join(FORGE_ROOT, 'forge-ui/.demo-shots/verify', RUN_HANDLE);
+const OUT_DIR = join(FORGE_ROOT, 'demos/verify', RUN_HANDLE);
 const VIDEO_DIR = join(OUT_DIR, 'video');
 const FRAMES_DIR = join(OUT_DIR, 'frames');
 

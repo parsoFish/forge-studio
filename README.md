@@ -14,7 +14,7 @@ Full competitive analysis and the strategic frame: [`docs/forge-studio-market-an
 
 ## See it run
 
-The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → unifier → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`forge-ui/.demo-shots/e2e/index.html`](./forge-ui/.demo-shots/e2e)).
+The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → unifier → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
 
 ## The moat
 

@@ -114,7 +114,7 @@ runner code). The runner's **contract** is:
 - **Outputs:** a pass/fail verdict per outcome assertion, the realised cost vs
   ceiling, and the artifact bundle (events.jsonl rollup, golden diff, PR URL)
   for operator inspection — the same shapes `verify-cycle.mjs` already records
-  under `forge-ui/.demo-shots/verify/`.
+  under `demos/verify/`.
 - **Failure semantics:** any failed assertion fails the gate; a wedged or
   resumed-to-empty cycle (`complete:0`) is an explicit fail, not an indeterminate.
 
