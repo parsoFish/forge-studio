@@ -3569,6 +3569,10 @@ async function main() {
   }),
   };
 
+  // RUN_ORDER + results speak journey IDs (kebab-case), not the map's local keys.
+  const journeyById = Object.fromEntries(Object.values(journeys).map((j) => [j.id, j]));
+  const journeyIds = Object.values(journeys).map((j) => j.id);
+
   for (const j of Object.values(journeys)) tracker.journeyMeta(j);
 
   const RUN_ORDER = [
@@ -3621,6 +3625,22 @@ async function main() {
     ['recovery', 'recovery-surface'],
   ];
 
+  // Fail fast on drift between RUN_ORDER and the journey definitions: every
+  // pair must resolve, and every declared beat must be scheduled exactly once.
+  const scheduled = new Set();
+  for (const [jid, bid] of RUN_ORDER) {
+    const j = journeyById[jid];
+    if (!j) throw new Error(`[e2e] RUN_ORDER references unknown journey '${jid}'`);
+    if (!j.beats.some((b) => b.id === bid)) throw new Error(`[e2e] RUN_ORDER references unknown beat '${jid}/${bid}'`);
+    if (scheduled.has(`${jid}/${bid}`)) throw new Error(`[e2e] RUN_ORDER schedules '${jid}/${bid}' twice`);
+    scheduled.add(`${jid}/${bid}`);
+  }
+  for (const j of Object.values(journeys)) {
+    for (const b of j.beats) {
+      if (!scheduled.has(`${j.id}/${b.id}`)) throw new Error(`[e2e] beat '${j.id}/${b.id}' is defined but never scheduled in RUN_ORDER`);
+    }
+  }
+
   if (process.argv.includes('--list')) {
     console.log(`[e2e] ${Object.keys(journeys).length} journeys, ${RUN_ORDER.length} beats:`);
     for (const j of Object.values(journeys)) {
@@ -3665,7 +3685,7 @@ async function main() {
 
   try {
     for (const [journeyId, beatId] of RUN_ORDER) {
-      const beat = journeys[journeyId].beats.find((b) => b.id === beatId);
+      const beat = journeyById[journeyId].beats.find((b) => b.id === beatId);
       console.log(`\n[journey/beat] ${journeyId}/${beatId} — ${beat.title}`);
       tracker.begin(journeyId, beatId);
       await beat.drive(journeyCtx);
@@ -3773,8 +3793,8 @@ async function main() {
   const results = tracker.toResults({
     project: PROJECT,
     mode: 'full',
-    requestedJourneys: Object.keys(journeys),
-    executedJourneys: Object.keys(journeys),
+    requestedJourneys: journeyIds,
+    executedJourneys: journeyIds,
   });
   writeResultsFile(join(OUT, 'results.json'), results);
   writeGalleryFile(join(OUT, 'index.html'), renderGallery(results, {
