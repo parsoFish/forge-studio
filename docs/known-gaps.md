@@ -97,17 +97,29 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
      on `/flows/[id]` (`data-pannable`). Reconcile the section against the real surface
      (the studio-routes map from the S5 investigation is the ground truth).
 10. **`ui:journey` can trigger a REAL cycle if a scheduler is active (harness-isolation
-    hazard, 2026-07-14):** the walkthrough seeds queue manifests (`pending`/`in-flight`)
-    to emulate a cycle. If a **`forge serve` scheduler/daemon is running concurrently**
-    (`FORGE_ARCHITECT_NO_SPAWN=1` does NOT stop the daemon — it only guards architect/
-    reflector spawns), it can **claim a seeded manifest, run a real cycle to
-    release-finalize, and commit** (`chore(release): finalise …`) onto the working
-    branch — observed twice this session (a stray forge `0.5.1` + an mdtoc `0.1.1`
-    release; both untangled by hand). The longer overhauled journey widens the claim
-    window. **Mitigation today:** run `ui:journey` with **no forge daemon active** +
-    commit first (the existing git-reset guardrail). **Fix:** the harness should stop
-    any daemon (`readPid`/`clearPidFile` + kill) before seeding and refuse to seed
-    while `forge.pid` is alive.
+    hazard, 2026-07-14)** — *resolved 2026-07-16:* the walkthrough seeds queue
+    manifests (`pending`/`in-flight`) to emulate a cycle. If a **`forge serve`
+    scheduler/daemon is running concurrently** (`FORGE_ARCHITECT_NO_SPAWN=1` does NOT
+    stop the daemon — it only guards architect/reflector spawns), it could **claim a
+    seeded manifest, run a real cycle to release-finalize, and commit**
+    (`chore(release): finalise …`) onto the working branch — observed twice (a stray
+    forge `0.5.1` + an mdtoc `0.1.1` release; both untangled by hand). A second,
+    related residue defect was found alongside it: the emulated approve→merge beat
+    runs the **real, deterministic** release-finalize path against `projects/mdtoc`
+    (tracked *inside* the forge repo, no nested `.git`), which leaves
+    `projects/mdtoc/{CHANGELOG.md,package.json,package-lock.json}` modified **and
+    staged** in the forge index after every green run — with a live scheduler this
+    escalates to an actual commit+push.
+    **Fix:** `scripts/lib/journey-daemon-guard.mjs` (`assertNoLiveDaemon`) runs as the
+    first statement in `main()`, before any cleanup or seeding — it refuses to
+    proceed if `_logs/daemon/forge.pid` names a live pid, or if `_queue/{pending,
+    in-flight}` already has stray manifest(s) sitting in it. Set
+    `FORGE_E2E_AUTOKILL_DAEMON=1` to have the guard `SIGTERM` a live daemon instead of
+    refusing (escape hatch for scripted/CI runs, not the default). The `finally`
+    cleanup block in `e2e-journey.mjs` now also `git restore --staged` +
+    `git checkout --` the `projects/<PROJECT>` subtree after every run, so the
+    release-finalize residue doesn't linger in the working tree (best-effort,
+    non-fatal like the other cleanups).
 
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 

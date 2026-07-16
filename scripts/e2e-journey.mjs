@@ -89,6 +89,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
+import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // PROJECT is parameterised (FORGE_E2E_PROJECT) so the walkthrough can be
@@ -963,6 +964,11 @@ async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = 
 // ── THE JOURNEY ────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Pre-seed isolation guard (known-gaps #10) — refuse before touching anything
+  // if a live daemon or a stray manifest could turn the emulated seed into a
+  // REAL cycle.
+  await assertNoLiveDaemon(FORGE_ROOT);
+
   cleanProjectDir();
   mkdirSync(join(projectRoot, '_architect'), { recursive: true });
   rmSync(OUT, { recursive: true, force: true });
@@ -3286,6 +3292,16 @@ async function main() {
         try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* */ }
       }
     } catch { /* KB-seam cleanup best-effort */ }
+    // known-gaps #10 residue — the emulated approve→merge beat runs the REAL
+    // deterministic release-finalize path against `projects/<PROJECT>`, which is
+    // tracked IN the forge repo (no nested .git). That leaves the managed
+    // project's own CHANGELOG/package.json/package-lock modified AND staged in
+    // the forge index after every green run. Restore the subtree so the working
+    // tree is clean again; best-effort, same convention as the cleanups above.
+    try {
+      execFileSync('git', ['-C', FORGE_ROOT, 'restore', '--staged', '--', `projects/${PROJECT}`]);
+      execFileSync('git', ['-C', FORGE_ROOT, 'checkout', '--', `projects/${PROJECT}`]);
+    } catch (err) { console.warn(`[e2e] managed-project restore best-effort failed: ${err.message}`); }
   }
 
   const vids = readdirSync(VIDEO).filter((f) => f.endsWith('.webm'));
