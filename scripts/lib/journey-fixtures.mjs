@@ -836,6 +836,117 @@ export function cleanSeededBrain(bsid) {
   try { rmSync(join(FORGE_ROOT, '_logs', `_project-brain-${bsid}`), { recursive: true, force: true }); } catch { /* */ }
 }
 
+// ── DEMO-BUILDER HELPERS ────────────────────────────────────────────────────────
+// Regenerate a project's demo page, element by element. Session dir:
+// projects/<p>/_demo/<sid>/status.json. Real path constants mirrored from
+// orchestrator/demo-builder-runner.ts: DEMO_REL_DIR = .forge/demo,
+// DEMO_HTML_REL_PATH = .forge/demo/DEMO.html, DEMO_LOCK_REL_PATH =
+// .forge/demo/demo.lock.json, DEMO_HISTORY_REL_DIR = .forge/demo/history,
+// DEMO_FRAGMENTS_REL_DIR = .forge/demo/fragments. Spawn is guarded the same way
+// (FORGE_ARCHITECT_NO_SPAWN=1) — clicking a real action button only flips
+// status.json.phase server-side; the harness hand-writes every artifact.
+export function demoDir(sid) { return join(projectRoot, '_demo', sid); }
+export function writeDemoStatus(sid, patch) {
+  const dir = demoDir(sid);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sid, project: PROJECT, project_repo_path: projectRoot,
+    phase: 'briefing', mode: 'create', iteration: 1, prompt: '',
+    ...patch, updated_at: new Date().toISOString(),
+  }, null, 2));
+}
+let demoSeq = 0;
+export function demoEvent(sid, eventType, message, metadata = {}) {
+  const dir = join(FORGE_ROOT, '_logs', `_demo-${sid}`);
+  mkdirSync(dir, { recursive: true });
+  demoSeq += 1;
+  appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({
+    event_id: `EV_demo_${demoSeq}`, cycle_id: `_demo-${sid}`,
+    initiative_id: `demo-${sid}`, started_at: new Date().toISOString(),
+    phase: 'unifier', skill: 'demo-builder-runner',
+    event_type: eventType, input_refs: [], output_refs: [], message, metadata,
+  }) + '\n');
+}
+export async function demoBurst(sid, tools) {
+  for (const t of tools) { demoEvent(sid, 'tool_use', `tool.${t}`, { tool: t }); await sleep(THINK); }
+}
+
+export const DEMO_ELEMENT_TRIO = [
+  { kind: 'capture', text: 'Run the mdtoc CLI baseline vs changed and capture real stdout.', element: 'cli-capture' },
+  { kind: 'verify', text: 'Run npm test on the changed tree and capture the real result.', element: 'test-evidence' },
+  { kind: 'present', text: 'A tight prose lead on what changed and why it matters.', element: 'narrative' },
+];
+
+export function projectJsonPath() { return join(projectRoot, '.forge', 'project.json'); }
+export function patchDemoProcess() {
+  const path = projectJsonPath();
+  const original = readFileSync(path, 'utf8');
+  const cfg = JSON.parse(original);
+  cfg.demoProcess = DEMO_ELEMENT_TRIO;
+  writeFileSync(path, JSON.stringify(cfg, null, 2));
+  return original;
+}
+export function restoreProjectJson(stashedText) {
+  if (!stashedText) return;
+  try { writeFileSync(projectJsonPath(), stashedText); } catch { /* best-effort */ }
+}
+
+const DEMO_FRAG_CSS = 'body{background:#0a0e14;color:#e6edf3;font:14px/1.5 ui-sans-serif,system-ui;margin:0;padding:20px}' +
+  '.demo-card{background:#11161d;border:1px solid #21262d;border-radius:8px;padding:16px 20px;margin-bottom:16px}' +
+  'h1{font-size:20px}h2{font-size:16px;color:#e6edf3}h3{font-size:14px;color:#8b949e;margin-top:0}' +
+  'p{color:#e6edf3}em{color:#8b949e}code,pre{background:#0a0f16;color:#e6edf3;border-radius:6px;padding:2px 6px}' +
+  'a{color:#1f6feb}';
+
+const DEMO_FORGE_DIR = join(projectRoot, '.forge', 'demo');
+function demoFragment(title, body) {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${DEMO_FRAG_CSS}</style></head>` +
+    `<body><div class="demo-card"><h3>${title}</h3>${body}</div></body></html>`;
+}
+function composedDemoHtml() {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>mdtoc — demo</title>` +
+    `<style>${DEMO_FRAG_CSS}</style></head><body>` +
+    `<h1>mdtoc — demo</h1>` +
+    `<p><em>Harness stand-in for the e2e journey — the real demo-builder agent composes this page ` +
+    `element by element (capture → verify → present) and inlines studio/demo/forge-demo.css.</em></p>` +
+    `<div class="demo-card"><h3>CLI before/after</h3><p><em>Harness stand-in — the real agent runs the CLI baseline vs changed and captures real stdout here.</em></p></div>` +
+    `<div class="demo-card"><h3>Test evidence</h3><p><em>Harness stand-in — the real agent runs the quality gate and shows the pass/fail result here.</em></p></div>` +
+    `<div class="demo-card"><h3>Narrative essence</h3><p><em>Harness stand-in — the real agent writes a one-to-three sentence essence of the change here.</em></p></div>` +
+    `</body></html>`;
+}
+export function writeDemoArtifacts() {
+  const fragDir = join(DEMO_FORGE_DIR, 'fragments');
+  mkdirSync(fragDir, { recursive: true });
+  writeFileSync(join(fragDir, 'cli-capture.html'), demoFragment('CLI before/after',
+    '<p><em>Harness stand-in — the real agent runs the CLI baseline vs changed and captures real stdout here.</em></p>'));
+  writeFileSync(join(fragDir, 'test-evidence.html'), demoFragment('Test evidence',
+    '<p><em>Harness stand-in — the real agent runs the quality gate and shows the pass/fail result here.</em></p>'));
+  writeFileSync(join(fragDir, 'narrative.html'), demoFragment('Narrative essence',
+    '<p><em>Harness stand-in — the real agent writes a one-to-three sentence essence of the change here.</em></p>'));
+  writeFileSync(join(DEMO_FORGE_DIR, 'DEMO.html'), composedDemoHtml());
+}
+
+export function writeDemoLock(sid, prompt) {
+  mkdirSync(DEMO_FORGE_DIR, { recursive: true });
+  const lock = {
+    session_id: sid, project: PROJECT, prompt: prompt ?? '',
+    iterations: 1, demo_skill: null, demo_html: '.forge/demo/DEMO.html',
+    locked_at: new Date().toISOString(),
+  };
+  const lockText = `${JSON.stringify(lock, null, 2)}\n`;
+  writeFileSync(join(DEMO_FORGE_DIR, 'demo.lock.json'), lockText);
+  const histDir = join(DEMO_FORGE_DIR, 'history', sid);
+  mkdirSync(histDir, { recursive: true });
+  writeFileSync(join(histDir, 'DEMO.html'), readFileSync(join(DEMO_FORGE_DIR, 'DEMO.html'), 'utf8'));
+  writeFileSync(join(histDir, 'meta.json'), lockText);
+}
+
+export function cleanDemoBuilderSession(sid) {
+  if (!sid) return;
+  try { rmSync(join(projectRoot, '_demo', sid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(join(FORGE_ROOT, '_logs', `_demo-${sid}`), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(DEMO_FORGE_DIR, { recursive: true, force: true }); } catch { /* */ }
+}
+
 // ── SKILLS-PILLAR HELPERS ───────────────────────────────────────────────────────
 // OOTB skill ids that must surface as draggable chips (studio/catalog.yaml community-skills).
 export const OOTB_SKILL_IDS = ['handoff', 'superpowers-tdd', 'security-review'];

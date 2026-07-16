@@ -112,6 +112,7 @@ import {
   caption,
   cleanInstructionsSession,
   cleanSeededBrain,
+  cleanDemoBuilderSession,
   cleanSkillArtifacts,
   ONB_EXISTING_SLUG, cleanOnboardedProject,
 } from './lib/journey-fixtures.mjs';
@@ -366,6 +367,11 @@ async function main() {
         cleanSeededSession(journeyCtx.seeded.createdSid);
         cleanInstructionsSession(journeyCtx.seeded.instrSid);          // Part 1 — AI-1
         cleanSeededBrain(journeyCtx.seeded.pbSid);                      // Part 1 — AI-2
+        // Crash-safe sweep for the demo-builder journey (its in-beat cleanup only
+        // runs on a completed journey; residue here caused the 2026-07-16 incident class).
+        if (journeyCtx.seeded.demoSid) {
+          try { cleanDemoBuilderSession(journeyCtx.seeded.demoSid); } catch { /* best-effort */ }
+        }
         cleanOnboardedProject(ONB_EXISTING_SLUG);    // Part 1 — SU onboard-existing
         cleanSkillArtifacts();                        // Part 2 — skills pillar
         cleanScratchFlow();

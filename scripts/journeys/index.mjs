@@ -19,6 +19,7 @@ import { journey as roadmap } from './roadmap.mjs';
 import { journey as swapRuntime } from './swap-runtime.mjs';
 import { journey as knowledge } from './knowledge.mjs';
 import { journey as recovery } from './recovery.mjs';
+import { journey as demoBuilder } from './demo-builder.mjs';
 
 export const JOURNEYS = [
   standUpCreate,
@@ -31,6 +32,7 @@ export const JOURNEYS = [
   swapRuntime,
   knowledge,
   recovery,
+  demoBuilder,
 ];
 
 export const RUN_ORDER = [
@@ -81,4 +83,7 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-pin-guidance'],
   ['knowledge', 'knowledge-lint-index'],
   ['recovery', 'recovery-surface'],
+  ['demo-builder', 'demo-builder-brief'],
+  ['demo-builder', 'demo-builder-generate'],
+  ['demo-builder', 'demo-builder-lock'],
 ];
