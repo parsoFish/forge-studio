@@ -7,9 +7,10 @@
  * who never leaves the UI. This harness walks the canonical Studio USER STORIES —
  * the things that operator actually does — organised around the three platform
  * verbs: AUTHOR a flow, RUN it, SWAP its engine. It is BOTH the watchable demo
- * (records a video + frame gallery + index.html) AND the UI regression harness
- * (every beat asserts a real data-* invariant; a non-zero exit flags a regression
- * while the video always finishes). It is a sibling to two other harnesses:
+ * (short looping per-capability clips + a frame gallery + index.html — clips-first,
+ * NOT one full-session video) AND the UI regression harness (every beat asserts a
+ * real data-* invariant; a non-zero exit flags a regression while the gallery
+ * always finishes). It is a sibling to two other harnesses:
  *   · scripts/e2e-deadpaths.mjs (`npm run ui:deadpaths`) — the read-only route/
  *     dead-path crawler (renders + no dead CTAs + nav resolves, twice).
  *   · scripts/verify-cycle.mjs (`npm run verify:cycle`) — the REAL-capability gate
@@ -78,16 +79,19 @@
  * reflection hex complete, the four architect surfaces (P1–P4), and the
  * author-from-scratch parity + `forge studio lint` proof.
  *
- * Output: demos/e2e/{video/journey.webm, frames/*.png, index.html}. Cleans up all
+ * Output: demos/e2e/{clips/*.webm, frames/*.png, index.html}. Cleans up all
  * seeded state (architect session, cycle logs, queue manifests, the authored
- * scratch flow, any _guidance/*.md) in the finally block.
+ * scratch flow, any _guidance/*.md, and any brain/cycles/_raw/ archives an
+ * emulated cycle left behind) in the finally block.
  *
  * JOURNEYS-AS-DATA. The beats are grouped into 11 journeys via `defineJourney()`
  * (scripts/lib/journey-runtime.mjs), one module per user story under
  * scripts/journeys/ (registry: scripts/journeys/index.mjs), and driven through
- * a flat `RUN_ORDER` that still preserves today's exact global sequence
- * (journeys interleave in registration order; a later pass will make each
- * journey's beats contiguous once its seed/cleanup steps are formalised).
+ * a flat `RUN_ORDER` in a building-blocks THROUGHLINE — every journey's beats
+ * now run contiguous (no interleaving): skills, stand-up-onboard,
+ * stand-up-create, knowledge, agents, flows-author, flows-run, roadmap,
+ * swap-runtime, recovery, demo-builder (see scripts/journeys/index.mjs for the
+ * cross-journey ordering constraints this sequence preserves).
  * `node scripts/e2e-journey.mjs --list` prints the journey/beat shape and
  * exits without booting Studio.
  */
@@ -101,15 +105,14 @@ import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, P
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
-  OUT, FRAMES, VIDEO, CLIPS,
-  DATE, INIT, CYCLE_LOG,
+  OUT, FRAMES, CLIPS,
+  DATE, INIT, J5_INIT, CYCLE_LOG,
   writeScratchFlow, cleanScratchFlow,
   cleanStarterAgents,
   cleanFirstFlow,
   cleanFirstProject,
   cleanFirstFlowRun,
   READ, ACT, QDIR,
-  caption,
   cleanInstructionsSession,
   cleanSeededBrain,
   cleanDemoBuilderSession,
@@ -158,12 +161,12 @@ const captions = [];
 // building/generating interactions, embedded autoplay-loop in the gallery.
 const clipMeta = [];
 let seq = 0;
-async function frame(page, name, altCaption) {
+async function frame(page, name, altCaption, opts = {}) {
   seq += 1;
   const file = `${String(seq).padStart(2, '0')}-${name}.png`;
   await page.screenshot({ path: join(FRAMES, file), fullPage: true });
   captions.push({ file, caption: altCaption });
-  tracker.recordCapture({ kind: 'frame', file, caption: altCaption });
+  tracker.recordCapture({ kind: 'frame', file, caption: altCaption, key: opts.key });
   console.log(`  [${String(seq).padStart(2, '0')}] ${altCaption}`);
 }
 
@@ -293,7 +296,6 @@ async function main() {
   mkdirSync(join(projectRoot, '_architect'), { recursive: true });
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(FRAMES, { recursive: true });
-  mkdirSync(VIDEO, { recursive: true });
   mkdirSync(CLIPS, { recursive: true });
 
   // Author the from-scratch flow BEFORE booting the bridge so the UI + lint can
@@ -313,7 +315,6 @@ async function main() {
   browser = await chromium.launch();
   const ctx = await browser.newContext({
     viewport: { width: 1380, height: 1600 },
-    recordVideo: { dir: VIDEO, size: { width: 1380, height: 1600 } },
   });
   page = await ctx.newPage();
   page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
@@ -332,35 +333,6 @@ async function main() {
       await beat.drive(journeyCtx);
       tracker.end();
     }
-
-        // ── End card ──────────────────────────────────────────────────────────────
-        console.log('\n[end] End card');
-        await page.evaluate(() => {
-          let card = document.getElementById('demo-end-card');
-          if (!card) {
-            card = document.createElement('div');
-            card.id = 'demo-end-card';
-            Object.assign(card.style, {
-              position: 'fixed', inset: '0', background: '#0d1117',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              zIndex: '99997', pointerEvents: 'none',
-            });
-            card.innerHTML = `
-              <div style="font:700 22px ui-sans-serif,system-ui;color:#58a6ff;margin-bottom:20px">
-                Forge Studio — the platform, not just the pipeline.
-              </div>
-              <div style="font:500 18px ui-sans-serif,system-ui;color:#e6edf3;margin-bottom:10px">
-                Author a flow. Run it. Swap its engine.
-              </div>
-              <div style="margin-top:32px;font:12px ui-monospace,monospace;color:#6e7681">
-                The forge cycle is three chained flows now. Everything is data you can edit.
-              </div>`;
-            document.body.appendChild(card);
-          }
-        });
-        await caption(page, 'Forge Studio — author a flow, run it, swap its engine. The forge cycle is three chained flows now, not one.');
-        await frame(page, 'end-card', 'End card — "Author a flow. Run it. Swap its engine."');
-        await sleep(READ);
 
         console.log('\n[e2e] journey complete.');
   } finally {
@@ -405,6 +377,23 @@ async function main() {
             for (const f of entries) rmSync(join(QDIR(q), f), { force: true });
           }
         } catch { /* studio cleanup best-effort */ }
+        // Cycle-archive cleanup (contamination found 2026-07-16) — the emulated
+        // architect/dev-loop turns this harness seeds write real reflector
+        // archives under brain/cycles/_raw/ exactly like a live cycle does; left
+        // behind, they silently pollute the real cross-cycle corpus Brain 2
+        // planners read from. Sweep every archive stamped with this run's
+        // synthetic initiative ids (main cycle, the J5 flows-author seeded-run,
+        // and the ACT-3 gated "studio-demo" run — none of these must ever reach
+        // the real corpus).
+        try {
+          const rawDir = join(FORGE_ROOT, 'brain', 'cycles', '_raw');
+          if (existsSync(rawDir)) {
+            const studioInit = `INIT-${DATE}-e2e-studio-demo`;
+            const staleSuffixes = [`_${INIT}.md`, `_${J5_INIT}.md`, `_${studioInit}.md`];
+            const stale = readdirSync(rawDir).filter((f) => staleSuffixes.some((suf) => f.endsWith(suf)));
+            for (const f of stale) rmSync(join(rawDir, f), { force: true });
+          }
+        } catch { /* cycle-archive cleanup best-effort */ }
         if (journeyCtx.seeded.createdSid) {
           try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${journeyCtx.seeded.createdSid}`), { recursive: true, force: true }); } catch { /* */ }
         }
@@ -431,12 +420,6 @@ async function main() {
         } catch (err) { console.warn(`[e2e] managed-project restore best-effort failed: ${err.message}`); }
   }
 
-    const vids = readdirSync(VIDEO).filter((f) => f.endsWith('.webm'));
-    let videoName = vids[0] ?? '';
-    if (videoName) {
-      renameSync(join(VIDEO, videoName), join(VIDEO, 'journey.webm'));
-      videoName = 'video/journey.webm';
-    }
     // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).
     try { rmSync(join(CLIPS, '_tmp'), { recursive: true, force: true }); } catch { /* */ }
   const results = tracker.toResults({
@@ -447,11 +430,10 @@ async function main() {
   });
   writeResultsFile(join(OUT, 'results.json'), results);
   writeGalleryFile(join(OUT, 'index.html'), renderGallery(results, {
-    videoName,
     title: 'Forge Studio — the operator walkthrough',
     subtitle: 'Clone forge → stand up a project → compose the four pillars (flows · skills · agents · knowledge) → run a gated cycle. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded ' + new Date().toISOString() + '.',
   }));
-  console.log(`[e2e] OK — ${OUT}/index.html (${captions.length} frames + video)`);
+  console.log(`[e2e] OK — ${OUT}/index.html (${captions.length} frames + ${clipMeta.length} clips)`);
 
   console.log('\n[e2e] journey summary:');
   for (const jid of results.executedJourneys) {

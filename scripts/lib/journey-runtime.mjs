@@ -163,10 +163,14 @@ export function createBeatTracker() {
    *  being dropped; they render as a trailing epilogue section in the gallery. */
   const epilogueCaptures = [];
 
-  /** @param {{kind:'frame'|'clip', file:string, caption:string, sizeBytes?:number}} capture */
-  function recordCapture({ kind, file, caption, sizeBytes }) {
+  /** @param {{kind:'frame'|'clip', file:string, caption:string, sizeBytes?:number, key?:boolean}} capture
+   *  `key` flags a still frame as gallery-worthy: the gallery shows only
+   *  key-flagged frames per beat (falling back to the first 3 when none are
+   *  flagged); the full capture set is always retained here + in results.json. */
+  function recordCapture({ kind, file, caption, sizeBytes, key }) {
     const capture = { kind, file, caption };
     if (sizeBytes !== undefined) capture.sizeBytes = sizeBytes;
+    if (key) capture.key = true;
     if (!current) {
       epilogueCaptures.push(capture);
       return;
@@ -244,11 +248,23 @@ function renderCapture(c) {
   if (c.kind === 'frame') {
     return `<figure><img loading="lazy" src="frames/${c.file}"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
   }
-  return `<figure><video autoplay loop muted playsinline src="clips/${c.file}"></video><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
+  return `<figure class="clip"><video autoplay loop muted playsinline src="clips/${c.file}"></video><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
 }
 
+/**
+ * Clips-first rendering (the demo product is looping per-capability clips, not
+ * a full-session video): every beat's looping clips render before its stills.
+ * Stills are then trimmed to a gallery-worthy SUBSET — only frames explicitly
+ * flagged `key: true`, falling back to the beat's first 3 captured frames when
+ * none are flagged. The full capture set (every clip + every frame) is always
+ * retained in beat.captures / results.json regardless of what the gallery shows.
+ */
 function renderBeat(beat) {
-  const captures = beat.captures.map(renderCapture).join('\n');
+  const clips = beat.captures.filter((c) => c.kind === 'clip');
+  const frames = beat.captures.filter((c) => c.kind === 'frame');
+  const keyFrames = frames.filter((c) => c.key);
+  const shownFrames = keyFrames.length > 0 ? keyFrames : frames.slice(0, 3);
+  const captures = [...clips, ...shownFrames].map(renderCapture).join('\n');
   return `<div class="beat"><h3>${beat.title}</h3><p class="narration">${beat.narration}</p>${captures}</div>`;
 }
 
@@ -266,21 +282,13 @@ function renderJourney(j) {
  *
  * @param {object} results               a toResults() output.
  * @param {object} [opts]
- * @param {string} [opts.videoName]      relative path to the full-run video; omit to skip the header video.
  * @param {string} [opts.title]
  * @param {string} [opts.subtitle]
  */
-export function renderGallery(results, { videoName, title = 'Forge Studio — the operator walkthrough', subtitle = '' } = {}) {
+export function renderGallery(results, { title = 'Forge Studio — the operator walkthrough', subtitle = '' } = {}) {
   const journeysHtml = results.executedJourneys
     .map((jid) => (results.journeys[jid] ? renderJourney(results.journeys[jid]) : ''))
     .join('\n');
-
-  const videoCaption = results.mode === 'full'
-    ? 'Full walkthrough'
-    : `Partial walkthrough — journeys: ${results.executedJourneys.join(', ')}`;
-  const videoHtml = videoName
-    ? `<h2>${videoCaption}</h2><video src="${videoName}" controls autoplay muted loop></video>`
-    : '';
 
   const epilogueCaptures = results.epilogue?.captures ?? [];
   const epilogueHtml = epilogueCaptures.length
@@ -294,12 +302,12 @@ video{width:100%;border:1px solid #30363d;border-radius:8px;background:#000}
 section{margin:40px 0}.story{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
 .beat{margin:24px 0}h3{margin-bottom:4px}.narration{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
 figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
+figure.clip{max-width:520px}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}
 .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:12px;margin:6px 0}
 .badge-ok{background:#0d3320;color:#3fb950}.badge-fail{background:#3d0d12;color:#f85149}</style></head>
 <body><h1>${title}</h1>
 ${subtitle ? `<p>${subtitle}</p>` : ''}
-${videoHtml}
 ${journeysHtml}
 ${epilogueHtml}
 </body></html>`;

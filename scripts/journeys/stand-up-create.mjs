@@ -1,6 +1,6 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  PROJECT, SCRATCH_FLOW, ACT, READ, THINK, pace, caption,
+  PROJECT, SCRATCH_FLOW, ACT, READ, THINK, caption,
   writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft,
   writePbStatus, seedStagedBrain,
 } from '../lib/journey-fixtures.mjs';
@@ -18,17 +18,17 @@ export const journey = defineJourney({
     story: 'As an operator, I create a brand-new project from Studio\'s library — the create-new path of the capability diagram. AI-assisted instructions- and project-brain-builders seed its AGENTS.md and its seeded-to-grow knowledge base, while the project builder lets me tune north star, demo timeline, and contract readiness.',
     beats: [
       {
-        id: 'su-create-title',
-        title: 'Title card — Studio library',
-        narration: 'The library page reports ready before anything else loads, and a title card frames the three things Studio does: author a flow, run it, swap its engine.',
+        id: 'su-create-library',
+        title: 'Library — everything is data',
+        narration: 'The library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
         drive: async (ctx) => {
-              const { page, watch, frame, check } = ctx;
+              const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
               // ACT 1 — AUTHOR. Everything in Studio is data you can edit.
               // ════════════════════════════════════════════════════════════════════════
 
-              // ── A1.0: Title card on the library ───────────────────────────────────────
-              console.log('\n[A1.0] Title card — Studio library');
+              // ── A1.0: the library reports ready before anything else loads ────────────
+              console.log('\n[A1.0] Library ready');
               await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
               try {
                 await page.waitForFunction(
@@ -41,42 +41,6 @@ export const journey = defineJourney({
                   document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') ?? '(no data-page=library)');
                 check(false, `library: data-page-ready (got "${pr}")`);
               }
-              await caption(page, 'Forge Studio — author a flow, run it, swap its engine.');
-              await page.evaluate(() => {
-                let card = document.getElementById('demo-title-card');
-                if (!card) {
-                  card = document.createElement('div');
-                  card.id = 'demo-title-card';
-                  Object.assign(card.style, {
-                    position: 'fixed', inset: '0', background: '#0d1117',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    zIndex: '99997', pointerEvents: 'none',
-                  });
-                  card.innerHTML = `
-                    <div style="font:700 32px ui-sans-serif,system-ui;color:#e6edf3;letter-spacing:-.5px;margin-bottom:16px">
-                      Forge Studio
-                    </div>
-                    <div style="font:500 20px ui-sans-serif,system-ui;color:#58a6ff">
-                      — author a flow · run it · swap its engine —
-                    </div>
-                    <div style="margin-top:40px;font:13px ui-monospace,monospace;color:#6e7681">
-                      the forge cycle is just one flow definition
-                    </div>`;
-                  document.body.appendChild(card);
-                }
-              });
-              await frame(page, 'a1-0-title', 'Title — "Forge Studio: author a flow, run it, swap its engine"');
-              await pace('dwell');
-              await page.evaluate(() => { const el = document.getElementById('demo-title-card'); if (el) el.style.display = 'none'; });
-
-        },
-      },
-      {
-        id: 'su-create-library',
-        title: 'Library — everything is data',
-        narration: 'The library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
-        drive: async (ctx) => {
-              const { page, check, countAtLeast } = ctx;
               // ── A1.1: Library — flows / agents / projects / KBs as data ───────────────
               console.log('\n[A1.1] Library — everything is data');
               await caption(page, 'Flows, agents, projects, and knowledge — one screen, all editable definitions.');
