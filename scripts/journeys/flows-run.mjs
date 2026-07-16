@@ -8,6 +8,7 @@ import {
   archDir, writeStatus, archEvent, archReasoning, burst, paced, writeQuestions,
   EMULATED_ARCHITECT_COST_USD, EMULATED_ARCHITECT_DURATION_MS, writePlan,
   cycleEvent, unifierEvent, moveManifest, seedReviewWorktree, writeDemoJson, writeReflectionQuestions,
+  writeReflectionArtifacts, writeReleaseArtifact,
   openStudioMonitor,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
@@ -235,7 +236,9 @@ export const journey = defineJourney({
               const { page, frame } = ctx;
               // ── R1.5: Architect drafts — P4 real cost greens the hex ──────────────────
               console.log('\n[R1.5] Architect drafts — P4 real cost');
-              await caption(page, '$0.46, 95 seconds — metered from the first phase.');
+              // Grounded (S5, fix item 1): real cycles meter the architect turn at
+              // $0 — it runs out-of-cycle (docs/known-gaps.md item 2), not a harness gap.
+              await caption(page, '$0.00 — the architect runs out-of-cycle; its duration alone is metered (4 min).');
               archEvent(sid, 'tool_use', 'tool.Write', { tool: 'Write' });
               await sleep(THINK);
               archEvent(sid, 'tool_use', 'tool.Edit', { tool: 'Edit' });
@@ -251,7 +254,7 @@ export const journey = defineJourney({
                 const archDur = durMatch ? parseInt(durMatch[1], 10) : EMULATED_ARCHITECT_DURATION_MS;
                 cycleEvent('architect', 'end', 'architect.end', { cost_usd: archCost, duration_ms: archDur });
               }
-              await frame(page, 'r1-5-architect-cost', 'R1 — P4: architect hex greens with real cost pill ($0.46, 95s)');
+              await frame(page, 'r1-5-architect-cost', 'R1 — P4: architect hex greens ($0.00 — real cycles meter it out-of-cycle)');
 
         },
       },
@@ -347,20 +350,22 @@ export const journey = defineJourney({
               // Model B: /flows/forge-develop renders ONLY the develop slice (dev→unifier→review,
               // the dev node fanning out into per-WI hexes). It does NOT show architect/pm/reflect.
               await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'monitor: forge-develop slice shows its phase hexes (unifier/review)');
-              // P4: the architect ran in the architect FLOW — assert its real cost on the
-              // forge-architect slice (the threaded run surfaces there via flowLineage).
+              // P4: the architect ran in the architect FLOW — assert it reaches complete
+              // on the forge-architect slice (the threaded run surfaces there via
+              // flowLineage). Grounded (S5, fix item 1): real cycles meter the architect
+              // turn at $0 (out-of-cycle accounting — docs/known-gaps.md item 2), so the
+              // assertion is on status, not on cost > 0.
               await openStudioMonitor(page, watch, 'forge-architect');
               try {
                 await page.waitForFunction(
-                  () => (parseFloat(document.querySelector('[data-mon-node][data-node-id="architect"]')
-                    ?.getAttribute('data-phase-cost-usd') ?? '0') || 0) > 0,
+                  () => document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-status') === 'complete',
                   null, { timeout: 12000 },
                 );
-                check(true, 'P4: architect hex (on /flows/forge-architect) carries real cost (data-phase-cost-usd > 0)');
+                check(true, 'P4: architect hex (on /flows/forge-architect) reaches complete (cost is $0 — metered out-of-cycle)');
               } catch {
-                const costVal = await page.evaluate(() =>
-                  document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-phase-cost-usd') ?? '(absent)');
-                check(false, `P4: architect hex carries real cost (got "${costVal}")`);
+                const statusVal = await page.evaluate(() =>
+                  document.querySelector('[data-mon-node][data-node-id="architect"]')?.getAttribute('data-status') ?? '(absent)');
+                check(false, `P4: architect hex reaches complete (got status="${statusVal}")`);
               }
               check(
                 await page.evaluate(() => document.querySelector('[data-mon-node][data-node-id="pm"]') !== null),
@@ -379,13 +384,33 @@ export const journey = defineJourney({
               // ── R3.0: PM decomposes ACs into work items ───────────────────────────────
               console.log('\n[R3.0] PM decomposes ACs into work items');
               await caption(page, 'Dependency-ordered work items — from G/W/T, not tasks. (Pure inject.ts, then the --write wiring + acceptance read-back.)');
+              // Grounded (S5, fix item 6): real PM log lines are 'pm.context-injected'
+              // (not 'pm.brain-query') + a richer 'pm.work-item-emitted' metadata shape
+              // (source: gitpulse events.jsonl). Cost $0.31 was already in the real
+              // $0.31-$1.23 range.
               await paced([
                 () => cycleEvent('project-manager', 'start', 'pm phase start'),
-                () => cycleEvent('project-manager', 'tool_use', 'pm.brain-query', { metadata: { tool: 'brain-query' } }),
-                () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-1' } }),
-                () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', { metadata: { work_item_id: 'WI-2' } }),
+                () => cycleEvent('project-manager', 'tool_use', 'pm.context-injected', {
+                  metadata: { brain_files: ['brain/projects/mdtoc/themes/structure.md'], manifest_inlined: true, tree_listing: true },
+                }),
+                () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', {
+                  metadata: {
+                    work_item_id: 'WI-1', depends_on: [], files_in_scope: 1, ac_count: 1,
+                    task: 'GIVEN a doc with <!-- toc --> / <!-- /toc --> markers WHEN mdtoc --write runs THEN the generated TOC is inserted between them',
+                  },
+                }),
+                () => cycleEvent('project-manager', 'log', 'pm.work-item-emitted', {
+                  metadata: {
+                    work_item_id: 'WI-2', depends_on: ['WI-1'], files_in_scope: 2, ac_count: 1,
+                    task: 'GIVEN the embedded TOC is already current WHEN mdtoc --write runs again THEN the file is unchanged',
+                  },
+                }),
               ], WORK);
               await frame(page, 'r3-0-pm-midpulse', 'R3 (mid-pulse) — PM hex active as it emits work items');
+              cycleEvent('project-manager', 'log', 'pm.spec-lint', { metadata: { status: 'clean' } });
+              await pace('fastForward');
+              cycleEvent('project-manager', 'log', 'pm.graph-emitted', { metadata: { node_count: 2, edge_count: 1 } });
+              await pace('fastForward');
               cycleEvent('project-manager', 'end', 'pm.end', { cost_usd: 0.31, duration_ms: 28000, metadata: { work_item_count: 2 } });
               await sleep(WORK);
               await frame(page, 'r3-0b-pm-settled', 'R3 — PM decomposed ACs into 2 dependency-ordered work items');
@@ -431,9 +456,15 @@ export const journey = defineJourney({
                 cycleEvent('developer-loop', 'tool_use', `tool.${t}`, { metadata: { work_item_id: 'WI-1', tool: t } });
                 await pace('fastForward');
               }
-              cycleEvent('developer-loop', 'log', 'usage_delta', { metadata: { work_item_id: 'WI-1', input_tokens: 1800, output_tokens: 600 } });
+              // Grounded (S5, fix item 7): 'usage_delta' IS a real message (47x in the
+              // gitpulse unifier phase); enriched with the real cache-token fields.
+              cycleEvent('developer-loop', 'log', 'usage_delta', {
+                metadata: { work_item_id: 'WI-1', input_tokens: 1800, output_tokens: 600, cache_read_tokens: 12400, cache_creation_tokens: 2100 },
+              });
               await sleep(WORK);
-              cycleEvent('developer-loop', 'log', 'usage_delta', { metadata: { work_item_id: 'WI-1', input_tokens: 2100, output_tokens: 900 } });
+              cycleEvent('developer-loop', 'log', 'usage_delta', {
+                metadata: { work_item_id: 'WI-1', input_tokens: 2100, output_tokens: 900, cache_read_tokens: 15800, cache_creation_tokens: 1400 },
+              });
               await sleep(WORK);
               await frame(page, 'r3-2-grind', 'R3 (fast-forward) — dev-loop implementing WI-1; token/cost bar growing');
 
@@ -451,8 +482,12 @@ export const journey = defineJourney({
               await caption(page, 'Red four minutes ago — now green. WI-2 (the --write wiring + acceptance read-back) only started once WI-1 was done.');
               cycleEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-1' } });
               await sleep(THINK);
+              // Grounded (S5, fix item 7): iteration cost/tokens are the real CUMULATIVE
+              // per-WI totals (source: gitpulse events.jsonl WI costs 0.6676/1.0856/1.2087,
+              // tokens_out ~15-17k) — not a flat per-iteration delta.
               cycleEvent('developer-loop', 'iteration', 'WI-1 iteration', {
-                iteration: 1, tokens_in: 4200, tokens_out: 1600, cost_usd: 0.21, metadata: { work_item_id: 'WI-1' },
+                iteration: 1, tokens_in: 989, tokens_out: 16679, cost_usd: 0.6676270500000001, duration_ms: 332582,
+                metadata: { work_item_id: 'WI-1' },
               });
               await sleep(THINK);
               cycleEvent('developer-loop', 'end', 'WI-1 complete', { metadata: { work_item_id: 'WI-1' } });
@@ -460,11 +495,19 @@ export const journey = defineJourney({
               await frame(page, 'r3-3-wi1-green', 'R3 — gate.pass; WI-1 green; WI-2 (depends on WI-1) only now starts');
               cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } });
               await sleep(THINK);
-              cycleEvent('developer-loop', 'log', 'usage_delta', { metadata: { work_item_id: 'WI-2', input_tokens: 1200, output_tokens: 400 } });
+              cycleEvent('developer-loop', 'log', 'usage_delta', {
+                metadata: { work_item_id: 'WI-2', input_tokens: 1200, output_tokens: 400, cache_read_tokens: 9600, cache_creation_tokens: 800 },
+              });
               await sleep(WORK);
-              cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', { iteration: 1, metadata: { work_item_id: 'WI-2' } });
+              // Grounded (S5, fix item 7): the real WI-2 iteration was missing cost/tokens
+              // in the seeded event entirely — now carries the real cumulative totals.
+              cycleEvent('developer-loop', 'iteration', 'WI-2 iteration', {
+                iteration: 1, tokens_in: 34, tokens_out: 14305, cost_usd: 1.0856373499999998, duration_ms: 253165,
+                metadata: { work_item_id: 'WI-2' },
+              });
               cycleEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } });
-              cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.92, duration_ms: 140000 });
+              // ralph.end sums the two WIs' real costs/durations above (0.6676 + 1.0856 ≈ 1.7533).
+              cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 1.7532643999999998, duration_ms: 585747 });
               await sleep(WORK);
               await frame(page, 'r3-3b-devloop-green', 'R3 — dev-loop hex greens (both WIs done); unifier runs next on its own hex');
 
@@ -479,19 +522,45 @@ export const journey = defineJourney({
               // ── R3.4: Unifier on its OWN hex ──────────────────────────────────────────
               console.log('\n[R3.4] Unifier on its own hex');
               await caption(page, 'A separate phase reviews the branch and authors the demo — with captured CLI read-back evidence.');
+              // Grounded (S5, fix items 3/8/14): a representative dozen+ real unifier
+              // events (not the ~5 invented ones, and not the full 130-event corpus
+              // breakdown either) — real message names + skill developer-unifier, real
+              // cost/duration (source: gitpulse events.jsonl unifier phase: 56 log/51
+              // tool_use/23 heartbeat/3 file_change, cost 1.1984, dur 357551ms). Filler
+              // events use fastForward pacing so the video doesn't lengthen materially.
               await paced([
-                () => unifierEvent('start', 'unifier.start — reviewing the merged work-item output'),
-                () => unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test && npm run acceptance' } }),
+                () => unifierEvent('start', 'unifier-phase.start', { metadata: { resumed: false } }),
+                () => unifierEvent('tool_use', 'tool.TodoWrite', { metadata: { tool: 'TodoWrite' } }),
               ], WORK);
               await frame(page, 'r3-4-unifier-midpulse', 'R3 (mid-pulse) — unifier hex active, running the gate + acceptance on the merged branch');
-              unifierEvent('log', 'unifier.gate — initiative gate green; cleaning output');
-              await sleep(WORK);
-              unifierEvent('log', 'unifier.demo-skill — authoring demo.json (captured CLI read-back evidence)');
+              unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test && npm run acceptance' } });
+              await pace('fastForward');
+              unifierEvent('log', 'usage_delta', {
+                metadata: { input_tokens: 3200, output_tokens: 1100, cache_read_tokens: 18200, cache_creation_tokens: 900 },
+              });
+              await pace('fastForward');
+              unifierEvent('agent_heartbeat', 'agent.heartbeat');
+              await pace('fastForward');
+              for (const [checkId, detail] of [
+                ['initiative_gate', 'PLAN.md present, ACs match manifest'],
+                ['pr_self_contained', 'no cross-WI dependency leakage'],
+                ['demo_fanin_honesty', 'demo metadata matches the post-fan-in branch (diffStat re-derived + refreshed)'],
+                ['branches_in_sync', 'branch up-to-date with main'],
+                ['complete_delivery', 'both WIs delivered, no orphan work'],
+              ]) {
+                unifierEvent('log', 'unifier.gate.sub-check', { metadata: { check_id: checkId, pass: true, detail } });
+                await pace('fastForward');
+              }
+              unifierEvent('log', 'unifier.demo-capture', { metadata: { kind: 'screenshot', label: 'README TOC region — before vs after --write' } });
+              await pace('fastForward');
+              unifierEvent('log', 'unifier.demo-metadata-refreshed', { metadata: { branch: `forge/${INIT}` } });
               await sleep(THINK);
               unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } });
               await sleep(THINK);
               writeDemoJson(1);
-              unifierEvent('end', 'unifier.end — demo authored, branch clean', { cost_usd: 0.18, duration_ms: 46000 });
+              unifierEvent('log', 'unifier.branch-pushed', { metadata: { branch: `forge/${INIT}` } });
+              await sleep(THINK);
+              unifierEvent('end', 'unifier.end', { cost_usd: 1.1984102000000005, duration_ms: 357551 });
               await openStudioMonitor(page, watch);
               try {
                 await page.waitForFunction(
@@ -519,7 +588,9 @@ export const journey = defineJourney({
               cycleEvent('review-loop', 'start', 'review-loop start');
               cycleEvent('review-loop', 'log', 'reviewer.pr-opened');
               moveManifest('in-flight', 'ready-for-review');
-              await caption(page, 'Forge Develop, costed per phase — dev-loop $0.92, unifier $0.18 — under its ceiling. (The Architect flow bills separately.)');
+              // Grounded (S5, fix items 7/8): dev-loop $1.75 (0.6676 + 1.0856), unifier $1.20 —
+              // paired with the grounded costs in flows-run-dependency-gate + flows-run-unifier.
+              await caption(page, 'Forge Develop, costed per phase — dev-loop $1.75, unifier $1.20 — under its ceiling. (The Architect flow bills separately.)');
               await openStudioMonitor(page, watch);
               await sleep(READ);
               await frame(page, 'r3-5-cost-rollup', 'R3 — cost rollup across the spine (Studio monitor)');
@@ -714,17 +785,41 @@ export const journey = defineJourney({
               await frame(page, 'r4-4-approve', 'R4 — operator approves (human decision #2 complete)');
               await page.locator('[data-component="verdict-form"] [data-action="approve-and-merge"]').click();
               await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
+              // Grounded (S5, fix items 4/10): real closure is TWO-PASS — pr-open
+              // (awaiting operator) then, after release-finalize runs, merged +
+              // post-merge-ci — matching orchestrator/phases/closure.ts +
+              // release-finalize.ts message names exactly. The bridge's OWN
+              // release-finalize path is neutralised for the whole ui:journey run
+              // (e2e-journey.mjs strips project.json's releaseProcess for the run), so
+              // this is pure seeded fixture data — no collision with a real backend write.
               await paced([
-                () => cycleEvent('review-loop', 'end', 'review-loop end — operator approved', { cost_usd: 0.21 }),
-                () => cycleEvent('closure', 'start', 'closure.start'),
-                () => cycleEvent('closure', 'log', 'closure.pr-merged'),
-                () => cycleEvent('closure', 'end', 'closure.end'),
+                () => cycleEvent('review-loop', 'end', 'review-loop end — operator approved', { cost_usd: 0.21, skill: 'review-verdict' }),
+                () => cycleEvent('closure', 'start', 'closure.start', { metadata: { reviewer_outcome: 'pr-open' } }),
+                () => cycleEvent('closure', 'log', 'closure.pr-open-awaiting-operator', { metadata: { outcome: 'pr-open', merged: false } }),
+                () => cycleEvent('closure', 'end', 'closure.end', { metadata: { outcome: 'pr-open', merged: false } }),
+              ], WORK);
+              cycleEvent('release-finalize', 'start', 'release-finalize.start', { metadata: { project: PROJECT } });
+              await pace('fastForward');
+              const releaseJsonPath = writeReleaseArtifact('0.2.0');
+              cycleEvent('release-finalize', 'end', 'release.finalized', {
+                cost_usd: 0.2851268500000001, duration_ms: 53990, output_refs: [releaseJsonPath],
+                metadata: { project: PROJECT, version: '0.2.0', branch: `forge/${INIT}`, changelog_path: 'CHANGELOG.md' },
+              });
+              await pace('fastForward');
+              await paced([
+                () => cycleEvent('closure', 'start', 'closure.start', { metadata: { reviewer_outcome: 'pr-open' } }),
+                () => cycleEvent('closure', 'log', 'closure.manifest-moved-to-done', { metadata: { confirmed_merge: true } }),
+                () => cycleEvent('closure', 'log', 'cycle.post-merge-ci', { metadata: { status: 'green', needs_operator: false } }),
+                () => cycleEvent('closure', 'end', 'closure.end', { metadata: { outcome: 'merged', merged: true } }),
                 () => cycleEvent('reflection', 'start', 'reflection.start'),
                 () => cycleEvent('reflection', 'tool_use', 'reflection.brain-query', { metadata: { tool: 'brain-query' } }),
-                () => cycleEvent('reflection', 'end', 'reflection.end'),
               ], WORK);
+              // NOTE: the terminal reflection.end event now lives SOLELY in the
+              // flows-run-reflect beat below — no more duplicate 'reflection.end' emitted
+              // here before the reflect screen has actually run.
               moveManifest('ready-for-review', 'done');
               writeReflectionQuestions();
+              writeReflectionArtifacts();
               await page.waitForSelector('[data-action="open-reflect"]', { timeout: 15000 }).catch(() => {});
               await sleep(ACT);
               await frame(page, 'r4-4b-reflect-link', 'R4 — merged; "Reflect on this cycle →" surfaces the final human moment');
@@ -880,7 +975,9 @@ export const journey = defineJourney({
                 // flowLineage is [forge-architect, forge-develop] and the S1 monitor deep-dive
                 // renders the develop slice (WI fan-out + unifier + review) under Model B.
                 'flow_id: forge-develop',
-                'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: ready-for-review', 'origin: architect',
+                // Grounded (S5, fix item 2): distinct-but-realistic from the primary
+                // cycle's grounded 10/4 (real range 6-24 / $4-$80).
+                'iteration_budget: 6', 'cost_budget_usd: 8', 'phase: ready-for-review', 'origin: architect',
                 '---', '', '# Studio demo — gated run for the flow-engine controls', '',
                 'Add a --check mode to mdtoc that exits non-zero when the embedded TOC is stale.',
               ].join('\n'));
@@ -898,9 +995,12 @@ export const journey = defineJourney({
               studioEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } });
               studioEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.48 });
               studioEvent('unifier', 'start', 'unifier.start', { skill: 'developer-unifier' });
+              // Grounded (S5, fix item 14): 'demo_runs_clean' renamed to the real
+              // check_id 'demo_fanin_honesty' — the other 4 check_ids were already real
+              // (source: gitpulse/betterado unifier.gate.sub-check events).
               for (const [checkId, pass, detail] of [
                 ['initiative_gate',    true,  'PLAN.md present'],
-                ['demo_runs_clean',    true,  'demo.json valid'],
+                ['demo_fanin_honesty', true,  'demo metadata matches the post-fan-in branch (diffStat re-derived + refreshed)'],
                 ['pr_self_contained',  true,  'no cross-WI deps'],
                 ['branches_in_sync',   true,  'branch up-to-date'],
                 ['complete_delivery',  true,  'all WIs delivered'],

@@ -30,20 +30,70 @@ export const journey = defineJourney({
               roadmapSeeded = false;
               try {
                 mkdirSync(wiSnapshotDir, { recursive: true });
+                // Grounded (S5, fix item 12): real WI frontmatter always carries populated
+                // GWT acceptance_criteria + files_in_scope + a quality_gate_cmd + the
+                // ADR-037 `creates:` list (source: gitpulse WI-1.md/WI-3.md) — never the
+                // empty arrays a hand-rolled fixture might default to.
                 writeFileSync(ROADMAP_SEEDED_WI, [
                   '---',
                   `work_item_id: WI-1`,
                   `initiative_id: ${INIT}`,
                   'status: complete',
                   'depends_on: []',
-                  'acceptance_criteria: []',
-                  'files_in_scope: []',
+                  'acceptance_criteria:',
+                  '  - given: a Markdown file with <!-- toc --> / <!-- /toc --> markers',
+                  '    when: mdtoc --write <file> runs',
+                  '    then: the generated TOC replaces the marker region and nothing outside it changes',
+                  '  - given: a file whose embedded TOC is already current',
+                  '    when: mdtoc --write <file> runs again',
+                  '    then: the file is unchanged (idempotent — re-running produces no diff)',
+                  'files_in_scope:',
+                  '  - src/inject.ts',
+                  '  - src/cli.ts',
+                  '  - test/inject.test.ts',
                   'estimated_iterations: 1',
+                  'quality_gate_cmd:',
+                  '  - npm',
+                  '  - test',
+                  'creates:',
+                  '  - src/inject.ts',
                   '---',
                   '',
                   '## Add --write mode',
                   '',
                   'Implement in-place TOC injection with idempotency.',
+                ].join('\n'));
+                // Grounded (S5, fix item 12): real cycles always leave the PM's
+                // decomposition trail alongside the WI snapshot — seed concise but
+                // structurally real versions (source: gitpulse work-items-snapshot/).
+                writeFileSync(join(wiSnapshotDir, '_decomposition.md'), [
+                  `# Decomposition — ${INIT}`,
+                  '',
+                  '1 work item(s) emitted.',
+                  '',
+                  '## Top-level scope',
+                  '',
+                  '- Pure marker-slice injector (src/inject.ts)',
+                  '- CLI wiring for --write (src/cli.ts)',
+                  '',
+                  '## WI-1',
+                  '',
+                  '- src/inject.ts',
+                  '- src/cli.ts',
+                  '- test/inject.test.ts',
+                ].join('\n'));
+                writeFileSync(join(wiSnapshotDir, '_decomposition-state.md'), [
+                  `# Decomposition state — ${INIT}`,
+                  '',
+                  '- [x] WI-1 — Add --write mode (in-place TOC injection, idempotent)',
+                ].join('\n'));
+                writeFileSync(join(wiSnapshotDir, '_graph.md'), [
+                  `# Work-item graph — ${INIT}`,
+                  '',
+                  '```mermaid',
+                  'graph TD',
+                  '  WI-1["WI-1: Add --write mode (src/inject.ts + src/cli.ts)"]',
+                  '```',
                 ].join('\n'));
                 roadmapSeeded = true;
               } catch {
@@ -59,7 +109,9 @@ export const journey = defineJourney({
               mkdirSync(QDIR('pending'), { recursive: true });
               writeFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), [
                 '---', `initiative_id: ${INIT_DEV}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
-                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
+                // Grounded (S5, fix item 2): distinct-but-realistic budget (real range
+                // 6-24 iterations / $4-$80 — source _queue/done manifests).
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
                 'origin: architect', `cycle_id: ${DEV_CYCLE_ID}`,
                 '---', '', '# mdtoc — `--check` mode (CI drift guard)', '',
                 'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',

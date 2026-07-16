@@ -376,15 +376,22 @@ export function writeQuestions(sid) {
 }
 
 // P4: emulated architect telemetry — mirrors what the real finalize step stamps.
-export const EMULATED_ARCHITECT_COST_USD = 0.46;
-export const EMULATED_ARCHITECT_DURATION_MS = 95000;
+// Grounded (S5 corpus-grounding): real cycles show architect cost as ALWAYS $0 —
+// it is metered out-of-cycle (see docs/known-gaps.md item 2), not a harness gap.
+// Source: gitpulse projects/gitpulse/_architect/2026-07-11T17-22-24/manifests/
+// INIT-2026-07-11-cli-sort-flag.md (architect_cost_usd: 0, architect_duration_ms
+// in the 239486-2338556ms real range across the corpus).
+export const EMULATED_ARCHITECT_COST_USD = 0;
+export const EMULATED_ARCHITECT_DURATION_MS = 239486;
 
 export function writePlan(sid, round) {
   const dir = archDir(sid);
   mkdirSync(join(dir, 'manifests'), { recursive: true });
   writeFileSync(join(dir, 'manifests', `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
-    `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 4', 'cost_budget_usd: 6', 'phase: pending',
+    // Grounded (S5): real budget distribution is 6-24 iterations / $4-$80 — source
+    // _queue/done/INIT-2026-07-11-exclude-path-filter.md (gitpulse).
+    `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 10', 'cost_budget_usd: 4', 'phase: pending',
     'origin: architect',
     // S9/DEC-3: the RUN demonstration drives the 3-stage spine. The manifest names
     // forge-develop (the build flow the hand-off repoints onto); the seeded events
@@ -413,14 +420,31 @@ export function writePlan(sid, round) {
 }
 
 let cycleSeq = 0;
+// Grounded (S5, fix item 3): the real skill names are more granular than the
+// phase id (source: gitpulse/betterado events.jsonl). review-loop defaults to
+// review-router (the routing skill); the verdict-recording event overrides to
+// review-verdict explicitly at its call site.
+const PHASE_SKILL_DEFAULTS = {
+  'developer-loop': 'developer-ralph',
+  'review-loop': 'review-router',
+};
+// Grounded (S5, fix item 4): chain parent_event_id start→end/iteration/log per
+// phase, like the real event schema (source: gitpulse events.jsonl) — a 'start'
+// event opens a new parent for that phase; every subsequent event on the same
+// phase (until the next 'start') is its child.
+const lastStartEventIdByPhase = {};
 export function cycleEvent(phase, eventType, message, opts = {}) {
-  const { metadata = {}, skill = phase, ...extras } = opts;
+  const { metadata = {}, skill = PHASE_SKILL_DEFAULTS[phase] ?? phase, input_refs = [], output_refs = [], ...extras } = opts;
   mkdirSync(CYCLE_LOG, { recursive: true });
   cycleSeq += 1;
+  const event_id = `EV_cyc_${cycleSeq}`;
+  const parent_event_id = eventType === 'start' ? undefined : lastStartEventIdByPhase[phase];
+  if (eventType === 'start') lastStartEventIdByPhase[phase] = event_id;
   appendFileSync(join(CYCLE_LOG, 'events.jsonl'), JSON.stringify({
-    event_id: `EV_cyc_${cycleSeq}`, cycle_id: CYCLE_ID, initiative_id: INIT,
+    event_id, cycle_id: CYCLE_ID, initiative_id: INIT,
     started_at: new Date().toISOString(), phase, skill,
-    event_type: eventType, input_refs: [], output_refs: [], message, metadata, ...extras,
+    ...(parent_event_id ? { parent_event_id } : {}),
+    event_type: eventType, input_refs, output_refs, message, metadata, ...extras,
   }) + '\n');
 }
 /** Sugar for the unifier phase — phase:'unifier', skill:'developer-unifier'. */
@@ -462,6 +486,9 @@ export function seedReviewWorktree() {
   } catch (err) { console.warn(`[e2e] review-worktree sandbox git init failed: ${err.message}`); }
   // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes, so a
   // review send-back appends UWI-2 (depends_on:[UWI-1]) rather than a self-cyclic UWI-1.
+  // Grounded (S5, fix item 13): real unifier-authored WI frontmatter always
+  // carries an ADR-037 `creates:` list (the structural PM/unifier validator
+  // rejects a pure-modification WI without it) — source gitpulse WI-1.md/WI-3.md.
   const uwi1 = {
     work_item_id: 'UWI-1', initiative_id: INIT, status: 'pending', depends_on: [],
     acceptance_criteria: [{
@@ -470,6 +497,7 @@ export function seedReviewWorktree() {
       then: 'the quality gate passes against branch tip and demo.json + .forge/pr-description.md exist',
     }],
     files_in_scope: ['.forge/pr-description.md', `demo/${INIT}/demo.json`],
+    creates: ['.forge/pr-description.md', `demo/${INIT}/demo.json`],
     quality_gate_cmd: ['npm', 'test'], kind: 'packaging', estimated_iterations: 1,
   };
   writeFileSync(join(wt, '.forge', 'unifier-items', 'UWI-1.md'),
@@ -628,6 +656,93 @@ export function writeReflectionQuestions() {
       options: [],
     },
   ], null, 2));
+}
+
+/** S5 corpus-grounding (fix item 11): seed the reflector's full real artifact
+ *  set — recap.md, retro.md, report.md, brain-lint.md, artifacts/reflection.json
+ *  — mirroring the shapes a real cycle writes (source: betterado
+ *  `_logs/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity/`). NOTE:
+ *  user-feedback.md is deliberately NOT seeded here — ReflectionGate.tsx writes
+ *  it live from the operator's submitted answers (pre-seeding would conflict). */
+export function writeReflectionArtifacts() {
+  mkdirSync(CYCLE_LOG, { recursive: true });
+  writeFileSync(join(CYCLE_LOG, 'recap.md'), [
+    `# Cycle recap — ${INIT}`, '',
+    '## Outcome', '',
+    `merged — project \`${PROJECT}\`, cycle \`${CYCLE_ID}\`.`, '',
+    '## Stats', '',
+    '- Cost (total): $3.83',
+    '- Duration: 9m 12s',
+    '- Send-back rounds: 1',
+    '- Dev-loop iterations: 2', '',
+    '## Themes written', '',
+    '- _(none yet — reflected live during the walkthrough)_', '',
+    '## Brain gaps', '',
+    '- Closed (0): _(none)_',
+    '- Outstanding (0): _(none)_', '',
+    '## Lint', '',
+    '- Status: clean',
+    `- Report: _logs/${CYCLE_ID}/brain-lint.md`, '',
+    '## Links', '',
+    `- Retro: _logs/${CYCLE_ID}/retro.md`,
+    `- Manifest: _queue/done/${INIT}.md`,
+  ].join('\n'));
+  writeFileSync(join(CYCLE_LOG, 'retro.md'), [
+    `# Retro — ${INIT}`, '',
+    '## Self-reflection', '',
+    '### Repeated actions', '',
+    '| Action | Count | Notes |',
+    '|---|---|---|',
+    '| Acceptance read-back re-run while tuning the marker regex | 3 | Trailing-newline drift on the 2nd `--write` (the send-back). |',
+    '',
+    '### Roadblocks / wedges', '',
+    '1. **Idempotency drift (send-back).** A second `--write` on an already-current doc left a trailing-newline diff; the operator sent it back on AC-2. Fixed on the dev-loop rerun.',
+    '',
+    '### Notable patterns', '',
+    '- Dependency ordering held: WI-2 (`--write` wiring + acceptance read-back) only started once WI-1 (pure `inject.ts`) was done.',
+    '', '---', '',
+    '## User questions', '',
+    '_(answered live on the reflect screen — see user-questions.json)_',
+  ].join('\n'));
+  writeFileSync(join(CYCLE_LOG, 'report.md'), [
+    `# Cycle report — ${INIT}`, '',
+    `Project: \`${PROJECT}\`. Outcome: merged.`, '',
+    '## Work items', '',
+    '- WI-1 — pure inject.ts marker-slice',
+    '- WI-2 — --write CLI wiring + acceptance read-back', '',
+    '## Send-back', '',
+    '- Round 1: AC-2 (idempotency) PARTIAL — a trailing-newline drift on the 2nd `--write`. Fixed on rerun (PARTIAL→MET).',
+  ].join('\n'));
+  writeFileSync(join(CYCLE_LOG, 'brain-lint.md'), [
+    '# Brain-lint report', '',
+    '## Flags (0)', '',
+    'Summary: 0 error(s), 0 flag(s), 0 auto-fix(es).',
+  ].join('\n'));
+  const artifacts = join(CYCLE_LOG, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(artifacts, 'reflection.json'), JSON.stringify({
+    friction: [
+      'Idempotency drift on the 2nd --write (trailing newline) — caught by the send-back.',
+    ],
+  }, null, 2));
+}
+
+/** S5 corpus-grounding (fix item 10): seed the release-finalize artifact the
+ *  real closure phase writes after a merge — field shape verified against
+ *  betterado's real artifacts/release.json (camelCase changelogPath/
+ *  finalizedAt). The bridge's own release-finalize path is neutralised for the
+ *  whole ui:journey run (e2e-journey.mjs strips project.json's releaseProcess
+ *  for the run), so this is purely seeded fixture data — no collision with a
+ *  real backend write. */
+export function writeReleaseArtifact(version = '0.2.0') {
+  const artifacts = join(CYCLE_LOG, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  const path = join(artifacts, 'release.json');
+  writeFileSync(path, JSON.stringify({
+    initiative_id: INIT, cycleId: CYCLE_ID, project: PROJECT, version,
+    changelogPath: 'CHANGELOG.md', branch: `forge/${INIT}`, finalizedAt: new Date().toISOString(),
+  }, null, 2));
+  return path;
 }
 
 // ── AI-GENERATION EMULATION (instructions / project-brain) ──────────────────────
