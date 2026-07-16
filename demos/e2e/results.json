@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T10:58:54.604Z",
+  "generatedAt": "2026-07-16T11:33:39.436Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -31,11 +31,11 @@
   "journeys": {
     "stand-up-create": {
       "title": "Stand up a project (create new)",
-      "story": "Create a new project from Studio's library: title card and library orientation, AI-assisted AGENTS.md + project-brain generation, and the project builder.",
+      "story": "As an operator, I create a brand-new project from Studio's library — the create-new path of the capability diagram. AI-assisted instructions- and project-brain-builders seed its AGENTS.md and its seeded-to-grow knowledge base, while the project builder lets me tune north star, demo timeline, and contract readiness.",
       "beats": {
         "su-create-title": {
           "title": "Title card — Studio library",
-          "narration": "Title card — Studio library",
+          "narration": "The library page reports ready before anything else loads, and a title card frames the three things Studio does: author a flow, run it, swap its engine.",
           "checks": [
             {
               "msg": "library: [data-page=\"library\"][data-page-ready=\"true\"]",
@@ -53,7 +53,7 @@
         },
         "su-create-library": {
           "title": "Library — everything is data",
-          "narration": "Library — everything is data",
+          "narration": "The library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.",
           "checks": [
             {
               "msg": "library: [data-section=\"flows\"] present (found 1, want ≥1)",
@@ -117,7 +117,7 @@
         },
         "su-create-orientation": {
           "title": "First-run orientation + discoverable creation",
-          "narration": "First-run orientation + discoverable creation",
+          "narration": "With the library already populated, the first-run welcome panel correctly stays hidden, and the \"+ New Agent\" CTA proves creating something new is one click away, not a URL only a developer would know.",
           "checks": [
             {
               "msg": "J1: library \"+ New Agent\" creation CTA ([data-action=\"new-agent\"]) is present",
@@ -151,7 +151,7 @@
         },
         "su-create-instructions": {
           "title": "instructions-creator — generate AGENTS.md (AI-assisted)",
-          "narration": "instructions-creator — generate AGENTS.md (AI-assisted)",
+          "narration": "The operator launches the instructions-creator agent, answers its two clarifying questions, and approves the AGENTS.md it drafts — a new project gets its onboarding contract written for it, with a human still signing off.",
           "checks": [
             {
               "msg": "AI-1: instructions screen renders ([data-page=\"instructions-interview\"])",
@@ -170,7 +170,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 600K (got 327893)",
+              "msg": "clip instr-generate.webm under 600K (got 314423)",
               "pass": true
             },
             {
@@ -193,7 +193,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "instructions-creator: AGENTS.md generated with AI assistance",
-              "sizeBytes": 327893
+              "sizeBytes": 314423
             },
             {
               "kind": "frame",
@@ -205,7 +205,7 @@
         },
         "su-create-project-brain": {
           "title": "project-brain-builder — seed the project brain (AI-assisted)",
-          "narration": "project-brain-builder — seed the project brain (AI-assisted)",
+          "narration": "The project-brain-builder analyses the new project and stages three seed themes for review; approving commits nothing but a pointer — the project's own knowledge base starts here and grows as cycles run.",
           "checks": [
             {
               "msg": "AI-2: project-brain screen renders ([data-page=\"project-brain\"])",
@@ -220,7 +220,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 600K (got 151428)",
+              "msg": "clip pbrain-generate.webm under 600K (got 152200)",
               "pass": true
             },
             {
@@ -243,7 +243,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "project-brain-builder: the seed brain generated with AI assistance",
-              "sizeBytes": 151428
+              "sizeBytes": 152200
             },
             {
               "kind": "frame",
@@ -255,7 +255,7 @@
         },
         "su-create-project-builder": {
           "title": "Project builder — /projects/mdtoc",
-          "narration": "Project builder — /projects/mdtoc",
+          "narration": "In the project builder for mdtoc, the operator tunes north star, demo timeline, and contract readiness at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page.",
           "checks": [
             {
               "msg": "project-builder: [data-page=\"projects\"][data-page-ready=\"true\"]",
@@ -323,11 +323,11 @@
     },
     "agents": {
       "title": "Compose an agent",
-      "story": "Build the three starter agents from the curated library, then edit an existing agent's composition in the agent builder.",
+      "story": "As an operator, I compose the three OOTB plan/dev/review agents from forge's curated starter library, then reopen an existing agent to prove its composition — skills, tools, runtime, budgets — is editable, not fixed once built.",
       "beats": {
         "agents-starters": {
           "title": "Author plan/dev/review agents from the starter library",
-          "narration": "Author plan/dev/review agents from the starter library",
+          "narration": "The operator picks each of the three curated starters in turn — required fields pre-filled, advanced config collapsed — and saves each straight to a SKILL.md that then passes forge's own `studio lint` gate: the agents pillar's OOTB library, tuned through forge's own development, made concrete.",
           "checks": [
             {
               "msg": "J2: new-agent shows the curated starter picker ([data-section=\"starter-picker\"])",
@@ -391,7 +391,7 @@
         },
         "agents-builder": {
           "title": "Agent builder — /agents/project-manager",
-          "narration": "Agent builder — /agents/project-manager",
+          "narration": "Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, then edits its purpose field and watches the dirty flag flip before discarding — proof an OOTB agent stays modifiable after the fact.",
           "checks": [
             {
               "msg": "agent-builder: [data-page=\"agents\"][data-page-ready=\"true\"]",
@@ -438,7 +438,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 600K (got 471975)",
+              "msg": "clip agent-build.webm under 600K (got 507194)",
               "pass": true
             }
           ],
@@ -457,7 +457,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "Composing an agent from the starter library",
-              "sizeBytes": 471975
+              "sizeBytes": 507194
             }
           ],
           "pass": true
@@ -469,11 +469,11 @@
     },
     "flows-author": {
       "title": "Author a flow",
-      "story": "Author a cycle flow as data: string agents into a new flow, give it seeded work, and prove a from-scratch flow is structurally identical to the production seed.",
+      "story": "As an operator, I author a brand-new cycle flow entirely as data — the flows pillar's user-creates path — stringing plan/dev/review agents together, handing the result real work, and proving a from-scratch rebuild of forge-develop is structurally identical to the production seed.",
       "beats": {
         "flows-author-new-flow": {
           "title": "String plan/dev/review into a flow (new-flow builder)",
-          "narration": "String plan/dev/review into a flow (new-flow builder)",
+          "narration": "From the library's \"+ New Flow\" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`.",
           "checks": [
             {
               "msg": "J3: library \"+ New Flow\" CTA is enabled and routes to the flow builder",
@@ -541,7 +541,7 @@
         },
         "flows-author-seeded-run": {
           "title": "Give the authored flow work (seeded run on my-first-flow)",
-          "narration": "Give the authored flow work (seeded run on my-first-flow)",
+          "narration": "The freshly authored flow is handed a real run: its own plan/dev/review hexes progress and park at the verdict gate, with per-phase cost accruing — proof a user-authored flow is a first-class citizen of the monitor, not a demo-only shell.",
           "checks": [
             {
               "msg": "J5: the authored flow shows the seeded run (run-count 1)",
@@ -583,7 +583,7 @@
         },
         "flows-author-scratch-parity": {
           "title": "Build the forge-develop flow from scratch (flow-as-data)",
-          "narration": "Build the forge-develop flow from scratch (flow-as-data)",
+          "narration": "Rebuilding forge-develop node-for-node from scratch, `studio lint` validates it and its node set, gate, and edge count match the production seed exactly — the hardcoded cycle really is just one flow definition, and the operator can drag more agents onto it from the same palette.",
           "checks": [
             {
               "msg": "author-from-scratch: `forge studio lint` validates the authored forge-develop-scratch flow (exit 0)",
@@ -642,7 +642,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-build.webm under 600K (got 472310)",
+              "msg": "clip flow-build.webm under 600K (got 321838)",
               "pass": true
             }
           ],
@@ -661,7 +661,7 @@
               "kind": "clip",
               "file": "clips/flow-build.webm",
               "caption": "the flow builder — compose the cycle as data (nodes · palette · gates)",
-              "sizeBytes": 472310
+              "sizeBytes": 321838
             }
           ],
           "pass": true
@@ -673,11 +673,11 @@
     },
     "stand-up-onboard": {
       "title": "Stand up a project (onboard existing)",
-      "story": "Onboard an existing project in the UI and resolve it to the forge project contract.",
+      "story": "As an operator, I onboard an existing repository through the UI — the onboard-existing path of the capability diagram — and watch forge deterministically resolve it against the project contract until it is ready for development.",
       "beats": {
         "su-onboard-project": {
           "title": "Onboard a project from the UI",
-          "narration": "Onboard a project from the UI",
+          "narration": "Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the library; .forge/project.json lands on disk with the hard contract fields, the project appears in the library, and `studio lint` stays green.",
           "checks": [
             {
               "msg": "J4: library \"+ New Project\" CTA is enabled and routes to onboarding",
@@ -740,7 +740,7 @@
         },
         "su-onboard-preflight": {
           "title": "onboard existing → deterministically resolve a failing clause",
-          "narration": "onboard existing → deterministically resolve a failing clause",
+          "narration": "Onboarding a second, existing-style repo trips a real contract clause (no ARTIFACTS convention yet); the operator clicks the one auto-fix action and watches the clause disappear — the repo is aligned to the contract deterministically, no LLM call needed.",
           "checks": [
             {
               "msg": "SU: onboard-project enables once the required fields are filled",
@@ -790,11 +790,11 @@
     },
     "skills": {
       "title": "Compose a skill",
-      "story": "Browse the OOTB community-sourced skill library, edit a skill, and author a brand-new one.",
+      "story": "As an operator, I browse forge's OOTB skill library — highly rated skills sourced from existing community libraries, provenance and stars shown — then edit one in place and author a brand-new skill from scratch.",
       "beats": {
         "skills-ootb-library": {
           "title": "OOTB skill library (community-sourced)",
-          "narration": "OOTB skill library (community-sourced)",
+          "narration": "The catalog ships a library of community-sourced skills (superpowers, TDD, security-review, and more), each one carrying its source URL, provenance, and star count in the agent builder's palette — the operator can see exactly where a skill came from before dragging it in.",
           "checks": [
             {
               "msg": "SK-1: catalog ships an OOTB skill library (9 community-skills)",
@@ -836,7 +836,7 @@
         },
         "skills-edit": {
           "title": "Edit a skill",
-          "narration": "Edit a skill",
+          "narration": "Opening an OOTB skill in the builder, the operator rewrites its instructions body and saves — the change lands straight in that skill's own SKILL.md, proving an out-of-the-box skill is editable text, not a black box.",
           "checks": [
             {
               "msg": "SK-2: editor loaded the skill ([data-agent-id=\"journey-ootb-review\"])",
@@ -858,7 +858,7 @@
         },
         "skills-create": {
           "title": "Author a new skill",
-          "narration": "Author a new skill",
+          "narration": "From a blank builder the operator names a brand-new skill, describes it in one line, and writes its instructions; creating it writes a fresh SKILL.md to the library — the skills pillar's third leg, adding new skills from scratch.",
           "checks": [
             {
               "msg": "SK-3: skill builder renders ([data-page=\"skill-builder\"])",
@@ -873,7 +873,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 600K (got 86802)",
+              "msg": "clip sk-create.webm under 600K (got 81783)",
               "pass": true
             },
             {
@@ -891,7 +891,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "authoring a new skill from scratch",
-              "sizeBytes": 86802
+              "sizeBytes": 81783
             },
             {
               "kind": "frame",
@@ -908,11 +908,11 @@
     },
     "flows-run": {
       "title": "Run a gated cycle",
-      "story": "Run a gated cycle end-to-end on a real mdtoc roadmap feature: idea → architect interview → PLAN gate → autonomous build → review gate → merge → reflect, plus the flow-engine monitor controls.",
+      "story": "As an operator, I run a gated cycle end-to-end on a real mdtoc feature — idea to architect interview to PLAN gate to an autonomous build to a review gate to merge to reflection — monitoring flow progress and clearing every gate myself from the flow UI.",
       "beats": {
         "flows-run-idea": {
           "title": "Operator drops the mdtoc idea",
-          "narration": "Operator drops the mdtoc idea",
+          "narration": "The operator types one real mdtoc feature idea into a single field and hits go — no form, no ceremony — and forge opens a fresh architect interview session to run with it.",
           "checks": [
             {
               "msg": "[data-section=\"new-idea\"] present on /architect/new",
@@ -934,7 +934,7 @@
         },
         "flows-run-grounding": {
           "title": "Architect grounds itself — P3 activity panel",
-          "narration": "Architect grounds itself — P3 activity panel",
+          "narration": "Before asking a single question, the architect reads the CLI source and the brain — every tool call and reasoning line streams live into the activity panel, so the operator watches it ground itself in the real codebase rather than guess.",
           "checks": [
             {
               "msg": "P3: [data-section=\"architect-activity\"] rendered",
@@ -965,7 +965,7 @@
         },
         "flows-run-questions": {
           "title": "Architect returns questions",
-          "narration": "Architect returns questions",
+          "narration": "The architect comes back with exactly two clarifying questions — schema default and acceptance fixture — asking only what it genuinely cannot resolve on its own.",
           "checks": [
             {
               "msg": "[data-section=\"architect-interview\"] rendered with questions",
@@ -987,7 +987,7 @@
         },
         "flows-run-freetext": {
           "title": "Operator answers — P2 free-text override on Q2",
-          "narration": "Operator answers — P2 free-text override on Q2",
+          "narration": "The operator answers Q1 with a radio option but overrides Q2 entirely in free text; the question resolves on the typed answer and every radio stays unselected — proving the operator is never boxed into the offered choices.",
           "checks": [
             {
               "msg": "P2: Q2 [data-question-resolved=\"true\"] after free-text entry",
@@ -1014,7 +1014,7 @@
         },
         "flows-run-stall": {
           "title": "Stall cameo — P1 StuckWarning",
-          "narration": "Stall cameo — P1 StuckWarning",
+          "narration": "A staged stale heartbeat makes the architect look stuck for two minutes and the StuckWarning lights up; once the session resumes the warning clears on its own — the operator always sees when forge has gone quiet, and when it hasn't.",
           "checks": [
             {
               "msg": "P1: [data-architect-stale=\"true\"] rendered when session staleMs > 120s",
@@ -1036,7 +1036,7 @@
         },
         "flows-run-draft-cost": {
           "title": "Architect drafts — P4 real cost",
-          "narration": "Architect drafts — P4 real cost",
+          "narration": "The architect emits its plan and the hex greens at $0.00 — that's not a bug: real cycles meter the architect turn out-of-cycle, its duration tracked but its dollar cost billed elsewhere, and the demo owns that honestly rather than hiding it.",
           "checks": [],
           "captures": [
             {
@@ -1049,7 +1049,7 @@
         },
         "flows-run-plan-gate": {
           "title": "Rich PLAN.html (gate)",
-          "narration": "Rich PLAN.html (gate)",
+          "narration": "The plan gate presents the architect's output as rendered Given/When/Then acceptance-criteria cards, not raw markdown — the same PLAN.html the PM will read verbatim once approved.",
           "checks": [
             {
               "msg": "plan gate renders the rich PLAN.html iframe",
@@ -1067,7 +1067,7 @@
         },
         "flows-run-send-back": {
           "title": "Send-back + revised plan",
-          "narration": "Send-back + revised plan",
+          "narration": "The operator sends the plan back with one concrete piece of feedback (cover the no-markers case); the architect reruns and re-presents a revised plan carrying a \"(revised)\" badge — human gate #1, working as a real gate.",
           "checks": [],
           "captures": [
             {
@@ -1085,7 +1085,7 @@
         },
         "flows-run-approve": {
           "title": "Approve → watch it build",
-          "narration": "Approve → watch it build",
+          "narration": "Approving the plan hands off to the second flow, Forge Develop; clicking \"Watch it build\" lands on its monitor, which shows only the develop slice's own hexes — while the same threaded run's architect slice, checked separately, sits complete on its own flow at that honest $0.00.",
           "checks": [
             {
               "msg": "monitor: forge-develop slice shows its phase hexes (unifier/review) (found 3, want ≥2)",
@@ -1121,7 +1121,7 @@
         },
         "flows-run-pm-decompose": {
           "title": "PM decomposes ACs into work items",
-          "narration": "PM decomposes ACs into work items",
+          "narration": "The project-manager phase turns the plan's acceptance criteria into two dependency-ordered work items straight from Given/When/Then, not vague tasks; clicking either the phase hex or a WI hex opens its own drawer of detail.",
           "checks": [
             {
               "msg": "monitor: PM materialised ≥2 WI hexes (found 2, want ≥2)",
@@ -1162,7 +1162,7 @@
         },
         "flows-run-tdd-red": {
           "title": "Dev-loop TDD red — gate.expected-fail",
-          "narration": "Dev-loop TDD red — gate.expected-fail",
+          "narration": "The dev-loop's first move on WI-1 is a failing test — gate.expected-fail fires before any implementation exists — TDD is the loop's actual discipline, not a claim in a prompt.",
           "checks": [],
           "captures": [
             {
@@ -1175,7 +1175,7 @@
         },
         "flows-run-grind": {
           "title": "Dev-loop GRIND (fast-forward)",
-          "narration": "Dev-loop GRIND (fast-forward)",
+          "narration": "The dev-loop keeps grinding on WI-1 (fast-forwarded here): tool calls accumulate and the token/cost bar climbs live — the operator can watch the actual work happen, not a spinner.",
           "checks": [],
           "captures": [
             {
@@ -1188,7 +1188,7 @@
         },
         "flows-run-dependency-gate": {
           "title": "Gate.pass + WI-1 green → WI-2 starts",
-          "narration": "Gate.pass + WI-1 green → WI-2 starts",
+          "narration": "WI-1's gate passes and only then does WI-2 — which declared WI-1 as a dependency — begin: the scheduler enforces the ordering the plan declared, visibly, rather than racing both work items at once.",
           "checks": [],
           "captures": [
             {
@@ -1206,7 +1206,7 @@
         },
         "flows-run-unifier": {
           "title": "Unifier on its own hex",
-          "narration": "Unifier on its own hex",
+          "narration": "With both work items green, the unifier phase's own hex activates and merges them into one branch, runs the gate, and authors the demo — the seam between many parallel WIs and one reviewable change, made visible.",
           "checks": [
             {
               "msg": "monitor: unifier node lit its own status complete (not folded into dev-loop)",
@@ -1229,7 +1229,7 @@
         },
         "flows-run-cost-rollup": {
           "title": "Cost rollup",
-          "narration": "Cost rollup",
+          "narration": "The cycle badge sums exactly what dev-loop and unifier already accrued ($1.75 + $1.20) — the rollup is arithmetic on real per-phase numbers the operator watched tick up, not a separate estimate.",
           "checks": [
             {
               "msg": "monitor: cost rollup — a phase hex shows cost > 0",
@@ -1251,7 +1251,7 @@
         },
         "flows-run-review-comment": {
           "title": "Review — comment-on-page visual demo (PARTIAL)",
-          "narration": "Review — comment-on-page visual demo (PARTIAL)",
+          "narration": "The review page renders the actual DEMO.md with a before/after slider and per-region comment anchors; AC-2 reads PARTIAL — a real gap surfaces before the operator ever has to decide anything.",
           "checks": [
             {
               "msg": "review demo foregrounds per-AC evaluated output (found 2, want ≥2)",
@@ -1290,7 +1290,7 @@
         },
         "flows-run-review-send-back": {
           "title": "Send-back — operator anchors a blocking comment to AC-2",
-          "narration": "Send-back — operator anchors a blocking comment to AC-2",
+          "narration": "The operator anchors a blocking comment directly on AC-2 instead of filling out a form; the page derives a send-back verdict from that comment alone, and it survives a reload — progressing the gate through the flow UI, on the artifact itself.",
           "checks": [
             {
               "msg": "the anchored comment renders under its region",
@@ -1329,7 +1329,7 @@
         },
         "flows-run-rerun": {
           "title": "Dev-loop reruns on feedback (fast-forward)",
-          "narration": "Dev-loop reruns on feedback (fast-forward)",
+          "narration": "The anchored comment routes straight back to the dev-loop, which reruns on exactly that criterion and re-renders the demo — the send-back was real routing, not a dead-end button.",
           "checks": [],
           "captures": [
             {
@@ -1342,7 +1342,7 @@
         },
         "flows-run-re-review": {
           "title": "Re-review — PARTIAL→MET",
-          "narration": "Re-review — PARTIAL→MET",
+          "narration": "AC-2 now reads MET; resolving the original blocking comment flips the page's derived verdict from send-back back to approve — the loop closed on the operator's own criterion, not a generic re-run.",
           "checks": [
             {
               "msg": "re-review: partial AC count == 0 after dev-loop rerun (got 0)",
@@ -1368,7 +1368,7 @@
         },
         "flows-run-approve-merge": {
           "title": "Approve & merge → completed spine",
-          "narration": "Approve & merge → completed spine",
+          "narration": "The operator approves and the PR merges for real; the run rail deliberately holds at \"active\" rather than \"complete\" while reflection is still in flight — a merged cycle genuinely isn't done until its lesson lands, and the monitor tells the truth about that.",
           "checks": [
             {
               "msg": "monitor: merged run stays \"active\" while reflection is in flight (got \"active\")",
@@ -1421,7 +1421,7 @@
         },
         "flows-run-reflect": {
           "title": "Reflect",
-          "narration": "Reflect",
+          "narration": "The operator answers the reflection questions — WI sizing, repeated actions, a free-text lesson — and only once that submits does the reflector write a brain theme and the run rail finally flips to complete.",
           "checks": [
             {
               "msg": "reflection node greened after tuning feedback (/flows/forge-reflect slice)",
@@ -1453,7 +1453,7 @@
         },
         "flows-run-monitor-deep-dive": {
           "title": "Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)",
-          "narration": "Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)",
+          "narration": "On a freshly gated run, clicking the unifier hex opens its own drawer of gate sub-checks and phase log — every phase and WI hex from a live cycle stays this inspectable, not just while it's running.",
           "checks": [
             {
               "msg": "monitor: [data-page=\"flow-monitor\"][data-page-ready=\"true\"]",
@@ -1512,7 +1512,7 @@
         },
         "flows-run-start-run-cta": {
           "title": "Engine — start-run CTA (forge-develop-scratch, no runs)",
-          "narration": "Engine — start-run CTA (forge-develop-scratch, no runs)",
+          "narration": "On the from-scratch forge-develop-scratch flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones.",
           "checks": [
             {
               "msg": "engine: flow-monitor ready for forge-develop-scratch",
@@ -1538,7 +1538,7 @@
         },
         "flows-run-gate-control": {
           "title": "Engine — gate control + cost on the gated run",
-          "narration": "Engine — gate control + cost on the gated run",
+          "narration": "A second run parks itself at its gate and links straight through to the verdict screen, its accrued cost metered against the flow's own ceiling — the operator progresses this gate from the monitor, not a separate tool.",
           "checks": [
             {
               "msg": "engine: the seeded run shows status gated on the run rail",
@@ -1569,11 +1569,11 @@
     },
     "roadmap": {
       "title": "Project roadmap",
-      "story": "Browse the per-project roadmap and trigger a queued initiative onto the develop flow.",
+      "story": "As an operator, I browse a project's serpentine roadmap of initiatives over time and click \"Start development\" on a pending one — the roadmap extension proving the initiative timeline actually drives what forge builds next, not just a passive history view.",
       "beats": {
         "roadmap-tab": {
           "title": "Per-project Roadmap tab",
-          "narration": "Per-project Roadmap tab",
+          "narration": "The Roadmap tab renders every initiative as a dot on a serpentine timeline; clicking a completed one pops a detail card listing its actual work items — the roadmap is read straight off real cycle history, not a hand-maintained list.",
           "checks": [
             {
               "msg": "roadmap: [data-section=\"project-roadmap\"] rendered",
@@ -1604,7 +1604,7 @@
         },
         "roadmap-start-development": {
           "title": "Start development trigger (DEC-3)",
-          "narration": "Start development trigger (DEC-3)",
+          "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.",
           "checks": [
             {
               "msg": "roadmap: the decomposed initiative is pending (develop-able)",
@@ -1644,11 +1644,11 @@
     },
     "swap-runtime": {
       "title": "Swap the runtime adapter",
-      "story": "Swap the runtime-adapter seam — the registry-driven SDK/model picker.",
+      "story": "As an operator, I open an agent's runtime picker to prove the SDK/model choice is a registry-driven seam — claude selectable today, gemini and codex visibly disabled until their adapters ship, with a range strategy for routing across model tiers.",
       "beats": {
         "swap-runtime-sdk-picker": {
           "title": "Runtime-adapter seam — /agents/project-manager",
-          "narration": "Runtime-adapter seam — /agents/project-manager",
+          "narration": "On the project-manager agent, claude's SDK card is selectable while codex and gemini sit visibly disabled (no adapter registered yet); switching to the range strategy picks multiple Claude tiers and the YAML preview updates live to `strategy: range` — the swap seam, not a config file the operator has to hand-edit.",
           "checks": [
             {
               "msg": "adapter-seam: [data-page=\"agents\"][data-page-ready=\"true\"]",
@@ -1713,11 +1713,11 @@
     },
     "knowledge": {
       "title": "Knowledge graph",
-      "story": "Browse the knowledge graph, pin human guidance, and run KB maintenance (lint/index/OOTB brains).",
+      "story": "As an operator, I browse the real cycles brain as a force-graph, pin a piece of human guidance onto it, and run lint/index maintenance — the knowledge pillar's OOTB brains, edited through both deterministic tooling and my own guidance-plus-ingest loop.",
       "beats": {
         "knowledge-graph": {
           "title": "KB-backend seam — /knowledge?id=cycles (real brain)",
-          "narration": "KB-backend seam — /knowledge?id=cycles (real brain)",
+          "narration": "The knowledge screen force-graphs the real cycles brain — theme and index nodes, KB health panel, a backend selector — and clicking a theme node opens its full article; this is the actual OOTB cross-cycle brain, not a mock graph.",
           "checks": [
             {
               "msg": "kb-seam: [data-page=\"knowledge\"][data-page-ready=\"true\"]",
@@ -1776,7 +1776,7 @@
         },
         "knowledge-pin-guidance": {
           "title": "KB-backend seam — pin-guidance",
-          "narration": "KB-backend seam — pin-guidance",
+          "narration": "The operator types a lesson straight into the HUMAN GUIDANCE panel and pins it; a guidance node appears in the graph immediately — human guidance is how the brain grows between ingest passes, visible as its own node until the next one folds it in.",
           "checks": [
             {
               "msg": "kb-seam: data-guidance-pinned=\"true\" — guidance POST succeeded",
@@ -1803,7 +1803,7 @@
         },
         "knowledge-lint-index": {
           "title": "KB maintenance — lint / index / OOTB brains",
-          "narration": "KB maintenance — lint / index / OOTB brains",
+          "narration": "The operator runs the real kb-lint and kb-index actions from the maintenance panel — structural checks and a regenerated index, not cosmetic buttons — and the KB selector confirms both cycles and forge-dev ship as OOTB brains: the knowledge pillar is edited through lint/index tooling, on top of the human-guidance loop from the beat before.",
           "checks": [
             {
               "msg": "S3.2: kb-lint result badge (got \"lint: 2 finding(s)\")",
@@ -1822,7 +1822,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 600K (got 155103)",
+              "msg": "clip kb-lint.webm under 600K (got 154099)",
               "pass": true
             }
           ],
@@ -1841,7 +1841,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 155103
+              "sizeBytes": 154099
             }
           ],
           "pass": true
@@ -1853,11 +1853,11 @@
     },
     "recovery": {
       "title": "Recover a stuck initiative",
-      "story": "Recover a stuck initiative from the dedicated operator surface.",
+      "story": "As an operator, I open the dedicated recovery screen to inspect, requeue, or abandon a stuck cycle — the recovery extension, proving forge surfaces its own failure states in the UI rather than requiring me to dig through logs or a CLI.",
       "beats": {
         "recovery-surface": {
           "title": "Recovery surface — the operator surface for stuck cycles (DEC-6)",
-          "narration": "Recovery surface — the operator surface for stuck cycles (DEC-6)",
+          "narration": "The /recovery screen renders every stuck initiative (or a clean empty state when there are none) with inspect/requeue/abandon actions — the CLI verbs that used to handle this moved here, so a stuck cycle is recovered in-UI, not by an operator dropping into a terminal.",
           "checks": [
             {
               "msg": "recovery: [data-page=\"recovery\"][data-page-ready=\"true\"] renders (DEC-6 operator surface)",
@@ -1888,7 +1888,7 @@
       "beats": {
         "demo-builder-brief": {
           "title": "Brief the demo agent",
-          "narration": "Brief the demo agent",
+          "narration": "Before the agent touches anything, the operator types one line of steering (\"give the CLI capture more contrast\") into a real briefing field — the regenerate isn't a blind rerun, it takes direction first.",
           "checks": [
             {
               "msg": "DB-1: demo-builder screen renders ([data-page=\"demo-builder\"][data-page-ready=\"true\"])",
@@ -1914,7 +1914,7 @@
         },
         "demo-builder-generate": {
           "title": "The demo agent composes the page, element by element",
-          "narration": "The demo agent composes the page, element by element",
+          "narration": "The agent works through all three demo-process steps — capture, verify, present — each one bound to its own element, then hands back an iframe preview for the operator to review before anything is locked in.",
           "checks": [
             {
               "msg": "DB-2: phase advances to awaiting-review",
@@ -1937,7 +1937,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 600K (got 321726)",
+              "msg": "clip demo-generate.webm under 600K (got 325782)",
               "pass": true
             }
           ],
@@ -1956,14 +1956,14 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder regenerates the page element by element",
-              "sizeBytes": 321726
+              "sizeBytes": 325782
             }
           ],
           "pass": true
         },
         "demo-builder-lock": {
           "title": "Lock the demo in",
-          "narration": "Lock the demo in",
+          "narration": "Locking writes demo.lock.json plus a history entry to disk and returns the operator to the project — the regenerated demo becomes the one reproducible artifact for this cycle, not a throwaway preview.",
           "checks": [
             {
               "msg": "DB-3: the locked success surface renders",
