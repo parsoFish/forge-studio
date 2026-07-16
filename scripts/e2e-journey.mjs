@@ -206,7 +206,11 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
       const sizeBytes = statSync(dest).size;
       clipMeta.push({ file: `clips/${name}.webm`, caption: cap });
       tracker.recordCapture({ kind: 'clip', file: `clips/${name}.webm`, caption: cap, sizeBytes });
-      check(sizeBytes < 400_000, `clip ${name}.webm under 400K (got ${sizeBytes})`);
+      // 600K ceiling: the operator-mandated long tail costs ~60K/s on animated
+      // surfaces (flow-canvas edges, force-graph), so the old 400K target and the
+      // hold-on-final-state pacing are incompatible; 8 clips × ≤600K stays trivial
+      // next to the tracked frame set.
+      check(sizeBytes < 600_000, `clip ${name}.webm under 600K (got ${sizeBytes})`);
       console.log(`  [clip] ${name} — ${cap} (${sizeBytes}B)`);
     }
   } catch (e) {

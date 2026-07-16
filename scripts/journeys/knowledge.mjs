@@ -194,6 +194,9 @@ export const journey = defineJourney({
               // Clip: kb-lint + the lint-resolution scan — read-only/idempotent maintenance,
               // safe to re-drive on a fresh context. Fresh context, own navigation.
               await recordClip(browser, watch, 'kb-lint', '/knowledge?id=cycles', async (p) => {
+                // The force-graph animates continuously — hide it for this clip so every
+                // recorded frame is near-static (the clip's story is the lint panel).
+                await p.addStyleTag({ content: '#kb-svg { visibility: hidden; }' }).catch(() => {});
                 await p.waitForSelector('[data-component="kb-maintenance"] [data-action="kb-lint"]', { timeout: 12000 }).catch(() => {});
                 // Scroll the maintenance panel into view FIRST — the force-graph above it
                 // animates continuously, and while it's in-viewport every recorded frame
@@ -213,7 +216,14 @@ export const journey = defineJourney({
                     null, { timeout: 15000 },
                   ).catch(() => {});
                 }
-              }, { readySel: '[data-page="knowledge"]', caption: 'KB lint findings triaged from the maintenance surface', holdTailMs: 1500 });
+              }, {
+                readySel: '[data-page="knowledge"]',
+                caption: 'KB lint findings triaged from the maintenance surface',
+                holdTailMs: 1500,
+                // Short viewport: the animated force-graph above the maintenance panel
+                // mostly leaves frame, so recorded frames stay near-static (was ~1M).
+                size: { width: 1000, height: 480 },
+              });
 
         },
       },
