@@ -294,6 +294,12 @@ export const journey = defineJourney({
                   // clause (data-preflight-status="ok") but is NOT yet flow-ready — that
                   // needs demo steps + a bound skill + a bound KB, which the skills /
                   // knowledge / project-tuning blocks demonstrate. Assert the true state.
+                  // The preflight fetch is async ('pending' until it lands) — wait for it
+                  // to settle before reading, or a fast page-ready reads a blank panel.
+                  await page.waitForFunction(
+                    () => ['ok', 'hard-fail'].includes(document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') ?? ''),
+                    null, { timeout: 15000 },
+                  ).catch(() => {});
                   const preflightNow = await page.evaluate(() => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') ?? '');
                   check(preflightNow === 'ok', `SU: hard + agent clauses resolved — preflight reports ok (got "${preflightNow}")`);
                   await frame(page, 'onb-2-agent-resolved', 'Part 1 — the agent-resolvable clause resolved via the real "Resolve with agent" button; flow-ready');
