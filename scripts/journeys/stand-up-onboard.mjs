@@ -255,7 +255,11 @@ export const journey = defineJourney({
                   ).catch(() => {});
                   await sleep(WORK);
                 }, { readySel: '[data-section="contract-resolution"]', caption: 'Preflight resolution, staged: auto-fix → agent-resolvable → all-green' });
-                try { rmSync(clipDir, { recursive: true, force: true }); } catch { /* clip-copy cleanup best-effort */ }
+                try {
+                  rmSync(clipDir, { recursive: true, force: true });
+                  // The re-scan on the clip project seeds a Brain-3 KB for it too.
+                  rmSync(join(FORGE_ROOT, 'brain', 'projects', clipSlug), { recursive: true, force: true });
+                } catch { /* clip-copy cleanup best-effort */ }
                 await page.locator('[data-action="apply-preflight-auto"]').first().click().catch(() => {});
                 await sleep(WORK);
                 await page.waitForFunction(
