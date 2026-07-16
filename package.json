@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Idea machine for one human across many side projects. Autonomous multi-agent system.",
   "type": "module",
   "private": true,
