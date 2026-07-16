@@ -209,11 +209,12 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
       const sizeBytes = statSync(dest).size;
       clipMeta.push({ file: `clips/${name}.webm`, caption: cap });
       tracker.recordCapture({ kind: 'clip', file: `clips/${name}.webm`, caption: cap, sizeBytes });
-      // 600K ceiling: the operator-mandated long tail costs ~60K/s on animated
-      // surfaces (flow-canvas edges, force-graph), so the old 400K target and the
-      // hold-on-final-state pacing are incompatible; 8 clips × ≤600K stays trivial
-      // next to the tracked frame set.
-      check(sizeBytes < 600_000, `clip ${name}.webm under 600K (got ${sizeBytes})`);
+      // 2M runaway-catch: clips ARE the demo product now (clips-first pivot) —
+      // full staged progressions with viewer-processing dwells legitimately run
+      // 0.7-1.7M. The guard exists to catch a runaway recording, not to fight
+      // the demo's purpose; total clip weight still nets far below the removed
+      // 45M full-session video.
+      check(sizeBytes < 2_000_000, `clip ${name}.webm under 2M (got ${sizeBytes})`);
       console.log(`  [clip] ${name} — ${cap} (${sizeBytes}B)`);
     }
   } catch (e) {

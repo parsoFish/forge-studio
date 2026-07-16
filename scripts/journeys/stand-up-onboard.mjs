@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { cleanFirstProject, FORGE_ROOT, J4_PROJECT, waitForFile, caption, ONB_EXISTING_SLUG, WORK, cleanOnboardedProject } from '../lib/journey-fixtures.mjs';
@@ -209,14 +209,21 @@ export const journey = defineJourney({
                 const resolutionPanel = await page.waitForSelector('[data-section="contract-resolution"]', { timeout: 15000 }).then(() => true).catch(() => false);
                 check(resolutionPanel, 'SU: contract-resolution panel renders when a clause fails');
                 await frame(page, 'onb-0-failing', 'Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)');
-                // Clip: the FULL staged progression, on a fresh context — placed BEFORE the
-                // main page's own actions below so the clauses are still failing when the
-                // clip navigates in, capturing the real failing→resolved flip (once the
-                // main page resolves them below, the clauses — and their buttons — are gone
-                // for good). Longer clip: failing clause visible → auto-fix applied → the
-                // agent-resolvable clause routed for real (spawn suppressed, generation
-                // emulated) → resolved via a real re-scan → all-green (flow-ready) hold.
-                await recordClip(browser, watch, 'onboard-resolve', `/projects/${onbSlug}`, async (p) => {
+                // Clip: the FULL staged progression on a fresh context — driven against a
+                // CLIP-ONLY COPY of the onboarded project so the canonical slug's clauses
+                // stay failing for the main page's own resolution story below (the clip
+                // previously resolved C8 on the shared slug, breaking the main assertions).
+                const clipSlug = `${onbSlug}-clip`;
+                const clipDir = join(FORGE_ROOT, 'projects', clipSlug);
+                try {
+                  rmSync(clipDir, { recursive: true, force: true });
+                  cpSync(join(FORGE_ROOT, 'projects', onbSlug), clipDir, { recursive: true });
+                  const clipCfgPath = join(clipDir, '.forge', 'project.json');
+                  const clipCfg = JSON.parse(readFileSync(clipCfgPath, 'utf8'));
+                  if (clipCfg.name) clipCfg.name = clipSlug;
+                  writeFileSync(clipCfgPath, JSON.stringify(clipCfg, null, 2));
+                } catch (err) { console.warn(`[su] clip-project copy failed: ${err.message}`); }
+                await recordClip(browser, watch, 'onboard-resolve', `/projects/${clipSlug}`, async (p) => {
                   // Stage 1 — failing clauses visible (C1/C2 already seed-fixed above; ARTIFACTS
                   // + the agent-resolvable C8 are still genuinely failing at this point).
                   await p.waitForSelector('[data-section="contract-resolution"]', { timeout: 10000 }).catch(() => {});
@@ -235,9 +242,9 @@ export const journey = defineJourney({
                   await p.waitForURL(/\/instructions\//, { timeout: 10000 }).catch(() => {});
                   await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 10000 }).catch(() => {});
                   await sleep(WORK);
-                  writeOnboardedAgentsMd(join(FORGE_ROOT, 'projects', onbSlug));
+                  writeOnboardedAgentsMd(join(FORGE_ROOT, 'projects', clipSlug));
                   // Stage 4 — the real re-scan: back to the project page, resolved + all-green.
-                  await p.goto(watch.uiUrl + `/projects/${onbSlug}`, { waitUntil: 'domcontentloaded' });
+                  await p.goto(watch.uiUrl + `/projects/${clipSlug}`, { waitUntil: 'domcontentloaded' });
                   await p.waitForFunction(
                     () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
                     null, { timeout: 20000 },
@@ -248,6 +255,7 @@ export const journey = defineJourney({
                   ).catch(() => {});
                   await sleep(WORK);
                 }, { readySel: '[data-section="contract-resolution"]', caption: 'Preflight resolution, staged: auto-fix → agent-resolvable → all-green' });
+                try { rmSync(clipDir, { recursive: true, force: true }); } catch { /* clip-copy cleanup best-effort */ }
                 await page.locator('[data-action="apply-preflight-auto"]').first().click().catch(() => {});
                 await sleep(WORK);
                 await page.waitForFunction(
