@@ -159,15 +159,19 @@ export function createBeatTracker() {
     beat.checks.push({ msg, pass: !!pass });
   }
 
+  /** Captures fired outside any beat (e.g. the end card) land here instead of
+   *  being dropped; they render as a trailing epilogue section in the gallery. */
+  const epilogueCaptures = [];
+
   /** @param {{kind:'frame'|'clip', file:string, caption:string, sizeBytes?:number}} capture */
   function recordCapture({ kind, file, caption, sizeBytes }) {
+    const capture = { kind, file, caption };
+    if (sizeBytes !== undefined) capture.sizeBytes = sizeBytes;
     if (!current) {
-      console.warn(`[journey-runtime] recordCapture fired with no active beat (file: "${file}")`);
+      epilogueCaptures.push(capture);
       return;
     }
     const beat = ensureBeat(current.journeyId, current.beatId);
-    const capture = { kind, file, caption };
-    if (sizeBytes !== undefined) capture.sizeBytes = sizeBytes;
     beat.captures.push(capture);
   }
 
@@ -217,6 +221,9 @@ export function createBeatTracker() {
       checksFailed += jChecksFailed;
     }
 
+    framesTotal += epilogueCaptures.filter((c) => c.kind === 'frame').length;
+    clipsTotal += epilogueCaptures.filter((c) => c.kind === 'clip').length;
+
     return {
       generatedAt: generatedAt ?? new Date().toISOString(),
       project,
@@ -224,6 +231,7 @@ export function createBeatTracker() {
       requestedJourneys,
       executedJourneys,
       journeys: journeysOut,
+      epilogue: { captures: epilogueCaptures },
       totals: { checksTotal, checksFailed, framesTotal, clipsTotal },
       exitCode: checksFailed > 0 ? 1 : 0,
     };
@@ -264,7 +272,7 @@ function renderJourney(j) {
  */
 export function renderGallery(results, { videoName, title = 'Forge Studio — the operator walkthrough', subtitle = '' } = {}) {
   const journeysHtml = results.executedJourneys
-    .map((jid) => (results.journeys[jid] ? renderJourney(jid, results.journeys[jid]) : ''))
+    .map((jid) => (results.journeys[jid] ? renderJourney(results.journeys[jid]) : ''))
     .join('\n');
 
   const videoCaption = results.mode === 'full'
@@ -272,6 +280,11 @@ export function renderGallery(results, { videoName, title = 'Forge Studio — th
     : `Partial walkthrough — journeys: ${results.executedJourneys.join(', ')}`;
   const videoHtml = videoName
     ? `<h2>${videoCaption}</h2><video src="${videoName}" controls autoplay muted loop></video>`
+    : '';
+
+  const epilogueCaptures = results.epilogue?.captures ?? [];
+  const epilogueHtml = epilogueCaptures.length
+    ? `<section><h2>Finale</h2>${epilogueCaptures.map(renderCapture).join('\n')}</section>`
     : '';
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
@@ -288,6 +301,7 @@ figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}
 ${subtitle ? `<p>${subtitle}</p>` : ''}
 ${videoHtml}
 ${journeysHtml}
+${epilogueHtml}
 </body></html>`;
 }
 
