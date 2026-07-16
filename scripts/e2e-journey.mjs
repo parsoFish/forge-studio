@@ -191,6 +191,10 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
   try {
     mkdirSync(tmp, { recursive: true });
     clipCtx = await browser.newContext({ viewport: size, recordVideo: { dir: tmp, size } });
+    // Bound EVERY locator action inside interact(): the playwright default is 30s,
+    // and a single missing element records 30s of dead video into the clip
+    // (observed: a 129s clip from three swallowed locator timeouts).
+    clipCtx.setDefaultTimeout(5000);
     clipPage = await clipCtx.newPage();
     // opts.freezeAnimations: pause CSS animations/transitions for the whole clip —
     // continuous shimmer/pulse effects dominate VP8 size on otherwise-static scenes.
