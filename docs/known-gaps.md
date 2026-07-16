@@ -38,16 +38,24 @@ cycle flows** until the run-model stamps the real `flowId` (`orchestrator/run-mo
 (`forge-architect`/`forge-develop`/`forge-reflect`); it surfaces only when a second,
 operator-authored flow is actually run.
 
-### 2. Architect hex shows `$0.00` cost in `ui:journey` (architect cost-observability gap)
+### 2. Architect hex shows `$0.00` cost — correct out-of-cycle accounting, not a gap (clarified 2026-07-16)
 
-The architect phase hex can render `$0.00` in some `ui:journey` views because the
-seeded architect events carry no cost rollup to that hex. The 2026-07-14 demo
-overhaul asserts the architect cost on the **`forge-architect` flow slice**
-(`data-phase-cost-usd > 0`) where it does surface, so `ui:journey` is **fully green
-(0 DOM-as-metrics failures)**; this item remains only as a real architect
-cost-observability nuance — the architect's live cost/output tracking is thinner
-than the other phases' (see the architect-observability operator notes). Independent
-of any single branch's roadmap.
+The architect phase hex legitimately renders `$0.00`. Real cycles meter the
+architect turn entirely **out-of-cycle** — only its wall-clock duration is
+metered in-cycle — confirmed against the archived cycle corpus, e.g.
+`_queue/done/INIT-2026-07-11-cli-sort-flag.md` (`architect_cost_usd: 0`,
+`architect_duration_ms: 239486`). The 2026-07-16 journey rebuild
+(`scripts/journeys/flows-run.mjs`) asserts this directly: on the
+`/flows/forge-architect` slice the architect hex is asserted at
+`data-status="complete"` (**not** `data-phase-cost-usd > 0` — that assertion
+was removed because it no longer matched reality), while the PM hex on the
+same slice is only asserted *present*, not on its cost. Cost `> 0` is
+correctly asserted where it really does accrue in-cycle: the develop-flow
+phase hexes (`/flows/forge-develop`) and the gated engine run
+(`expectPhaseCost` calls in `flows-run.mjs`). This is not a forge defect —
+the entry is kept only as a correction against its own prior wording, which
+incorrectly framed `$0.00` as an "observability gap" and claimed the harness
+asserted cost `> 0` on the architect hex itself; neither was accurate.
 
 ### 3. brain-ingest haiku R1 A/B follow-up
 
@@ -85,17 +93,22 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 8. **Untracked `demos/verify/<handle>/` gate artifacts**
    (summaries + videos) — decide keep/commit/clean (currently absent; tree was
    clean at close).
-9. **e2e-journey demo overhaul — deferred tails (2026-07-14):**
-   - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) was
-     the one AI-generation surface NOT added to the journey (element-binding is the
-     most complex seed; recipe exists). Add it to complete the AUTHOR-generation set.
-   - The **`CLAUDE.md` "forge-ui DOM-as-metrics convention" section is partially
-     stale** — it documents the deleted `/dashboard` surface (`data-conn-state`,
-     `data-phase-hex`, `data-wi-hex`, `agent-graph`, `pipeline-tree`, `scheduler-banner`,
-     `data-cost-badge`, `data-page="architect-session"` — all **0 occurrences** in
-     `forge-ui/`). Hexes are now `data-mon-node` + `data-hex-kind`; the pipeline lives
-     on `/flows/[id]` (`data-pannable`). Reconcile the section against the real surface
-     (the studio-routes map from the S5 investigation is the ground truth).
+9. **e2e-journey demo overhaul — deferred tails (2026-07-14) — *resolved 2026-07-16:***
+   - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) is
+     now in the journey set: `scripts/journeys/demo-builder.mjs` covers brief →
+     generate → lock in 3 beats, plus a tracked
+     `demos/e2e/clips/demo-generate.webm` long-tail clip.
+   - The **`CLAUDE.md` "forge-ui DOM-as-metrics convention" section** has been
+     reconciled against the live `forge-ui/` tree (this pass, S5) — every stale
+     `/dashboard`-era attribute (`data-conn-state`, `data-phase-hex`, `data-wi-hex`,
+     `agent-graph`, `pipeline-tree`, `scheduler-banner`, `data-cost-badge`,
+     `data-page="architect-session"`, `escalation-id` — all confirmed **0
+     occurrences** in `forge-ui/`) is gone, replaced by a per-route inventory
+     (library, `/flows/[id]`, `/artifact`, `/agents/[id]`, `/projects[/id]`,
+     `/architect/new` + `/interview`, `/instructions/[sid]`, `/project-brain/[sid]`,
+     `/demo/[sid]`, `/knowledge[/new]`, `/recovery`, `/skills`) plus the shared
+     status vocabularies (`WiStatus`, `PhaseStatus`, `RunStatus`, roadmap status,
+     `HexKind`), and the harness paragraph rewritten for the 11-journey model.
 10. **`ui:journey` can trigger a REAL cycle if a scheduler is active (harness-isolation
     hazard, 2026-07-14)** — *resolved 2026-07-16:* the walkthrough seeds queue
     manifests (`pending`/`in-flight`) to emulate a cycle. If a **`forge serve`
