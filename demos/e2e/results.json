@@ -1,0 +1,1850 @@
+{
+  "generatedAt": "2026-07-16T07:40:20.942Z",
+  "project": "mdtoc",
+  "mode": "full",
+  "requestedJourneys": [
+    "stand-up-create",
+    "agents",
+    "flows-author",
+    "stand-up-onboard",
+    "skills",
+    "flows-run",
+    "roadmap",
+    "swap-runtime",
+    "knowledge",
+    "recovery"
+  ],
+  "executedJourneys": [
+    "stand-up-create",
+    "agents",
+    "flows-author",
+    "stand-up-onboard",
+    "skills",
+    "flows-run",
+    "roadmap",
+    "swap-runtime",
+    "knowledge",
+    "recovery"
+  ],
+  "journeys": {
+    "stand-up-create": {
+      "title": "Stand up a project (create new)",
+      "story": "Create a new project from Studio's library: title card and library orientation, AI-assisted AGENTS.md + project-brain generation, and the project builder.",
+      "beats": {
+        "su-create-title": {
+          "title": "Title card — Studio library",
+          "narration": "Title card — Studio library",
+          "checks": [
+            {
+              "msg": "library: [data-page=\"library\"][data-page-ready=\"true\"]",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "01-a1-0-title.png",
+              "caption": "Title — \"Forge Studio: author a flow, run it, swap its engine\""
+            }
+          ],
+          "pass": true
+        },
+        "su-create-library": {
+          "title": "Library — everything is data",
+          "narration": "Library — everything is data",
+          "checks": [
+            {
+              "msg": "library: [data-section=\"flows\"] present (found 1, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: [data-section=\"agents\"] present (found 1, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: [data-section=\"projects\"] present (found 1, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: [data-section=\"kbs\"] present (found 1, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: operator pulse panel ([data-pulse-flows]) present",
+              "pass": true
+            },
+            {
+              "msg": "library: ≥1 flow card in flows section (found 4, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: ≥1 agent card in agents section (found 8, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: ≥1 project card in projects section (found 5, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: ≥1 kb card in kbs section (found 6, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "library: flows section data-count ≥1 (got 4)",
+              "pass": true
+            },
+            {
+              "msg": "library: agents section data-count ≥1 (got 8)",
+              "pass": true
+            },
+            {
+              "msg": "library: projects section data-count ≥1 (got 5)",
+              "pass": true
+            },
+            {
+              "msg": "library: kbs section data-count ≥1 (got 6)",
+              "pass": true
+            },
+            {
+              "msg": "library: the authored \"forge-develop-scratch\" flow appears as a card (registered as data)",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "su-create-orientation": {
+          "title": "First-run orientation + discoverable creation",
+          "narration": "First-run orientation + discoverable creation",
+          "checks": [
+            {
+              "msg": "J1: library \"+ New Agent\" creation CTA ([data-action=\"new-agent\"]) is present",
+              "pass": true
+            },
+            {
+              "msg": "J1: \"+ New Agent\" CTA is enabled (creation is discoverable, not a dead greyed button)",
+              "pass": true
+            },
+            {
+              "msg": "J1: \"+ New Agent\" routes to the agent builder (got \"/agents/new\")",
+              "pass": true
+            },
+            {
+              "msg": "J1: populated library reports data-first-run=\"false\" (got \"false\")",
+              "pass": true
+            },
+            {
+              "msg": "J1: orientation panel correctly hidden when the library is populated (shown only on a fresh install)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "02-a1-1-library.png",
+              "caption": "A1 — Studio library: flows/agents/projects/KBs as data + operator pulse"
+            }
+          ],
+          "pass": true
+        },
+        "su-create-instructions": {
+          "title": "instructions-creator — generate AGENTS.md (AI-assisted)",
+          "narration": "instructions-creator — generate AGENTS.md (AI-assisted)",
+          "checks": [
+            {
+              "msg": "AI-1: instructions screen renders ([data-page=\"instructions-interview\"])",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: interview returns clarifying questions",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: ≥2 instructions questions (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: drafted AGENTS.md awaits the operator verdict",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: AGENTS.md committed — back-to-project offered",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "11-instr-0-interview.png",
+              "caption": "Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)"
+            },
+            {
+              "kind": "frame",
+              "file": "12-instr-1-draft.png",
+              "caption": "Part 1 — the generated AGENTS.md draft, awaiting approval"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/instr-generate.webm",
+              "caption": "instructions-creator: AGENTS.md generated with AI assistance",
+              "sizeBytes": 206279
+            },
+            {
+              "kind": "frame",
+              "file": "13-instr-2-committed.png",
+              "caption": "Part 1 — AGENTS.md generated + approved (AI-assisted)"
+            }
+          ],
+          "pass": true
+        },
+        "su-create-project-brain": {
+          "title": "project-brain-builder — seed the project brain (AI-assisted)",
+          "narration": "project-brain-builder — seed the project brain (AI-assisted)",
+          "checks": [
+            {
+              "msg": "AI-2: project-brain screen renders ([data-page=\"project-brain\"])",
+              "pass": true
+            },
+            {
+              "msg": "AI-2: staged themes presented for review",
+              "pass": true
+            },
+            {
+              "msg": "AI-2: ≥3 seed themes drafted (found 4, want ≥3)",
+              "pass": true
+            },
+            {
+              "msg": "AI-2: seed brain committed — bind-and-return offered",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "14-pbrain-0-analyzing.png",
+              "caption": "Part 1 — project-brain-builder analyses the project (AI-assisted)"
+            },
+            {
+              "kind": "frame",
+              "file": "15-pbrain-1-review.png",
+              "caption": "Part 1 — the generated seed brain: themes to review + approve"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/pbrain-generate.webm",
+              "caption": "project-brain-builder: the seed brain generated with AI assistance",
+              "sizeBytes": 90250
+            },
+            {
+              "kind": "frame",
+              "file": "16-pbrain-2-committed.png",
+              "caption": "Part 1 — project brain seeded (grows with the project)"
+            }
+          ],
+          "pass": true
+        },
+        "su-create-project-builder": {
+          "title": "Project builder — /projects/mdtoc",
+          "narration": "Project builder — /projects/mdtoc",
+          "checks": [
+            {
+              "msg": "project-builder: [data-page=\"projects\"][data-page-ready=\"true\"]",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: data-project-id=\"mdtoc\" (got \"mdtoc\")",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: north star field present",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: [data-step-count] attribute present (got 3)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: [data-ready-count] attribute present (got 5)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: [data-flow-ready] attribute present (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: instructions agent launcher present (Stage A)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: demo agent launcher present (Stage B)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: contract-resolution panel wired (present on gaps, absent when ready)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: data-step-count incremented after preset click (3→4)",
+              "pass": true
+            },
+            {
+              "msg": "project-builder: data-dirty=\"true\" after adding demo step (got \"true\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "24-a4-0-project-builder.png",
+              "caption": "A4 — project builder: north star, demo timeline, skills, contract readiness"
+            },
+            {
+              "kind": "frame",
+              "file": "25-a4-1-project-dirty.png",
+              "caption": "A4 — data-step-count incremented (3→4), data-dirty=\"true\" (no save)"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 40,
+      "checksFailed": 0
+    },
+    "agents": {
+      "title": "Compose an agent",
+      "story": "Build the three starter agents from the curated library, then edit an existing agent's composition in the agent builder.",
+      "beats": {
+        "agents-starters": {
+          "title": "Author plan/dev/review agents from the starter library",
+          "narration": "Author plan/dev/review agents from the starter library",
+          "checks": [
+            {
+              "msg": "J2: new-agent shows the curated starter picker ([data-section=\"starter-picker\"])",
+              "pass": true
+            },
+            {
+              "msg": "J2: advanced config is not dumped on the picker (progressive disclosure)",
+              "pass": true
+            },
+            {
+              "msg": "J2: picker offers ≥3 starters + blank (got 4 options)",
+              "pass": true
+            },
+            {
+              "msg": "J2: advanced config collapsed by default after picking a starter (got \"false\")",
+              "pass": true
+            },
+            {
+              "msg": "J2: required fields (purpose, process) visible without opening Advanced",
+              "pass": true
+            },
+            {
+              "msg": "J2: picking a starter pre-fills + marks the form dirty (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "J2: saving the \"plan\" starter writes skills/plan/SKILL.md",
+              "pass": true
+            },
+            {
+              "msg": "J2: saving the \"dev\" starter writes skills/dev/SKILL.md",
+              "pass": true
+            },
+            {
+              "msg": "J2: saving the \"review\" starter writes skills/review/SKILL.md",
+              "pass": true
+            },
+            {
+              "msg": "J2: `forge studio lint` validates the three authored agents (exit 0)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "03-j2-0-starter-picker.png",
+              "caption": "J2 — new agent: pick a curated starter (plan/dev/review) or blank"
+            },
+            {
+              "kind": "frame",
+              "file": "04-j2-1-builder-prefilled.png",
+              "caption": "J2 — starter pre-fills required fields; advanced collapsed"
+            },
+            {
+              "kind": "frame",
+              "file": "05-j2-2-agents-authored.png",
+              "caption": "J2 — plan/dev/review agents authored from starters, lint-green"
+            }
+          ],
+          "pass": true
+        },
+        "agents-builder": {
+          "title": "Agent builder — /agents/project-manager",
+          "narration": "Agent builder — /agents/project-manager",
+          "checks": [
+            {
+              "msg": "agent-builder: [data-page=\"agents\"][data-page-ready=\"true\"]",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: catalog palette renders ≥1 chip (found 25, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: drop zone [data-accepts=\"skill\"] present",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: drop zone [data-accepts=\"tool\"] present",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: drop zone [data-accepts=\"mcp\"] present",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: drop zone [data-accepts=\"hook\"] present",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: data-agent-id non-empty (got \"project-manager\")",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: [data-ready-count] attribute present (got 6)",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: readiness ≥4 checks pass for project-manager (got 6)",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: [data-sdk] attribute present (got \"claude\")",
+              "pass": true
+            },
+            {
+              "msg": "agent-builder: data-dirty=\"true\" after editing purpose field (got \"true\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "22-a3-0-agent-builder.png",
+              "caption": "A3 — agent builder: catalog, drop zones, runtime, readiness panel"
+            },
+            {
+              "kind": "frame",
+              "file": "23-a3-1-agent-dirty.png",
+              "caption": "A3 — data-dirty flips on edit (discarded, no save — seed SKILL.md immutable)"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 21,
+      "checksFailed": 0
+    },
+    "flows-author": {
+      "title": "Author a flow",
+      "story": "Author a cycle flow as data: string agents into a new flow, give it seeded work, and prove a from-scratch flow is structurally identical to the production seed.",
+      "beats": {
+        "flows-author-new-flow": {
+          "title": "String plan/dev/review into a flow (new-flow builder)",
+          "narration": "String plan/dev/review into a flow (new-flow builder)",
+          "checks": [
+            {
+              "msg": "J3: library \"+ New Flow\" CTA is enabled and routes to the flow builder",
+              "pass": true
+            },
+            {
+              "msg": "J3: new-flow canvas seeded from the basic starter (≥3 nodes, got 3)",
+              "pass": true
+            },
+            {
+              "msg": "J3: project/KB/triggers collapsed under Advanced by default (progressive disclosure)",
+              "pass": true
+            },
+            {
+              "msg": "J3: saving the new flow writes studio/flows/my-first-flow/flow.yaml",
+              "pass": true
+            },
+            {
+              "msg": "J3: saved flow persists node positions (every node has numeric x/y; 3 nodes)",
+              "pass": true
+            },
+            {
+              "msg": "J3: authored flow keeps the human verdict gate (zero-gate flows are rejected)",
+              "pass": true
+            },
+            {
+              "msg": "J3: `forge studio lint` validates the authored flow (exit 0)",
+              "pass": true
+            },
+            {
+              "msg": "J3: authored flow is runnable (data-can-start=\"true\", got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→244)",
+              "pass": true
+            },
+            {
+              "msg": "J3: no-runs flow shows the kickoff surface ([data-kickoff-kind]=\"generic\")",
+              "pass": true
+            },
+            {
+              "msg": "J3: node position PERSISTS across reload (x 244 → 244)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "06-j3-0-new-flow-seeded.png",
+              "caption": "J3 — new flow seeded from the basic starter (plan → dev → review)"
+            },
+            {
+              "kind": "frame",
+              "file": "07-j3-1-flow-arranged.png",
+              "caption": "J3 — authored flow, node hand-arranged on the canvas"
+            },
+            {
+              "kind": "frame",
+              "file": "08-j3-2-flow-persisted.png",
+              "caption": "J3 — node positions persist across reload (authored flow is durable)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-author-seeded-run": {
+          "title": "Give the authored flow work (seeded run on my-first-flow)",
+          "narration": "Give the authored flow work (seeded run on my-first-flow)",
+          "checks": [
+            {
+              "msg": "J5: the authored flow shows the seeded run (run-count 1)",
+              "pass": true
+            },
+            {
+              "msg": "J5: monitor renders the \"plan\" hex of the authored flow",
+              "pass": true
+            },
+            {
+              "msg": "J5: monitor renders the \"dev\" hex of the authored flow",
+              "pass": true
+            },
+            {
+              "msg": "J5: monitor renders the \"review\" hex of the authored flow",
+              "pass": true
+            },
+            {
+              "msg": "J5: plan phase shows complete (got \"complete\")",
+              "pass": true
+            },
+            {
+              "msg": "J5: review phase awaits the human verdict (got \"active\")",
+              "pass": true
+            },
+            {
+              "msg": "J5: the authored run shows accrued per-phase cost",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "19-j5-0-authored-run.png",
+              "caption": "J5 — the authored flow, given work, runs plan → dev → review to the verdict gate"
+            }
+          ],
+          "pass": true
+        },
+        "flows-author-scratch-parity": {
+          "title": "Build the forge-develop flow from scratch (flow-as-data)",
+          "narration": "Build the forge-develop flow from scratch (flow-as-data)",
+          "checks": [
+            {
+              "msg": "author-from-scratch: `forge studio lint` validates the authored forge-develop-scratch flow (exit 0)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: node set matches the seed (dev,review,unifier)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: the review gate lands on verdict (matches the forge-develop seed)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: edge count matches the seed (2)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: flow-monitor ready for the authored flow",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: engine can run the authored flow (data-can-start=\"true\", got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: BUILD tab click flips data-active-tab=\"build\"",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: BUILD canvas renders ≥3 nodes for the authored forge-develop-scratch flow (got 3)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: ≥1 [data-flow-node] rendered in BUILD canvas (found 3, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: [data-component=\"agent-palette\"] present (drag more agents in)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: palette has ≥1 [data-palette-chip] (found 18, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: palette agent chips loaded (found 11, want ≥3)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: library agents appear in the palette (developer-ralph,project-manager,project-scoped-review)",
+              "pass": true
+            },
+            {
+              "msg": "author-from-scratch: [data-goal-set] present in FlowHeader",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "20-a2-0-scratch-monitor.png",
+              "caption": "A2 — authored forge-develop-scratch: lint green, parity with seed, runnable by the engine"
+            },
+            {
+              "kind": "frame",
+              "file": "21-a2-1-scratch-build.png",
+              "caption": "A2 — BUILD canvas: the authored cycle (3 nodes) on the ReactFlow canvas, palette + goal field"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/flow-build.webm",
+              "caption": "the flow builder — compose the cycle as data (nodes · palette · gates)",
+              "sizeBytes": 398299
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 32,
+      "checksFailed": 0
+    },
+    "stand-up-onboard": {
+      "title": "Stand up a project (onboard existing)",
+      "story": "Onboard an existing project in the UI and resolve it to the forge project contract.",
+      "beats": {
+        "su-onboard-project": {
+          "title": "Onboard a project from the UI",
+          "narration": "Onboard a project from the UI",
+          "checks": [
+            {
+              "msg": "J4: library \"+ New Project\" CTA is enabled and routes to onboarding",
+              "pass": true
+            },
+            {
+              "msg": "J4: new-project shows the onboarding form ([data-section=\"project-onboard\"])",
+              "pass": true
+            },
+            {
+              "msg": "J4: advanced contract clauses collapsed by default (only required fields shown)",
+              "pass": true
+            },
+            {
+              "msg": "J4: onboarding writes projects/journey-demo-project/.forge/project.json",
+              "pass": true
+            },
+            {
+              "msg": "J4: project.json carries the C1 quality_gate_cmd",
+              "pass": true
+            },
+            {
+              "msg": "J4: project.json carries the DEMO block (demo.shape)",
+              "pass": true
+            },
+            {
+              "msg": "J4: project.json carries the north star",
+              "pass": true
+            },
+            {
+              "msg": "J4: the project is auto-discovered from disk (.forge/project.json present)",
+              "pass": true
+            },
+            {
+              "msg": "J4: onboarded project passes ≥3 contract-readiness checks (got 3)",
+              "pass": true
+            },
+            {
+              "msg": "J4: onboarding adds exactly one project to the library (5→6, journey-demo-project listed=true)",
+              "pass": true
+            },
+            {
+              "msg": "J4: `forge studio lint` stays green with the onboarded project (exit 0)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "09-j4-0-onboard-form.png",
+              "caption": "J4 — onboard a project: required fields only (quality gate, north star)"
+            },
+            {
+              "kind": "frame",
+              "file": "10-j4-1-project-readiness.png",
+              "caption": "J4 — onboarded project: contract readiness reflects the hard fields"
+            }
+          ],
+          "pass": true
+        },
+        "su-onboard-preflight": {
+          "title": "onboard existing → deterministically resolve a failing clause",
+          "narration": "onboard existing → deterministically resolve a failing clause",
+          "checks": [
+            {
+              "msg": "SU: onboard-project enables once the required fields are filled",
+              "pass": true
+            },
+            {
+              "msg": "SU: onboarding created project \"journey-onboard-existing\"",
+              "pass": true
+            },
+            {
+              "msg": "SU: contract-resolution panel renders when a clause fails",
+              "pass": true
+            },
+            {
+              "msg": "SU: auto-fix resolved the failing clause (existing repo aligned to the contract)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "17-onb-0-failing.png",
+              "caption": "Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)"
+            },
+            {
+              "kind": "frame",
+              "file": "18-onb-1-resolved.png",
+              "caption": "Part 1 — clause auto-resolved: the existing repo is now contract-ready"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 15,
+      "checksFailed": 0
+    },
+    "skills": {
+      "title": "Compose a skill",
+      "story": "Browse the OOTB community-sourced skill library, edit a skill, and author a brand-new one.",
+      "beats": {
+        "skills-ootb-library": {
+          "title": "OOTB skill library (community-sourced)",
+          "narration": "OOTB skill library (community-sourced)",
+          "checks": [
+            {
+              "msg": "SK-1: catalog ships an OOTB skill library (9 community-skills)",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: an OOTB skill cites an online source (https://github.com/obra/superpowers)",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: OOTB skill carries provenance + stars (obra/superpowers + Matt Pocock, 228k)",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: agent-builder renders the Component Library",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: OOTB skill \"handoff\" is draggable in the library",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: OOTB skill \"superpowers-tdd\" is draggable in the library",
+              "pass": true
+            },
+            {
+              "msg": "SK-1: OOTB skill \"security-review\" is draggable in the library",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "26-sk-0-library.png",
+              "caption": "Part 2 (skills) — the OOTB skill library, sourced from community repos"
+            }
+          ],
+          "pass": true
+        },
+        "skills-edit": {
+          "title": "Edit a skill",
+          "narration": "Edit a skill",
+          "checks": [
+            {
+              "msg": "SK-2: editor loaded the skill ([data-agent-id=\"journey-ootb-review\"])",
+              "pass": true
+            },
+            {
+              "msg": "SK-2: saving rewrites skills/journey-ootb-review/SKILL.md",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "27-sk-1-edit.png",
+              "caption": "Part 2 (skills) — editing a skill in the builder"
+            }
+          ],
+          "pass": true
+        },
+        "skills-create": {
+          "title": "Author a new skill",
+          "narration": "Author a new skill",
+          "checks": [
+            {
+              "msg": "SK-3: skill builder renders ([data-page=\"skill-builder\"])",
+              "pass": true
+            },
+            {
+              "msg": "SK-3: [data-section=\"skill-new\"] present",
+              "pass": true
+            },
+            {
+              "msg": "SK-3: create-skill enables once name + description are filled",
+              "pass": true
+            },
+            {
+              "msg": "SK-3: creating writes skills/api-contract-review/SKILL.md",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "28-sk-2-create.png",
+              "caption": "Part 2 (skills) — authoring a brand-new skill"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/sk-create.webm",
+              "caption": "authoring a new skill from scratch",
+              "sizeBytes": 52033
+            },
+            {
+              "kind": "frame",
+              "file": "29-sk-3-created.png",
+              "caption": "Part 2 (skills) — new skill authored → SKILL.md on disk → ready to compose"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 13,
+      "checksFailed": 0
+    },
+    "flows-run": {
+      "title": "Run a gated cycle",
+      "story": "Run a gated cycle end-to-end on a real mdtoc roadmap feature: idea → architect interview → PLAN gate → autonomous build → review gate → merge → reflect, plus the flow-engine monitor controls.",
+      "beats": {
+        "flows-run-idea": {
+          "title": "Operator drops the mdtoc idea",
+          "narration": "Operator drops the mdtoc idea",
+          "checks": [
+            {
+              "msg": "[data-section=\"new-idea\"] present on /architect/new",
+              "pass": true
+            },
+            {
+              "msg": "[data-action=\"start-architect\"] navigates to /architect/<sid>/interview",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "30-r1-0-idea-typed.png",
+              "caption": "R1 — operator types a real mdtoc feature idea"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-grounding": {
+          "title": "Architect grounds itself — P3 activity panel",
+          "narration": "Architect grounds itself — P3 activity panel",
+          "checks": [
+            {
+              "msg": "P3: [data-section=\"architect-activity\"] rendered",
+              "pass": true
+            },
+            {
+              "msg": "P3: activity panel data-activity-count ≥1 (got 8)",
+              "pass": true
+            },
+            {
+              "msg": "P3: at least one reasoning row rendered in the activity panel",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "31-r1-1-activity-midstream.png",
+              "caption": "R1 (mid-stream) — P3 activity panel filling while the architect reads the CLI source"
+            },
+            {
+              "kind": "frame",
+              "file": "32-r1-1-activity-settled.png",
+              "caption": "R1 (settled) — P3 activity panel: tool calls + reasoning rows persisted"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-questions": {
+          "title": "Architect returns questions",
+          "narration": "Architect returns questions",
+          "checks": [
+            {
+              "msg": "[data-section=\"architect-interview\"] rendered with questions",
+              "pass": true
+            },
+            {
+              "msg": "architect returned ≥2 questions (found 2, want ≥2)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "33-r1-2-questions.png",
+              "caption": "R1 — architect returns 2 clarifying questions (schema design + acc fixture)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-freetext": {
+          "title": "Operator answers — P2 free-text override on Q2",
+          "narration": "Operator answers — P2 free-text override on Q2",
+          "checks": [
+            {
+              "msg": "P2: Q2 [data-question-resolved=\"true\"] after free-text entry",
+              "pass": true
+            },
+            {
+              "msg": "P2: all Q2 radio options unselected — free-text overrides the radio",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "34-r1-3-freetext.png",
+              "caption": "R1 — P2: operator types a free-text answer on Q2 (overriding the option list)"
+            },
+            {
+              "kind": "frame",
+              "file": "35-r1-3b-drafting.png",
+              "caption": "R1 — planning: architect drafts with the answers folded in"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-stall": {
+          "title": "Stall cameo — P1 StuckWarning",
+          "narration": "Stall cameo — P1 StuckWarning",
+          "checks": [
+            {
+              "msg": "P1: [data-architect-stale=\"true\"] rendered when session staleMs > 120s",
+              "pass": true
+            },
+            {
+              "msg": "P1: [data-architect-stale] clears after session refresh",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "36-r1-4-stale-warning.png",
+              "caption": "R1 — P1: StuckWarning renders when the architect goes quiet for >2 min"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-draft-cost": {
+          "title": "Architect drafts — P4 real cost",
+          "narration": "Architect drafts — P4 real cost",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "37-r1-5-architect-cost.png",
+              "caption": "R1 — P4: architect hex greens with real cost pill ($0.46, 95s)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-plan-gate": {
+          "title": "Rich PLAN.html (gate)",
+          "narration": "Rich PLAN.html (gate)",
+          "checks": [
+            {
+              "msg": "plan gate renders the rich PLAN.html iframe",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "38-r2-0-plan-html.png",
+              "caption": "R2 — rich PLAN.html with Given/When/Then AC cards"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-send-back": {
+          "title": "Send-back + revised plan",
+          "narration": "Send-back + revised plan",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "39-r2-1-send-back.png",
+              "caption": "R2 — operator sends the plan back with feedback"
+            },
+            {
+              "kind": "frame",
+              "file": "40-r2-1b-revised-plan.png",
+              "caption": "R2 — revised plan re-presented with (revised) badge"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-approve": {
+          "title": "Approve → watch it build",
+          "narration": "Approve → watch it build",
+          "checks": [
+            {
+              "msg": "monitor: forge-develop slice shows its phase hexes (unifier/review) (found 3, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "P4: architect hex (on /flows/forge-architect) carries real cost (data-phase-cost-usd > 0)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: forge-architect slice shows the pm hex (architect+pm, not the develop nodes)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "41-r2-2-approve.png",
+              "caption": "R2 — operator approves the plan (human decision #1 complete)"
+            },
+            {
+              "kind": "frame",
+              "file": "42-r2-2b-monitor-landing.png",
+              "caption": "R2 — \"Watch it build →\" lands on the Studio flow monitor"
+            },
+            {
+              "kind": "frame",
+              "file": "43-r2-2c-monitor-live.png",
+              "caption": "R2 — Forge Develop monitor shows the build slice live (run rail + topology)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-pm-decompose": {
+          "title": "PM decomposes ACs into work items",
+          "narration": "PM decomposes ACs into work items",
+          "checks": [
+            {
+              "msg": "monitor: PM materialised ≥2 WI hexes (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "monitor phase drawer: clicking a phase hex opens the drawer (data-hex-kind=\"phase\")",
+              "pass": true
+            },
+            {
+              "msg": "monitor WI drawer: clicking a wi hex opens the drawer (data-hex-kind=\"wi\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "44-r3-0-pm-midpulse.png",
+              "caption": "R3 (mid-pulse) — PM hex active as it emits work items"
+            },
+            {
+              "kind": "frame",
+              "file": "45-r3-0b-pm-settled.png",
+              "caption": "R3 — PM decomposed ACs into 2 dependency-ordered work items"
+            },
+            {
+              "kind": "frame",
+              "file": "46-hex-detail-phase.png",
+              "caption": "Phase drawer — phase hex opens the detail drawer (held open)"
+            },
+            {
+              "kind": "frame",
+              "file": "47-hex-detail-wi.png",
+              "caption": "Phase drawer — wi hex opens the detail drawer (held open)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-tdd-red": {
+          "title": "Dev-loop TDD red — gate.expected-fail",
+          "narration": "Dev-loop TDD red — gate.expected-fail",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "48-r3-1-gate-fail.png",
+              "caption": "R3 — TDD red: gate.expected-fail — the inject test fails before src/inject.ts exists"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-grind": {
+          "title": "Dev-loop GRIND (fast-forward)",
+          "narration": "Dev-loop GRIND (fast-forward)",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "49-r3-2-grind.png",
+              "caption": "R3 (fast-forward) — dev-loop implementing WI-1; token/cost bar growing"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-dependency-gate": {
+          "title": "Gate.pass + WI-1 green → WI-2 starts",
+          "narration": "Gate.pass + WI-1 green → WI-2 starts",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "50-r3-3-wi1-green.png",
+              "caption": "R3 — gate.pass; WI-1 green; WI-2 (depends on WI-1) only now starts"
+            },
+            {
+              "kind": "frame",
+              "file": "51-r3-3b-devloop-green.png",
+              "caption": "R3 — dev-loop hex greens (both WIs done); unifier runs next on its own hex"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-unifier": {
+          "title": "Unifier on its own hex",
+          "narration": "Unifier on its own hex",
+          "checks": [
+            {
+              "msg": "monitor: unifier node lit its own status complete (not folded into dev-loop)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "52-r3-4-unifier-midpulse.png",
+              "caption": "R3 (mid-pulse) — unifier hex active, running the gate + acceptance on the merged branch"
+            },
+            {
+              "kind": "frame",
+              "file": "53-r3-4b-unifier-green.png",
+              "caption": "R3 — unifier (own node) greens after authoring the demo"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-cost-rollup": {
+          "title": "Cost rollup",
+          "narration": "Cost rollup",
+          "checks": [
+            {
+              "msg": "monitor: cost rollup — a phase hex shows cost > 0",
+              "pass": true
+            },
+            {
+              "msg": "monitor: run rail shows the cycle as gated (ready-for-review)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "54-r3-5-cost-rollup.png",
+              "caption": "R3 — cost rollup across the spine (Studio monitor)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-review-comment": {
+          "title": "Review — comment-on-page visual demo (PARTIAL)",
+          "narration": "Review — comment-on-page visual demo (PARTIAL)",
+          "checks": [
+            {
+              "msg": "review demo foregrounds per-AC evaluated output (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "an AC reads PARTIAL on round 1 — the gap the operator sends back on",
+              "pass": true
+            },
+            {
+              "msg": "review page renders DEMO.md in a sandboxed iframe",
+              "pass": true
+            },
+            {
+              "msg": "review page anchors per-demo-region comment targets (found 6, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "review page shows a before/after img-comparison-slider",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "55-r4-0-review-partial.png",
+              "caption": "R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)"
+            },
+            {
+              "kind": "frame",
+              "file": "56-r4-0b-slider.png",
+              "caption": "R4 — before/after image-comparison slider for the TOC region"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-review-send-back": {
+          "title": "Send-back — operator anchors a blocking comment to AC-2",
+          "narration": "Send-back — operator anchors a blocking comment to AC-2",
+          "checks": [
+            {
+              "msg": "the anchored comment renders under its region",
+              "pass": true
+            },
+            {
+              "msg": "the blocking comment derives a send-back verdict",
+              "pass": true
+            },
+            {
+              "msg": "the anchored comment PERSISTS across a reload (review-comments sidecar)",
+              "pass": true
+            },
+            {
+              "msg": "send-back submitted (ADR-026 in-place append) — state=submitted",
+              "pass": true
+            },
+            {
+              "msg": "send-back appended a UWI into the SAME cycle worktree (ADR-026 in place, no new cycle)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "57-r4-1-comment.png",
+              "caption": "R4 — a blocking comment anchored to AC-2 (the send-back, on the page)"
+            },
+            {
+              "kind": "frame",
+              "file": "58-r4-1b-send-back.png",
+              "caption": "R4 — the comment persists; the derived verdict is \"send back\""
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-rerun": {
+          "title": "Dev-loop reruns on feedback (fast-forward)",
+          "narration": "Dev-loop reruns on feedback (fast-forward)",
+          "checks": [],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "59-r4-2-rerun.png",
+              "caption": "R4 (fast-forward) — dev-loop reran on the new criterion; back to \"Review →\""
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-re-review": {
+          "title": "Re-review — PARTIAL→MET",
+          "narration": "Re-review — PARTIAL→MET",
+          "checks": [
+            {
+              "msg": "re-review: partial AC count == 0 after dev-loop rerun (got 0)",
+              "pass": true
+            },
+            {
+              "msg": "re-review: all ACs show verdict \"met\" (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "resolving the blocking comment flips the derived verdict to approve",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "60-r4-3-rereview-met.png",
+              "caption": "R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-approve-merge": {
+          "title": "Approve & merge → completed spine",
+          "narration": "Approve & merge → completed spine",
+          "checks": [
+            {
+              "msg": "monitor: run rail shows the cycle complete (merged + reflected)",
+              "pass": true
+            },
+            {
+              "msg": "completed develop slice shows its phase hexes (unifier+review) (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "completed develop slice shows the dev fan-out (≥2 WI hexes) (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "completed develop slice shows accrued per-phase cost",
+              "pass": true
+            },
+            {
+              "msg": "Model B: /flows/forge-architect renders the architect slice (architect+pm, not dev) of the threaded run",
+              "pass": true
+            },
+            {
+              "msg": "unifier node complete on its own monitor slot (not folded into dev-loop)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "61-r4-4-approve.png",
+              "caption": "R4 — operator approves (human decision #2 complete)"
+            },
+            {
+              "kind": "frame",
+              "file": "62-r4-4b-reflect-link.png",
+              "caption": "R4 — merged; \"Reflect on this cycle →\" surfaces the final human moment"
+            },
+            {
+              "kind": "frame",
+              "file": "63-r4-4c-spine-complete.png",
+              "caption": "R4 — completed spine: every phase green with its cost pill"
+            },
+            {
+              "kind": "frame",
+              "file": "64-r4-4d-architect-flow.png",
+              "caption": "The Forge Architect flow on its own monitor — architect + PM hexes only, no dev or unifier"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-reflect": {
+          "title": "Reflect",
+          "narration": "Reflect",
+          "checks": [
+            {
+              "msg": "reflection node greened after tuning feedback (/flows/forge-reflect slice)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "65-r5-0-reflect-page.png",
+              "caption": "R5 — reflection screen: WI-sizing + repeated-actions/roadblocks + general-notes (the S8 deeper retro)"
+            },
+            {
+              "kind": "frame",
+              "file": "66-r5-0b-reflected.png",
+              "caption": "R5 — feedback captured; reflector folds it into the brain"
+            },
+            {
+              "kind": "frame",
+              "file": "67-r5-1-reflect-flow.png",
+              "caption": "The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-monitor-deep-dive": {
+          "title": "Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)",
+          "narration": "Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)",
+          "checks": [
+            {
+              "msg": "monitor: [data-page=\"flow-monitor\"][data-page-ready=\"true\"]",
+              "pass": true
+            },
+            {
+              "msg": "monitor: run rail shows ≥1 [data-run-id] (found 34, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: develop slice renders ≥4 [data-mon-node] hexes (WI fan-out + unifier + review) (found 4, want ≥4)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: the dev node fans out into ≥2 per-WI hexes (run-driven) (found 2, want ≥2)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: develop slice shows the unifier phase hex (found 1, want ≥1)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: clicking unifier hex opens drawer (data-drawer-open=\"true\")",
+              "pass": true
+            },
+            {
+              "msg": "monitor: drawer shows Gate sub-checks section",
+              "pass": true
+            },
+            {
+              "msg": "monitor: drawer shows Phase log section",
+              "pass": true
+            },
+            {
+              "msg": "monitor: drawer still renders after toggling stderr checkbox",
+              "pass": true
+            },
+            {
+              "msg": "monitor: [data-tail-count] attribute present (got 0)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "72-s1-0-monitor.png",
+              "caption": "S1 — Forge Develop slice: WI fan-out + unifier + review"
+            },
+            {
+              "kind": "frame",
+              "file": "73-s1-0b-monitor-drawer.png",
+              "caption": "S1 — phase drawer open: gate sub-checks + phase log visible"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-start-run-cta": {
+          "title": "Engine — start-run CTA (forge-develop-scratch, no runs)",
+          "narration": "Engine — start-run CTA (forge-develop-scratch, no runs)",
+          "checks": [
+            {
+              "msg": "engine: flow-monitor ready for forge-develop-scratch",
+              "pass": true
+            },
+            {
+              "msg": "engine: data-can-start=\"true\" on flow-monitor (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "engine: [data-action=\"start-run\"] present and enabled (no real run started)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "74-s1-1-start-run.png",
+              "caption": "S1 — engine: Start Run CTA enabled on a flow with no runs"
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-gate-control": {
+          "title": "Engine — gate control + cost on the gated run",
+          "narration": "Engine — gate control + cost on the gated run",
+          "checks": [
+            {
+              "msg": "engine: the seeded run shows status gated on the run rail",
+              "pass": true
+            },
+            {
+              "msg": "engine: gated run shows accrued per-phase cost (metered vs ceiling)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: [data-section=\"monitor-artifacts\"] has ≥1 chip (got 1)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "75-s1-2-gate-control.png",
+              "caption": "S1 — engine: gated run parked, cost metered against the flow ceiling"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 57,
+      "checksFailed": 0
+    },
+    "roadmap": {
+      "title": "Project roadmap",
+      "story": "Browse the per-project roadmap and trigger a queued initiative onto the develop flow.",
+      "beats": {
+        "roadmap-tab": {
+          "title": "Per-project Roadmap tab",
+          "narration": "Per-project Roadmap tab",
+          "checks": [
+            {
+              "msg": "roadmap: [data-section=\"project-roadmap\"] rendered",
+              "pass": true
+            },
+            {
+              "msg": "roadmap: ≥1 [data-roadmap-node] on the timeline (got 2)",
+              "pass": true
+            },
+            {
+              "msg": "roadmap: clicking a dot pops its card with ≥1 [data-work-item-id] (got 1)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "68-r6-0-roadmap-tab.png",
+              "caption": "R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time"
+            },
+            {
+              "kind": "frame",
+              "file": "69-r6-0b-popover.png",
+              "caption": "R6 — clicking an initiative dot pops its detail card up off the timeline"
+            }
+          ],
+          "pass": true
+        },
+        "roadmap-start-development": {
+          "title": "Start development trigger (DEC-3)",
+          "narration": "Start development trigger (DEC-3)",
+          "checks": [
+            {
+              "msg": "roadmap: the decomposed initiative is pending (develop-able)",
+              "pass": true
+            },
+            {
+              "msg": "start-development enqueues the develop run (data-develop-state=started)",
+              "pass": true
+            },
+            {
+              "msg": "start-development repoints the manifest at the forge-develop flow",
+              "pass": true
+            },
+            {
+              "msg": "the develop run threads the architect-minted cycle_id (DEC-2)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "70-r6-1-start-development.png",
+              "caption": "R6 — the \"start development\" trigger on a pending initiative"
+            },
+            {
+              "kind": "frame",
+              "file": "71-r6-1b-development-started.png",
+              "caption": "R6 — development started: the unifier will open a PR for review"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 7,
+      "checksFailed": 0
+    },
+    "swap-runtime": {
+      "title": "Swap the runtime adapter",
+      "story": "Swap the runtime-adapter seam — the registry-driven SDK/model picker.",
+      "beats": {
+        "swap-runtime-sdk-picker": {
+          "title": "Runtime-adapter seam — /agents/project-manager",
+          "narration": "Runtime-adapter seam — /agents/project-manager",
+          "checks": [
+            {
+              "msg": "adapter-seam: [data-page=\"agents\"][data-page-ready=\"true\"]",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: [data-sdk-id=\"claude\"] selectable (adapter registered)",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: [data-sdk-id=\"codex\"] disabled (adapter not registered)",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: [data-sdk-id=\"gemini\"] disabled (adapter not registered)",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: range segment flips [data-component=\"runtime-picker\"][data-strategy=\"range\"]",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: range strategy caption rendered (\"the agent routes each task to the cheapest model that can do it\")",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: ≥1 [data-model-id] chip rendered in range mode (got 3)",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: data-model-count ≥2 after selecting 2 chip(s) (got 2)",
+              "pass": true
+            },
+            {
+              "msg": "adapter-seam: YAML preview contains \"strategy: range\" (got: \"Definition PreviewYAMLslug: project-manager\\nname: project-manager\\npurpose: Decompose an approved ini\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "76-s2-0-sdk-picker.png",
+              "caption": "S2 — adapter seam: claude selectable; codex/gemini disabled (registry-driven)"
+            },
+            {
+              "kind": "frame",
+              "file": "77-s2-1-range-chips.png",
+              "caption": "S2 — range mode: 2 Claude tier chip(s) selected; routes to the cheapest capable tier first"
+            },
+            {
+              "kind": "frame",
+              "file": "78-s2-2-yaml-range.png",
+              "caption": "S2 — YAML preview shows strategy: range (authored in UI; no Save — seed SKILL.md immutable)"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 9,
+      "checksFailed": 0
+    },
+    "knowledge": {
+      "title": "Knowledge graph",
+      "story": "Browse the knowledge graph, pin human guidance, and run KB maintenance (lint/index/OOTB brains).",
+      "beats": {
+        "knowledge-graph": {
+          "title": "KB-backend seam — /knowledge?id=cycles (real brain)",
+          "narration": "KB-backend seam — /knowledge?id=cycles (real brain)",
+          "checks": [
+            {
+              "msg": "kb-seam: [data-page=\"knowledge\"][data-page-ready=\"true\"]",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: #kb-svg data-kb-id=\"cycles\" (got \"cycles\")",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: #kb-svg data-node-count ≥10 (got 222)",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: #kb-svg data-edge-count > 0 (got 272)",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: ≥5 [data-node-id] nodes rendered in graph (found 222, want ≥5)",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: [data-layer=\"theme\"] node(s) present",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: [data-layer=\"index\"] node(s) present",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: KB HEALTH panel rendered",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: KB selector present",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: clicking a theme node sets data-selected-node (got \"2026-06-05-forge-demo-render-cwd-sensitivity\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "79-s3-0-kb-graph.png",
+              "caption": "S3 — /knowledge?id=cycles: force-graph rendered (222 nodes, real cycles brain)"
+            },
+            {
+              "kind": "frame",
+              "file": "80-s3-0b-kb-node-article.png",
+              "caption": "S3 — theme node clicked: NODE ARTICLE panel visible"
+            }
+          ],
+          "pass": true
+        },
+        "knowledge-pin-guidance": {
+          "title": "KB-backend seam — pin-guidance",
+          "narration": "KB-backend seam — pin-guidance",
+          "checks": [
+            {
+              "msg": "kb-seam: data-guidance-pinned=\"true\" — guidance POST succeeded",
+              "pass": true
+            },
+            {
+              "msg": "kb-seam: [data-layer=\"guidance\"] node appeared after pin (graph re-fetched)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "81-s3-1-guidance-typed.png",
+              "caption": "S3 — guidance text typed into the HUMAN GUIDANCE panel"
+            },
+            {
+              "kind": "frame",
+              "file": "82-s3-1b-guidance-pinned.png",
+              "caption": "S3 — guidance pinned: data-guidance-pinned=\"true\", guidance node in graph"
+            }
+          ],
+          "pass": true
+        },
+        "knowledge-lint-index": {
+          "title": "KB maintenance — lint / index / OOTB brains",
+          "narration": "KB maintenance — lint / index / OOTB brains",
+          "checks": [
+            {
+              "msg": "S3.2: kb-lint result badge (got \"lint: 2 finding(s)\")",
+              "pass": true
+            },
+            {
+              "msg": "S3.2: kb-index maintenance triggered",
+              "pass": true
+            },
+            {
+              "msg": "S3.2: lint-resolution scan ran (data-lint-scanned=\"true\")",
+              "pass": true
+            },
+            {
+              "msg": "S3.2: cycles + forge-dev brains ship OOTB (Cycle Patterns / Forge Engineering)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "83-kb-0-lint.png",
+              "caption": "Part 2 (knowledge) — kb-lint: lint: 2 finding(s)"
+            },
+            {
+              "kind": "frame",
+              "file": "84-kb-1-maintenance.png",
+              "caption": "Part 2 (knowledge) — lint/index maintenance + the resolution surface"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 16,
+      "checksFailed": 0
+    },
+    "recovery": {
+      "title": "Recover a stuck initiative",
+      "story": "Recover a stuck initiative from the dedicated operator surface.",
+      "beats": {
+        "recovery-surface": {
+          "title": "Recovery surface — the operator surface for stuck cycles (DEC-6)",
+          "narration": "Recovery surface — the operator surface for stuck cycles (DEC-6)",
+          "checks": [
+            {
+              "msg": "recovery: [data-page=\"recovery\"][data-page-ready=\"true\"] renders (DEC-6 operator surface)",
+              "pass": true
+            },
+            {
+              "msg": "recovery: the recoverable-list or empty-state section renders",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "85-s4-recovery.png",
+              "caption": "S4 — Recovery: inspect/requeue/abandon a stuck cycle, all in the UI (CLI retired)"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 2,
+      "checksFailed": 0
+    }
+  },
+  "epilogue": {
+    "captures": [
+      {
+        "kind": "frame",
+        "file": "86-end-card.png",
+        "caption": "End card — \"Author a flow. Run it. Swap its engine.\""
+      }
+    ]
+  },
+  "totals": {
+    "checksTotal": 212,
+    "checksFailed": 0,
+    "framesTotal": 86,
+    "clipsTotal": 4
+  },
+  "exitCode": 0
+}
