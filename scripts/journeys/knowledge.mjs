@@ -153,7 +153,7 @@ export const journey = defineJourney({
         title: 'KB maintenance — lint / index / OOTB brains',
         narration: 'KB maintenance — lint / index / OOTB brains',
         drive: async (ctx) => {
-              const { page, watch, check, frame } = ctx;
+              const { page, watch, browser, recordClip, check, frame } = ctx;
               // ── S3.2: KB maintenance — LINT + INDEX + OOTB brains (real, read-only) ───
               console.log('\n[S3.2] KB maintenance — lint / index / OOTB brains');
               await page.goto(`${watch.uiUrl}/knowledge?id=cycles`, { waitUntil: 'domcontentloaded' });
@@ -191,6 +191,25 @@ export const journey = defineJourney({
                 check(ootb.cycles.length > 0 && ootb.forgeDev.length > 0,
                   `S3.2: cycles + forge-dev brains ship OOTB (${ootb.cycles} / ${ootb.forgeDev})`);
               }
+              // Clip: kb-lint + the lint-resolution scan — read-only/idempotent maintenance,
+              // safe to re-drive on a fresh context. Fresh context, own navigation.
+              await recordClip(browser, watch, 'kb-lint', '/knowledge?id=cycles', async (p) => {
+                await p.waitForSelector('[data-component="kb-maintenance"] [data-action="kb-lint"]', { timeout: 12000 }).catch(() => {});
+                await p.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
+                await p.waitForFunction(
+                  () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
+                  null, { timeout: 15000 },
+                ).catch(() => {});
+                const scanBtn = p.locator('[data-section="lint-resolution"] [data-action="lint-scan"]');
+                if (await scanBtn.count() > 0) {
+                  await scanBtn.click().catch(() => {});
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-section="lint-resolution"]')?.getAttribute('data-lint-scanned') === 'true',
+                    null, { timeout: 15000 },
+                  ).catch(() => {});
+                }
+                await sleep(THINK);
+              }, { readySel: '[data-page="knowledge"]', caption: 'KB lint findings triaged from the maintenance surface' });
 
         },
       },

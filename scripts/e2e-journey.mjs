@@ -97,7 +97,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
-import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile } from './lib/journey-runtime.mjs';
+import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
@@ -173,6 +173,11 @@ async function frame(page, name, altCaption) {
  * and re-waits for readiness — which composes with the seed model (seed the files
  * first, then the clip re-reads the same server state). Non-fatal: any error is
  * swallowed so the journey (and its main video) always finishes.
+ *
+ * Operator pacing mandate: every clip HOLDS on its final state after `interact`
+ * returns (opts.holdTailMs, default PACE.holdTail) so a loop never jump-cuts —
+ * the viewer gets processing time on whatever the interaction just revealed.
+ * A soft size-guard flags any clip that creeps toward the ~400KB gallery ceiling.
  */
 async function recordClip(browser, watch, name, route, interact, opts = {}) {
   const { size = { width: 1000, height: 620 }, readySel = '[data-page-ready="true"]', caption: cap = name } = opts;
@@ -186,6 +191,7 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
     await clipPage.goto(watch.uiUrl + route, { waitUntil: 'domcontentloaded' });
     await clipPage.waitForSelector(readySel, { timeout: 15000 }).catch(() => {});
     await interact(clipPage);
+    await sleep(opts.holdTailMs ?? PACE.holdTail); // hold on the final state — no jump-cut loops
   } catch (e) {
     console.error(`  [clip ${name}] skipped: ${(e?.message ?? e)}`.slice(0, 200));
   } finally {
@@ -196,9 +202,11 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
     if (src && existsSync(src)) {
       const dest = join(CLIPS, `${name}.webm`);
       renameSync(src, dest);
+      const sizeBytes = statSync(dest).size;
       clipMeta.push({ file: `clips/${name}.webm`, caption: cap });
-      tracker.recordCapture({ kind: 'clip', file: `clips/${name}.webm`, caption: cap, sizeBytes: statSync(dest).size });
-      console.log(`  [clip] ${name} — ${cap}`);
+      tracker.recordCapture({ kind: 'clip', file: `clips/${name}.webm`, caption: cap, sizeBytes });
+      check(sizeBytes < 400_000, `clip ${name}.webm under 400K (got ${sizeBytes})`);
+      console.log(`  [clip] ${name} — ${cap} (${sizeBytes}B)`);
     }
   } catch (e) {
     console.error(`  [clip ${name}] collect failed: ${(e?.message ?? e)}`.slice(0, 160));

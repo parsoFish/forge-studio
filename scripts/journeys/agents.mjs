@@ -78,7 +78,7 @@ export const journey = defineJourney({
         title: 'Agent builder — /agents/project-manager',
         narration: 'Agent builder — /agents/project-manager',
         drive: async (ctx) => {
-              const { page, watch, frame, check, countAtLeast } = ctx;
+              const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
               console.log('\n[A3] Agent builder — /agents/project-manager');
               await page.goto(watch.uiUrl + '/agents/project-manager', { waitUntil: 'domcontentloaded' });
@@ -146,6 +146,24 @@ export const journey = defineJourney({
               } else {
                 check(false, 'agent-builder: page did not become ready — agent-builder checks skipped');
               }
+              // Clip: composing an agent — open Advanced, edit the purpose field (dirty),
+              // discard back to a settled state. Fresh context, own navigation.
+              await recordClip(browser, watch, 'agent-build', '/agents/project-manager', async (p) => {
+                await p.waitForSelector('[data-action="toggle-advanced"]', { timeout: 12000 }).catch(() => {});
+                await p.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
+                await p.waitForFunction(
+                  () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
+                  null, { timeout: 5000 },
+                ).catch(() => {});
+                const purposeInput = p.locator('#purpose-input');
+                if (await purposeInput.count() > 0) {
+                  await purposeInput.click().catch(() => {});
+                  await purposeInput.pressSequentially(' (clip)', { delay: 18 }).catch(() => {});
+                  await sleep(THINK);
+                  await p.locator('#btn-discard').click().catch(() => {});
+                }
+                await sleep(THINK);
+              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from the starter library' });
 
         },
       },

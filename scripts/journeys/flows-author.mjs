@@ -344,7 +344,7 @@ export const journey = defineJourney({
                 if (await buildTab.count() > 0) await buildTab.click().catch(() => {});
                 await p.waitForSelector('[data-flow-node]', { timeout: 12000 }).catch(() => {});
                 await sleep(2600);
-              }, { readySel: '[data-page="flow-monitor"]', caption: 'the flow builder — compose the cycle as data (nodes · palette · gates)' });
+              }, { readySel: '[data-page="flow-monitor"]', caption: 'the flow builder — compose the cycle as data (nodes · palette · gates)', holdTailMs: 1200 });
 
         },
       },

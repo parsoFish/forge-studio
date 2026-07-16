@@ -130,7 +130,7 @@ export const journey = defineJourney({
         title: 'onboard existing → deterministically resolve a failing clause',
         narration: 'onboard existing → deterministically resolve a failing clause',
         drive: async (ctx) => {
-              const { page, watch, frame, check } = ctx;
+              const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SU: onboard existing → align to the contract (preflight resolution) ────
               console.log('\n[SU] onboard existing → deterministically resolve a failing clause');
               await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
@@ -180,6 +180,18 @@ export const journey = defineJourney({
                 const resolutionPanel = await page.waitForSelector('[data-section="contract-resolution"]', { timeout: 15000 }).then(() => true).catch(() => false);
                 check(resolutionPanel, 'SU: contract-resolution panel renders when a clause fails');
                 await frame(page, 'onb-0-failing', 'Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)');
+                // Clip: the resolve action itself, on a fresh context — placed BEFORE the
+                // main page's own auto-fix click below so the clause is still failing when
+                // the clip navigates in, capturing the real failing→resolved flip (once the
+                // main page resolves it below, the clause — and its button — are gone for good).
+                await recordClip(browser, watch, 'onboard-resolve', `/projects/${onbSlug}`, async (p) => {
+                  await p.waitForSelector('[data-action="apply-preflight-auto"]', { timeout: 10000 }).catch(() => {});
+                  await p.locator('[data-action="apply-preflight-auto"]').first().click().catch(() => {});
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-resolution-clause][data-clause-id="ARTIFACTS"]') === null,
+                    null, { timeout: 12000 },
+                  ).catch(() => {});
+                }, { readySel: '[data-section="contract-resolution"]', caption: 'Preflight resolution — an existing repo aligned to the contract' });
                 await page.locator('[data-action="apply-preflight-auto"]').first().click().catch(() => {});
                 await sleep(WORK);
                 await page.waitForFunction(
