@@ -7,6 +7,25 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-16
+
+### Tests
+
+- **E2E journey rebuilt around the capability diagram (S5).** The Studio
+  walkthrough is restructured into 10 data-defined journeys (47 beats) covering
+  the building flows the old journey skipped — instructions-creator,
+  project-brain-builder, onboard-existing, skills pillar, and knowledge pillar —
+  with a `Beat`/`Journey` model, `results.json`, and a journey-sectioned gallery.
+- **Looping `.webm` clips** (autoplay-loop, each &lt;400 K) recorded per
+  building/generating interaction and embedded in the gallery.
+- **Gallery (`demos/e2e/index.html`) re-sectioned** by the capability diagram
+  (Part 1 stand-up / Part 2 pillars / Part 3 run); dead `verify/` galleries and
+  forge-ui/.demo-shots orphans swept; `gitignore` updated to track small clips +
+  frames and ignore large full-run videos.
+- Fixed gallery render caller arity; orphan captures now land in an epilogue
+  section. Fixed beat lookup keyed by journey id; `RUN_ORDER` coverage validated
+  fail-fast.
+
 ## [0.5.0] - 2026-07-12
 
 Refinement campaign **Phases 3–5** — the post-betterado "remove guardrails over
@@ -321,7 +340,12 @@ real data-table dispatch and a second, gated implementation behind it).
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
-[Unreleased]: https://github.com/Parso/forge/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Parso/forge/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Parso/forge/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/Parso/forge/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/Parso/forge/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/Parso/forge/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/Parso/forge/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Parso/forge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Parso/forge/releases/tag/v0.1.0
 [DEC-3]: docs/decisions/

@@ -40,13 +40,14 @@ operator-authored flow is actually run.
 
 ### 2. Architect hex shows `$0.00` cost in `ui:journey` (architect cost-observability gap)
 
-The architect phase hex renders `$0.00` in the `ui:journey` walkthrough because
-the seeded architect events carry no cost rollup to the hex. Pre-existing (fails
-on the pre-observability baseline too) and the **only remaining `ui:journey`
-DOM-as-metrics failure**. It is a real architect cost-observability gap — the
-architect's live cost/output tracking is thinner than the other phases' (see the
-architect-observability operator notes). Independent of any single branch's
-roadmap.
+The architect phase hex can render `$0.00` in some `ui:journey` views because the
+seeded architect events carry no cost rollup to that hex. The 2026-07-14 demo
+overhaul asserts the architect cost on the **`forge-architect` flow slice**
+(`data-phase-cost-usd > 0`) where it does surface, so `ui:journey` is **fully green
+(0 DOM-as-metrics failures)**; this item remains only as a real architect
+cost-observability nuance — the architect's live cost/output tracking is thinner
+than the other phases' (see the architect-observability operator notes). Independent
+of any single branch's roadmap.
 
 ### 3. brain-ingest haiku R1 A/B follow-up
 
@@ -77,14 +78,48 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    memory pressure; self-heal absorbs it, not root-caused.
 6. **PM never populates a WI `domain` field** — constraint selectors currently
    match `manifest.<field>` globs or `all` only (ADR 037 as-built note).
-7. **e2e-journey cleanup gap:** the creation-seam KB seed writes
-   `brain/projects/<journey-demo-project>/` + a raw cycle archive during the
-   AUTHOR section, and the harness cleanup sweep doesn't remove either (one
-   seeded brain dir + one raw archive were left behind this session, removed by
-   hand). Add both to the sweep.
-8. **Untracked `forge-ui/.demo-shots/verify/<handle>/` gate artifacts**
+7. **e2e-journey cleanup gap** — *resolved 2026-07-14:* `cleanFirstProject` now
+   also removes the onboarding-seeded `brain/projects/<slug>/` Brain-3 KB (the demo
+   overhaul's onboard beats seed it via `seedProjectBrain`). (Any leftover raw
+   cycle archive would come from a real cycle, not the emulated journey — see item 10.)
+8. **Untracked `demos/verify/<handle>/` gate artifacts**
    (summaries + videos) — decide keep/commit/clean (currently absent; tree was
    clean at close).
+9. **e2e-journey demo overhaul — deferred tails (2026-07-14):**
+   - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) was
+     the one AI-generation surface NOT added to the journey (element-binding is the
+     most complex seed; recipe exists). Add it to complete the AUTHOR-generation set.
+   - The **`CLAUDE.md` "forge-ui DOM-as-metrics convention" section is partially
+     stale** — it documents the deleted `/dashboard` surface (`data-conn-state`,
+     `data-phase-hex`, `data-wi-hex`, `agent-graph`, `pipeline-tree`, `scheduler-banner`,
+     `data-cost-badge`, `data-page="architect-session"` — all **0 occurrences** in
+     `forge-ui/`). Hexes are now `data-mon-node` + `data-hex-kind`; the pipeline lives
+     on `/flows/[id]` (`data-pannable`). Reconcile the section against the real surface
+     (the studio-routes map from the S5 investigation is the ground truth).
+10. **`ui:journey` can trigger a REAL cycle if a scheduler is active (harness-isolation
+    hazard, 2026-07-14)** — *resolved 2026-07-16:* the walkthrough seeds queue
+    manifests (`pending`/`in-flight`) to emulate a cycle. If a **`forge serve`
+    scheduler/daemon is running concurrently** (`FORGE_ARCHITECT_NO_SPAWN=1` does NOT
+    stop the daemon — it only guards architect/reflector spawns), it could **claim a
+    seeded manifest, run a real cycle to release-finalize, and commit**
+    (`chore(release): finalise …`) onto the working branch — observed twice (a stray
+    forge `0.5.1` + an mdtoc `0.1.1` release; both untangled by hand). A second,
+    related residue defect was found alongside it: the emulated approve→merge beat
+    runs the **real, deterministic** release-finalize path against `projects/mdtoc`
+    (tracked *inside* the forge repo, no nested `.git`), which leaves
+    `projects/mdtoc/{CHANGELOG.md,package.json,package-lock.json}` modified **and
+    staged** in the forge index after every green run — with a live scheduler this
+    escalates to an actual commit+push.
+    **Fix:** `scripts/lib/journey-daemon-guard.mjs` (`assertNoLiveDaemon`) runs as the
+    first statement in `main()`, before any cleanup or seeding — it refuses to
+    proceed if `_logs/daemon/forge.pid` names a live pid, or if `_queue/{pending,
+    in-flight}` already has stray manifest(s) sitting in it. Set
+    `FORGE_E2E_AUTOKILL_DAEMON=1` to have the guard `SIGTERM` a live daemon instead of
+    refusing (escape hatch for scripted/CI runs, not the default). The `finally`
+    cleanup block in `e2e-journey.mjs` now also `git restore --staged` +
+    `git checkout --` the `projects/<PROJECT>` subtree after every run, so the
+    release-finalize residue doesn't linger in the working tree (best-effort,
+    non-fatal like the other cleanups).
 
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 

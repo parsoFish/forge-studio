@@ -37,7 +37,7 @@ SAFETY exclusions (below) override every rule.
 | id | match (glob / predicate) | rationale | action |
 |---|---|---|---|
 | `lint-dumps` | `_lint-*.txt`, `*-lint-before.txt`, `*-lint-after.txt` at repo root | one-off lint output snapshots; regenerate via the linter | `git rm` if tracked, else `rm` |
-| `demo-galleries` | `forge-ui/.demo-shots/verify/**`, any `**/.demo-shots/**/*.webm` | regenerable demo capture output (the curated `e2e/` gallery + `index.html` stay — see `.gitignore`) | `rm -rf` (untracked) |
+| `demo-galleries` | `demos/verify/**`, any `demos/**/*.webm` | regenerable demo capture output (the curated `e2e/` gallery + `index.html` stay — see `.gitignore`) | `rm -rf` (untracked) |
 | `db-scratch` | `*.db`, `*.db-shm`, `*.db-wal`, `headroom_memory.db` at repo root | local SQLite scratch (e.g. headroom memory); never source | `rm` + ensure `*.db` is gitignored |
 | `abandoned-worktrees` | any dir under `_worktrees/` whose path is **absent** from `git worktree list` | orphaned worktree the scheduler never cleaned (crash/abort) | `rm -rf` the orphan dir ONLY |
 | `dead-brain-skeletons` | `brain/*-brain/` containing only `kb.yaml` + empty `_raw/` + empty `themes/` | scaffolded per-project brain stub with zero content; the real project brain lives in the project repo | `rm -rf` the empty skeleton |
@@ -59,7 +59,7 @@ These are **never** deleted, even if a rule would match:
 - `_logs/`, `_queue/`, `projects/` contents that the runtime owns (state, not cruft).
 - Any worktree path that **appears** in `git worktree list` (only orphans go).
 - Secrets (`*.env`, `secrets.env`) and `forge.config.json`.
-- The curated demo gallery (`forge-ui/.demo-shots/e2e/` PNGs + `index.html`).
+- The curated demo gallery (`demos/e2e/` PNGs + `index.html`).
 
 When in doubt, the skill reports the path as `REVIEW` and does **not** delete it.
 
