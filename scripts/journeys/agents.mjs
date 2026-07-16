@@ -158,12 +158,13 @@ export const journey = defineJourney({
                 const purposeInput = p.locator('#purpose-input');
                 if (await purposeInput.count() > 0) {
                   await purposeInput.click().catch(() => {});
-                  await purposeInput.pressSequentially(' (clip)', { delay: 18 }).catch(() => {});
+                  // fill() = one repaint (keystroke typing recorded ~140K of extra frames)
+                  const current = await purposeInput.inputValue().catch(() => '');
+                  await purposeInput.fill(`${current} (clip)`).catch(() => {});
                   await sleep(THINK);
                   await p.locator('#btn-discard').click().catch(() => {});
                 }
-                await sleep(THINK);
-              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from the starter library' });
+              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from the starter library', holdTailMs: 1500 });
 
         },
       },

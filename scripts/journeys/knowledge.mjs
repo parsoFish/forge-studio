@@ -195,6 +195,11 @@ export const journey = defineJourney({
               // safe to re-drive on a fresh context. Fresh context, own navigation.
               await recordClip(browser, watch, 'kb-lint', '/knowledge?id=cycles', async (p) => {
                 await p.waitForSelector('[data-component="kb-maintenance"] [data-action="kb-lint"]', { timeout: 12000 }).catch(() => {});
+                // Scroll the maintenance panel into view FIRST — the force-graph above it
+                // animates continuously, and while it's in-viewport every recorded frame
+                // differs (this clip hit 1.2M). Off-screen graph = near-static frames.
+                await p.locator('[data-component="kb-maintenance"]').scrollIntoViewIfNeeded().catch(() => {});
+                await sleep(400);
                 await p.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
                 await p.waitForFunction(
                   () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
@@ -208,8 +213,7 @@ export const journey = defineJourney({
                     null, { timeout: 15000 },
                   ).catch(() => {});
                 }
-                await sleep(THINK);
-              }, { readySel: '[data-page="knowledge"]', caption: 'KB lint findings triaged from the maintenance surface' });
+              }, { readySel: '[data-page="knowledge"]', caption: 'KB lint findings triaged from the maintenance surface', holdTailMs: 1500 });
 
         },
       },

@@ -825,19 +825,17 @@ export const journey = defineJourney({
               await frame(page, 'r4-4b-reflect-link', 'R4 — merged; "Reflect on this cycle →" surfaces the final human moment');
               await openStudioMonitor(page, watch);
               await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
-              await page.waitForSelector(`[data-run-id="${CYCLE_ID}"][data-run-status="complete"]`, { timeout: 15000 }).catch(() => {});
+              // Grounded truth: at merge time the run is NOT complete yet — reflection is
+              // still in flight (reflection.start emitted, no end), and the run model
+              // truthfully reconciles done/-with-unfinished-reflect back to 'active'.
+              // The rail flips to 'complete' only after the reflect beat (asserted there).
+              await page.waitForSelector(`[data-run-id="${CYCLE_ID}"][data-run-status="active"]`, { timeout: 15000 }).catch(() => {});
               await sleep(READ);
-              await frame(page, 'r4-4c-spine-complete', 'R4 — completed spine: every phase green with its cost pill');
-              try {
-                await page.waitForFunction(
-                  (id) => document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') === 'complete',
-                  CYCLE_ID, { timeout: 12000 },
-                );
-                check(true, 'monitor: run rail shows the cycle complete (merged + reflected)');
-              } catch {
+              await frame(page, 'r4-4c-spine-complete', 'R4 — merged; the spine holds at "active" while reflection finishes out-of-band');
+              {
                 const got = await page.evaluate((id) =>
                   document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
-                check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
+                check(got === 'active', `monitor: merged run stays "active" while reflection is in flight (got "${got}")`);
               }
               // Model B: the completed spine is split across the 3 flow monitors. This develop
               // slice shows the dev fan-out (≥2 WI hexes) + unifier + review.
@@ -935,6 +933,19 @@ export const journey = defineJourney({
                 const reflStatus = await page.evaluate(() =>
                   document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') ?? '(absent)');
                 check(false, `reflection node greened after tuning feedback (got "${reflStatus}")`);
+              }
+              // With reflection.end now emitted, the run model's reconciler lets the
+              // done/-based 'complete' stand — the payoff the approve-merge beat deferred.
+              try {
+                await page.waitForFunction(
+                  (id) => document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') === 'complete',
+                  CYCLE_ID, { timeout: 12000 },
+                );
+                check(true, 'monitor: run rail shows the cycle complete (merged + reflected)');
+              } catch {
+                const got = await page.evaluate((id) =>
+                  document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
+                check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
               }
 
         },
