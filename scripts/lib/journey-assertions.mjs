@@ -10,7 +10,10 @@
  * `createAssertions()` returns an asserter bound to its own `failures` array so a
  * caller owns its pass/fail tally. Pass a `frame` callback (the harness's
  * screenshot helper) to enable the drawer-open helper's held-open capture; omit
- * it and the helper still asserts, just without a frame.
+ * it and the helper still asserts, just without a frame. Pass an `onCheck`
+ * callback to additionally observe every check as it fires (e.g. to wire checks
+ * into `journey-runtime.mjs`'s beat tracker) — optional and purely additive;
+ * existing callers that omit it behave identically.
  *
  * The phase-cost / hex-drawer helpers target the Studio flow monitor
  * ([data-mon-node]) — the cycle-monitor surface since /dashboard was deleted
@@ -28,13 +31,16 @@ export const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd]';
  * @param {function} [opts.frame]    async (page, name, caption) — capture helper for held-open frames.
  * @param {number}   [opts.dwellMs]  how long to hold an opened drawer before the frame (default 4200).
  * @param {number}   [opts.actMs]    short settle after a click (default 1500).
+ * @param {function} [opts.onCheck]  ({ msg, pass }) — fired for every check() call, in addition to
+ *                                   the existing console + failures-array behaviour. Optional.
  */
-export function createAssertions({ frame, dwellMs = 4200, actMs = 1500 } = {}) {
+export function createAssertions({ frame, dwellMs = 4200, actMs = 1500, onCheck } = {}) {
   const failures = [];
 
   function check(cond, msg) {
     if (cond) { console.log(`  ✓ ${msg}`); }
     else { failures.push(msg); console.error(`  ✗ ${msg}`); }
+    if (onCheck) onCheck({ msg, pass: !!cond });
   }
 
   async function countAtLeast(page, selector, n, msg) {
