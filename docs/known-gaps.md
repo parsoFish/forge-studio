@@ -154,6 +154,17 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `POST /api/scheduler/start` (boots the real daemon). A harness-mode seam
     (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
     paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
+11. **UI-created skills are invisible to the agent builder's palette (2026-07-17,
+    found by the S5b demo rebuild):** `CatalogPalette` sources skill chips
+    exclusively from `studio/catalog.yaml`'s static `community-skills` list, and
+    `POST /api/studio/skills` (the `/skills/new` builder) never registers the new
+    skill into `catalog.yaml` — so a skill an operator just authored cannot be
+    dragged into an agent's skill drop-zone. This broke the demo's intended
+    artifact throughline (create a skill → compose it into an agent); the journey
+    substitutes the catalog-listed `handoff` skill and narrates the limitation
+    honestly. **Fix candidates:** the skills builder registers into
+    `catalog.yaml` on create, or the palette unions catalog entries with live
+    `skills/*/SKILL.md` discovery.
 
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 

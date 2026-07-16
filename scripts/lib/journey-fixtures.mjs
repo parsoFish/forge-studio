@@ -84,56 +84,23 @@ export const ACC_FIXTURE = 'test/fixtures/release-notes.md';
 export const TOC_SENTINEL = 'sentinel-7f3a9c';
 
 // ── ACT-1 AUTHOR: author-from-scratch flow definition ──────────────────────────
-// The forge cycle rebuilt from first principles as a flow definition: six named
-// agents, five artifact edges, two human gates. Proves the cycle is subsumed by
-// data (ADR-028) — `forge studio lint` validates it and it is structurally
-// identical to the production seed. Written before the bridge boots so the UI can
-// load it; removed in the finally block.
+// The forge cycle rebuilt from first principles as a flow definition: three
+// agent nodes, two artifact edges, one human gate. Proves the cycle is
+// subsumed by data (ADR-028) — the operator builds this flow LIVE in the
+// Studio BUILD-tab canvas (drag agents from the palette, wire edges via
+// handle-drag, toggle the human gate, save) rather than a pre-boot seed file;
+// `forge studio lint` validates the saved result and a topological compare
+// (agent-ref multiset + edge artifact labels + gate placement — not literal
+// node ids, which the canvas always auto-generates) proves it matches the
+// production seed's shape. SCRATCH_FLOW/SCRATCH_FLOW_DIR name the slug the UI
+// derives from the operator's chosen flow name; cleanScratchFlow() sweeps the
+// UI-authored result before + after the run.
 // S8/DEC-3: the forge-cycle monolith was retired; the AUTHOR proof re-anchors on
 // forge-develop — the build flow of the 3-flow set — rebuilt from scratch as data
 // and proven structurally identical to the shipped seed.
 export const SCRATCH_FLOW = 'forge-develop-scratch';
 export const SCRATCH_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', SCRATCH_FLOW);
 export const SEED_FLOW_PATH = join(FORGE_ROOT, 'studio', 'flows', 'forge-develop', 'flow.yaml');
-/** The explicit, from-scratch authoring spec (NOT a copy of the seed file).
- *  Mirrors forge-develop: dev (entry, no fanOut) → unifier (resumable) → review
- *  (verdict gate). 3 nodes, 2 edges, 1 gate. */
-export const SCRATCH_SPEC = {
-  nodes: [
-    { id: 'dev', agent: 'developer-ralph' },
-    { id: 'unifier', agent: 'developer-unifier', resumable: true },
-    { id: 'review', gate: 'verdict' },
-  ],
-  edges: [
-    { from: 'dev', to: 'unifier', artifact: 'wi-branches' },
-    { from: 'unifier', to: 'review', artifact: 'pr' },
-  ],
-};
-export function inlineYaml(obj) {
-  // Render { id: x, agent: y } as the flow.yaml inline-map style. String() coerces
-  // booleans (resumable: true) + everything else to their YAML scalar form.
-  return '{ ' + Object.entries(obj).map(([k, v]) => `${k}: ${String(v)}`).join(', ') + ' }';
-}
-export function writeScratchFlow() {
-  mkdirSync(SCRATCH_FLOW_DIR, { recursive: true });
-  const lines = [
-    `id: ${SCRATCH_FLOW}`,
-    'name: Forge Develop (authored from scratch)',
-    'version: 1',
-    'goal: Author-from-scratch proof — the forge-develop build flow rebuilt as a flow definition.',
-    'project: null',
-    'kb: cycles',
-    'costCeilingUsd: 25',
-    'origin: user',
-    'nodes:',
-    ...SCRATCH_SPEC.nodes.map((n) => `  - ${inlineYaml(n)}`),
-    'edges:',
-    ...SCRATCH_SPEC.edges.map((e) => `  - ${inlineYaml(e)}`),
-    'triggers: []',
-    '',
-  ];
-  writeFileSync(join(SCRATCH_FLOW_DIR, 'flow.yaml'), lines.join('\n'));
-}
 export function cleanScratchFlow() {
   try { rmSync(SCRATCH_FLOW_DIR, { recursive: true, force: true }); } catch { /* */ }
 }

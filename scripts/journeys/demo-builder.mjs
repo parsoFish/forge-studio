@@ -1,6 +1,6 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  ACT, caption,
+  ACT, THINK, WORK, caption,
   writeDemoStatus, demoEvent, demoBurst,
   patchDemoProcess, restoreProjectJson, writeDemoArtifacts, writeDemoLock,
   cleanDemoBuilderSession,
@@ -9,6 +9,7 @@ import { sleep } from '../lib/journey-assertions.mjs';
 
 // module-scope cross-beat state (mirrors stand-up-create.mjs's instrSid/pbSid).
 let demoSid = null;
+let demoClipSid = null;         // demo-builder-generate → demo-builder-lock (clip-only session)
 let demoJsonStash = null;
 let demoBrief = '';
 
@@ -71,12 +72,54 @@ export const journey = defineJourney({
         check(await page.locator('[data-demo-iframe]').count() > 0, 'DB-2: the composed demo previews in an iframe');
         check(await page.locator('[data-section="demo-process"][data-step-count="3"]').count() > 0, 'DB-2: the demo process shows all 3 element-bound steps');
         await countAtLeast(page, '[data-step-element]', 3, 'DB-2: all 3 demo-process steps carry a data-step-element');
-        await frame(page, 'demo-2-review', 'The demo agent — composed demo ready for review');
-        await recordClip(browser, watch, 'demo-generate', `/demo/${encodeURIComponent(demoSid)}`, async (p) => {
+        await frame(page, 'demo-2-review', 'The demo agent — composed demo ready for review', { key: true });
+
+        // Clip: a fresh clip-only session shows the FULL generation progression —
+        // briefing → (real submit-brief click, spawn-suppressed) → generating →
+        // awaiting-review — staged with real dwells between each write, so the
+        // clip shows the regenerate actually happening rather than a single
+        // static hold on the finished review surface. A dedicated sid (not the
+        // shared demoSid) keeps this clip's writes off the outer page's own
+        // poll on demoSid, which is already sitting at 'awaiting-review' by
+        // this point in the beat.
+        // SAFETY (S5): cleanDemoBuilderSession() unconditionally wipes the
+        // *shared* .forge/demo/ directory (DEMO_FORGE_DIR is NOT sid-scoped,
+        // unlike _demo/<sid>/ and _logs/_demo-<sid>/) — cleaning demoClipSid
+        // here, mid-beat, would delete DEMO.html before demo-builder-lock's
+        // writeDemoLock() reads it back. So the clip session's cleanup is
+        // deferred to demo-builder-lock's tail (alongside the existing
+        // cleanDemoBuilderSession(demoSid) call), once nothing downstream
+        // still needs .forge/demo/.
+        demoClipSid = `${demoSid}-clip`;
+        writeDemoStatus(demoClipSid, { phase: 'briefing', mode: 'create' });
+        await recordClip(browser, watch, 'demo-generate', `/demo/${encodeURIComponent(demoClipSid)}`, async (p) => {
           await p.waitForSelector('main[data-page="demo-builder"]', { timeout: 12000 });
-          await p.waitForSelector('[data-component="demo-review"]', { timeout: 8000 }).catch(() => {});
-          await sleep(2600);
-        }, { readySel: 'main[data-page="demo-builder"]', caption: 'The demo builder regenerates the page element by element' });
+          await p.waitForSelector('[data-section="session-briefing"]', { timeout: 8000 }).catch(() => {});
+          await p.locator('[data-field="briefing-notes"]').fill(demoBrief).catch(() => {});
+          await sleep(THINK);
+          await p.locator('[data-action="submit-brief"]').click().catch(() => {});
+          await sleep(ACT);
+          writeDemoStatus(demoClipSid, { phase: 'generating', mode: 'create', prompt: demoBrief });
+          demoEvent(demoClipSid, 'start', 'demo-builder turn (phase=generating) — composing capture/verify/present');
+          await demoBurst(demoClipSid, ['Read', 'Bash', 'Write']);
+          await p.waitForFunction(
+            () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'generating',
+            null, { timeout: 10000 },
+          ).catch(() => {});
+          await sleep(WORK);
+          writeDemoArtifacts();
+          writeDemoStatus(demoClipSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
+          demoEvent(demoClipSid, 'log', 'demo composed — awaiting review');
+          await p.waitForFunction(
+            () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
+            null, { timeout: 10000 },
+          ).catch(() => {});
+          await p.waitForSelector('[data-demo-iframe]', { timeout: 10000 }).catch(() => {});
+          await sleep(WORK);
+        }, {
+          readySel: 'main[data-page="demo-builder"]',
+          caption: 'The demo builder: briefed, then composing the page element by element — capture, verify, present',
+        });
       },
     },
     {
@@ -99,6 +142,12 @@ export const journey = defineJourney({
         // Self-contained cleanup (e2e-journey.mjs's finally block is out of this
         // task's touch-scope, so this journey cleans up its own state here).
         cleanDemoBuilderSession(demoSid);
+        // The clip-only session's cleanup is deliberately deferred to here (not
+        // demo-builder-generate, right after recordClip) — cleanDemoBuilderSession()
+        // also unconditionally wipes the shared .forge/demo/ directory, which the
+        // writeDemoLock() call above still needed to read from. Safe now: nothing
+        // downstream needs .forge/demo/ once the demo is locked.
+        cleanDemoBuilderSession(demoClipSid);
         restoreProjectJson(demoJsonStash);
       },
     },

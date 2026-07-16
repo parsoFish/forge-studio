@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  PROJECT, SCRATCH_FLOW, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
+  PROJECT, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
   cleanOnboardedProject,
   writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft, cleanInstructionsSession,
   writePbStatus, seedStagedBrain, cleanSeededBrain,
@@ -136,7 +136,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-library',
         title: 'Library — everything is data',
-        narration: 'With a brand-new project just stood up from nothing, the library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
+        narration: 'With a brand-new project just stood up from nothing, the library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the OOTB flows (forge-develop is the one the operator rebuilds from scratch, live, later in this walkthrough).',
         drive: async (ctx) => {
               const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -181,13 +181,17 @@ export const journey = defineJourney({
               check(sectionCounts.agents >= 1, `library: agents section data-count ≥1 (got ${sectionCounts.agents})`);
               check(sectionCounts.projects >= 1, `library: projects section data-count ≥1 (got ${sectionCounts.projects})`);
               check(sectionCounts.kbs >= 1, `library: kbs section data-count ≥1 (got ${sectionCounts.kbs})`);
-              // The from-scratch flow we authored before boot should appear as a flow card.
-              const scratchCardPresent = await page.evaluate((id) =>
-                document.querySelector(`[data-card-type="flow"][data-card-id="${id}"]`) !== null ||
-                [...document.querySelectorAll('[data-card-type="flow"]')].some((el) => (el.getAttribute('href') ?? '').includes(id)) ||
-                (document.querySelector('[data-section="flows"]')?.textContent ?? '').includes(id),
-                SCRATCH_FLOW);
-              check(scratchCardPresent, `library: the authored "${SCRATCH_FLOW}" flow appears as a card (registered as data)`);
+              // The OOTB flows render as real cards (data, not a hardcoded list) — this
+              // is the "everything is data" claim, honestly scoped to what's on disk at
+              // this point in the run (the from-scratch flow is authored live in the
+              // BUILD tab later, in flows-author — it doesn't exist yet here).
+              const ootbFlowIds = ['forge-architect', 'forge-develop', 'forge-reflect'];
+              const ootbCardsPresent = await page.evaluate((ids) =>
+                ids.every((id) =>
+                  document.querySelector(`[data-card-type="flow"][data-card-id="${id}"]`) !== null ||
+                  [...document.querySelectorAll('[data-card-type="flow"]')].some((el) => (el.getAttribute('href') ?? '').includes(id))),
+                ootbFlowIds);
+              check(ootbCardsPresent, `library: the OOTB flows (${ootbFlowIds.join(', ')}) render as cards (registered as data)`);
 
         },
       },

@@ -140,7 +140,7 @@ export const journey = defineJourney({
         title: 'Operator answers — P2 free-text override on Q2',
         narration: 'The operator answers Q1 with a radio option but overrides Q2 entirely in free text; the question resolves on the typed answer and every radio stays unselected — proving the operator is never boxed into the offered choices.',
         drive: async (ctx) => {
-              const { page, frame, check } = ctx;
+              const { page, frame, check, browser, watch, recordClip } = ctx;
               // ── R1.3: Operator answers — free-text override (P2) ──────────────────────
               console.log('\n[R1.3] Operator answers — P2 free-text override on Q2');
               await caption(page, "Answer with an option — or in your own words. You're in control.");
@@ -156,7 +156,7 @@ export const journey = defineJourney({
                   { delay: 18 },
                 );
                 await sleep(THINK);
-                await frame(page, 'r1-3-freetext', 'R1 — P2: operator types a free-text answer on Q2 (overriding the option list)');
+                await frame(page, 'r1-3-freetext', 'R1 — P2: operator types a free-text answer on Q2 (overriding the option list)', { key: true });
                 try {
                   await page.waitForFunction(
                     () => document.querySelector('[data-question-index="1"]')?.getAttribute('data-question-resolved') === 'true',
@@ -180,13 +180,46 @@ export const journey = defineJourney({
                 await sleep(THINK);
                 await frame(page, 'r1-3-answer-fallback', 'R1 — answered via radio (P2 freetext surface not found)');
               }
+
+              // CHAPTER CLIP 1 — run-idea-interview: a fresh ephemeral context re-drives the
+              // SAME sid's interview at the still-unanswered awaiting-answers stage (no server
+              // mutation has happened yet — the shared page's picks are tab-local React state
+              // until submit-answers POSTs). The clip picks Q1 and free-texts Q2 itself, then
+              // ends on the answered state WITHOUT submitting — submission is what would mutate
+              // the canonical sid, so the clip stops one step short of it.
+              await recordClip(browser, watch, 'run-idea-interview', `/architect/${encodeURIComponent(sid)}/interview`, async (p) => {
+                await p.waitForSelector('[data-section="architect-interview"]', { timeout: 15000 });
+                await caption(p, "Two questions, your call — pick an option, or just say it in your own words.");
+                await p.locator('[data-question-index="1"]').scrollIntoViewIfNeeded().catch(() => {});
+                await sleep(READ);
+                await p.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
+                await sleep(THINK);
+                const clipFreetext = p.locator('[data-question-freetext="1"]');
+                if (await clipFreetext.count() > 0) {
+                  await clipFreetext.scrollIntoViewIfNeeded().catch(() => {});
+                  await clipFreetext.click();
+                  await clipFreetext.pressSequentially(
+                    'Reuse SharedReleaseFixture, but add a standalone subtest for the gate-task path.',
+                    { delay: 20 },
+                  );
+                  await sleep(THINK);
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-question-index="1"]')?.getAttribute('data-question-resolved') === 'true',
+                    null, { timeout: 5000 },
+                  ).catch(() => {});
+                } else {
+                  await p.locator('[data-question-index="1"] input[type="radio"]').first().check().catch(() => {});
+                }
+                await sleep(READ);
+              }, { readySel: '[data-section="architect-interview"]', caption: "Answer the architect's clarifying questions — an option, or your own words" });
+
               await page.locator('[data-action="submit-answers"]').click();
               await sleep(ACT);
               writeStatus(sid, { phase: 'drafting', round: 2, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=drafting) — rolling in answers');
               await page.waitForSelector('[data-section="architect-interview"]', { state: 'detached', timeout: 8000 }).catch(() => {});
               await burst(sid, ['Read', 'Edit']);
-              await frame(page, 'r1-3b-drafting', 'R1 — planning: architect drafts with the answers folded in');
+              await frame(page, 'r1-3b-drafting', 'R1 — planning: architect drafts with the answers folded in', { key: true });
 
         },
       },
@@ -263,7 +296,7 @@ export const journey = defineJourney({
         title: 'Rich PLAN.html (gate)',
         narration: 'The plan gate presents the architect\'s output as rendered Given/When/Then acceptance-criteria cards, not raw markdown — the same PLAN.html the PM will read verbatim once approved.',
         drive: async (ctx) => {
-              const { page, watch, frame, check } = ctx;
+              const { page, watch, frame, check, browser, recordClip } = ctx;
               // ── R2.0: Rich PLAN.html presented ────────────────────────────────────────
               console.log('\n[R2.0] Rich PLAN.html (gate)');
               await page.goto(
@@ -276,7 +309,38 @@ export const journey = defineJourney({
               check(await page.locator('[data-plan-iframe]').count() > 0, 'plan gate renders the rich PLAN.html iframe');
               await page.locator('[data-plan-iframe]').scrollIntoViewIfNeeded().catch(() => {});
               await sleep(READ);
-              await frame(page, 'r2-0-plan-html', 'R2 — rich PLAN.html with Given/When/Then AC cards');
+              await frame(page, 'r2-0-plan-html', 'R2 — rich PLAN.html with Given/When/Then AC cards', { key: true });
+
+              // CHAPTER CLIP 2 — run-plan-gate: a fresh ephemeral context re-drives the SAME
+              // sid's plan gate WHILE the session is still 'awaiting-verdict' — the artifact
+              // page live-polls the architect session, so this MUST run before send-back moves
+              // the phase to 'drafting'. Pure dwell + hover on send-back/approve — no clicks —
+              // so the canonical sid never advances a gate the main beats own for real.
+              await recordClip(browser, watch, 'run-plan-gate',
+                `/artifact?run=_architect-${encodeURIComponent(sid)}&type=plan&mode=gate`,
+                async (p) => {
+                  await p.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
+                  await caption(p, 'Given/When/Then, rendered — not raw markdown. Dwell on it before you decide.');
+                  await p.locator('[data-plan-iframe]').scrollIntoViewIfNeeded().catch(() => {});
+                  await sleep(WORK);
+                  await sleep(READ);
+                  const rationaleField = p.locator(
+                    '[data-component="plan-gate"] [data-field="rationale"], [data-section="plan-gate"] [data-field="rationale"]'
+                  ).first();
+                  if (await rationaleField.count() > 0) {
+                    await rationaleField.scrollIntoViewIfNeeded().catch(() => {});
+                    await rationaleField.hover().catch(() => {});
+                  }
+                  await sleep(THINK);
+                  const approveBtn = p.locator('[data-action="approve-plan"]');
+                  if (await approveBtn.count() > 0) {
+                    await approveBtn.scrollIntoViewIfNeeded().catch(() => {});
+                    await approveBtn.hover().catch(() => {});
+                  }
+                  await sleep(WORK);
+                },
+                { readySel: '[data-section="plan-gate"]', caption: 'The plan gate — dwell on the plan, send-back in reach, holding on approve' },
+              );
 
         },
       },
@@ -582,7 +646,7 @@ export const journey = defineJourney({
         title: 'Cost rollup',
         narration: 'The cycle badge sums exactly what dev-loop and unifier already accrued ($1.75 + $1.20) — the rollup is arithmetic on real per-phase numbers the operator watched tick up, not a separate estimate.',
         drive: async (ctx) => {
-              const { page, watch, frame, check, expectPhaseCost } = ctx;
+              const { page, watch, frame, check, expectPhaseCost, browser, recordClip } = ctx;
               // ── R3.5: Cost rollup across the spine ────────────────────────────────────
               console.log('\n[R3.5] Cost rollup');
               cycleEvent('review-loop', 'start', 'review-loop start');
@@ -593,7 +657,7 @@ export const journey = defineJourney({
               await caption(page, 'Forge Develop, costed per phase — dev-loop $1.75, unifier $1.20 — under its ceiling. (The Architect flow bills separately.)');
               await openStudioMonitor(page, watch);
               await sleep(READ);
-              await frame(page, 'r3-5-cost-rollup', 'R3 — cost rollup across the spine (Studio monitor)');
+              await frame(page, 'r3-5-cost-rollup', 'R3 — cost rollup across the spine (Studio monitor)', { key: true });
               await expectPhaseCost(page, 'monitor: cost rollup — a phase hex shows cost > 0');
               try {
                 await page.waitForFunction(
@@ -613,6 +677,34 @@ export const journey = defineJourney({
               // S7: seed a live worktree so the comment-derived send-back genuinely
               // appends a UWI in place (ADR-026), not a 409.
               REVIEW_WT = seedReviewWorktree();
+
+              // CHAPTER CLIP 3 — run-build-monitor: a fresh ephemeral context re-drives the
+              // SAME CYCLE_ID's forge-develop monitor — a pure GET re-read of the already
+              // gated run's event log, so nothing about the canonical cycle is mutated. The
+              // hex click just opens/observes the phase drawer (read-only), mirroring the
+              // established expectHexOpensDrawer visual without asserting inside the clip.
+              await recordClip(browser, watch, 'run-build-monitor', '/flows/forge-develop', async (p) => {
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                ).catch(() => {});
+                const runCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
+                if (await runCard.count() > 0) { await runCard.click().catch(() => {}); await sleep(ACT); }
+                await caption(p, 'Watch it build — the WI hexes fan out, the unifier reviews on its own node, cost accrues live.');
+                await sleep(WORK);
+                await p.locator('[data-mon-node][data-hex-kind="wi"]').first().scrollIntoViewIfNeeded().catch(() => {});
+                await sleep(READ);
+                const unifierHex = p.locator('[data-mon-node][data-node-id="unifier"]').first();
+                if (await unifierHex.count() > 0) {
+                  await unifierHex.scrollIntoViewIfNeeded().catch(() => {});
+                  await unifierHex.click().catch(() => {});
+                  await p.waitForFunction(
+                    () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
+                    null, { timeout: 8000 },
+                  ).catch(() => {});
+                }
+                await sleep(WORK);
+              }, { readySel: '[data-page="flow-monitor"]', caption: 'Watch it build — WI fan-out, unifier own-node, cost pills accruing' });
 
         },
       },
@@ -741,7 +833,7 @@ export const journey = defineJourney({
         title: 'Re-review — PARTIAL→MET',
         narration: 'AC-2 now reads MET; resolving the original blocking comment flips the page\'s derived verdict from send-back back to approve — the loop closed on the operator\'s own criterion, not a generic re-run.',
         drive: async (ctx) => {
-              const { page, frame, check, countAtLeast } = ctx;
+              const { page, frame, check, countAtLeast, browser, watch, recordClip } = ctx;
               // ── R4.3: Re-review — PARTIAL→MET (payoff) ────────────────────────────────
               console.log('\n[R4.3] Re-review — PARTIAL→MET');
               await sleep(ACT);
@@ -751,7 +843,7 @@ export const journey = defineJourney({
               await caption(page, 'Partial → corrected → met. The loop closed on your criterion.');
               await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
               await sleep(READ);
-              await frame(page, 'r4-3-rereview-met', 'R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)');
+              await frame(page, 'r4-3-rereview-met', 'R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)', { key: true });
               const partialCount = await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count();
               check(partialCount === 0, `re-review: partial AC count == 0 after dev-loop rerun (got ${partialCount})`);
               await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
@@ -768,6 +860,33 @@ export const journey = defineJourney({
               check(
                 await page.locator('[data-component="verdict-form"][data-form-kind="approve"]').count() > 0,
                 'resolving the blocking comment flips the derived verdict to approve',
+              );
+
+              // CHAPTER CLIP 4 — run-verdict-gate: a fresh ephemeral context re-drives the
+              // SAME CYCLE_ID's verdict surface at exactly this checkpoint — comment resolved,
+              // every AC met, verdict already derived to 'approve' — a pure GET re-read, no
+              // mutation. It ends holding on (hovering, never clicking) approve-and-merge; the
+              // next beat owns the real click that actually merges.
+              await recordClip(browser, watch, 'run-verdict-gate',
+                `/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=gate`,
+                async (p) => {
+                  await p.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
+                  await p.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 }).catch(() => {});
+                  await caption(p, 'Partial, corrected, met — every acceptance criterion accountable, the comment resolved on record.');
+                  await p.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
+                  await sleep(WORK);
+                  await sleep(READ);
+                  const ac2Clip = p.locator('[data-demo-region="ac-2"]');
+                  if (await ac2Clip.count() > 0) {
+                    await ac2Clip.scrollIntoViewIfNeeded().catch(() => {});
+                    await sleep(THINK);
+                  }
+                  await p.locator('[data-component="verdict-form"]').scrollIntoViewIfNeeded().catch(() => {});
+                  const approveMergeBtn = p.locator('[data-component="verdict-form"] [data-action="approve-and-merge"]');
+                  if (await approveMergeBtn.count() > 0) await approveMergeBtn.hover().catch(() => {});
+                  await sleep(WORK);
+                },
+                { readySel: '[data-page-ready="true"]', caption: 'The verdict surface — demo comparison, resolved comment, holding on approve-and-merge' },
               );
 
         },
@@ -875,7 +994,7 @@ export const journey = defineJourney({
         title: 'Reflect',
         narration: 'The operator answers the reflection questions — WI sizing, repeated actions, a free-text lesson — and only once that submits does the reflector write a brain theme and the run rail finally flips to complete.',
         drive: async (ctx) => {
-              const { page, watch, frame, check } = ctx;
+              const { page, watch, frame, check, browser, recordClip } = ctx;
               // ── R5: Reflect — operator tunes the brain ────────────────────────────────
               console.log('\n[R5] Reflect');
               await caption(page, "Forge improves. You're the teacher — tune the brain.");
@@ -915,14 +1034,14 @@ export const journey = defineJourney({
                 () => cycleEvent('reflection', 'end', 'reflection.end', { cost_usd: 0.12 }),
               ], WORK);
               await sleep(ACT);
-              await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain');
+              await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain', { key: true });
               // Model B: the reflect node lives on the forge-reflect flow; the threaded run
               // surfaces there via flowLineage (it ran a reflection phase).
               await openStudioMonitor(page, watch, 'forge-reflect');
               await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
               await sleep(ACT);
               await caption(page, 'And on the Forge Reflect flow — the reflect step that fired automatically on merge.');
-              await frame(page, 'r5-1-reflect-flow', 'The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge');
+              await frame(page, 'r5-1-reflect-flow', 'The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge', { key: true });
               try {
                 await page.waitForFunction(
                   () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
@@ -947,6 +1066,34 @@ export const journey = defineJourney({
                   document.querySelector(`[data-run-id="${id}"]`)?.getAttribute('data-run-status') ?? '(absent)', CYCLE_ID);
                 check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
               }
+
+              // CHAPTER CLIP 5 — run-reflect-complete: submission already happened for real on
+              // the shared page above (user-feedback.md is now on disk), so a fresh ephemeral
+              // context re-driving REFLECT_URL is a pure GET that reads the ALREADY-answered
+              // state straight back — no second submit, no duplicated cycle/reflection events.
+              // It then re-drives the forge-reflect monitor (also a pure GET re-read) to hold
+              // on the reflect hex green + the run rail already reading complete.
+              await recordClip(browser, watch, 'run-reflect-complete',
+                `/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=reflection&mode=view`,
+                async (p) => {
+                  await p.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
+                  await caption(p, "Forge improves — you're the teacher, and the lesson is already banked.");
+                  await p.waitForSelector('[data-section="reflect-done"]', { timeout: 10000 }).catch(() => {});
+                  await sleep(WORK);
+                  await sleep(READ);
+                  await p.goto(watch.uiUrl + '/flows/forge-reflect', { waitUntil: 'domcontentloaded' });
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+                    null, { timeout: 15000 },
+                  ).catch(() => {});
+                  const reflectRunCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
+                  if (await reflectRunCard.count() > 0) { await reflectRunCard.click().catch(() => {}); await sleep(ACT); }
+                  await caption(p, 'The reflect hex greens on its own flow — and the run rail finally reads complete.');
+                  await sleep(WORK);
+                  await sleep(READ);
+                },
+                { readySel: '[data-page-ready="true"]', caption: 'Reflection submitted — the brain updates, the run completes' },
+              );
 
         },
       },

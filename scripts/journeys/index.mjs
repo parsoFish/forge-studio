@@ -6,9 +6,12 @@
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
  * interleaving): skills → stand-up-onboard → stand-up-create → knowledge →
- * agents → flows-author → flows-run → roadmap → swap-runtime → recovery →
- * demo-builder. Two hard orderings this sequence must preserve (verified by
- * reading every journey module, not just assumed):
+ * agents → flows-author → flows-run → roadmap → recovery → demo-builder.
+ * (the standalone runtime-adapter journey was retired — its checks were
+ * folded into agents' agents-scratch-build beat, which drives the SDK/model
+ * picker as part of composing a brand-new agent from scratch.) Two
+ * hard orderings this sequence must preserve (verified by reading every
+ * journey module, not just assumed):
  *   · stand-up-onboard before flows-author — flows-author's seeded-run beat
  *     (J5) reads the project stand-up-onboard onboards (J4_PROJECT) on disk.
  *   · flows-run (all 24 beats, in file-declared order) before roadmap —
@@ -17,14 +20,15 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
- * Every other journey (skills, agents, knowledge, swap-runtime, recovery,
- * demo-builder) is self-contained: skills-edit restores the real shipped
- * skill it edits, skills-agentic-author removes its staged demo-design
- * artifact + demo sessions, and demo-builder-lock cleans its own seeded
- * state — each at the top/end of their own drive(). skills' created slugs
- * never collide with agents' starter slugs, and skills-create's
- * api-contract-review skill is the throughline artifact: it stays on disk
- * until the runner's finally sweeps it.
+ * Every other journey (skills, agents, knowledge, recovery, demo-builder) is
+ * self-contained: skills-edit restores the real shipped skill it edits,
+ * skills-agentic-author removes its staged demo-design artifact + demo
+ * sessions, agents-scratch-build/agents-builder each clean up their own
+ * skill-dir/stashed-SKILL.md, flows-author-scratch-build cleans its own
+ * authored flow, and demo-builder-lock cleans its own seeded state — each at
+ * the top/end of their own drive(). skills' created slugs never collide with
+ * agents' starter slugs, and skills-create's api-contract-review skill is the
+ * throughline artifact: it stays on disk until the runner's finally sweeps it.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
@@ -34,7 +38,6 @@ import { journey as agents } from './agents.mjs';
 import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
 import { journey as roadmap } from './roadmap.mjs';
-import { journey as swapRuntime } from './swap-runtime.mjs';
 import { journey as recovery } from './recovery.mjs';
 import { journey as demoBuilder } from './demo-builder.mjs';
 
@@ -47,7 +50,6 @@ export const JOURNEYS = [
   flowsAuthor,
   flowsRun,
   roadmap,
-  swapRuntime,
   recovery,
   demoBuilder,
 ];
@@ -75,11 +77,12 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-lint-index'],
 
   ['agents', 'agents-starters'],
+  ['agents', 'agents-scratch-build'],
   ['agents', 'agents-builder'],
 
   ['flows-author', 'flows-author-new-flow'],
+  ['flows-author', 'flows-author-scratch-build'],
   ['flows-author', 'flows-author-seeded-run'],
-  ['flows-author', 'flows-author-scratch-parity'],
 
   ['flows-run', 'flows-run-idea'],
   ['flows-run', 'flows-run-grounding'],
@@ -108,8 +111,6 @@ export const RUN_ORDER = [
 
   ['roadmap', 'roadmap-tab'],
   ['roadmap', 'roadmap-start-development'],
-
-  ['swap-runtime', 'swap-runtime-sdk-picker'],
 
   ['recovery', 'recovery-surface'],
 

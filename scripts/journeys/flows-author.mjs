@@ -2,18 +2,142 @@ import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   cleanFirstFlow, J3_FLOW_DIR, waitForFile, readSavedFlowNodes, J3_FLOW,
   readSavedFlow, waitForFlowVersion, THINK, cleanFirstFlowRun, QDIR, J5_INIT,
-  J4_PROJECT, J5_CYCLE_ID, j5Event, parseFlowStructure, SEED_FLOW_PATH,
-  SCRATCH_FLOW_DIR, SCRATCH_FLOW, FORGE_ROOT, caption, ACT, READ,
+  J4_PROJECT, J5_CYCLE_ID, j5Event, SEED_FLOW_PATH,
+  SCRATCH_FLOW_DIR, SCRATCH_FLOW, FORGE_ROOT, caption, ACT, READ, cleanScratchFlow,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import yaml from 'js-yaml';
+
+// The three agents authored, live, into the from-scratch flow — same roles as
+// the forge-develop seed (developer-ralph → developer-unifier → a gated
+// review node), so the topological parity compare below has something real
+// to compare against.
+const SCRATCH_CHAIN = ['developer-ralph', 'developer-unifier', 'project-scoped-review'];
+
+// ── HTML5 DnD: AgentPalette agent chip → FlowBuilderCanvas ──────────────────
+// Mirrors AgentPalette's DraggableChip (encodeDragPayload sets text/plain to
+// JSON.stringify({kind:'agent', ref})) → FlowBuilderCanvas.onDrop (decodes it,
+// only accepts kind==='agent', places the new fn-<ts> node at
+// rfInstance.project({x: clientX-rect.left, y: clientY-rect.top})).
+async function dropAgentNode(page, agentRef, clientX, clientY) {
+  const chip = page.locator(`[data-palette-chip="agent"][data-chip-ref="${agentRef}"]`);
+  const canvas = page.locator('[data-component="flow-builder-canvas"]');
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await chip.dispatchEvent('dragstart', { dataTransfer });
+  await canvas.dispatchEvent('dragover', { dataTransfer, clientX, clientY });
+  await canvas.dispatchEvent('drop', { dataTransfer, clientX, clientY });
+  await chip.dispatchEvent('dragend', { dataTransfer });
+}
+
+// ── ReactFlow handle-drag (real mouse, NOT synthetic dispatch) ──────────────
+// ReactFlow's own pointer-drag connection logic listens for real
+// mousedown/mousemove/mouseup, not synthetic DOM events — this must be an
+// actual Playwright mouse drag between the two Handle nodes
+// ([data-nodeid][data-handleid="out"|"in"]).
+async function wireEdge(page, srcNodeId, tgtNodeId) {
+  const srcHandle = page.locator(`[data-nodeid="${srcNodeId}"][data-handleid="out"]`);
+  const tgtHandle = page.locator(`[data-nodeid="${tgtNodeId}"][data-handleid="in"]`);
+  const srcBox = await srcHandle.boundingBox();
+  const tgtBox = await tgtHandle.boundingBox();
+  if (!srcBox || !tgtBox) return false;
+  const sx = srcBox.x + srcBox.width / 2, sy = srcBox.y + srcBox.height / 2;
+  const tx = tgtBox.x + tgtBox.width / 2, ty = tgtBox.y + tgtBox.height / 2;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move((sx + tx) / 2, (sy + ty) / 2, { steps: 8 });
+  await page.mouse.move(tx, ty, { steps: 8 });
+  await page.mouse.up();
+  return true;
+}
+
+// On connect, FlowBuilderCanvas's onConnectEnd opens the ArtifactPicker at
+// the real cursor (mouseup) position — pick the artifact label there. (An
+// Artifact-Reference chip dragged onto an edge is a no-op by design; this
+// post-connect picker is the ONLY UI path that actually labels an edge.)
+async function pickArtifact(page, artifactId, timeout = 6000) {
+  try {
+    await page.waitForSelector('[data-component="artifact-picker"]', { timeout });
+  } catch { return false; }
+  const opt = page.locator(`[data-artifact-option="${artifactId}"]`);
+  if ((await opt.count()) === 0) return false;
+  await opt.click();
+  return true;
+}
+
+// ── module-local topological structural-parity compare ─────────────────────
+// Deliberately NOT the fixtures' parseFlowStructure (literal node-id compare)
+// — FlowBuilderCanvas always auto-generates `fn-<ts>` node ids on drop, so a
+// from-scratch UI rebuild can never match the seed's literal ids. This walks
+// the node chain in topological (source→sink) order instead and compares:
+//   - the agent-ref MULTISET of every non-gated node in the chain — EXCLUDING
+//     the terminal gate node's agent identity. rfNodesToFlow() always writes
+//     a concrete `agent:` for every UI-saved node, but the production seed's
+//     `review` node is a bare gate placeholder with NO `agent:` field at all
+//     — a from-scratch UI rebuild structurally cannot reproduce that exactly.
+//     An honest, source-confirmed UI limit, not something to fake around.
+//   - the ordered edge artifact-label sequence (wi-branches, then pr)
+//   - gate PLACEMENT: which position in the chain carries a gate, and which
+//     gate kind (verdict) — not that node's agent identity.
+function topoChain(doc) {
+  const nodes = Array.isArray(doc?.nodes) ? doc.nodes : [];
+  const edges = Array.isArray(doc?.edges) ? doc.edges : [];
+  const hasIncoming = new Set(edges.map((e) => e.to));
+  let current = nodes.find((n) => !hasIncoming.has(n.id))?.id ?? nodes[0]?.id;
+  const order = [];
+  const edgeArtifacts = [];
+  const seen = new Set();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    order.push(current);
+    const edge = edges.find((e) => e.from === current);
+    if (edge) edgeArtifacts.push(edge.artifact ?? null);
+    current = edge?.to;
+  }
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return { order: order.map((id) => byId.get(id)), edgeArtifacts };
+}
+
+function compareFlowTopology(seedDoc, scratchDoc) {
+  const seed = topoChain(seedDoc);
+  const scratch = topoChain(scratchDoc);
+  const results = [];
+  results.push({
+    ok: seed.order.length === scratch.order.length,
+    label: `chain length matches the seed (seed ${seed.order.length}, scratch ${scratch.order.length})`,
+  });
+  const n = Math.min(seed.order.length, scratch.order.length);
+  const seedAgents = seed.order.slice(0, n).filter((nd) => typeof nd?.gate !== 'string').map((nd) => nd?.agent);
+  const scratchAgents = scratch.order.slice(0, n).filter((nd) => typeof nd?.gate !== 'string').map((nd) => nd?.agent);
+  results.push({
+    ok: JSON.stringify([...seedAgents].sort()) === JSON.stringify([...scratchAgents].sort()),
+    label: `non-gated agent-ref multiset matches the seed (seed: ${seedAgents.join(',')}; scratch: ${scratchAgents.join(',')})`,
+  });
+  results.push({
+    ok: JSON.stringify(seed.edgeArtifacts) === JSON.stringify(scratch.edgeArtifacts),
+    label: `edge artifact-label sequence matches the seed (seed: ${seed.edgeArtifacts.join('→')}; scratch: ${scratch.edgeArtifacts.join('→')})`,
+  });
+  const seedGateIdx = seed.order.findIndex((nd) => typeof nd?.gate === 'string');
+  const scratchGateIdx = scratch.order.findIndex((nd) => typeof nd?.gate === 'string');
+  results.push({
+    ok: seedGateIdx !== -1 && seedGateIdx === scratchGateIdx,
+    label: `gate placement matches the seed (chain position ${seedGateIdx}, scratch position ${scratchGateIdx})`,
+  });
+  const seedGateKind = seedGateIdx !== -1 ? seed.order[seedGateIdx]?.gate : null;
+  const scratchGateKind = scratchGateIdx !== -1 ? scratch.order[scratchGateIdx]?.gate : null;
+  results.push({
+    ok: seedGateKind !== null && seedGateKind === scratchGateKind,
+    label: `gate kind matches the seed ("${seedGateKind}" vs "${scratchGateKind}")`,
+  });
+  return results;
+}
 
 export const journey = defineJourney({
     id: 'flows-author',
     title: 'Author a flow',
-    story: 'As an operator, I author a brand-new cycle flow entirely as data — the flows pillar\'s user-creates path — stringing plan/dev/review agents together, handing the result real work, and proving a from-scratch rebuild of forge-develop is structurally identical to the production seed.',
+    story: 'As an operator, I author a brand-new cycle flow entirely as data — the flows pillar\'s user-creates path — stringing plan/dev/review agents together, handing the result real work, and genuinely rebuilding forge-develop from scratch in the live builder UI to prove it is topologically identical to the production seed.',
     beats: [
       {
         id: 'flows-author-new-flow',
@@ -155,6 +279,207 @@ export const journey = defineJourney({
         },
       },
       {
+        id: 'flows-author-scratch-build',
+        title: 'Build the forge-develop flow from scratch (flow-as-data)',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder — clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and triggers/kickoff/cost-ceiling have no UI surface at all.',
+        drive: async (ctx) => {
+              const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
+              // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
+              console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
+              cleanScratchFlow(); // defensive — a prior run's leftover, if any
+
+              await page.goto(watch.uiUrl + '/flows/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              await caption(page, 'Building the forge-develop flow from scratch, live: three agents dropped from the palette, two edges wired by hand, one verdict gate — the same shape as the production seed.');
+
+              // /flows/new always seeds the basic starter — there is no blank path.
+              // Clear the canvas (native window.confirm) to author genuinely from scratch.
+              page.once('dialog', (d) => d.accept());
+              const clearBtn = page.locator('[data-action="clear-canvas"]');
+              const clearPresent = (await clearBtn.count()) > 0;
+              check(clearPresent, 'author-from-scratch: [data-action="clear-canvas"] present on a freshly seeded flow');
+              if (clearPresent) await clearBtn.click();
+              await page.waitForFunction(
+                () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') === '0',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              const clearedCount = await page.evaluate(() =>
+                document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count'));
+              check(clearedCount === '0', `author-from-scratch: clear-canvas empties the canvas (data-node-count="${clearedCount}")`);
+              await sleep(READ);
+              await frame(page, 'a2-0-blank-canvas', 'A2 — a genuinely blank canvas: cleared, ready to author from scratch');
+
+              // Drop the three agents from the palette by HTML5 DnD.
+              await countAtLeast(page, '[data-palette-chip="agent"]', 3, 'author-from-scratch: palette agent chips loaded before dropping');
+              const canvasBox = await page.locator('[data-component="flow-builder-canvas"]').boundingBox();
+              for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
+                const ref = SCRATCH_CHAIN[i];
+                const x = canvasBox.x + canvasBox.width * (0.22 + i * 0.28);
+                const y = canvasBox.y + canvasBox.height * 0.45;
+                await dropAgentNode(page, ref, x, y);
+                await page.waitForFunction(
+                  (n) => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= n,
+                  i + 1, { timeout: 8000 },
+                ).catch(() => {});
+              }
+              const droppedCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10));
+              check(droppedCount === 3, `author-from-scratch: 3 agent nodes dropped onto the canvas via HTML5 DnD (data-node-count=${droppedCount})`);
+              await frame(page, 'a2-1-nodes-dropped', 'A2 — dev → unifier → review agent nodes dropped from the palette (real HTML5 DnD)');
+
+              // CRITICAL settle wait — FitOnChange's 60ms-delayed, 300ms-transition
+              // auto-fit must finish before edge-wiring reads stable handle boxes.
+              await sleep(800);
+
+              const idFor = async (ref) => page.evaluate((r) =>
+                document.querySelector(`[data-flow-node][data-agent-ref="${r}"]`)?.getAttribute('data-node-id') ?? null, ref);
+              const [devId, unifierId, reviewId] = await Promise.all(SCRATCH_CHAIN.map(idFor));
+              check(!!devId && !!unifierId && !!reviewId,
+                `author-from-scratch: dropped nodes resolve to real node ids (${devId}, ${unifierId}, ${reviewId})`);
+
+              // Edge 1: dev → unifier, artifact wi-branches (real ReactFlow handle-drag).
+              const wired1 = devId && unifierId ? await wireEdge(page, devId, unifierId) : false;
+              check(wired1, 'author-from-scratch: ReactFlow handle-drag wires dev → unifier');
+              const picked1 = wired1 ? await pickArtifact(page, 'wi-branches') : false;
+              check(picked1, 'author-from-scratch: ArtifactPicker labels the dev → unifier edge "wi-branches"');
+              await sleep(THINK);
+
+              // Edge 2: unifier → review, artifact pr.
+              const wired2 = unifierId && reviewId ? await wireEdge(page, unifierId, reviewId) : false;
+              check(wired2, 'author-from-scratch: ReactFlow handle-drag wires unifier → review');
+              const picked2 = wired2 ? await pickArtifact(page, 'pr') : false;
+              check(picked2, 'author-from-scratch: ArtifactPicker labels the unifier → review edge "pr"');
+              const edgeCount = await page.evaluate(() =>
+                document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-edge-count'));
+              check(edgeCount === '2', `author-from-scratch: 2 edges wired (data-edge-count="${edgeCount}")`);
+              await frame(page, 'a2-2-edges-wired', 'A2 — edges wired by real handle-drag; ArtifactPicker labels each (wi-branches, pr)');
+
+              // Gate: click the terminal node to open its mini-panel; toggle the gate.
+              let gateToggled = false;
+              if (reviewId) {
+                await page.locator(`[data-testid="rf__node-${reviewId}"]`).click({ force: true }).catch(() => {});
+                try {
+                  await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${reviewId}"]`, { timeout: 6000 });
+                  await page.locator('[data-action="toggle-gate"]').click();
+                  await sleep(THINK);
+                  gateToggled = true;
+                } catch { /* mini panel did not open */ }
+                await page.keyboard.press('Escape').catch(() => {});
+              }
+              check(gateToggled, 'author-from-scratch: node-mini-panel opens on click; [data-action="toggle-gate"] sets the human verdict gate');
+              await frame(page, 'a2-3-gate-toggled', 'A2 — the terminal node gated: a human verdict is required before this flow can complete');
+
+              // KB bind — Advanced → kb-select (this one WORKS; not a UI limit).
+              await page.locator('summary[data-action="toggle-flow-advanced"]').click().catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="flow-advanced"]')?.open === true,
+                null, { timeout: 5000 },
+              ).catch(() => {});
+              const kbSelect = page.locator('[data-field="kb-select"]');
+              let kbBound = false;
+              if ((await kbSelect.count()) > 0) {
+                await kbSelect.selectOption('cycles').catch(() => {});
+                kbBound = (await kbSelect.inputValue().catch(() => '')) === 'cycles';
+              }
+              check(kbBound, 'author-from-scratch: Advanced kb-select binds the flow to the "cycles" KB');
+
+              // Honest UI limits, narrated rather than faked: `resumable` has no UI
+              // toggle; triggers are hardcoded to on:'complete' (the seed's real
+              // trigger is on:'merged' — unreachable from this UI); kickoff and
+              // costCeilingUsd have no UI fields at all (server defaults apply).
+              // None of these gate the parity compare below — it only asserts the
+              // shapes the UI genuinely CAN author.
+
+              // Name + save.
+              await page.locator('[data-field="flow-name"]').fill('Forge Develop Scratch');
+              await page.locator('[data-action="save-flow"]').click();
+              await page.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 15000 }).catch(() => {});
+              const savedYamlPath = join(SCRATCH_FLOW_DIR, 'flow.yaml');
+              const savedLanded = await waitForFile(savedYamlPath, 12000);
+              check(savedLanded, `author-from-scratch: saving writes studio/flows/${SCRATCH_FLOW}/flow.yaml`);
+              await sleep(READ);
+              await frame(page, 'a2-4-saved', 'A2 — "Forge Develop Scratch" saved: a from-scratch flow, authored entirely in the UI');
+
+              // `forge studio lint` validates the authored flow — the platform's own gate.
+              let lintOk = false;
+              try {
+                execFileSync(process.execPath,
+                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+                  { cwd: FORGE_ROOT, stdio: 'pipe' });
+                lintOk = true;
+              } catch (e) {
+                console.error(`  [studio lint A2] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
+              }
+              check(lintOk, 'author-from-scratch: `forge studio lint` validates the from-scratch flow (exit 0)');
+
+              // Topological structural parity vs the production seed.
+              if (savedLanded) {
+                const seedDoc = yaml.load(readFileSync(SEED_FLOW_PATH, 'utf8'));
+                const scratchDoc = yaml.load(readFileSync(savedYamlPath, 'utf8'));
+                for (const { ok, label } of compareFlowTopology(seedDoc, scratchDoc)) {
+                  check(ok, `author-from-scratch: ${label}`);
+                }
+              } else {
+                check(false, 'author-from-scratch: topological parity vs the seed (skipped — save did not land)');
+              }
+
+              // Clip: the whole authoring arc, start to finish — the "money clip".
+              // Re-authors the SAME-named flow in a fresh context: an idempotent
+              // re-save of the same slug (not a collision), purely so the clip shows
+              // the complete from-nothing arc rather than a partial replay.
+              await recordClip(browser, watch, 'flow-scratch-build', '/flows/new', async (p) => {
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
+                  null, { timeout: 12000 },
+                ).catch(() => {});
+                p.once('dialog', (d) => d.accept());
+                await p.locator('[data-action="clear-canvas"]').click().catch(() => {});
+                await p.waitForFunction(
+                  () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') === '0',
+                  null, { timeout: 6000 },
+                ).catch(() => {});
+                const box = await p.locator('[data-component="flow-builder-canvas"]').boundingBox();
+                if (box) {
+                  for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
+                    const ref = SCRATCH_CHAIN[i];
+                    const cx = box.x + box.width * (0.22 + i * 0.28);
+                    const cy = box.y + box.height * 0.45;
+                    await dropAgentNode(p, ref, cx, cy).catch(() => {});
+                    await sleep(250);
+                  }
+                }
+                await sleep(800);
+                const clipIdFor = async (ref) => p.evaluate((r) =>
+                  document.querySelector(`[data-flow-node][data-agent-ref="${r}"]`)?.getAttribute('data-node-id') ?? null, ref);
+                const [d1, d2, d3] = await Promise.all(SCRATCH_CHAIN.map(clipIdFor));
+                if (d1 && d2) {
+                  await wireEdge(p, d1, d2).catch(() => {});
+                  await pickArtifact(p, 'wi-branches').catch(() => {});
+                }
+                await sleep(300);
+                if (d2 && d3) {
+                  await wireEdge(p, d2, d3).catch(() => {});
+                  await pickArtifact(p, 'pr').catch(() => {});
+                }
+                await sleep(300);
+                if (d3) {
+                  await p.locator(`[data-testid="rf__node-${d3}"]`).click({ force: true }).catch(() => {});
+                  await p.locator('[data-action="toggle-gate"]').click().catch(() => {});
+                  await p.keyboard.press('Escape').catch(() => {});
+                }
+                await sleep(400);
+                await p.locator('[data-field="flow-name"]').fill('Forge Develop Scratch').catch(() => {});
+                await p.locator('[data-action="save-flow"]').click().catch(() => {});
+                await p.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 12000 }).catch(() => {});
+                await sleep(1000);
+              }, { readySel: '[data-page="flow-monitor"]', caption: 'Authoring the forge-develop flow from scratch — drop, wire, gate, save', holdTailMs: 1500 });
+
+        },
+      },
+      {
         id: 'flows-author-seeded-run',
         title: 'Give the authored flow work (seeded run on my-first-flow)',
         narration: 'The freshly authored flow is handed a real run: its own plan/dev/review hexes progress and park at the verdict gate, with per-phase cost accruing — proof a user-authored flow is a first-class citizen of the monitor, not a demo-only shell.',
@@ -223,128 +548,6 @@ export const journey = defineJourney({
               await frame(page, 'j5-0-authored-run', 'J5 — the authored flow, given work, runs plan → dev → review to the verdict gate');
               // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
               cleanFirstFlowRun();
-
-        },
-      },
-      {
-        id: 'flows-author-scratch-parity',
-        title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'Rebuilding forge-develop node-for-node from scratch, `studio lint` validates it and its node set, gate, and edge count match the production seed exactly — the hardcoded cycle really is just one flow definition, and the operator can drag more agents onto it from the same palette.',
-        drive: async (ctx) => {
-              const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
-              // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH ─────────────────────────
-              // The headline new beat. We authored forge-develop-scratch as a flow definition
-              // (3 nodes, 2 edges, 1 gate). Prove: (1) `forge studio lint` validates it,
-              // (2) it is structurally identical to the production seed (subsumption), (3)
-              // the flow builder renders it live, (4) the engine can run it (data-can-start).
-              console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
-
-              // (1) `forge studio lint` validates the authored flow — the platform's own gate.
-              let lintOk = false;
-              try {
-                execFileSync(process.execPath,
-                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
-                  { cwd: FORGE_ROOT, stdio: 'pipe' });
-                lintOk = true;
-              } catch (e) {
-                console.error(`  [studio lint] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
-              }
-              check(lintOk, 'author-from-scratch: `forge studio lint` validates the authored forge-develop-scratch flow (exit 0)');
-
-              // (2) Structural parity with the production seed (forge-develop) — the subsumption proof.
-              const seedStruct = parseFlowStructure(readFileSync(SEED_FLOW_PATH, 'utf8'));
-              const scratchStruct = parseFlowStructure(readFileSync(join(SCRATCH_FLOW_DIR, 'flow.yaml'), 'utf8'));
-              check(JSON.stringify(scratchStruct.nodeIds) === JSON.stringify(seedStruct.nodeIds),
-                `author-from-scratch: node set matches the seed (${scratchStruct.nodeIds.join(',')})`);
-              check(scratchStruct.gates.review === 'verdict',
-                'author-from-scratch: the review gate lands on verdict (matches the forge-develop seed)');
-              check(scratchStruct.edgeCount === seedStruct.edgeCount,
-                `author-from-scratch: edge count matches the seed (${scratchStruct.edgeCount})`);
-
-              // (3) The flow builder renders the authored flow live.
-              await page.goto(watch.uiUrl + `/flows/${SCRATCH_FLOW}`, { waitUntil: 'domcontentloaded' });
-              try {
-                await page.waitForFunction(
-                  () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
-                  null, { timeout: 20000 },
-                );
-                check(true, 'author-from-scratch: flow-monitor ready for the authored flow');
-              } catch {
-                const pr = await page.evaluate(() =>
-                  document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
-                check(false, `author-from-scratch: flow-monitor ready (got "${pr}")`);
-              }
-              await caption(page, 'The forge-develop build flow, rebuilt from scratch — dev → unifier → review, one verdict gate. The platform validates it and it is identical to the production seed.');
-              await sleep(ACT);
-              // (4) The engine can run it — start-run is enabled (no runs yet on this flow).
-              const canStart = await page.evaluate(() =>
-                document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
-              check(canStart === 'true', `author-from-scratch: engine can run the authored flow (data-can-start="true", got "${canStart}")`);
-              await frame(page, 'a2-0-scratch-monitor', 'A2 — authored forge-develop-scratch: lint green, parity with seed, runnable by the engine');
-
-              // Open the BUILD tab to show the authored topology on the canvas.
-              const buildTabBtn = page.locator('button.tab').filter({ hasText: 'BUILD' }).first();
-              if ((await buildTabBtn.count()) > 0) {
-                await buildTabBtn.click();
-                try {
-                  await page.waitForFunction(
-                    () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
-                    null, { timeout: 8000 },
-                  );
-                  check(true, 'author-from-scratch: BUILD tab click flips data-active-tab="build"');
-                } catch {
-                  const tabVal = await page.evaluate(() =>
-                    document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') ?? '(absent)');
-                  check(false, `author-from-scratch: data-active-tab="build" (got "${tabVal}")`);
-                }
-              } else {
-                check(false, 'author-from-scratch: BUILD tab button present');
-              }
-              // ReactFlow hydrates after the tab switch — poll for the node count rather
-              // than a fixed sleep (the canvas can render a tick late under load).
-              await page.waitForFunction(
-                () => parseInt(document.querySelector('[data-node-count]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
-                null, { timeout: 15000 },
-              ).catch(() => {});
-              const nodeCount = await page.evaluate(() => {
-                const el = document.querySelector('[data-node-count]');
-                return el ? parseInt(el.getAttribute('data-node-count') ?? '0', 10) : -1;
-              });
-              check(nodeCount >= 3, `author-from-scratch: BUILD canvas renders ≥3 nodes for the authored forge-develop-scratch flow (got ${nodeCount})`);
-              await countAtLeast(page, '[data-flow-node]', 1, 'author-from-scratch: ≥1 [data-flow-node] rendered in BUILD canvas');
-              const palettePresent = await page.evaluate(() => document.querySelector('[data-component="agent-palette"]') !== null);
-              check(palettePresent, 'author-from-scratch: [data-component="agent-palette"] present (drag more agents in)');
-              await countAtLeast(page, '[data-palette-chip]', 1, 'author-from-scratch: palette has ≥1 [data-palette-chip]');
-              // Agent chips load async (the Agents section shows "Loading…" first while the
-              // fixed Artifact chips render instantly) — wait for the agent chips before
-              // asserting, else we race the fetch.
-              await countAtLeast(page, '[data-palette-chip="agent"]', 3, 'author-from-scratch: palette agent chips loaded');
-              // The new OOTB agent library (L1-A) is draggable from the palette (#10) — the
-              // author can compose the freshly-seeded agents into a flow from scratch.
-              const ootbChips = await page.evaluate(() => {
-                const want = ['developer-ralph', 'project-manager', 'project-scoped-review'];
-                const present = new Set(
-                  Array.from(document.querySelectorAll('[data-palette-chip="agent"]')).map((el) =>
-                    el.getAttribute('data-chip-ref'),
-                  ),
-                );
-                return want.filter((w) => present.has(w));
-              });
-              check(
-                ootbChips.length === 3,
-                `author-from-scratch: library agents appear in the palette (${ootbChips.join(',') || 'none'})`,
-              );
-              const goalSetPresent = await page.evaluate(() => document.querySelector('[data-goal-set]') !== null);
-              check(goalSetPresent, 'author-from-scratch: [data-goal-set] present in FlowHeader');
-              await sleep(READ);
-              await frame(page, 'a2-1-scratch-build', `A2 — BUILD canvas: the authored cycle (${nodeCount} nodes) on the ReactFlow canvas, palette + goal field`);
-              // Clip: the flow builder — the iconic "build the pipeline as data" surface.
-              await recordClip(browser, watch, 'flow-build', `/flows/${SCRATCH_FLOW}`, async (p) => {
-                const buildTab = p.locator('button.tab').filter({ hasText: 'BUILD' }).first();
-                if (await buildTab.count() > 0) await buildTab.click().catch(() => {});
-                await p.waitForSelector('[data-flow-node]', { timeout: 12000 }).catch(() => {});
-                await sleep(2600);
-              }, { readySel: '[data-page="flow-monitor"]', caption: 'the flow builder — compose the cycle as data (nodes · palette · gates)', holdTailMs: 1200 });
 
         },
       },

@@ -84,13 +84,13 @@
  * scratch flow, any _guidance/*.md, and any brain/cycles/_raw/ archives an
  * emulated cycle left behind) in the finally block.
  *
- * JOURNEYS-AS-DATA. The beats are grouped into 11 journeys via `defineJourney()`
+ * JOURNEYS-AS-DATA. The beats are grouped into 10 journeys via `defineJourney()`
  * (scripts/lib/journey-runtime.mjs), one module per user story under
  * scripts/journeys/ (registry: scripts/journeys/index.mjs), and driven through
  * a flat `RUN_ORDER` in a building-blocks THROUGHLINE — every journey's beats
  * now run contiguous (no interleaving): skills, stand-up-onboard,
  * stand-up-create, knowledge, agents, flows-author, flows-run, roadmap,
- * swap-runtime, recovery, demo-builder (see scripts/journeys/index.mjs for the
+ * recovery, demo-builder (see scripts/journeys/index.mjs for the
  * cross-journey ordering constraints this sequence preserves).
  * `node scripts/e2e-journey.mjs --list` prints the journey/beat shape and
  * exits without booting Studio.
@@ -107,7 +107,7 @@ import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
   OUT, FRAMES, CLIPS,
   DATE, INIT, J5_INIT, CYCLE_LOG,
-  writeScratchFlow, cleanScratchFlow,
+  cleanScratchFlow,
   cleanStarterAgents,
   cleanFirstFlow,
   cleanFirstProject,
@@ -299,14 +299,14 @@ async function main() {
   mkdirSync(FRAMES, { recursive: true });
   mkdirSync(CLIPS, { recursive: true });
 
-  // Author the from-scratch flow BEFORE booting the bridge so the UI + lint can
-  // load it. (Cleaned up in finally.) This is the data the ACT-1 build beat shows.
+  // The from-scratch flow (ACT-1) is now authored LIVE in the Studio BUILD tab by
+  // flows-author's scratch-build beat, not pre-seeded — this is just the stale-state
+  // sweep so a prior interrupted run's leftovers don't collide with this one.
   cleanScratchFlow();
   cleanStarterAgents();
   cleanFirstFlow();
   cleanFirstProject();
   cleanFirstFlowRun();
-  writeScratchFlow();
 
   console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
   watch = await startWatch();

@@ -1,6 +1,6 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption,
+  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -130,7 +130,7 @@ export const journey = defineJourney({
                 await roadmapTab.click();
                 await sleep(1500); // allow bridge fetch to settle
                 await caption(page, 'Per-project Roadmap — a serpentine timeline of the project’s progression over time; click a dot to pop its detail card.');
-                await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time');
+                await frame(page, 'r6-0-roadmap-tab', 'R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time', { key: true });
                 const roadmapSection = await page.evaluate(() =>
                   document.querySelector('[data-section="project-roadmap"]') !== null);
                 check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
@@ -160,9 +160,49 @@ export const journey = defineJourney({
         title: 'Start development trigger (DEC-3)',
         narration: 'A decomposed-but-not-yet-built initiative offers "Start development" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.',
         drive: async (ctx) => {
-              const { page, check, frame } = ctx;
+              const { page, watch, browser, recordClip, check, frame } = ctx;
               // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
               console.log('\n[R6.1] Start development trigger (DEC-3)');
+
+              // Clip: a fresh, isolated context drives the roadmap the way an operator
+              // would — dwell on the serpentine timeline, pop the completed initiative's
+              // card (its real WI listing), then pop the pending initiative's card and
+              // settle on the "Start development" trigger, focused and ready to fire.
+              // SAFETY (S5): the real trigger repoints ${INIT_DEV}'s manifest onto the
+              // forge-develop flow — a live scheduler (`forge studio` spawns `serve` for
+              // real; only FORGE_ARCHITECT_NO_SPAWN-guarded routes are stubbed) polls
+              // _queue/pending every 5s and would claim it, kicking off a REAL dev-loop
+              // cycle. The main beat below already performs that click exactly once (on
+              // the outer `page`) and its own tail already cleans up the manifest it
+              // creates — reusing it here would be a second live-fire window for a demo
+              // clip. So this clip stops at the button, unclicked; the single real click
+              // stays owned by the code that follows, on the outer page.
+              await recordClip(browser, watch, 'roadmap-drive', `/projects/${PROJECT}`, async (p) => {
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                ).catch(() => {});
+                await p.locator('button[data-tab="roadmap"]').click().catch(() => {});
+                await p.waitForSelector('[data-roadmap-node]', { timeout: 10000 }).catch(() => {});
+                await sleep(WORK); // dwell on the serpentine timeline
+                // Pop the completed initiative's card — its real WI listing.
+                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT}"]`).first().click().catch(() => {});
+                await p.waitForSelector('[data-roadmap-popover]', { timeout: 8000 }).catch(() => {});
+                await sleep(WORK);
+                await p.keyboard.press('Escape').catch(() => {});
+                await sleep(THINK);
+                // Pop the pending initiative's card and settle on its "Start
+                // development" trigger — focused, not fired (see SAFETY note above).
+                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"]`).first().click().catch(() => {});
+                await p.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`, { timeout: 8000 }).catch(() => {});
+                await p.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state] [data-action="start-development"]`)
+                  .scrollIntoViewIfNeeded().catch(() => {});
+                await sleep(WORK);
+              }, {
+                readySel: '[data-page="projects"]',
+                caption: 'The operator reads the roadmap, pops a finished initiative’s card, then eyes the "Start development" trigger on the one queued up next',
+              });
+
               // The card pops off the dot — click the pending initiative's node to reveal it.
               await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"]`).first().click().catch(() => {});
               await sleep(500);
@@ -182,7 +222,7 @@ export const journey = defineJourney({
                 await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});
                 const devState = await devCard.getAttribute('data-develop-state');
                 check(devState === 'started', `start-development enqueues the develop run (data-develop-state=${devState})`);
-                await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review');
+                await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review', { key: true });
                 // The manifest is now claimable on the forge-develop flow, threading its cycle_id.
                 const devManifest = readFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), 'utf8');
                 check(/^flow_id:\s*forge-develop\s*$/m.test(devManifest), 'start-development repoints the manifest at the forge-develop flow');
