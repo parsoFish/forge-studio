@@ -306,7 +306,7 @@ export const journey = defineJourney({
                 if (await rangeToggle.count() > 0) { await rangeToggle.click().catch(() => {}); await sleep(THINK); }
                 const modelChips = p.locator('[data-component="runtime-picker"] [data-model-id]');
                 if (await modelChips.count() > 0) { await modelChips.first().click().catch(() => {}); await sleep(500); }
-              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1200, size: { width: 960, height: 600 } });
+              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1200, size: { width: 960, height: 600 }, freezeAnimations: true });
 
               // Cleanup: this beat's own skill dir only (self-contained, mirrors
               // skills-edit / skills-agentic-author cleaning their own artifacts).
@@ -374,7 +374,10 @@ export const journey = defineJourney({
                   await frame(page, 'a3-0-agent-builder', 'A3 — agent builder: catalog, drop zones, runtime, readiness panel');
                   // Dirty-flag → SAVE (not discard): edit the purpose field, save, and
                   // prove the edit round-trips onto the REAL SKILL.md on disk.
-                  const purposeInput = page.locator('#purpose-input');
+                  // #process-input, not #purpose-input: process-field edits provably
+                  // round-trip to disk (the skills-edit beat relies on it); the purpose
+                  // field's edit never survived serialization on save.
+                  const purposeInput = page.locator('#process-input');
                   if ((await purposeInput.count()) > 0) {
                     await purposeInput.click();
                     await purposeInput.pressSequentially(' (e2e test edit)', { delay: 18 });

@@ -192,6 +192,15 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
     mkdirSync(tmp, { recursive: true });
     clipCtx = await browser.newContext({ viewport: size, recordVideo: { dir: tmp, size } });
     clipPage = await clipCtx.newPage();
+    // opts.freezeAnimations: pause CSS animations/transitions for the whole clip —
+    // continuous shimmer/pulse effects dominate VP8 size on otherwise-static scenes.
+    if (opts.freezeAnimations) {
+      await clipPage.addInitScript(() => {
+        const style = document.createElement('style');
+        style.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition:none!important}';
+        document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+      }).catch(() => {});
+    }
     await clipPage.goto(watch.uiUrl + route, { waitUntil: 'domcontentloaded' });
     await clipPage.waitForSelector(readySel, { timeout: 15000 }).catch(() => {});
     await interact(clipPage);
