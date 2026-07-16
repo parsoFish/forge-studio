@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T07:40:20.942Z",
+  "generatedAt": "2026-07-16T10:58:54.604Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -12,7 +12,8 @@
     "roadmap",
     "swap-runtime",
     "knowledge",
-    "recovery"
+    "recovery",
+    "demo-builder"
   ],
   "executedJourneys": [
     "stand-up-create",
@@ -24,7 +25,8 @@
     "roadmap",
     "swap-runtime",
     "knowledge",
-    "recovery"
+    "recovery",
+    "demo-builder"
   ],
   "journeys": {
     "stand-up-create": {
@@ -168,6 +170,10 @@
               "pass": true
             },
             {
+              "msg": "clip instr-generate.webm under 600K (got 327893)",
+              "pass": true
+            },
+            {
               "msg": "AI-1: AGENTS.md committed — back-to-project offered",
               "pass": true
             }
@@ -187,7 +193,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "instructions-creator: AGENTS.md generated with AI assistance",
-              "sizeBytes": 206279
+              "sizeBytes": 327893
             },
             {
               "kind": "frame",
@@ -214,6 +220,10 @@
               "pass": true
             },
             {
+              "msg": "clip pbrain-generate.webm under 600K (got 151428)",
+              "pass": true
+            },
+            {
               "msg": "AI-2: seed brain committed — bind-and-return offered",
               "pass": true
             }
@@ -233,7 +243,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "project-brain-builder: the seed brain generated with AI assistance",
-              "sizeBytes": 90250
+              "sizeBytes": 151428
             },
             {
               "kind": "frame",
@@ -308,7 +318,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 40,
+      "checksTotal": 42,
       "checksFailed": 0
     },
     "agents": {
@@ -426,6 +436,10 @@
             {
               "msg": "agent-builder: data-dirty=\"true\" after editing purpose field (got \"true\")",
               "pass": true
+            },
+            {
+              "msg": "clip agent-build.webm under 600K (got 471975)",
+              "pass": true
             }
           ],
           "captures": [
@@ -438,13 +452,19 @@
               "kind": "frame",
               "file": "23-a3-1-agent-dirty.png",
               "caption": "A3 — data-dirty flips on edit (discarded, no save — seed SKILL.md immutable)"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/agent-build.webm",
+              "caption": "Composing an agent from the starter library",
+              "sizeBytes": 471975
             }
           ],
           "pass": true
         }
       },
       "pass": true,
-      "checksTotal": 21,
+      "checksTotal": 22,
       "checksFailed": 0
     },
     "flows-author": {
@@ -620,6 +640,10 @@
             {
               "msg": "author-from-scratch: [data-goal-set] present in FlowHeader",
               "pass": true
+            },
+            {
+              "msg": "clip flow-build.webm under 600K (got 472310)",
+              "pass": true
             }
           ],
           "captures": [
@@ -637,14 +661,14 @@
               "kind": "clip",
               "file": "clips/flow-build.webm",
               "caption": "the flow builder — compose the cycle as data (nodes · palette · gates)",
-              "sizeBytes": 398299
+              "sizeBytes": 472310
             }
           ],
           "pass": true
         }
       },
       "pass": true,
-      "checksTotal": 32,
+      "checksTotal": 33,
       "checksFailed": 0
     },
     "stand-up-onboard": {
@@ -731,6 +755,10 @@
               "pass": true
             },
             {
+              "msg": "clip onboard-resolve.webm under 600K (got 242156)",
+              "pass": true
+            },
+            {
               "msg": "SU: auto-fix resolved the failing clause (existing repo aligned to the contract)",
               "pass": true
             }
@@ -742,6 +770,12 @@
               "caption": "Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)"
             },
             {
+              "kind": "clip",
+              "file": "clips/onboard-resolve.webm",
+              "caption": "Preflight resolution — an existing repo aligned to the contract",
+              "sizeBytes": 242156
+            },
+            {
               "kind": "frame",
               "file": "18-onb-1-resolved.png",
               "caption": "Part 1 — clause auto-resolved: the existing repo is now contract-ready"
@@ -751,7 +785,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 15,
+      "checksTotal": 16,
       "checksFailed": 0
     },
     "skills": {
@@ -839,6 +873,10 @@
               "pass": true
             },
             {
+              "msg": "clip sk-create.webm under 600K (got 86802)",
+              "pass": true
+            },
+            {
               "msg": "SK-3: creating writes skills/api-contract-review/SKILL.md",
               "pass": true
             }
@@ -853,7 +891,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "authoring a new skill from scratch",
-              "sizeBytes": 52033
+              "sizeBytes": 86802
             },
             {
               "kind": "frame",
@@ -865,7 +903,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 13,
+      "checksTotal": 14,
       "checksFailed": 0
     },
     "flows-run": {
@@ -1004,7 +1042,7 @@
             {
               "kind": "frame",
               "file": "37-r1-5-architect-cost.png",
-              "caption": "R1 — P4: architect hex greens with real cost pill ($0.46, 95s)"
+              "caption": "R1 — P4: architect hex greens ($0.00 — real cycles meter it out-of-cycle)"
             }
           ],
           "pass": true
@@ -1054,7 +1092,7 @@
               "pass": true
             },
             {
-              "msg": "P4: architect hex (on /flows/forge-architect) carries real cost (data-phase-cost-usd > 0)",
+              "msg": "P4: architect hex (on /flows/forge-architect) reaches complete (cost is $0 — metered out-of-cycle)",
               "pass": true
             },
             {
@@ -1333,7 +1371,7 @@
           "narration": "Approve & merge → completed spine",
           "checks": [
             {
-              "msg": "monitor: run rail shows the cycle complete (merged + reflected)",
+              "msg": "monitor: merged run stays \"active\" while reflection is in flight (got \"active\")",
               "pass": true
             },
             {
@@ -1371,7 +1409,7 @@
             {
               "kind": "frame",
               "file": "63-r4-4c-spine-complete.png",
-              "caption": "R4 — completed spine: every phase green with its cost pill"
+              "caption": "R4 — merged; the spine holds at \"active\" while reflection finishes out-of-band"
             },
             {
               "kind": "frame",
@@ -1387,6 +1425,10 @@
           "checks": [
             {
               "msg": "reflection node greened after tuning feedback (/flows/forge-reflect slice)",
+              "pass": true
+            },
+            {
+              "msg": "monitor: run rail shows the cycle complete (merged + reflected)",
               "pass": true
             }
           ],
@@ -1522,7 +1564,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 57,
+      "checksTotal": 58,
       "checksFailed": 0
     },
     "roadmap": {
@@ -1686,7 +1728,7 @@
               "pass": true
             },
             {
-              "msg": "kb-seam: #kb-svg data-node-count ≥10 (got 222)",
+              "msg": "kb-seam: #kb-svg data-node-count ≥10 (got 223)",
               "pass": true
             },
             {
@@ -1694,7 +1736,7 @@
               "pass": true
             },
             {
-              "msg": "kb-seam: ≥5 [data-node-id] nodes rendered in graph (found 222, want ≥5)",
+              "msg": "kb-seam: ≥5 [data-node-id] nodes rendered in graph (found 223, want ≥5)",
               "pass": true
             },
             {
@@ -1722,7 +1764,7 @@
             {
               "kind": "frame",
               "file": "79-s3-0-kb-graph.png",
-              "caption": "S3 — /knowledge?id=cycles: force-graph rendered (222 nodes, real cycles brain)"
+              "caption": "S3 — /knowledge?id=cycles: force-graph rendered (223 nodes, real cycles brain)"
             },
             {
               "kind": "frame",
@@ -1778,6 +1820,10 @@
             {
               "msg": "S3.2: cycles + forge-dev brains ship OOTB (Cycle Patterns / Forge Engineering)",
               "pass": true
+            },
+            {
+              "msg": "clip kb-lint.webm under 600K (got 155103)",
+              "pass": true
             }
           ],
           "captures": [
@@ -1790,13 +1836,19 @@
               "kind": "frame",
               "file": "84-kb-1-maintenance.png",
               "caption": "Part 2 (knowledge) — lint/index maintenance + the resolution surface"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/kb-lint.webm",
+              "caption": "KB lint findings triaged from the maintenance surface",
+              "sizeBytes": 155103
             }
           ],
           "pass": true
         }
       },
       "pass": true,
-      "checksTotal": 16,
+      "checksTotal": 17,
       "checksFailed": 0
     },
     "recovery": {
@@ -1829,22 +1881,128 @@
       "pass": true,
       "checksTotal": 2,
       "checksFailed": 0
+    },
+    "demo-builder": {
+      "title": "Regenerate the demo page",
+      "story": "As the operator, I regenerate a project's demo page element by element — brief the agent, watch it compose the capture/verify/present trio, review the result, and lock it in as the reproducible artifact.",
+      "beats": {
+        "demo-builder-brief": {
+          "title": "Brief the demo agent",
+          "narration": "Brief the demo agent",
+          "checks": [
+            {
+              "msg": "DB-1: demo-builder screen renders ([data-page=\"demo-builder\"][data-page-ready=\"true\"])",
+              "pass": true
+            },
+            {
+              "msg": "DB-1: briefing surface offered before the agent runs",
+              "pass": true
+            },
+            {
+              "msg": "DB-1: submit-brief action present",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "86-demo-0-briefing.png",
+              "caption": "The demo agent — briefing before it runs"
+            }
+          ],
+          "pass": true
+        },
+        "demo-builder-generate": {
+          "title": "The demo agent composes the page, element by element",
+          "narration": "The demo agent composes the page, element by element",
+          "checks": [
+            {
+              "msg": "DB-2: phase advances to awaiting-review",
+              "pass": true
+            },
+            {
+              "msg": "DB-2: the demo-review surface renders",
+              "pass": true
+            },
+            {
+              "msg": "DB-2: the composed demo previews in an iframe",
+              "pass": true
+            },
+            {
+              "msg": "DB-2: the demo process shows all 3 element-bound steps",
+              "pass": true
+            },
+            {
+              "msg": "DB-2: all 3 demo-process steps carry a data-step-element (found 3, want ≥3)",
+              "pass": true
+            },
+            {
+              "msg": "clip demo-generate.webm under 600K (got 321726)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "87-demo-1-generating.png",
+              "caption": "The demo agent composes the page, element by element"
+            },
+            {
+              "kind": "frame",
+              "file": "88-demo-2-review.png",
+              "caption": "The demo agent — composed demo ready for review"
+            },
+            {
+              "kind": "clip",
+              "file": "clips/demo-generate.webm",
+              "caption": "The demo builder regenerates the page element by element",
+              "sizeBytes": 321726
+            }
+          ],
+          "pass": true
+        },
+        "demo-builder-lock": {
+          "title": "Lock the demo in",
+          "narration": "Lock the demo in",
+          "checks": [
+            {
+              "msg": "DB-3: the locked success surface renders",
+              "pass": true
+            },
+            {
+              "msg": "DB-3: back-to-project offered once locked",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "89-demo-3-locked.png",
+              "caption": "The demo agent — locked in as the reproducible demo artifact"
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 11,
+      "checksFailed": 0
     }
   },
   "epilogue": {
     "captures": [
       {
         "kind": "frame",
-        "file": "86-end-card.png",
+        "file": "90-end-card.png",
         "caption": "End card — \"Author a flow. Run it. Swap its engine.\""
       }
     ]
   },
   "totals": {
-    "checksTotal": 212,
+    "checksTotal": 231,
     "checksFailed": 0,
-    "framesTotal": 86,
-    "clipsTotal": 4
+    "framesTotal": 90,
+    "clipsTotal": 8
   },
   "exitCode": 0
 }
