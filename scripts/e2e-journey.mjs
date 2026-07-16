@@ -405,6 +405,10 @@ async function main() {
             try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* */ }
           }
         } catch { /* KB-seam cleanup best-effort */ }
+        // Scratch-KB sweep — the knowledge journey creates + deletes
+        // brain/journey-scratch-kb/ through the real UI; this is the crash-safe
+        // backstop so an aborted run never leaves a synthetic KB in brain/.
+        try { rmSync(join(FORGE_ROOT, 'brain', 'journey-scratch-kb'), { recursive: true, force: true }); } catch { /* */ }
         // Restore the releaseProcess block stripped at run start (finalize
         // neutralisation) — verbatim original text, before the git restore below.
         try { writeFileSync(projectJsonPath, projectJsonOriginal); } catch (err) {

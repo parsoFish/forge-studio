@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  PROJECT, SCRATCH_FLOW, ACT, READ, THINK, caption,
-  writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft,
-  writePbStatus, seedStagedBrain,
+  PROJECT, SCRATCH_FLOW, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
+  cleanOnboardedProject,
+  writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft, cleanInstructionsSession,
+  writePbStatus, seedStagedBrain, cleanSeededBrain,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -12,15 +15,128 @@ import { sleep } from '../lib/journey-assertions.mjs';
 let instrSid = null;   // instructions-creator session (Part 1)
 let pbSid = null;      // project-brain-builder session (Part 1)
 
+// ── CREATE-NEW HELPERS (module-local) ───────────────────────────────────────
+// A brand-new project stood up from absolutely nothing via /projects/new — no
+// existing repo, no contract, no brain — on its own slug, distinct from
+// stand-up-onboard's onboard-existing slugs so the two journeys never collide
+// on disk. Two slugs: the canonical one the beat drives, and a clip-only
+// throwaway the isolated clip context creates to prove the path is repeatable.
+const CREATE_NAME = 'Journey Fresh Project';
+const CREATE_SLUG = 'journey-fresh-project';
+const CREATE_NORTH_STAR = 'Prove Studio can stand up a project from absolutely nothing — no repo, no contract, no brain seeded — in one form.';
+const CREATE_QUALITY_GATE = 'npm test';
+const CREATE_CLIP_NAME = 'Journey Fresh Project Clip';
+const CREATE_CLIP_SLUG = `${CREATE_SLUG}-clip`;
+const CREATE_CLIP_NORTH_STAR = 'A second from-scratch project, created live in an isolated browser context, to prove the path is real.';
+
+function cleanCreateProjects() {
+  cleanOnboardedProject(CREATE_SLUG);
+  cleanOnboardedProject(CREATE_CLIP_SLUG);
+}
+
 export const journey = defineJourney({
     id: 'stand-up-create',
     title: 'Stand up a project (create new)',
-    story: 'As an operator, I create a brand-new project from Studio\'s library — the create-new path of the capability diagram. AI-assisted instructions- and project-brain-builders seed its AGENTS.md and its seeded-to-grow knowledge base, while the project builder lets me tune north star, demo timeline, and contract readiness.',
+    story: 'As an operator, I stand up a brand-new project from absolutely nothing through Studio\'s onboarding form — the create-new path of the capability diagram — then discover it from the library. AI-assisted instructions- and project-brain-builders seed its AGENTS.md and its seeded-to-grow knowledge base, while the project builder lets me tune north star, demo timeline, and contract readiness.',
     beats: [
+      {
+        id: 'su-create-project',
+        title: 'Create a project from nothing — /projects/new',
+        narration: 'The operator stands up a brand-new project from absolutely nothing — no repo, no contract, no brain — filling in a name, a north star, and a quality-gate command; the very same form that onboards an existing repo also creates one from scratch. Submitting immediately shows the real contract-readiness checklist (a fresh project always trips the hard clauses first, honestly), then opens straight into the new project\'s own page.',
+        drive: async (ctx) => {
+              const { page, watch, browser, frame, recordClip, check } = ctx;
+              // ── A0: CREATE A PROJECT FROM NOTHING (in the UI) ──────────────────────────
+              console.log('\n[A0] Create a project from nothing — /projects/new');
+              cleanCreateProjects();
+              ctx.seeded.createSlugs = [CREATE_SLUG, CREATE_CLIP_SLUG]; // read by the runner's finally-block cleanup
+
+              await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="project-onboard"]') !== null,
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const formPresent = await page.evaluate(() => document.querySelector('[data-section="project-onboard"]') !== null);
+              check(formPresent, 'A0: /projects/new renders the onboarding form (create-new shares the same form as onboard-existing)');
+              await frame(page, 'a0-0-create-form', 'A0 — creating a project from nothing: name, north star, quality-gate command');
+
+              await page.locator('[data-field="project-name"]').fill(CREATE_NAME);
+              await page.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
+              await page.locator('[data-field="north-star"]').fill(CREATE_NORTH_STAR);
+              await page.locator('[data-action="onboard-project"]').click();
+
+              const createJsonPath = join(FORGE_ROOT, 'projects', CREATE_SLUG, '.forge', 'project.json');
+              const createLanded = await waitForFile(createJsonPath, 12000);
+              check(createLanded, `A0: creating writes projects/${CREATE_SLUG}/.forge/project.json — a project entry now exists where nothing did before`);
+
+              let createCfg = {};
+              try { createCfg = JSON.parse(readFileSync(createJsonPath, 'utf8')); } catch { /* */ }
+              check(Array.isArray(createCfg.quality_gate_cmd) && createCfg.quality_gate_cmd.length > 0,
+                'A0: project.json carries the quality-gate contract field');
+              check(typeof createCfg.northStar === 'string' && createCfg.northStar.length > 0,
+                'A0: project.json carries the north star — real contract items land, not just a bare registry entry');
+
+              // A from-scratch project always trips the hard contract clauses first (no
+              // package.json / quality-gate sidecar, no git history yet exists) — the form
+              // correctly stays on /projects/new and shows the real failing checklist,
+              // exactly as a first-time operator creating something from nothing would see.
+              const onFailingChecklist = await page.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).then(() => true).catch(() => false);
+              check(onFailingChecklist, 'A0: a from-scratch project trips real contract clauses — the failing checklist renders (nothing pre-seeded)');
+              if (onFailingChecklist) {
+                const failingCount = await page.evaluate(() =>
+                  parseInt(document.querySelector('[data-section="onboard-preflight"]')?.getAttribute('data-failing-count') ?? '0', 10));
+                check(failingCount >= 1, `A0: failing-clauses checklist reports ≥1 real gap (got ${failingCount})`);
+                const clauseCount = await page.locator('[data-section="failing-clauses"] [data-clause-id]').count();
+                check(clauseCount === failingCount, `A0: rendered clause rows match data-failing-count (${clauseCount} rows vs ${failingCount})`);
+                await frame(page, 'a0-1-failing-checklist', 'A0 — a project created from nothing immediately shows the real contract gaps');
+              }
+
+              // Clip: a second from-scratch project, created live in its own isolated
+              // browser context on its own throwaway slug — proves the create-new path
+              // is real and repeatable, not a one-off fixture.
+              await recordClip(browser, watch, 'project-create', '/projects/new', async (p) => {
+                await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
+                await p.locator('[data-field="project-name"]').fill(CREATE_CLIP_NAME).catch(() => {});
+                await p.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
+                await p.locator('[data-field="north-star"]').fill(CREATE_CLIP_NORTH_STAR).catch(() => {});
+                await p.locator('[data-action="onboard-project"]').click().catch(() => {});
+                await p.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).catch(() => {});
+                await sleep(WORK);
+              }, { readySel: '[data-section="project-onboard"]', caption: 'Creating a second project from nothing, live — the same from-scratch path, proven again' });
+
+              // Open the real project page — the "open onboarded project" link on the
+              // failing checklist, falling back to a direct navigate — contract readiness
+              // renders on the project's own page regardless of the form's redirect, same
+              // as stand-up-onboard's su-onboard-project.
+              const openLink = page.locator('[data-action="open-onboarded-project"]');
+              if (onFailingChecklist && (await openLink.count()) > 0) {
+                await openLink.click().catch(() => {});
+              }
+              await page.waitForURL(new RegExp(`/projects/${CREATE_SLUG}`), { timeout: 10000 }).catch(() => {});
+              if (!new RegExp(`/projects/${CREATE_SLUG}`).test(page.url())) {
+                await page.goto(watch.uiUrl + `/projects/${CREATE_SLUG}`, { waitUntil: 'domcontentloaded' });
+              }
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              await page.waitForSelector('[data-ready-count]', { timeout: 15000 }).catch(() => {});
+              const readyCount = await page.evaluate(() => {
+                const el = document.querySelector('[data-ready-count]');
+                return el ? parseInt(el.getAttribute('data-ready-count') ?? '0', 10) : -1;
+              });
+              check(readyCount >= 3, `A0: the from-scratch project's own page renders the readiness checklist (got ${readyCount} passing checks)`);
+              await frame(page, 'a0-2-project-page', 'A0 — the from-scratch project\'s own page: readiness checklist, north star, contract fields all real');
+
+              // Clean up BOTH slugs (canonical + clip) in this beat's own tail — runner-safe
+              // even if a later beat throws, since nothing downstream depends on this project.
+              cleanCreateProjects();
+
+        },
+      },
       {
         id: 'su-create-library',
         title: 'Library — everything is data',
-        narration: 'The library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
+        narration: 'With a brand-new project just stood up from nothing, the library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
         drive: async (ctx) => {
               const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -78,7 +194,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-orientation',
         title: 'First-run orientation + discoverable creation',
-        narration: 'With the library already populated, the first-run welcome panel correctly stays hidden, and the "+ New Agent" CTA proves creating something new is one click away, not a URL only a developer would know.',
+        narration: 'Creating from nothing didn\'t require a URL only a developer would know — the library\'s "+ New Agent" CTA proves creating something new is always one click away, and with the library already populated the first-run welcome panel correctly stays hidden.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── J1: first-run orientation + discoverable creation ─────────────────────
@@ -161,11 +277,40 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-component="instructions-verdict"]', { timeout: 15000 }).catch(() => {});
               check(await page.locator('[data-component="instructions-verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
               await frame(page, 'instr-1-draft', 'Part 1 — the generated AGENTS.md draft, awaiting approval');
-              // Clip: the generated draft awaiting verdict (the AI-assisted output).
-              await recordClip(browser, watch, 'instr-generate', `/instructions/${encodeURIComponent(instrSid)}`, async (p) => {
+              // Clip: a fresh clip-only session shows the FULL generation progression —
+              // briefing → interviewing → drafting → awaiting-verdict — staged with real
+              // dwells between each write, so the clip shows generation actually happening
+              // rather than a single static hold on the finished draft. A dedicated sid
+              // (not the shared instrSid) keeps this clip's writes from racing the outer
+              // page's own 3s poll on instrSid, which is already sitting at
+              // 'awaiting-verdict' by this point in the beat.
+              const instrClipSid = `${instrSid}-clip`;
+              writeInstrStatus(instrClipSid, { phase: 'briefing', round: 1 });
+              await recordClip(browser, watch, 'instr-generate', `/instructions/${encodeURIComponent(instrClipSid)}`, async (p) => {
                 await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 12000 });
-                await sleep(2800);
-              }, { readySel: 'main[data-page="instructions-interview"]', caption: 'instructions-creator: AGENTS.md generated with AI assistance' });
+                await sleep(WORK);
+                writeInstrStatus(instrClipSid, { phase: 'interviewing', round: 1 });
+                instrEvent(instrClipSid, 'start', 'instructions turn (phase=interviewing, round=1)');
+                await instrBurst(instrClipSid, ['Glob', 'Read']);
+                await p.waitForFunction(
+                  () => document.querySelector('main[data-page="instructions-interview"]')?.getAttribute('data-instructions-phase') === 'interviewing',
+                  null, { timeout: 10000 },
+                ).catch(() => {});
+                await sleep(WORK);
+                writeInstrStatus(instrClipSid, { phase: 'drafting', round: 2 });
+                instrEvent(instrClipSid, 'start', 'instructions turn (phase=drafting) — rolling in answers');
+                await instrBurst(instrClipSid, ['Read', 'Write']);
+                await p.waitForFunction(
+                  () => document.querySelector('main[data-page="instructions-interview"]')?.getAttribute('data-instructions-phase') === 'drafting',
+                  null, { timeout: 10000 },
+                ).catch(() => {});
+                await sleep(WORK);
+                writeInstrDraft(instrClipSid);
+                writeInstrStatus(instrClipSid, { phase: 'awaiting-verdict', round: 2 });
+                await p.waitForSelector('[data-component="instructions-verdict"]', { timeout: 12000 }).catch(() => {});
+                await sleep(WORK);
+              }, { readySel: 'main[data-page="instructions-interview"]', caption: 'instructions-creator: briefing → interviewing → drafting → the generated AGENTS.md draft' });
+              cleanInstructionsSession(instrClipSid);
               // approve → committed
               await page.locator('[data-component="instructions-verdict"] [data-action="approve-instructions"]').click().catch(() => {});
               await page.waitForSelector('[data-component="instructions-verdict"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
@@ -202,11 +347,28 @@ export const journey = defineJourney({
               check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
               await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
               await frame(page, 'pbrain-1-review', 'Part 1 — the generated seed brain: themes to review + approve');
-              // Clip: the generated seed-brain themes under review.
-              await recordClip(browser, watch, 'pbrain-generate', `/project-brain/${encodeURIComponent(pbSid)}?project=${encodeURIComponent(PROJECT)}`, async (p) => {
+              // Clip: a fresh clip-only session shows the FULL generation progression —
+              // briefing → analyzing → awaiting-review — staged with real dwells between
+              // each write, so the clip shows the analysis actually happening rather than
+              // a single static hold on the finished themes. Dedicated sid (not the shared
+              // pbSid) keeps this clip's writes off the outer page's own 2.5s poll on pbSid,
+              // which is already sitting at 'awaiting-review' by this point in the beat.
+              const pbClipSid = `${pbSid}-clip`;
+              writePbStatus(pbClipSid, 'briefing', '');
+              await recordClip(browser, watch, 'pbrain-generate', `/project-brain/${encodeURIComponent(pbClipSid)}?project=${encodeURIComponent(PROJECT)}`, async (p) => {
                 await p.waitForSelector('main[data-page="project-brain"]', { timeout: 12000 });
-                await sleep(2800);
-              }, { readySel: 'main[data-page="project-brain"]', caption: 'project-brain-builder: the seed brain generated with AI assistance' });
+                await sleep(WORK);
+                writePbStatus(pbClipSid, 'analyzing', 'emphasise conventions + module layout');
+                await p.waitForFunction(
+                  () => document.querySelector('main[data-page="project-brain"]')?.getAttribute('data-project-brain-phase') === 'analyzing',
+                  null, { timeout: 10000 },
+                ).catch(() => {});
+                await sleep(WORK);
+                seedStagedBrain(pbClipSid);
+                await p.waitForSelector('main[data-project-brain-phase="awaiting-review"]', { timeout: 12000 }).catch(() => {});
+                await sleep(WORK);
+              }, { readySel: 'main[data-page="project-brain"]', caption: 'project-brain-builder: briefing → analyzing → the generated seed themes, awaiting review' });
+              cleanSeededBrain(pbClipSid);
               // approve → committing → committed (flip-only; nothing written under brain/)
               await page.locator('[data-action="approve-brain"]').click().catch(() => {});
               await page.waitForSelector('main[data-project-brain-phase="committing"]', { timeout: 8000 }).catch(() => {});
@@ -219,8 +381,8 @@ export const journey = defineJourney({
       },
       {
         id: 'su-create-project-builder',
-        title: `Project builder — /projects/${PROJECT}`,
-        narration: `In the project builder for ${PROJECT}, the operator tunes north star, demo timeline, and contract readiness at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page.`,
+        title: `Project builder — tune an existing project (/projects/${PROJECT})`,
+        narration: `Contrast with the from-scratch project above: ${PROJECT} already has real content, so its project builder shows the same north star, demo timeline, and contract-readiness surfaces already populated and tuneable at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page.`,
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── A4: Project builder — the managed project as data ─────────────────────

@@ -950,28 +950,80 @@ export function cleanDemoBuilderSession(sid) {
 // ── SKILLS-PILLAR HELPERS ───────────────────────────────────────────────────────
 // OOTB skill ids that must surface as draggable chips (studio/catalog.yaml community-skills).
 export const OOTB_SKILL_IDS = ['handoff', 'superpowers-tdd', 'security-review'];
-export const SK_EDIT_SLUG = 'journey-ootb-review';  // a seeded "installed OOTB skill" (agent-skill) to edit
+// The edit beat opens a REAL shipped skill (no fabricated seed). The
+// /agents/<slug> editor only opens STUDIO agents — a SKILL.md with a `runtime:`
+// block and `library !== false` (orchestrator/studio/registry.ts isStudioAgent)
+// — so plain skills like handoff/brain-query are not editable there.
+// `project-scoped-review` is the low-risk pick: a library-listed (library: true),
+// operator-triggered, read-only audit skill that no flow node references and no
+// other journey depends on. Its original bytes are stashed below and restored
+// after every real save (a save round-trips through serializeAgentDefinition,
+// which normalises the file — only a byte-restore is faithful).
+export const SK_EDIT_SLUG = 'project-scoped-review';
+export const SK_EDIT_PATH = join(FORGE_ROOT, 'skills', SK_EDIT_SLUG, 'SKILL.md');
 export const SK_NEW_NAME = 'API contract review';
 export const SK_NEW_SLUG = 'api-contract-review';   // = name.toLowerCase().replace(/\s+/g,'-')
+// The create CLIP records in a fresh context and clicks Create for real — it
+// uses its own slug so it never collides with the main beat's SK_NEW_SLUG
+// artifact. SK_NEW_SLUG is the walkthrough's THROUGHLINE skill (a later
+// agents-journey block composes it into an agent build): nothing may remove it
+// mid-run; the runner's finally sweeps it via cleanSkillArtifacts().
+export const SK_CLIP_NAME = 'API contract review clip';
+export const SK_CLIP_SLUG = 'api-contract-review-clip';
+
+// Byte-stash of the real skill under edit (mirrors patchDemoProcess /
+// restoreProjectJson): module-level so BOTH the beat's own tail and the
+// runner's finally (which routes through cleanSkillArtifacts) can restore
+// after a crash mid-edit. Restore is idempotent; the stash survives for the
+// process lifetime.
+let skEditStash = null;
+export function stashRealSkill() {
+  if (skEditStash === null) skEditStash = readFileSync(SK_EDIT_PATH, 'utf8');
+  return skEditStash;
+}
+export function restoreRealSkill() {
+  if (skEditStash === null) return;
+  try { writeFileSync(SK_EDIT_PATH, skEditStash); } catch { /* best-effort */ }
+}
+
+// The agentic-author beat's staged artifact — the EXACT path the real
+// demo-builder agent writes (orchestrator/demo-builder-runner.ts
+// DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md') and the path the
+// preflight DEMO-SKILL clause checks (cli/preflight.ts checkDemoSkill). It is
+// UNTRACKED in the mdtoc subtree, so the runner-finally `git checkout --
+// projects/<p>` does NOT cover it — it is swept in cleanSkillArtifacts instead.
+export const DEMO_DESIGN_SKILL_DIR = join(projectRoot, '.forge', 'skills', 'demo-design');
+export function writeDemoDesignSkill() {
+  mkdirSync(DEMO_DESIGN_SKILL_DIR, { recursive: true });
+  writeFileSync(join(DEMO_DESIGN_SKILL_DIR, 'SKILL.md'), [
+    '---',
+    'name: demo-design',
+    `description: Generated demo machinery for ${PROJECT} — renders a before/after demo of an initiative's changes.`,
+    '---',
+    '',
+    `# demo-design (${PROJECT})`,
+    '',
+    'Composes the project demo page from its demo-process elements, in order:',
+    '',
+    '1. **Capture** — run `npm run demo` (the BUILT CLI against',
+    '   test/fixtures/release-notes.md) and keep the real stdout.',
+    '2. **Verify** — read the captured TOC back against the expected output',
+    `   (the ${TOC_SENTINEL} section must be present; the fenced fake heading must not).`,
+    '3. **Present** — assemble the fragments into .forge/demo/DEMO.html with the base CSS.',
+    '',
+    '> Staged artifact: the e2e walkthrough hand-writes this file at the exact path',
+    '> the real demo-builder agent uses, under the FORGE_ARCHITECT_NO_SPAWN seam;',
+    '> the beat removes it again after the preflight clause flips to resolved.',
+    '',
+  ].join('\n'));
+}
+
 export function cleanSkillArtifacts() {
-  for (const slug of [SK_EDIT_SLUG, SK_NEW_SLUG]) {
+  restoreRealSkill(); // crash-safe: the runner's finally routes through here
+  for (const slug of [SK_NEW_SLUG, SK_CLIP_SLUG]) {
     try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
   }
-}
-// A plain skill has no in-UI editor (POST-only), so the edit beat drives the
-// agent-skill editor — a SKILL.md that carries a runtime block is an editable object.
-export function seedOotbSkill() {
-  const dir = join(FORGE_ROOT, 'skills', SK_EDIT_SLUG);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'SKILL.md'), [
-    '---', 'name: Journey OOTB Review', 'description: Seeded OOTB skill for the edit beat.',
-    'phase: developer', 'surface: forge', 'purpose: Review a diff for correctness.',
-    'brainAccess: none', 'interactivity: none',
-    'composition:', '  skills: []', '  tools: []', '  mcps: []', '  hooks:', '    - event-log',
-    'runtime:', '  sdk: claude', '  strategy: fixed', '  model: claude-sonnet-4-6',
-    'allowed-tools:', '  - Read', 'disallowed-tools: []',
-    '---', '', '# Journey OOTB Review', '', 'ORIGINAL body text.', '',
-  ].join('\n'));
+  try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
 
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────

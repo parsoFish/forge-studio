@@ -18,9 +18,13 @@
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
  * Every other journey (skills, agents, knowledge, swap-runtime, recovery,
- * demo-builder) is self-contained: skills-edit and demo-builder-lock each
- * clean up their own seeded state at the top/end of their own drive(), and
- * skills' edited/created slugs never collide with agents' starter slugs.
+ * demo-builder) is self-contained: skills-edit restores the real shipped
+ * skill it edits, skills-agentic-author removes its staged demo-design
+ * artifact + demo sessions, and demo-builder-lock cleans its own seeded
+ * state — each at the top/end of their own drive(). skills' created slugs
+ * never collide with agents' starter slugs, and skills-create's
+ * api-contract-review skill is the throughline artifact: it stays on disk
+ * until the runner's finally sweeps it.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
@@ -52,10 +56,12 @@ export const RUN_ORDER = [
   ['skills', 'skills-ootb-library'],
   ['skills', 'skills-edit'],
   ['skills', 'skills-create'],
+  ['skills', 'skills-agentic-author'],
 
   ['stand-up-onboard', 'su-onboard-project'],
   ['stand-up-onboard', 'su-onboard-preflight'],
 
+  ['stand-up-create', 'su-create-project'],
   ['stand-up-create', 'su-create-library'],
   ['stand-up-create', 'su-create-orientation'],
   ['stand-up-create', 'su-create-instructions'],
@@ -64,6 +70,8 @@ export const RUN_ORDER = [
 
   ['knowledge', 'knowledge-graph'],
   ['knowledge', 'knowledge-pin-guidance'],
+  ['knowledge', 'knowledge-create-kb'],
+  ['knowledge', 'knowledge-ingest'],
   ['knowledge', 'knowledge-lint-index'],
 
   ['agents', 'agents-starters'],
