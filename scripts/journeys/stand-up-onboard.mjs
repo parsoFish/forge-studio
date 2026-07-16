@@ -290,8 +290,12 @@ export const journey = defineJourney({
                     null, { timeout: 12000 }).catch(() => {});
                   const c8Cleared = await page.locator('[data-resolution-clause][data-clause-id="C8"]').count() === 0;
                   check(c8Cleared, 'SU: the agent-resolvable clause cleared after hand-writing AGENTS.md + a real re-scan');
-                  const flowReadyNow = await page.evaluate(() => document.querySelector('[data-flow-ready]')?.getAttribute('data-flow-ready') ?? '');
-                  check(flowReadyNow === 'true', `SU: with the hard + agent clauses resolved, the project reports flow-ready (got "${flowReadyNow}")`);
+                  // Honest endpoint: a freshly-resolved skeleton clears every preflight
+                  // clause (data-preflight-status="ok") but is NOT yet flow-ready — that
+                  // needs demo steps + a bound skill + a bound KB, which the skills /
+                  // knowledge / project-tuning blocks demonstrate. Assert the true state.
+                  const preflightNow = await page.evaluate(() => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') ?? '');
+                  check(preflightNow === 'ok', `SU: hard + agent clauses resolved — preflight reports ok (got "${preflightNow}")`);
                   await frame(page, 'onb-2-agent-resolved', 'Part 1 — the agent-resolvable clause resolved via the real "Resolve with agent" button; flow-ready');
                 }
               }
