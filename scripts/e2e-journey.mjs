@@ -523,6 +523,15 @@ function seedReviewWorktree() {
   mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
   mkdirSync(join(wt, '.forge', 'unifier-items'), { recursive: true });
   writeFileSync(join(wt, 'package.json'), JSON.stringify({ name: 'mdtoc-review-wt', private: true }, null, 2));
+  // SANDBOX (incident 2026-07-16): the real approve handler runs release-finalize
+  // + `gh pr merge` with this dir as cwd. As a plain dir inside the forge repo,
+  // every git op bubbled up to forge's own .git (a real finalise 0.5.1 got
+  // committed AND pushed onto the working branch). Making it a standalone repo
+  // with no remote contains any residual git/gh escape.
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: wt });
+    execFileSync('git', ['-c', 'user.email=e2e@forge.local', '-c', 'user.name=forge-e2e', 'commit', '-q', '--allow-empty', '-m', 'e2e sandbox'], { cwd: wt });
+  } catch (err) { console.warn(`[e2e] review-worktree sandbox git init failed: ${err.message}`); }
   // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes, so a
   // review send-back appends UWI-2 (depends_on:[UWI-1]) rather than a self-cyclic UWI-1.
   const uwi1 = {
@@ -3654,6 +3663,20 @@ async function main() {
   // REAL cycle.
   await assertNoLiveDaemon(FORGE_ROOT);
 
+  // Neutralise the bridge's release-finalize path for the whole run (incident
+  // 2026-07-16): the REAL approve-and-merge click calls the bridge's in-process
+  // runReleaseFinalize — a real SDK agent turn — which is NOT covered by
+  // FORGE_ARCHITECT_NO_SPAWN. Its first gate is hasReleaseProcess(project.json),
+  // so stripping `releaseProcess` for the run makes it return 'skipped' before
+  // any SDK call or git op. Restored verbatim in the finally block.
+  const projectJsonPath = join(projectRoot, '.forge', 'project.json');
+  const projectJsonOriginal = readFileSync(projectJsonPath, 'utf8');
+  {
+    const cfg = JSON.parse(projectJsonOriginal);
+    delete cfg.releaseProcess;
+    writeFileSync(projectJsonPath, JSON.stringify(cfg, null, 2));
+  }
+
   cleanProjectDir();
   mkdirSync(join(projectRoot, '_architect'), { recursive: true });
   rmSync(OUT, { recursive: true, force: true });
@@ -3770,12 +3793,15 @@ async function main() {
             try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* */ }
           }
         } catch { /* KB-seam cleanup best-effort */ }
-        // known-gaps #10 residue — the emulated approve→merge beat runs the REAL
-        // deterministic release-finalize path against `projects/<PROJECT>`, which is
-        // tracked IN the forge repo (no nested .git). That leaves the managed
-        // project's own CHANGELOG/package.json/package-lock modified AND staged in
-        // the forge index after every green run. Restore the subtree so the working
-        // tree is clean again; best-effort, same convention as the cleanups above.
+        // Restore the releaseProcess block stripped at run start (finalize
+        // neutralisation) — verbatim original text, before the git restore below.
+        try { writeFileSync(projectJsonPath, projectJsonOriginal); } catch (err) {
+          console.warn(`[e2e] project.json restore failed: ${err.message}`);
+        }
+        // known-gaps #10 residue — if the release-finalize path ever runs anyway,
+        // it dirties/stages the managed project subtree (tracked IN the forge repo,
+        // no nested .git). Restore so green runs leave the tree clean; best-effort,
+        // same convention as the cleanups above.
         try {
           execFileSync('git', ['-C', FORGE_ROOT, 'restore', '--staged', '--', `projects/${PROJECT}`]);
           execFileSync('git', ['-C', FORGE_ROOT, 'checkout', '--', `projects/${PROJECT}`]);

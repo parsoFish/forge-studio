@@ -120,6 +120,27 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `git checkout --` the `projects/<PROJECT>` subtree after every run, so the
     release-finalize residue doesn't linger in the working tree (best-effort,
     non-fatal like the other cleanups).
+    **Recurrence + second trigger path (2026-07-16):** with NO daemon alive, the
+    walkthrough's real `approve-and-merge` click hit the bridge's verdict-approve
+    handler, whose `runReleaseFinalize` call is an **in-process SDK agent turn**
+    (`cli/ui-bridge.ts` wiring; `cli/bridge-studio-runs.ts` approve branch) —
+    structurally outside `FORGE_ARCHITECT_NO_SPAWN`, which only guards `spawn()`
+    sites. A real finalizer ran ($0.58), and because the seeded `worktree_path`
+    was a plain dir inside the forge repo, its git ops bubbled up to forge's own
+    `.git` and **committed + pushed** a stray `chore(release): finalise 0.5.1`
+    (reverted). **Harness fix:** the run now (a) strips `releaseProcess` from the
+    grounding project's `.forge/project.json` for the run's duration (finalize
+    exits at its `hasReleaseProcess` opt-in gate before any SDK call; restored
+    verbatim in cleanup), and (b) `git init`s the seeded review worktree as a
+    standalone no-remote sandbox so residual `git`/`gh` ops cannot escape.
+    **Open platform hardening (needs a future code change, out of the cleanup
+    campaign's scope):** the bridge exposes three real-agent trigger surfaces no
+    env guard covers — the in-process `runReleaseFinalize` in verdict-approve
+    (plus the real `gh pr merge` beside it), `spawnBrainFix`
+    (`cli/bridge-studio-kbs.ts`, KB lint-resolution route), and
+    `POST /api/scheduler/start` (boots the real daemon). A harness-mode seam
+    (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
+    paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
 
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 
