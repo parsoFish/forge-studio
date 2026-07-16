@@ -5,12 +5,12 @@ import { sleep } from '../lib/journey-assertions.mjs';
 export const journey = defineJourney({
     id: 'recovery',
     title: 'Recover a stuck initiative',
-    story: 'Recover a stuck initiative from the dedicated operator surface.',
+    story: 'As an operator, I open the dedicated recovery screen to inspect, requeue, or abandon a stuck cycle — the recovery extension, proving forge surfaces its own failure states in the UI rather than requiring me to dig through logs or a CLI.',
     beats: [
       {
         id: 'recovery-surface',
         title: 'Recovery surface — the operator surface for stuck cycles (DEC-6)',
-        narration: 'Recovery surface — the operator surface for stuck cycles (DEC-6)',
+        narration: 'The /recovery screen renders every stuck initiative (or a clean empty state when there are none) with inspect/requeue/abandon actions — the CLI verbs that used to handle this moved here, so a stuck cycle is recovered in-UI, not by an operator dropping into a terminal.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S4: Recovery surface (DEC-6 — the CLI recovery verbs moved to the UI) ──

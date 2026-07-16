@@ -28,12 +28,12 @@ let INIT2, STAMP2, CYCLE_ID2, CYCLE_LOG2, studioSeqBase, studioEvent; // flows-r
 export const journey = defineJourney({
     id: 'flows-run',
     title: 'Run a gated cycle',
-    story: 'Run a gated cycle end-to-end on a real mdtoc roadmap feature: idea → architect interview → PLAN gate → autonomous build → review gate → merge → reflect, plus the flow-engine monitor controls.',
+    story: 'As an operator, I run a gated cycle end-to-end on a real mdtoc feature — idea to architect interview to PLAN gate to an autonomous build to a review gate to merge to reflection — monitoring flow progress and clearing every gate myself from the flow UI.',
     beats: [
       {
         id: 'flows-run-idea',
         title: 'Operator drops the mdtoc idea',
-        narration: 'Operator drops the mdtoc idea',
+        narration: 'The operator types one real mdtoc feature idea into a single field and hits go — no form, no ceremony — and forge opens a fresh architect interview session to run with it.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -67,7 +67,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-grounding',
         title: 'Architect grounds itself — P3 activity panel',
-        narration: 'Architect grounds itself — P3 activity panel',
+        narration: 'Before asking a single question, the architect reads the CLI source and the brain — every tool call and reasoning line streams live into the activity panel, so the operator watches it ground itself in the real codebase rather than guess.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── R1.1: Architect grounds itself — P3 activity panel ────────────────────
@@ -116,7 +116,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-questions',
         title: 'Architect returns questions',
-        narration: 'Architect returns questions',
+        narration: 'The architect comes back with exactly two clarifying questions — schema default and acceptance fixture — asking only what it genuinely cannot resolve on its own.',
         drive: async (ctx) => {
               const { page, frame, check, countAtLeast } = ctx;
               // ── R1.2: Architect returns clarifying questions ──────────────────────────
@@ -138,7 +138,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-freetext',
         title: 'Operator answers — P2 free-text override on Q2',
-        narration: 'Operator answers — P2 free-text override on Q2',
+        narration: 'The operator answers Q1 with a radio option but overrides Q2 entirely in free text; the question resolves on the typed answer and every radio stays unselected — proving the operator is never boxed into the offered choices.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── R1.3: Operator answers — free-text override (P2) ──────────────────────
@@ -193,7 +193,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-stall',
         title: 'Stall cameo — P1 StuckWarning',
-        narration: 'Stall cameo — P1 StuckWarning',
+        narration: 'A staged stale heartbeat makes the architect look stuck for two minutes and the StuckWarning lights up; once the session resumes the warning clears on its own — the operator always sees when forge has gone quiet, and when it hasn\'t.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── R1.4: Stall cameo — P1 StuckWarning ───────────────────────────────────
@@ -231,7 +231,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-draft-cost',
         title: 'Architect drafts — P4 real cost',
-        narration: 'Architect drafts — P4 real cost',
+        narration: 'The architect emits its plan and the hex greens at $0.00 — that\'s not a bug: real cycles meter the architect turn out-of-cycle, its duration tracked but its dollar cost billed elsewhere, and the demo owns that honestly rather than hiding it.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R1.5: Architect drafts — P4 real cost greens the hex ──────────────────
@@ -261,7 +261,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-plan-gate',
         title: 'Rich PLAN.html (gate)',
-        narration: 'Rich PLAN.html (gate)',
+        narration: 'The plan gate presents the architect\'s output as rendered Given/When/Then acceptance-criteria cards, not raw markdown — the same PLAN.html the PM will read verbatim once approved.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── R2.0: Rich PLAN.html presented ────────────────────────────────────────
@@ -283,7 +283,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-send-back',
         title: 'Send-back + revised plan',
-        narration: 'Send-back + revised plan',
+        narration: 'The operator sends the plan back with one concrete piece of feedback (cover the no-markers case); the architect reruns and re-presents a revised plan carrying a "(revised)" badge — human gate #1, working as a real gate.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R2.1: Send-back + revised plan ────────────────────────────────────────
@@ -318,7 +318,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-approve',
         title: 'Approve → watch it build',
-        narration: 'Approve → watch it build',
+        narration: 'Approving the plan hands off to the second flow, Forge Develop; clicking "Watch it build" lands on its monitor, which shows only the develop slice\'s own hexes — while the same threaded run\'s architect slice, checked separately, sits complete on its own flow at that honest $0.00.',
         drive: async (ctx) => {
               const { page, watch, frame, check, countAtLeast } = ctx;
               // ── R2.2: Approve → watch it build ────────────────────────────────────────
@@ -378,7 +378,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-pm-decompose',
         title: 'PM decomposes ACs into work items',
-        narration: 'PM decomposes ACs into work items',
+        narration: 'The project-manager phase turns the plan\'s acceptance criteria into two dependency-ordered work items straight from Given/When/Then, not vague tasks; clicking either the phase hex or a WI hex opens its own drawer of detail.',
         drive: async (ctx) => {
               const { page, watch, frame, countAtLeast, expectHexOpensDrawer } = ctx;
               // ── R3.0: PM decomposes ACs into work items ───────────────────────────────
@@ -424,7 +424,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-tdd-red',
         title: 'Dev-loop TDD red — gate.expected-fail',
-        narration: 'Dev-loop TDD red — gate.expected-fail',
+        narration: 'The dev-loop\'s first move on WI-1 is a failing test — gate.expected-fail fires before any implementation exists — TDD is the loop\'s actual discipline, not a claim in a prompt.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R3.1: Dev-loop TDD red — gate.expected-fail ───────────────────────────
@@ -444,7 +444,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-grind',
         title: 'Dev-loop GRIND (fast-forward)',
-        narration: 'Dev-loop GRIND (fast-forward)',
+        narration: 'The dev-loop keeps grinding on WI-1 (fast-forwarded here): tool calls accumulate and the token/cost bar climbs live — the operator can watch the actual work happen, not a spinner.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R3.2: Dev-loop GRIND — fast-forwarded ─────────────────────────────────
@@ -473,7 +473,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-dependency-gate',
         title: 'Gate.pass + WI-1 green → WI-2 starts',
-        narration: 'Gate.pass + WI-1 green → WI-2 starts',
+        narration: 'WI-1\'s gate passes and only then does WI-2 — which declared WI-1 as a dependency — begin: the scheduler enforces the ordering the plan declared, visibly, rather than racing both work items at once.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R3.3: Dependency gate + gate.pass ─────────────────────────────────────
@@ -516,7 +516,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-unifier',
         title: 'Unifier on its own hex',
-        narration: 'Unifier on its own hex',
+        narration: 'With both work items green, the unifier phase\'s own hex activates and merges them into one branch, runs the gate, and authors the demo — the seam between many parallel WIs and one reviewable change, made visible.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── R3.4: Unifier on its OWN hex ──────────────────────────────────────────
@@ -580,7 +580,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-cost-rollup',
         title: 'Cost rollup',
-        narration: 'Cost rollup',
+        narration: 'The cycle badge sums exactly what dev-loop and unifier already accrued ($1.75 + $1.20) — the rollup is arithmetic on real per-phase numbers the operator watched tick up, not a separate estimate.',
         drive: async (ctx) => {
               const { page, watch, frame, check, expectPhaseCost } = ctx;
               // ── R3.5: Cost rollup across the spine ────────────────────────────────────
@@ -619,7 +619,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-review-comment',
         title: 'Review — comment-on-page visual demo (PARTIAL)',
-        narration: 'Review — comment-on-page visual demo (PARTIAL)',
+        narration: 'The review page renders the actual DEMO.md with a before/after slider and per-region comment anchors; AC-2 reads PARTIAL — a real gap surfaces before the operator ever has to decide anything.',
         drive: async (ctx) => {
               const { page, frame, check, countAtLeast } = ctx;
               // ── R4.0: Review — the comment-on-page visual demo (DEC-5) ─────────────────
@@ -651,7 +651,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-review-send-back',
         title: 'Send-back — operator anchors a blocking comment to AC-2',
-        narration: 'Send-back — operator anchors a blocking comment to AC-2',
+        narration: 'The operator anchors a blocking comment directly on AC-2 instead of filling out a form; the page derives a send-back verdict from that comment alone, and it survives a reload — progressing the gate through the flow UI, on the artifact itself.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── R4.1: Send-back via an anchored blocking comment (DEC-5) ───────────────
@@ -711,7 +711,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-rerun',
         title: 'Dev-loop reruns on feedback (fast-forward)',
-        narration: 'Dev-loop reruns on feedback (fast-forward)',
+        narration: 'The anchored comment routes straight back to the dev-loop, which reruns on exactly that criterion and re-renders the demo — the send-back was real routing, not a dead-end button.',
         drive: async (ctx) => {
               const { page, frame } = ctx;
               // ── R4.2: Dev-loop reruns on feedback (fast-forward) ──────────────────────
@@ -739,7 +739,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-re-review',
         title: 'Re-review — PARTIAL→MET',
-        narration: 'Re-review — PARTIAL→MET',
+        narration: 'AC-2 now reads MET; resolving the original blocking comment flips the page\'s derived verdict from send-back back to approve — the loop closed on the operator\'s own criterion, not a generic re-run.',
         drive: async (ctx) => {
               const { page, frame, check, countAtLeast } = ctx;
               // ── R4.3: Re-review — PARTIAL→MET (payoff) ────────────────────────────────
@@ -775,7 +775,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-approve-merge',
         title: 'Approve & merge → completed spine',
-        narration: 'Approve & merge → completed spine',
+        narration: 'The operator approves and the PR merges for real; the run rail deliberately holds at "active" rather than "complete" while reflection is still in flight — a merged cycle genuinely isn\'t done until its lesson lands, and the monitor tells the truth about that.',
         drive: async (ctx) => {
               const { page, watch, frame, check, countAtLeast, expectPhaseCost } = ctx;
               // ── R4.4: Approve & merge → completed spine ───────────────────────────────
@@ -873,7 +873,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-reflect',
         title: 'Reflect',
-        narration: 'Reflect',
+        narration: 'The operator answers the reflection questions — WI sizing, repeated actions, a free-text lesson — and only once that submits does the reflector write a brain theme and the run rail finally flips to complete.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── R5: Reflect — operator tunes the brain ────────────────────────────────
@@ -953,7 +953,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-monitor-deep-dive',
         title: 'Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)',
-        narration: 'Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)',
+        narration: 'On a freshly gated run, clicking the unifier hex opens its own drawer of gate sub-checks and phase log — every phase and WI hex from a live cycle stays this inspectable, not just while it\'s running.',
         drive: async (ctx) => {
               const { page, watch, frame, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -1107,7 +1107,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-start-run-cta',
         title: `Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`,
-        narration: `Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`,
+        narration: `On the from-scratch ${SCRATCH_FLOW} flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones.`,
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── S1.1: Engine control — start-run CTA (a genuinely run-less flow) ───────
@@ -1145,7 +1145,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-gate-control',
         title: 'Engine — gate control + cost on the gated run',
-        narration: 'Engine — gate control + cost on the gated run',
+        narration: 'A second run parks itself at its gate and links straight through to the verdict screen, its accrued cost metered against the flow\'s own ceiling — the operator progresses this gate from the monitor, not a separate tool.',
         drive: async (ctx) => {
               const { page, watch, frame, check, expectPhaseCost } = ctx;
               // ── S1.2: Engine control — gate + cost-ceiling on the gated run ───────────

@@ -5,12 +5,12 @@ import { sleep } from '../lib/journey-assertions.mjs';
 export const journey = defineJourney({
     id: 'swap-runtime',
     title: 'Swap the runtime adapter',
-    story: 'Swap the runtime-adapter seam — the registry-driven SDK/model picker.',
+    story: 'As an operator, I open an agent\'s runtime picker to prove the SDK/model choice is a registry-driven seam — claude selectable today, gemini and codex visibly disabled until their adapters ship, with a range strategy for routing across model tiers.',
     beats: [
       {
         id: 'swap-runtime-sdk-picker',
         title: 'Runtime-adapter seam — /agents/project-manager',
-        narration: 'Runtime-adapter seam — /agents/project-manager',
+        narration: 'On the project-manager agent, claude\'s SDK card is selectable while codex and gemini sit visibly disabled (no adapter registered yet); switching to the range strategy picks multiple Claude tiers and the YAML preview updates live to `strategy: range` — the swap seam, not a config file the operator has to hand-edit.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S2: Runtime-adapter seam (ADR-029) — registry-driven SDK picker + range

@@ -13,12 +13,12 @@ let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-dev
 export const journey = defineJourney({
     id: 'roadmap',
     title: 'Project roadmap',
-    story: 'Browse the per-project roadmap and trigger a queued initiative onto the develop flow.',
+    story: 'As an operator, I browse a project\'s serpentine roadmap of initiatives over time and click "Start development" on a pending one — the roadmap extension proving the initiative timeline actually drives what forge builds next, not just a passive history view.',
     beats: [
       {
         id: 'roadmap-tab',
         title: 'Per-project Roadmap tab',
-        narration: 'Per-project Roadmap tab',
+        narration: 'The Roadmap tab renders every initiative as a dot on a serpentine timeline; clicking a completed one pops a detail card listing its actual work items — the roadmap is read straight off real cycle history, not a hand-maintained list.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── R6: Per-project Roadmap tab (S6 DEC-3) ───────────────────────────────
@@ -158,7 +158,7 @@ export const journey = defineJourney({
       {
         id: 'roadmap-start-development',
         title: 'Start development trigger (DEC-3)',
-        narration: 'Start development trigger (DEC-3)',
+        narration: 'A decomposed-but-not-yet-built initiative offers "Start development" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.',
         drive: async (ctx) => {
               const { page, check, frame } = ctx;
               // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──

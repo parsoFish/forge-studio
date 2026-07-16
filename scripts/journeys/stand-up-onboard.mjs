@@ -8,12 +8,12 @@ import { sleep } from '../lib/journey-assertions.mjs';
 export const journey = defineJourney({
     id: 'stand-up-onboard',
     title: 'Stand up a project (onboard existing)',
-    story: 'Onboard an existing project in the UI and resolve it to the forge project contract.',
+    story: 'As an operator, I onboard an existing repository through the UI — the onboard-existing path of the capability diagram — and watch forge deterministically resolve it against the project contract until it is ready for development.',
     beats: [
       {
         id: 'su-onboard-project',
         title: 'Onboard a project from the UI',
-        narration: 'Onboard a project from the UI',
+        narration: 'Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the library; .forge/project.json lands on disk with the hard contract fields, the project appears in the library, and `studio lint` stays green.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── J4: ONBOARD A PROJECT (in the UI) ─────────────────────────────────────
@@ -128,7 +128,7 @@ export const journey = defineJourney({
       {
         id: 'su-onboard-preflight',
         title: 'onboard existing → deterministically resolve a failing clause',
-        narration: 'onboard existing → deterministically resolve a failing clause',
+        narration: 'Onboarding a second, existing-style repo trips a real contract clause (no ARTIFACTS convention yet); the operator clicks the one auto-fix action and watches the clause disappear — the repo is aligned to the contract deterministically, no LLM call needed.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SU: onboard existing → align to the contract (preflight resolution) ────

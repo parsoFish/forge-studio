@@ -20,7 +20,7 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-brief',
       title: 'Brief the demo agent',
-      narration: 'Brief the demo agent',
+      narration: 'Before the agent touches anything, the operator types one line of steering ("give the CLI capture more contrast") into a real briefing field — the regenerate isn\'t a blind rerun, it takes direction first.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[DB-1] demo-builder — brief the agent');
@@ -48,7 +48,7 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-generate',
       title: 'The demo agent composes the page, element by element',
-      narration: 'The demo agent composes the page, element by element',
+      narration: 'The agent works through all three demo-process steps — capture, verify, present — each one bound to its own element, then hands back an iframe preview for the operator to review before anything is locked in.',
       drive: async (ctx) => {
         const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
         console.log('\n[DB-2] demo-builder — generate');
@@ -82,7 +82,7 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-lock',
       title: 'Lock the demo in',
-      narration: 'Lock the demo in',
+      narration: 'Locking writes demo.lock.json plus a history entry to disk and returns the operator to the project — the regenerated demo becomes the one reproducible artifact for this cycle, not a throwaway preview.',
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
         console.log('\n[DB-3] demo-builder — lock');

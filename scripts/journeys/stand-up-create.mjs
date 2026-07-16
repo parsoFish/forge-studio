@@ -15,12 +15,12 @@ let pbSid = null;      // project-brain-builder session (Part 1)
 export const journey = defineJourney({
     id: 'stand-up-create',
     title: 'Stand up a project (create new)',
-    story: 'Create a new project from Studio\'s library: title card and library orientation, AI-assisted AGENTS.md + project-brain generation, and the project builder.',
+    story: 'As an operator, I create a brand-new project from Studio\'s library — the create-new path of the capability diagram. AI-assisted instructions- and project-brain-builders seed its AGENTS.md and its seeded-to-grow knowledge base, while the project builder lets me tune north star, demo timeline, and contract readiness.',
     beats: [
       {
         id: 'su-create-title',
         title: 'Title card — Studio library',
-        narration: 'Title card — Studio library',
+        narration: 'The library page reports ready before anything else loads, and a title card frames the three things Studio does: author a flow, run it, swap its engine.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -74,7 +74,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-library',
         title: 'Library — everything is data',
-        narration: 'Library — everything is data',
+        narration: 'The library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the very flow the operator will author from scratch later in this walkthrough.',
         drive: async (ctx) => {
               const { page, check, countAtLeast } = ctx;
               // ── A1.1: Library — flows / agents / projects / KBs as data ───────────────
@@ -114,7 +114,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-orientation',
         title: 'First-run orientation + discoverable creation',
-        narration: 'First-run orientation + discoverable creation',
+        narration: 'With the library already populated, the first-run welcome panel correctly stays hidden, and the "+ New Agent" CTA proves creating something new is one click away, not a URL only a developer would know.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               // ── J1: first-run orientation + discoverable creation ─────────────────────
@@ -149,7 +149,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-instructions',
         title: 'instructions-creator — generate AGENTS.md (AI-assisted)',
-        narration: 'instructions-creator — generate AGENTS.md (AI-assisted)',
+        narration: 'The operator launches the instructions-creator agent, answers its two clarifying questions, and approves the AGENTS.md it drafts — a new project gets its onboarding contract written for it, with a human still signing off.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -218,7 +218,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-project-brain',
         title: 'project-brain-builder — seed the project brain (AI-assisted)',
-        narration: 'project-brain-builder — seed the project brain (AI-assisted)',
+        narration: 'The project-brain-builder analyses the new project and stages three seed themes for review; approving commits nothing but a pointer — the project\'s own knowledge base starts here and grows as cycles run.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── AI-2: project-brain-builder seeds the project brain ───────────────────
@@ -256,7 +256,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-project-builder',
         title: `Project builder — /projects/${PROJECT}`,
-        narration: `Project builder — /projects/${PROJECT}`,
+        narration: `In the project builder for ${PROJECT}, the operator tunes north star, demo timeline, and contract readiness at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page.`,
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── A4: Project builder — the managed project as data ─────────────────────

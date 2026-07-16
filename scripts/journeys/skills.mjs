@@ -11,12 +11,12 @@ import { sleep } from '../lib/journey-assertions.mjs';
 export const journey = defineJourney({
     id: 'skills',
     title: 'Compose a skill',
-    story: 'Browse the OOTB community-sourced skill library, edit a skill, and author a brand-new one.',
+    story: 'As an operator, I browse forge\'s OOTB skill library — highly rated skills sourced from existing community libraries, provenance and stars shown — then edit one in place and author a brand-new skill from scratch.',
     beats: [
       {
         id: 'skills-ootb-library',
         title: 'OOTB skill library (community-sourced)',
-        narration: 'OOTB skill library (community-sourced)',
+        narration: 'The catalog ships a library of community-sourced skills (superpowers, TDD, security-review, and more), each one carrying its source URL, provenance, and star count in the agent builder\'s palette — the operator can see exactly where a skill came from before dragging it in.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -47,7 +47,7 @@ export const journey = defineJourney({
       {
         id: 'skills-edit',
         title: 'Edit a skill',
-        narration: 'Edit a skill',
+        narration: 'Opening an OOTB skill in the builder, the operator rewrites its instructions body and saves — the change lands straight in that skill\'s own SKILL.md, proving an out-of-the-box skill is editable text, not a black box.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── SK-2: edit a skill (via the agent-skill editor) ───────────────────────
@@ -71,7 +71,7 @@ export const journey = defineJourney({
       {
         id: 'skills-create',
         title: 'Author a new skill',
-        narration: 'Author a new skill',
+        narration: 'From a blank builder the operator names a brand-new skill, describes it in one line, and writes its instructions; creating it writes a fresh SKILL.md to the library — the skills pillar\'s third leg, adding new skills from scratch.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SK-3: author a NEW skill ──────────────────────────────────────────────

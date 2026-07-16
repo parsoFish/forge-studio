@@ -82,7 +82,7 @@
  * seeded state (architect session, cycle logs, queue manifests, the authored
  * scratch flow, any _guidance/*.md) in the finally block.
  *
- * JOURNEYS-AS-DATA. The beats are grouped into 10 journeys via `defineJourney()`
+ * JOURNEYS-AS-DATA. The beats are grouped into 11 journeys via `defineJourney()`
  * (scripts/lib/journey-runtime.mjs), one module per user story under
  * scripts/journeys/ (registry: scripts/journeys/index.mjs), and driven through
  * a flat `RUN_ORDER` that still preserves today's exact global sequence
@@ -452,6 +452,21 @@ async function main() {
     subtitle: 'Clone forge → stand up a project → compose the four pillars (flows · skills · agents · knowledge) → run a gated cycle. Grounded on a real mdtoc roadmap feature (in-place TOC injection). Recorded ' + new Date().toISOString() + '.',
   }));
   console.log(`[e2e] OK — ${OUT}/index.html (${captions.length} frames + video)`);
+
+  console.log('\n[e2e] journey summary:');
+  for (const jid of results.executedJourneys) {
+    const j = results.journeys[jid];
+    if (!j) continue;
+    const passed = j.checksTotal - j.checksFailed;
+    const mark = j.pass ? '✓' : '✗';
+    const beatCount = Object.keys(j.beats).length;
+    console.log(`  ${mark} ${jid} — ${passed}/${j.checksTotal} checks, ${beatCount} beats`);
+  }
+  const totalBeats = results.executedJourneys.reduce(
+    (sum, jid) => sum + (results.journeys[jid] ? Object.keys(results.journeys[jid].beats).length : 0), 0,
+  );
+  const totalPassed = results.totals.checksTotal - results.totals.checksFailed;
+  console.log(`  totals: ${totalPassed}/${results.totals.checksTotal} checks, ${totalBeats} beats across ${results.executedJourneys.length} journeys`);
 
   if (failures.length) {
     console.error(`\n[e2e] ${failures.length} DOM-as-metrics assertion(s) FAILED:`);

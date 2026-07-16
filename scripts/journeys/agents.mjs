@@ -7,12 +7,12 @@ import { sleep } from '../lib/journey-assertions.mjs';
 export const journey = defineJourney({
     id: 'agents',
     title: 'Compose an agent',
-    story: 'Build the three starter agents from the curated library, then edit an existing agent\'s composition in the agent builder.',
+    story: 'As an operator, I compose the three OOTB plan/dev/review agents from forge\'s curated starter library, then reopen an existing agent to prove its composition — skills, tools, runtime, budgets — is editable, not fixed once built.',
     beats: [
       {
         id: 'agents-starters',
         title: 'Author plan/dev/review agents from the starter library',
-        narration: 'Author plan/dev/review agents from the starter library',
+        narration: 'The operator picks each of the three curated starters in turn — required fields pre-filled, advanced config collapsed — and saves each straight to a SKILL.md that then passes forge\'s own `studio lint` gate: the agents pillar\'s OOTB library, tuned through forge\'s own development, made concrete.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── J2: BUILD THE THREE AGENTS FROM THE CURATED STARTER LIBRARY ───────────
@@ -76,7 +76,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Agent builder — /agents/project-manager',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, then edits its purpose field and watches the dirty flag flip before discarding — proof an OOTB agent stays modifiable after the fact.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────

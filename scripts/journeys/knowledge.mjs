@@ -8,12 +8,12 @@ let GUIDANCE_TEXT, kbPageReady;             // knowledge-graph → knowledge-pin
 export const journey = defineJourney({
     id: 'knowledge',
     title: 'Knowledge graph',
-    story: 'Browse the knowledge graph, pin human guidance, and run KB maintenance (lint/index/OOTB brains).',
+    story: 'As an operator, I browse the real cycles brain as a force-graph, pin a piece of human guidance onto it, and run lint/index maintenance — the knowledge pillar\'s OOTB brains, edited through both deterministic tooling and my own guidance-plus-ingest loop.',
     beats: [
       {
         id: 'knowledge-graph',
         title: 'KB-backend seam — /knowledge?id=cycles (real brain)',
-        narration: 'KB-backend seam — /knowledge?id=cycles (real brain)',
+        narration: 'The knowledge screen force-graphs the real cycles brain — theme and index nodes, KB health panel, a backend selector — and clicking a theme node opens its full article; this is the actual OOTB cross-cycle brain, not a mock graph.',
         drive: async (ctx) => {
               const { page, watch, check, frame, countAtLeast } = ctx;
               // ── S3: KB-backend seam (ADR-027 §4) — knowledge graph + pin guidance ─────
@@ -95,7 +95,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-pin-guidance',
         title: 'KB-backend seam — pin-guidance',
-        narration: 'KB-backend seam — pin-guidance',
+        narration: 'The operator types a lesson straight into the HUMAN GUIDANCE panel and pins it; a guidance node appears in the graph immediately — human guidance is how the brain grows between ingest passes, visible as its own node until the next one folds it in.',
         drive: async (ctx) => {
               const { page, check, frame } = ctx;
               // ── S3.1: Pin-guidance → guidance node appears (writes _guidance/<ts>.md) ──
@@ -151,7 +151,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-lint-index',
         title: 'KB maintenance — lint / index / OOTB brains',
-        narration: 'KB maintenance — lint / index / OOTB brains',
+        narration: 'The operator runs the real kb-lint and kb-index actions from the maintenance panel — structural checks and a regenerated index, not cosmetic buttons — and the KB selector confirms both cycles and forge-dev ship as OOTB brains: the knowledge pillar is edited through lint/index tooling, on top of the human-guidance loop from the beat before.',
         drive: async (ctx) => {
               const { page, watch, browser, recordClip, check, frame } = ctx;
               // ── S3.2: KB maintenance — LINT + INDEX + OOTB brains (real, read-only) ───

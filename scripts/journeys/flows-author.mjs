@@ -13,12 +13,12 @@ import { join } from 'node:path';
 export const journey = defineJourney({
     id: 'flows-author',
     title: 'Author a flow',
-    story: 'Author a cycle flow as data: string agents into a new flow, give it seeded work, and prove a from-scratch flow is structurally identical to the production seed.',
+    story: 'As an operator, I author a brand-new cycle flow entirely as data — the flows pillar\'s user-creates path — stringing plan/dev/review agents together, handing the result real work, and proving a from-scratch rebuild of forge-develop is structurally identical to the production seed.',
     beats: [
       {
         id: 'flows-author-new-flow',
         title: 'String plan/dev/review into a flow (new-flow builder)',
-        narration: 'String plan/dev/review into a flow (new-flow builder)',
+        narration: 'From the library\'s "+ New Flow" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── J3: STRING THE THREE AGENTS INTO A FLOW (new-flow builder) ────────────
@@ -157,7 +157,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-seeded-run',
         title: 'Give the authored flow work (seeded run on my-first-flow)',
-        narration: 'Give the authored flow work (seeded run on my-first-flow)',
+        narration: 'The freshly authored flow is handed a real run: its own plan/dev/review hexes progress and park at the verdict gate, with per-phase cost accruing — proof a user-authored flow is a first-class citizen of the monitor, not a demo-only shell.',
         drive: async (ctx) => {
               const { page, watch, check, frame, expectPhaseCost } = ctx;
               // ── J5: GIVE THE AUTHORED FLOW WORK (seeded run) ──────────────────────────
@@ -229,7 +229,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-parity',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'Build the forge-develop flow from scratch (flow-as-data)',
+        narration: 'Rebuilding forge-develop node-for-node from scratch, `studio lint` validates it and its node set, gate, and edge count match the production seed exactly — the hardcoded cycle really is just one flow definition, and the operator can drag more agents onto it from the same palette.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH ─────────────────────────
