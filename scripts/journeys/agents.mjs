@@ -281,9 +281,11 @@ export const journey = defineJourney({
               // second write to the same slug) — the "money clip" for building an
               // agent as data, from nothing.
               await recordClip(browser, watch, 'agent-scratch-build', '/agents/new', async (p) => {
-                await p.waitForSelector('[data-starter-option="blank"]', { timeout: 12000 }).catch(() => {});
+                // Bounded waits: every missed selector here records dead animated
+                // frames (this clip once ballooned to 4.8M on timeout accumulation).
+                await p.waitForSelector('[data-starter-option="blank"]', { timeout: 6000 }).catch(() => {});
                 await p.locator('[data-starter-option="blank"]').click().catch(() => {});
-                await p.waitForSelector('#purpose-input', { timeout: 8000 }).catch(() => {});
+                await p.waitForSelector('#purpose-input', { timeout: 5000 }).catch(() => {});
                 await p.locator('input.agent-name-input').fill(`${SCRATCH_AGENT_NAME} (clip)`).catch(() => {});
                 await p.locator('#purpose-input').fill(
                   'Review a proposed API contract change for breaking-change risk before it merges.').catch(() => {});
@@ -291,7 +293,7 @@ export const journey = defineJourney({
                 await p.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
                 await p.waitForFunction(
                   () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
-                  null, { timeout: 5000 },
+                  null, { timeout: 3000 },
                 ).catch(() => {});
                 const dt = await p.evaluateHandle(() => new DataTransfer());
                 const chip = p.locator(`.catalog-chip[data-id="${DND_SKILL_ID}"][data-kind="skill"]`);
@@ -304,8 +306,7 @@ export const journey = defineJourney({
                 if (await rangeToggle.count() > 0) { await rangeToggle.click().catch(() => {}); await sleep(THINK); }
                 const modelChips = p.locator('[data-component="runtime-picker"] [data-model-id]');
                 if (await modelChips.count() > 0) { await modelChips.first().click().catch(() => {}); await sleep(500); }
-                await sleep(1000);
-              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1500 });
+              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1200, size: { width: 960, height: 600 } });
 
               // Cleanup: this beat's own skill dir only (self-contained, mirrors
               // skills-edit / skills-agentic-author cleaning their own artifacts).
@@ -387,7 +388,12 @@ export const journey = defineJourney({
                     ).catch(() => {});
                     const dirtyAfterSave = await page.evaluate(() => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
                     check(dirtyAfterSave === 'false', `agent-builder: data-dirty="false" after saving the edit (got "${dirtyAfterSave}")`);
-                    const savedOnDisk = readFileSync(PM_SKILL_PATH, 'utf8').includes('(e2e test edit)');
+                    // The dirty flag flips before the fs write settles — poll the file.
+                    let savedOnDisk = false;
+                    for (let t = 0; t < 20 && !savedOnDisk; t += 1) {
+                      savedOnDisk = readFileSync(PM_SKILL_PATH, 'utf8').includes('(e2e test edit)');
+                      if (!savedOnDisk) await sleep(250);
+                    }
                     check(savedOnDisk, 'agent-builder: the edited purpose lands in the real skills/project-manager/SKILL.md on disk');
                     await frame(page, 'a3-1-agent-saved', 'A3 — data-dirty flips on edit; SAVE persists it to the real SKILL.md (restored after)');
                   } else {

@@ -296,6 +296,13 @@ export const journey = defineJourney({
               await caption(page, 'Building the forge-develop flow from scratch, live: three agents dropped from the palette, two edges wired by hand, one verdict gate — the same shape as the production seed.');
 
               // /flows/new always seeds the basic starter — there is no blank path.
+              // WAIT for the starter fetch to land first: loadBuildData is async, and
+              // clearing before it resolves lets the starter re-materialise over the
+              // "blank" canvas (observed: plan/dev starter nodes under our drops).
+              await page.waitForFunction(
+                () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
+                null, { timeout: 15000 },
+              ).catch(() => {});
               // Clear the canvas (native window.confirm) to author genuinely from scratch.
               page.once('dialog', (d) => d.accept());
               const clearBtn = page.locator('[data-action="clear-canvas"]');
@@ -433,6 +440,12 @@ export const journey = defineJourney({
               await recordClip(browser, watch, 'flow-scratch-build', '/flows/new', async (p) => {
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
+                  null, { timeout: 12000 },
+                ).catch(() => {});
+                // Same async-starter race as the main beat: wait for the seed to land
+                // before clearing, or it re-materialises over the blank canvas.
+                await p.waitForFunction(
+                  () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
                   null, { timeout: 12000 },
                 ).catch(() => {});
                 p.once('dialog', (d) => d.accept());
