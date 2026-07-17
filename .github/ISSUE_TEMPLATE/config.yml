@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/parsoFish/forge-studio/discussions
+    about: For open-ended questions or design discussion, start a Discussion instead of an issue.

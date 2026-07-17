@@ -31,7 +31,7 @@ Format: `WI-<n>` where `<n>` is a 1-indexed integer, contiguous within a single 
 
 ### 2. `_graph.md` mermaid format
 
-```markdown
+````markdown
 # Work-item dependency graph
 
 ```mermaid
@@ -42,7 +42,7 @@ graph TD
     WI-1 --> WI-3
     WI-2 --> WI-3
 ```
-```
+````
 
 **Rules:**
 

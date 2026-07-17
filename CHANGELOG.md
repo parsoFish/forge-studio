@@ -7,6 +7,55 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-17
+
+Production-repo cleanup campaign sessions **S5–S6** (zero platform-function
+change — the suite stayed at 1987/1987 throughout). Bump rationale: new
+user-visible capabilities (Added) → minor.
+
+### Added
+
+- **Clips-first UI-journey demo** — `scripts/e2e-journey.mjs` rebuilt as a thin
+  runner over 10 user-story journey modules (`scripts/journeys/`), one per
+  capability-diagram box in a building-blocks throughline (skills → onboard →
+  create → knowledge → agents → flows-author → flows-run → extensions). Every
+  beat is simultaneously a demo scene and a named test case (auto-tagged into a
+  tracked `demos/e2e/results.json`); the gallery is tabbed per journey with 21
+  looping end-to-end clips (1600×1000, viewer-processing dwells) + key stills.
+  Includes genuine in-UI flow authoring (palette drag → edge wiring → verdict
+  gate → save → topological parity vs the production seed) and corpus-grounded
+  seeds with provenance to real archived cycles.
+- **`journey-sync` skill** (`.claude/skills/journey-sync/`) + a CLAUDE.md rule:
+  forge-ui changes must sync the affected journey (beats/checks + narration/
+  clips) in the same PR.
+- **Community health + doc CI** — CODE_OF_CONDUCT (Contributor Covenant 2.1),
+  SECURITY (GitHub private Security Advisories flow), issue/PR templates,
+  `.github/workflows/ci.yml` running the existing gates (build, test, studio
+  lint, brain lint) plus `npm run lint` (markdownlint-cli2 over `docs/**` +
+  root) and two drift guards proven to fail on injected drift:
+  `scripts/check-adr-index.mjs` (ADR-index completeness + next-free) and
+  `scripts/check-docs-claims.mjs` (docs/README coverage vs `git ls-files`).
+
+### Fixed
+
+- **Harness isolation (real-money hazard)** — `ui:journey` now refuses to seed
+  while a forge daemon is alive or stray queue manifests exist
+  (`scripts/lib/journey-daemon-guard.mjs`), strips the grounding project's
+  `releaseProcess` for the run so the bridge's verdict-approve cannot start a
+  real release-finalizer, sandboxes the seeded review worktree as a no-remote
+  git repo, and restores/sweeps all seeded state (including corpus archives an
+  emulated cycle leaves behind). Follows the 2026-07-16 incident in which a
+  real finalizer committed, pushed, and self-merged a PR (documented in
+  `docs/known-gaps.md` item 10, with the remaining platform hardening).
+- ADR-index drift (037 unlisted, stale next-free) and three unindexed docs —
+  the exact drift classes the new guards now police.
+
+### Changed
+
+- CLAUDE.md's forge-ui DOM-as-metrics convention rewritten against the live
+  tree (every attribute grep-verified); demo output re-homed under `demos/`;
+  the full-session walkthrough video retired in favour of per-capability clips.
+
 ## [0.5.0] - 2026-07-12
 
 Refinement campaign **Phases 3–5** — the post-betterado "remove guardrails over
@@ -171,6 +220,7 @@ S9 — **the 3-stage spine is the REAL runtime + the CLI is retired as the opera
 surface**. (Reconciles the stray 0.1.1 self-release back into a clean lockstep bump.)
 
 ### Added
+
 - **Spine as the runtime.** The `forge-architect → [plan gate] → forge-develop →
   [verdict gate] → merge → forge-reflect` spine now runs end-to-end on real cycles
   (proven on the gitpulse verify ground). `scripts/verify-cycle.mjs` drives the spine
@@ -184,10 +234,12 @@ surface**. (Reconciles the stray 0.1.1 self-release back into a clean lockstep b
   UI screen replace the retired `forge review --inspect/--abandon` + `forge requeue`.
 
 ### Changed / Fixed
+
 - The architect→develop hand-off reuses the preserved worktree (work-items survive);
   a closure-less `ready-for-review` cycle is moved out of in-flight by the scheduler.
 
 ### Removed
+
 - The `release-refine` + `forge-cycle-with-review` legacy flows; the flow-less
   `web-scraper` + `security-auditor` agents.
 - The operator CLI surface (cycle / enqueue / metrics / review / report / log / requeue) —
@@ -219,7 +271,7 @@ This covers the **productionisation pass**: a release final-loop, disk-based
 project auto-discovery, a creds-free reference project, and a hard cull of removed
 seams (Zep, graphify) and stale framing (forge-v2).
 
-### Added
+#### Added
 
 - **Release final-loop.** An in-cycle drafted changelog → operator **Approve** →
   `release-finalize` (commits the changelog + docs) → forge merges the PR → CI
@@ -237,7 +289,7 @@ seams (Zep, graphify) and stale framing (forge-v2).
 - **Runtime-adapter `runtime.sdk` threading** — the resolved SDK id flows through
   to `getAdapter(sdkId)`, with Gemini/Aider conformance.
 
-### Removed
+#### Removed
 
 - **Zep KB backend** — `orchestrator/kb-backends/` and `@getzep/zep-cloud`. The KB
   seam is now filesystem-only (`FilesystemKbBackend`).
@@ -247,7 +299,7 @@ seams (Zep, graphify) and stale framing (forge-v2).
 - **forge-v2 / v1-vs-v2 framing** — the product is "Forge Studio".
 - **Dead dependencies** — `blessed-contrib`, `globby`, `@getzep/zep-cloud`, `dagre`.
 
-### Changed
+#### Changed
 
 - **KB simplified to filesystem-only.** The `KbBackend` seam stays; the second
   (Zep) implementation is gone.

@@ -196,7 +196,6 @@ already-tracked files.
 
 ---
 
-
 ### C4 — Machine-readable planning inputs *(HARD)*
 
 A `roadmap.md` at the project root **and** the project's Brain 3 profile — the
