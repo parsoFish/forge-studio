@@ -131,7 +131,12 @@ async function startWatch() {
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
       ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open', '--force-takeover'],
-      { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
+      { cwd: FORGE_ROOT,
+        // R5-01-F1: FORGE_DRY_BRIDGE=1 alongside NO_SPAWN — the harness's bridge
+        // child must never spawn/merge/daemon-control for real (2026-07-16
+        // self-merge incident). Task A3/A4 add the drift-guard test + post-run
+        // assertions that consume this; this wiring alone is R5-01-F1's job.
+        env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1', FORGE_DRY_BRIDGE: '1' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let buf = '';
     let settled = false;
