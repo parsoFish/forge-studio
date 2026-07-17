@@ -1,9 +1,13 @@
-# Minimum Viable User Story (MVUS) — the productionised forge
+# Minimum Viable User Story (MVUS) — the shipped OOTB suite (Scope 2)
 
-> **Canonical product vision.** This document defines forge's productionised form as **one user
-> journey**. It is the timeless grounding every component is judged against.
+> **Canonical vision for the shipped OOTB suite (Scope 2)** (re-scoped 2026-07-17,
+> [ADR 038](../decisions/038-north-star-platform-and-ootb.md)). This document defines the
+> **ideas machine** — forge's shipped, out-of-the-box agents and flows — as **one user
+> journey**. It is the timeless grounding every **Scope-2 (OOTB)** component is judged
+> against. It does not describe Scope 1 (the modular platform/engine/seams that runs
+> this journey, or any other agentic flow) — see [docs/repo-map.md](../repo-map.md).
 
-Every component is judged against this journey:
+Every **Scope-2 (OOTB)** component is judged against this journey:
 
 - **REQUIRED** — the journey names this capability directly.
 - **FORWARDS** — it demonstrably enables/serves a named capability.
@@ -35,10 +39,14 @@ are already familiar with.
 After approval, the **project manager** takes the initiatives and breaks them into **work items**, which the
 **developer agents** work to completion.
 
-## 3. Review phase — the unifier
+## 3. Review phase — demo agent + adversarial review (re-scoped 2026-07-17, Q3-B)
 
-The unifier:
-- **cleans all the work** — ensuring **passing CI, build, and lint**,
+> **Amendment (2026-07-17):** the unifier concept is retired
+> ([roadmap README §8, decision Q3-B](../roadmaps/README.md#8-session-decisions-record-2026-07-17)).
+> Post-develop, two initiative-context agents replace it — a demo agent and an
+> adversarial review agent, below.
+
+A **demo agent**:
 - generates a **rich HTML demo** of the work done, containing:
   - the **assessed intent** from the initiative,
   - the **evaluated output** of the workers measured against that intent,
@@ -46,8 +54,17 @@ The unifier:
     (e.g. a **video of a CLI's behaviour** has value to a human). *The concept is what matters: a
     human-watchable demonstration of behaviour, whatever the component's shape — not one specific medium.*
 
+An **adversarial review agent** ensures **passing CI, build, and lint** and stress-tests the
+work against the initiative's assessed intent before it reaches the human.
+
+> ⚑ **Operator review flagged (Q3-B).** The former unifier's dual-boundary full-suite gate
+> — a known-gaps "strength worth preserving" — relocates to **orchestrator-owned gate
+> execution** (the ADR-036 pattern: agents judge, orchestrator executes), not to either
+> agent above. This relocation is flagged for operator review wherever it appears; its
+> final shape is not yet settled.
+
 The user **accepts** or **provides feedback**. When feedback is given, a **work item to complete that work
-is established and sent back to the unifier**. This loop continues until the user accepts — at which point the
+is established and sent back** into the develop flow. This loop continues until the user accepts — at which point the
 change is **closed out, merged to main**, and the cycle moves toward release.
 
 ## 4. Release phase — the final loop
@@ -86,7 +103,11 @@ Throughout the whole flow:
 
 ---
 
-## What this implies for keep / cull
+## What this implies for keep / cull (Scope-2 content only)
+
+This keep/cull rule is bounded to **Scope-2 (OOTB)** content — the shipped agents, flows,
+and journey below. It says nothing about Scope-1 (platform/engine/seams) componentry,
+which is judged by the roadmap set (`docs/roadmaps/`), not by this document.
 
 Capabilities the journey **promotes to load-bearing** (regardless of prior classification):
 
