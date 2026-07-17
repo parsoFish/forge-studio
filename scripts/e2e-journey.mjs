@@ -366,8 +366,12 @@ async function main() {
 
         console.log('\n[e2e] journey complete.');
   } finally {
-        await ctx.close();
-        await browser.close();
+        // Guard the playwright teardown like every other cleanup step below:
+        // a throw from ctx/browser close would abort the finally before the
+        // post-run boundary check at its end, silently skipping the F3 backstop
+        // (the exact "check never runs" class this harness must never reopen).
+        try { await ctx.close(); } catch (err) { console.warn(`[e2e] context close failed: ${err.message}`); }
+        try { await browser.close(); } catch (err) { console.warn(`[e2e] browser close failed: ${err.message}`); }
         try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* */ }
         cleanProjectDir();
         cleanSeededSession(journeyCtx.seeded.createdSid);
