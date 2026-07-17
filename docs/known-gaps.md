@@ -166,6 +166,60 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `catalog.yaml` on create, or the palette unions catalog entries with live
     `skills/*/SKILL.md` discovery.
 
+### 4b. Demo/UI-journey refinement backlog — operator review of PR #24 (2026-07-17)
+
+> The operator closed PR #24 (the clips-first S5 rebuild) with these notes recorded
+> for later refinement. Sync mechanism: the `journey-sync` skill
+> (`.claude/skills/journey-sync/`) + the CLAUDE.md DOM-convention rule now make
+> journey maintenance part of every UI-touching change.
+
+**Platform / product features (need design, future sessions):**
+
+1. **Skills need first-class management.** The skill-create surface exposed that
+   there is no clear way to view the skill library, no consistent entry point for
+   creating skills, and skills should break out into their own library item.
+   (Operator will detail their view in a future session; pairs with item 11 above —
+   UI-created skills invisible to the catalog palette.)
+2. **Create-KB must mandate a scope at creation** — without one the KB can't know
+   what information to seed on or how it should generate new information over time.
+3. **KB scoping model rework.** The "cycles" (forge-cycle) brain is likely a scope
+   that no longer makes sense. The clearer delineation: `forge-dev` stays unique
+   (it sits outside forge's operational cycles); every OTHER KB should be linked to
+   either a specific FLOW or a specific PROJECT. This also sharpens what item 2's
+   mandatory scope means.
+4. **Recovery tab: candidate for full removal** — fold stuck-cycle recovery into
+   the roadmap surface instead of a standalone tab.
+5. **Flow artifact-set cleanup.** The artifacts generated through a flow are messy;
+   now the componentry is implemented, reduce the artifact possibilities and
+   solidify what gets presented.
+
+**Demo/clip refinements (next demo pass):**
+
+6. **Mouse visibility**: show a cursor or highlight click events in clips; ensure
+   all typing appears progressively (no instant fills) across every clip.
+7. **Advanced options must always be showcased** in clips wherever a surface has them.
+8. **skill-edit clip doesn't show a skill being edited** — it shows the
+   build-an-agent page (a symptom of feature 1: no skill-editing surface exists).
+9. **pbrain-generate clip goes static** once it reaches the build-project-brain
+   screen and never shows a seeded brain (the static frames do show it).
+10. **Sticky-header artifacts in full-page screenshots** — header bars/UI elements
+    shift into the middle of several frames (example:
+    `demos/e2e/frames/24-a4-1-project-dirty.png`). Likely `fullPage` capture vs
+    sticky positioning; needs a capture-time fix (scroll-to-top or header unstick).
+11. **Deeper text descriptions in the gallery** per demoed item — the combination
+    of text + images + video should make it obvious to any agent working on forge
+    what should be shown, the story beats, and when video/images drift out of sync
+    with the text description of the functionality. (The gallery narrations are the
+    seed of this; expand into per-item functional descriptions.)
+12. **Add a clip of the first run through my-first-flow.**
+13. **run-plan-gate's PLAN.html is dated** — it doesn't match the plans recent real
+    forge cycles produce (the initiative breakdown shown to the user). Re-ground
+    the seeded PLAN.html on a recent real architect session.
+14. **hex-detail frames show nothing happening** (no logs in the drawer). Good clip
+    candidate: the phase drawer with realistic log lines streaming.
+15. **The review-section demo evidence is hand-crafted and dated** — re-sync the
+    seeded demo comparison to an actual demo artifact from the betterado cycles.
+
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 
 > Project work on `terraform-provider-betterado`, tracked here because it is the

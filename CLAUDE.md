@@ -271,11 +271,15 @@ The shared status vocabularies:
   `phase | wi`, the phase-vs-WI distinction every monitor hex carries.
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change.
+`data-*` attribute** alongside any visual change — and **sync the affected
+UI journey in the same PR** (beats/checks + narration/clips): invoke the
+`journey-sync` skill for the maintenance contract. The journeys are both the
+demo and the UI regression gate; a UI change without its journey update either
+breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 11 user-story journeys in
+is a thin runner over 10 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
 `flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
 `swap-runtime`, `knowledge`, `recovery`, `demo-builder` — one file per
