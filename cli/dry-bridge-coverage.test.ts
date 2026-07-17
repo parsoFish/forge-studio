@@ -40,10 +40,15 @@
 //     match-var-by-name). A genuinely novel 4th shape (a switch, a lookup
 //     table, an inline `.match()` never bound to a name) would silently NOT be
 //     picked up. All six files this guard scans were audited by hand against
-//     this list at write time and contain no other shape.
-//   - A brand-new *file* added to the bridge's dispatch chain, outside
-//     SCANNED_DISPATCH_FILES below, is invisible to this guard by construction
-//     — adding a bridge dispatch file must also add it to that list.
+//     this list at write time and contain no other shape. This is the ONLY
+//     remaining silent window: dispatch *files* are auto-discovered from cli/
+//     by naming convention (ui-bridge.ts + bridge-*.ts, tests excluded), so a
+//     new dispatch file following the convention is scanned automatically —
+//     over-scanning a non-dispatch match is harmless (zero candidates) or
+//     visibly red, never silent — and a containment test pins the known six
+//     as a floor so a narrowed discovery filter also goes red. (A dispatch
+//     file named entirely outside that convention would still dodge the scan;
+//     naming review carries that residue.)
 //   - Two reconciliation special cases are required because the real dispatch
 //     multiplexes on more than the URL: the `/api/runs/:id/gates/:id` double
 //     placeholder (gateId is 'plan' | 'verdict', chosen by URL suffix in the
@@ -70,7 +75,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRIDGE_ROUTE_CLASSIFICATION, type RouteClassification } from './dry-bridge.ts';
@@ -78,16 +83,27 @@ import { BRIDGE_ROUTE_CLASSIFICATION, type RouteClassification } from './dry-bri
 const CLI_DIR = dirname(fileURLToPath(import.meta.url));
 const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 
-// Every file that participates in HTTP method/URL dispatch for the Studio
-// bridge. A new dispatch file must be added here or it is invisible to this
-// guard (see the header comment's documented failure mode).
-const SCANNED_DISPATCH_FILES = [
-  'ui-bridge.ts',
-  'bridge-studio.ts',
-  'bridge-studio-writes.ts',
-  'bridge-studio-kbs.ts',
+// The dispatch-file set is DERIVED from the cli/ directory, not hand-listed:
+// ui-bridge.ts plus every bridge-*.ts, tests excluded. Over-scanning a
+// non-dispatch file that happens to match is harmless (zero candidates) or
+// visibly red (unclassified candidates) — never silent. The containment test
+// below pins the currently-known dispatch files as a floor so an accidental
+// narrowing of this filter also goes red.
+function discoverDispatchFiles(): readonly string[] {
+  return readdirSync(CLI_DIR)
+    .filter((f) => !f.endsWith('.test.ts'))
+    .filter((f) => f === 'ui-bridge.ts' || (f.startsWith('bridge-') && f.endsWith('.ts')))
+    .sort();
+}
+
+// Floor, not ceiling: discovery must always include at least these.
+const KNOWN_DISPATCH_FILES = [
   'bridge-recovery.ts',
+  'bridge-studio-kbs.ts',
   'bridge-studio-runs.ts',
+  'bridge-studio-writes.ts',
+  'bridge-studio.ts',
+  'ui-bridge.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
@@ -252,7 +268,7 @@ function methodsEquivalent(a: string, b: string): boolean {
 
 function loadAllCandidates(): DerivedCandidate[] {
   const all: DerivedCandidate[] = [];
-  for (const relFile of SCANNED_DISPATCH_FILES) {
+  for (const relFile of discoverDispatchFiles()) {
     const source = readFileSync(join(CLI_DIR, relFile), 'utf8');
     all.push(...extractDispatchCandidates(source, `cli/${relFile}`));
   }
@@ -302,6 +318,16 @@ test('every BRIDGE_ROUTE_CLASSIFICATION entry corresponds to a real dispatch rou
 test('sanity: the derivation scan finds a non-trivial number of real routes (guard is not vacuous)', () => {
   const total = loadAllCandidates().length;
   assert.ok(total > 35, `expected > 35 derived non-GET routes across the scanned dispatch files, got ${total}`);
+});
+
+test('sanity: dispatch-file discovery contains every currently-known dispatch file', () => {
+  const discovered = discoverDispatchFiles();
+  const missing = KNOWN_DISPATCH_FILES.filter((f) => !discovered.includes(f));
+  assert.deepEqual(
+    missing,
+    [],
+    `dispatch-file discovery lost known bridge dispatch files: ${missing.join(', ')} — was the cli/ filename filter in this test narrowed?`,
+  );
 });
 
 test('fixture: literal url match with explicit method is extracted', () => {
