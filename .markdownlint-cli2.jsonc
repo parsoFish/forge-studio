@@ -1,0 +1,74 @@
+{
+  // markdownlint-cli2 config for forge's prose-heavy documentation.
+  // Scope is set by the `lint` npm script itself ("docs/**/*.md" "*.md") —
+  // this file only tunes rules, it does not re-declare globs.
+  //
+  // Every disable below was checked against the CURRENT clean tree
+  // (docs/**/*.md + root *.md) before being added — see the rationale
+  // next to each rule. The goal is `npm run lint` green with config
+  // tuning, not mass-reflowing hundreds of existing docs.
+  "config": {
+    "default": true,
+
+    // House style is long-form prose with deliberately long lines (no
+    // hard-wrap convention) — this repo trips 1000+ instances on the
+    // current clean tree; wrapping would be pure churn with no content
+    // value.
+    "MD013": false,
+
+    // ADRs and phase docs lean on inline HTML-ish bits (raw `<br>`,
+    // `data-*` attribute callouts, etc. quoted inline) — flagging those
+    // as violations would be noise, not signal.
+    "MD033": false,
+
+    // Many docs (ADRs, phase docs) intentionally open with frontmatter-ish
+    // metadata lines (Status/Date) or a blockquote callout before the
+    // first `#` heading, not a heading itself.
+    "MD041": false,
+
+    // Emphasis-as-heading (`**Rules:**`, `**Context**` etc.) is used
+    // throughout as a lightweight sub-heading inside a section without
+    // promoting it to the document's heading hierarchy/TOC — a deliberate
+    // house convention, not an accident.
+    "MD036": false,
+
+    // Duplicate headings are real and desired in CHANGELOG.md ("### Added" /
+    // "### Removed" repeats under every version) and multi-part guides
+    // (docs/extending-forge.md repeats "### The interface" per extension
+    // point). `siblings_only` still catches an actual duplicate heading
+    // under the SAME parent, which is the real mistake this rule exists
+    // to catch.
+    "MD024": { "siblings_only": true },
+
+    // Table formatting (column padding/alignment style) is inconsistent
+    // across ~180 existing table rows (compact vs aligned pipes); this is
+    // a cosmetic table-rendering rule, not a content-correctness one —
+    // tune off rather than reflow every table in the docs tree.
+    "MD060": false,
+
+    // Blank-line-around-lists is violated ~80 times across dense
+    // reference docs (ADRs, phase docs) that pack a heading directly
+    // against its list — a repo-wide formatting habit, not isolated typos.
+    "MD032": false,
+
+    // Bullet markers mix `-` and `*` across the tree (~28 instances) —
+    // both are valid CommonMark; not worth a mechanical rename pass.
+    "MD004": false,
+
+    // Ordered-list numbering style is inconsistent (sequential `1. 2. 3.`
+    // vs repeated `1. 1. 1.`) across ~24 instances — cosmetic, not
+    // content-correctness.
+    "MD029": false,
+
+    // Fenced code blocks without a language tag appear ~17 times across
+    // ~12 files (directory trees, plain CLI output, mermaid-in-markdown
+    // examples) — annotating each is a mass touch across many files for a
+    // purely cosmetic highlighting concern.
+    "MD040": false,
+
+    // Multi-paragraph blockquote callouts (amendment notes, caveats) are
+    // a deliberate house pattern across the ADRs — a blank line between
+    // quoted paragraphs, not an accidental blockquote break.
+    "MD028": false
+  }
+}

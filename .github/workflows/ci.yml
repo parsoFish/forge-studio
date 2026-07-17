@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+        env:
+          # Mocks only — no live credentials in CI. This flag is belt-and-braces:
+          # it keeps the architect phase from ever spawning a real agent process
+          # even if a test forgets to inject its own mock.
+          FORGE_ARCHITECT_NO_SPAWN: "1"
+
+      - name: Studio lint
+        run: node --experimental-strip-types orchestrator/cli.ts studio lint
+
+      - name: Brain lint
+        run: node --experimental-strip-types orchestrator/cli.ts brain lint
+
+      - name: Markdown lint
+        run: npm run lint
+
+      - name: ADR index check
+        run: node scripts/check-adr-index.mjs
+
+      - name: Docs claims check
+        run: node scripts/check-docs-claims.mjs

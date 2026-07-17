@@ -46,9 +46,12 @@ Perishable strategy docs (dated; not onboarding material):
 **Seams & extension**
 - [Extending forge](./extending-forge.md) — add a runtime adapter, flow, or skill.
 - [Harness-overlay seam](./architecture/harness-overlay-seam.md) — the parked injection seam.
+- [Gate-script template](./gate-script-template.md) — the errexit-exempt-safe template for a multi-step `quality_gate_cmd` script.
 
 **Operations & backlog**
 - [Serve supervision](./operations/serve-supervision.md) — running `forge serve` under a supervisor.
+- [Headroom token-efficiency trial](./operations/headroom-token-efficiency-trial.md) — runbook + decision criteria for trialling the headroom context-compression proxy against forge.
+- [Verify-cycle idea corpus](./verify-cycle-ideas/README.md) — hand-authored initiative ideas fed to `scripts/verify-cycle.mjs --idea-file` for the gitpulse reference-project harness.
 - [Known gaps](./known-gaps.md) — the open hardening backlog (internal).
 - [UX reference](./reference/studio-first-flow-ux.md)
 

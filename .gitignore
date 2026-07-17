@@ -77,8 +77,13 @@ secrets.env
 # Local Claude Code state (settings, transcripts) is per-machine noise — but
 # .claude/commands/ holds the operator-facing slash-command SOURCE (the three
 # human-interaction moments; Phase 7 / US-3.1) and IS committed.
+# .claude/skills/journey-sync/ is the UI-journey maintenance contract (the demo
+# harness sync rules) and IS committed — other .claude/skills stay local.
 .claude/*
 !.claude/commands/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/journey-sync/
 *.swp
 *.swo
 *~
@@ -100,3 +105,6 @@ graphify-out/
 # One-shot audit/investigation reports (project-scoped-review output) — working
 # artifacts, not source; durable lessons are extracted to the brain + ADRs.
 docs/investigations/
+
+# local code-graph tool cache (tokensave MCP)
+.tokensave/

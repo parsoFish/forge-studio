@@ -32,6 +32,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
   manifests, NOT yet in `_queue/pending/`. Promoted only on operator approve.
 - On approve: one or more **`_queue/pending/<initiative-id>.md`** manifests
   with frontmatter:
+
   ```yaml
   ---
   initiative_id: INIT-<YYYYMMDD>-<slug>
@@ -41,6 +42,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
   cost_budget_usd: 5             # operator-set cost cap
   ---
   ```
+
 - Frontmatter is followed by the markdown initiative spec (the council-confirmed brief)
   with vision + Given/When/Then acceptance criteria. **No `features[]` list** — the PM
   decomposes the initiative's ACs directly into work items.
