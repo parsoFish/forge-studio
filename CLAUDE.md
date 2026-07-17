@@ -139,110 +139,187 @@ tomorrow) can drive the page by reading structured DOM state rather
 than scraping rendered text. Pattern from
 [anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code).
 
-The root `<main>` carries page-level state:
+Studio has no standalone `/dashboard` any more (retired M7, ADR-031) —
+every route below owns its own `data-page="<name>"` root (+
+`data-page-ready` once its first fetch settles), so this is a per-route
+inventory rather than one shared page-level contract:
 
-- `data-conn-state` — `connecting | open | reconnecting | no-bridge | daemon-stalled`
-- `data-daemon-stalled` — `true | false` (the scheduler heartbeat went stale while the bridge is open)
-- `data-bridge-url` — the resolved bridge base (debug handle)
-- `data-live-count`, `data-recent-count` — cycle counts
-- `data-active-cycle-id`, `data-active-cycle-status`, `data-active-cycle-events`, `data-active-cycle-cost-usd`
-- `data-page-ready` — `true` once the bridge connection is open (or `no-bridge` / `daemon-stalled`)
-- the header cost badge: `[data-cost-badge][data-cost-usd]`
+- **Library `/`** — the landing/browse surface: `[data-page="library"][data-page-ready]`,
+  one `data-section` per pillar (`orientation`, `projects`, `agents`,
+  `flows`, `kbs`).
+- **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
+  (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
+  topology (`FlowTopology.tsx`): each node is
+  `[data-mon-node][data-node-id][data-status][data-hex-kind]`
+  (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
+  WI hexes additionally carry `data-wi-cost-usd`; a fanned-out dev node's
+  own aggregate carries `data-fanout-phase` rather than
+  `data-hex-kind="phase"`. A single **flowLineage** run threads across
+  chained flow definitions (`forge-architect` → `forge-develop` →
+  `forge-reflect`) — each renders only its own slice of nodes, so
+  switching `/flows/<flowId>` changes which hexes appear. BUILD renders
+  the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
+  + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
+  per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`.
+- **`/artifact` — the unified gate/artifact viewer + the review/reflect
+  redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
+  root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  (that `data-page="flows"` value is the page's own literal, not a typo —
+  every gate/artifact moment folded into this one route). `type=verdict&mode=gate`
+  is the sole review gate: `[data-section="demo-comparison"]` /
+  `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
+  the verdict form —
+  `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
+  (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
+  is `approve | send-back`), submit button
+  `[data-action="approve-and-merge"|"send-back"]`. `type=reflection&mode=view`
+  is the sole reflection surface (interactive ReflectionGate above a
+  read-only renderer). The old `/review/[cycleId]` and `/reflect/[cycleId]`
+  routes are now permanent client-side redirects into `/artifact` (M7-3,
+  ADR-031) — `[data-page="review-redirect"|"reflect-redirect"][data-page-ready="true"]`
+  — kept only so stale bookmarks keep working.
+- **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
+  the catalog palette renders `[data-id]` chips; Advanced is collapsed by
+  default (`[data-section="advanced"][data-advanced-open]`) behind which sit
+  the capability drop zones `[data-accepts="skill"|"tool"|"mcp"|"hook"]`, a
+  `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel.
+  `/agents/new` shows the curated starter picker first
+  (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
+- **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
+  just redirects to the first registered project
+  (`[data-page="projects-index"]` while empty/loading). The project page is
+  `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
+  with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
+  Roadmap renders `SerpentineTimeline.tsx`:
+  `[data-roadmap-timeline][data-node-count]` with per-initiative
+  `[data-roadmap-node][data-initiative-id][data-initiative-status]` and a
+  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`. A
+  brand-new project renders `ProjectOnboardForm` instead:
+  `[data-section="project-onboard"]`, collapsible
+  `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
+  check against the forge project contract —
+  `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
+  The recovery page groups by initiative too (see `/recovery` below).
+- **`/architect/new` + `/architect/[sid]/interview`.** `/architect/new` is
+  the native "start a run" entry that replaced the retired `/dashboard`
+  launcher — `[data-page="architect-new"][data-page-ready]` wrapping the
+  same idea box, `[data-section="new-idea"][data-new-idea-ready]`. The
+  interview is a dedicated Studio-chrome screen —
+  `[data-page="architect-interview"][data-page-ready][data-session-id][data-architect-phase]`
+  — with the focused architect hex (`[data-architect-phase][data-architect-active]`,
+  `[data-tool-burst]` chips) plus
+  `[data-section="architect-interview"][data-architect-round][data-questions-answered]`,
+  per-question `[data-question-index][data-question-resolved]`, per-option
+  `[data-option-label][data-option-selected]`. The bare
+  `/architect/[sessionId]` route (no `/interview`) is now a permanent
+  server-side redirect into `/architect/<sid>/interview` (M7-4, ADR-031) —
+  the old standalone screen + its `design-decisions`/`escalation-id` PLAN
+  gate are gone; the PLAN gate is just
+  `/artifact?run=_architect-<sid>&type=plan&mode=gate` like any other gate.
+- **`/instructions/[sid]`** — the AI-assisted AGENTS.md/instructions
+  interview, sharing the same Studio-chrome shell and (deliberately) the
+  same round/question/option attribute names as the architect interview:
+  `[data-page="instructions-interview"][data-page-ready][data-session-id][data-instructions-phase]`,
+  `[data-section="instructions-status"]`,
+  `[data-section="instructions-interview"][data-architect-round][data-questions-answered]`.
+  Its verdict form is
+  `[data-component="instructions-verdict"][data-form-state][data-form-kind]`
+  with `[data-action="approve-instructions"|"revise-instructions"|"reject-instructions"]`.
+- **`/project-brain/[sid]`** — the onboarding Brain-3 builder:
+  `[data-page="project-brain"][data-session-id][data-project-brain-phase]`
+  stepping through
+  `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
+  (`brain-review` carries `data-theme-count`).
+- **`/demo/[sid]`** — the per-project demo-page builder (brief → generate →
+  lock, element-by-element): shares the Studio-chrome shell —
+  `[data-page="demo-builder"][data-page-ready][data-session-id][data-demo-phase]`
+  — with
+  `[data-section="demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`.
+- **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
+  (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
+  (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`).
+- **`/recovery`** — the stuck-initiative operator surface, grouped by
+  initiative: `[data-page="recovery"][data-page-ready][data-recovery-count]`
+  with per-item
+  `[data-recovery-item][data-recovery-initiative][data-recovery-status][data-recovery-attempt-count]`
+  (+ `[data-recovery-prior-attempts]`) and an expandable
+  `[data-section="recovery-detail"][data-recovery-detail-initiative]`.
+- **`/skills`** — no standalone catalog route; the OOTB
+  community-sourced skill library (`studio/catalog.yaml`, with provenance +
+  stars) surfaces inside the agent builder's palette (`/agents/new`,
+  `/agents/[id]`), editing an existing skill happens through that same
+  `/agents/[id]` builder, and authoring a brand-new one is `/skills/new` —
+  `[data-page="skill-builder"][data-page-ready="true"][data-section="skill-new"]`.
 
-Section + component anchors (post-2026-05-25 cascade-tree layout —
-the old state-machine + activity-sidebar + standalone wi-graph
-sections were merged into a single hex pipeline):
+The shared status vocabularies:
 
-- Project roadmap (initiative-centric since M7; the old cycles-tab pane is
-  gone) — `forge-ui/components/studio/SerpentineTimeline.tsx` on the project
-  page renders one node per INITIATIVE:
-  `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
-  `data-node-count`, per-node `[data-popover-initiative-id]` pop-off cards).
-  The recovery page (`app/recovery/page.tsx`) groups by initiative too:
-  `[data-recovery-initiative][data-recovery-attempt-count][data-recovery-prior-attempts]`
-  + page-level `data-recovery-count`.
-- `[data-section="pipeline-tree"]` — the cascading hex view (phases
-  on top, WIs branching directly off the dev-loop hex) hosted by
-  `[data-component="agent-graph"]`.
-- *(ADR 020 cleanup)* the **inline dashboard** verdict box was retired —
-  the review human moment runs on the `/review/<cycleId>` UI screen (approve /
-  send-back), or by merging the PR in GitHub. The verdict form itself is **alive
-  there**: `[data-component="verdict-form"]` (ReviewVerdictForm.tsx) carries
-  `data-form-state` (`editing | submitting | submitted`) + `data-form-kind`
-  (`approve | send-back`) + `data-initiative-id` + `data-ac-count`, and the
-  harness depends on it.
-- `[data-section="architect"]` — the in-UI architect **launcher** (ADR 020) on
-  the primary dashboard, mounted above the cycles tab. Compact by design — the
-  heavy interview + PLAN-gate UI lives on the dedicated screen. Carries
-  `data-architect-session-count` + `data-pending-plan-count`. Children:
-  - `[data-section="new-idea"][data-new-idea-ready]` — idea entry box.
-  - One slim row per active session, linking to `/architect/<sid>`:
-    `[data-architect-session-id][data-architect-phase][data-architect-project]`
-    with a `[data-action="open-plan"]` (green, when `awaiting-verdict`) or
-    `[data-action="open-architect"]` button.
-- `[data-page="architect-session"][data-session-id][data-architect-phase][data-page-ready]`
-  — the dedicated plan screen (`app/architect/[sessionId]`). Holds the focused
-  architect hex `[data-component="architect-hex"][data-architect-phase][data-architect-active]`
-  (with `[data-tool-burst]` chips) plus the phase-appropriate feedback surface:
-  - `[data-section="architect-interview"][data-architect-round][data-questions-answered]`
-    with per-question `[data-question-index][data-question-resolved]` and
-    per-option `[data-option-label][data-option-selected]`.
-  - `[data-section="plan-gate"][data-session-id][data-plan-verdict-state][data-decisions-resolved]`
-    with `[data-plan-iframe]` (PLAN.html, `sandbox=""`) and
-    `[data-section="design-decisions"]` → per-decision
-    `[data-escalation-id][data-decision-resolved]`.
-- Cycle buttons: `[data-cycle-id][data-cycle-status][data-cycle-active]`.
-- Phase hex mirrors: `[data-phase-hex][data-phase][data-phase-status][data-phase-cost-usd]`.
-- WI hex mirrors: `[data-wi-hex][data-wi-id][data-wi-deps][data-wi-cost-usd]`.
-- Canvas panel overlays: `[data-component="cost-panel"]` (CostPanel) + the FileHeatmap.
-- Event tail (ActivityPanel): `[data-section="events-list"]` + `[data-section="event-detail"][data-detail-event-id]`.
-- Components: `[data-component="scheduler-banner"][data-banner-state]`,
-  `[data-component="toasts"][data-toast-count]`.
-
-Phase and WI statuses share a single 5-state vocabulary
-(`pending | active | complete | retrying | failed`). Yellow = retrying
-(had a transient error, still recovering); red = full cycle failure
-only — sibling units stay in their own state independently. See
-[`forge-ui/lib/wi-status.ts`](./forge-ui/lib/wi-status.ts) +
-[`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts).
+- **Pipeline/WI 5-state** — `pending | active | complete | retrying |
+  failed`. Was `forge-ui/lib/wi-status.ts` (now **deleted**); the type is
+  inlined in [`forge-ui/lib/status-colors.ts`](./forge-ui/lib/status-colors.ts)
+  (`WiStatus`) alongside [`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts)
+  (`PhaseStatus`) — same 5 values, one shared palette
+  (`STATUS_COLOR` + `WI_STATUS_GLOW`) so a colour change happens in exactly
+  one place. Yellow = retrying (transient error, still recovering); red =
+  terminal failure only — sibling units stay in their own state
+  independently.
+- **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
+  `planned | active | gated | complete | failed`.
+- **Roadmap initiative status** (`SerpentineTimeline.tsx`) — `pending |
+  in-flight | ready-for-review | done | failed`.
+- **`HexKind`** ([`forge-ui/lib/monitor-layout.ts`](./forge-ui/lib/monitor-layout.ts)) —
+  `phase | wi`, the phase-vs-WI distinction every monitor hex carries.
 
 When changing component state, **add or update the corresponding
-`data-*` attribute** alongside any visual change. The harness surface centres on
-**two primary scripts** (2026-05-30 consolidation) — plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
-(`npm run ui:deadpaths`), the dead-route/no-op sweep — sharing one extracted
-assertion module — [`scripts/lib/journey-assertions.mjs`](./scripts/lib/journey-assertions.mjs)
-(the soft `check()` + the `data-*` DOM-as-metrics helpers) — so the demo
-video and the regression layer stop entangling:
+`data-*` attribute** alongside any visual change.
 
-1. **UI-emulation harness** — [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs)
-   (`npm run ui:journey`) is the **canonical Studio walkthrough**, organised
-   platform-first (post-M8) around the three things Studio does, not one linear
-   cycle: **AUTHOR** (library; build the cycle flow from scratch as data —
-   `forge studio lint` validates it + structural parity vs the seed; agent +
-   project builders) → **RUN** (idea → architect interview → PLAN gate →
-   autonomous build on the develop flow (`/flows/forge-develop`) → verdict gate send-back/payoff →
-   approve+merge → reflect) → **SWAP** (the seams: flow-engine controls, the
-   runtime-adapter registry SDK picker — the live swap surface — plus the
-   filesystem-only KB-backend seam). It is
-   grounded on a **real betterado** release-definition feature (so the seeded
-   artifacts read true), emulates the architect turns + autonomous cycle by
-   seeding the same files/events the real phases write (`FORGE_ARCHITECT_NO_SPAWN=1`),
-   and is BOTH the watchable demo (records a **video** + frame gallery +
-   `index.html` under `demos/e2e/`) AND the **UI regression
-   harness** (≥5 phase hexes, materialised WI hexes, per-phase cost rollup,
-   unifier own-node, gate surfaces, the author-from-scratch parity + lint proof,
-   etc.) — the video always finishes; a non-zero exit flags any DOM-as-metrics
-   regression. Cleans up all seeded state (architect session, cycle logs, queue
-   manifests, the scratch cycle flow it created, any `_guidance/*.md`) afterwards.
+The harness surface is **journeys-as-data**:
+[`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
+is a thin runner over 11 user-story journeys in
+[`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
+`flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
+`swap-runtime`, `knowledge`, `recovery`, `demo-builder` — one file per
+journey, each mapping to a capability-diagram user story rather than a
+step of one linear cycle. Each journey is
+`defineJourney({ id, title, story, beats })`
+([`scripts/lib/journey-runtime.mjs`](./scripts/lib/journey-runtime.mjs));
+a **beat** is a scripted story moment (`{ id, title, narration, drive(ctx) }`)
+that is simultaneously a demo scene (captured as a clip/frame) AND a named
+test case (auto-tagged into `demos/e2e/results.json` so every `check()`
+traces back to the beat that raised it). Shared machinery:
+[`scripts/lib/journey-assertions.mjs`](./scripts/lib/journey-assertions.mjs)
+(the soft `check()` + the `data-*` DOM-as-metrics helpers) and
+[`scripts/lib/journey-fixtures.mjs`](./scripts/lib/journey-fixtures.mjs)
+(seeds + grounding — values are corpus-grounded, with code comments citing
+real archived cycle artifacts under `_queue/done/` — e.g.
+`INIT-2026-07-11-cli-sort-flag.md` — as provenance for things like the
+architect's real cost/budget shape, not hand-waved numbers). The runner
+supports `--list` (enumerate journeys/beats without running), a daemon
+guard ([`scripts/lib/journey-daemon-guard.mjs`](./scripts/lib/journey-daemon-guard.mjs))
+that refuses to run against a real live `forge serve`, and
+finalize-neutralisation (strips `releaseProcess` from the grounding
+project's config for the run's duration, so the emulated approve+merge
+beat can't trigger a real release finalize). Output: a journey-sectioned
+gallery (`demos/e2e/index.html`, one section per journey with its story +
+a green/red check-count badge) plus 8 looping long-tail clips
+(`demos/e2e/clips/*.webm`) and the tracked `demos/e2e/results.json` — the
+video always finishes; a non-zero exit flags any DOM-as-metrics
+regression. Cleans up all seeded state (architect/instructions/demo
+sessions, cycle logs, queue manifests, the scratch flow it authored, any
+`_guidance/*.md`) afterwards.
 
-2. **Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
-   (`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
-   project (auto-approve + closure + reflection capture). This is the standing
-   regression harness for forge's actual capabilities (ADR 022): it asserts
-   real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
-   gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
-   **mdtoc** (default — the creds-free neutral reference project) and the
-   **betterado terraform provider** (`--project terraform-provider-betterado` —
-   the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
-   **live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /
-   greenfield release).
+Plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
+(`npm run ui:deadpaths`), the dead-route/no-op sweep, sharing the same
+assertion module.
+
+**Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
+(`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
+project (auto-approve + closure + reflection capture). This is the standing
+regression harness for forge's actual capabilities (ADR 022): it asserts
+real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
+gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
+**mdtoc** (default — the creds-free neutral reference project) and the
+**betterado terraform provider** (`--project terraform-provider-betterado` —
+the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
+**live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /
+greenfield release).

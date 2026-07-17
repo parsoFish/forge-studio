@@ -2,11 +2,17 @@
 
 > **Status:** operator's canonical vision for the end-to-end journey. Rewritten
 > 2026-06-14 for the post-M8 Studio (ADR-031 "Studio is the one product" +
-> M8 seams). It defines the intent and the **target behaviour forge moves
-> towards** — not only the as-built. The video-recorded
+> M8 seams); reconciled 2026-07-16 (S5) to the journeys-as-data harness. It
+> defines the intent and the **target behaviour forge moves towards** — not
+> only the as-built. The video-recorded
 > [`scripts/e2e-journey.mjs`](../scripts/e2e-journey.mjs) (`npm run ui:journey`)
-> is its executable spec: it walks these beats at a watchable pace, entirely
-> through Forge Studio, and doubles as the DOM-as-metrics regression harness.
+> is its executable spec: a thin runner over 11 user-story journeys in
+> [`scripts/journeys/`](../scripts/journeys/), each one mapping to a capability
+> the platform actually has (not a step of one linear cycle). It walks every
+> journey's beats at a watchable pace, entirely through Forge Studio, and
+> doubles as the DOM-as-metrics regression harness. The ACT 1/2/3 structure
+> below is this vision's own organisation, unchanged since M8 — see "How the
+> journeys prove this" under each ACT for which of the 11 journeys exercises it.
 
 The journey is centralised on Forge Studio. The operator never leaves it.
 
@@ -23,6 +29,14 @@ it, swap its engine** — with the cycle as the proof case inside RUN.
 
 ## ACT 1 — AUTHOR (everything in Studio is data)
 
+*How the journeys prove this:* `flows-author` (build + lint + parity-check a
+cycle flow from scratch, step 2), `agents` (compose the three OOTB agents +
+reopen one, step 3), `stand-up-create` (new project, AI-assisted
+instructions/project-brain builders, step 4), `stand-up-onboard` (resolve an
+existing repo to the forge project contract, also step 4), and `skills`
+(browse the OOTB community skill library, edit one, author a new one —
+adjacent to step 3's agent composition).
+
 1. **The library** (`/`) lists flows, agents, projects and KBs as cards, with the
    operator pulse (what needs you). All of it is editable definitions.
 2. **Build a cycle flow from scratch.** Author a cycle flow as a definition — its
@@ -37,6 +51,12 @@ it, swap its engine** — with the cycle as the proof case inside RUN.
    bound skills + KB, and contract readiness.
 
 ## ACT 2 — RUN (the cycle as the proof case)
+
+*How the journeys prove this:* `flows-run` (idea → architect interview → PLAN
+gate → autonomous build on `/flows/forge-develop` → verdict gate → merge →
+reflect — steps 5–10 in one journey, on a real mdtoc roadmap feature) and
+`roadmap` (browse the per-project roadmap and trigger a queued initiative onto
+the develop flow — the roadmap-first entry into the same RUN path).
 
 5. **New idea** (`/architect/new`) — the operator types an idea for a managed
    project.
@@ -58,6 +78,16 @@ it, swap its engine** — with the cycle as the proof case inside RUN.
     brain (human decision #3); the reflector folds the feedback in.
 
 ## ACT 3 — SWAP (the seams — the platform is modular)
+
+*How the journeys prove this:* `swap-runtime` (the registry-driven SDK
+picker, step 12) and `knowledge` (browse the knowledge graph, pin human
+guidance, run KB lint/index/OOTB-brain maintenance — step 13's KB-backend
+seam). `recovery` (recover a stuck initiative from the dedicated operator
+surface) and `demo-builder` (regenerate a project's demo page
+element-by-element) round out the 11 journeys — both are platform
+capabilities the harness proves but that sit outside this vision's 13
+numbered steps (operational recovery and demo-machinery upkeep,
+respectively).
 
 11. **Flow-engine controls** — the engine runs any flow with guardrails:
     start-run CTA, cost-ceiling gauge, gate parking, resume.
@@ -83,8 +113,9 @@ backlog already tracks, now framed against the Studio surface:
 | 9 — review↔dev loop until approve | The verdict gate writes a send-back the dev-loop reacts to. | Make send-back visibly spawn a dev-loop, re-demo, and re-present as a continuous loop gated only by operator approval. |
 | 12 — adapter seam | claude is live and the gemini / aider adapters are wired in (SDK threaded through to the runtime); the registry disables only the still-unprovisioned SDKs (codex). | Exercise a second adapter on a full real cycle end-to-end (the seam is wired; the remaining gap is a live cross-adapter cycle run, not the plumbing). |
 
-The UI-emulation harness emulates the **target** for every beat (seeding the
-files/events the real phases write) so the recording is a faithful picture of
-where forge is going. The **real** proof is the separate
-[`scripts/verify-cycle.mjs`](../scripts/verify-cycle.mjs) gate — run it against
-betterado (`--project terraform-provider-betterado`) for the live-ADO tier.
+The UI-emulation harness (the 11 journeys in `scripts/journeys/`) emulates the
+**target** for every beat (seeding the files/events the real phases write) so
+the recording is a faithful picture of where forge is going. The **real**
+proof is the separate [`scripts/verify-cycle.mjs`](../scripts/verify-cycle.mjs)
+gate — run it against betterado (`--project terraform-provider-betterado`) for
+the live-ADO tier.

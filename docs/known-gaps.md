@@ -38,16 +38,24 @@ cycle flows** until the run-model stamps the real `flowId` (`orchestrator/run-mo
 (`forge-architect`/`forge-develop`/`forge-reflect`); it surfaces only when a second,
 operator-authored flow is actually run.
 
-### 2. Architect hex shows `$0.00` cost in `ui:journey` (architect cost-observability gap)
+### 2. Architect hex shows `$0.00` cost — correct out-of-cycle accounting, not a gap (clarified 2026-07-16)
 
-The architect phase hex can render `$0.00` in some `ui:journey` views because the
-seeded architect events carry no cost rollup to that hex. The 2026-07-14 demo
-overhaul asserts the architect cost on the **`forge-architect` flow slice**
-(`data-phase-cost-usd > 0`) where it does surface, so `ui:journey` is **fully green
-(0 DOM-as-metrics failures)**; this item remains only as a real architect
-cost-observability nuance — the architect's live cost/output tracking is thinner
-than the other phases' (see the architect-observability operator notes). Independent
-of any single branch's roadmap.
+The architect phase hex legitimately renders `$0.00`. Real cycles meter the
+architect turn entirely **out-of-cycle** — only its wall-clock duration is
+metered in-cycle — confirmed against the archived cycle corpus, e.g.
+`_queue/done/INIT-2026-07-11-cli-sort-flag.md` (`architect_cost_usd: 0`,
+`architect_duration_ms: 239486`). The 2026-07-16 journey rebuild
+(`scripts/journeys/flows-run.mjs`) asserts this directly: on the
+`/flows/forge-architect` slice the architect hex is asserted at
+`data-status="complete"` (**not** `data-phase-cost-usd > 0` — that assertion
+was removed because it no longer matched reality), while the PM hex on the
+same slice is only asserted *present*, not on its cost. Cost `> 0` is
+correctly asserted where it really does accrue in-cycle: the develop-flow
+phase hexes (`/flows/forge-develop`) and the gated engine run
+(`expectPhaseCost` calls in `flows-run.mjs`). This is not a forge defect —
+the entry is kept only as a correction against its own prior wording, which
+incorrectly framed `$0.00` as an "observability gap" and claimed the harness
+asserted cost `> 0` on the architect hex itself; neither was accurate.
 
 ### 3. brain-ingest haiku R1 A/B follow-up
 
@@ -85,17 +93,22 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 8. **Untracked `demos/verify/<handle>/` gate artifacts**
    (summaries + videos) — decide keep/commit/clean (currently absent; tree was
    clean at close).
-9. **e2e-journey demo overhaul — deferred tails (2026-07-14):**
-   - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) was
-     the one AI-generation surface NOT added to the journey (element-binding is the
-     most complex seed; recipe exists). Add it to complete the AUTHOR-generation set.
-   - The **`CLAUDE.md` "forge-ui DOM-as-metrics convention" section is partially
-     stale** — it documents the deleted `/dashboard` surface (`data-conn-state`,
-     `data-phase-hex`, `data-wi-hex`, `agent-graph`, `pipeline-tree`, `scheduler-banner`,
-     `data-cost-badge`, `data-page="architect-session"` — all **0 occurrences** in
-     `forge-ui/`). Hexes are now `data-mon-node` + `data-hex-kind`; the pipeline lives
-     on `/flows/[id]` (`data-pannable`). Reconcile the section against the real surface
-     (the studio-routes map from the S5 investigation is the ground truth).
+9. **e2e-journey demo overhaul — deferred tails (2026-07-14) — *resolved 2026-07-16:***
+   - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) is
+     now in the journey set: `scripts/journeys/demo-builder.mjs` covers brief →
+     generate → lock in 3 beats, plus a tracked
+     `demos/e2e/clips/demo-generate.webm` long-tail clip.
+   - The **`CLAUDE.md` "forge-ui DOM-as-metrics convention" section** has been
+     reconciled against the live `forge-ui/` tree (this pass, S5) — every stale
+     `/dashboard`-era attribute (`data-conn-state`, `data-phase-hex`, `data-wi-hex`,
+     `agent-graph`, `pipeline-tree`, `scheduler-banner`, `data-cost-badge`,
+     `data-page="architect-session"`, `escalation-id` — all confirmed **0
+     occurrences** in `forge-ui/`) is gone, replaced by a per-route inventory
+     (library, `/flows/[id]`, `/artifact`, `/agents/[id]`, `/projects[/id]`,
+     `/architect/new` + `/interview`, `/instructions/[sid]`, `/project-brain/[sid]`,
+     `/demo/[sid]`, `/knowledge[/new]`, `/recovery`, `/skills`) plus the shared
+     status vocabularies (`WiStatus`, `PhaseStatus`, `RunStatus`, roadmap status,
+     `HexKind`), and the harness paragraph rewritten for the 11-journey model.
 10. **`ui:journey` can trigger a REAL cycle if a scheduler is active (harness-isolation
     hazard, 2026-07-14)** — *resolved 2026-07-16:* the walkthrough seeds queue
     manifests (`pending`/`in-flight`) to emulate a cycle. If a **`forge serve`
@@ -120,6 +133,38 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `git checkout --` the `projects/<PROJECT>` subtree after every run, so the
     release-finalize residue doesn't linger in the working tree (best-effort,
     non-fatal like the other cleanups).
+    **Recurrence + second trigger path (2026-07-16):** with NO daemon alive, the
+    walkthrough's real `approve-and-merge` click hit the bridge's verdict-approve
+    handler, whose `runReleaseFinalize` call is an **in-process SDK agent turn**
+    (`cli/ui-bridge.ts` wiring; `cli/bridge-studio-runs.ts` approve branch) —
+    structurally outside `FORGE_ARCHITECT_NO_SPAWN`, which only guards `spawn()`
+    sites. A real finalizer ran ($0.58), and because the seeded `worktree_path`
+    was a plain dir inside the forge repo, its git ops bubbled up to forge's own
+    `.git` and **committed + pushed** a stray `chore(release): finalise 0.5.1`
+    (reverted). **Harness fix:** the run now (a) strips `releaseProcess` from the
+    grounding project's `.forge/project.json` for the run's duration (finalize
+    exits at its `hasReleaseProcess` opt-in gate before any SDK call; restored
+    verbatim in cleanup), and (b) `git init`s the seeded review worktree as a
+    standalone no-remote sandbox so residual `git`/`gh` ops cannot escape.
+    **Open platform hardening (needs a future code change, out of the cleanup
+    campaign's scope):** the bridge exposes three real-agent trigger surfaces no
+    env guard covers — the in-process `runReleaseFinalize` in verdict-approve
+    (plus the real `gh pr merge` beside it), `spawnBrainFix`
+    (`cli/bridge-studio-kbs.ts`, KB lint-resolution route), and
+    `POST /api/scheduler/start` (boots the real daemon). A harness-mode seam
+    (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
+    paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
+11. **UI-created skills are invisible to the agent builder's palette (2026-07-17,
+    found by the S5b demo rebuild):** `CatalogPalette` sources skill chips
+    exclusively from `studio/catalog.yaml`'s static `community-skills` list, and
+    `POST /api/studio/skills` (the `/skills/new` builder) never registers the new
+    skill into `catalog.yaml` — so a skill an operator just authored cannot be
+    dragged into an agent's skill drop-zone. This broke the demo's intended
+    artifact throughline (create a skill → compose it into an agent); the journey
+    substitutes the catalog-listed `handoff` skill and narrates the limitation
+    honestly. **Fix candidates:** the skills builder registers into
+    `catalog.yaml` on create, or the palette unions catalog entries with live
+    `skills/*/SKILL.md` discovery.
 
 ### 5. betterado framework-auth-parity + protocol-manifest release (P0/P1 — carried from the retired REFINEMENT-PLAN)
 
