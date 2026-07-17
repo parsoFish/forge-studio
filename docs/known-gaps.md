@@ -285,6 +285,44 @@ centralised, the physical move becomes a one-place change that can ride the full
 works — moving 35 hot-path files for a cosmetic reorg would grow the capped orchestrator
 surface and risk a skill mis-pathing that only surfaces at real-cycle time.
 
+### 7. Dry-bridge seam (R5-01) whole-branch-review follow-up tail (2026-07-17)
+
+R5-01 shipped (roadmap R5-B8); a multi-lens adversarial whole-branch review +
+security review confirmed no Critical/High and landed the must-fixes, routing a
+cheap-but-real residue tail here. Each owned by a roadmap ID; the roadmap entry
+is authoritative for how/when.
+
+- **`isDryBridge` silently false for near-miss values** (`FORGE_DRY_BRIDGE=true|yes|"1 "`
+  all read as OFF, running every real-acting route live). One-time stderr warning /
+  event in `startBridge` when the var is set non-empty but `!== '1'`. `cli/dry-bridge.ts`. *(R5)*
+- **`post-run-boundary` porcelain parsing** mishandles git-quoted paths and `' -> '`
+  rename separators — fails in the safe direction (false violation) but a non-ASCII/space
+  filename under an exempted prefix would spuriously red every run. Switch capture to
+  `git status --porcelain -z` (NUL-split) + a quoted-path test. `scripts/lib/post-run-boundary.mjs`. *(R7)*
+- **Boundary check fires outside any beat** → dropped from `demos/e2e/results.json` and the
+  gallery (exit-code contract still holds, but the tracked artifact reads all-green on a
+  boundary violation, against the every-check-traces-to-a-beat rule). Route it through a
+  synthetic epilogue beat. `scripts/lib/journey-runtime.mjs` / `scripts/e2e-journey.mjs`. *(R7)*
+- **`defaultGhPrList` spawnSync has no timeout** — a network-hung `gh` freezes the harness
+  synchronously at baseline capture. Add `timeout: 30_000` + route the error through the
+  existing null-degrade path. `scripts/lib/post-run-boundary.mjs`. *(R5)*
+- **exempt-local enqueue + pre-existing live daemon = real cycle under dry mode** — a
+  manifest written by a `FORGE_DRY_BRIDGE=1` bridge becomes a real cycle in the hands of a
+  daemon started outside the bridge (only `ui:journey`'s `assertNoLiveDaemon` covers it
+  today). Extend the exempt-local rows' reason strings to state the caveat; optionally
+  advise/refuse when `daemonState` reports live under dry mode. `cli/dry-bridge.ts`. *(R5)*
+- **Drift-guard scanner precision limits** — two-value gates collapse to method `'*'`
+  (matching any table method), `MATCH_ASSIGN_RE` requires inline regex literals,
+  DELETE-encoded-as-`POST … (delete)`. A legit refactor (named regex constant, braced
+  gate, arrow handler) either reds with a misleading "stale table entry?" message or
+  silently loosens matching. Document all shapes in the known-limits header; extend the
+  direction-2 offender message to name scanner-shape breakage. `cli/dry-bridge-coverage.test.ts`. *(R7)*
+- **Manifest `cycle_id` unvalidated → `createLogger` path resolution** (pre-existing root
+  cause, not a regression; this branch added one more call site exercising it). A
+  maliciously-crafted `cycle_id` (`../`) would write logs outside `ctx.logsRoot`; today's
+  exploitability is low (manifests are forge-authored). Add a `cycle_id` format check to
+  `validateManifest()` mirroring `INITIATIVE_ID_PATTERN`. `orchestrator/manifest.ts`. *(R5)*
+
 ---
 
 ## Strengths worth preserving (don't regress these)

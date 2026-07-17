@@ -77,11 +77,30 @@ single-sourced to gitpulse (ADR 022 ground-swap amendment), CLAUDE.md
 `brain/forge-dev/log.md` + `studio/README.md` paths fixed, C7 collision +
 theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
 
+### R5-B8 Dry-bridge seam shipped (R5-01, 2026-07-17)
+
+`FORGE_DRY_BRIDGE=1` harness-mode seam (`cli/dry-bridge.ts`): a typed
+`BRIDGE_ROUTE_CLASSIFICATION` table (`refuse | stub-actions | exempt-local |
+read-only`) covering every bridge route, consulted by every real-acting path
+in `cli/ui-bridge.ts` + `cli/bridge-studio-*.ts` + `cli/bridge-recovery.ts`.
+Refusals are HTTP 409 + JSONL event; verdict-approve and the spawn/reflect
+routes are `stub-actions` (state bookkeeping proceeds, the agent turn / merge /
+finalize skipped with a `dryBridge:{skipped:[…]}` marker + event), preserving
+the ui:journey emulation contract. F2 drift guard
+(`cli/dry-bridge-coverage.test.ts`) statically derives the route set from the
+dispatch sources (auto-discovered from `cli/`) and reds on both an unclassified
+real route and a classified-but-unguarded `refuse` row. F3 post-run boundary
+(`scripts/lib/post-run-boundary.mjs`) captures git HEAD/tree + open-PR state
+before/after `ui:journey` and `verify:cycle` (forge repo only), always prints a
+boundary report, and fails the run on any un-exempted mutation; gh degrade is a
+surfaced skip, never a silent pass. Journeys synced (`flows-run` reflect beat).
+Spawn-suppression is red-on-regression (per-family no-log-dir assertions).
+
 ## Planned initiatives
 
 ### R5-01 Dry-bridge seam
 
-- **Status:** planned  ·  **Wave:** 0 — **the first implementation session of the set**
+- **Status:** implemented (2026-07-17 — as-built facts in R5-B8)  ·  **Wave:** 0 — **the first implementation session of the set**
 - **Depends on:** —
 - **Depended on by:** R2-01 (new spawn surfaces born inside the seam),
   R2-04-F3 (trigger paths guard-covered), R3-03 *(soft — hook execution leans
@@ -384,3 +403,8 @@ maintenance contract; nothing currently carries a deferral condition.
   minted (F8 north-star reframe + strike-list) and the F1–F7 reconciliation
   sweep landed; status planned → implemented, as-built facts absorbed into
   R5-B7.
+- 2026-07-17 — **R5-01 implemented** (branch `fix/r5-01-dry-bridge`): the
+  `FORGE_DRY_BRIDGE` seam (F1), route-coverage drift guard (F2), and harness
+  post-run boundary checks (F3) landed; status planned → implemented, as-built
+  facts absorbed into R5-B8. A whole-branch adversarial review + security
+  review produced a documented follow-up tail — see known-gaps §7.
