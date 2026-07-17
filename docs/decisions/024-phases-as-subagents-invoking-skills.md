@@ -185,6 +185,19 @@ phase is migrated.
 > allowedTools both equal the derived spec values) in
 > `orchestrator/architect-runner.test.ts`.
 
+> **Reconciled 2026-07-17 (R5-07-F2).** This ADR's landed notes above and
+> `CLAUDE.md` had drifted into an apparent contradiction (landed notes say the
+> five `PhaseAgentSpec` migrations are done; `CLAUDE.md` said "the full ADR-024
+> migration is incremental and not yet complete"). Both were true at different
+> granularities — this defines completion going forward: the **spec
+> migration** (every LLM phase declaring a `PhaseAgentSpec` and sourcing intent
+> from `SKILL.md`) is complete as of 2026-06-13; step four ("migrate
+> incrementally") continues as the **artifact migration** — phases as OOTB
+> artifacts on the generic R2-01 runnable primitive, replacing the
+> `orchestrator/*-invocation.ts` files with registry-driven dispatch — tracked
+> as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not as an open item of this
+> ADR. `CLAUDE.md`'s north-star section now states this same definition.
+
 ## Consequences
 
 - **Intent has one home; capabilities are shared.** A phase's intent is its agent

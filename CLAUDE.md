@@ -19,7 +19,7 @@ Forge is **designed to run primarily unattended between human interaction points
 
 If the answer to (1) is no, the change must justify why. If (2) reveals a re-invention, find the existing tool. If (3) reveals complexity, cut.
 
-There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean but the full ADR-024 migration is incremental and not yet complete.
+There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean, and [ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)'s **spec migration is done** — all five LLM phases (architect, project-manager, developer-loop, unifier, reflector) source their intent from `SKILL.md` via `PhaseAgentSpec`, landed 2026-06-13. What ADR 024's incremental-migration decision leaves open is the **artifact migration** — moving the phases off hand-written `orchestrator/*-invocation.ts` prose onto registry-driven OOTB artifacts on the generic runnable primitive — tracked as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not an ADR-024 gap.
 
 ## Studio session workflow
 
