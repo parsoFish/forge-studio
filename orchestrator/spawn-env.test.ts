@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AGENT_ENV_ALLOWLIST, buildChildEnv } from './spawn-env.ts';
+import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from './spawn-env.ts';
 
 test('AGENT_ENV_ALLOWLIST: does not include ANTHROPIC_BASE_URL or any HEADROOM_* var (the recurring G8 leak)', () => {
   assert.ok(!AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_BASE_URL'), 'ANTHROPIC_BASE_URL must never be inheritable');
@@ -104,4 +104,35 @@ test('buildChildEnv: an undefined-valued key in parentEnv or overrides is treate
   const child = buildChildEnv(parent, { GIT_AUTHOR_NAME: undefined });
   assert.equal('PATH' in child, false);
   assert.equal('GIT_AUTHOR_NAME' in child, false);
+});
+
+// FIX 5 (R5-02): overrides is meant for a SMALL deliberate delta (the 4-key
+// git-identity overlay is the only production caller). A future caller passing
+// a large ambient blob as overrides would silently reopen the allowlist —
+// every key in it wins unconditionally. A lightweight structural guard caps
+// the key count so that misuse fails loudly instead of leaking.
+test('MAX_ENV_OVERRIDE_KEYS: leaves clear headroom over the git-identity overlay (4 keys) but well below an ambient blob', () => {
+  assert.ok(MAX_ENV_OVERRIDE_KEYS >= 4, 'must allow at least the 4-key git-identity overlay');
+  assert.ok(MAX_ENV_OVERRIDE_KEYS < 20, 'must stay well below a full ambient env (dozens/hundreds of keys)');
+});
+
+test('buildChildEnv: the 4-key git-identity overlay is within the cap (no false positive)', () => {
+  assert.doesNotThrow(() =>
+    buildChildEnv({ PATH: '/usr/bin' }, {
+      GIT_AUTHOR_NAME: 'forge-ralph',
+      GIT_AUTHOR_EMAIL: 'forge-ralph+WI-7@forge.local',
+      GIT_COMMITTER_NAME: 'forge-ralph',
+      GIT_COMMITTER_EMAIL: 'forge-ralph+WI-7@forge.local',
+    }),
+  );
+});
+
+test('buildChildEnv: rejects an oversized overrides blob (allowlist stays closed by construction, not by discipline)', () => {
+  const ambientBlob: NodeJS.ProcessEnv = {};
+  for (let i = 0; i <= MAX_ENV_OVERRIDE_KEYS; i++) ambientBlob[`AMBIENT_VAR_${i}`] = String(i);
+  assert.throws(
+    () => buildChildEnv({ PATH: '/usr/bin' }, ambientBlob),
+    /overrides/,
+    'passing more override keys than the cap must throw, not silently reopen the allowlist',
+  );
 });

@@ -57,6 +57,23 @@ export const AGENT_ENV_ALLOWLIST: readonly string[] = [
 ] as const;
 
 /**
+ * Upper bound on how many keys a legitimate `overrides` delta may carry.
+ *
+ * `overrides` exist for a SMALL deliberate composition the caller owns — the
+ * only production caller today is the git-identity SDK overlay, exactly four
+ * `GIT_AUTHOR_*`/`GIT_COMMITTER_*` keys. Because overrides win
+ * unconditionally (bypassing the allowlist by design), a future caller that
+ * mistakenly passes a large ambient blob (`process.env`, dozens/hundreds of
+ * keys) as overrides would silently reopen the exact leak this module closes.
+ * This cap makes that misuse fail loudly instead: 8 leaves headroom over the
+ * 4-key overlay while staying far below any ambient env. It is a structural
+ * guard, not a discipline reminder — the allowlist stays closed by
+ * construction. (Kept small on purpose; raise it only alongside a real,
+ * enumerated new small-delta caller.)
+ */
+export const MAX_ENV_OVERRIDE_KEYS = 8 as const;
+
+/**
  * Build the full env for an SDK-spawned agent child: an allowlist-filtered
  * snapshot of `parentEnv` (only `AGENT_ENV_ALLOWLIST` names, when defined),
  * with `overrides` layered on top unconditionally.
@@ -70,6 +87,10 @@ export const AGENT_ENV_ALLOWLIST: readonly string[] = [
  * coexist with a strict ambient allowlist without the wrapper needing two
  * different code paths.
  *
+ * `overrides` must carry at most `MAX_ENV_OVERRIDE_KEYS` keys — a structural
+ * guard against a caller accidentally passing a whole ambient env (which would
+ * reopen the allowlist). Exceeding it throws (fail fast).
+ *
  * Pure: never mutates `parentEnv` or `overrides`, always returns a new
  * object. A key present with an `undefined` value (either side) is treated
  * as absent, never written back as the literal string `"undefined"`.
@@ -78,6 +99,14 @@ export function buildChildEnv(
   parentEnv: NodeJS.ProcessEnv,
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
+  const overrideKeys = Object.keys(overrides);
+  if (overrideKeys.length > MAX_ENV_OVERRIDE_KEYS) {
+    throw new Error(
+      `buildChildEnv: overrides carries ${overrideKeys.length} keys, exceeding the ${MAX_ENV_OVERRIDE_KEYS}-key cap. ` +
+        'overrides is for a small deliberate delta (e.g. the 4-key git-identity overlay), not a whole ambient env — ' +
+        'passing process.env here would reopen the allowlist. Filter to the specific keys you intend to override.',
+    );
+  }
   const result: NodeJS.ProcessEnv = {};
   for (const key of AGENT_ENV_ALLOWLIST) {
     const value = parentEnv[key];
