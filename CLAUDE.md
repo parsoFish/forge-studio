@@ -109,7 +109,7 @@ All six phases (brain, architect, project-manager, developer-loop,
 review-loop, reflection) are closed and production-running. End-to-end
 cycles ship merged PRs against managed projects. The detail of when
 each phase closed and the historical iteration arcs live in
-[`brain/log.md`](./brain/log.md).
+[`brain/forge-dev/log.md`](./brain/forge-dev/log.md).
 
 **Note (2026-05-25):** the per-phase + e2e bench harnesses under
 `benchmarks/` were removed in this commit. They had grown into a set
