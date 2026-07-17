@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — KB Library (end state)</title>
+<style>
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hairline:rgba(255,255,255,0.10); --gridline:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --implemented:#0ca30c; --inprogress:#fab219;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5}
+  .banner{background:var(--surface);border-bottom:1px solid var(--hairline);color:var(--ink2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 24px;text-align:center}
+  .crumbs{max-width:1360px;margin:0 auto;padding:14px 24px 0;font-size:12px;color:var(--muted)}
+  .crumbs a{color:var(--ink2);text-decoration:none}
+  .layout{max-width:1360px;margin:0 auto;padding:16px 24px 64px;display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+  h1{font-size:22px;margin:4px 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 18px;max-width:80ch}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;border-radius:999px;padding:1px 9px;white-space:nowrap;vertical-align:middle}
+  .chip-impl{background:rgba(12,163,12,.14);border:1px solid var(--implemented);color:var(--ink)}
+  .chip-plan{background:transparent;border:1px solid rgba(195,194,183,.5);color:var(--ink2)}
+  .chip-def{background:transparent;border:1px dashed rgba(137,135,129,.6);color:var(--muted)}
+  .chip-scope{background:transparent;border:1px solid var(--gridline);color:var(--ink2);font-family:ui-monospace,Menlo,monospace;font-size:11px}
+  .callout{display:inline-flex;width:20px;height:20px;border-radius:50%;border:2px solid var(--muted);color:var(--ink);background:var(--page);font-size:11px;font-weight:700;align-items:center;justify-content:center;vertical-align:middle;flex:none}
+  .c-r1{border-color:var(--r1)} .c-r4{border-color:var(--r4)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .kb{background:var(--surface);border:1px solid var(--hairline);border-left:3px solid var(--r1);border-radius:10px;padding:14px 16px}
+  .kb h3{margin:0;font-size:15px}
+  .khead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .kdesc{color:var(--ink2);font-size:12.5px;margin:6px 0 10px}
+  .krow{display:flex;align-items:center;gap:8px;border-top:1px solid var(--gridline);padding:7px 0;font-size:12.5px;flex-wrap:wrap}
+  .krow .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:76px;flex:none}
+  .obl{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid var(--gridline);border-radius:6px;padding:1px 7px;color:var(--ink2)}
+  .obl .ok{color:var(--implemented)}
+  .obl .due{color:var(--inprogress)}
+  .obl .na{color:var(--muted)}
+  .prov{margin-top:9px;border:1px dashed var(--gridline);border-radius:8px;padding:7px 10px;font-size:11.5px;color:var(--muted)}
+  .prov strong{color:var(--ink2);font-weight:600}
+  .newkb{border-style:dashed;border-left-style:solid}
+  .field{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px}
+  .field label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:76px;flex:none}
+  .field .input{flex:1;border:1px solid var(--gridline);border-radius:6px;padding:4px 9px;color:var(--ink2);background:var(--page);font-size:12.5px}
+  .req{color:var(--inprogress);font-size:11px}
+  .policy{margin-top:20px;background:var(--surface);border:1px solid var(--hairline);border-left:3px solid var(--r1);border-radius:10px;padding:12px 16px;font-size:12.5px;color:var(--ink2)}
+  .policy strong{color:var(--ink)}
+  aside{position:sticky;top:16px;background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:14px 16px}
+  aside h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2)}
+  .leg{display:flex;gap:10px;border-top:1px solid var(--gridline);padding:9px 0;font-size:12px;color:var(--ink2)}
+  .leg:first-of-type{border-top:none}
+  .leg .lid{font-family:ui-monospace,Menlo,monospace;color:var(--ink);font-size:12px}
+  .leg .cite{color:var(--muted);display:block;margin-top:2px;font-size:11px}
+  footer{grid-column:1/-1;color:var(--muted);font-size:12px;border-top:1px solid var(--gridline);padding-top:14px}
+</style>
+</head>
+<body data-page="knowledge" data-page-ready="true" data-mockup="endstate">
+  <div class="banner">END-STATE MOCKUP — reference artifact (docs/roadmaps/), not implementation</div>
+  <div class="crumbs"><a href="index.html">← mockup set index</a> · mirrors today's <span class="mono">/knowledge</span> + <span class="mono">/knowledge/new</span> routes (<span class="mono">data-page="knowledge"</span>)</div>
+
+  <div class="layout">
+    <main>
+      <h1>Knowledge Bases</h1>
+      <p class="sub">End state: a KB is a <strong>contract object</strong> — it declares a mandatory scope binding (flow or project; Q5-B),
+        satisfies four contract obligations (lint · ingest · consolidate · usage), and names its backend behind the KbBackend seam.
+        Obligation indicator values below are illustrative mock data.</p>
+
+      <div class="grid" data-section="kb-grid" data-kb-count="6" data-kb-bound-count="5">
+
+        <!-- forge-dev -->
+        <article class="kb" data-kb-id="forge-dev" data-kb-scope="unbound" data-kb-backend="filesystem">
+          <div class="khead"><h3>forge-dev</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Forge's own engineering brain (Brain 1, ADR-018). The platform KB.</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">unbound · unique</span>
+            <span class="callout c-r1">5</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="callout c-r1">2</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="ok">✓</span> ingest</span>
+            <span class="obl"><span class="due">◔</span> consolidate</span>
+            <span class="obl"><span class="ok">✓</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span>
+            <span class="mono">filesystem</span>
+            <span class="callout c-r1">3</span>
+            <span style="color:var(--muted);font-size:11.5px">KbBackend seam — alternates attach here</span>
+          </div>
+        </article>
+
+        <!-- cycles → rebound -->
+        <article class="kb" data-kb-id="cycles" data-kb-scope="flow:forge-develop" data-kb-backend="filesystem">
+          <div class="khead"><h3>cycles</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Cross-cycle patterns + archives (Brain 2, ADR-018).</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">flow:forge-develop</span>
+            <span class="callout c-r1">4</span>
+            <span class="chip chip-plan">◇ planned (rebind)</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="ok">✓</span> ingest</span>
+            <span class="obl"><span class="ok">✓</span> consolidate</span>
+            <span class="obl"><span class="due">◔</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span><span class="mono">filesystem</span></div>
+          <div class="prov"><strong>Provenance:</strong> formerly the free-standing cross-cycle brain; <em>rebound</em> as the
+            develop-flow's KB under Q5-B — a scope change only, no dissolve/migration project. Content and archives
+            (<span class="mono">brain/_raw/cycles/</span>) stay where they are.</div>
+        </article>
+
+        <!-- betterado -->
+        <article class="kb" data-kb-id="betterado" data-kb-scope="project:betterado" data-kb-backend="filesystem">
+          <div class="khead"><h3>betterado</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Project brain (Brain 3, ADR-035): 132 themes, topical hub indexes, theme↔theme edges.</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">project:betterado</span>
+            <span class="callout c-r1">1</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="ok">✓</span> ingest</span>
+            <span class="obl"><span class="ok">✓</span> consolidate</span>
+            <span class="obl"><span class="ok">✓</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span><span class="mono">filesystem</span></div>
+        </article>
+
+        <!-- gitpulse -->
+        <article class="kb" data-kb-id="gitpulse" data-kb-scope="project:gitpulse" data-kb-backend="filesystem">
+          <div class="khead"><h3>gitpulse</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Project brain for the independent verify-cycle reference project.</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">project:gitpulse</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="due">◔</span> ingest</span>
+            <span class="obl"><span class="na">—</span> consolidate</span>
+            <span class="obl"><span class="ok">✓</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span><span class="mono">filesystem</span></div>
+        </article>
+
+        <!-- mdtoc -->
+        <article class="kb" data-kb-id="mdtoc" data-kb-scope="project:mdtoc" data-kb-backend="filesystem">
+          <div class="khead"><h3>mdtoc</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Project brain for the creds-free neutral reference project.</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">project:mdtoc</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="ok">✓</span> ingest</span>
+            <span class="obl"><span class="na">—</span> consolidate</span>
+            <span class="obl"><span class="ok">✓</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span><span class="mono">filesystem</span></div>
+        </article>
+
+        <!-- trafficGame -->
+        <article class="kb" data-kb-id="trafficGame" data-kb-scope="project:trafficGame" data-kb-backend="filesystem">
+          <div class="khead"><h3>trafficGame</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="kdesc">Project brain for the managed trafficGame project.</p>
+          <div class="krow"><span class="k">Scope</span>
+            <span class="chip chip-scope">project:trafficGame</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Contract</span>
+            <span class="obl"><span class="ok">✓</span> lint</span>
+            <span class="obl"><span class="ok">✓</span> ingest</span>
+            <span class="obl"><span class="na">—</span> consolidate</span>
+            <span class="obl"><span class="due">◔</span> usage</span>
+            <span class="chip chip-plan">◇ planned</span>
+          </div>
+          <div class="krow"><span class="k">Backend</span><span class="mono">filesystem</span></div>
+        </article>
+
+        <!-- new KB creation card -->
+        <article class="kb newkb" data-kb-id="_new" data-section="kb-new">
+          <div class="khead"><h3>New knowledge base…</h3> <span class="callout c-r1">6</span> <span class="chip chip-plan">◇ planned</span></div>
+          <p class="kdesc">Creation form (today's <span class="mono">/knowledge/new</span>). End state: the scope binding is a
+            <strong>required field at creation</strong> — a KB cannot exist unbound (forge-dev is the sole grandfathered exception).</p>
+          <div class="field"><label>Name</label><span class="input">my-new-kb</span></div>
+          <div class="field"><label>Scope</label><span class="input">flow: … | project: …&nbsp;&nbsp;▾</span><span class="req">⚠ required</span></div>
+          <div class="field"><label>Backend</label><span class="input">filesystem ▾</span></div>
+        </article>
+
+      </div>
+
+      <div class="policy" data-section="brain-read-policy">
+        <span class="callout c-r1">7</span>&nbsp; <strong>Brain-read policy is untouched by the scoping rework.</strong>
+        Planners (architect / plan / reflect) read their bound KBs <em>mandatorily</em>; dev-loop + review read only the
+        cycle's project KB (Brain 3), <em>advisory</em>. Q5-B changes what a KB is bound to — not who reads what (ADR-010 as amended).
+      </div>
+
+      <footer>
+        END-STATE MOCKUP · statuses: new capability = <span class="chip chip-plan">◇ planned</span>, baseline chrome = <span class="chip chip-impl">✓ implemented</span> ·
+        obligation values are illustrative · route garnish mirrors forge-ui DOM-as-metrics (CLAUDE.md):
+        <span class="mono">[data-page="knowledge"]</span>, per-card <span class="mono">data-kb-id / data-kb-scope / data-kb-backend</span>.
+      </footer>
+    </main>
+
+    <!-- ============ CALLOUT LEGEND ============ -->
+    <aside data-section="callout-legend" data-callout-count="7">
+      <h2>Callouts → roadmap initiatives</h2>
+      <div class="leg"><span class="callout c-r1">1</span><div><span class="lid">R1-01</span> — KB contract type: mandatory scope-binding chip on every KB card (<span class="lid">flow:*</span> or <span class="lid">project:*</span>).<span class="cite">Q5-B · known-gaps KB loose ends (via R5-05 cross-ref)</span></div></div>
+      <div class="leg"><span class="callout c-r1">2</span><div><span class="lid">R1-01</span> — contract-obligation status row per KB: lint · ingest · consolidate · usage process indicators.<span class="cite">machine-checked later by R1-05</span></div></div>
+      <div class="leg"><span class="callout c-r1">3</span><div><span class="lid">R1-02</span> — backend field behind the KbBackend seam (today: filesystem); seam completion lets alternate backends attach without touching callers.<span class="cite">seam introduced in M8</span></div></div>
+      <div class="leg"><span class="callout c-r1">4</span><div><span class="lid">R1-01</span> — "cycles" rebinds as the develop-flow's KB; provenance note on the card; no dissolve/migration project.<span class="cite">Q5-B · consumed by R4-10 develop-cycle flow</span></div></div>
+      <div class="leg"><span class="callout c-r1">5</span><div><span class="lid">R1-01</span> — forge-dev stays unique/unbound: the one platform KB exempt from mandatory binding.<span class="cite">Q5-B · ADR-018 Brain 1</span></div></div>
+      <div class="leg"><span class="callout c-r1">6</span><div><span class="lid">R1-01</span> — new-KB creation makes the scope binding a required field at creation time.<span class="cite">Q5-B · today's /knowledge/new form</span></div></div>
+      <div class="leg"><span class="callout c-r1">7</span><div><span class="lid">R1-01</span> — scoping note: asymmetric brain-read policy explicitly out of scope for the rework.<span class="cite">ADR-010 as amended · Q5-B</span></div></div>
+    </aside>
+
+  </div>
+</body>
+</html>

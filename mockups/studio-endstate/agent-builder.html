@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — Agent Builder (end state mockup)</title>
+<style>
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hair:rgba(255,255,255,0.10); --grid:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --ok:#0ca30c; --wip:#fab219;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px; line-height:1.45;}
+  .banner{background:var(--surface); border-bottom:1px dashed var(--hair); padding:8px 20px;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink2);
+    border-left:4px solid var(--r4);}
+  header.chrome{display:flex; align-items:baseline; gap:14px; padding:16px 20px 10px; border-bottom:1px solid var(--hair);}
+  header.chrome h1{font-size:17px; font-weight:600;}
+  header.chrome .crumb{color:var(--muted); font-size:12px;}
+  .layout{display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; padding:18px 20px 40px; max-width:1280px; margin:0 auto;}
+  .card{background:var(--surface); border:1px solid var(--hair); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink2); margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+  .lane-r1{border-left:3px solid var(--r1);} .lane-r2{border-left:3px solid var(--r2);}
+  .lane-r3{border-left:3px solid var(--r3);} .lane-r4{border-left:3px solid var(--r4);}
+  .lane-r5{border-left:3px solid var(--r5);}
+  /* status chips — always icon + text + color, never color alone */
+  .chip{display:inline-flex; align-items:center; gap:5px; border-radius:999px; font-size:11px; padding:2px 9px; white-space:nowrap;}
+  .chip.planned{border:1px solid var(--ink2); color:var(--ink2);}
+  .chip.deferred{border:1px dashed var(--muted); color:var(--muted);}
+  .chip.implemented{border:1px solid var(--ok); color:var(--ok); background:rgba(12,163,12,0.10);}
+  .chip.inprogress{border:1px solid var(--wip); color:var(--wip); background:rgba(250,178,25,0.10);}
+  .chip.review{border:1px solid var(--wip); color:var(--wip);}
+  /* numbered callout badges */
+  .co{display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:50%;
+    background:var(--page); color:var(--ink); font-size:11px; font-weight:700; flex:none; border:2px solid var(--grid);}
+  .co.r2{border-color:var(--r2);} .co.r3{border-color:var(--r3);} .co.r4{border-color:var(--r4);} .co.r5{border-color:var(--r5);} .co.r1{border-color:var(--r1);}
+  .decl-row{display:grid; grid-template-columns:22px 190px minmax(0,1fr); gap:10px; align-items:start;
+    padding:11px 4px; border-top:1px solid var(--grid);}
+  .decl-row:first-of-type{border-top:none;}
+  .decl-name{font-weight:600; font-size:13px;}
+  .decl-name small{display:block; font-weight:400; color:var(--muted); font-size:11px; margin-top:2px;}
+  .decl-body{color:var(--ink2); font-size:13px;}
+  .decl-body .note{color:var(--muted); font-size:12px; margin-top:5px;}
+  .toggle{display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink);}
+  .toggle .track{width:32px; height:18px; border-radius:999px; background:var(--grid); position:relative; border:1px solid var(--hair);}
+  .toggle.on .track{background:rgba(255,255,255,0.22);}
+  .toggle .knob{width:12px; height:12px; border-radius:50%; background:var(--ink2); position:absolute; top:2px; left:2px;}
+  .toggle.on .knob{left:16px; background:var(--ink);}
+  .btn{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--ink2); color:var(--ink);
+    border-radius:7px; padding:4px 12px; font-size:12px; background:transparent; cursor:default;}
+  .btn.primary{border-color:var(--ink); background:rgba(255,255,255,0.08);}
+  .seg{display:inline-flex; border:1px solid var(--hair); border-radius:7px; overflow:hidden; font-size:12px;}
+  .seg span{padding:4px 11px; color:var(--muted); border-right:1px solid var(--hair);}
+  .seg span:last-child{border-right:none;}
+  .seg span.sel{background:rgba(255,255,255,0.10); color:var(--ink); font-weight:600;}
+  .select{display:inline-flex; align-items:center; gap:8px; border:1px solid var(--hair); border-radius:7px; padding:4px 10px; font-size:12px; color:var(--ink);}
+  .select .caret{color:var(--muted); font-size:10px;}
+  .notestrip{border:1px dashed var(--hair); border-left:3px solid var(--r2); border-radius:8px;
+    padding:10px 14px; margin-bottom:16px; color:var(--ink2); font-size:13px; display:flex; gap:10px; align-items:center; background:rgba(255,255,255,0.02);}
+  .palette-group{margin-bottom:12px;}
+  .palette-group h3{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:8px;}
+  .chips{display:flex; flex-wrap:wrap; gap:7px;}
+  .skill{display:inline-flex; align-items:center; gap:7px; border:1px solid var(--hair); border-radius:7px;
+    padding:4px 10px; font-size:12px; color:var(--ink); background:var(--page);}
+  .skill .prov{font-size:10px; color:var(--muted); border:1px solid var(--grid); border-radius:4px; padding:0 5px;}
+  .skill .prov.live{border-color:var(--r3); color:var(--ink2);}
+  .search{border:1px solid var(--hair); border-radius:7px; padding:5px 10px; color:var(--muted); font-size:12px; margin-bottom:11px;}
+  .zones{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  .zone{border:1px dashed var(--grid); border-radius:8px; padding:10px; min-height:82px; font-size:12px; color:var(--ink2);}
+  .zone .zlabel{font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:6px; display:flex; align-items:center; gap:6px;}
+  .zone.hook{border-color:var(--r3); border-style:dashed;}
+  .zone .item{display:flex; align-items:center; gap:6px; border:1px solid var(--hair); border-radius:6px; padding:3px 8px; margin-top:4px; background:var(--surface); font-size:11px;}
+  aside .card{position:sticky; top:12px;}
+  .legend-row{display:grid; grid-template-columns:22px 62px minmax(0,1fr) auto; gap:8px; align-items:start;
+    padding:8px 2px 8px 8px; border-top:1px solid var(--grid); font-size:12px;}
+  .legend-row:first-of-type{border-top:none;}
+  .legend-row .iid{font-weight:700; font-size:11px; color:var(--ink);}
+  .legend-row .desc{color:var(--ink2); font-size:11.5px;}
+  .keyline{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink2); padding:3px 0;}
+  .swatch{width:12px; height:12px; border-radius:3px; flex:none;}
+  .ground{font-size:11.5px; color:var(--muted); line-height:1.55;}
+  .ground code{color:var(--ink2); font-family:inherit;}
+  .baseline{border-left:3px solid var(--ok);}
+  .baseline ul{list-style:none;}
+  .baseline li{display:flex; gap:8px; align-items:baseline; padding:4px 0; font-size:12.5px; color:var(--ink2);}
+</style>
+</head>
+<body data-page="agents" data-agent-id="forge-develop" data-dirty="false" data-page-ready="true" data-mockup="studio-endstate">
+
+<div class="banner">END-STATE MOCKUP — reference artifact (docs/roadmaps/), not implementation</div>
+
+<header class="chrome">
+  <h1>Agent Builder</h1>
+  <span class="crumb">Library &rsaquo; Agents &rsaquo; <strong style="color:var(--ink2)">forge-develop</strong></span>
+  <span class="crumb" style="margin-left:auto">runtime: claude-agent-sdk &middot; readiness 6/6</span>
+</header>
+
+<div class="layout">
+<main>
+
+  <!-- ============ CAPABILITY DECLARATION PANEL ============ -->
+  <section class="card lane-r2" data-section="capability-declarations">
+    <h2>Capability declarations <span class="chip planned">&#9671; planned</span>
+      <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:11px;">— the agent def is the single source; everything downstream derives from these</span>
+    </h2>
+
+    <div class="decl-row" data-decl="runnable-standalone">
+      <span class="co r2">1</span>
+      <div class="decl-name">Runnable standalone<small>agent-as-runnable primitive</small></div>
+      <div class="decl-body">
+        <span class="toggle on"><span class="track"><span class="knob"></span></span> declared</span>
+        &nbsp;&nbsp;<span class="btn primary">&#9654; Run agent</span>
+        <div class="note">Declared runnable &rarr; the agent can execute outside any flow: standalone run from this
+          screen or from the roadmap surface. R2-01; consumed by R4-01 platform&rarr;artifact migration.</div>
+      </div>
+    </div>
+
+    <div class="decl-row" data-decl="fanout-able">
+      <span class="co r2">2</span>
+      <div class="decl-name">Fanout-able<small>parallel work-item execution</small></div>
+      <div class="decl-body">
+        <span class="toggle on"><span class="track"><span class="knob"></span></span> declared</span>
+        &nbsp;&nbsp;<span class="select">max parallel: 4 worktrees <span class="caret">&#9662;</span></span>
+        <div class="note">R2-03 — <strong>research spike first</strong>: survey parallel-agent/merge practice outside
+          forge before any merge-resolution design. Merge-resolution itself is a deferred placeholder
+          <span class="chip deferred">&#10074;&#10074; deferred R2-D1</span> gated on that evidence (Q3-B).</div>
+      </div>
+    </div>
+
+    <div class="decl-row" data-decl="interactive-mode">
+      <span class="co r2">3</span>
+      <div class="decl-name">Interactive mode<small>replaces <code>surface:</code> / <code>interactivity:</code> freetext</small></div>
+      <div class="decl-body">
+        <span class="seg"><span>headless</span><span class="sel">gate-form</span><span>interview</span></span>
+        <div class="note">Structured enum on the def, not duplicated freetext — today's two freetext fields collapse
+          into one declaration the flow builder can actually read. R2-02 agent-def-driven builder.</div>
+      </div>
+    </div>
+
+    <div class="decl-row" data-decl="gate-capable">
+      <span class="co r2">4</span>
+      <div class="decl-name">Gate-capable<small>can this agent's verdict pause a flow?</small></div>
+      <div class="decl-body">
+        <span class="toggle on"><span class="track"><span class="knob"></span></span> declared</span>
+        <div class="note">The agent <em>judges</em>; the <em>orchestrator executes</em> the gate (ADR-036 pattern).
+          The retired unifier's dual-boundary full-suite gate relocates to orchestrator-owned execution —
+          <span class="chip review">&#9873; for operator review</span> (Q3-B).</div>
+      </div>
+    </div>
+
+    <div class="decl-row" data-decl="runtime">
+      <span class="co r2">5</span>
+      <div class="decl-name">Runtime / SDK<small>adapter registry (ADR-029)</small></div>
+      <div class="decl-body">
+        <span class="select" data-sdk="claude-agent-sdk">claude-agent-sdk <span class="caret">&#9662;</span></span>
+        &nbsp;&nbsp;<span class="select">model tier: reasoning-high <span class="caret">&#9662;</span></span>
+        <div class="note">Def declares a <em>tier</em>, not a model id — each adapter resolves the tier itself
+          (claude &rarr; opus-class, gemini &rarr; pro-class, aider &rarr; configured pair). R2-06 runtime-adapter realization.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DERIVATION NOTE-STRIP ============ -->
+  <div class="notestrip" data-section="derivation-note">
+    <span class="co r2">6</span>
+    <div><strong style="color:var(--ink)">Flow builder options derive from these declarations.</strong>
+      A node referencing this agent in /flows/&hellip; BUILD exposes exactly what is declared here — fanout selector,
+      gate wiring, interactive surface — nothing hand-configured twice. (R2-02)</div>
+  </div>
+
+  <!-- ============ UNIFIED PALETTE ============ -->
+  <section class="card lane-r3" data-section="unified-palette">
+    <h2>Capability palette — catalog &cup; live operator-authored <span class="co r3">7</span> <span class="chip planned">&#9671; planned</span></h2>
+    <div class="search">&#8981; search skills, tools, hooks&hellip;</div>
+
+    <div class="palette-group">
+      <h3>Catalog (studio/catalog.yaml) <span class="chip implemented">&#10003; implemented — as-built baseline</span></h3>
+      <div class="chips">
+        <span class="skill" data-id="tdd-workflow">tdd-workflow <span class="prov">community &#9733; 4.2k</span></span>
+        <span class="skill" data-id="security-review">security-review <span class="prov">community &#9733; 2.9k</span></span>
+        <span class="skill" data-id="webapp-testing">webapp-testing <span class="prov">community &#9733; 1.8k</span></span>
+      </div>
+    </div>
+
+    <div class="palette-group">
+      <h3>Operator-authored — live from /skills/new <span class="chip planned">&#9671; planned (R3-01)</span></h3>
+      <div class="chips">
+        <span class="skill" data-id="brain-query">brain-query <span class="prov live">authored &middot; v3</span></span>
+        <span class="skill" data-id="journey-sync">journey-sync <span class="prov live">authored &middot; v1</span></span>
+        <span class="skill" data-id="forge-onboard-project">forge-onboard-project <span class="prov live">authored &middot; v2</span></span>
+      </div>
+      <div style="color:var(--muted); font-size:11.5px; margin-top:7px;">One palette, two provenances: authored skills
+        become first-class managed objects (versioned, editable, listed here live) — R3-01; unlocks the
+        skill-generator flow R3-02. Cross-ref: known-gaps residue R5-05 &ldquo;skills palette&rdquo;.</div>
+    </div>
+  </section>
+
+  <!-- ============ DROP ZONES ============ -->
+  <section class="card lane-r3" data-section="advanced" data-advanced-open="true">
+    <h2>Capability drop zones <span class="chip implemented">&#10003; zones implemented — as-built baseline</span></h2>
+    <div class="zones">
+      <div class="zone" data-accepts="skill"><div class="zlabel">skill</div>
+        <div class="item">tdd-workflow</div><div class="item">brain-query</div></div>
+      <div class="zone" data-accepts="tool"><div class="zlabel">tool</div>
+        <div class="item">headroom sg</div></div>
+      <div class="zone" data-accepts="mcp"><div class="zlabel">mcp</div>
+        <div class="item">tokensave</div></div>
+      <div class="zone hook" data-accepts="hook"><div class="zlabel"><span class="co r3">8</span> hook</div>
+        <div class="item">pre-commit-lint <span class="chip implemented" style="font-size:10px">&#10003; scan passed</span></div>
+        <div class="item">cost-ceiling-guard <span class="chip inprogress" style="font-size:10px">&#9684; scan pending</span></div>
+        <div style="color:var(--muted); font-size:11px; margin-top:6px;">Hooks library w/ mandatory security-scan
+          status per hook before an agent may bind it — R3-03 <span class="chip planned" style="font-size:10px">&#9671; planned</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AS-BUILT BASELINE ============ -->
+  <section class="card baseline" data-section="as-built-baseline">
+    <h2>As-built baseline (today's /agents/[id]) <span class="chip implemented">&#10003; implemented</span></h2>
+    <ul>
+      <li><span class="chip implemented">&#10003;</span> Advanced section w/ skill/tool/mcp/hook drop zones (<code style="color:var(--muted)">data-accepts</code>), <code style="color:var(--muted)">data-sdk</code> runtime pick, readiness panel (<code style="color:var(--muted)">data-ready-count</code>).</li>
+      <li><span class="chip implemented">&#10003;</span> Catalog palette from studio/catalog.yaml with provenance + stars; starter picker on /agents/new.</li>
+      <li><span class="chip implemented">&#10003;</span> Today's <code style="color:var(--muted)">surface:</code> / <code style="color:var(--muted)">interactivity:</code> freetext on the def — the duplicated surface callout &#9314; replaces.</li>
+    </ul>
+  </section>
+
+</main>
+
+<!-- ============ LEGEND SIDEBAR ============ -->
+<aside>
+  <div class="card">
+    <h2>Callout legend</h2>
+    <div class="legend-row lane-r2"><span class="co r2">1</span><span class="iid">R2-01</span><span class="desc">Agent-as-runnable primitive — standalone toggle + Run button</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2"><span class="co r2">2</span><span class="iid">R2-03</span><span class="desc">Fanout capability declaration (research spike precedes design)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2"><span class="co r2">3</span><span class="iid">R2-02</span><span class="desc">Interactive-mode declaration replaces surface/interactivity freetext</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2"><span class="co r2">4</span><span class="iid">R2-02</span><span class="desc">Gate-capable flag; orchestrator executes gates (ADR-036, Q3-B)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2"><span class="co r2">5</span><span class="iid">R2-06</span><span class="desc">Runtime/SDK pick with per-adapter tier resolution (ADR-029)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2"><span class="co r2">6</span><span class="iid">R2-02</span><span class="desc">Agent-def-driven builder — flow options derive from declarations</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r3"><span class="co r3">7</span><span class="iid">R3-01</span><span class="desc">Skills first-class: catalog &cup; live operator-authored, provenance badges</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r3"><span class="co r3">8</span><span class="iid">R3-03</span><span class="desc">Hooks library drop-zone with security-scan status badge</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row" style="border-top:1px solid var(--grid)"><span></span><span class="iid" style="color:var(--muted)">R2-D1</span><span class="desc">Parallel-work merge-resolution — placeholder gated on R2-03 spike evidence</span><span class="chip deferred">&#10074;&#10074; deferred</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Status key</h2>
+    <div class="keyline"><span class="chip implemented">&#10003; implemented</span> as-built baseline only</div>
+    <div class="keyline"><span class="chip inprogress">&#9684; in-progress</span></div>
+    <div class="keyline"><span class="chip planned">&#9671; planned</span> roadmap document only</div>
+    <div class="keyline"><span class="chip deferred">&#10074;&#10074; deferred</span> gated / future</div>
+    <div class="keyline"><span class="chip review">&#9873; for operator review</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Lane key</h2>
+    <div class="keyline"><span class="swatch" style="background:var(--r1)"></span> R1 contract componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r2)"></span> R2 runnable componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r3)"></span> R3 library componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r4)"></span> R4 OOTB suite</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r5)"></span> R5 hardening &amp; operability</div>
+  </div>
+
+  <div class="card">
+    <h2>Grounding</h2>
+    <div class="ground">
+      Decisions: <code>Q2-B</code> (plan agent alongside architect), <code>Q3-B</code> (unifier retired; ADR-036 gate
+      relocation), <code>Q6-A</code> (R2-01/R2-02 = wave 1).<br><br>
+      ADRs: <code>024</code> agent-composes-skills, <code>027</code> studio object model, <code>029</code> runtime
+      adapters, <code>036</code> orchestrator-owned gate execution.<br><br>
+      known-gaps: <code>&sect;6</code> skills subfolder move (deferred), <code>&sect;Strengths worth preserving</code> dual-boundary gate =
+      strength worth preserving. Dependency edges: R4-01 &larr; R2-01, R2-02; R3-02 &larr; R3-01.
+    </div>
+  </div>
+</aside>
+</div>
+
+</body>
+</html>

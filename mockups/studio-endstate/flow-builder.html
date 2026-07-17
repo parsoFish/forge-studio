@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — Flow Builder (end state mockup)</title>
+<style>
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hair:rgba(255,255,255,0.10); --grid:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --ok:#0ca30c; --wip:#fab219;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px; line-height:1.45;}
+  .banner{background:var(--surface); border-bottom:1px dashed var(--hair); padding:8px 20px;
+    font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink2); border-left:4px solid var(--r4);}
+  header.chrome{display:flex; align-items:baseline; gap:14px; padding:16px 20px 10px; border-bottom:1px solid var(--hair);}
+  header.chrome h1{font-size:17px; font-weight:600;}
+  header.chrome .crumb{color:var(--muted); font-size:12px;}
+  .tabbar{display:inline-flex; border:1px solid var(--hair); border-radius:7px; overflow:hidden; font-size:12px; margin-left:auto;}
+  .tabbar span{padding:4px 13px; color:var(--muted);}
+  .tabbar span.sel{background:rgba(255,255,255,0.10); color:var(--ink); font-weight:600;}
+  .layout{display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:18px; padding:18px 20px 40px; max-width:1360px; margin:0 auto;}
+  .card{background:var(--surface); border:1px solid var(--hair); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink2); margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .lane-r2{border-left:3px solid var(--r2);} .lane-r4{border-left:3px solid var(--r4);} .lane-r5{border-left:3px solid var(--r5);}
+  .chip{display:inline-flex; align-items:center; gap:5px; border-radius:999px; font-size:11px; padding:2px 9px; white-space:nowrap;}
+  .chip.planned{border:1px solid var(--ink2); color:var(--ink2);}
+  .chip.deferred{border:1px dashed var(--muted); color:var(--muted);}
+  .chip.implemented{border:1px solid var(--ok); color:var(--ok); background:rgba(12,163,12,0.10);}
+  .chip.review{border:1px solid var(--wip); color:var(--wip); background:rgba(250,178,25,0.08);}
+  .co{display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:50%;
+    background:var(--page); color:var(--ink); font-size:11px; font-weight:700; flex:none; border:2px solid var(--grid);}
+  .co.r1{border-color:var(--r1);} .co.r2{border-color:var(--r2);} .co.r4{border-color:var(--r4);} .co.r5{border-color:var(--r5);}
+  /* canvas */
+  .canvas{background:
+      repeating-linear-gradient(0deg, transparent 0 23px, var(--grid) 23px 24px),
+      repeating-linear-gradient(90deg, transparent 0 23px, var(--grid) 23px 24px);
+    border:1px solid var(--hair); border-radius:10px; padding:16px 14px 20px; margin-bottom:14px;}
+  .human-moment{display:inline-flex; align-items:center; gap:8px; border:1px dashed var(--ink2); border-radius:999px;
+    padding:4px 12px; font-size:12px; color:var(--ink); background:var(--page); margin-bottom:12px;}
+  .human-moment .dot{width:9px; height:9px; border-radius:50%; background:var(--ink);}
+  .chain{display:flex; align-items:stretch; gap:0; flex-wrap:wrap;}
+  .fnode{background:var(--surface); border:1px solid var(--hair); border-radius:9px; padding:10px 12px; min-width:138px; position:relative;}
+  .fnode .ntitle{font-weight:600; font-size:13px; display:flex; align-items:center; gap:7px;}
+  .fnode .nagent{color:var(--muted); font-size:11px; margin-top:2px;}
+  .fnode .nmeta{margin-top:7px; font-size:11px; color:var(--ink2);}
+  .fnode.trigger{border-style:dashed; min-width:110px;}
+  .fnode.gate{border-color:var(--ink2);}
+  .arrow{align-self:center; color:var(--muted); font-size:17px; padding:0 7px; flex:none;}
+  .fan{position:relative;}
+  .fan::before,.fan::after{content:""; position:absolute; inset:0; background:var(--surface); border:1px solid var(--hair); border-radius:9px; z-index:-1;}
+  .fan::before{transform:translate(5px,5px);}
+  .fan::after{transform:translate(10px,10px); opacity:0.6;}
+  .subnode{border:1px dashed var(--grid); border-radius:8px; background:var(--page); padding:8px 11px; font-size:11.5px; color:var(--ink2); max-width:300px; margin:10px 0 0 40px;}
+  .subnode .stitle{color:var(--ink); font-weight:600; font-size:12px; display:flex; gap:7px; align-items:center;}
+  .stub{display:inline-flex; align-items:center; gap:7px; border:1px dashed var(--muted); border-radius:8px; padding:6px 11px;
+    font-size:11.5px; color:var(--muted); margin:10px 0 0 40px;}
+  /* orchestrator band */
+  .orch{border:1px solid var(--r5); border-left:6px solid var(--r5); border-radius:9px; margin-top:16px;
+    padding:10px 14px; background:rgba(25,158,112,0.06);}
+  .orch .otitle{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink2); display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .orch .gates{display:flex; gap:26px; margin-top:9px; flex-wrap:wrap;}
+  .orch .gmark{font-size:12px; color:var(--ink2); display:flex; gap:7px; align-items:baseline;}
+  .orch .gmark b{color:var(--ink); font-weight:600;}
+  /* inspectors */
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .field{display:grid; grid-template-columns:120px minmax(0,1fr); gap:8px; padding:7px 0; border-top:1px solid var(--grid); font-size:12.5px; align-items:start;}
+  .field:first-of-type{border-top:none;}
+  .field .flabel{color:var(--muted);}
+  .field .fval{color:var(--ink);}
+  .field.disabled .fval{color:var(--muted);}
+  .select{display:inline-flex; align-items:center; gap:8px; border:1px solid var(--hair); border-radius:7px; padding:3px 9px; font-size:12px; color:var(--ink);}
+  .select.off{border-style:dashed; color:var(--muted);}
+  .hint{font-size:11px; color:var(--muted); margin-top:3px;}
+  .trig-group{border-top:1px solid var(--grid); padding:9px 0;}
+  .trig-group:first-of-type{border-top:none;}
+  .trig-group h3{font-size:12px; color:var(--ink); font-weight:600; display:flex; gap:8px; align-items:center; margin-bottom:5px;}
+  .trig-group .items{font-size:12px; color:var(--ink2); line-height:1.7;}
+  .legend-row{display:grid; grid-template-columns:22px 62px minmax(0,1fr) auto; gap:8px; align-items:start;
+    padding:8px 2px 8px 8px; border-top:1px solid var(--grid); font-size:12px;}
+  .legend-row:first-of-type{border-top:none;}
+  .legend-row .iid{font-weight:700; font-size:11px; color:var(--ink);}
+  .legend-row .desc{color:var(--ink2); font-size:11.5px;}
+  .lane-r1-b{border-left:3px solid var(--r1);} .lane-r2-b{border-left:3px solid var(--r2);}
+  .lane-r4-b{border-left:3px solid var(--r4);} .lane-r5-b{border-left:3px solid var(--r5);}
+  .keyline{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink2); padding:3px 0;}
+  .swatch{width:12px; height:12px; border-radius:3px; flex:none;}
+  .ground{font-size:11.5px; color:var(--muted); line-height:1.55;}
+  .ground code{color:var(--ink2); font-family:inherit;}
+</style>
+</head>
+<body data-page="flow-monitor" data-flow-id="forge-develop-cycle" data-active-tab="build" data-page-ready="true" data-mockup="studio-endstate">
+
+<div class="banner">END-STATE MOCKUP — reference artifact (docs/roadmaps/), not implementation</div>
+
+<header class="chrome">
+  <h1>Flow Builder</h1>
+  <span class="crumb">Library &rsaquo; Flows &rsaquo; <strong style="color:var(--ink2)">forge-develop-cycle (OOTB)</strong></span>
+  <div class="tabbar"><span>MONITOR</span><span class="sel">BUILD</span></div>
+</header>
+
+<div class="layout">
+<main>
+
+  <!-- ============ CANVAS: OOTB DEVELOP-CYCLE FLOW AS DATA ============ -->
+  <section class="card lane-r4" data-component="flow-builder-canvas" data-node-count="6" data-edge-count="5" data-goal-set="true">
+    <h2><span class="co r4">1</span> OOTB develop-cycle flow — shown as data
+      <span class="chip planned">&#9671; planned (R4-10)</span>
+      <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:11px;">unifier retired (Q3-B); post-develop = demo + adversarial review</span>
+    </h2>
+
+    <div class="canvas">
+      <div class="human-moment" data-human-moment="architect-accept"><span class="co r4">9</span><span class="dot"></span>
+        HUMAN MOMENT — architect accept, upstream of this flow (/artifact?type=plan&amp;mode=gate)</div>
+
+      <div class="chain">
+        <div class="fnode trigger" data-flow-node data-node-id="trigger">
+          <div class="ntitle">&#9889; trigger</div>
+          <div class="nmeta">on: architect accept<br>&middot; or standalone (roadmap)</div>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="fnode" data-flow-node data-node-id="plan" data-agent-ref="forge-plan">
+          <div class="ntitle"><span class="co r4">2</span> plan</div>
+          <div class="nagent">agent: forge-plan</div>
+          <div class="nmeta">per-initiative WI decomposition<br>ADR-037 wi-spec-compiler folds in<br><span class="chip planned" style="font-size:10px">&#9671; planned R4-05</span></div>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="fnode fan" data-flow-node data-node-id="develop" data-agent-ref="forge-develop" data-fanout="4">
+          <div class="ntitle"><span class="co r2">3</span> develop</div>
+          <div class="nagent">agent: forge-develop &middot; fanout &times;4</div>
+          <div class="nmeta">parallel worktrees (wi-1&hellip;wi-4)<br><span class="chip planned" style="font-size:10px">&#9671; planned R2-03/R4-06</span></div>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="fnode" data-flow-node data-node-id="demo" data-agent-ref="forge-demo">
+          <div class="ntitle"><span class="co r4">5</span> demo</div>
+          <div class="nagent">agent: forge-demo</div>
+          <div class="nmeta">initiative-context evidence<br>needs R1-03 demo-process clause<br><span class="chip planned" style="font-size:10px">&#9671; planned R4-07</span></div>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="fnode" data-flow-node data-node-id="adversarial-review" data-agent-ref="forge-adversary">
+          <div class="ntitle"><span class="co r4">6</span> adversarial review</div>
+          <div class="nagent">agent: forge-adversary</div>
+          <div class="nmeta">initiative-context; judges, never executes gates<br><span class="chip planned" style="font-size:10px">&#9671; planned R4-08</span></div>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="fnode gate" data-flow-node data-node-id="verdict-gate" data-gate="true">
+          <div class="ntitle">&#9646;&#9646; verdict gate</div>
+          <div class="nagent">/artifact?type=verdict&amp;mode=gate</div>
+          <div class="nmeta"><span class="co r4">9</span> HUMAN MOMENT — PR approve<br>&rarr; initiative &ldquo;merged&rdquo; state (Q2-B), reflect triggers after</div>
+        </div>
+      </div>
+
+      <!-- dynamic-artifact node hanging off demo -->
+      <div class="subnode" data-flow-node data-node-id="artifact-surface" data-artifact-kind="dynamic-html">
+        <div class="stitle"><span class="co r2">7</span> dynamic artifact surface — demo.html / plan.html</div>
+        layout + content = <strong style="color:var(--ink)">agent output</strong>, rendered by the flow UI —
+        the surface is agent-defined HTML, not a fixed Studio template. <span class="chip planned" style="font-size:10px">&#9671; planned R2-05</span>
+      </div>
+
+      <!-- deferred merge-resolution stub -->
+      <div class="stub" data-flow-node data-node-id="merge-resolution" data-deferred="true">
+        <span class="co r2">4</span> merge-resolution (post-fanout) — placeholder only, gated on R2-03 spike evidence
+        <span class="chip deferred" style="font-size:10px">&#10074;&#10074; deferred R2-D1</span>
+      </div>
+
+      <!-- orchestrator-owned gate band: NOT an agent node -->
+      <div class="orch" data-band="orchestrator" data-gate-owner="orchestrator">
+        <div class="otitle"><span class="co r5">8</span> ORCHESTRATOR — owned gate execution (band, not an agent node)
+          <span class="chip review">&#9873; operator review: gate relocation per ADR-036</span>
+          <span class="chip planned">&#9671; planned</span></div>
+        <div class="gates">
+          <div class="gmark">&#9654;&#10074; <b>scoped per-WI gate</b> — runs at each develop worktree boundary</div>
+          <div class="gmark">&#9654;&#10074; <b>full-suite dual-boundary gate</b> — pre-merge; relocated from the retired
+            unifier (known-gaps &ldquo;strength worth preserving&rdquo;: nothing ships red)</div>
+        </div>
+        <div class="hint" style="margin-top:7px;">Agents judge; the orchestrator executes (ADR-036 pattern, Q3-B).</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="twocol">
+    <!-- ============ DECLARATION-CONSTRAINED NODE CONFIG ============ -->
+    <section class="card lane-r2" data-section="node-inspector">
+      <h2><span class="co r2">10</span> Node config — constrained by agent declarations
+        <span class="chip planned">&#9671; planned (R2-02)</span></h2>
+
+      <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">selected: <strong style="color:var(--ink)">develop</strong> &middot; agent forge-develop (declares fanout)</div>
+      <div class="field"><span class="flabel">fanout</span>
+        <span class="fval"><span class="select">enabled &middot; parallelism: 4 <span style="color:var(--muted)">&#9662;</span></span>
+        <div class="hint">selector ENABLED — forge-develop declares fanout-able on its def (see agent-builder mockup, callout 2)</div></span></div>
+      <div class="field"><span class="flabel">interactive</span>
+        <span class="fval">headless <div class="hint">derived from the agent's interactive-mode declaration; not editable here</div></span></div>
+      <div class="field"><span class="flabel">gate wiring</span>
+        <span class="fval">n/a — agent not gate-capable <div class="hint">verdict-gate node offers gate wiring because forge-adversary declares gate-capable</div></span></div>
+
+      <div style="font-size:12px; color:var(--muted); margin:13px 0 6px; border-top:1px solid var(--grid); padding-top:10px;">selected: <strong style="color:var(--ink)">demo</strong> &middot; agent forge-demo (no fanout declaration)</div>
+      <div class="field disabled"><span class="flabel">fanout</span>
+        <span class="fval"><span class="select off">disabled &#8856;</span>
+        <div class="hint">greyed — <em>agent does not declare fanout</em>; declare it on the agent def to unlock this option</div></span></div>
+    </section>
+
+    <!-- ============ TRIGGER PANEL ============ -->
+    <section class="card lane-r2" data-section="trigger-panel">
+      <h2><span class="co r2">11</span> Triggers <span class="chip planned">&#9671; planned (R2-04)</span></h2>
+
+      <div class="trig-group">
+        <h3>User action <span class="chip implemented" style="font-size:10px">&#10003; implemented — baseline</span></h3>
+        <div class="items">&#9654; Start run (flow monitor) &middot; /architect/new idea box</div>
+      </div>
+      <div class="trig-group">
+        <h3>On flow / agent completion <span class="chip implemented" style="font-size:10px">&#10003; implemented — baseline</span></h3>
+        <div class="items">flowLineage chaining: forge-architect &rarr; forge-develop &rarr; forge-reflect</div>
+      </div>
+      <div class="trig-group">
+        <h3>External events <span class="chip planned" style="font-size:10px">&#9671; planned R2-04</span></h3>
+        <div class="items">
+          &#8618; git push (repo webhook)<br>
+          &#8618; release published (webhook)<br>
+          &#8618; RSS item matched (poll)<br>
+          <span class="hint">each event source binds via a webhook <em>or</em> poll adapter — adapter choice per source, not per flow</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ AS-BUILT BASELINE ============ -->
+  <section class="card" style="border-left:3px solid var(--ok)" data-section="as-built-baseline">
+    <h2>As-built baseline (today's /flows/[id] BUILD) <span class="chip implemented">&#10003; implemented</span></h2>
+    <ul style="list-style:none;">
+      <li style="padding:4px 0; color:var(--ink2); font-size:12.5px;"><span class="chip implemented">&#10003;</span>
+        Flow-as-data canvas: <code style="color:var(--muted)">data-component="flow-builder-canvas"</code>, per-node
+        <code style="color:var(--muted)">data-flow-node / data-node-id / data-agent-ref</code>, save/clear/auto-layout actions.</li>
+      <li style="padding:4px 0; color:var(--ink2); font-size:12.5px;"><span class="chip implemented">&#10003;</span>
+        MONITOR hex topology (<code style="color:var(--muted)">data-mon-node / data-status / data-hex-kind</code>) incl.
+        <code style="color:var(--muted)">data-fanout-phase</code> aggregate for a fanned-out dev node.</li>
+      <li style="padding:4px 0; color:var(--ink2); font-size:12.5px;"><span class="chip implemented">&#10003;</span>
+        Current pipeline uses the unifier post-develop — retired in this end state (Q3-B); its full-suite gate relocates
+        to the orchestrator band, callout 8.</li>
+    </ul>
+  </section>
+
+</main>
+
+<!-- ============ LEGEND SIDEBAR ============ -->
+<aside>
+  <div class="card">
+    <h2>Callout legend</h2>
+    <div class="legend-row lane-r4-b"><span class="co r4">1</span><span class="iid">R4-10</span><span class="desc">Develop-cycle OOTB flow as data (deps: R4-05, R4-07, R4-08)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r4-b"><span class="co r4">2</span><span class="iid">R4-05</span><span class="desc">Plan agent — ADR-037 folds in; two entry paths (standalone / auto-after-accept, Q2-B)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2-b"><span class="co r2">3</span><span class="iid">R2-03</span><span class="desc">Fanout capability — research spike first (deps into R4-06)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2-b"><span class="co r2">4</span><span class="iid">R2-D1</span><span class="desc">Merge-resolution placeholder — gated on R2-03 evidence</span><span class="chip deferred">&#10074;&#10074; deferred</span></div>
+    <div class="legend-row lane-r4-b"><span class="co r4">5</span><span class="iid">R4-07</span><span class="desc">Demo agent, initiative-context (dep: R1-03 demo/test clauses)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r4-b"><span class="co r4">6</span><span class="iid">R4-08</span><span class="desc">Adversarial review agent — replaces reviewer+unifier judging (Q3-B)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2-b"><span class="co r2">7</span><span class="iid">R2-05</span><span class="desc">Dynamic artifact surfaces — agent-defined HTML, flow-UI rendered</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r5-b"><span class="co r5">8</span><span class="iid">R4-10</span><span class="desc">Orchestrator-owned dual-boundary gate band (R4-10-F2; ADR-036 relocation, Q3-B)</span><span class="chip review">&#9873; review</span></div>
+    <div class="legend-row lane-r4-b"><span class="co r4">9</span><span class="iid">R4-10</span><span class="desc">Human-moment markers: architect accept upstream; PR approve at gate (operator-journey)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2-b"><span class="co r2">10</span><span class="iid">R2-02</span><span class="desc">Node config constrained by agent declarations (fanout selector enabled/greyed)</span><span class="chip planned">&#9671; planned</span></div>
+    <div class="legend-row lane-r2-b"><span class="co r2">11</span><span class="iid">R2-04</span><span class="desc">Trigger expansion — external events via webhook/poll adapters</span><span class="chip planned">&#9671; planned</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Status key</h2>
+    <div class="keyline"><span class="chip implemented">&#10003; implemented</span> as-built baseline only</div>
+    <div class="keyline"><span class="chip planned">&#9671; planned</span> roadmap document only</div>
+    <div class="keyline"><span class="chip deferred">&#10074;&#10074; deferred</span> gated / future</div>
+    <div class="keyline"><span class="chip review">&#9873; for operator review</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Lane key</h2>
+    <div class="keyline"><span class="swatch" style="background:var(--r1)"></span> R1 contract componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r2)"></span> R2 runnable componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r3)"></span> R3 library componentry</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r4)"></span> R4 OOTB suite</div>
+    <div class="keyline"><span class="swatch" style="background:var(--r5)"></span> R5 hardening &amp; operability</div>
+  </div>
+
+  <div class="card">
+    <h2>Grounding</h2>
+    <div class="ground">
+      Decisions: <code>Q2-B</code> (plan agent alongside architect; &ldquo;merged&rdquo; initiative state),
+      <code>Q3-B</code> (unifier retired; gate relocation flagged for operator review),
+      <code>Q6-A</code> (waves: R2-01/02 &rarr; R4-05/11 &rarr; rest of R4).<br><br>
+      ADRs: <code>028</code> flow engine, <code>031</code> studio consolidation, <code>036</code> orchestrator-owned
+      gate execution, <code>037</code> compiled WI contracts (folds into R4-05; only Proposed ADR).<br><br>
+      known-gaps: <code>&sect;Strengths</code> — dual-boundary gate &ldquo;nothing ships red&rdquo; preserved by callout 8;
+      <code>&sect;1</code> flow edit-lock &rarr; R5-04. Dependency edges: R4-06 &larr; R2-03, R4-05;
+      R4-07 &larr; R1-03; R4-10 &larr; R4-05, R4-07, R4-08; R2-D1 &larr; R2-03 evidence.
+    </div>
+  </div>
+</aside>
+</div>
+
+</body>
+</html>

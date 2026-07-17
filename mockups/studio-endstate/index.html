@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — End-State Mockup Set</title>
+<style>
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hairline:rgba(255,255,255,0.10); --gridline:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --implemented:#0ca30c; --inprogress:#fab219;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5}
+  .banner{background:var(--surface);border-bottom:1px solid var(--hairline);color:var(--ink2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 24px;text-align:center}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 24px 64px}
+  h1{font-size:24px;margin:0 0 6px}
+  h2{font-size:15px;margin:36px 0 12px;color:var(--ink);letter-spacing:.02em}
+  p.lede{color:var(--ink2);max-width:72ch;margin:0}
+  a{color:var(--ink);text-decoration:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:16px}
+  .card{display:block;background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:16px 18px;transition:border-color .12s}
+  .card:hover{border-color:rgba(255,255,255,.28)}
+  .card h3{margin:0 0 6px;font-size:16px}
+  .card .file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted)}
+  .card p{margin:8px 0 0;color:var(--ink2);font-size:13px}
+  .lanes{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+  .lanepill{font-size:11px;color:var(--ink2);border:1px solid var(--hairline);border-radius:999px;padding:1px 8px;border-left-width:3px}
+  .lp-r1{border-left-color:var(--r1)} .lp-r2{border-left-color:var(--r2)} .lp-r3{border-left-color:var(--r3)} .lp-r4{border-left-color:var(--r4)} .lp-r5{border-left-color:var(--r5)}
+  table{border-collapse:collapse;width:100%;margin-top:8px}
+  td,th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--gridline);font-size:13px;vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  td.lane{font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:baseline}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;border-radius:999px;padding:2px 10px;white-space:nowrap}
+  .chip-impl{background:rgba(12,163,12,.14);border:1px solid var(--implemented);color:var(--ink)}
+  .chip-prog{background:rgba(250,178,25,.12);border:1px solid var(--inprogress);color:var(--ink)}
+  .chip-plan{background:transparent;border:1px solid rgba(195,194,183,.5);color:var(--ink2)}
+  .chip-def{background:transparent;border:1px dashed rgba(137,135,129,.6);color:var(--muted)}
+  .note{background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:14px 18px;color:var(--ink2);font-size:13px}
+  .note strong{color:var(--ink)}
+  ul{margin:8px 0 0;padding-left:20px;color:var(--ink2);font-size:13px}
+  li{margin:4px 0}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  footer{margin-top:48px;color:var(--muted);font-size:12px;border-top:1px solid var(--gridline);padding-top:16px}
+</style>
+</head>
+<body data-page="mockup-index" data-page-ready="true">
+  <div class="banner">END-STATE MOCKUP — reference artifact (docs/roadmaps/), not implementation</div>
+  <div class="wrap">
+    <h1>Forge Studio — End-State Mockup Set</h1>
+    <p class="lede">Target-state reference for <span class="mono">docs/roadmaps/</span>; each callout № on a page maps to a
+      roadmap initiative ID (legend sidebar on every page). This set documents the five living roadmaps (Q1) —
+      it is a <strong>roadmap document only</strong>: every new capability shown carries status <em>planned</em>
+      (or <em>deferred</em>); <em>implemented</em> appears only in as-built baseline chrome.</p>
+
+    <h2>Pages</h2>
+    <div class="grid" data-section="mockup-nav">
+      <a class="card" href="library.html" data-mock-page="library">
+        <h3>Studio Library</h3>
+        <div class="file">library.html</div>
+        <p>The landing surface end state: today's pillars plus first-class Skills, Hooks, Tools/MCPs/CLIs and
+           Instructions pillars, a cross-project attention strip, and standalone-runnable agents.</p>
+        <div class="lanes"><span class="lanepill lp-r2">R2 runnable</span><span class="lanepill lp-r3">R3 library</span><span class="lanepill lp-r4">R4 OOTB</span></div>
+      </a>
+      <a class="card" href="kb-library.html" data-mock-page="kb-library">
+        <h3>KB Library</h3>
+        <div class="file">kb-library.html</div>
+        <p>Knowledge bases as contract objects: mandatory flow/project scope bindings (Q5-B), per-KB
+           contract-obligation rows (lint · ingest · consolidate · usage), and the backend seam.</p>
+        <div class="lanes"><span class="lanepill lp-r1">R1 contract</span></div>
+      </a>
+      <a class="card" href="roadmap.html" data-mock-page="roadmap">
+        <h3>Roadmap &amp; Attention Surface</h3>
+        <div class="file">roadmap.html</div>
+        <p>Per-project roadmap end state: initiative lifecycle with the new <em>merged</em> state (Q2-B),
+           plan-agent entry points, and gate/attention affordances.</p>
+        <div class="lanes"><span class="lanepill lp-r4">R4 OOTB</span></div>
+      </a>
+      <a class="card" href="agent-builder.html" data-mock-page="agent-builder">
+        <h3>Agent Builder</h3>
+        <div class="file">agent-builder.html</div>
+        <p>Agent-as-runnable primitive and the agent-def-driven builder: one definition drives palette,
+           readiness, and standalone runs.</p>
+        <div class="lanes"><span class="lanepill lp-r2">R2 runnable</span><span class="lanepill lp-r3">R3 library</span></div>
+      </a>
+      <a class="card" href="flow-builder.html" data-mock-page="flow-builder">
+        <h3>Flow Builder</h3>
+        <div class="file">flow-builder.html</div>
+        <p>Flow authoring end state: trigger expansion, fanout capability (research spike first), and
+           dynamic artifact surfaces.</p>
+        <div class="lanes"><span class="lanepill lp-r2">R2 runnable</span></div>
+      </a>
+    </div>
+
+    <h2>The five living roadmaps (Q1)</h2>
+    <table data-section="lane-legend">
+      <tr><th>Lane</th><th>Roadmap</th><th>Covers</th></tr>
+      <tr><td class="lane"><span class="swatch" style="background:var(--r1)"></span>R1</td><td>Contract componentry</td><td>KB contract type &amp; seam, project-contract processes (demo/test/instructions/release/build), machine-checks. R1-01…R1-05, R1-D1 (deferred).</td></tr>
+      <tr><td class="lane"><span class="swatch" style="background:var(--r2)"></span>R2</td><td>Runnable componentry</td><td>Agent-as-runnable, def-driven builder, fanout (research spike first), triggers, dynamic artifact surfaces, runtime adapters. R2-01…R2-06, R2-D1 (deferred, gated on R2-03 evidence).</td></tr>
+      <tr><td class="lane"><span class="swatch" style="background:var(--r3)"></span>R3</td><td>Library componentry</td><td>Skills first-class, skill-generator flow, hooks / tools-MCPs-CLIs / instructions libraries. R3-01…R3-05.</td></tr>
+      <tr><td class="lane"><span class="swatch" style="background:var(--r4)"></span>R4</td><td>OOTB suite</td><td>Platform→artifact migration, onboarding/creation/architect/plan/develop/demo/adversarial-review/reflect agents, develop-cycle flow, roadmap &amp; attention surface. R4-01…R4-11, R4-D1 (deferred).</td></tr>
+      <tr><td class="lane"><span class="swatch" style="background:var(--r5)"></span>R5</td><td>Hardening &amp; operability</td><td>Dry-bridge seam, G8 env-pin, cost integrity, edit-lock fix, known-gaps residue, demo/harness backlog, SSOT reconciliation. R5-01…R5-07.</td></tr>
+    </table>
+    <p class="note" style="margin-top:12px">Living docs: stable never-reused IDs, append-only change log; new focus areas mint <strong>R6+</strong>.
+      Driving order (Q6-A): wave 0 = R5-01 + R5-02 (+R5-07); wave 1 = R2-01, R2-02; wave 2 = R4-05 + R4-11; then R1-01/R3-01 interleaved; remaining R4 as deps land; R5-03..06 continuous.</p>
+
+    <h2>Status vocabulary (used on every page)</h2>
+    <div class="note" data-section="status-legend">
+      <span class="chip chip-impl">✓ implemented</span>&nbsp;&nbsp;as-built baseline only&nbsp;&nbsp;·&nbsp;&nbsp;
+      <span class="chip chip-prog">◐ in progress</span>&nbsp;&nbsp;(unused in this set)&nbsp;&nbsp;·&nbsp;&nbsp;
+      <span class="chip chip-plan">◇ planned</span>&nbsp;&nbsp;every new capability&nbsp;&nbsp;·&nbsp;&nbsp;
+      <span class="chip chip-def">⏸ deferred</span>&nbsp;&nbsp;placeholder initiatives (R1-D1, R2-D1, R4-D1)
+    </div>
+
+    <h2>Out-of-scope register</h2>
+    <div class="note" data-section="out-of-scope">
+      <strong>Scope 3 — managed-project work is OUT of this roadmap set</strong> (scope = forge-dev: repo-map Scope 1
+      componentry + shipping of Scope 2 OOTB content). Excluded and tracked in the projects' own roadmaps:
+      <ul>
+        <li>betterado framework-auth-parity + protocol-manifest release (known-gaps §5, P0/P1 carried from the retired REFINEMENT-PLAN).</li>
+        <li>Any per-managed-project backlog (gitpulse, mdtoc, trafficGame feature work) — forge builds these <em>through cycles</em>, not through docs/roadmaps/.</li>
+      </ul>
+    </div>
+
+    <h2>Locked session decisions (immutable inputs to this set)</h2>
+    <ul data-section="locked-decisions">
+      <li><strong>Q1</strong> — five living roadmaps R1–R5; stable IDs; append-only change logs.</li>
+      <li><strong>Q2-B</strong> — plan agent ships alongside the current architect flow (standalone-from-roadmap + auto-after-architect-accept); architect-flow retirement deferred (R4-D1); initiative lifecycle gains <em>merged</em> (reflect trigger); ADR-037 wi-spec-compiler folds into the plan agent.</li>
+        <li><strong>Q3-B</strong> — unifier retired; post-develop = demo agent + adversarial review agent; fanout (R2-03) gets a research-first spike; merge-resolution deferred (R2-D1); the unifier's dual-boundary full-suite gate relocates to orchestrator-owned gate execution (ADR-036 pattern) — <em>flagged for operator review</em>.</li>
+      <li><strong>Q4</strong> — slim cross-project attention strip / notifications blade (R4-11; MVUS cross-cutting; ADR-031 retired the old pane).</li>
+      <li><strong>Q5-B</strong> — every new KB binds mandatorily at creation to a flow or project; forge-dev unique/unbound; "cycles" rebinds as the develop-flow's KB; asymmetric brain-read policy (ADR-010) untouched.</li>
+      <li><strong>Q6-A</strong> — safety-first driving order (see lane table above).</li>
+    </ul>
+
+    <footer>
+      Planning snapshot 2026-07-17 · mockups/studio-endstate/ · single-file pages, no external deps ·
+      DOM <span class="mono">data-page</span>/<span class="mono">data-section</span> attributes mirror the forge-ui
+      DOM-as-metrics convention as documentation garnish only.
+    </footer>
+  </div>
+</body>
+</html>

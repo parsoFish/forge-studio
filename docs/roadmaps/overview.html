@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Roadmap Set — Planning Snapshot 2026-07-17</title>
+<style>
+  :root{
+    --bg:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hair:rgba(255,255,255,0.10); --grid:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --ok:#0ca30c; --warn:#fab219;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.45}
+  .banner{background:#232320;border-bottom:1px solid var(--hair);color:var(--ink2);
+    text-align:center;padding:8px 16px;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .banner strong{color:var(--ink)}
+  main{max-width:1480px;margin:0 auto;padding:24px 28px 48px}
+  h1{font-size:22px;margin:18px 0 4px}
+  .subtitle{color:var(--ink2);margin:0 0 6px}
+  .stats{color:var(--muted);font-size:12px;margin:0 0 22px}
+  h2{font-size:15px;margin:34px 0 10px;color:var(--ink)}
+  h2 .anno{color:var(--muted);font-weight:400;font-size:12px;margin-left:8px}
+
+  /* ---- wave band ---- */
+  .waveband{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:8px}
+  .wavecol{background:var(--surface);border:1px solid var(--hair);border-radius:8px;padding:10px 12px}
+  .wavecol h3{margin:0 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+  .wavecol .ids{color:var(--ink);font-size:12.5px;font-weight:600;line-height:1.7}
+  .wavecol .note{color:var(--muted);font-size:11.5px;margin-top:4px}
+  .wavecol.start{border-color:rgba(255,255,255,0.35);background:#20201e;box-shadow:0 0 0 1px rgba(255,255,255,0.08)}
+  .wavecol.start .starttag{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    border:1px solid var(--ink2);border-radius:99px;padding:1px 8px;color:var(--ink);margin-bottom:6px}
+
+  /* ---- legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;background:var(--surface);
+    border:1px solid var(--hair);border-radius:8px;padding:12px 16px;margin:10px 0 26px;font-size:12px;color:var(--ink2)}
+  .legend .grp{min-width:180px}
+  .legend .grp b{display:block;color:var(--ink);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+  .legend .row{display:flex;align-items:center;gap:8px;margin:3px 0}
+  .swatch{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+  .edge-sample{width:36px;height:0;border-top:2px solid var(--muted);position:relative;flex:0 0 auto}
+  .edge-sample::after{content:"";position:absolute;right:-1px;top:-4px;border:4px solid transparent;border-left-color:var(--muted)}
+
+  /* ---- chips ---- */
+  .chip{display:inline-block;font-size:10.5px;letter-spacing:.03em;border-radius:99px;padding:1px 8px;white-space:nowrap}
+  .chip.planned{border:1px solid var(--ink2);color:var(--ink2);background:transparent}
+  .chip.deferred{border:1px solid var(--muted);color:var(--muted);background:transparent}
+  .chip.review{border:1px solid var(--warn);color:var(--ink2);background:transparent}
+  .wave{display:inline-block;font-size:10.5px;font-weight:700;border-radius:5px;padding:1px 7px;
+    background:var(--grid);color:var(--ink2);white-space:nowrap}
+  .wave.w0{background:#233123;color:var(--ink)}
+
+  /* ---- board / lanes ---- */
+  #board{position:relative}
+  #edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+  #edges path.hit{pointer-events:stroke}
+  #edges path.vis{stroke:var(--muted);stroke-width:1.75;fill:none;transition:stroke .12s}
+  #edges path.vis.hl{stroke:#e8e6dc;stroke-width:2.5}
+  .lane{background:var(--surface);border:1px solid var(--hair);border-left:4px solid var(--lane,var(--muted));
+    border-radius:10px;padding:14px 16px 16px;margin-bottom:26px;position:relative;z-index:1}
+  .lane-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .lane-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;border-radius:5px;
+    padding:2px 9px;background:var(--lane,var(--muted));color:var(--ink)}
+  .lane-head h3{margin:0;font-size:15px;color:var(--ink)}
+  .lane-head .sub{color:var(--muted);font-size:12px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px}
+  .card{background:#161615;border:1px solid var(--hair);border-left:3px solid var(--lane,var(--muted));
+    border-radius:8px;padding:10px 12px;scroll-margin-top:80px;transition:box-shadow .12s,border-color .12s}
+  .card.edge-hl{border-color:rgba(255,255,255,0.45);box-shadow:0 0 0 1px rgba(255,255,255,0.25)}
+  .card.deferred-card{opacity:.72;border-left-style:dashed}
+  .card-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+  .cid{font-weight:800;font-size:13px;color:var(--ink);letter-spacing:.02em}
+  .card h4{margin:2px 0 5px;font-size:13px;color:var(--ink);font-weight:600;line-height:1.3}
+  .card p{margin:0 0 7px;font-size:12px;color:var(--ink2)}
+  .deps{font-size:11.5px;color:var(--ink2);margin:2px 0}
+  .deps b{color:var(--ink);font-weight:600}
+  .cite{font-size:10.5px;color:var(--muted);margin-top:6px;border-top:1px solid var(--grid);padding-top:5px}
+
+  /* ---- tooltip ---- */
+  #edge-tip{position:fixed;z-index:50;display:none;max-width:340px;background:#232320;color:var(--ink);
+    border:1px solid var(--hair);border-radius:6px;padding:7px 10px;font-size:12px;pointer-events:none;
+    box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  #edge-tip .eid{color:var(--muted);font-size:10.5px;display:block;margin-bottom:2px}
+
+  /* ---- table fallback ---- */
+  table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:10px}
+  th,td{border:1px solid var(--grid);padding:6px 9px;text-align:left;vertical-align:top}
+  th{color:var(--ink2);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:#161615}
+  td{color:var(--ink2)}
+  td.tid{color:var(--ink);font-weight:700;white-space:nowrap}
+  tr[data-lane] td.tid{border-left:3px solid var(--lane)}
+
+  footer{margin-top:36px;border-top:1px solid var(--hair);padding-top:14px;color:var(--muted);font-size:12px}
+  a{color:var(--ink2)}
+</style>
+</head>
+<body data-page="roadmap-overview">
+<div class="banner"><strong>PLANNING SNAPSHOT 2026-07-17</strong> — operator review copy</div>
+<main>
+  <h1>Forge roadmap set — five living roadmaps</h1>
+  <p class="subtitle">R1 contract · R2 runnable · R3 library · R4 OOTB suite · R5 hardening &amp; operability (Q1). Scope: forge-dev componentry + OOTB content shipping; Scope&nbsp;3 managed-project work (e.g. betterado, known-gaps&nbsp;§5) is out of scope — see the index's out-of-scope register.</p>
+  <p class="stats">37 initiatives (34 planned · 3 deferred) · 14 cross-roadmap dependency edges · driving order per Q6-A · zero implementation this session — every new item is <em>planned</em> or <em>deferred</em>.</p>
+
+  <h2>Driving order (Q6-A)<span class="anno">wave band — columns are execution waves</span></h2>
+  <div class="waveband" data-section="wave-band">
+    <div class="wavecol start" data-wave-col="0">
+      <span class="starttag">start here</span>
+      <h3>Wave 0 — safety first</h3>
+      <div class="ids">R5-01 dry-bridge → R5-02 env-pin</div>
+      <div class="ids">+ R5-07</div>
+      <div class="note">cheap doc hygiene rides along</div>
+    </div>
+    <div class="wavecol" data-wave-col="1">
+      <h3>Wave 1</h3>
+      <div class="ids">R2-01 · R2-02</div>
+      <div class="note">runnable-primitive foundation</div>
+    </div>
+    <div class="wavecol" data-wave-col="2">
+      <h3>Wave 2</h3>
+      <div class="ids">R4-05 · R4-11</div>
+      <div class="note">plan agent + roadmap surface</div>
+    </div>
+    <div class="wavecol" data-wave-col="3">
+      <h3>Wave 3</h3>
+      <div class="ids">R1-01 · R3-01</div>
+      <div class="note">interleaved at dependency points; pulls follow-on R1/R2/R3 items (badged W3+) as edges demand</div>
+    </div>
+    <div class="wavecol" data-wave-col="4">
+      <h3>Wave 4</h3>
+      <div class="ids">remaining R4 agents</div>
+      <div class="note">R4-01..04, R4-06..10 — as deps land</div>
+    </div>
+    <div class="wavecol" data-wave-col="opportunistic">
+      <h3>Opportunistic</h3>
+      <div class="ids">R5-03 · R5-04 · R5-05 · R5-06</div>
+      <div class="note">continuous, slotted between waves</div>
+    </div>
+  </div>
+
+  <div class="legend" data-section="legend">
+    <div class="grp"><b>Status chips</b>
+      <div class="row"><span class="chip planned">○ planned</span><span>new roadmap item, not started</span></div>
+      <div class="row"><span class="chip deferred">◌ deferred</span><span>placeholder, gated / future</span></div>
+      <div class="row"><span class="chip review">⚠ for operator review</span><span>relocation flagged for markup</span></div>
+    </div>
+    <div class="grp"><b>Lane hues (categorical)</b>
+      <div class="row"><span class="swatch" style="background:var(--r1)"></span>R1 contract componentry</div>
+      <div class="row"><span class="swatch" style="background:var(--r2)"></span>R2 runnable componentry</div>
+      <div class="row"><span class="swatch" style="background:var(--r3)"></span>R3 library componentry</div>
+      <div class="row"><span class="swatch" style="background:var(--r4)"></span>R4 OOTB suite</div>
+      <div class="row"><span class="swatch" style="background:var(--r5)"></span>R5 hardening &amp; operability</div>
+    </div>
+    <div class="grp"><b>Edges</b>
+      <div class="row"><span class="edge-sample"></span><span>dependency, prerequisite → dependent</span></div>
+      <div class="row"><span style="color:var(--muted)">hover an edge or card to highlight both ends; hover shows the reason. Cards list deps both ways (← needs / → feeds).</span></div>
+    </div>
+    <div class="grp"><b>Wave badges</b>
+      <div class="row"><span class="wave w0">W0</span><span class="wave">W1</span><span class="wave">W2</span><span class="wave">W3</span><span class="wave">W3+</span><span class="wave">W4</span><span class="wave">OPP</span></div>
+      <div class="row"><span style="color:var(--muted)">W3+ = interleaved at dependency points after the W3 anchors</span></div>
+    </div>
+  </div>
+
+  <h2>Swimlanes<span class="anno">cards in wave order · every card has a stable <code>id=</code> anchor for review comments</span></h2>
+  <div id="board" data-card-count="37" data-edge-count="14">
+    <svg id="edges" aria-hidden="true"></svg>
+
+    <!-- ================= R1 ================= -->
+    <section class="lane" style="--lane:var(--r1)" data-lane="R1">
+      <div class="lane-head"><span class="lane-badge">R1</span><h3>Contract componentry</h3><span class="sub">KB + project contract types, seams, machine-checks</span></div>
+      <div class="cards">
+        <article class="card" id="R1-01" data-initiative-id="R1-01" data-status="planned" data-wave="3">
+          <div class="card-top"><span class="cid">R1-01</span><span class="wave">W3</span><span class="chip planned">○ planned</span></div>
+          <h4>KB contract type</h4>
+          <p>Every new KB binds mandatorily at creation to a specific flow or project; forge-dev stays unique/unbound; the "cycles" brain rebinds as the develop-flow's KB. Scoping only — the asymmetric brain-read policy is untouched.</p>
+          <div class="deps"><b>→ feeds</b> R4-09</div>
+          <div class="cite">Q5-B · ADR-010/018/035 lineage · R5-05 KB loose ends fold in</div>
+        </article>
+        <article class="card" id="R1-02" data-initiative-id="R1-02" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R1-02</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>KB seam completion</h4>
+          <p>Complete the KbBackend seam so bound/scoped KBs are enforceable end-to-end, not just declared.</p>
+          <div class="cite">Q5-B · M8 KbBackend seam</div>
+        </article>
+        <article class="card" id="R1-03" data-initiative-id="R1-03" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R1-03</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Project contract: demo + test processes</h4>
+          <p>Codify demo + test processes as first-class project-contract clauses (demo-ability lives project-side).</p>
+          <div class="deps"><b>→ feeds</b> R4-07</div>
+          <div class="cite">docs/forge-project-contract.md · demos-as-visual-evidence feedback</div>
+        </article>
+        <article class="card" id="R1-04" data-initiative-id="R1-04" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R1-04</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Project contract: instructions + release + build processes</h4>
+          <p>Codify instructions, release, and build processes as contract clauses (the "+R1 clauses" the R4 onboarding/creation agents consume).</p>
+          <div class="cite">docs/forge-project-contract.md · onboarding-at-contract-level feedback</div>
+        </article>
+        <article class="card" id="R1-05" data-initiative-id="R1-05" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R1-05</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Contract machine-checks</h4>
+          <p>Machine-checkable validation for every contract clause — preflight-grade checks, not prose invariants.</p>
+          <div class="cite">onboard-preflight pattern (ProjectOnboardForm)</div>
+        </article>
+        <article class="card deferred-card" id="R1-D1" data-initiative-id="R1-D1" data-status="deferred" data-wave="deferred">
+          <div class="card-top"><span class="cid">R1-D1</span><span class="chip deferred">◌ deferred</span></div>
+          <h4>Holistic-metrics clause + exploration-initiative support</h4>
+          <p>Deferred: a holistic-metrics contract clause plus support for exploration-type initiatives.</p>
+          <div class="cite">deferred placeholder — no design yet</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= R2 ================= -->
+    <section class="lane" style="--lane:var(--r2)" data-lane="R2">
+      <div class="lane-head"><span class="lane-badge">R2</span><h3>Runnable componentry</h3><span class="sub">agents as the runnable primitive; triggers, surfaces, adapters, fanout</span></div>
+      <div class="cards">
+        <article class="card" id="R2-01" data-initiative-id="R2-01" data-status="planned" data-wave="1">
+          <div class="card-top"><span class="cid">R2-01</span><span class="wave">W1</span><span class="chip planned">○ planned</span></div>
+          <h4>Agent-as-runnable primitive</h4>
+          <p>Agents become the flow engine's runnable primitive — the foundation the platform→artifact migration runs on.</p>
+          <div class="deps"><b>→ feeds</b> R4-01</div>
+          <div class="cite">Q6-A wave 1 · ADR-024 skill-model direction</div>
+        </article>
+        <article class="card" id="R2-02" data-initiative-id="R2-02" data-status="planned" data-wave="1">
+          <div class="card-top"><span class="cid">R2-02</span><span class="wave">W1</span><span class="chip planned">○ planned</span></div>
+          <h4>Agent-def-driven builder</h4>
+          <p>Builder surfaces driven directly from agent definitions — the def is the single source, the builder renders it.</p>
+          <div class="deps"><b>→ feeds</b> R4-01</div>
+          <div class="cite">Q6-A wave 1 · studio defs-as-data (M0–M2)</div>
+        </article>
+        <article class="card" id="R2-03" data-initiative-id="R2-03" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R2-03</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Fanout capability (research spike first)</h4>
+          <p>Research-first spike: survey parallel-agent / merge best practices <em>outside</em> forge before any fanout design. Evidence gates R2-D1.</p>
+          <div class="deps"><b>→ feeds</b> R4-06 · R2-D1 (evidence gate)</div>
+          <div class="cite">Q3-B</div>
+        </article>
+        <article class="card" id="R2-04" data-initiative-id="R2-04" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R2-04</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Trigger expansion</h4>
+          <p>Expand flow triggers beyond the current per-flow kickoff set (FlowTrigger lineage).</p>
+          <div class="cite">agentic-additions Stage C lineage</div>
+        </article>
+        <article class="card" id="R2-05" data-initiative-id="R2-05" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R2-05</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Dynamic artifact surfaces</h4>
+          <p>Artifact/gate surfaces declared dynamically per flow or agent, instead of hard-wired <code>/artifact</code> types.</p>
+          <div class="cite">ADR-031 unified artifact route as baseline</div>
+        </article>
+        <article class="card" id="R2-06" data-initiative-id="R2-06" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R2-06</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Runtime-adapter realization</h4>
+          <p>Realize the runtime-adapter seam with working non-default adapters (M8 registry made the socket; this ships a second plug).</p>
+          <div class="cite">M8 adapter registry · differentiation "2nd adapter" proof</div>
+        </article>
+        <article class="card deferred-card" id="R2-D1" data-initiative-id="R2-D1" data-status="deferred" data-wave="deferred">
+          <div class="card-top"><span class="cid">R2-D1</span><span class="chip deferred">◌ deferred</span></div>
+          <h4>Parallel-work merge-resolution</h4>
+          <p>Deferred placeholder — merge-resolution capability is designed only after R2-03's research evidence lands.</p>
+          <div class="deps"><b>← needs</b> R2-03 (evidence)</div>
+          <div class="cite">Q3-B gate</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= R3 ================= -->
+    <section class="lane" style="--lane:var(--r3)" data-lane="R3">
+      <div class="lane-head"><span class="lane-badge">R3</span><h3>Library componentry</h3><span class="sub">skills, hooks, tools/MCPs, instructions as managed libraries</span></div>
+      <div class="cards">
+        <article class="card" id="R3-01" data-initiative-id="R3-01" data-status="planned" data-wave="3">
+          <div class="card-top"><span class="cid">R3-01</span><span class="wave">W3</span><span class="chip planned">○ planned</span></div>
+          <h4>Skills first-class management</h4>
+          <p>Skills become first-class managed library objects (absorbs the known-gaps skills-palette residue via R5-05 cross-ref).</p>
+          <div class="deps"><b>→ feeds</b> R3-02</div>
+          <div class="cite">Q6-A wave 3 anchor · studio/catalog.yaml provenance model</div>
+        </article>
+        <article class="card" id="R3-02" data-initiative-id="R3-02" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R3-02</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Skill-generator flow</h4>
+          <p>A flow that authors new skills into the library.</p>
+          <div class="deps"><b>← needs</b> R3-01</div>
+          <div class="cite">/skills/new builder as seed surface</div>
+        </article>
+        <article class="card" id="R3-03" data-initiative-id="R3-03" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R3-03</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Hooks library</h4>
+          <p>Curated, provenance-tracked hooks library componentry.</p>
+          <div class="cite">agent-builder capability drop zones (data-accepts="hook")</div>
+        </article>
+        <article class="card" id="R3-04" data-initiative-id="R3-04" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R3-04</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Tools/MCPs/CLIs library</h4>
+          <p>Curated tools / MCP / CLI library componentry.</p>
+          <div class="cite">agent-builder capability drop zones (data-accepts="tool"|"mcp")</div>
+        </article>
+        <article class="card" id="R3-05" data-initiative-id="R3-05" data-status="planned" data-wave="3+">
+          <div class="card-top"><span class="cid">R3-05</span><span class="wave">W3+</span><span class="chip planned">○ planned</span></div>
+          <h4>Instructions library</h4>
+          <p>Reusable instructions library — the substrate the onboarding + creation agents draw on.</p>
+          <div class="deps"><b>→ feeds</b> R4-02 · R4-03</div>
+          <div class="cite">instructions-creator (Stage A) lineage</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= R4 ================= -->
+    <section class="lane" style="--lane:var(--r4)" data-lane="R4">
+      <div class="lane-head"><span class="lane-badge">R4</span><h3>OOTB suite</h3><span class="sub">the shipped out-of-the-box agents, flows, and operator surfaces</span></div>
+      <div class="cards">
+        <article class="card" id="R4-05" data-initiative-id="R4-05" data-status="planned" data-wave="2">
+          <div class="card-top"><span class="cid">R4-05</span><span class="wave">W2</span><span class="chip planned">○ planned</span></div>
+          <h4>Plan agent</h4>
+          <p>New plan agent <em>alongside</em> the architect flow (two entries: standalone per-initiative from the roadmap screen; auto-after-architect-accept). Folds in ADR-037 wi-spec-compiler; initiative lifecycle gains a "merged" state (reflect trigger point).</p>
+          <div class="deps"><b>← needs</b> R4-11 (soft: roadmap-screen states) · <b>→ feeds</b> R4-06 · R4-10</div>
+          <div class="cite">Q2-B · ADR-037 (only Proposed ADR) · PM-domain residue via R5-05</div>
+        </article>
+        <article class="card" id="R4-11" data-initiative-id="R4-11" data-status="planned" data-wave="2">
+          <div class="card-top"><span class="cid">R4-11</span><span class="wave">W2</span><span class="chip planned">○ planned</span></div>
+          <h4>Roadmap &amp; attention surface</h4>
+          <p>Roadmap screen + slim cross-project aggregate strip / notifications blade — answers "which projects need my attention" when several run concurrently.</p>
+          <div class="deps"><b>→ feeds</b> R4-05 (soft)</div>
+          <div class="cite">Q4 · MVUS cross-cutting requirement · ADR-031 retired the old pane</div>
+        </article>
+        <article class="card" id="R4-01" data-initiative-id="R4-01" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-01</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Platform→artifact migration</h4>
+          <p>Migrate platform-coded phase behaviour onto agent/flow artifacts, riding the runnable primitive + def-driven builder.</p>
+          <div class="deps"><b>← needs</b> R2-01 · R2-02</div>
+          <div class="cite">ADR-024 direction · repo-map Scope 1→2 shipping</div>
+        </article>
+        <article class="card" id="R4-02" data-initiative-id="R4-02" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-02</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Project onboarding agent</h4>
+          <p>OOTB onboarding agent built on the instructions library + the R1 contract clauses.</p>
+          <div class="deps"><b>← needs</b> R3-05 (+R1 clauses)</div>
+          <div class="cite">forge-onboard-project skill + contract-level onboarding feedback</div>
+        </article>
+        <article class="card" id="R4-03" data-initiative-id="R4-03" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-03</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Project creation agent</h4>
+          <p>OOTB project-creation agent (greenfield), same substrate as onboarding.</p>
+          <div class="deps"><b>← needs</b> R3-05 (+R1 clauses)</div>
+          <div class="cite">ProjectOnboardForm / preflight lineage</div>
+        </article>
+        <article class="card" id="R4-04" data-initiative-id="R4-04" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-04</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Architect agent refinement</h4>
+          <p>Refine the architect agent in place — the architect <em>flow</em> keeps running; its retirement stays deferred (R4-D1).</p>
+          <div class="cite">Q2-B · architect-coverage brain theme (2026-07-01)</div>
+        </article>
+        <article class="card" id="R4-06" data-initiative-id="R4-06" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-06</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Develop agent refinement</h4>
+          <p>Develop agent consumes plan-agent WI specs and the fanout capability.</p>
+          <div class="deps"><b>← needs</b> R2-03 · R4-05</div>
+          <div class="cite">Q3-B post-develop reshape</div>
+        </article>
+        <article class="card" id="R4-07" data-initiative-id="R4-07" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-07</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Demo agent</h4>
+          <p>Post-develop demo agent, initiative-context (unifier concept retired). Judges against the project contract's demo process.</p>
+          <div class="deps"><b>← needs</b> R1-03 · <b>→ feeds</b> R4-10</div>
+          <div class="cite">Q3-B · demos-as-visual-evidence feedback</div>
+        </article>
+        <article class="card" id="R4-08" data-initiative-id="R4-08" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-08</span><span class="wave">W4</span><span class="chip planned">○ planned</span><span class="chip review">⚠ for operator review</span></div>
+          <h4>Adversarial review agent</h4>
+          <p>Post-develop adversarial review, initiative-context. The retired unifier's dual-boundary full-suite gate (a known-gaps "strength worth preserving") <b>relocates to orchestrator-owned gate execution</b> per the ADR-036 pattern (agents judge, orchestrator executes) — relocation flagged for operator review.</p>
+          <div class="deps"><b>→ feeds</b> R4-10</div>
+          <div class="cite">Q3-B · ADR-036 · known-gaps "strengths worth preserving"</div>
+        </article>
+        <article class="card" id="R4-09" data-initiative-id="R4-09" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-09</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Reflect agent</h4>
+          <p>Reflect agent aligned to KB scoping (bound KBs); triggers at the new "merged" lifecycle state.</p>
+          <div class="deps"><b>← needs</b> R1-01</div>
+          <div class="cite">Q2-B merged-state · Q5-B scoping</div>
+        </article>
+        <article class="card" id="R4-10" data-initiative-id="R4-10" data-status="planned" data-wave="4">
+          <div class="card-top"><span class="cid">R4-10</span><span class="wave">W4</span><span class="chip planned">○ planned</span></div>
+          <h4>Develop-cycle OOTB flow</h4>
+          <p>The shipped develop-cycle flow composing the plan, demo, and adversarial-review agents end-to-end.</p>
+          <div class="deps"><b>← needs</b> R4-05 · R4-07 · R4-08</div>
+          <div class="cite">Q3-B post-develop shape</div>
+        </article>
+        <article class="card deferred-card" id="R4-D1" data-initiative-id="R4-D1" data-status="deferred" data-wave="deferred">
+          <div class="card-top"><span class="cid">R4-D1</span><span class="chip deferred">◌ deferred</span></div>
+          <h4>Architect-flow retirement</h4>
+          <p>Deferred future initiative: retire the architect flow once the plan agent has proven out alongside it.</p>
+          <div class="cite">Q2-B</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= R5 ================= -->
+    <section class="lane" style="--lane:var(--r5)" data-lane="R5">
+      <div class="lane-head"><span class="lane-badge">R5</span><h3>Hardening &amp; operability</h3><span class="sub">safety seams, integrity fixes, doc hygiene — wave 0 lives here</span></div>
+      <div class="cards">
+        <article class="card" id="R5-01" data-initiative-id="R5-01" data-status="planned" data-wave="0">
+          <div class="card-top"><span class="cid">R5-01</span><span class="wave w0">W0</span><span class="chip planned">○ planned</span></div>
+          <h4>Dry-bridge seam</h4>
+          <p>No-spawn / dry seam for the bridge — closes the 2026-07-16 self-merge incident class (FORGE_ARCHITECT_NO_SPAWN doesn't cover finalize+merge / brain-fix / scheduler-start).</p>
+          <div class="cite">Q6-A wave 0 · 2026-07-16 bridge incident</div>
+        </article>
+        <article class="card" id="R5-02" data-initiative-id="R5-02" data-status="planned" data-wave="0">
+          <div class="card-top"><span class="cid">R5-02</span><span class="wave w0">W0</span><span class="chip planned">○ planned</span></div>
+          <h4>G8 env-pin at spawn seam</h4>
+          <p>Pin environment at the agent-spawn seam (G8) so spawned agents can't inherit drift.</p>
+          <div class="cite">Q6-A wave 0 · brain theme env-leak-at-spawn-seam (G8)</div>
+        </article>
+        <article class="card" id="R5-07" data-initiative-id="R5-07" data-status="planned" data-wave="0">
+          <div class="card-top"><span class="cid">R5-07</span><span class="wave w0">W0</span><span class="chip planned">○ planned</span></div>
+          <h4>SSOT reconciliation</h4>
+          <p>Doc hygiene: strike stale §4.3c (fixed by PR #26); ADR-024 status double-booking; journey count 10-vs-11; verify-ground identity (mdtoc/gitpulse/betterado); brain-log path; two-C7 collision.</p>
+          <div class="cite">known-gaps §4.3c · ADR-024 · ADR-022 grounds</div>
+        </article>
+        <article class="card" id="R5-03" data-initiative-id="R5-03" data-status="planned" data-wave="opportunistic">
+          <div class="card-top"><span class="cid">R5-03</span><span class="wave">OPP</span><span class="chip planned">○ planned</span></div>
+          <h4>Cost integrity</h4>
+          <p>Cost accounting integrity end-to-end (out-of-cycle costs stay attributed, ceilings stay honest).</p>
+          <div class="cite">known-gaps §2 clarification (2026-07-16)</div>
+        </article>
+        <article class="card" id="R5-04" data-initiative-id="R5-04" data-status="planned" data-wave="opportunistic">
+          <div class="card-top"><span class="cid">R5-04</span><span class="wave">OPP</span><span class="chip planned">○ planned</span></div>
+          <h4>Flow edit-lock fix</h4>
+          <p>Fix the latent M4 flow edit-lock false-negative.</p>
+          <div class="cite">known-gaps §1</div>
+        </article>
+        <article class="card" id="R5-05" data-initiative-id="R5-05" data-status="planned" data-wave="opportunistic">
+          <div class="card-top"><span class="cid">R5-05</span><span class="wave">OPP</span><span class="chip planned">○ planned</span></div>
+          <h4>Known-gaps residue</h4>
+          <p>Cross-references, not duplicates: PM domain → R4-05, skills palette → R3-01, KB loose ends → R1-01. Keeps known-gaps.md and the roadmaps from double-booking.</p>
+          <div class="cite">known-gaps §4 residue map</div>
+        </article>
+        <article class="card" id="R5-06" data-initiative-id="R5-06" data-status="planned" data-wave="opportunistic">
+          <div class="card-top"><span class="cid">R5-06</span><span class="wave">OPP</span><span class="chip planned">○ planned</span></div>
+          <h4>Demo/harness backlog</h4>
+          <p>known-gaps §4b.6–15 + architect re-run button + standing opportunistic targets: readable logs, ID handles flowing to log paths, PLAN.html richness.</p>
+          <div class="cite">known-gaps §4b · iteration-refinement standing items</div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <div id="edge-tip"></div>
+
+  <!-- ================= table fallback ================= -->
+  <h2 id="table">All initiatives (table fallback)<span class="anno">accessibility + easy quoting in review comments</span></h2>
+  <table data-section="initiative-table">
+    <thead><tr><th>ID</th><th>Title</th><th>Wave</th><th>Dependencies</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-01</td><td>KB contract type</td><td>3</td><td>— (feeds R4-09)</td><td>planned</td></tr>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-02</td><td>KB seam completion</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-03</td><td>Project contract: demo + test processes</td><td>3+</td><td>— (feeds R4-07)</td><td>planned</td></tr>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-04</td><td>Project contract: instructions + release + build processes</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-05</td><td>Contract machine-checks</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R1" style="--lane:var(--r1)"><td class="tid">R1-D1</td><td>Holistic-metrics clause + exploration-initiative support</td><td>—</td><td>—</td><td>deferred</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-01</td><td>Agent-as-runnable primitive</td><td>1</td><td>— (feeds R4-01)</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-02</td><td>Agent-def-driven builder</td><td>1</td><td>— (feeds R4-01)</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-03</td><td>Fanout capability (research spike first)</td><td>3+</td><td>— (feeds R4-06, gates R2-D1)</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-04</td><td>Trigger expansion</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-05</td><td>Dynamic artifact surfaces</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-06</td><td>Runtime-adapter realization</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R2" style="--lane:var(--r2)"><td class="tid">R2-D1</td><td>Parallel-work merge-resolution</td><td>—</td><td>← R2-03 (evidence)</td><td>deferred</td></tr>
+      <tr data-lane="R3" style="--lane:var(--r3)"><td class="tid">R3-01</td><td>Skills first-class management</td><td>3</td><td>— (feeds R3-02)</td><td>planned</td></tr>
+      <tr data-lane="R3" style="--lane:var(--r3)"><td class="tid">R3-02</td><td>Skill-generator flow</td><td>3+</td><td>← R3-01</td><td>planned</td></tr>
+      <tr data-lane="R3" style="--lane:var(--r3)"><td class="tid">R3-03</td><td>Hooks library</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R3" style="--lane:var(--r3)"><td class="tid">R3-04</td><td>Tools/MCPs/CLIs library</td><td>3+</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R3" style="--lane:var(--r3)"><td class="tid">R3-05</td><td>Instructions library</td><td>3+</td><td>— (feeds R4-02, R4-03)</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-01</td><td>Platform→artifact migration</td><td>4</td><td>← R2-01, R2-02</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-02</td><td>Project onboarding agent</td><td>4</td><td>← R3-05 (+R1 clauses)</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-03</td><td>Project creation agent</td><td>4</td><td>← R3-05 (+R1 clauses)</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-04</td><td>Architect agent refinement</td><td>4</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-05</td><td>Plan agent</td><td>2</td><td>← R4-11 (soft); feeds R4-06, R4-10</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-06</td><td>Develop agent refinement</td><td>4</td><td>← R2-03, R4-05</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-07</td><td>Demo agent</td><td>4</td><td>← R1-03; feeds R4-10</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-08</td><td>Adversarial review agent</td><td>4</td><td>feeds R4-10 · gate relocation flagged for operator review</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-09</td><td>Reflect agent</td><td>4</td><td>← R1-01</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-10</td><td>Develop-cycle OOTB flow</td><td>4</td><td>← R4-05, R4-07, R4-08</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-11</td><td>Roadmap &amp; attention surface</td><td>2</td><td>— (soft-feeds R4-05)</td><td>planned</td></tr>
+      <tr data-lane="R4" style="--lane:var(--r4)"><td class="tid">R4-D1</td><td>Architect-flow retirement</td><td>—</td><td>after R4-05 proves out</td><td>deferred</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-01</td><td>Dry-bridge seam</td><td>0</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-02</td><td>G8 env-pin at spawn seam</td><td>0</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-03</td><td>Cost integrity</td><td>opportunistic</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-04</td><td>Flow edit-lock fix</td><td>opportunistic</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-05</td><td>Known-gaps residue (cross-references)</td><td>opportunistic</td><td>refs → R4-05, R3-01, R1-01</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-06</td><td>Demo/harness backlog</td><td>opportunistic</td><td>—</td><td>planned</td></tr>
+      <tr data-lane="R5" style="--lane:var(--r5)"><td class="tid">R5-07</td><td>SSOT reconciliation</td><td>0</td><td>—</td><td>planned</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Snapshot 2026-07-17 · source <code>docs/roadmaps/*.md</code> · refinements append to the roadmap files, this snapshot regenerates.
+    Living-doc rules (Q1): stable never-reused IDs · append-only change log · new focus areas mint R6+.
+    Scope 3 (managed projects, e.g. betterado known-gaps §5) is out of scope — the roadmap index carries the register.
+  </footer>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var EDGES=[
+    {from:"R2-01",to:"R4-01",label:"Platform→artifact migration runs on the agent-as-runnable primitive."},
+    {from:"R2-02",to:"R4-01",label:"Migration needs the agent-def-driven builder as its authoring surface."},
+    {from:"R4-11",to:"R4-05",label:"Soft: plan agent launches standalone from the roadmap-screen initiative states."},
+    {from:"R2-03",to:"R4-06",label:"Develop-agent refinement consumes the fanout capability (post research spike)."},
+    {from:"R4-05",to:"R4-06",label:"Develop agent consumes the plan agent's WI specs (ADR-037 folded in)."},
+    {from:"R1-03",to:"R4-07",label:"Demo agent judges against the project contract's demo + test process clauses."},
+    {from:"R1-01",to:"R4-09",label:"Reflect agent writes into flow/project-bound KBs — needs the KB contract type (Q5-B)."},
+    {from:"R3-05",to:"R4-02",label:"Onboarding agent draws on the instructions library (+R1 clauses)."},
+    {from:"R3-05",to:"R4-03",label:"Creation agent draws on the instructions library (+R1 clauses)."},
+    {from:"R3-01",to:"R3-02",label:"Skill-generator flow needs skills managed as first-class objects."},
+    {from:"R2-03",to:"R2-D1",label:"Merge-resolution design is gated on R2-03 fanout research evidence (Q3-B)."},
+    {from:"R4-05",to:"R4-10",label:"Develop-cycle OOTB flow composes the plan agent."},
+    {from:"R4-07",to:"R4-10",label:"Develop-cycle OOTB flow composes the demo agent."},
+    {from:"R4-08",to:"R4-10",label:"Develop-cycle OOTB flow composes the adversarial review agent."}
+  ];
+  var board=document.getElementById("board");
+  var svg=document.getElementById("edges");
+  var tip=document.getElementById("edge-tip");
+  var NS="http://www.w3.org/2000/svg";
+
+  function rectOf(id,wr){
+    var el=document.getElementById(id); if(!el) return null;
+    var r=el.getBoundingClientRect();
+    return {x:r.left-wr.left,y:r.top-wr.top,w:r.width,h:r.height};
+  }
+
+  function draw(){
+    var wr=board.getBoundingClientRect();
+    svg.setAttribute("viewBox","0 0 "+board.scrollWidth+" "+board.scrollHeight);
+    svg.setAttribute("width",board.scrollWidth);
+    svg.setAttribute("height",board.scrollHeight);
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var defs=document.createElementNS(NS,"defs");
+    defs.innerHTML='<marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#898781"/></marker>'+
+      '<marker id="arwHl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8e6dc"/></marker>';
+    svg.appendChild(defs);
+
+    // spread endpoints for edges sharing a source/target
+    var srcN={},tgtN={},srcI={},tgtI={};
+    EDGES.forEach(function(e){srcN[e.from]=(srcN[e.from]||0)+1;tgtN[e.to]=(tgtN[e.to]||0)+1;});
+
+    EDGES.forEach(function(e,i){
+      var s=rectOf(e.from,wr),t=rectOf(e.to,wr); if(!s||!t) return;
+      srcI[e.from]=(srcI[e.from]||0); tgtI[e.to]=(tgtI[e.to]||0);
+      var so=(srcI[e.from]-(srcN[e.from]-1)/2)*16; srcI[e.from]++;
+      var to=(tgtI[e.to]-(tgtN[e.to]-1)/2)*16; tgtI[e.to]++;
+      var d;
+      if(t.y>s.y+s.h+8){ // target below
+        var sx=s.x+s.w/2+so, sy=s.y+s.h, ex=t.x+t.w/2+to, ey=t.y-3;
+        var dy=(ey-sy)*0.55;
+        d="M"+sx+","+sy+" C"+sx+","+(sy+dy)+" "+ex+","+(ey-dy)+" "+ex+","+ey;
+      } else if(t.y+t.h<s.y-8){ // target above
+        var sx2=s.x+s.w/2+so, sy2=s.y, ex2=t.x+t.w/2+to, ey2=t.y+t.h+3;
+        var dy2=(sy2-ey2)*0.55;
+        d="M"+sx2+","+sy2+" C"+sx2+","+(sy2-dy2)+" "+ex2+","+(ey2+dy2)+" "+ex2+","+ey2;
+      } else { // same row: arc over the top
+        var sx3=s.x+s.w/2+so, sy3=s.y, ex3=t.x+t.w/2+to, ey3=t.y-3;
+        var lift=Math.min(s.y,t.y)-26-(i%4)*9;
+        d="M"+sx3+","+sy3+" C"+sx3+","+lift+" "+ex3+","+lift+" "+ex3+","+ey3;
+      }
+      var vis=document.createElementNS(NS,"path");
+      vis.setAttribute("d",d); vis.setAttribute("class","vis");
+      vis.setAttribute("marker-end","url(#arw)");
+      vis.setAttribute("data-edge-index",i);
+      svg.appendChild(vis);
+      var hit=document.createElementNS(NS,"path");
+      hit.setAttribute("d",d); hit.setAttribute("class","hit");
+      hit.setAttribute("stroke","rgba(0,0,0,0)"); hit.setAttribute("stroke-width","14"); hit.setAttribute("fill","none");
+      hit.setAttribute("data-edge-index",i);
+      svg.appendChild(hit);
+    });
+    document.body.setAttribute("data-page-ready","true");
+  }
+
+  function setHl(idx,on){
+    var e=EDGES[idx]; if(!e) return;
+    var vis=svg.querySelector('path.vis[data-edge-index="'+idx+'"]');
+    if(vis){vis.classList.toggle("hl",on);vis.setAttribute("marker-end",on?"url(#arwHl)":"url(#arw)");}
+    [e.from,e.to].forEach(function(id){
+      var c=document.getElementById(id); if(c) c.classList.toggle("edge-hl",on);
+    });
+  }
+
+  svg.addEventListener("mouseover",function(ev){
+    var p=ev.target.closest&&ev.target.closest("path.hit"); if(!p) return;
+    var idx=+p.getAttribute("data-edge-index"); setHl(idx,true);
+    var e=EDGES[idx];
+    tip.innerHTML='<span class="eid">'+e.from+" → "+e.to+"</span>"+e.label;
+    tip.style.display="block";
+  });
+  svg.addEventListener("mousemove",function(ev){
+    if(tip.style.display!=="block") return;
+    tip.style.left=Math.min(ev.clientX+14,window.innerWidth-360)+"px";
+    tip.style.top=(ev.clientY+14)+"px";
+  });
+  svg.addEventListener("mouseout",function(ev){
+    var p=ev.target.closest&&ev.target.closest("path.hit"); if(!p) return;
+    setHl(+p.getAttribute("data-edge-index"),false);
+    tip.style.display="none";
+  });
+
+  // hovering a card highlights all its edges
+  document.querySelectorAll(".card").forEach(function(card){
+    card.addEventListener("mouseenter",function(){
+      EDGES.forEach(function(e,i){if(e.from===card.id||e.to===card.id) setHl(i,true);});
+    });
+    card.addEventListener("mouseleave",function(){
+      EDGES.forEach(function(e,i){if(e.from===card.id||e.to===card.id) setHl(i,false);});
+    });
+  });
+
+  var rT;
+  window.addEventListener("resize",function(){clearTimeout(rT);rT=setTimeout(draw,120);});
+  window.addEventListener("load",draw);
+  draw();
+})();
+</script>
+</body>
+</html>
