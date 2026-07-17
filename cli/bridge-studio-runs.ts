@@ -267,7 +267,12 @@ export async function applyReviewVerdict(
     // Task A-finalfix ride-along 3: record finalize-after-merge's skip BEFORE
     // writing verdict.json, so `skipped` below is the complete set for this
     // verdict rather than missing whichever step comes textually after the
-    // write.
+    // write. Safe in the non-dry path ONLY because both this detached-dispatch
+    // and the writeVerdictJson below are synchronous up to their first await:
+    // finalizeMergedReadyForReview's sync prefix writes a merge-path verdict.json
+    // (overwrite:false) then yields, so the operator's overwrite:true write on
+    // the same tick still wins. Do NOT insert an `await` between here and the
+    // write — it would let finalize's fallback verdict race the operator's.
     if (dryBridgeActive) {
       skip('finalize-after-merge');
     } else {
