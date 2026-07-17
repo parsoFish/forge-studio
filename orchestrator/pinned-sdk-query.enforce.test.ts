@@ -2,9 +2,10 @@
  * G8 (2026-07 refinement) enforcement lock for the env-pin seam.
  *
  * Every SDK child spawn must route through `pinnedSdkQuery`
- * (orchestrator/pinned-sdk-query.ts) so `pinnedAgentEnv` (orchestrator/config.ts)
- * always scrubs host-leakage vars (ANTHROPIC_BASE_URL, ANTHROPIC_CUSTOM_HEADERS,
- * CLAUDE_EFFORT, HEADROOM_*) before a spawned child ever sees them.
+ * (orchestrator/pinned-sdk-query.ts) so `buildChildEnv` (orchestrator/spawn-env.ts)
+ * always allowlist-filters the ambient env (stripping ANTHROPIC_BASE_URL,
+ * ANTHROPIC_CUSTOM_HEADERS, CLAUDE_EFFORT, HEADROOM_*, and anything else not
+ * explicitly allowlisted) before a spawned child ever sees it.
  *
  * Rule enforced on every .ts/.tsx/.mts/.cts source file under orchestrator/,
  * loops/, and cli/ (except the wrapper itself): ANY reference to the SDK

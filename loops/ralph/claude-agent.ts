@@ -16,7 +16,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { pinnedSdkQuery as sdkQuery } from '../../orchestrator/pinned-sdk-query.ts';
 
 import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
-import { pinnedAgentEnvWithGitIdentity, type GitIdentity } from '../../orchestrator/config.ts';
+import { gitIdentityEnvOverlay, type GitIdentity } from '../../orchestrator/config.ts';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
 
 export type { GitIdentity };
@@ -219,12 +219,12 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;
     if (opts.systemPrompt !== undefined) options.systemPrompt = opts.systemPrompt;
-    // G8 wave 2 — compose the git identity overlay on top of the pinned env
-    // scrub (see pinnedAgentEnvWithGitIdentity). Only set options.env at all
-    // when a gitIdentity was supplied, so an unset gitIdentity leaves the SDK
-    // call's env exactly as it was before this wave (pinnedSdkQuery's own
-    // default of `pinnedAgentEnv(process.env)`).
-    if (opts.gitIdentity !== undefined) options.env = pinnedAgentEnvWithGitIdentity(opts.gitIdentity);
+    // G8 wave 2 (R5-02: now a small override delta, not a pre-merged env —
+    // see gitIdentityEnvOverlay + pinned-sdk-query.ts's override semantics).
+    // Only set options.env at all when a gitIdentity was supplied, so an
+    // unset gitIdentity leaves the SDK call's env exactly as it was before
+    // this wave (pinnedSdkQuery's own allowlist-filtered process.env).
+    if (opts.gitIdentity !== undefined) options.env = gitIdentityEnvOverlay(opts.gitIdentity);
     // Idle-deadline safety net: pass an AbortController the SDK honours so a
     // stalled stream can be cancelled (kills the CLI subprocess) rather than
     // hanging the iteration forever (known-gaps 2026-06-01).
