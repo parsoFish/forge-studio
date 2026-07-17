@@ -1,8 +1,15 @@
 # Forge Studio — Project Instructions for Claude Code
 
-> Idea machine for one human across many side projects. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
+> A modular platform for building the ideas machine — or any other agentic flow — that ships the ideas machine itself out of the box. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
 
 ## North star
+
+Forge's mission is **two-level** ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), 2026-07-17):
+
+- **Scope 1 — the platform.** `orchestrator/`, `cli/`, `loops/`, `forge-ui/`, and every seam (runtime adapter, KB backend, the `PhaseAgentSpec` harness-overlay injection point) are a **modular platform for building the ideas machine — or any other agentic flow**. SWE-focused for now by explicit operator choice; connectors to non-SWE systems are deliberately future work, not built in advance.
+- **Scope 2 OOTB — the ideas machine.** The six-phase cycle (architect → plan/decompose → developer loop → demo/review → reflect) and the brain-tuning loop are the concrete, opinionated agentic flow forge ships out of the box — see [`docs/product/minimum-viable-user-story.md`](./docs/product/minimum-viable-user-story.md) (MVUS) for its canonical vision.
+
+Both levels serve the same operator: **one human running many side projects** — a single technical operator driving a portfolio through forge.
 
 Forge is **designed to run primarily unattended between human interaction points** (architect, review, reflection). Every decision is judged against three things:
 
@@ -12,7 +19,7 @@ Forge is **designed to run primarily unattended between human interaction points
 
 If the answer to (1) is no, the change must justify why. If (2) reveals a re-invention, find the existing tool. If (3) reveals complexity, cut.
 
-There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean but the full ADR-024 migration is incremental and not yet complete.
+There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean, and [ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)'s **spec migration is done** — all five LLM phases (architect, project-manager, developer-loop, unifier, reflector) source their intent from `SKILL.md` via `PhaseAgentSpec`, landed 2026-06-13. What ADR 024's incremental-migration decision leaves open is the **artifact migration** — moving the phases off hand-written `orchestrator/*-invocation.ts` prose onto registry-driven OOTB artifacts on the generic runnable primitive — tracked as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not an ADR-024 gap.
 
 ## Studio session workflow
 
@@ -102,7 +109,7 @@ All six phases (brain, architect, project-manager, developer-loop,
 review-loop, reflection) are closed and production-running. End-to-end
 cycles ship merged PRs against managed projects. The detail of when
 each phase closed and the historical iteration arcs live in
-[`brain/log.md`](./brain/log.md).
+[`brain/forge-dev/log.md`](./brain/forge-dev/log.md).
 
 **Note (2026-05-25):** the per-phase + e2e bench harnesses under
 `benchmarks/` were removed in this commit. They had grown into a set
@@ -113,14 +120,20 @@ on real merged cycles (brain themes accumulate the evidence). Benches
 will be rebuilt later, anchored on actual past successful cycle
 artifacts rather than hand-curated fixtures.
 
-**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md)):**
+**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md));
+ground re-stated 2026-07-17 (R5-07-F4, ADR 022 ground-swap amendment):**
 the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
 fills the gap — `verify-cycle.mjs` is forge's standing real-capability regression
 harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached
 PR/merge, dev-loop N/N, project tests green post-merge, cost under ceiling), not
-synthetic rubrics. Default ground is the creds-free **mdtoc** reference project;
-**betterado** is the live-ADO tier. Tiered (frozen-SHA routine / full-greenfield
-release), run as a manual gate before pointing forge at a real project.
+synthetic rubrics. The routine, creds-free ground is **gitpulse**
+(`github.com/parsoFish/gitpulse` — an independent repo; the harness's
+`--project` flag literally defaults to `mdtoc`, but `mdtoc` is uniquely
+committed inside forge's own repo (`projects/mdtoc/`) and must **never**
+actually be the harness ground — always pass `--project gitpulse`);
+**betterado** is the live-ADO tier. Tiered (frozen-SHA routine /
+full-greenfield release), run as a manual gate before pointing forge at a
+real project.
 
 Where to look for as-built detail:
 
@@ -282,9 +295,13 @@ The harness surface is **journeys-as-data**:
 is a thin runner over 10 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
 `flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
-`swap-runtime`, `knowledge`, `recovery`, `demo-builder` — one file per
-journey, each mapping to a capability-diagram user story rather than a
-step of one linear cycle. Each journey is
+`knowledge`, `recovery`, `demo-builder` — one file per journey (plus
+`index.mjs`, the registry/run-order module — not itself a journey), each
+mapping to a capability-diagram user story rather than a step of one
+linear cycle. The standalone `swap-runtime` journey was retired
+2026-07-17 — its checks folded into `agents`' `agents-scratch-build` beat,
+which now drives the SDK/model picker as part of composing a brand-new
+agent from scratch. Each journey is
 `defineJourney({ id, title, story, beats })`
 ([`scripts/lib/journey-runtime.mjs`](./scripts/lib/journey-runtime.mjs));
 a **beat** is a scripted story moment (`{ id, title, narration, drive(ctx) }`)
@@ -322,8 +339,10 @@ project (auto-approve + closure + reflection capture). This is the standing
 regression harness for forge's actual capabilities (ADR 022): it asserts
 real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
 gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
-**mdtoc** (default — the creds-free neutral reference project) and the
-**betterado terraform provider** (`--project terraform-provider-betterado` —
-the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
-**live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /
+**gitpulse** (`--project gitpulse` — the creds-free, independent reference
+project; see `docs/verify-cycle-ideas/README.md` for the corpus of idea
+files) and the **betterado terraform provider**
+(`--project terraform-provider-betterado` — the live-ADO tier, higher
+ceiling, plus a 5th gate asserting the demo carries **live REST
+evidence**, not a test-name table). Tiered (frozen-SHA routine /
 greenfield release).

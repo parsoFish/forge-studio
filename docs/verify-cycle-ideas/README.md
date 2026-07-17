@@ -28,3 +28,11 @@ node scripts/verify-cycle.mjs <run-handle> --project gitpulse \
 
 `verify:cycle` is real-money (it runs a full agentic cycle); run it deliberately as
 a manual capability gate, not in routine CI.
+
+**Note (2026-07-17, R5-07-F4):** `scripts/verify-cycle.mjs`'s `--project` flag
+literally defaults to `mdtoc`, but `mdtoc` is uniquely committed inside
+forge's own repo (`projects/mdtoc/`) and must **never** actually be the
+harness ground — the routine, creds-free ground is always `gitpulse`
+(`--project gitpulse`, this corpus), an independent repo; `betterado`
+(`--project terraform-provider-betterado`) is the live-ADO tier. `CLAUDE.md`
+states the same canonical grounds.

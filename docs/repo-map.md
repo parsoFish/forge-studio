@@ -10,8 +10,10 @@ into another.
 
 ## Scope 1 — Framework / seams / orchestration (the hot path)
 
-The engine that runs any cycle for any project. **Rule: never special-case a particular
-project or a specific cycle-agent here.** Cross-scope concerns belong here.
+The engine that runs **any agentic flow** — the ideas machine (Scope 2 OOTB) is one
+instance of it, SWE-focused for now by explicit operator choice (2026-07-17,
+[ADR 038](./decisions/038-north-star-platform-and-ootb.md)). **Rule: never special-case a
+particular project or a specific cycle-agent here.** Cross-scope concerns belong here.
 
 | Path | What lives here |
 |---|---|

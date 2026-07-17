@@ -19,7 +19,7 @@ Hold the durable, queryable knowledge that lets every other phase make better de
 - `brain/cycles/themes/<theme>.md` — cross-cycle pattern theme page (Brain 2).
 - `brain/projects/<name>/themes/<theme>.md` — project-specific theme page (Brain 3 lives in the forge repo, ADR 035).
 - Updated category indexes (`patterns.md`, `antipatterns.md`, `decisions.md`, `operations.md`, per-project `profile.md`).
-- Append to `brain/log.md` for significant operations.
+- Append to `brain/forge-dev/log.md` for significant operations.
 
 ## Skills
 
