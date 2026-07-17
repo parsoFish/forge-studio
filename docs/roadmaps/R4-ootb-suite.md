@@ -640,7 +640,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 - **Session sizing:** ~2-3 sessions (state+plan-trigger; recovery+strip; rerun).
 - **Out of scope:** plan agent internals (R4-05); reflect behaviour (R4-09);
   notification *transport* beyond the in-Studio blade (no email/push — YAGNI
-  until asked).
+  until asked; tracked as **R6-D1**).
 
 ## Deferred
 

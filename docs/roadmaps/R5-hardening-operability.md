@@ -257,12 +257,12 @@ is stale (R5-07 strikes it).
     forge to spot story beats and drift. ACs: every journey section carries a
     functional description beyond its narration.
   - **R5-06-F5 Opportunistic operability targets.** (memory, standing —
-    smallest intervention wins, never sub-systems): human-readable logs
-    (pino-pretty pairing per event type; `forge log <id> --pretty`);
-    initiative-handle symlinks `_logs/<handle>/ → _logs/<cycleId>/` at
-    cycle.start; PLAN.html ≥1 HTML-native element (visual dep graph /
-    highlighted manifest preview). ACs: each lands only when a session
-    already touches the surface.
+    smallest intervention wins, never sub-systems): PLAN.html ≥1 HTML-native
+    element (visual dep graph / highlighted manifest preview — feeds R2-05's
+    dynamic surfaces). The human-readable-logs and initiative-handle items
+    **relocated to R6-02** (2026-07-17 coverage review — they are
+    operator-surface platform work, not harness content). ACs: lands only
+    when a session already touches the surface.
 - **Session sizing:** 1-2 bundled sessions (F1-F4); F5 rides along.
 - **Out of scope:** demo *agent* behaviour (R4-07); architect re-run surface
   (R4-11-F5 — its journey coverage lands here).
