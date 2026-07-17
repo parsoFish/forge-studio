@@ -301,7 +301,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   // runs them DIRECTLY rather than through the per-WI gate runner.
   const ci_gate = optionalArgv(obj.ci_gate, 'ci_gate');
   const ci_fix_cmd = optionalArgv(obj.ci_fix_cmd, 'ci_fix_cmd');
-  const ci_gate_unset_env = optionalArgv(obj.ci_gate_unset_env, 'ci_gate_unset_env');
+  const ci_gate_unset_env = parseCiGateUnsetEnv(obj.ci_gate_unset_env);
   const standing_work_item_acs = optionalArgv(
     obj.standing_work_item_acs,
     'standing_work_item_acs',
@@ -626,6 +626,33 @@ function optionalArgv(v: unknown, label: string): string[] | undefined {
     }
   }
   return v as string[];
+}
+
+/**
+ * Env var names `ci_gate_unset_env` must never strip. project.json is external
+ * input at a trust boundary; declaring one of these would WEAKEN the gate
+ * child rather than tighten it — PATH loss → wrong-binary resolution, HOME/
+ * SHELL loss → broken tool/shell config. `ci_gate_unset_env` exists to drop
+ * live-test TRIGGER vars (TF_ACC, RUN_INTEGRATION, …), never process
+ * fundamentals. (Minimum blocklist per the R5-02 F4 decision — those three.)
+ */
+const CI_GATE_UNSET_ENV_BLOCKLIST: readonly string[] = ['PATH', 'HOME', 'SHELL'];
+
+/**
+ * Validate `ci_gate_unset_env` as an argv string[] (via optionalArgv) and
+ * reject any blocklisted process-fundamental name — fail fast at the boundary.
+ */
+function parseCiGateUnsetEnv(v: unknown): string[] | undefined {
+  const names = optionalArgv(v, 'ci_gate_unset_env');
+  if (names === undefined) return undefined;
+  for (const name of names) {
+    if (CI_GATE_UNSET_ENV_BLOCKLIST.includes(name)) {
+      throw new Error(
+        `project-config: ci_gate_unset_env must not include ${name} — unsetting it would weaken the gate child (e.g. PATH loss → wrong-binary resolution), not act as a live-test trigger. Use it only for live-test trigger vars like TF_ACC.`,
+      );
+    }
+  }
+  return names;
 }
 
 function optionalString(v: unknown, label: string): string | undefined {
