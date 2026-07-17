@@ -40,15 +40,15 @@
 //     match-var-by-name). A genuinely novel 4th shape (a switch, a lookup
 //     table, an inline `.match()` never bound to a name) would silently NOT be
 //     picked up. All six files this guard scans were audited by hand against
-//     this list at write time and contain no other shape. This is the ONLY
-//     remaining silent window: dispatch *files* are auto-discovered from cli/
-//     by naming convention (ui-bridge.ts + bridge-*.ts, tests excluded), so a
-//     new dispatch file following the convention is scanned automatically —
-//     over-scanning a non-dispatch match is harmless (zero candidates) or
-//     visibly red, never silent — and a containment test pins the known six
-//     as a floor so a narrowed discovery filter also goes red. (A dispatch
-//     file named entirely outside that convention would still dodge the scan;
-//     naming review carries that residue.)
+//     this list at write time and contain no other shape. Dispatch *files*
+//     are auto-discovered from cli/ by naming convention (ui-bridge.ts +
+//     bridge-*.ts, tests excluded), so a new dispatch file following the
+//     convention is scanned automatically — over-scanning a non-dispatch
+//     match is harmless (zero candidates) or visibly red, never silent — and
+//     a containment test pins the known six as a floor so a narrowed
+//     discovery filter also goes red. (A dispatch file named entirely outside
+//     that convention would still dodge the scan; naming review carries that
+//     residue.)
 //   - Two reconciliation special cases are required because the real dispatch
 //     multiplexes on more than the URL: the `/api/runs/:id/gates/:id` double
 //     placeholder (gateId is 'plan' | 'verdict', chosen by URL suffix in the
@@ -65,6 +65,32 @@
 //     matching purposes — a real modelling gap in the table worth tightening
 //     separately, not fixed here to keep this change minimal and behaviour-
 //     preserving.
+//
+// Task A-finalfix FIX 4: direction 1/2 above only prove a route STRING is
+// classified and that classification corresponds to SOME real dispatch line
+// — they say nothing about whether that classification is actually enforced.
+// A future `guard: 'route'` refuse row whose handler never actually calls
+// `refuseDryBridge` would pass both directions silently (the route text
+// exists in both places; nothing checks the handler body). A third test below
+// closes that specific window: for every `guard: 'route'` refuse row, the
+// scanned dispatch sources must contain a `refuseDryBridge(` call carrying
+// that row's verbatim `route` string. So the remaining silent windows are, in
+// combination: (a) the 4th-dispatch-shape / off-convention-filename gaps
+// above, AND (b) classification-vs-guard-site divergence for anything this
+// guard does NOT scan for a call site — currently only `guard: 'route'` refuse
+// rows are checked this way; `guard: 'spawn-helper'` stub-actions rows (whose
+// enforcement is an inline `|| isDryBridge()` OR inside a private spawn
+// helper, not a named call this static scan can grep for) and un-guarded
+// `stub-actions` rows (verdict-approve, reflect-answer — enforced via
+// `emitDryBridgeSkip`/`dryBridgeAgentTurnMarker` call sites with no fixed
+// argument shape to grep) are NOT parity-checked here; their red-on-regression
+// coverage instead lives in the per-route unit tests
+// (cli/ui-bridge-dry-spawn.test.ts, cli/ui-bridge-reflect.test.ts, FIX 3).
+// Review carries that residual divergence risk. Scanner-precision limits
+// beyond dispatch-shape (two-value method gates collapsing to the ambiguous
+// '*', the inline-regex-literal requirement for match-var routes, the
+// DELETE-as-POST-suffix encoding above) are likewise accepted, documented
+// residue — owner R7 (docs/roadmaps/R7-verification-infrastructure.md).
 //
 // Both directions are asserted: every derived real route must have a table
 // entry (direction 1 — the AC's "unclassified route" case), and every table
@@ -327,6 +353,80 @@ test('sanity: dispatch-file discovery contains every currently-known dispatch fi
     missing,
     [],
     `dispatch-file discovery lost known bridge dispatch files: ${missing.join(', ')} — was the cli/ filename filter in this test narrowed?`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// FIX 4 — classification-vs-guard-site parity: a `guard: 'route'` refuse row
+// is only load-bearing if the handler it describes actually calls
+// refuseDryBridge(...) with that verbatim route. Scans the comment-stripped
+// source for every `refuseDryBridge(` call and pulls its `route: '...'`
+// argument regardless of whether the call is single-line or (as with
+// bridge-studio-kbs.ts's fix-agent op) spans multiple lines/arguments.
+// ---------------------------------------------------------------------------
+const REFUSE_CALL_RE = /refuseDryBridge\(\s*res\s*,\s*origin\s*,\s*\{[^}]*?\broute:\s*'([^']+)'/gs;
+
+function extractRefuseDryBridgeRoutes(source: string): Set<string> {
+  const stripped = stripComments(source);
+  const routes = new Set<string>();
+  REFUSE_CALL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = REFUSE_CALL_RE.exec(stripped))) {
+    routes.add(m[1]);
+  }
+  return routes;
+}
+
+test("every guard:'route' refuse row has a matching refuseDryBridge( call site (FIX 4: classified-but-unguarded routes must not pass silently)", () => {
+  const guardedRefuseRows = BRIDGE_ROUTE_CLASSIFICATION.filter(
+    (r) => r.classification === 'refuse' && r.guard === 'route',
+  );
+  assert.ok(guardedRefuseRows.length > 0, "sanity: expected at least one guard:'route' refuse row to exist");
+
+  const calledRoutes = new Set<string>();
+  for (const relFile of discoverDispatchFiles()) {
+    const source = readFileSync(join(CLI_DIR, relFile), 'utf8');
+    for (const route of extractRefuseDryBridgeRoutes(source)) calledRoutes.add(route);
+  }
+
+  const offenders: string[] = [];
+  for (const row of guardedRefuseRows) {
+    if (!calledRoutes.has(row.route)) {
+      offenders.push(
+        `${DRY_BRIDGE_TABLE_PATH}: "${row.method} ${row.route}" is classified refuse/guard:'route' but no ` +
+          "refuseDryBridge( call site carrying that verbatim route string was found across the scanned " +
+          'dispatch files — a classification-vs-guard-site divergence (this row can pass direction-1/2 above ' +
+          'purely because the route text exists somewhere, while its own handler never actually refuses).',
+      );
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `guard:'route' rows with no matching refuseDryBridge( call site:\n${offenders.join('\n')}`,
+  );
+});
+
+test('fixture: extractRefuseDryBridgeRoutes matches a single-line refuseDryBridge( call', () => {
+  const src = [
+    "async function handleFoo(req, res, url, method, origin, ctx) {",
+    "  refuseDryBridge(res, origin, { route: '/api/thing/:id/resume', method, action: 'git-remote', logsRoot: ctx.logsRoot });",
+    '}',
+  ].join('\n');
+  assert.deepEqual(extractRefuseDryBridgeRoutes(src), new Set(['/api/thing/:id/resume']));
+});
+
+test('fixture: extractRefuseDryBridgeRoutes matches a multi-line refuseDryBridge( call (the bridge-studio-kbs.ts fix-agent shape)', () => {
+  const src = [
+    "async function handleFoo(req, res, url, method, origin, ctx) {",
+    '  refuseDryBridge(res, origin, {',
+    "    route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', method, action: 'spawn-agent', logsRoot: ctx.logsRoot,",
+    '  });',
+    '}',
+  ].join('\n');
+  assert.deepEqual(
+    extractRefuseDryBridgeRoutes(src),
+    new Set(['/api/studio/kbs/:id/maintenance (op=fix-agent)']),
   );
 });
 

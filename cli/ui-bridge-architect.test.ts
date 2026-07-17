@@ -274,6 +274,13 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local s
     assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] }, 'the skipped agent turn must be explicit in the response');
     const status = JSON.parse(readFileSync(join(dir5, 'status.json'), 'utf8'));
     assert.equal(status.phase, 'finalizing', 'local state must still progress under dry-bridge');
+    // Task A-finalfix FIX 3: the marker/event alone aren't red-on-regression —
+    // assert the actual spawn side effect (the log dir spawnArchitectTurn
+    // mkdirs right before spawning) never happened.
+    assert.ok(
+      !existsSync(join(forgeRoot, '_logs', `_architect-${sid5}`)),
+      'dry-bridge must not create the architect spawn log dir',
+    );
   } finally {
     if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;

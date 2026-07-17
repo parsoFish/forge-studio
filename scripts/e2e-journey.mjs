@@ -468,9 +468,14 @@ async function main() {
             ignorePathPrefixes: ['demos/e2e/'],
           });
           console.log(`\n${formatBoundaryReport(boundaryResult)}`);
+          // FIX 6 (task A-finalfix): mirror verify-cycle.mjs's pattern — a
+          // skipped pr-state check (gh unavailable) is not a violation and
+          // must not hard-fail, but the check message must say so rather
+          // than silently affirming pr-state was checked when it wasn't.
           check(
             boundaryResult.clean,
-            `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s))`,
+            `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s)` +
+              `${boundaryResult.prsSkipped ? ', pr-state SKIPPED: gh unavailable' : ', pr-state checked'})`,
           );
         } catch (err) {
           console.error(`\n[e2e] post-run boundary check failed to run: ${err.message}`);
