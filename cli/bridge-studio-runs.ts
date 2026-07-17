@@ -35,6 +35,7 @@ import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -97,7 +98,7 @@ function _writeStatus(dir: string, status: ArchitectStatus): void {
 /** Spawn one architect-runner turn as a detached child.
  *  `FORGE_ARCHITECT_NO_SPAWN=1` disables spawn for test harnesses. */
 function _spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   // M1: defence-in-depth — sessionId must be safe before it enters the log dir path.
   if (!SAFE_ID_RE.test(sessionId)) return;
   try {
@@ -195,27 +196,56 @@ export async function applyReviewVerdict(
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
+    // R5-01-F1: dry-bridge — the incident (2026-07-16, self-merge with the
+    // operator's real gh token) was exactly these three real-acting steps.
+    // In dry mode the verdict application itself (state transition, artifact
+    // writes below) still proceeds, but release-finalize / the real merge /
+    // finalize-after-merge are individually skipped with a typed marker + one
+    // JSONL event each, so the ui:journey approve beat can keep progressing
+    // run state without ever touching a real remote.
+    const dryBridgeActive = isDryBridge();
+    const skipped: DryBridgeStubAction[] = [];
+    const approveCycleId = approveManifest.cycle_id ?? initiativeId;
+    const dryBridgeLogger = dryBridgeActive ? createLogger(approveCycleId, ctx.logsRoot) : null;
+    const skip = (action: DryBridgeStubAction): void => {
+      skipped.push(action);
+      if (dryBridgeLogger) emitDryBridgeSkip(dryBridgeLogger, initiativeId, action);
+    };
+
     // WS-A (release): finalise the release on the PR branch BEFORE merging.
     // Opt-in on the project's `releaseProcess` (skips cleanly otherwise) and
     // log-and-continue on failure — the merge MUST still fire (the in-cycle
     // DRAFT changelog is the fallback), so this is awaited but never gates the
     // merge. Present ⇒ finalise-then-merge; absent ⇒ straight-to-merge.
     if (ctx.runReleaseFinalize) {
-      try {
-        await ctx.runReleaseFinalize({
-          initiativeId,
-          cycleId: approveManifest.cycle_id ?? initiativeId,
-          projectName: approveManifest.project,
-          worktreePath: approveWorktreePath,
-          projectRepoPath: approveManifest.project_repo_path,
-          logsRoot: ctx.logsRoot,
-        });
-      } catch {
-        // Defence in depth: the phase itself log-and-continues, but a hook-level
-        // throw must never block the merge either.
+      if (dryBridgeActive) {
+        skip('release-finalize');
+      } else {
+        try {
+          await ctx.runReleaseFinalize({
+            initiativeId,
+            cycleId: approveCycleId,
+            projectName: approveManifest.project,
+            worktreePath: approveWorktreePath,
+            projectRepoPath: approveManifest.project_repo_path,
+            logsRoot: ctx.logsRoot,
+          });
+        } catch {
+          // Defence in depth: the phase itself log-and-continues, but a hook-level
+          // throw must never block the merge either.
+        }
       }
     }
-    const merged = ctx.mergePr(approveWorktreePath);
+    let merged: boolean;
+    if (dryBridgeActive) {
+      skip('merge-pr');
+      // Treat as succeeded so the verdict state transition below still
+      // proceeds — dry mode must not silently do nothing (that's the whole
+      // point), it must keep the run's state moving without the real gh call.
+      merged = true;
+    } else {
+      merged = ctx.mergePr(approveWorktreePath);
+    }
     if (!merged) {
       sendJson(res, 409, {
         error: 'gh pr merge failed — merge the PR manually on GitHub',
@@ -230,15 +260,21 @@ export async function applyReviewVerdict(
       {
         kind: 'approve',
         initiative_id: initiativeId,
-        cycleId: approveManifest.cycle_id ?? initiativeId,
+        cycleId: approveCycleId,
         decidedBy: 'operator',
         rationale,
         at: new Date().toISOString(),
       },
       { overwrite: true },
     );
-    void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
-    sendJson(res, 200, { ok: true, kind, note: 'PR merged and finalization triggered' }, origin);
+    if (dryBridgeActive) {
+      skip('finalize-after-merge');
+    } else {
+      void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
+    }
+    const responseBody: Record<string, unknown> = { ok: true, kind, note: 'PR merged and finalization triggered' };
+    if (skipped.length > 0) responseBody.dryBridge = { skipped };
+    sendJson(res, 200, responseBody, origin);
     return;
   }
 
@@ -542,6 +578,10 @@ export async function handleStudioPostRoutes(
   // ---- POST /api/runs/:id/resume — resume a run ----------------------------
   const resumeMatch = url.match(/^\/api\/runs\/([^/]+)\/resume$/);
   if (resumeMatch) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/runs/:id/resume', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     const runId = decodeURIComponent(resumeMatch[1]);
     if (!runId || !SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);

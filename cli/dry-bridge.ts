@@ -162,6 +162,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/initiatives', classification: 'exempt-local', reason: 'writeManifest — local queue write only' },
   { method: 'POST', route: '/api/instructions/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/answer/verdict' },
   { method: 'POST', route: '/api/project-brain/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/approve' },
+  { method: 'POST', route: '/api/project-brain/abandon', classification: 'exempt-local', reason: 'writes local session status only — confirmed it does NOT call spawnProjectBrainTurn (only /approve does)' },
   { method: 'POST', route: '/api/demo-builder/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/feedback/lock/abandon' },
 
   // ---- read-only ----------------------------------------------------------

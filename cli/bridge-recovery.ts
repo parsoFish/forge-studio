@@ -28,8 +28,9 @@ import { parseManifest, validateManifest, writeManifest } from '../orchestrator/
 import { runRequeue } from './forge-requeue.ts';
 import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from './bridge-studio.ts';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
+import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 
-export type RecoveryContext = { forgeRoot: string; queueRoot: string };
+export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 
 type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
 
@@ -149,6 +150,10 @@ export async function handleRecoveryRoutes(
   // POST /api/recovery/:id/abandon
   const abandonMatch = url.match(/^\/api\/recovery\/([^/]+)\/abandon$/);
   if (method === 'POST' && abandonMatch) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/recovery/:id/abandon', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     const id = decodeURIComponent(abandonMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
@@ -161,6 +166,10 @@ export async function handleRecoveryRoutes(
   // POST /api/recovery/:id/requeue {resetRetries?, resumeFromUnifier?}
   const requeueMatch = url.match(/^\/api\/recovery\/([^/]+)\/requeue$/);
   if (method === 'POST' && requeueMatch) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/recovery/:id/requeue', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     const id = decodeURIComponent(requeueMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {

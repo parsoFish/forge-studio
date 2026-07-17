@@ -69,6 +69,7 @@ import {
   type ReleaseFinalizeHookInput,
 } from './bridge-studio-runs.ts';
 import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
+import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
@@ -889,7 +890,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
-  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot }, url, method)) return;
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -913,6 +914,10 @@ async function handleHttp(
     return;
   }
   if (method === 'POST' && url === '/api/scheduler/start') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/start', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
     try {
       // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
       // the shared helper — the bridge no longer shells out to a `forge start`
@@ -949,6 +954,10 @@ async function handleHttp(
   // don't block the request on the drain — the status poll reflects
   // `running:false` once it's down.
   if (method === 'POST' && url === '/api/scheduler/stop') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/stop', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
     try {
       const pid = readPid(daemonPaths(ctx.forgeRoot).pidFile);
       if (pid === null || !isAlive(pid)) {
@@ -1097,7 +1106,7 @@ async function handleHttp(
  *  `_logs/_architect-<sid>/stderr.log` so stalls are diagnosable via the
  *  existing GET /api/architect/file/<project>/<sid>/stderr.log endpoint. */
 function spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1320,7 +1329,7 @@ async function handleArchitect(
  *  env guard the harness sets. Stderr is captured to
  *  `_logs/_instructions-<sid>/stderr.log` for diagnosability. */
 function spawnInstructionsTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_instructions-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1606,7 +1615,7 @@ async function handleInstructions(
  *  env guard the harness sets. Stderr is captured to
  *  `_logs/_demo-<sid>/stderr.log` for diagnosability. */
 function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_demo-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1623,7 +1632,7 @@ function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: str
 
 /** R1-3b — spawn ONE detached `forge project-brain run` turn (analyze or commit). */
 function spawnProjectBrainTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_project-brain-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -2165,6 +2174,10 @@ async function handleReflect(
   }
 
   if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/reflect/:cycleId/answer', method, action: 'spawn-agent', logsRoot: ctx.logsRoot });
+      return true;
+    }
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
