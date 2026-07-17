@@ -57,6 +57,14 @@ within a declared tolerance or document + deliberately update it. Concretely:
 - **Negative examples** — the screenshot index includes designs that scored
   badly, so an agent learns the failure modes, not just what passed.
 
+**Clause-id collision (noted 2026-07-17, R5-07-F6):** `docs/forge-project-contract.md`
+already has a **different**, landed **C7 — External-resource model** clause
+(creds-free in-loop gate + isolated self-cleaning live confirmation) — see
+[[forge-project-onboarding-contract]]. This theme's C7 was never landed, so
+the numbering collides. [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md)
+is where this is resolved: on pick-up, this clause takes the next free id
+(e.g. C11), never C7.
+
 ## Why tests aren't enough
 
 Tests cover correctness under specific conditions; a green suite proves nothing

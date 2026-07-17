@@ -90,7 +90,13 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    projects get no `kb` binding in `project.json` (ContractReadiness shows
    unbound).
 4. **Architect+PM collapse** (§6 item 4) — still deferred per plan; needs
-   post-refinement cycle evidence before committing.
+   post-refinement cycle evidence before committing. — *superseded 2026-07-17
+   (R5-07-F6):* this question (collapse architect+PM into one phase) is
+   superseded by the **Q2-B architect/plan split** (`docs/roadmaps/README.md`
+   §1; `docs/roadmaps/R4-ootb-suite.md` R4-04) — the roadmap direction adds a
+   **new plan agent alongside** the architect rather than collapsing the two;
+   architect-flow retirement is a separate, deferred future initiative
+   (R4-D1).
 5. **Watch SIGKILL mystery** — 4 occurrences mid-dev-loop, suspected WSL2
    memory pressure; self-heal absorbs it, not root-caused.
 6. **PM never populates a WI `domain` field** — constraint selectors currently

@@ -53,13 +53,19 @@ enforced only for PM (throw) and reflector (log-and-continue) and was
 deliberately removed from dev-loop/reviewer.
 
 **Amendment 2026-05-26 (ADR 018 three-brain model).** The dev-loop and
-reviewer **may** read **Brain 3** — the cycle's project brain at
-`projects/<name>/brain/` (present in the worktree). Now that Brain 3 is
+reviewer **may** read **Brain 3** — the project brain. Now that Brain 3 is
 scope-clean (project-only, no forge-theme pollution), the original
 "don't risk an executor reading a forge theme and going off-spec"
 rationale no longer applies. Brain 3 is *supplemental context* (project
 file layout, testing norms); the WI/manifest remains the single source
 of *intent*. Advisory, not mandatory — no runtime gate added.
+
+**Path correction (2026-07-17, R5-07-F6):** the location above was
+`projects/<name>/brain/` (in the worktree) at the time of this amendment;
+[ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md)
+(2026-06-20) centralised Brain 3 **out of** the managed project's repo and
+**into** the forge repo at `brain/projects/<name>/themes/` — that is the
+location the dev-loop/reviewer now read.
 
 **How reads are bounded (guardrail).** Every permitted brain read must
 go through the built navigation metadata first — `INDEX.md`, the

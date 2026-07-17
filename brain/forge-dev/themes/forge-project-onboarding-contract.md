@@ -6,7 +6,7 @@ description: >-
   Empirically derived from what trafficGame needed before forge could run it
   unattended. C1 fast gate, C2 scratch hygiene, C3 decomposed source, C4
   machine-readable arch context, C5 honoured locked-core mandates, C6
-  satisfiable merge model (the open clause).
+  satisfiable merge model (resolved post-Phase-6, no longer open).
 category: decision
 keywords:
   - contract
@@ -51,16 +51,17 @@ trafficGame blocker that had to be fixed before unattended runs worked.
   CLAUDE.md constraints (e.g. trafficGame: user owns git, never modify
   tests to pass, per-map calibrated thresholds) must be respected;
   forge had to change to commit-not-reset to honour git ownership.
-- **C6 — A satisfiable merge model (OPEN).** Either initiatives
-  serialize behind their base merge, or forge enforces non-stacked
-  branches before `gh pr merge`. Today neither holds — this is the
+- **C6 — A satisfiable merge model (was OPEN; satisfied post-Phase-6, see
+  "Deepened 2026-05-31" below).** Either initiatives serialize behind
+  their base merge, or forge enforces non-stacked branches before
+  `gh pr merge`. At the time this theme was written, neither held — the
   proximate cause of "`done/` ≠ merged" and the live blocker to
   unattended operation.
 
 This contract is the operator's durable deliverable from the trafficGame
 arc. It should become a written preflight (closure goal G2) and,
-because it is load-bearing, a candidate ADR-017. C1–C5 are met by
-trafficGame today; C6 is not met by forge.
+because it is load-bearing, a candidate ADR-017. C1–C5 were met by
+trafficGame at the time; C6 is now also satisfied (post-Phase-6, see below).
 
 ## Deepened 2026-05-31 (betterado onboarding run)
 
@@ -73,6 +74,13 @@ under-specified. See [`docs/forge-project-contract.md`](../../../docs/forge-proj
 
 C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/known-gaps.md`](../../../docs/known-gaps.md) §2026-05-31). C6 is now satisfied post-Phase-6.
 
+**Clause-id collision (noted 2026-07-17, R5-07-F6):** this C7 (external-resource
+model, landed in `docs/forge-project-contract.md`) is a **different** clause
+from [[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic
+metrics". [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md) resolves
+the numbering when that clause is picked up: it takes the next free id (e.g.
+C11), never C7 — C7 stays this external-resource clause.
+
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the structural-prerequisite evidence.
@@ -80,6 +88,6 @@ C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/kn
 
 ## See also
 
-- [[merge-boundary-stacked-initiative-failure]] — C6, the open clause.
+- [[merge-boundary-stacked-initiative-failure]] — C6, the clause that was open (now resolved post-Phase-6).
 - [[file-based-state-machine]] — file-based state machine for queue management.
 - [[quality-gates-orchestrator-verified]] — C1's enforcement mechanism.
