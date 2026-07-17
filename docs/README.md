@@ -37,6 +37,9 @@ Perishable strategy docs (dated; not onboarding material):
 - [Architecture overview](./architecture/overview.md) — internal index into phases, decisions, and the contract.
 - [CLI reference](./reference/cli.md) — *Reference.* The committed `forge --help` plus the daemon / scaffolding / phase verbs.
 
+**Direction**
+- [Roadmap set](./roadmaps/README.md) — *Explanation · Reference.* The living forge-dev roadmaps (R1–R8): the planning SSOT for everything forge builds next, with the coverage map routing every architecture pillar to its owning roadmap. Start any forge-dev work here.
+
 **Decisions**
 - [ADR index](./decisions/README.md) — every load-bearing choice plus the retirement ledger.
 
