@@ -198,3 +198,47 @@ export function formatBoundaryReport(result, options = {}) {
   lines.push(`  pr-state: ${prsSkipped ? 'skipped (gh unavailable)' : 'checked'}`);
   return lines.join('\n');
 }
+
+/**
+ * Run the full post-run boundary check end to end: capture the AFTER
+ * snapshot, diff it against `baseline`, print the report, and record the
+ * result via the caller's `check`. Extracted from `e2e-journey.mjs`'s inline
+ * `finally` block (R5-01-F3fix) so the wiring is unit-testable on its own —
+ * a caller need only prove this ONE function is reached, rather than trust
+ * an inline block buried among ~20 other cleanup steps.
+ *
+ * Never throws: a failure to even RUN the check (e.g. git itself broken)
+ * degrades to a failed `check()` call instead of escaping the caller's
+ * `finally` and masking the run's own error — the same guarantee the old
+ * inline try/catch provided.
+ *
+ * @param {object} params
+ * @param {BoundarySnapshot} params.baseline the BEFORE snapshot, captured via
+ *   {@link captureBoundaryBaseline} at harness start
+ * @param {string} params.repoRoot passed to {@link captureBoundaryBaseline}
+ *   for the AFTER snapshot
+ * @param {string[]} [params.ignorePathPrefixes] passed to {@link compareBoundary}
+ * @param {(cond: boolean, msg: string) => void} params.check the harness's
+ *   soft-assert function
+ * @param {(repoRoot: string) => PrRecord[] | null} [params.ghPrList] override
+ *   for the AFTER capture (testing)
+ * @returns {{ clean: boolean, violations: BoundaryViolation[], prsSkipped: boolean } | null}
+ *   the compare result, or `null` if the check itself failed to run
+ */
+export function runBoundaryCheck({ baseline, repoRoot, ignorePathPrefixes, check, ghPrList = defaultGhPrList }) {
+  try {
+    const current = captureBoundaryBaseline({ repoRoot, ghPrList });
+    const result = compareBoundary(baseline, current, { ignorePathPrefixes });
+    console.log(`\n${formatBoundaryReport(result)}`);
+    check(
+      result.clean,
+      `post-run boundary: forge repo/PR state unchanged (${result.violations.length} violation(s)` +
+        `${result.prsSkipped ? ', pr-state SKIPPED: gh unavailable' : ', pr-state checked'})`,
+    );
+    return result;
+  } catch (err) {
+    console.error(`\n[post-run boundary] check failed to run: ${err.message}`);
+    check(false, `post-run boundary: check failed to run (${err.message})`);
+    return null;
+  }
+}

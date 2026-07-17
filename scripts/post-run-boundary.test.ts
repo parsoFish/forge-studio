@@ -15,6 +15,7 @@ import {
   compareBoundary,
   defaultGhPrList,
   formatBoundaryReport,
+  runBoundaryCheck,
 } from './lib/post-run-boundary.mjs';
 
 /** `gh pr list` stand-in used everywhere PR-state isn't itself under test. */
@@ -337,4 +338,100 @@ test('formatBoundaryReport: renders each violation type and the gh-skipped line'
   assert.match(report, /tree-dirtied: new dirt at stray\.txt/);
   assert.match(report, /pr-state-changed: #23 OPEN \(feat\/x\) -> \(absent\)/);
   assert.match(report, /pr-state: skipped \(gh unavailable\)/);
+});
+
+// ---------------------------------------------------------------------------
+// runBoundaryCheck (R5-01-F3fix Defect A) — e2e-journey.mjs's finally block
+// used to run captureBoundaryBaseline/compareBoundary/formatBoundaryReport
+// inline, buried among ~20 other cleanup steps; that wiring silently failed
+// to execute on a real run. `runBoundaryCheck` is the single guaranteed,
+// unit-tested call the harness now makes instead — these tests prove it
+// actually prints the report and calls `check()`, not just that its
+// underlying pieces work in isolation.
+// ---------------------------------------------------------------------------
+
+/** Capture console.log output for the duration of `fn`. */
+function captureLog(fn: () => void): string[] {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+  try {
+    fn();
+  } finally {
+    console.log = original;
+  }
+  return lines;
+}
+
+test('runBoundaryCheck: clean run prints CLEAN and calls check(true, ...)', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    const calls: Array<{ cond: boolean; msg: string }> = [];
+    let result: ReturnType<typeof runBoundaryCheck>;
+
+    const logged = captureLog(() => {
+      result = runBoundaryCheck({
+        baseline,
+        repoRoot: dir,
+        ignorePathPrefixes: [],
+        check: (cond: boolean, msg: string) => calls.push({ cond, msg }),
+      });
+    });
+
+    assert.equal(result!.clean, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cond, true);
+    assert.match(calls[0].msg, /post-run boundary: forge repo\/PR state unchanged \(0 violation/);
+    assert.ok(logged.some((line) => line.includes('[post-run boundary] CLEAN')), 'prints the CLEAN report');
+  });
+});
+
+test('runBoundaryCheck: flags a head-moved violation, prints VIOLATION(S), and calls check(false, ...)', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    writeFileSync(join(dir, 'new.txt'), 'x\n');
+    execFileSync('git', ['add', '.'], { cwd: dir });
+    execFileSync('git', ['commit', '-q', '-m', 'stray commit'], { cwd: dir });
+
+    const calls: Array<{ cond: boolean; msg: string }> = [];
+    let result: ReturnType<typeof runBoundaryCheck>;
+
+    const logged = captureLog(() => {
+      result = runBoundaryCheck({
+        baseline,
+        repoRoot: dir,
+        ignorePathPrefixes: [],
+        check: (cond: boolean, msg: string) => calls.push({ cond, msg }),
+      });
+    });
+
+    assert.equal(result!.clean, false);
+    assert.equal(result!.violations[0]?.type, 'head-moved');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cond, false);
+    assert.ok(
+      logged.some((line) => line.includes('1 VIOLATION(S)') && line.includes('head-moved')),
+      'prints the violation report',
+    );
+  });
+});
+
+test('runBoundaryCheck: a failure to even run degrades to a failed check() rather than throwing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'post-run-boundary-notgit-'));
+  try {
+    const calls: Array<{ cond: boolean; msg: string }> = [];
+    const result = runBoundaryCheck({
+      baseline: { headSha: 'x'.repeat(40), statusPorcelain: '', prs: null },
+      repoRoot: dir,
+      ignorePathPrefixes: [],
+      check: (cond: boolean, msg: string) => calls.push({ cond, msg }),
+    });
+
+    assert.equal(result, null);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cond, false);
+    assert.match(calls[0].msg, /check failed to run/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

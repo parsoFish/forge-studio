@@ -101,7 +101,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
-import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
+import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import {
@@ -453,34 +453,26 @@ async function main() {
           execFileSync('git', ['-C', FORGE_ROOT, 'checkout', '--', `projects/${PROJECT}`]);
         } catch (err) { console.warn(`[e2e] managed-project restore best-effort failed: ${err.message}`); }
 
-        // Post-run boundary check (R5-01-F3) — always printed, success or
-        // failure, same "the video always finishes" philosophy as the rest of
-        // this harness. Only demos/e2e/ is exempted: this harness's own known,
-        // intentional write surface (the gallery it regenerates every run).
-        // Everything else — INCLUDING brain/ — must come back clean: this
-        // harness sweeps its own brain contamination above, so residual dirt
-        // there after that sweep is itself a real signal, not noise. The whole
-        // block is guarded so a git failure HERE degrades to a failed check
-        // instead of throwing from the finally and masking the run's own error.
-        try {
-          const boundaryCurrent = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
-          const boundaryResult = compareBoundary(boundaryBaseline, boundaryCurrent, {
-            ignorePathPrefixes: ['demos/e2e/'],
-          });
-          console.log(`\n${formatBoundaryReport(boundaryResult)}`);
-          // FIX 6 (task A-finalfix): mirror verify-cycle.mjs's pattern — a
-          // skipped pr-state check (gh unavailable) is not a violation and
-          // must not hard-fail, but the check message must say so rather
-          // than silently affirming pr-state was checked when it wasn't.
-          check(
-            boundaryResult.clean,
-            `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s)` +
-              `${boundaryResult.prsSkipped ? ', pr-state SKIPPED: gh unavailable' : ', pr-state checked'})`,
-          );
-        } catch (err) {
-          console.error(`\n[e2e] post-run boundary check failed to run: ${err.message}`);
-          check(false, `post-run boundary: check failed to run (${err.message})`);
-        }
+        // Post-run boundary check (R5-01-F3, extracted R5-01-F3fix) — always
+        // printed, success or failure, same "the video always finishes"
+        // philosophy as the rest of this harness. Only demos/e2e/ is
+        // exempted: this harness's own known, intentional write surface (the
+        // gallery it regenerates every run). Everything else — INCLUDING
+        // brain/ — must come back clean: this harness sweeps its own brain
+        // contamination above, so residual dirt there after that sweep is
+        // itself a real signal, not noise. `runBoundaryCheck` never throws —
+        // a failure to even run the check degrades to a failed `check()`
+        // call instead of escaping the finally and masking the run's own
+        // error. Calling the extracted helper here (rather than an inline
+        // try/catch buried among the ~20 cleanup steps above) is itself the
+        // R5-01-F3fix Defect A fix: the wiring reduces to one guaranteed,
+        // unit-tested call.
+        runBoundaryCheck({
+          baseline: boundaryBaseline,
+          repoRoot: FORGE_ROOT,
+          ignorePathPrefixes: ['demos/e2e/'],
+          check,
+        });
   }
 
     // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).
