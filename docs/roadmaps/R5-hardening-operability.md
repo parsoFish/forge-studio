@@ -77,6 +77,22 @@ single-sourced to gitpulse (ADR 022 ground-swap amendment), CLAUDE.md
 `brain/forge-dev/log.md` + `studio/README.md` paths fixed, C7 collision +
 theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
 
+### R5-B9 G8 env-pin shipped (R5-02, 2026-07-18)
+
+The recurring headroom/`ANTHROPIC_BASE_URL` leak (theme
+`env-leak-must-be-fixed-at-spawn-seam-not-launcher.md`, 3× recurrence) is closed
+at the seam. `orchestrator/spawn-env.ts` — `AGENT_ENV_ALLOWLIST` (14 explicit
+names; proxy/headroom/`ANTHROPIC_BASE_URL` excluded, `ANTHROPIC_API_KEY`
+retained) + `buildChildEnv` with a `MAX_ENV_OVERRIDE_KEYS` cap — is applied at
+`orchestrator/pinned-sdk-query.ts`, the single SDK-query boundary every agent
+spawn passes (F1). A **default-deny** structural lock
+(`orchestrator/pinned-sdk-query.enforce.test.ts`) flags any import of a
+child-spawning SDK export (`query`, `unstable_v2_*`) outside the wrapper across
+`orchestrator/` + `loops/` + `cli/` + `scripts/*.mjs`, covering all five launch
+paths so a new bypassing path can't ship silently. Gate children strip each
+project's declared `ci_gate_unset_env` in `runGateCapturing` + `runShellGate`
+(F2), with a PATH/HOME/SHELL blocklist at the `project-config` boundary.
+
 ## Planned initiatives
 
 ### R5-01 Dry-bridge seam
@@ -123,7 +139,7 @@ theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
 
 ### R5-02 G8 env-pin at the spawn seam
 
-- **Status:** planned  ·  **Wave:** 0 (second session, or rides with R5-01)
+- **Status:** implemented (2026-07-18 — as-built facts in R5-B9)  ·  **Wave:** 0 (second session, or rides with R5-01)
 - **Depends on:** —
 - **Depended on by:** R2-01 (the runnable primitive inherits the pinned
   seam), R3-03 *(soft)*
@@ -149,7 +165,12 @@ theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
     parent and TF_ACC in `ci_gate_unset_env` executes with it unset.
 - **Session sizing:** 1 session.
 - **Out of scope:** headroom tooling itself (user-global, not forge);
-  dry-bridge semantics (R5-01 — different seam, same safety wave).
+  dry-bridge semantics (R5-01 — different seam, same safety wave). Also
+  deliberately not covered (surfaced by the 2026-07-18 review, deferred as a
+  G8-scope-widening follow-up): `orchestrator/phases/orchestrated-capture.ts`
+  `runOrchestratorCommand` (demo-capture) defaults to unscrubbed `process.env`
+  — it is neither an SDK-agent spawn nor a gate, so it sits outside G8's
+  allowlist/gate-strip contract; revisit if a leak ever surfaces through it.
 
 ### R5-03 Cost integrity
 
@@ -384,3 +405,10 @@ maintenance contract; nothing currently carries a deferral condition.
   minted (F8 north-star reframe + strike-list) and the F1–F7 reconciliation
   sweep landed; status planned → implemented, as-built facts absorbed into
   R5-B7.
+- 2026-07-18 — **R5-02 implemented** (branch `fix/r5-02-env-pin`): the G8 env
+  allowlist at the shared SDK spawn seam (F1) + `ci_gate_unset_env` gate-child
+  strip (F2) landed, with a default-deny structural lock covering all five
+  launch paths; status planned → implemented, as-built facts absorbed into
+  R5-B9. The env-leak theme's G8 marked resolved. A spec/quality + security
+  review pair found and closed the `unstable_v2_*` enforce-lock bypass before
+  merge.

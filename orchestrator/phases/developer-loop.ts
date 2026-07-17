@@ -357,9 +357,16 @@ export async function runDeveloperLoop(
   // suite must run with those vars set — else the runner SKIPS and the gate
   // false-passes (the daemon ran betterado cycles without TF_ACC and shipped
   // unverified resources). Load the config once; absent ⇒ no env requirement.
+  // R5-02 F2: same load also yields the project's declared `ci_gate_unset_env`
+  // (e.g. `["TF_ACC"]`) — env vars to strip from every per-WI gate child so an
+  // operator's shell (or a sibling live-acc cycle) exporting TF_ACC=1 can't
+  // silently run the live-acceptance suite on a docs-only cycle.
   let accGate: AcceptanceGateConfig | undefined;
+  let ciGateUnsetEnv: string[] | undefined;
   try {
-    accGate = loadProjectConfig(input.worktreePath)?.acceptance_gate;
+    const projectCfg = loadProjectConfig(input.worktreePath);
+    accGate = projectCfg?.acceptance_gate;
+    ciGateUnsetEnv = projectCfg?.ci_gate_unset_env;
   } catch {
     /* best-effort — a malformed config is fail-closed by the baseline gate */
   }
@@ -710,7 +717,12 @@ export async function runDeveloperLoop(
               // longer disables the check, which let a vacuous scoped go-test
               // (exit 0, "[no tests to run]") false-pass at iter-0 and kill
               // the WI as gate-too-loose.
-              { requiredPaths: gateRequiredPaths(wi), ...(requiredEnv ? { requiredEnv } : {}), timeoutMs: resolveGateTimeoutMs() },
+              {
+                requiredPaths: gateRequiredPaths(wi),
+                ...(requiredEnv ? { requiredEnv } : {}),
+                ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
+                timeoutMs: resolveGateTimeoutMs(),
+              },
             );
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
@@ -1877,11 +1889,18 @@ export function assertGreenBaseline(
   // "does the gate discriminate" (that is the per-WI gate's job, enforced by
   // the iter-0 hollow check).
   let info: GateRunInfo | undefined;
+  const ciGateUnsetEnv = projectConfig?.ci_gate_unset_env;
   const passed = makeQualityGateFromCmd(
     input.worktreePath,
     [...baselineCmd],
     (i) => { info = i; },
-    { timeoutMs: resolveGateTimeoutMs() },
+    {
+      timeoutMs: resolveGateTimeoutMs(),
+      // R5-02 F2: strip the project's declared ci_gate_unset_env (e.g.
+      // TF_ACC) so the baseline gate can't silently run the live-acceptance
+      // suite just because the orchestrator's own process env carries it.
+      ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
+    },
   )();
 
   if (passed) {
@@ -2072,6 +2091,7 @@ export async function runUnifier(
         demoProcess: projectConfig?.demoProcess,
         skills: projectConfig?.skills,
         changelogPath: projectConfig?.releaseProcess?.changelogPath,
+        ciGateUnsetEnv: projectConfig?.ci_gate_unset_env,
         unifierSdkId,
         devRoleSdkId,
       });
@@ -2219,6 +2239,13 @@ type UnifierItemArgs = {
   unifierSdkId: string;
   /** ADR 029: resolved runtime sdk for a code-fix UWI (dev-role inside the unifier). */
   devRoleSdkId: string;
+  /**
+   * R5-02 F2: the project's declared `ci_gate_unset_env` — env var names to
+   * strip from every gate child this UWI spawns (the code-fix UWI's own
+   * quality gate AND the packaging UWI's composed-gate `initiative_gate`
+   * sub-check). Absent/empty ⇒ no stripping.
+   */
+  ciGateUnsetEnv?: readonly string[];
 };
 type UnifierItemOutcome = {
   id: string;
@@ -2483,6 +2510,8 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       worktreePath: input.worktreePath,
       initiativeId: input.initiativeId,
       qualityGateCmd: itemGateCmd,
+      // R5-02 F2: strip the project's declared ci_gate_unset_env.
+      unsetEnv: args.ciGateUnsetEnv,
       logger,
       initiativeIdForEvent: input.initiativeId,
       parentEventId: startEventId,
@@ -2666,7 +2695,12 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
     // .forge/last-gate-failure.md seam the dev loop + composed gate use
     // (ADR 036) — cleared at unifier start, so present ⇒ fresh.
     (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); writeGateFeedback(input.worktreePath, gateInfo); },
-    { requiredPaths: uwi.creates ?? [], timeoutMs: resolveGateTimeoutMs() },
+    {
+      requiredPaths: uwi.creates ?? [],
+      timeoutMs: resolveGateTimeoutMs(),
+      // R5-02 F2: strip the project's declared ci_gate_unset_env.
+      ...(args.ciGateUnsetEnv && args.ciGateUnsetEnv.length > 0 ? { unsetEnv: args.ciGateUnsetEnv } : {}),
+    },
   );
 
   let loopResult: LoopResult | null = null;
@@ -2726,6 +2760,12 @@ type ComposedUnifierGateInput = {
   worktreePath: string;
   initiativeId: string;
   qualityGateCmd: string[];
+  /**
+   * R5-02 F2: env var names to strip from the `initiative_gate` sub-check's
+   * child process — the project's declared `ci_gate_unset_env`. Absent/empty
+   * ⇒ no stripping (unchanged behaviour).
+   */
+  unsetEnv?: readonly string[];
   logger: EventLogger;
   initiativeIdForEvent: string;
   parentEventId: string;
@@ -2843,7 +2883,7 @@ export async function composedUnifierGate(input: ComposedUnifierGateInput): Prom
   };
 
   // 1. initiative_gate
-  const initiativeGate = runShellGate(worktreePath, qualityGateCmd, input.gateTimeoutMs);
+  const initiativeGate = runShellGate(worktreePath, qualityGateCmd, input.gateTimeoutMs, input.unsetEnv);
   if (initiativeGate.timedOut) {
     // N10: killed by OUR timeout — an ENVIRONMENT failure (load / hung live
     // step), categorically distinct from a work failure and from a broken
@@ -3399,12 +3439,24 @@ type ShellGateResult = {
  * delivery failure (re-review #1) — and (N10) from a gate KILLED by our own
  * `timeoutMs`, which is an ENVIRONMENT failure, never a work failure.
  */
-function runShellGate(worktreePath: string, cmd: string[], timeoutMs?: number): ShellGateResult {
+function runShellGate(worktreePath: string, cmd: string[], timeoutMs?: number, unsetEnv?: readonly string[]): ShellGateResult {
   if (cmd.length === 0 || !cmd[0]) return { passed: false, errored: true, timedOut: false, stderr: 'empty gate command', exitCode: null };
   const [head, ...rest] = cmd;
   const startedAt = Date.now();
+  // R5-02 F2: strip the project's declared ci_gate_unset_env (e.g. TF_ACC)
+  // before this gate's child process runs — mirrors runGateCapturing's strip.
+  let gateEnv: NodeJS.ProcessEnv | undefined;
+  if (unsetEnv && unsetEnv.length > 0) {
+    gateEnv = { ...process.env };
+    for (const name of unsetEnv) delete gateEnv[name];
+  }
   try {
-    execFileSync(head, rest, { cwd: worktreePath, stdio: 'pipe', ...(timeoutMs ? { timeout: timeoutMs } : {}) });
+    execFileSync(head, rest, {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      ...(timeoutMs ? { timeout: timeoutMs } : {}),
+      ...(gateEnv ? { env: gateEnv } : {}),
+    });
     return { passed: true, errored: false, timedOut: false, stderr: '', exitCode: 0 };
   } catch (err) {
     const e = err as { status?: number | null; code?: string; signal?: string; message?: string; stderr?: Buffer | string };
