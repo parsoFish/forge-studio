@@ -289,9 +289,13 @@ The harness surface is **journeys-as-data**:
 is a thin runner over 10 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
 `flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
-`swap-runtime`, `knowledge`, `recovery`, `demo-builder` — one file per
-journey, each mapping to a capability-diagram user story rather than a
-step of one linear cycle. Each journey is
+`knowledge`, `recovery`, `demo-builder` — one file per journey (plus
+`index.mjs`, the registry/run-order module — not itself a journey), each
+mapping to a capability-diagram user story rather than a step of one
+linear cycle. The standalone `swap-runtime` journey was retired
+2026-07-17 — its checks folded into `agents`' `agents-scratch-build` beat,
+which now drives the SDK/model picker as part of composing a brand-new
+agent from scratch. Each journey is
 `defineJourney({ id, title, story, beats })`
 ([`scripts/lib/journey-runtime.mjs`](./scripts/lib/journey-runtime.mjs));
 a **beat** is a scripted story moment (`{ id, title, narration, drive(ctx) }`)

@@ -2,17 +2,19 @@
 
 > **Status:** operator's canonical vision for the end-to-end journey. Rewritten
 > 2026-06-14 for the post-M8 Studio (ADR-031 "Studio is the one product" +
-> M8 seams); reconciled 2026-07-16 (S5) to the journeys-as-data harness. It
+> M8 seams); reconciled 2026-07-16 (S5) to the journeys-as-data harness;
+> reconciled again 2026-07-17 (R5-07-F3) after the standalone `swap-runtime`
+> journey retired (folded into `agents`), bringing the count to 10. It
 > defines the intent and the **target behaviour forge moves towards** — not
 > only the as-built. The video-recorded
 > [`scripts/e2e-journey.mjs`](../scripts/e2e-journey.mjs) (`npm run ui:journey`)
-> is its executable spec: a thin runner over 11 user-story journeys in
+> is its executable spec: a thin runner over 10 user-story journeys in
 > [`scripts/journeys/`](../scripts/journeys/), each one mapping to a capability
 > the platform actually has (not a step of one linear cycle). It walks every
 > journey's beats at a watchable pace, entirely through Forge Studio, and
 > doubles as the DOM-as-metrics regression harness. The ACT 1/2/3 structure
 > below is this vision's own organisation, unchanged since M8 — see "How the
-> journeys prove this" under each ACT for which of the 11 journeys exercises it.
+> journeys prove this" under each ACT for which of the 10 journeys exercises it.
 
 The journey is centralised on Forge Studio. The operator never leaves it.
 
@@ -79,12 +81,14 @@ the develop flow — the roadmap-first entry into the same RUN path).
 
 ## ACT 3 — SWAP (the seams — the platform is modular)
 
-*How the journeys prove this:* `swap-runtime` (the registry-driven SDK
-picker, step 12) and `knowledge` (browse the knowledge graph, pin human
-guidance, run KB lint/index/OOTB-brain maintenance — step 13's KB-backend
-seam). `recovery` (recover a stuck initiative from the dedicated operator
+*How the journeys prove this:* `agents` (the registry-driven SDK/model
+picker, step 12 — exercised via the `agents-scratch-build` beat; the
+standalone `swap-runtime` journey retired 2026-07-17 and its checks folded
+in here) and `knowledge` (browse the knowledge graph, pin human guidance,
+run KB lint/index/OOTB-brain maintenance — step 13's KB-backend seam).
+`recovery` (recover a stuck initiative from the dedicated operator
 surface) and `demo-builder` (regenerate a project's demo page
-element-by-element) round out the 11 journeys — both are platform
+element-by-element) round out the 10 journeys — both are platform
 capabilities the harness proves but that sit outside this vision's 13
 numbered steps (operational recovery and demo-machinery upkeep,
 respectively).
@@ -113,7 +117,7 @@ backlog already tracks, now framed against the Studio surface:
 | 9 — review↔dev loop until approve | The verdict gate writes a send-back the dev-loop reacts to. | Make send-back visibly spawn a dev-loop, re-demo, and re-present as a continuous loop gated only by operator approval. |
 | 12 — adapter seam | claude is live and the gemini / aider adapters are wired in (SDK threaded through to the runtime); the registry disables only the still-unprovisioned SDKs (codex). | Exercise a second adapter on a full real cycle end-to-end (the seam is wired; the remaining gap is a live cross-adapter cycle run, not the plumbing). |
 
-The UI-emulation harness (the 11 journeys in `scripts/journeys/`) emulates the
+The UI-emulation harness (the 10 journeys in `scripts/journeys/`) emulates the
 **target** for every beat (seeding the files/events the real phases write) so
 the recording is a faithful picture of where forge is going. The **real**
 proof is the separate [`scripts/verify-cycle.mjs`](../scripts/verify-cycle.mjs)
