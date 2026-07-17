@@ -102,6 +102,14 @@ class RegistryError extends Error {}
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
 const MODEL_STRATEGIES = ['fixed', 'range'] as const;
 const KB_SCOPES = ['project', 'flow', 'agent-integration'] as const;
+// R2-01-F5: the ONLY four `surface` values seen across the real roster
+// (verified 2026-07-18). Checked at LINT time (validateAgent), not load time —
+// unlike BRAIN_ACCESS/MODEL_STRATEGIES above, a bad value here should report
+// with full lint context (agent:<slug>) instead of crashing the loader,
+// mirroring the kb.backend / flow.kickoff.kind precedent. Exported so
+// validate.ts (the enum check) and derive.ts (the execution-path mapping)
+// share this one source instead of duplicating the literal list.
+export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered', 'both'] as const;
 
 function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
   if ((allowed as readonly string[]).includes(value)) return value as T;

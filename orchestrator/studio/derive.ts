@@ -80,3 +80,24 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
     sdk: def.runtime.sdk,
   };
 }
+
+/**
+ * Map an agent's `surface` (R2-01-F5) onto the flow engine's execution-path
+ * discriminant. Pure — no I/O. Consumed by a later task (R2-01-F2) to resolve
+ * an agent's execution path from the DEFINITION instead of a hardcoded table.
+ *
+ * - 'interactive' → 'interactive'
+ * - 'unattended' → 'unattended'
+ * - 'operator-triggered' → 'unattended' — describes the LAUNCH, not mid-run
+ *   interactivity; e.g. project-scoped-review is operator-triggered yet its
+ *   own frontmatter says "Fully autonomous once launched — asks no
+ *   questions, never blocks mid-run."
+ * - 'both' → 'unattended' — runs unattended with an optional operator pause
+ *   (e.g. reflector); the unattended path is the safe default.
+ * - absent / unknown → 'unattended' — the default. (The only absent-surface
+ *   roster agent is architect, which is resolved via the gate table, never
+ *   through this helper.)
+ */
+export function executionPathForSurface(surface: string | undefined): 'interactive' | 'unattended' {
+  return surface === 'interactive' ? 'interactive' : 'unattended';
+}

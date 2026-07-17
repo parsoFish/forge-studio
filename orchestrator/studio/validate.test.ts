@@ -13,6 +13,7 @@ import type {
   KbDescriptor,
   ProjectDefinition,
 } from './types.ts';
+import { SURFACE_KINDS } from './registry.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -204,6 +205,39 @@ describe('validateAgent — readiness/interactivity', () => {
   it('non-empty interactivity → no readiness/interactivity finding', () => {
     const findings = validateAgent(makeAgent());
     assert.ok(!findings.some((x) => x.check === 'readiness/interactivity'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — surface/enum (R2-01-F5)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — surface/enum', () => {
+  for (const value of SURFACE_KINDS) {
+    it(`valid surface "${value}" → no surface/enum finding`, () => {
+      const findings = validateAgent(makeAgent({ surface: value }));
+      assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+    });
+  }
+
+  it('absent surface → no surface/enum finding', () => {
+    const findings = validateAgent(makeAgent({ surface: undefined }));
+    assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+  });
+
+  it('unknown surface value → blocking surface/enum finding', () => {
+    const findings = validateAgent(makeAgent({ surface: 'bogus' }));
+    const f = findings.find((x) => x.check === 'surface/enum');
+    assert.ok(f, 'expected surface/enum finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.object.startsWith('agent:'));
+    assert.match(f.message, /unknown surface "bogus"/);
+    assert.match(f.message, new RegExp(SURFACE_KINDS.join('\\|')));
+  });
+
+  it('blank/whitespace-only surface → no surface/enum finding (treated as absent)', () => {
+    const findings = validateAgent(makeAgent({ surface: '   ' }));
+    assert.ok(!findings.some((x) => x.check === 'surface/enum'));
   });
 });
 

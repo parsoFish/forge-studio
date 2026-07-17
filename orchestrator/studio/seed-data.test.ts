@@ -143,6 +143,22 @@ test('all studio agents validateAgent with zero ERROR-level findings', () => {
   }
 });
 
+// R2-01-F5: the real roster's surface values are already all valid
+// (unattended/interactive/operator-triggered/both, or absent — e.g. architect).
+// This must stay green with no SKILL.md value edits.
+test('all studio agents validateAgent with zero surface/enum findings', () => {
+  const agents = listAgentDefinitions(join(ROOT, 'skills'));
+  for (const agent of agents) {
+    const findings = validateAgent(agent);
+    const surfaceFindings = findings.filter((f) => f.check === 'surface/enum');
+    assert.deepEqual(
+      surfaceFindings,
+      [],
+      `agent "${agent.slug}" (surface: ${agent.surface ?? '(absent)'}) has surface/enum findings:\n${JSON.stringify(surfaceFindings, null, 2)}`,
+    );
+  }
+});
+
 // ---------------------------------------------------------------------------
 // brain-ingest agent (M3-5: studio frontmatter added)
 // ---------------------------------------------------------------------------

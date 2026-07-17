@@ -42,7 +42,10 @@ function makeAgentSkillMd(): string {
     'name: Write Agent',
     'description: An agent for write-route tests.',
     'phase: developer',
-    'surface: forge',
+    // R2-01-F5: must be a valid SURFACE_KINDS value — 'forge' was a bogus
+    // placeholder that now trips the surface/enum lint check (validateAgent
+    // also guards the bridge PUT save path).
+    'surface: unattended',
     'purpose: Write tests to validate the PUT routes.',
     'brainAccess: advisory',
     'interactivity: none',

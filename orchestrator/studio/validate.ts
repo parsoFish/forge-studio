@@ -9,6 +9,7 @@
 import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
+import { SURFACE_KINDS } from './registry.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -119,6 +120,16 @@ export function validateAgent(
   // readiness/interactivity — error
   if (!def.interactivity.trim()) {
     findings.push(err(obj, 'readiness/interactivity', 'Agent interactivity description is missing or blank'));
+  }
+
+  // surface/enum — error (R2-01-F5). `surface` is optional — absent is legal
+  // (e.g. architect has no surface field at all). Parsed leniently at load
+  // (registry.ts), so a bad value is a lint error here, not a load crash
+  // (kb.backend / flow.kickoff.kind precedent).
+  if (def.surface !== undefined && def.surface.trim() !== '' && !(SURFACE_KINDS as readonly string[]).includes(def.surface)) {
+    findings.push(
+      err(obj, 'surface/enum', `unknown surface "${def.surface}" — must be one of ${SURFACE_KINDS.join('|')}`),
+    );
   }
 
   // readiness/runtime — error
