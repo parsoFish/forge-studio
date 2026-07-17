@@ -71,8 +71,8 @@ The architect consumes locked baselines (C4 extended), the PM writes WIs with AC
 
 ## Sources
 
-- [`projects/trafficGame/scripts/grading/runSweep.mjs`](../../../projects/trafficGame/scripts/grading/runSweep.mjs) — the measurement engine.
-- [`projects/trafficGame/docs/baselines/`](../../../projects/trafficGame/docs/baselines/) — the locks.
+- `projects/trafficGame/scripts/grading/runSweep.mjs` (managed-project checkout, machine-local) — the measurement engine.
+- `projects/trafficGame/docs/baselines/` (managed-project checkout, machine-local) — the locks.
 - PR #57 — the arc that demonstrated the gap.
 
 ## See also
