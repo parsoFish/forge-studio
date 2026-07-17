@@ -22,6 +22,13 @@
 > runtime adapter registry, the KbBackend seam (filesystem-only today), and the
 > unifier as an independently-dispatchable flow node — the **runtime adapter**
 > seam carries a second implementation shipped.
+>
+> **Note (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)):**
+> the phases below are the shipped OOTB suite (Scope 2) riding Scope 1's
+> engine/seams, not the whole of what forge is — forge's platform (Scope 1:
+> `orchestrator/`, `cli/`, `loops/`, `forge-ui/`, the seams) is generic to any
+> agentic flow. A full rewrite of this document to lead with the platform view
+> is deliberately deferred to R4-01.
 
 ## Overview
 

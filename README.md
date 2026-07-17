@@ -2,7 +2,7 @@
 
 > The steerable composition layer for autonomous software delivery — for one operator running a portfolio of projects.
 
-Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served.
+Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served. Under the hood it's two levels: **a modular platform for building the ideas machine or any other agentic flow** (SWE-focused for now by explicit choice), which ships **the ideas machine itself** as its out-of-the-box content (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)).
 
 Three things make it one product rather than three:
 

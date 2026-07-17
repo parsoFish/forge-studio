@@ -1,8 +1,13 @@
 # Forge Studio — Project Instructions for Claude Code
 
-> Idea machine for one human across many side projects. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
+> A modular platform for building the ideas machine — or any other agentic flow — that ships the ideas machine itself out of the box. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
 
 ## North star
+
+Forge's mission is **two-level** ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), 2026-07-17):
+
+- **Scope 1 — the platform.** `orchestrator/`, `cli/`, `loops/`, `forge-ui/`, and every seam (runtime adapter, KB backend, the `PhaseAgentSpec` harness-overlay injection point) are a **modular platform for building the ideas machine — or any other agentic flow**. SWE-focused for now by explicit operator choice; connectors to non-SWE systems are deliberately future work, not built in advance.
+- **Scope 2 OOTB — the ideas machine.** The six-phase cycle (architect → plan/decompose → developer loop → demo/review → reflect) and the brain-tuning loop are the concrete, opinionated agentic flow forge ships out of the box — see [`docs/product/minimum-viable-user-story.md`](./docs/product/minimum-viable-user-story.md) (MVUS) for its canonical vision.
 
 Forge is **designed to run primarily unattended between human interaction points** (architect, review, reflection). Every decision is judged against three things:
 
