@@ -117,6 +117,21 @@ paths so a new bypassing path can't ship silently. Gate children strip each
 project's declared `ci_gate_unset_env` in `runGateCapturing` + `runShellGate`
 (F2), with a PATH/HOME/SHELL blocklist at the `project-config` boundary.
 
+### R5-B10 Flow edit-lock verified (R5-04, 2026-07-18)
+
+The flow edit-lock proof artifact exists and is green:
+`cli/bridge-studio-flows.test.ts` ("PUT /api/studio/flows/locked-flow → 423 when
+a run with that flowId is active") proves an operator-authored **non-seed** flow
+(`locked-flow`, `origin: studio`) whose in-flight manifest carries a real
+`flow_id` is locked against edits — the write returns `423 Locked` and
+`flow.yaml` is byte-unchanged. The lock predicate is
+`cli/bridge-studio-writes.ts:774-786` (`r.flowId === id && r.status === 'active'`);
+the run's `flowId` is manifest-derived since S8/DEC-3 (`orchestrator/run-model.ts`,
+`FALLBACK_FLOW_ID='unknown'` applies to pre-S8 manifests only). The test was
+authored with the S8/DEC-3 fix (commit `d0a186f`, 2026-06-21) — it pre-dates this
+roadmap, so R5-04's "proof artifact missing" note was an oversight; no new test
+was needed.
+
 ## Planned initiatives
 
 ### R5-01 Dry-bridge seam
@@ -227,7 +242,7 @@ project's declared `ci_gate_unset_env` in `runGateCapturing` + `runShellGate`
 
 ### R5-04 Flow edit-lock verification (re-scoped 2026-07-17)
 
-- **Status:** planned  ·  **Wave:** 1 (small; must precede the first second
+- **Status:** implemented (2026-07-18 — proof pre-exists; as-built in R5-B10)  ·  **Wave:** 1 (small; must precede the first second
   live flow — R3-02's generator flow, R2-03-F4's test flow, and R4-10 all
   guarantee that condition)
 - **Depends on:** — · **Depended on by:** R3-02 *(soft)*, R4-10 *(soft)* —
@@ -245,6 +260,11 @@ project's declared `ci_gate_unset_env` in `runGateCapturing` + `runShellGate`
     operator-authored (non-seed) flow id locks its definition against edits.
     ACs: test exists and is green; known-gaps §1 struck with the S8/DEC-3
     citation (rides R5-07-F1).
+    - **Done 2026-07-18:** the proof already existed and is green —
+      `cli/bridge-studio-flows.test.ts` (commit `d0a186f`, authored with the
+      S8/DEC-3 fix), which pre-dates this roadmap. No new test authored (a
+      duplicate would be a review defect); as-built in R5-B10, known-gaps §1
+      already struck.
 - **Session sizing:** trivial — fold into any adjacent session before wave 3.
 - **Out of scope:** operator-authored flow *enqueue* (R2-04-F1); builder UX
   around locked flows (existing surface).
@@ -445,3 +465,10 @@ maintenance contract; nothing currently carries a deferral condition.
   boundary check never firing; the harness moving the forge HEAD via a
   studio-write branch checkout on a nested project) — both fixed and re-proven
   green before merge.
+- 2026-07-18 — **R5-04 implemented** (rider, branch
+  `docs/r5-04-edit-lock-verified`): the edit-lock verification proof already
+  existed and is green (`cli/bridge-studio-flows.test.ts`, commit `d0a186f`
+  with the S8/DEC-3 fix) — it pre-dates this roadmap, so the "proof artifact
+  missing" framing was an oversight. No new test was authored (a duplicate
+  would be a review defect); status planned → implemented, as-built in R5-B10.
+  known-gaps §1 was already struck (R5-07-F1).

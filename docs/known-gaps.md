@@ -43,7 +43,9 @@ flow id was retired, and every manifest writer (`orchestrator/manifest.ts`,
 `flow-runner.ts`, `architect-runner.ts`, `enqueue-develop-run.ts`) now requires
 a real `flow_id`; `run-model.ts`'s `FALLBACK_FLOW_ID = 'unknown'` applies only
 to pre-S8 manifests, never to a live operator-authored flow. Verification
-test: **R5-04-F1** (`docs/roadmaps/R5-hardening-operability.md`).
+test: **R5-04-F1** — `cli/bridge-studio-flows.test.ts` ("PUT
+/api/studio/flows/locked-flow → 423 when a run with that flowId is active"),
+green; R5-04 implemented 2026-07-18 (roadmap R5-B10).
 
 ### 2. Architect hex shows `$0.00` cost — correct out-of-cycle accounting, not a gap (clarified 2026-07-16)
 
