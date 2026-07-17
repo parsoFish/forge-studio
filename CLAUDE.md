@@ -120,7 +120,8 @@ on real merged cycles (brain themes accumulate the evidence). Benches
 will be rebuilt later, anchored on actual past successful cycle
 artifacts rather than hand-curated fixtures.
 
-**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md)):**
+**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md));
+ground re-stated 2026-07-17 (R5-07-F4, ADR 022 ground-swap amendment):**
 the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
 fills the gap — `verify-cycle.mjs` is forge's standing real-capability regression
 harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached

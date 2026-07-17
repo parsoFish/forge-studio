@@ -118,6 +118,17 @@ runner code). The runner's **contract** is:
 - **Failure semantics:** any failed assertion fails the gate; a wedged or
   resumed-to-empty cycle (`complete:0`) is an explicit fail, not an indeterminate.
 
+> **Ground-swap amendment (2026-07-17, R5-07-F4).** As built, the routine
+> creds-free ground is **gitpulse** (`github.com/parsoFish/gitpulse`), not
+> `projects/mdtoc`. `mdtoc` remains committed inside forge's own repo, and the
+> runner's `--project` flag still literally defaults to it, but the runner's own
+> contract forbids using it as the harness ground — `scripts/verify-cycle.mjs:46-49`:
+> "default mdtoc; NEVER run against mdtoc when it is committed inside forge —
+> use gitpulse, an independent repo" (a repo inside forge's own tree is not the
+> arm's-length real repo this decision requires). The mechanism above is
+> unchanged; only the concrete neutral reference project swapped — always pass
+> `--project gitpulse` for the routine tier. betterado stays the live tier.
+
 ## Consequences
 
 - **A real pre-flight gate exists again, without the teaching trap.** Forge gets

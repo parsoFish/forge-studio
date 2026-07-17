@@ -31,9 +31,8 @@ related_themes:
 # The forge↔project contract
 
 For forge to progress a project toward **more automated cycles with less
-hand-holding**, the project must satisfy a contract. This is not
-aspirational — each clause is the generalisation of a specific
-trafficGame blocker that had to be fixed before unattended runs worked.
+hand-holding**, the project must satisfy a contract. Not aspirational — each
+clause generalises a specific trafficGame blocker fixed before unattended runs worked.
 
 - **C1 — Fast, trustworthy quality gate.** One command, deterministic,
   green at HEAD, fast (≈≤10s). trafficGame's 18k-LOC/106-file suite
@@ -52,16 +51,14 @@ trafficGame blocker that had to be fixed before unattended runs worked.
   tests to pass, per-map calibrated thresholds) must be respected;
   forge had to change to commit-not-reset to honour git ownership.
 - **C6 — A satisfiable merge model (was OPEN; satisfied post-Phase-6, see
-  "Deepened 2026-05-31" below).** Either initiatives serialize behind
-  their base merge, or forge enforces non-stacked branches before
-  `gh pr merge`. At the time this theme was written, neither held — the
-  proximate cause of "`done/` ≠ merged" and the live blocker to
-  unattended operation.
+  "Deepened 2026-05-31" below).** Either initiatives serialize behind their
+  base merge, or forge enforces non-stacked branches before `gh pr merge`.
+  When this theme was written neither held — the proximate cause of
+  "`done/` ≠ merged" and the then-live blocker to unattended operation.
 
-This contract is the operator's durable deliverable from the trafficGame
-arc. It should become a written preflight (closure goal G2) and,
-because it is load-bearing, a candidate ADR-017. C1–C5 were met by
-trafficGame at the time; C6 is now also satisfied (post-Phase-6, see below).
+This contract is the operator's durable deliverable from the trafficGame arc.
+It should become a written preflight (closure goal G2) and, because it is
+load-bearing, a candidate ADR-017. trafficGame met C1–C5 at the time.
 
 ## Deepened 2026-05-31 (betterado onboarding run)
 
@@ -75,11 +72,10 @@ under-specified. See [`docs/forge-project-contract.md`](../../../docs/forge-proj
 C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/known-gaps.md`](../../../docs/known-gaps.md) §2026-05-31). C6 is now satisfied post-Phase-6.
 
 **Clause-id collision (noted 2026-07-17, R5-07-F6):** this C7 (external-resource
-model, landed in `docs/forge-project-contract.md`) is a **different** clause
-from [[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic
-metrics". [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md) resolves
-the numbering when that clause is picked up: it takes the next free id (e.g.
-C11), never C7 — C7 stays this external-resource clause.
+model, landed in `docs/forge-project-contract.md`) is a **different** clause from
+[[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic metrics";
+[R1-D1](../../../docs/roadmaps/R1-contract-componentry.md) resolves the numbering
+on pick-up — that clause takes the next free id (e.g. C11), never C7.
 
 ## Sources
 

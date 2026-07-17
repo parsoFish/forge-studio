@@ -30,9 +30,8 @@ related_themes:
 # Holistic project metrics are a contract clause
 
 The existing forge↔project contract (C1–C6, [forge-project-onboarding-contract](./forge-project-onboarding-contract.md))
-ensures forge can **run** a project's gate, route work to isolated worktrees,
-honour locked-core mandates, and merge without stranding. It does NOT ensure
-forge can **evaluate whether a change made the project better**.
+ensures forge can **run** a project's gate, route work to isolated worktrees, honour
+locked-core mandates, and merge without stranding — NOT **evaluate whether a change made the project better**.
 
 The trafficGame PR #57 illustrated this gap: across 34 commits, the 788-test
 suite passed throughout, but only the third iteration was actually *better* by
@@ -60,10 +59,9 @@ within a declared tolerance or document + deliberately update it. Concretely:
 **Clause-id collision (noted 2026-07-17, R5-07-F6):** `docs/forge-project-contract.md`
 already has a **different**, landed **C7 — External-resource model** clause
 (creds-free in-loop gate + isolated self-cleaning live confirmation) — see
-[[forge-project-onboarding-contract]]. This theme's C7 was never landed, so
-the numbering collides. [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md)
-is where this is resolved: on pick-up, this clause takes the next free id
-(e.g. C11), never C7.
+[[forge-project-onboarding-contract]]. This theme's C7 was never landed, so the
+numbering collides; [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md)
+resolves it on pick-up — this clause takes the next free id (e.g. C11), never C7.
 
 ## Why tests aren't enough
 

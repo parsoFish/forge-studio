@@ -60,17 +60,16 @@ rationale no longer applies. Brain 3 is *supplemental context* (project
 file layout, testing norms); the WI/manifest remains the single source
 of *intent*. Advisory, not mandatory — no runtime gate added.
 
-**Path correction (2026-07-17, R5-07-F6):** the location above was
-`projects/<name>/brain/` (in the worktree) at the time of this amendment;
+**Path correction (2026-07-17, R5-07-F6):** at the time of that amendment
+Brain 3 lived inside the managed project's repo at `projects/<name>/brain/`;
 [ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md)
-(2026-06-20) centralised Brain 3 **out of** the managed project's repo and
-**into** the forge repo at `brain/projects/<name>/themes/` — that is the
-location the dev-loop/reviewer now read.
+(2026-06-20) centralised it into the forge repo at
+`brain/projects/<name>/themes/` — the location the dev-loop/reviewer now read.
 
 **How reads are bounded (guardrail).** Every permitted brain read must
 go through the built navigation metadata first — `INDEX.md`, the
 category indexes (`cycles/{patterns,antipatterns,...}.md`), and
-`projects/<name>/brain/profile.md` — and only then drill into a specific theme
+`brain/projects/<name>/profile.md` — and only then drill into a specific theme
 and its raw source. Full-tree scans / grep-the-world are the expensive
 antipattern the index layer exists to prevent. Open implementation
 gap: `brain-index.ts` is module-cached, so a long `forge serve` process
