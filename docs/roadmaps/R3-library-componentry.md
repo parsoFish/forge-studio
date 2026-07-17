@@ -16,6 +16,7 @@ initiatives in this file are planned/deferred as of 2026-07-17.
 ## As-built baseline (implemented)
 
 ### R3-B1 Skills as the agent surface (flat, path-hardcoded)
+
 24 skills live as flat direct children `skills/<name>/SKILL.md` (ADR-003
 skills-not-self-baked-agents; inventory + role grouping in
 [`skills/README.md`](../../skills/README.md)). Resolution is **decentralised**:
@@ -30,6 +31,7 @@ unset. All facts per [known-gaps §6](../known-gaps.md) (the deferred physical
 role-subfolder move).
 
 ### R3-B2 Studio catalog — curated, reference-only component metadata
+
 [`studio/catalog.yaml`](../../studio/catalog.yaml) ships: **9
 community-skills** with provenance + stars (`handoff`, `pre-impl-interview`,
 `superpowers-tdd`, `systematic-debugging`, `webapp-testing`,
@@ -44,6 +46,7 @@ routes `/agents/new` + `/agents/[id]`, drop zones
 `[data-accepts="skill"|"tool"|"mcp"|"hook"]`).
 
 ### R3-B3 Skill authoring surface (disconnected from the catalog)
+
 `/skills/new` is the brand-new-skill builder
 ([`forge-ui/app/skills/[id]/page.tsx`](../../forge-ui/app/skills/%5Bid%5D/page.tsx),
 `[data-page="skill-builder"]`), backed by `POST /api/studio/skills` in
@@ -57,6 +60,7 @@ from the static `community-skills` list — cannot see it
 surface** at all (known-gaps §4b.8) and no library/list view (§4b.1).
 
 ### R3-B4 Instructions-creator agent (the consumer R3-05 seeds)
+
 [`skills/instructions-creator/SKILL.md`](../../skills/instructions-creator/SKILL.md)
 (`library: false`) + the `/instructions/[sid]` interview UI
 (`[data-page="instructions-interview"]`, bridge surface
@@ -66,6 +70,7 @@ through an interview but currently generates from scratch; there is **no seed
 library** of language/domain best-practice instructions for it to draw on.
 
 ### R3-B5 Hook concepts exist only as orchestrator machinery + catalog metadata
+
 The 5 catalog hooks are display metadata mapping onto orchestrator-owned
 implementations (JSONL event log, cost guard, stall watchdog, merge gate,
 scratch strip — all inside `orchestrator/`). Agent definitions can carry
@@ -74,6 +79,7 @@ scratch strip — all inside `orchestrator/`). Agent definitions can carry
 no security model for one — hooks execute in-harness with the harness's env.
 
 ### R3-B6 Skill provenance pattern already proven
+
 The catalog's community-skills demonstrate the provenance shape R3 generalises:
 upstream `source` URL, `provenance` attribution, `stars`, `category`, `tier`,
 `composedBy` (which forge agents compose it). The OOTB-palette assertion
@@ -83,6 +89,7 @@ in the builder.
 ## Planned initiatives
 
 ### R3-01 Skills first-class management
+
 - **Status:** planned  ·  **Wave:** 3 (interleaved at dependency points — Q6-A)
 - **Depends on:** — . **Depended on by:** R3-02 (landing-place), R3-03 (soft —
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
@@ -98,7 +105,7 @@ in the builder.
   reorganisation of `skills/` is blocked until a single shared `skillPath(name)`
   resolver exists. Operator diagram (R3 verbatim intent): *"Skills = installed
   library shipping OOTB; edit + add hand-crafted skills; reference marketplaces
-  like https://skillsmp.com/ for browse/install."*
+  like <https://skillsmp.com/> for browse/install."*
 - **Features:**
   - **R3-01-F1 — `skillPath(name)` shared resolver.** One resolution point for
     every skill lookup **and enumeration** — a three-function module
@@ -144,7 +151,7 @@ in the builder.
     implementation; treat this feature's UI shape as provisional.**
   - **R3-01-F4 — Marketplace browse/install (posture hardened 2026-07-17,
     adversarial review E5 — operator decision 3).** Browse/install from
-    community marketplaces (reference: https://skillsmp.com/, plus the
+    community marketplaces (reference: <https://skillsmp.com/>, plus the
     upstream repos already cited in `catalog.yaml` — obra/superpowers,
     anthropics/skills). Third-party prompt-code gets **at least** the gate
     forge's own generated skills get (R3-02-F4) — never weaker: install routes
@@ -170,6 +177,7 @@ in the builder.
   taken here); hook-grade security protections (R3-03); tools/MCPs (R3-04).
 
 ### R3-02 Skill-generator flow
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R3-01 (landing-place — generated skills need the managed
   library to land in; index dependency table records this edge), R1-01 (soft —
@@ -226,6 +234,7 @@ in the builder.
   `skill-creator` upstream.
 
 ### R3-03 Hooks library
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R5-01 (soft — the dry-bridge safety seam and R5-02 env-pin
   should land before forge ships *installable, in-harness-executing*
@@ -292,6 +301,7 @@ in the builder.
   once both exist — not specced here).
 
 ### R3-04 Tools/MCPs/CLIs library
+
 - **Status:** planned  ·  **Wave:** 4 (opportunistic — no R4 dependent)
 - **Depends on:** R3-01 (soft — reuses the unified-registry + library-view
   patterns).
@@ -347,6 +357,7 @@ in the builder.
   only presents/installs them); hook execution protections (R3-03).
 
 ### R3-05 Instructions library
+
 - **Status:** planned  ·  **Wave:** 3 (must precede R4-02/R4-03 — Q6-A
   "interleaved at dependency points")
 - **Depends on:** — . **Depended on by:** R4-02 project-onboarding agent and

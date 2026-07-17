@@ -18,6 +18,7 @@ R1–R5 driving order (index §4).
 ## As-built baseline (implemented)
 
 ### R6-B1 Route inventory + DOM-as-metrics convention
+
 Every load-bearing UI state mirrors to `data-*` attributes (per-route
 inventory in `CLAUDE.md`'s forge-ui section; pattern from anthropics
 cwc-workshops). The convention is load-bearing: journeys drive the page by
@@ -25,6 +26,7 @@ structured DOM state, and any UI change must sync its journey in the same PR
 (`journey-sync` skill).
 
 ### R6-B2 Status vocabularies, one palette
+
 Pipeline/WI 5-state + `RunStatus` + roadmap statuses share
 `forge-ui/lib/status-colors.ts` (`STATUS_COLOR`/`WI_STATUS_GLOW`) — colour
 semantics change in exactly one place (yellow = retrying/transient, red =
@@ -32,6 +34,7 @@ terminal only; operator feedback 2026-05-30 honored). R4-11-F1 extends this
 table with `merged`.
 
 ### R6-B3 Run observability (as-is)
+
 Flow monitor hex topology (`FlowTopology.tsx`: `data-mon-node`,
 `data-status`, `data-phase-cost-usd`, `data-wi-cost-usd`, fanout aggregates);
 JSONL event log (`_logs/<cycleId>/events.jsonl`, ADR-008) with run model
@@ -46,6 +49,7 @@ unnoticed before the heartbeat poll loop existed" — monitors were per-session
 rebuilds).
 
 ### R6-B4 Operator affordances (as-is)
+
 Attention signalling is per-surface (gates at `/artifact`, stuck initiatives
 at `/recovery` until R4-11-F3 folds it in); R4-11-F4 ships the cross-project
 attention strip; architect re-run lands as R4-11-F5. Raw `events.jsonl` is
@@ -55,6 +59,7 @@ iteration-refinement target 1).
 ## Planned initiatives
 
 ### R6-01 Run-observability depth
+
 - **Status:** planned  ·  **Wave:** unsequenced (operator to prioritize)
 - **Depends on:** —
 - **Context:** The three recorded observability gaps in R6-B3: silent hex
@@ -90,6 +95,7 @@ iteration-refinement target 1).
   revisit if F1/F2 need them).
 
 ### R6-02 Human-readable operations
+
 - **Status:** planned  ·  **Wave:** unsequenced (small; opportunistic)
 - **Depends on:** —
 - **Context:** Standing iteration-refinement targets 1–2 (memory, 2026-05-23
@@ -109,6 +115,7 @@ iteration-refinement target 1).
   artifact concern feeding R2-05's dynamic surfaces).
 
 ### R6-03 IA & convention stewardship
+
 - **Status:** planned  ·  **Wave:** unsequenced
 - **Depends on:** — (grows as R3/R4 add surfaces)
 - **Context:** The set adds routes and pillars (skills library R3-01-F3, KB
@@ -131,6 +138,7 @@ iteration-refinement target 1).
 ## Deferred
 
 ### R6-D1 Notification transport beyond the in-Studio blade
+
 Email/push/webhook-out notifications. **Deliberately not built** (R4-11's
 out-of-scope: "no email/push — YAGNI until asked"). **Re-entry condition:**
 the operator asks for out-of-Studio signalling after living with the

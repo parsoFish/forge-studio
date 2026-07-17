@@ -28,6 +28,7 @@ schema, not its addressee (adversarial review 2026-07-17, E11).
 ## As-built baseline (implemented)
 
 ### R4-B1 Seed cycle flows
+
 `studio/flows/{forge-architect,forge-develop,forge-reflect}/flow.yaml` (ADR-028):
 architect(gate:plan)→pm; dev→unifier(resumable)→review(gate:verdict) with
 trigger `{on: merged, flow: forge-reflect}` fired async by
@@ -36,6 +37,7 @@ Starters (inert templates, ADR-033): `studio/starters/agents/{plan,dev,review}` 
 `studio/starters/flows/basic.yaml`.
 
 ### R4-B2 Agent roster + dispatch reality
+
 "An agent IS a skill directory" (`orchestrator/studio/types.ts`): 14 of 24
 `skills/` dirs carry a `runtime:` block; 8 are in the composable roster
 (`library: false` excludes the rest). Flow-engine dispatch is the hardcoded
@@ -46,6 +48,7 @@ derivation (`orchestrator/studio/derive.ts`, ADR-024). The migration R4-01
 performs starts from here.
 
 ### R4-B3 Architect (as-is)
+
 In-UI file-checkpointed runner (ADR-020): `/architect/new` +
 `/architect/[sid]/interview`, bounded Ralph-style turns via
 `spawnArchitectTurn`, PLAN gate at `/artifact?type=plan&mode=gate`. The
@@ -53,6 +56,7 @@ In-UI file-checkpointed runner (ADR-020): `/architect/new` +
 (2026-07 refinement) but is not folded into the architect's FINALIZE step.
 
 ### R4-B4 Project-manager / decomposition (as-is)
+
 `skills/project-manager` + PM invocation; wi-spec-compiler **deterministic
 core** live at the PM seam (ADR-037 — Proposed; the bounded sonnet assist is
 unbuilt, known-gaps §4.1); PM never populates a WI `domain` field (known-gaps
@@ -60,6 +64,7 @@ unbuilt, known-gaps §4.1); PM never populates a WI `domain` field (known-gaps
 betterado roadmap run (memory: dashboard-extension 1/2 WIs, core 2/7).
 
 ### R4-B5 Develop + unifier (as-is)
+
 `developer-ralph` per-WI Ralph loops (ADR-002) under
 `orchestrator/wi-dispatch-scheduler.ts` (concurrency default 1, known-gaps
 §4.2); `developer-unifier` holds the dual-boundary full-suite gate — the
@@ -67,6 +72,7 @@ known-gaps "strength worth preserving" that Q3-B's retirement must re-home
 (spec: R1-03-F4; execution home: R4-10-F2).
 
 ### R4-B6 Demo machinery (as-is)
+
 **Four** live mechanisms, with explicit dispositions under this roadmap
 (adversarial review 2026-07-17, A4): (1) `skills/demo` — the demo-contract
 SSOT, whose frontmatter names the developer-unifier as composer → **the
@@ -83,6 +89,7 @@ solely by R1-03-F2**, R4-07-F3 only consumes its output; (4)
 projects (verify-cycle betterado tier's 5th gate).
 
 ### R4-B7 Reflect (as-is)
+
 `reflector` skill + `rerunReflector`; fires on merge via
 `finalize-merged.ts`; writes Brain-2/Brain-3 central themes (ADR-035);
 done-vs-archive artifact-diff lint (reflector-completion theme, landed
@@ -90,6 +97,7 @@ done-vs-archive artifact-diff lint (reflector-completion theme, landed
 must not regress it.
 
 ### R4-B8 Onboarding / creation / instructions (as-is)
+
 `forge-onboard-project` skill + `ProjectOnboardForm`
 (`[data-section="project-onboard"]`) + pure `forge preflight` (ADR-033/034);
 `instructions-creator` agent (Stage A, `/instructions/[sid]`);
@@ -97,6 +105,7 @@ must not regress it.
 project-creation path exists.
 
 ### R4-B9 Roadmap surface (as-is)
+
 `SerpentineTimeline.tsx` with initiative statuses `pending | in-flight |
 ready-for-review | done | failed` — no `merged` state, no per-initiative plan
 trigger, no blocked-until-WIs concept; stuck-cycle recovery is a standalone
@@ -106,6 +115,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
+
 - **Status:** planned  ·  **Wave:** 4 — first item of wave 4, before the agent
   initiatives; **F4 alone runs last**, after R4-10-F2 (not contiguous with F1–F3)
 - **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
@@ -157,6 +167,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   (each agent's own initiative below); SSOT doc edits (R5-07).
 
 ### R4-02 Project onboarding agent
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R3-05 (instructions sourcing), R1-03/R1-04 (contract process
   clauses to tick), R1-01 (KB binding at onboarding), R2-01 (standalone runnable)
@@ -197,6 +208,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   (project-brain-builder remains its own agent).
 
 ### R4-03 Project creation agent
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R3-05 (instructions seeds), R1-03/R1-04 (processes to
   scaffold), R4-02 (hands off to the onboarding loop post-scaffold)
@@ -224,6 +236,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   library over time); onboarding mechanics (R4-02).
 
 ### R4-04 Architect agent refinement
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** — (soft: R4-05 fixes the hand-off shape it emits into)
 - **Context:** Operator diagram: refined current architect; roadmap-level
@@ -265,6 +278,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   itself (existing `/artifact` gate); architect-flow retirement (R4-D1).
 
 ### R4-05 Plan agent
+
 - **Status:** planned  ·  **Wave:** 2 (with R4-11 — the highest-leverage new capability)
 - **Depends on:** R2-01 (**hard, for F4** — standalone dispatch = the
   R2-01-F1 runAgent primitive, spawned behind R5-01's guard; no new bespoke
@@ -346,6 +360,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   consumption (R4-06); architect-side initiative quality (R4-04).
 
 ### R4-06 Develop agent refinement
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R4-05 (spec format), R2-03 (declared fanout property)
 - **Context:** Operator diagram: *"essentially the exact dev agent we have
@@ -370,6 +385,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   branches (R2-D1, deferred); spec quality (R4-05).
 
 ### R4-07 Demo agent
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R1-03 (executes the demo-process clause it types), R2-05
   *(soft — richer dynamic demo surfaces)*
@@ -406,6 +422,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   surface (R4-08 + existing gate); harness fixture re-grounding (R5-06).
 
 ### R4-08 Adversarial review agent
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** — (consumes R1-03 test-process results; R2-01-F4's
   `project-scoped-review` wiring is its design feed)
@@ -451,6 +468,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   orchestrator-owned — R4-10-F2); merge mechanics/guards (R5-01).
 
 ### R4-09 Reflect agent
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R1-01 (writes into contract-typed, Q5-B-scoped KBs)
 - **Context:** Operator diagram (verbatim intent): the current reflection agent
@@ -502,6 +520,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   state plumbing (R4-11-F1); read-policy changes (none — Q5-B).
 
 ### R4-10 Develop-cycle OOTB flow
+
 - **Status:** planned  ·  **Wave:** 4 (assembles last)
 - **Depends on:** R4-05, R4-07, R4-08 (its nodes)
 - **Context:** Operator diagram: *"put the chain of automated development
@@ -575,6 +594,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   architect-flow retirement (R4-D1).
 
 ### R4-11 Roadmap & attention surface
+
 - **Status:** planned  ·  **Wave:** 2 (with R4-05)
 - **Depends on:** — · **Depended on by:** R4-05 *(soft)*, R4-09 (merged-state trigger)
 - **Context:** The operator surface work the suite needs: Q2-B's `merged`
@@ -645,6 +665,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 ## Deferred
 
 ### R4-D1 Architect-flow retirement
+
 The diagram's end-state: the plan agent becomes the develop flow's starting
 point and the architect runs purely as a standalone agent — *"ultimately
 dropping the need for the architect flow entirely"*. **Deliberately deferred

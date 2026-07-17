@@ -11,27 +11,35 @@ Operator diagram intent (verbatim capture, 2026-07-17 direction session): *knowl
 ## As-built baseline (implemented)
 
 ### R1-B1 KB descriptor (`kb.yaml`) + scope enum
+
 Every brain carries a descriptor at `brain/<id>/kb.yaml` (e.g. `brain/forge-dev/kb.yaml`, `brain/cycles/kb.yaml`, `brain/projects/<name>/kb.yaml`) with `id / name / scope / desc / backend`. `scope` is the enum `project | flow | agent-integration` (`KB_SCOPES`, `orchestrator/studio/registry.ts:104`; type in `orchestrator/studio/types.ts`). Loaded by `registry.ts:loadKbDescriptor` (line ~542); validated by `orchestrator/studio/validate.ts` under `forge studio lint`. **Deliberate as-built constraint:** `kb.yaml` is hand-edited with **no serializer by design** — `orchestrator/studio/registry.ts:463`: "kb.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5)". R1-01 amends this deliberately.
 
 ### R1-B2 KbBackend seam
+
 `orchestrator/kb-backend.ts` (ADR-027 M8-0 amendment, 2026-06-14): `KbBackend` interface (`buildGraph`, `getNodeArticle`, `listPendingGuidance`, `deleteGuidanceFile`, `search`), `FilesystemKbBackend` as the only shipped backend, `getKbBackend(forgeRoot, kbId)` resolving via the descriptor's `backend:` field (the swap point a future graph-memory backend — Mem0/Cognee/Letta-shaped — hangs off; a first attempt, Zep, was removed). Contract test: `orchestrator/kb-backend.test.ts`. Bridge KB routes (`cli/bridge-studio-kbs.ts`) already read through the seam. **Known bypass:** the planning-context read — PM/reflector/architect load the brain navigation index via `loadBrainIndex`/`loadBrainNavigation` (`orchestrator/pm-invocation.ts`, `reflector-invocation.ts`, `architect-runner.ts`, `orchestrator/cli.ts`) — is NOT yet routed through `KbBackend` (ADR-027 amendment names it "the higher-value but riskier reroot").
 
 ### R1-B3 Brain health + index tooling
+
 `forge brain lint` — 9 structural checks incl. `checkProjectBrainIndexes` (Brain-3 coverage, from the betterado brain-relink work), 0-error standing gate. `forge brain index --write` walks the ADR-035 central `brain/projects/` layout with `profile.md` optional as of PR #26 (commit `464eabd`, merged 2026-07-17) — known-gaps §4.3(c) is therefore ALREADY FIXED; striking the stale doc entry is R5-07's job, not re-fixing here. Path SSOT: `orchestrator/brain-paths.ts`.
 
 ### R1-B4 KB ingest / consolidate / fix surfaces (process precursors)
+
 The pieces the KB contract's four processes will formalise already exist as scattered mechanisms: reflector-written Brain-3 themes (ADR-010/018/035), the `brain-ingest` skill (Brain-2 ingest from `brain/_raw/cycles/`), guidance append + bootstrap + maintenance bridge routes (`POST /api/studio/kbs/:id/guidance` (M5-3), `/bootstrap` (P3), `/maintenance` (K3) in `cli/bridge-studio-kbs.ts`), the lint-resolution agent (`orchestrator/brain-fix-runner.ts`, spawned via `spawnBrainFix`), and the onboarding Brain-3 builder (`orchestrator/project-brain-seed.ts`, `project-brain-builder-runner.ts`, UI `/project-brain/[sid]`).
 
 ### R1-B5 Unified project contract, two faces
+
 ADR-017 (original C1–C6 derivation) + ADR-034 (Studio-aligned unification): Face A = five Studio fields in `.forge/project.json` (`northStar`, `instructions`, `demoProcess`, `skills`, `kb`) checked by `forge-ui/components/studio/project-builder/ContractReadiness.tsx`; Face B = operational clauses C1–C10 + DEMO/DEMO-SKILL/ARTIFACTS/BRAIN checked by `cli/preflight.ts`. `data-flow-ready = uiAllReady && preflightOk`. SSOT document: `docs/forge-project-contract.md` (enforcement table at its foot). Hand-checked residue: C1b gate-discrimination facet, C2 build-artifact facet, C7 external-resource clause, C9 fixtures (ADR-017/034 notes) — R1-05's target.
 
 ### R1-B6 Demo process as-built
+
 `demoProcess[]` typed capture/verify/present steps (ADR-027 §3, ADR-034 §2 threshold: ≥1 capture + ≥1 verify). Naming disambiguation (adversarial review A4): the surface at `/demo/[sid]` is the **demo-builder** (`skills/demo-builder`, `orchestrator/demo-builder-runner.ts`, journey `scripts/journeys/demo-builder.mjs`) — it authors demo-page machinery; **`skills/demo-design`** is a different skill, the save-time generator that runs when a project's `demoProcess` is saved (wired via `cli/bridge-studio-writes.ts` + `preflight-resolve.ts`) and stays the save-time step under R1-03-F2; **`skills/demo`** is the demo-contract SSOT whose composer moves from the retired unifier to the R4-07 demo agent (disposition table: R4-B6). Evidence capture is **orchestrator-owned** per ADR-036 (`orchestrator/phases/orchestrated-capture.ts`, per-run nonce `FORGE_CAPTURE_NONCE`, producibility preflight) — agents author WHAT to capture, never the evidence.
 
 ### R1-B7 Instructions + release + build as-built
+
 Instructions: `instructions` field (Face A) + C8 human-authored agent-instruction file (advisory) + the Stage-A instructions creator (`/instructions/[sid]`, agent-assisted AGENTS.md interview). Release: C10 documentation-parity & release (advisory, active when `releaseProcess` declared) — the release final-loop (draft changelog standing AC → release-finalizer pre-merge → CI release workflow) is MVUS phase 4, shipped in the Studio final-loop build. Build: local = `quality_gate_cmd` (C1 HARD), remote/CI = `ci_gate` + C1b CI-alignment (HARD when populated) — but no first-class "build process" object distinct from the test gate.
 
 ### R1-B8 Contract resolution routing
+
 Preflight failures route to resolution surfaces by kind (`docs/forge-project-contract.md` §enforcement: **auto** C2/ARTIFACTS/C4 scaffolds, **agent** C8→instructions creator / DEMO→demo builder, **user** C1/C5/C6), surfaced in onboarding preflight (`[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`, ADR-033).
 
 ---
@@ -39,6 +47,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 ## Planned initiatives
 
 ### R1-01 KB contract type
+
 - **Status:** planned  ·  **Wave:** 3 (interleaved at dependency points after R2-01/R2-02 + R4-05/R4-11, per Q6-A)
 - **Depends on:** — (first R1 mover)
 - **Depended on by:** R1-02 (seam completion builds on the contract type) · R4-09 (reflect agent consumes the ingest/consolidate processes) · R4-02/R4-03 (onboarding/creation agents bind KBs via this contract) · R4-10-F4 (flow succession must rebind the cycles KB `binding.ref` or F1's dangling-ref lint goes red) · R3-02 (soft — skill-generator flow may bind a flow-scoped KB) · R5-05 (KB loose ends cross-reference here, not duplicated)
@@ -60,6 +69,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 - **Out of scope:** rerouting the planning read through the seam (R1-02); any non-filesystem backend implementation (R2-06 owns runtime-adapter realization; a graph-memory KB backend would be a future initiative gated on this contract); skills library management (R3-01); dissolving/migrating `brain/cycles/` content (explicitly not a project, Q5-B).
 
 ### R1-02 KB seam completion
+
 - **Status:** planned  ·  **Wave:** 3 (immediately after R1-01)
 - **Depends on:** R1-01 (schema — the seam should complete against the contract shape, not the legacy descriptor)
 - **Context:** The KbBackend seam exists but leaks: the highest-value read (planning context) bypasses it, and onboarding leaves three loose ends (known-gaps §4.3 wave-3 items). Sources: ADR-027 M8-0 amendment ("Next surface … the planning-context read"); known-gaps §4.3 items (a) onboard-skill `kb.yaml` gap, (b) superfluous local `profile.md` stub, (d) missing `project.json` `kb` binding; §4.3(c) is ALREADY FIXED by PR #26 (`464eabd`) — do not redo; R5-07 strikes the stale doc line.
@@ -75,6 +85,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 - **Out of scope:** new backends (see R1-01 out-of-scope); `studio/README.md` `kb/`-directory doc drift (R5-07 SSOT reconciliation); brain-ingest haiku A/B (known-gaps §3, an operational validation, not componentry).
 
 ### R1-03 Project contract: demo + test processes
+
 - **Status:** planned  ·  **Wave:** 3–4 (must land before R4-07 demo agent)
 - **Depends on:** — (parallel-safe with R1-01)
 - **Depended on by:** R1-04 (reuses the typed-process pattern) · R1-05 (machine-checks promote its clauses) · R4-07 (demo agent executes the demo process this initiative types) · R4-08 (adversarial review consumes test-process results) · R4-10 (develop-cycle OOTB flow composes both)
@@ -95,6 +106,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 - **Out of scope:** the demo *agent* itself (R4-07); adversarial review agent (R4-08); flow artifact-set cleanup (known-gaps §4b.5 → R2-05); re-grounding stale seeded demo evidence in the harness (known-gaps §4b.13/15 → R5-06).
 
 ### R1-04 Project contract: instructions + release + build processes
+
 - **Status:** planned  ·  **Wave:** 4
 - **Depends on:** R1-03 (shape — reuses the typed-process pattern F1 establishes)
 - **Depended on by:** R4-02/R4-03 (onboarding/creation agents scaffold these processes) · R4-05 (soft — plan agent reads them as planning inputs)
@@ -109,6 +121,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 - **Out of scope:** dry-bridge coverage of finalize (R5-01 owns the harness-mode seam — but note the edge: anything F2 adds to the finalize path must be behind R5-01's guard); plan-agent consumption of these inputs (R4-05); project-creation scaffolding of the processes (R4-03).
 
 ### R1-05 Contract machine-checks
+
 - **Status:** planned  ·  **Wave:** 4 / opportunistic (each check is independently landable)
 - **Depends on:** R1-03/R1-04 (targets — checks verify the typed processes; the C-clause checks below are independent and can land any time)
 - **Context:** ADR-034 closes with the honest residue: "C9 and the C1b discrimination check remain hand-verified at onboarding; no machine-check is added here. Tracked in docs/known-gaps.md." ADR-017's landed notes add the C2 build-artifact facet and the C7 external-resource clause to the hand-checked list. ADR-034's accepted trade-offs name two more gaps: Face-A Studio-field checks are UI-only (not re-run at claim time), and the history convention has no post-commit check. ADR-036 supplies the execution posture: **agents judge, orchestrator executes** — every check here is orchestrator-run, never agent-self-reported, and no forensic-escalation checks (mtime/affidavit) may be added (ADR-036 §4). Sources: ADR-017/034/036; `docs/forge-project-contract.md` enforcement table; Q3-B (ADR-036 pattern as the relocation target).
@@ -127,6 +140,7 @@ Preflight failures route to resolution surfaces by kind (`docs/forge-project-con
 ## Deferred
 
 ### R1-D1 Holistic-metrics clause + exploration-initiative support — deferred
+
 The C7-holistic-metrics clause (measurement command + locked baselines + regression budget, `brain/forge-dev/themes/holistic-metrics-onboarding.md`) and the exploration-initiative shape it enables (`brain/forge-dev/themes/exploration-vs-implementation-initiatives.md`: `type: exploration` manifests, sweep-batch WIs, score-delta review). **Re-entry condition — all five prerequisites the exploration theme names, plus one numbering fix:** (1) the holistic-metrics clause itself lands with a metric command + locked baselines on at least one managed project; (2) a parametric-design-search harness exists (`brain/cycles/themes/parametric-design-search.md`); (3) the architect/plan agent reads the relevant brain themes as planning input (R4-04/R4-05 landed); (4) the PM/plan agent accepts `type: exploration` manifests; (5) the reviewer accepts score-delta verdicts (R4-08 landed). **Numbering:** on pick-up, the clause takes a **fresh clause id (next free, e.g. C11)** — "C7" is already taken by the external-resource clause in `docs/forge-project-contract.md`, and the two-C7 collision between the themes is the doc defect R5-07 records; R1-D1 resolves the numbering in the themes when it becomes real work. Until a managed project with a trafficGame-clean metric is in active rotation, this stays deferred.
 
 ---

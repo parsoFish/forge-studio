@@ -16,6 +16,7 @@ operator to prioritize against the R1–R5 driving order.
 ## As-built baseline (implemented)
 
 ### R7-B1 Journeys-as-data harness
+
 `scripts/e2e-journey.mjs` over per-journey modules in `scripts/journeys/`
 (`defineJourney({id,title,story,beats})`, `scripts/lib/journey-runtime.mjs`);
 beats are simultaneously demo scenes and named test cases
@@ -26,12 +27,14 @@ guard (`journey-daemon-guard.mjs`), finalize neutralisation. Gallery + clips
 output. The journey count discrepancy (10 vs 11) is R5-07-F3's strike item.
 
 ### R7-B2 Dead-path sweep + CI
+
 `scripts/e2e-deadpaths.mjs` (`npm run ui:deadpaths`); GitHub Actions CI with
 two proven drift guards (production-repo cleanup campaign, 0.6.0); the full
 gate quartet (`npm run build`, `npm test` — 1987 tests, `forge studio lint`,
 `forge brain lint`).
 
 ### R7-B3 verify:cycle real-capability harness (ADR-022)
+
 `scripts/verify-cycle.mjs` — outcome-only assertions (reached merge,
 dev-loop N/N, project quality gate green post-merge, cost ceiling), tiered
 frozen-SHA routine / greenfield release, manual gate never CI. Grounds:
@@ -43,6 +46,7 @@ the remote, so it proves up-to-merge only (brain theme
 `2026-07-11-verify-harness-repo-state-traps`).
 
 ### R7-B4 The bench vacuum (deliberate, with a promised refill)
+
 Per-phase + e2e benches were **removed 2026-05-25** — they had grown
 synthetic rubrics that taught phases toward the bench shape.
 `CLAUDE.md`'s standing note: *"Benches will be rebuilt later, anchored on
@@ -52,6 +56,7 @@ That promise had no roadmap home until R7-01.
 ## Planned initiatives
 
 ### R7-01 Bench rebuild, corpus-anchored
+
 - **Status:** planned  ·  **Wave:** unsequenced (natural slot: after the R4
   suite stabilizes — the successor pipeline is the thing worth benching)
 - **Depends on:** — (soft: R4-10 — bench the successor flow, not the retiring one)
@@ -78,6 +83,7 @@ That promise had no roadmap home until R7-01.
   migration); synthetic per-phase rubrics (banned).
 
 ### R7-02 Journey platform evolution
+
 - **Status:** planned  ·  **Wave:** unsequenced
 - **Depends on:** —
 - **Context:** The DOM-as-metrics convention was built so "any automation
@@ -104,6 +110,7 @@ That promise had no roadmap home until R7-01.
   feature work (journey-sync contract, owned by each feature PR).
 
 ### R7-03 verify:cycle ground & corpus stewardship
+
 - **Status:** planned  ·  **Wave:** unsequenced (F1 rides R5-07-F4)
 - **Depends on:** — (R5-07-F4 supplies the canonical ground statement)
 - **Context:** Three grounds with drifting identity docs (R5-07-F4 strikes
@@ -127,6 +134,7 @@ That promise had no roadmap home until R7-01.
   direction (Scope 3, index §7).
 
 ### R7-04 CI & drift-guard growth
+
 - **Status:** planned  ·  **Wave:** unsequenced (opportunistic)
 - **Depends on:** —
 - **Context:** Two drift guards proved the pattern (R7-B2); the amendment

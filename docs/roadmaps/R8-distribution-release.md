@@ -16,6 +16,7 @@ initiatives in this file are planned/deferred as of 2026-07-17. **Unwaved.**
 ## As-built baseline (implemented)
 
 ### R8-B1 Install & operator entry
+
 Five-step install→first-merge path (`docs/getting-started.md`); operator CLI
 surface deliberately collapsed to `forge init | forge studio | forge studio
 lint` (ADR-031); projects auto-discovered from disk (no registry file);
@@ -23,6 +24,7 @@ Node-source checkout is the only install form — **no packaged artifact
 exists** (the refinement-roadmap S10 item, operator-deferred, is R8-01).
 
 ### R8-B2 Versioning & release discipline
+
 `CHANGELOG.md` keep-a-changelog discipline; standing policy (memory,
 operator): **forge-studio stays 0.x.y** — bump minor/patch as work ships —
 until the operator explicitly cuts v1.0.0 (baseline 0.1.0; currently 0.6.0).
@@ -30,11 +32,13 @@ Managed-project releases are a different thing entirely (C10/release-finalizer,
 R1-04-F2 — not this roadmap).
 
 ### R8-B3 OSS posture
+
 AGPL-3.0 (relicensed during the Studio M-arc); community-health files + CI
 (S6, PRs #19–#26 campaign); `CONTRIBUTING.md`, `SECURITY.md`,
 `CODE_OF_CONDUCT.md`; `docs/licensing-and-dependencies.md`.
 
 ### R8-B4 Positioning corpus
+
 `docs/forge-studio-market-and-differentiation.md` — self-flagged perishable
 (dated 2026-06-14; §10: re-check figures before external publication);
 differentiation thesis = intersection moat + modularity-as-subsumption
@@ -44,6 +48,7 @@ the north-star reframe annotation landing via R5-07-F8.
 ## Planned initiatives
 
 ### R8-01 Packaging (the deferred S10)
+
 - **Status:** planned  ·  **Wave:** unsequenced — **OPEN DESIGN MARKER:
   operator direction pending** (target audience and install form are
   ambition decisions: personal tool vs installable OSS product)
@@ -68,6 +73,7 @@ the north-star reframe annotation landing via R5-07-F8.
   launch (R8-03).
 
 ### R8-02 Version & release cadence for forge itself
+
 - **Status:** planned  ·  **Wave:** unsequenced (cheap; ride any release)
 - **Depends on:** —
 - **Context:** The 0.x policy lives only in operator memory; 1.0 criteria
@@ -86,6 +92,7 @@ the north-star reframe annotation landing via R5-07-F8.
 - **Out of scope:** the actual 1.0 cut (operator-only, by standing policy).
 
 ### R8-03 Public docs & positioning upkeep
+
 - **Status:** planned  ·  **Wave:** unsequenced
 - **Depends on:** — (R5-07-F8 lands the reframe annotations first)
 - **Context:** The market doc is perishable by design; the differentiation
@@ -109,6 +116,7 @@ the north-star reframe annotation landing via R5-07-F8.
 ## Deferred
 
 ### R8-D1 Community & ecosystem enablement
+
 Contribution pathways beyond the health files: external skill/plugin
 authorship as a supported channel (ties R3-01-F4's marketplace posture +
 ADR-024's skills-as-plugins north star), issue triage norms, external

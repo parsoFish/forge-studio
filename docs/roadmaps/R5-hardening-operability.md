@@ -21,6 +21,7 @@ surfaces (R2/R4) multiply it.
 ## As-built baseline (implemented)
 
 ### R5-B1 Harness-side incident mitigations (2026-07-16)
+
 `scripts/lib/journey-daemon-guard.mjs` (`assertNoLiveDaemon`, escape hatch
 `FORGE_E2E_AUTOKILL_DAEMON=1`); `scripts/e2e-journey.mjs` finalize
 neutralisation (strips `releaseProcess` from the grounding project for the
@@ -29,10 +30,12 @@ of the `projects/<name>` subtree in cleanup. Harness side of known-gaps §4.10
 is closed; the **platform** side is R5-01.
 
 ### R5-B2 Spawn-site guard
+
 `FORGE_ARCHITECT_NO_SPAWN` covers `spawn()` sites only — not in-process
 real-agent/real-git bridge paths (the R5-01 gap).
 
 ### R5-B3 Standing harnesses
+
 `scripts/verify-cycle.mjs` (ADR-022: outcome-only real-cycle gate, tiered
 frozen-SHA routine / greenfield release; betterado live tier + live-REST demo
 gate); journeys-as-data (`scripts/e2e-journey.mjs` + `scripts/journeys/`,
@@ -40,12 +43,14 @@ journey-sync skill keeps UI changes and journeys in one PR); dead-path sweep
 (`scripts/e2e-deadpaths.mjs`).
 
 ### R5-B4 Crash classification + self-heal
+
 `classifyCycleFailure` environment-failure detection + `inferRequeueResume`
 at the requeue boundary (ADR-019 amendment 2026-07-11,
 `orchestrator/requeue-resume.ts`); `ensureWatch` self-heal absorbs the
 un-root-caused watch SIGKILLs (known-gaps §4.5).
 
 ### R5-B5 Cost pipeline
+
 Shared aggregation in `orchestrator/event-cost.ts` (the double-count defect
 was fixed twice — 2026-06-08 in `cli/metrics.ts`, re-found 2026-07-10 in
 `per_skill` + `run-model-derive.ts` — hence R5-03's regression-guard posture);
@@ -53,6 +58,7 @@ phase-aware aggregation is a named invariant
 (`brain/forge-dev/themes/cost-event-phase-aware-aggregation-rule.md`).
 
 ### R5-B6 Brain/doc lint
+
 `forge brain lint` (9 checks incl. `checkProjectBrainIndexes`), brain-path
 SSOT `orchestrator/brain-paths.ts`; brain-index walks the ADR-035 central
 layout as of PR #26 (`464eabd`, 2026-07-17) — which is why known-gaps §4.3(c)
@@ -61,6 +67,7 @@ is stale (R5-07 strikes it).
 ## Planned initiatives
 
 ### R5-01 Dry-bridge seam
+
 - **Status:** planned  ·  **Wave:** 0 — **the first implementation session of the set**
 - **Depends on:** —
 - **Depended on by:** R2-01 (new spawn surfaces born inside the seam),
@@ -102,6 +109,7 @@ is stale (R5-07 strikes it).
   *harness* contexts, not the operator's real approve).
 
 ### R5-02 G8 env-pin at the spawn seam
+
 - **Status:** planned  ·  **Wave:** 0 (second session, or rides with R5-01)
 - **Depends on:** —
 - **Depended on by:** R2-01 (the runnable primitive inherits the pinned
@@ -131,6 +139,7 @@ is stale (R5-07 strikes it).
   dry-bridge semantics (R5-01 — different seam, same safety wave).
 
 ### R5-03 Cost integrity
+
 - **Status:** planned  ·  **Wave:** opportunistic (first session that touches metrics)
 - **Depends on:** —
 - **Context:** Two structural defects: (a) the architect logs `cost_usd: 0` on
@@ -159,6 +168,7 @@ is stale (R5-07 strikes it).
   models); budget policy changes (ADR-009: new knobs need ADRs).
 
 ### R5-04 Flow edit-lock verification (re-scoped 2026-07-17)
+
 - **Status:** planned  ·  **Wave:** 1 (small; must precede the first second
   live flow — R3-02's generator flow, R2-03-F4's test flow, and R4-10 all
   guarantee that condition)
@@ -182,6 +192,7 @@ is stale (R5-07 strikes it).
   around locked flows (existing surface).
 
 ### R5-05 Known-gaps residue
+
 - **Status:** planned  ·  **Wave:** opportunistic
 - **Depends on:** — (individual items below carry their own conditions)
 - **Context:** The remaining open known-gaps items that are genuinely
@@ -229,6 +240,7 @@ is stale (R5-07 strikes it).
   elsewhere); betterado items (known-gaps §5, Scope-3 — index §7).
 
 ### R5-06 Demo/harness backlog
+
 - **Status:** planned  ·  **Wave:** opportunistic (natural bundle: one demo-polish session)
 - **Depends on:** — (items 8/9 unblock fully only with R3-01 surfaces)
 - **Context:** known-gaps §4b.6–15 (operator's demo/clip notes from the PR #24
@@ -268,6 +280,7 @@ is stale (R5-07 strikes it).
   (R4-11-F5 — its journey coverage lands here).
 
 ### R5-07 SSOT reconciliation
+
 - **Status:** planned  ·  **Wave:** 0 (rides along with R5-01/R5-02 — cheap, stops drift compounding under the new roadmap set)
 - **Depends on:** —
 - **Context:** The stale/contradictory doc statements this planning session's

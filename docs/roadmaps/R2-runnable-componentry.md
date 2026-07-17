@@ -9,29 +9,37 @@ This is a **living roadmap** (session decision Q1): IDs are stable and never reu
 ## As-built baseline (implemented)
 
 ### R2-B1 Flow engine (flows-as-data + data-table dispatch)
+
 `orchestrator/flow-runner.ts` executes flow definitions from `studio/flows/<id>/flow.yaml` (ADR-028): node-kind resolution via the `GATE_KIND`/`AGENT_KIND` data tables + `DEFAULT_NODE_EXECUTORS` registry (injectable via `FlowRunArgs.nodeExecutors`), per-flow budgets (`orchestrator/flow-budgets.ts`), wedge-kill deadline (`orchestrator/stream-deadline.ts` — SDK abort threaded into PM but **not yet chained into per-WI Ralphs**, ADR-028 open note), unifier-resume (ADR-019), run model derived not stored (`orchestrator/run-model-derive.ts`). Three seed flows: `forge-architect` → `forge-develop` → `forge-reflect` chained by flowLineage.
 
 ### R2-B2 Bespoke interactive runners (the pre-primitive state)
+
 There is **no generic run-agent primitive**. Each interactive agent has a hand-built runner + CLI subcommand pair spawned by the bridge per operator turn: `orchestrator/architect-runner.ts` (`forge architect run <sid>`), `orchestrator/instructions-runner.ts`, `orchestrator/demo-builder-runner.ts`, `orchestrator/project-brain-builder-runner.ts`, all over the shared `orchestrator/interactive-session.ts` file-checkpointed session machinery, dispatched from `orchestrator/cli.ts` (cases `architect | instructions | demo-builder | project-brain`). Unattended agents run only as flow nodes via R2-B1's executors + `orchestrator/phase-agent.ts` (`PhaseAgentSpec`, ADR-024 injection seam).
 
 ### R2-B3 Agent definitions as skills (ADR-024 / ADR-027)
+
 An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by `orchestrator/studio/registry.ts` + `derive.ts` into `AgentDefinition` (`orchestrator/studio/types.ts`): `surface`, `interactivity`, `composition {skills,tools,mcps,hooks}`, `runtime {sdk, strategy, model}`, `allowedTools`/`disallowedTools`. Authored in Studio at `/agents/[id]` (`[data-page="agents"]`, catalog palette from `studio/catalog.yaml`), starters under `studio/starters/agents/` (ADR-033). Enforcement today: only `allowed-tools`/`disallowed-tools` reach the spawn; `composition.tools` is decorative; `surface:`/`interactivity:` are unvalidated free text duplicated in prose.
 
 ### R2-B4 Trigger machinery (Stage C, declaration-driven)
+
 `orchestrator/flow-trigger.ts` — flows declare `triggers: [{on, flow}]`; `FLOW_TRIGGER_EVENTS = ['complete','merged']` is the entire closed vocabulary. `on: merged` is live (fired async by `orchestrator/finalize-merged.ts`; single source of "merge fires reflect" is `studio/flows/forge-develop/flow.yaml`). `on: complete` stages a claimable request in `_queue/flow-runs/`; the **consumer is live** (`runFlowTriggerSweep`, `orchestrator/scheduler.ts:555` — called at daemon startup and on the recover timer, draining via `drainFlowRunRequests`) but there is **no producer** (no seed flow declares `on: complete`) and dispatch handles **only `forge-develop` targets** (`orchestrator/flow-run-requests.ts` `defaultStartFlowRun` throws for any other flow — corrected 2026-07-17, adversarial review A2). Kickoff kinds (launch surface): `idea | initiative-select | trigger-only` (`orchestrator/studio/types.ts`).
 
 ### R2-B5 Runtime-adapter seam (ADR-029, proof pending per ADR-032)
+
 `loops/_adapters/` — `registry.ts` + `conformance.ts` contract tests over `claude` (live; wraps `loops/ralph/claude-agent.ts`, wrap-not-move), `gemini` and `aider` (registered, `available: false` — deps/creds unprovisioned; Gemini tool executor missing), plus `example`. Tier escalation (haiku→sonnet→opus by catalog cost) resolves **Claude tiers only** (`orchestrator/model-range.ts`). ADR-032 names the realization gap: no *running* non-Claude cycle exists yet — also operator-journey gap #12 and the differentiation proof (`docs/forge-studio-market-and-differentiation.md`).
 
 ### R2-B6 Fanout as a static topology hint
+
 `fanOut?: string` on a flow node names the upstream artifact driving multiplicity (`orchestrator/studio/types.ts:61`); `findFanOutViolations` (`orchestrator/studio/validate.ts:68`) lints that it matches an inbound edge artifact. Real WI multiplicity is **runtime-derived** — `runDeveloperLoop` walks the WIs PM wrote; WI hexes derive from dev-loop events, not the static hint (`studio/flows/forge-develop/flow.yaml` comment). Fanout is not an agent-definition property: nothing stops authoring `fanOut` on any node.
 
 ### R2-B7 Artifact templates + advisory ref validation
+
 `studio/artifact-templates/` (plan, work-items, pr, verdict, wi-branches) with `validateArtifactRef` (ADR-027 amendment, `orchestrator/studio/validate.ts:331-355`) — currently **advisory**, promotion to error pending. `studio/demo-elements/` (6 element types) is the existing precedent for agent-composed rich output. The unified viewer is `/artifact` (`[data-page="flows"]`, ADR-031).
 
 ## Planned initiatives
 
 ### R2-01 Agent-as-runnable primitive
+
 - **Status:** planned  ·  **Wave:** 1
 - **Depends on:** R5-01 dry-bridge (safety — wave 0 precedes; new spawn surfaces must be born inside the dry-bridge seam), R5-02 G8 env-pin (spawn-seam hygiene).
 - **Depended on by:** R4-01 (platform→artifact migration needs the generic primitive), R4-02 (standalone onboarding agent), R4-05 (hard, for its F4 standalone-planner dispatch), R2-02, R2-04, R2-05 (dynamic surfaces render runnable output), R2-06 (adapter realization exercises the primitive).
@@ -46,6 +54,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 - **Out of scope:** builder-side capability exposure (R2-02); fanout semantics (R2-03); new trigger kinds (R2-04); replacement post-develop agents themselves (R4-07/R4-08); gate-recipe content changes (ADR-036 execution stays where it is — only the unifier-gate *relocation decision* is noted here, for operator review).
 
 ### R2-02 Agent-def-driven builder
+
 - **Status:** planned  ·  **Wave:** 1
 - **Depends on:** R2-01 (definition-driven execution is what makes builder-declared capabilities real, not decorative).
 - **Depended on by:** R4-01 (migration of platform agents to artifacts needs the capability schema), R2-03-F3.
@@ -59,6 +68,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 - **Out of scope:** the fanout *semantics* behind the toggle (R2-03); skill library management surfaces (R3-01); OOTB agent content changes (R4).
 
 ### R2-03 Fanout capability (research spike first)
+
 - **Status:** planned  ·  **Wave:** 3 (must land before R4-06 develop-agent refinement)
 - **Depends on:** R2-02 (capability schema is where fanout-capability is declared).
 - **Depended on by:** R4-06 (develop refinement), R2-D1 (merge-resolution deferred placeholder — gated on F1 evidence).
@@ -72,6 +82,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 - **Out of scope:** merge-conflict resolution of parallel branches (R2-D1, gated on F1); PM decomposition quality (R4-05 plan agent); raising the concurrency default itself (operational decision post-soak, known-gaps §4.2).
 
 ### R2-04 Trigger expansion
+
 - **Status:** planned  ·  **Wave:** 3 (opportunistic slice-able)
 - **Depends on:** R5-01 dry-bridge (every new trigger is a new unattended-spawn surface — must route through the guarded seam), R2-01 (agent-complete events exist only once agents are runnable primitives).
 - **Depended on by:** — (R4-10 develop-cycle OOTB flow consumes but does not require new kinds).
@@ -85,6 +96,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 - **Out of scope:** the notifications/attention strip that trigger-dense multi-project operation demands (R4-11, Q4); retiring the architect flow's kickoff (R4-D1).
 
 ### R2-05 Dynamic artifact surfaces
+
 - **Status:** planned  ·  **Wave:** 3
 - **Depends on:** R2-01 (agent output contracts formalize alongside the runnable primitive).
 - **Depended on by:** R4-07 demo agent (soft — richer demo surfaces build on this contract; its hard dep is R1-03).
@@ -97,6 +109,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 - **Out of scope:** re-grounding the dated seeded PLAN.html demo fixture (R5-06, known-gaps §4b.13); the demo agent's evidence policy (R4-07 / R1-03); plan-surface content quality (R4-05).
 
 ### R2-06 Runtime-adapter realization
+
 - **Status:** planned  ·  **Wave:** 4 (as deps/provisioning land)
 - **Depends on:** R2-01 (soft — the generic primitive should be adapter-agnostic from birth; light-up can start any time provisioning allows).
 - **Depended on by:** — (differentiation proof; nothing structurally blocks on it).
@@ -113,6 +126,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 ## Deferred
 
 ### R2-D1 Parallel-work merge-resolution
+
 **Deferred placeholder (Q3-B locked).** No merge-resolution capability is designed until fanout evidence exists. **Re-entry condition:** the R2-03-F1 research-spike report is published in `docs/investigations/` **and** real fanout runs (post R2-03-F4) produce merge conflicts that the current scheduler merge-gate ordering (dependent initiative waits for prerequisite in `done/`, branches fresh from post-merge main — memory: dev-loop continuity scope) demonstrably cannot absorb, **and** the spike's recommendation is "build". If the spike recommends conflict-avoidance-by-decomposition instead, this ID closes as rejected with the report as rationale. Note: the retired unifier's dual-boundary full-suite gate is NOT this item — that strength relocates to orchestrator-owned gate execution (ADR-036 pattern; **for operator review**, see R2-01 context).
 
 ## Change log
