@@ -14,11 +14,19 @@
  * table (data, not prose) enumerating every bridge route with its
  * classification. Route-coverage drift-guard tests consume this table.
  *
- * Never silent success: every `refuse` route writes both a typed 409 HTTP
- * response (via `refuseDryBridge`) AND a JSONL event, reusing the existing
- * `orchestrator/logging.ts` `createLogger` event-emission pattern (the same
- * one `applyReviewVerdict`'s send-back path and the reflect-answer route
- * already use) rather than inventing a new logging path.
+ * Never silent success/skip:
+ * - every `refuse` route writes both a typed 409 HTTP response (via
+ *   `refuseDryBridge`) AND a JSONL event;
+ * - every `stub-actions` route proceeds with its local bookkeeping but marks
+ *   each skipped real-acting step — `dryBridge: { skipped: [...] }` on the
+ *   200 body plus one `dry-bridge.skip` JSONL event per step (the verdict's
+ *   three incident actions via `emitDryBridgeSkip`; the spawn families'
+ *   agent turn via `dryBridgeAgentTurnMarker`);
+ * - the one non-HTTP spawn path (the boot-time reflect-reconcile) has no
+ *   response to type, so its JSONL event (`emitDryBridgeRefusal`) IS the
+ *   typed refusal.
+ * All event emission reuses the existing `orchestrator/logging.ts`
+ * `createLogger` pattern rather than inventing a new logging path.
  */
 
 import type { ServerResponse } from 'node:http';
@@ -30,12 +38,12 @@ import { sendJson } from './bridge-studio.ts';
  *  string literals scattered at call sites. */
 export const DRY_BRIDGE_ENV = 'FORGE_DRY_BRIDGE';
 
-/** Shared JSONL bucket every route-level refusal event is logged into (no
- *  natural per-cycle id exists for most refuse routes — e.g. scheduler
- *  start/stop). Stub-actions skips (verdict-approve) log into the cycle's
- *  OWN events.jsonl instead, via `emitDryBridgeSkip`, since a real cycleId is
- *  already in hand there and the skip is genuinely part of that cycle's
- *  narrative. */
+/** Shared JSONL bucket for refusal events and the spawn families' agent-turn
+ *  skip events (no natural per-cycle id exists at those points — e.g.
+ *  scheduler start/stop, an architect session). The verdict-approve
+ *  stub-actions skips log into the cycle's OWN events.jsonl instead, via
+ *  `emitDryBridgeSkip` with the cycle's logger, since a real cycleId is in
+ *  hand there and the skip is genuinely part of that cycle's narrative. */
 export const DRY_BRIDGE_LOG_BUCKET = '_dry-bridge';
 
 /** True iff dry-bridge mode is active. Reads `process.env` by default;
@@ -44,10 +52,12 @@ export function isDryBridge(env: Record<string, string | undefined> = process.en
   return env[DRY_BRIDGE_ENV] === '1';
 }
 
-/** The three real-acting sub-steps `applyReviewVerdict`'s approve path can
- *  individually skip in dry-bridge mode. Named for the incident: these are
- *  exactly the actions that self-merged the PR on 2026-07-16. */
-export type DryBridgeStubAction = 'release-finalize' | 'merge-pr' | 'finalize-after-merge';
+/** The real-acting sub-steps a `stub-actions` route can individually skip in
+ *  dry-bridge mode. The first three are `applyReviewVerdict`'s approve chain —
+ *  exactly the actions that self-merged the PR on 2026-07-16. `agent-turn` is
+ *  the spawn families' suppressed SDK-agent/runner turn (architect,
+ *  instructions, project-brain, demo-builder, preflight-fix). */
+export type DryBridgeStubAction = 'release-finalize' | 'merge-pr' | 'finalize-after-merge' | 'agent-turn';
 
 /** The action kind a `refuse` route's real-acting call falls into — carried
  *  in the typed 409 body so a caller can tell WHY without parsing prose. */
@@ -65,12 +75,13 @@ export type RouteClassification = {
   classification: DryBridgeClassification;
   /** Required when classification is 'refuse'; the 409 body's `action` field. */
   action?: DryBridgeAction;
-  /** For 'refuse' routes: where the guard fires. 'route' = a route-level 409
-   *  via `refuseDryBridge`, before any processing. 'spawn-helper' = the six
-   *  routes whose spawn is already gated by FORGE_ARCHITECT_NO_SPAWN inside a
-   *  private spawn-helper function; dry-bridge ORs into that SAME internal
-   *  guard rather than adding a second, route-level refusal, per the design
-   *  decision to not alter their existing NO_SPAWN behavior/response shape. */
+  /** Where the dry-mode enforcement lives. 'route' = a route-level 409 via
+   *  `refuseDryBridge`, before any processing (refuse rows). 'spawn-helper' =
+   *  the spawn-family stub-actions rows, whose suppression is ORed into the
+   *  EXISTING FORGE_ARCHITECT_NO_SPAWN early-return inside a private
+   *  spawn-helper function — the route still 200s with its session
+   *  bookkeeping done, plus the explicit `dryBridge.skipped` marker + skip
+   *  event added at the route's response. */
   guard?: 'route' | 'spawn-helper';
   /** One-line reason: what real-acting thing this route does (or why it's safe). */
   reason: string;
@@ -101,39 +112,42 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'PUT', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'the durable save merges + pushes via saveProjectRepo after the local .forge/project.json write' },
 
-  // ---- refuse: already-NO_SPAWN-guarded spawn routes --------------------
-  // These six get the dry-bridge check ORed into their EXISTING internal
-  // `FORGE_ARCHITECT_NO_SPAWN` early-return, not a new route-level 409 — the
-  // local state (session/status files) still gets written, matching today's
-  // NO_SPAWN behavior; only the spawn itself is skipped.
-  { method: 'POST', route: '/api/architect/start', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnArchitectTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/architect/answer', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnArchitectTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/plan-verdict', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'applyPlanVerdict spawns via the NO_SPAWN-guarded spawnArchitectTurn' },
-  { method: 'POST', route: '/api/runs/:id/gates/plan', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
+  // ---- stub-actions: the spawn-route families ----------------------------
+  // Session bookkeeping (status/prompt/answers files) proceeds exactly as
+  // under FORGE_ARCHITECT_NO_SPAWN today, but never silently: the suppressed
+  // agent turn is explicit — `dryBridge: { skipped: ['agent-turn'] }` on the
+  // 200 body + one `dry-bridge.skip` event (dryBridgeAgentTurnMarker). The
+  // suppression itself is ORed into each helper's EXISTING internal NO_SPAWN
+  // early-return (guard: 'spawn-helper'); NO_SPAWN-only keeps its legacy
+  // silent-skip semantics byte-identical (no marker, no event).
+  { method: 'POST', route: '/api/architect/start', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnArchitectTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/architect/answer', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnArchitectTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/plan-verdict', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'applyPlanVerdict → spawnArchitectTurn — marker on approve/revise (reject never spawns)' },
+  { method: 'POST', route: '/api/runs/:id/gates/plan', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'same handler as /api/plan-verdict (applyPlanVerdict)' },
-  { method: 'POST', route: '/api/instructions/brief', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/instructions/answer', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/instructions/verdict', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnInstructionsTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/project-brain/brief', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnProjectBrainTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/project-brain/approve', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnProjectBrainTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/demo-builder/brief', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/demo-builder/feedback', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/demo-builder/lock', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/demo-builder/abandon', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnDemoBuilderTurn already NO_SPAWN-guarded; dry-bridge ORs into the same guard' },
-  { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-agent', classification: 'refuse', action: 'spawn-agent', guard: 'spawn-helper',
-    reason: 'spawnPreflightFix already NO_SPAWN-guarded (user-tier only; auto/agent-tier sub-branches never spawn)' },
+  { method: 'POST', route: '/api/instructions/brief', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/instructions/answer', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/instructions/verdict', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/project-brain/brief', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnProjectBrainTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/project-brain/approve', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnProjectBrainTurn — marker on approve (the shared abandon branch never spawns)' },
+  { method: 'POST', route: '/api/demo-builder/brief', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/demo-builder/feedback', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/demo-builder/lock', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/demo-builder/abandon', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-agent', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnPreflightFix — marker on the user-tier spawn branch (auto/agent-tier branches never spawn)' },
 
   // ---- stub-actions: verdict-approve special case -----------------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',
@@ -174,27 +188,26 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
 // ---------------------------------------------------------------------------
 
 export type DryBridgeRefusalInput = {
+  /** For HTTP routes the route path; for non-HTTP spawn paths a stable
+   *  identifier (e.g. `startup:reflect-reconcile`). */
   route: string;
+  /** HTTP method, or a non-HTTP trigger label (e.g. `BOOT`). */
   method: string;
   action: DryBridgeAction;
   logsRoot: string;
-  /** JSONL bucket to log into. Defaults to the shared DRY_BRIDGE_LOG_BUCKET —
-   *  most refuse routes have no natural per-resource cycleId. */
-  bucket?: string;
 };
 
 /**
- * Write the typed 409 refusal AND emit a JSONL event. Never silent success.
- * Never throws — a logging failure must not prevent the HTTP response (the
- * response is written FIRST, the event emit is best-effort after).
+ * Emit the JSONL refusal event (into the shared DRY_BRIDGE_LOG_BUCKET — most
+ * refuse points have no natural per-resource cycleId). Standalone so non-HTTP
+ * suppression points (the boot-time reflect-reconcile) can emit the SAME
+ * typed refusal without an HTTP response. Never throws — best-effort.
  */
-export function refuseDryBridge(res: ServerResponse, origin: string, input: DryBridgeRefusalInput): void {
-  sendJson(res, 409, { error: 'dry-bridge', route: input.route, method: input.method, action: input.action }, origin);
+export function emitDryBridgeRefusal(input: DryBridgeRefusalInput): void {
   try {
-    const bucket = input.bucket ?? DRY_BRIDGE_LOG_BUCKET;
-    const logger = createLogger(bucket, input.logsRoot);
+    const logger = createLogger(DRY_BRIDGE_LOG_BUCKET, input.logsRoot);
     logger.emit({
-      initiative_id: bucket,
+      initiative_id: DRY_BRIDGE_LOG_BUCKET,
       phase: 'orchestrator',
       skill: 'dry-bridge',
       event_type: 'log',
@@ -203,7 +216,17 @@ export function refuseDryBridge(res: ServerResponse, origin: string, input: DryB
       message: 'dry-bridge.refuse',
       metadata: { route: input.route, method: input.method, action: input.action },
     });
-  } catch { /* best-effort — never break the refusal response on a logging failure */ }
+  } catch { /* best-effort — never break the caller on a logging failure */ }
+}
+
+/**
+ * Write the typed 409 refusal AND emit a JSONL event. Never silent success.
+ * Never throws — a logging failure must not prevent the HTTP response (the
+ * response is written FIRST, the event emit is best-effort after).
+ */
+export function refuseDryBridge(res: ServerResponse, origin: string, input: DryBridgeRefusalInput): void {
+  sendJson(res, 409, { error: 'dry-bridge', route: input.route, method: input.method, action: input.action }, origin);
+  emitDryBridgeRefusal(input);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,9 +237,15 @@ export function refuseDryBridge(res: ServerResponse, origin: string, input: DryB
  * Emit one JSONL event for a single skipped stub-action, into the SAME
  * cycle's events.jsonl the rest of that cycle's history lives in (the caller
  * already has a `createLogger`-derived logger for this cycle — reused here,
- * not re-derived).
+ * not re-derived). `extra` merges additional metadata (e.g. the route for
+ * agent-turn skips, which log into the shared bucket).
  */
-export function emitDryBridgeSkip(logger: EventLogger, initiativeId: string, action: DryBridgeStubAction): void {
+export function emitDryBridgeSkip(
+  logger: EventLogger,
+  initiativeId: string,
+  action: DryBridgeStubAction,
+  extra: Record<string, unknown> = {},
+): void {
   logger.emit({
     initiative_id: initiativeId,
     phase: 'orchestrator',
@@ -225,6 +254,35 @@ export function emitDryBridgeSkip(logger: EventLogger, initiativeId: string, act
     input_refs: [],
     output_refs: [],
     message: 'dry-bridge.skip',
-    metadata: { action },
+    metadata: { action, ...extra },
   });
+}
+
+// ---------------------------------------------------------------------------
+// dryBridgeAgentTurnMarker — the stub-actions marker for the spawn families
+// ---------------------------------------------------------------------------
+
+/**
+ * For the spawn-route families (classification 'stub-actions', guard
+ * 'spawn-helper'): when dry-bridge is active, emit one `dry-bridge.skip`
+ * agent-turn event and return the `dryBridge` fragment to spread into the
+ * route's 200 body. When inactive — including under
+ * FORGE_ARCHITECT_NO_SPAWN-only, whose legacy silent-skip semantics stay
+ * byte-identical — returns `{}` and emits nothing. Call exactly once per
+ * response, only on branches that would have spawned.
+ */
+export function dryBridgeAgentTurnMarker(
+  logsRoot: string,
+  route: string,
+  sessionId?: string,
+): { dryBridge?: { skipped: DryBridgeStubAction[] } } {
+  if (!isDryBridge()) return {};
+  try {
+    const logger = createLogger(DRY_BRIDGE_LOG_BUCKET, logsRoot);
+    emitDryBridgeSkip(logger, DRY_BRIDGE_LOG_BUCKET, 'agent-turn', {
+      route,
+      ...(sessionId ? { sessionId } : {}),
+    });
+  } catch { /* best-effort — never break the route response on a logging failure */ }
+  return { dryBridge: { skipped: ['agent-turn'] } };
 }

@@ -69,7 +69,7 @@ import {
   type ReleaseFinalizeHookInput,
 } from './bridge-studio-runs.ts';
 import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
-import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
@@ -217,7 +217,11 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // blocks the server coming up. Skipped in no-spawn mode (seeded e2e/journey
   // runs set FORGE_ARCHITECT_NO_SPAWN=1; the reconcile spawns reflectors, so it
   // honours the same guard as spawnArchitectTurn — no surprise agent runs there).
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
+  // R5-01-F1: dry-bridge suppresses this startup spawn path independently too —
+  // there is no HTTP response at boot, so the JSONL event IS the typed refusal.
+  if (isDryBridge()) {
+    emitDryBridgeRefusal({ route: 'startup:reflect-reconcile', method: 'BOOT', action: 'spawn-agent', logsRoot });
+  } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
     void reconcileReflectFeedback({
       logsRoot,
       queueRoot: queuePaths.root,
@@ -1249,7 +1253,7 @@ async function handleArchitect(
       writeStatus(dir, status);
       spawnArchitectTurn(ctx.forgeRoot, body.project, sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, sessionId }, origin);
+      sendJson(res, 200, { ok: true, sessionId, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/start', sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1282,7 +1286,7 @@ async function handleArchitect(
       writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
       spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, round }, origin);
+      sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1521,7 +1525,7 @@ async function handleInstructions(
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: 1, prompt: brief });
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/brief', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1554,7 +1558,7 @@ async function handleInstructions(
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: round + 1 });
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, round }, origin);
+      sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/answer', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1591,7 +1595,7 @@ async function handleInstructions(
       }
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/verdict', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1982,7 +1986,7 @@ async function handleDemoBuilder(
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: 'analyzing', prompt: body.brief ?? '' });
       spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
     return true;
   }
@@ -1997,7 +2001,8 @@ async function handleDemoBuilder(
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
       if (approve) spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      // Only approve spawns — abandon is exempt-local and carries no marker.
+      sendJson(res, 200, { ok: true, ...(approve ? dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
     return true;
   }
@@ -2063,7 +2068,7 @@ async function handleDemoBuilder(
       });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2089,7 +2094,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: status.iteration + 1 });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2113,7 +2118,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2137,7 +2142,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'abandoned' });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

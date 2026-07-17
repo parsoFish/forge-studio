@@ -248,16 +248,16 @@ test('POST /api/plan-verdict concurrent double-approve → exactly one 200 (stat
 
 // ---------------------------------------------------------------------------
 // R5-01-F1: FORGE_DRY_BRIDGE alone (without FORGE_ARCHITECT_NO_SPAWN) must
-// suppress the already-NO_SPAWN-guarded spawn helper. This module sets
+// suppress the already-NO_SPAWN-guarded spawn helper — but never silently:
+// the spawn routes are classified stub-actions, so the 200 body carries an
+// explicit `dryBridge: { skipped: ['agent-turn'] }` marker. This module sets
 // FORGE_ARCHITECT_NO_SPAWN=1 at load time (top of file) for every other test
 // here; this one test deliberately unsets it to prove the dry-bridge seam is
 // an orthogonal, independently-sufficient guard — not a rename of NO_SPAWN.
-// Representative for all 6 already-guarded spawn-helper call sites (see
-// BRIDGE_ROUTE_CLASSIFICATION guard:'spawn-helper' rows in dry-bridge.ts);
-// not exhaustively duplicated per-site since the guard line is identical.
+// The per-family table lives in ui-bridge-dry-spawn.test.ts.
 // ---------------------------------------------------------------------------
 
-test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local state still progresses)', async () => {
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local state progresses + explicit marker)', async () => {
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
   delete process.env.FORGE_ARCHITECT_NO_SPAWN;
@@ -266,10 +266,12 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local s
     const sid5 = '2026-05-29T16-00-00';
     const dir5 = seedVerdictSession(sid5);
     const res = await postApprove(sid5);
-    // The route itself is NOT dry-bridge-classified (only the reflect/scheduler/
-    // recovery/etc. routes refuse outright) — approve still succeeds and local
-    // state still advances; only the spawn underneath is suppressed.
+    // The route is stub-actions (never a 409) — approve still succeeds and
+    // local state still advances; only the spawn underneath is suppressed,
+    // and the response says so.
     assert.equal(res.status, 200);
+    const body = (await res.json()) as Record<string, unknown>;
+    assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] }, 'the skipped agent turn must be explicit in the response');
     const status = JSON.parse(readFileSync(join(dir5, 'status.json'), 'utf8'));
     assert.equal(status.phase, 'finalizing', 'local state must still progress under dry-bridge');
   } finally {

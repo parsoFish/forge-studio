@@ -35,7 +35,7 @@ import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -272,7 +272,14 @@ export async function applyReviewVerdict(
     } else {
       void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
     }
-    const responseBody: Record<string, unknown> = { ok: true, kind, note: 'PR merged and finalization triggered' };
+    // FIX-3: the note must not claim a real merge/finalization under dry-bridge.
+    const responseBody: Record<string, unknown> = {
+      ok: true,
+      kind,
+      note: dryBridgeActive
+        ? 'dry-bridge: verdict recorded; real-acting steps skipped (see dryBridge.skipped)'
+        : 'PR merged and finalization triggered',
+    };
     if (skipped.length > 0) responseBody.dryBridge = { skipped };
     sendJson(res, 200, responseBody, origin);
     return;
@@ -464,7 +471,11 @@ export async function applyPlanVerdict(
       _writeStatus(dir, { ...status, phase: 'rejected' });
     }
     ctx.broadcastArchitectChanged();
-    sendJson(res, 200, { ok: true, kind }, origin);
+    // R5-01-F1 stub-actions: approve/revise spawn a turn (reject never does),
+    // so only those kinds carry the dry-bridge agent-turn marker. Serves both
+    // POST /api/plan-verdict and POST /api/runs/:id/gates/plan (same handler).
+    const dryMarker = kind === 'reject' ? {} : dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/plan-verdict', sessionId);
+    sendJson(res, 200, { ok: true, kind, ...dryMarker }, origin);
   } finally {
     if (release) { try { await release(); } catch { /* ignore */ } }
   }

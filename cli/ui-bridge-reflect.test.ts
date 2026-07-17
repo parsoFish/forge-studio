@@ -75,6 +75,54 @@ test('POST /api/reflect/:cycleId/answer writes user-feedback.md and fires the re
   assert.equal(rerunCallCount, 1, 'rerunReflector must be invoked once for a normal submit');
 });
 
+test('R5-01-F1 FIX-2: bridge boot with FORGE_DRY_BRIDGE=1 alone suppresses the startup reflect-reconcile (event is the typed refusal, no spawn)', async () => {
+  // The startup reconcile (reconcileReflectFeedback) can spawn a real reflector
+  // for any cycle whose user-feedback.md out-dates its last reflector.end. It
+  // was guarded only by FORGE_ARCHITECT_NO_SPAWN; dry-bridge must suppress it
+  // independently — and, since this path has no HTTP response, the JSONL event
+  // IS the typed refusal (never silent).
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDry = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  const root = mkdtempSync(join(tmpdir(), 'bridge-reflect-boot-'));
+  try {
+    mkdirSync(join(root, '_queue'), { recursive: true });
+    // A cycle with stale feedback: user-feedback.md present, NO reflector.end
+    // at all → the reconcile would always fire a rerun for it.
+    const staleCycle = 'INIT-2026-07-17-stale-feedback';
+    mkdirSync(join(root, '_logs', staleCycle), { recursive: true });
+    writeFileSync(join(root, '_logs', staleCycle, 'user-feedback.md'), '# late feedback\n');
+
+    let rerunCalls = 0;
+    const bridge = await startBridge({
+      forgeRoot: root,
+      port: 0,
+      rerunReflector: () => { rerunCalls++; return Promise.resolve(); },
+    });
+    // The reconcile is fire-and-continue at boot — give it a beat before asserting.
+    await new Promise((r) => setTimeout(r, 50));
+    await bridge.close();
+
+    assert.equal(rerunCalls, 0, 'dry-bridge must suppress the startup reflector rerun');
+    const eventsPath = join(root, '_logs', '_dry-bridge', 'events.jsonl');
+    assert.ok(existsSync(eventsPath), 'the suppression must be logged (never silent)');
+    const events = readFileSync(eventsPath, 'utf8').trim().split('\n')
+      .map((l) => JSON.parse(l) as { message: string; metadata?: Record<string, unknown> });
+    const refusal = events.find(
+      (e) => e.message === 'dry-bridge.refuse' && e.metadata?.route === 'startup:reflect-reconcile',
+    );
+    assert.ok(refusal, `expected a startup:reflect-reconcile refusal event, got: ${JSON.stringify(events)}`);
+    assert.equal(refusal?.metadata?.action, 'spawn-agent');
+  } finally {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDry === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDry;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses reflect-answer with the typed 409, no write, no rerun', async () => {
   const prior = process.env.FORGE_DRY_BRIDGE;
   process.env.FORGE_DRY_BRIDGE = '1';

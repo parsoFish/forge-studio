@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -22,6 +22,7 @@ import {
   BRIDGE_ROUTE_CLASSIFICATION,
   refuseDryBridge,
   emitDryBridgeSkip,
+  dryBridgeAgentTurnMarker,
   DRY_BRIDGE_LOG_BUCKET,
 } from './dry-bridge.ts';
 import { createLogger } from '../orchestrator/logging.ts';
@@ -131,8 +132,8 @@ test('KB maintenance op=fix-agent is refuse/spawn-agent; op=lint|fix-auto|index 
   assert.equal(rest?.classification, 'exempt-local');
 });
 
-test('the six already-NO_SPAWN-guarded spawn routes are refuse/spawn-agent via the spawn-helper mechanism', () => {
-  const guardedRoutes: Array<[string, string]> = [
+test('the NO_SPAWN-guarded spawn routes are stub-actions via the spawn-helper mechanism (never a 409)', () => {
+  const spawnRoutes: Array<[string, string]> = [
     ['POST', '/api/architect/start'],
     ['POST', '/api/architect/answer'],
     ['POST', '/api/plan-verdict'],
@@ -148,12 +149,11 @@ test('the six already-NO_SPAWN-guarded spawn routes are refuse/spawn-agent via t
     ['POST', '/api/demo-builder/abandon'],
     ['POST', '/api/studio/projects/:id/preflight/fix-agent'],
   ];
-  for (const [method, route] of guardedRoutes) {
+  for (const [method, route] of spawnRoutes) {
     const row = classify(method, route);
     assert.ok(row, `missing classification row for ${method} ${route}`);
-    assert.equal(row?.classification, 'refuse', `${method} ${route}`);
-    assert.equal(row?.action, 'spawn-agent', `${method} ${route}`);
-    assert.equal(row?.guard, 'spawn-helper', `${method} ${route} should be guarded at the spawn-helper, not the route`);
+    assert.equal(row?.classification, 'stub-actions', `${method} ${route} — session bookkeeping proceeds, spawn is skipped explicitly`);
+    assert.equal(row?.guard, 'spawn-helper', `${method} ${route} suppression lives inside the spawn helper, not a route-level 409`);
   }
 });
 
@@ -242,5 +242,51 @@ test('emitDryBridgeSkip() emits one dry-bridge.skip event carrying the action na
     assert.equal(entry.message, 'dry-bridge.skip');
     assert.deepEqual(entry.metadata, { action: 'merge-pr' });
     assert.equal(entry.initiative_id, 'INIT-2026-07-17-example');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dryBridgeAgentTurnMarker() — the stub-actions marker for the spawn families
+// ---------------------------------------------------------------------------
+
+test('dryBridgeAgentTurnMarker() is a no-op when dry-bridge is inactive (NO_SPAWN-only stays byte-identical)', async () => {
+  await withTmp(async (logsRoot) => {
+    const priorDry = process.env.FORGE_DRY_BRIDGE;
+    const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+    delete process.env.FORGE_DRY_BRIDGE;
+    process.env.FORGE_ARCHITECT_NO_SPAWN = '1'; // legacy mode alone: no marker, no event
+    try {
+      const marker = dryBridgeAgentTurnMarker(logsRoot, '/api/architect/start', 'sid-1');
+      assert.deepEqual(marker, {}, 'no marker fragment when dry-bridge is off');
+      assert.ok(
+        !existsSync(join(logsRoot, DRY_BRIDGE_LOG_BUCKET, 'events.jsonl')),
+        'no event emitted when dry-bridge is off',
+      );
+    } finally {
+      if (priorDry === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = priorDry;
+      if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+      else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    }
+  });
+});
+
+test('dryBridgeAgentTurnMarker() under FORGE_DRY_BRIDGE=1 returns the marker and emits one agent-turn skip event', async () => {
+  await withTmp(async (logsRoot) => {
+    const priorDry = process.env.FORGE_DRY_BRIDGE;
+    process.env.FORGE_DRY_BRIDGE = '1';
+    try {
+      const marker = dryBridgeAgentTurnMarker(logsRoot, '/api/instructions/brief', 'sid-2');
+      assert.deepEqual(marker, { dryBridge: { skipped: ['agent-turn'] } });
+      const eventsPath = join(logsRoot, DRY_BRIDGE_LOG_BUCKET, 'events.jsonl');
+      const lines = readFileSync(eventsPath, 'utf8').trim().split('\n');
+      assert.equal(lines.length, 1);
+      const entry = JSON.parse(lines[0]) as { message: string; metadata: Record<string, unknown> };
+      assert.equal(entry.message, 'dry-bridge.skip');
+      assert.deepEqual(entry.metadata, { action: 'agent-turn', route: '/api/instructions/brief', sessionId: 'sid-2' });
+    } finally {
+      if (priorDry === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = priorDry;
+    }
   });
 });

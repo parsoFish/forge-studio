@@ -41,7 +41,7 @@ import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
-import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { listRuns } from '../orchestrator/run-model.ts';
 import {
   sendJson,
@@ -296,7 +296,12 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, resolution: 'user', route: 'preflight-fix', runId }, origin);
+      sendJson(res, 200, {
+        ok: true, resolution: 'user', route: 'preflight-fix', runId,
+        // R5-01-F1 stub-actions: only this user-tier branch spawns; the
+        // auto/agent-tier branches above return without a marker.
+        ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/projects/:id/preflight/fix-agent', runId),
+      }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -376,6 +376,15 @@ test('approve with FORGE_DRY_BRIDGE=1: skips release-finalize/merge/finalize-aft
     const body = json as Record<string, unknown>;
     assert.equal(body.ok, true);
     assert.deepEqual(body.dryBridge, { skipped: ['release-finalize', 'merge-pr', 'finalize-after-merge'] });
+    // FIX-3: the note must not claim a real merge/finalization happened.
+    assert.ok(
+      typeof body.note === 'string' && (body.note as string).includes('dry-bridge'),
+      `note must reflect the dry-bridge skip, got: ${body.note}`,
+    );
+    assert.ok(
+      !(body.note as string).includes('PR merged'),
+      `note must not claim the PR was merged under dry-bridge, got: ${body.note}`,
+    );
 
     // None of the three real-acting sub-calls actually ran.
     assert.equal(finalizeCallCount, 0, 'runReleaseFinalize must not be called');
@@ -430,6 +439,10 @@ test('approve with FORGE_DRY_BRIDGE=1 and no runReleaseFinalize override: the de
     assert.equal(status, 200);
     const body = json as Record<string, unknown>;
     assert.deepEqual(body.dryBridge, { skipped: ['release-finalize', 'merge-pr', 'finalize-after-merge'] });
+    assert.ok(
+      typeof body.note === 'string' && !(body.note as string).includes('PR merged'),
+      `note must not claim the PR was merged under dry-bridge, got: ${body.note}`,
+    );
     assert.equal(s.stubs.mergeCallCount, 0, 'mergePr must not be called');
     assert.equal(s.stubs.finalizeCallCount, 0, 'finalizeAfterMerge must not be called');
   } finally {
