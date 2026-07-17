@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<!--
+  END-STATE MOCKUP — project roadmap screen (Studio end state)
+  Roadmap-document artifact only. Zero implementation. All new capabilities: status "planned".
+  Grounding: Q2-B (plan agent alongside architect; MERGED lifecycle state), Q4 (aggregate strip),
+  Q6-A (wave 2 = R4-05 + R4-11), known-gaps §4b.4 (Recovery tab folded into roadmap surface),
+  ADR-037 (wi-spec-compiler folds into plan agent), ADR-031 (retired standalone panes).
+  Sample-project numbers are corpus-grounded in shape (cf. _queue/done/INIT-2026-07-11-cli-sort-flag.md
+  for the real cost/budget shape) — illustrative values, not real cycle data.
+  Current-state reference mirrored as garnish: forge-ui SerpentineTimeline data-roadmap-* attrs
+  (CLAUDE.md §/projects).
+-->
+<html lang="en" data-page="projects" data-project-id="gitpulse" data-tab="roadmap" data-tab-active="roadmap" data-page-ready="true">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap — end-state mockup (Forge Studio)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #0d0d0d; color: #ffffff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { font-size: 14px; line-height: 1.5; }
+  a { color: #c3c2b7; }
+
+  /* ------- tokens ------- */
+  :root {
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #898781;
+    --hairline: rgba(255,255,255,0.10);
+    --gridline: #2c2c2a;
+    --r1: #3987e5; --r2: #008300; --r3: #d55181; --r4: #c98500; --r5: #199e70;
+    --ok: #0ca30c; --warn: #fab219; --bad: #e0524f;
+  }
+
+  .banner {
+    background: #26200f; border-bottom: 1px solid var(--hairline);
+    color: var(--warn); font-size: 12px; letter-spacing: .04em;
+    padding: 8px 24px; text-transform: uppercase; font-weight: 600;
+  }
+  .banner span { color: var(--ink-3); text-transform: none; font-weight: 400; letter-spacing: 0; }
+
+  .page { max-width: 1280px; margin: 0 auto; padding: 20px 24px 48px; }
+
+  header.masthead { display: flex; align-items: baseline; gap: 16px; margin: 8px 0 4px; }
+  header.masthead h1 { font-size: 20px; font-weight: 650; }
+  header.masthead .proj { color: var(--ink-3); font-size: 13px; }
+  .tabs { display: inline-flex; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; margin-left: auto; }
+  .tabs .tab { padding: 4px 14px; font-size: 12px; color: var(--ink-3); background: transparent; }
+  .tabs .tab[data-tab-active] { color: var(--ink); background: var(--surface); font-weight: 600; }
+
+  .muted { color: var(--ink-3); }
+  .sec { color: var(--ink-2); }
+  .mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; }
+
+  /* ------- callout badges ------- */
+  .co {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    font-size: 11px; font-weight: 700; color: #ffffff;
+    vertical-align: middle; flex: none;
+  }
+  .co.r4 { background: var(--r4); }
+  .co.r5 { background: var(--r5); }
+  .co-float { position: absolute; top: -9px; right: -7px; box-shadow: 0 0 0 3px #0d0d0d; }
+
+  /* ------- chips: always icon + text + color, never color alone ------- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px; padding: 2px 10px;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    border: 1px solid var(--hairline); color: var(--ink-2); white-space: nowrap;
+  }
+  .chip .ico { font-size: 11px; line-height: 1; }
+  .chip.done      { border-color: var(--ok);   background: rgba(12,163,12,.14); color: #fff; }
+  .chip.done .ico { color: var(--ok); }
+  .chip.merged    { border: 1.5px solid var(--ok); background: transparent; color: #fff; }
+  .chip.merged .ico { color: var(--ok); }
+  .chip.inflight  { border-color: var(--warn); background: rgba(250,178,25,.12); color: #fff; }
+  .chip.inflight .ico { color: var(--warn); }
+  .chip.review    { border-color: var(--warn); background: transparent; color: #fff; }
+  .chip.review .ico { color: var(--warn); }
+  .chip.pending   { border-color: var(--hairline); color: var(--ink-2); }
+  .chip.plannednw { border: 1px dashed var(--hairline); color: var(--ink-3); }
+  .chip.failed    { border-color: var(--bad); background: rgba(224,82,79,.12); color: #fff; }
+  .chip.failed .ico { color: var(--bad); }
+  .chip.lock      { border-color: var(--bad); color: var(--ink-2); }
+  .chip.lock .ico { color: var(--bad); }
+
+  /* ------- aggregate strip (Q4 / R4-11) ------- */
+  .agg {
+    position: relative; display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 8px 14px; margin: 14px 0 10px;
+  }
+  .agg .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-right: 4px; }
+  .agg .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--hairline); border-radius: 999px;
+    padding: 3px 12px; font-size: 12px; color: var(--ink-2);
+  }
+  .agg .pill.current { border-color: rgba(255,255,255,.35); color: var(--ink); font-weight: 600; }
+  .agg .pill.attn { border-color: var(--warn); }
+  .agg .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .agg .attn-count { margin-left: auto; font-size: 12px; color: var(--warn); font-weight: 600; }
+
+  /* ------- architect stalled-session row ------- */
+  .arch-row {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-left: 3px solid var(--warn); border-radius: 10px;
+    padding: 8px 14px; margin: 0 0 18px; font-size: 12.5px; color: var(--ink-2);
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; color: var(--ink);
+    border: 1px solid rgba(255,255,255,.28); border-radius: 7px;
+    padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: default;
+  }
+  .btn.primary { background: #ffffff; color: #0d0d0d; border-color: #ffffff; }
+  .btn.small { padding: 2px 9px; font-size: 11px; }
+  .btn.danger { border-color: var(--bad); }
+  .btn[disabled] { opacity: .45; }
+
+  /* ------- layout: timeline + legend sidebar ------- */
+  .cols { display: grid; grid-template-columns: 1fr 320px; gap: 22px; align-items: start; }
+
+  .panel { background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 18px; }
+
+  .vocab { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; margin-bottom: 14px; }
+  .vocab .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-right: 6px; }
+
+  /* ------- serpentine ------- */
+  .serp-row { display: flex; gap: 14px; align-items: stretch; }
+  .serp-row.reverse { flex-direction: row-reverse; }
+  .flow-arrow { align-self: center; color: var(--gridline); font-size: 18px; flex: none; }
+  .elbow { height: 34px; border: 2px solid var(--gridline); border-top: none; margin: -2px 0; }
+  .elbow.right { margin-left: 45%; border-left: none; border-radius: 0 0 22px 0; border-bottom: none; height: 30px; border-right: 2px solid var(--gridline); }
+  .elbow-wrap { position: relative; height: 34px; }
+  .elbow-line { position: absolute; top: 0; bottom: 0; width: 44px; border: 2px solid var(--gridline); }
+  .elbow-line.right { right: -8px; border-left: none; border-radius: 0 16px 16px 0; }
+  .elbow-line.left { left: -8px; border-right: none; border-radius: 16px 0 0 16px; }
+
+  .node {
+    position: relative; flex: 1 1 0; min-width: 0;
+    background: #171716; border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .node .iid { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--ink-3); }
+  .node h3 { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+  .node .meta { font-size: 11.5px; color: var(--ink-3); }
+  .node .meta b { color: var(--ink-2); font-weight: 600; }
+  .node .foot { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  .recov {
+    border: 1px solid var(--bad); border-radius: 8px; padding: 7px 9px;
+    background: rgba(224,82,79,.07); font-size: 11.5px; color: var(--ink-2); position: relative;
+  }
+  .recov .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+
+  .tooltip {
+    position: relative; margin-top: 4px;
+    background: #262624; border: 1px solid var(--hairline); border-radius: 7px;
+    padding: 6px 9px; font-size: 11px; color: var(--ink-2);
+  }
+  .tooltip::before {
+    content: ""; position: absolute; top: -5px; left: 18px;
+    width: 8px; height: 8px; background: #262624;
+    border-left: 1px solid var(--hairline); border-top: 1px solid var(--hairline);
+    transform: rotate(45deg);
+  }
+
+  /* ------- detail popover (pinned open for the mockup) ------- */
+  .popover {
+    position: relative; margin: 26px 0 0 8%; max-width: 640px;
+    background: #212120; border: 1px solid rgba(255,255,255,.18); border-radius: 12px;
+    padding: 16px 18px; box-shadow: 0 12px 32px rgba(0,0,0,.5);
+  }
+  .popover::before {
+    content: ""; position: absolute; top: -7px; left: 64px; width: 12px; height: 12px;
+    background: #212120; border-left: 1px solid rgba(255,255,255,.18); border-top: 1px solid rgba(255,255,255,.18);
+    transform: rotate(45deg);
+  }
+  .popover h4 { font-size: 13px; margin-bottom: 2px; }
+  .popover .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+  .popover ul { list-style: none; font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+  .popover .sect { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); margin-bottom: 5px; }
+  .meter { height: 6px; border-radius: 4px; background: var(--gridline); overflow: hidden; margin-top: 5px; }
+  .meter > div { height: 100%; width: 30%; background: var(--ok); }
+
+  /* ------- legend sidebar ------- */
+  .legend h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin-bottom: 12px; }
+  .legend .item {
+    display: flex; gap: 10px; padding: 9px 10px; margin-bottom: 8px;
+    background: #171716; border: 1px solid var(--hairline); border-radius: 8px;
+    border-left-width: 3px; font-size: 12px; color: var(--ink-2);
+  }
+  .legend .item.lane-r4 { border-left-color: var(--r4); }
+  .legend .item.lane-r5 { border-left-color: var(--r5); }
+  .legend .item .id { font-weight: 700; color: var(--ink); }
+  .legend .cite { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-3); }
+  .lane-badge {
+    display: inline-block; border-radius: 4px; padding: 0 5px; font-size: 10px; font-weight: 700;
+    color: #ffffff; vertical-align: 1px; margin-right: 4px;
+  }
+  .lane-badge.r4 { background: var(--r4); } .lane-badge.r5 { background: var(--r5); }
+
+  .note { border-top: 1px dashed var(--gridline); margin-top: 14px; padding-top: 12px; font-size: 11.5px; color: var(--ink-3); }
+  .review-flag { color: var(--warn); font-weight: 600; }
+
+  footer.garnish { margin-top: 26px; border-top: 1px solid var(--hairline); padding-top: 14px; }
+  footer.garnish h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 8px; }
+  footer.garnish pre { background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 12px 14px; font-size: 11px; color: var(--ink-2); overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<div class="banner">END-STATE MOCKUP — <span>reference artifact (docs/roadmaps/), not implementation</span></div>
+
+<div class="page">
+
+  <header class="masthead">
+    <h1>Roadmap</h1>
+    <span class="proj mono">projects / gitpulse</span>
+    <nav class="tabs" aria-label="project tabs">
+      <span class="tab" data-tab="editor">Editor</span>
+      <span class="tab" data-tab="roadmap" data-tab-active="true">Roadmap</span>
+    </nav>
+  </header>
+  <p class="muted" style="font-size:12px">One surface per project: initiative timeline + plan triggers + inline recovery + attention strip. The standalone Recovery tab is retired here (known-gaps §4b.4).</p>
+
+  <!-- ① cross-project aggregate strip, condensed variant (Q4 → R4-11) -->
+  <section class="agg" data-aggregate-strip data-project-count="4" data-attention-count="2">
+    <span class="co r4 co-float">1</span>
+    <span class="label">All projects</span>
+    <span class="pill attn" data-agg-project="betterado" data-agg-attention="true">
+      <span class="dot" style="background:var(--warn)"></span> betterado — <b>verdict gate waiting 2h 10m</b>
+    </span>
+    <span class="pill current" data-agg-project="gitpulse">
+      <span class="dot" style="background:var(--warn)"></span> gitpulse — in-flight (this page)
+    </span>
+    <span class="pill attn" data-agg-project="trafficgame" data-agg-attention="true">
+      <span class="dot" style="background:var(--bad)"></span> trafficgame — <b>1 initiative stuck</b>
+    </span>
+    <span class="pill" data-agg-project="mdtoc">
+      <span class="dot" style="background:var(--gridline)"></span> mdtoc — idle
+    </span>
+    <span class="attn-count">⊙ 2 need attention</span>
+  </section>
+
+  <!-- ② stalled architect session row with re-run affordance -->
+  <section class="arch-row" data-architect-session="arch-2026-07-16-0093" data-architect-stalled="true">
+    <span class="co r4 co-float">2</span>
+    <span class="chip review"><span class="ico">◐</span> architect session stalled</span>
+    <span class="mono">arch-2026-07-16-0093</span>
+    <span>round 2 of interview — no events for <b class="sec">42m</b></span>
+    <span style="margin-left:auto"></span>
+    <span class="btn small" data-action="rerun-architect">↻ Re-run architect</span>
+    <span class="btn small" data-action="open-interview">Open interview</span>
+  </section>
+
+  <div class="cols">
+    <main>
+
+      <!-- extended status vocabulary legend -->
+      <div class="panel vocab" data-section="status-vocabulary">
+        <span class="label">Status vocabulary (extended)</span>
+        <span class="chip plannednw"><span class="ico">◌</span> planned · no WIs</span>
+        <span class="chip pending"><span class="ico">○</span> pending · WIs queued</span>
+        <span class="chip inflight"><span class="ico">◐</span> in-flight</span>
+        <span class="chip review"><span class="ico">⊙</span> ready-for-review</span>
+        <span class="chip merged"><span class="ico">◆</span> MERGED · awaiting reflect</span>
+        <span class="chip done"><span class="ico">✓</span> done</span>
+        <span class="chip failed"><span class="ico">✕</span> failed</span>
+      </div>
+
+      <!-- serpentine timeline -->
+      <section class="panel" data-roadmap-timeline data-node-count="8" aria-label="initiative timeline">
+
+        <!-- row 1: left → right -->
+        <div class="serp-row">
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-02-repo-scan-core" data-initiative-status="done">
+            <span class="iid">INIT-2026-07-02-repo-scan-core</span>
+            <h3>Repo scan core</h3>
+            <div class="meta">4/4 WIs · PR #8 merged · reflected · <b>$3.12</b></div>
+            <div class="foot"><span class="chip done"><span class="ico">✓</span> done</span></div>
+          </article>
+          <span class="flow-arrow">→</span>
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-06-contrib-graph-api" data-initiative-status="done">
+            <span class="iid">INIT-2026-07-06-contrib-graph-api</span>
+            <h3>Contributor graph API</h3>
+            <div class="meta">6/6 WIs · PR #10 merged · reflected · <b>$4.87</b></div>
+            <div class="foot"><span class="chip done"><span class="ico">✓</span> done</span></div>
+          </article>
+          <span class="flow-arrow">→</span>
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-09-webhook-ingest" data-initiative-status="merged">
+            <span class="co r4 co-float">3</span>
+            <span class="iid">INIT-2026-07-09-webhook-ingest</span>
+            <h3>Webhook ingest</h3>
+            <div class="meta">5/5 WIs · PR #12 merged 38m ago · <b>$5.40</b></div>
+            <div class="meta">reflect rider queued (→ R4-09)</div>
+            <div class="foot"><span class="chip merged"><span class="ico">◆</span> MERGED · awaiting reflect</span></div>
+          </article>
+        </div>
+
+        <div class="elbow-wrap"><div class="elbow-line right"></div></div>
+
+        <!-- row 2: right → left -->
+        <div class="serp-row reverse">
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-11-rate-limit-mw" data-initiative-status="ready-for-review">
+            <span class="iid">INIT-2026-07-11-rate-limit-mw</span>
+            <h3>Rate-limit middleware</h3>
+            <div class="meta">4/4 WIs green · demo captured · <b>$3.95</b></div>
+            <div class="foot">
+              <span class="chip review"><span class="ico">⊙</span> ready-for-review</span>
+              <span class="btn small primary" data-action="open-verdict-gate">Open verdict gate</span>
+            </div>
+            <div class="meta mono" style="font-size:10px">/artifact?run=…&type=verdict&mode=gate</div>
+          </article>
+          <span class="flow-arrow">←</span>
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-13-export-cli" data-initiative-status="in-flight" data-popover-open="true">
+            <span class="iid">INIT-2026-07-13-export-cli</span>
+            <h3>Export CLI</h3>
+            <div class="meta"><b>WI 2/4</b> active · dev-loop iter 3 · <b>$2.41</b> spent</div>
+            <div class="foot"><span class="chip inflight"><span class="ico">◐</span> in-flight</span> <span class="muted" style="font-size:11px">▼ detail popover pinned below</span></div>
+          </article>
+          <span class="flow-arrow">←</span>
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-12-digest-emails" data-initiative-status="failed" data-recovery-attempt-count="2">
+            <span class="iid">INIT-2026-07-12-digest-emails</span>
+            <h3>Digest emails</h3>
+            <div class="foot"><span class="chip failed"><span class="ico">✕</span> failed</span></div>
+            <!-- ⑤ inline recovery — replaces the old Recovery tab (§4b.4) -->
+            <div class="recov" data-recovery-inline data-recovery-initiative="INIT-2026-07-12-digest-emails" data-recovery-attempt-count="2">
+              <span class="co r4 co-float">5</span>
+              <b>Stuck</b> — 2 prior attempts (dev-loop wedge, WI-3) · <a class="mono" style="font-size:10.5px">prior attempts ▸</a>
+              <div class="row">
+                <span class="btn small" data-action="recover-initiative">↻ Recover</span>
+                <span class="btn small danger" data-action="requeue-initiative">⟳ Requeue</span>
+                <span class="muted" style="font-size:10.5px">on recover: plan re-spec rider (R4-05) + reflect-on-failure rider (R4-09)</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="elbow-wrap"><div class="elbow-line left"></div></div>
+
+        <!-- row 3: left → right -->
+        <div class="serp-row">
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-15-team-dashboards" data-initiative-status="pending" data-wi-count="5">
+            <span class="co r4 co-float">6</span>
+            <span class="iid">INIT-2026-07-15-team-dashboards</span>
+            <h3>Team dashboards</h3>
+            <div class="meta"><b>5 spec WIs</b> ready (plan agent, 2026-07-15) · est. ceiling $9.00</div>
+            <div class="meta">depends: webhook-ingest (MERGED ◆)</div>
+            <div class="foot"><span class="chip pending"><span class="ico">○</span> pending · WIs queued</span></div>
+          </article>
+          <span class="flow-arrow">→</span>
+          <article class="node" data-roadmap-node data-initiative-id="INIT-2026-07-15-sso-hardening" data-initiative-status="planned-no-wis" data-wi-count="0">
+            <span class="iid">INIT-2026-07-15-sso-hardening</span>
+            <h3>SSO hardening</h3>
+            <div class="meta">from architect roadmap · no work items yet</div>
+            <div class="foot">
+              <span class="chip plannednw"><span class="ico">◌</span> planned · no WIs</span>
+              <!-- ⑧ blocked-until-WIs lock -->
+              <span class="chip lock" data-blocked-until-wis="true" style="position:relative"><span class="co r4 co-float">8</span><span class="ico">⊘</span> develop blocked</span>
+            </div>
+            <div class="foot" style="position:relative">
+              <!-- ⑦ standalone plan-agent trigger (entry path 1, Q2-B) -->
+              <span class="btn small primary" data-action="plan-initiative" title="decomposes into spec work-items; develop blocks until planned" style="position:relative"><span class="co r4 co-float">7</span>▸ Plan</span>
+            </div>
+            <div class="tooltip">decomposes into spec work-items; develop blocks until planned</div>
+          </article>
+          <span class="flow-arrow" style="opacity:.35">→</span>
+          <article class="node" style="border-style:dashed; opacity:.75" data-roadmap-node data-initiative-id="INIT-next" data-initiative-status="planned-no-wis">
+            <span class="iid">INIT-…</span>
+            <h3 class="muted" style="font-weight:500">Next architect output lands here</h3>
+            <div class="meta">entry path 2: plan agent auto-runs after architect accept (Q2-B)</div>
+          </article>
+        </div>
+
+        <!-- ④ detail popover (pinned open for this mockup) -->
+        <aside class="popover" data-roadmap-popover data-popover-initiative-id="INIT-2026-07-13-export-cli">
+          <span class="co r4 co-float">4</span>
+          <h4>Export CLI <span class="mono muted">INIT-2026-07-13-export-cli</span></h4>
+          <span class="chip inflight"><span class="ico">◐</span> in-flight</span>
+          <div class="grid">
+            <div>
+              <div class="sect">Linked specs (plan agent, 2026-07-13)</div>
+              <ul data-popover-wi-list data-wi-count="4">
+                <li><span style="color:var(--ok)">✓</span> WI-1 spec: csv writer core <span class="mono muted">spec-071301</span></li>
+                <li><span style="color:var(--warn)">◐</span> WI-2 spec: json/ndjson emitters <span class="mono muted">spec-071302</span></li>
+                <li><span class="muted">○</span> WI-3 spec: --since/--until filters <span class="mono muted">spec-071303</span></li>
+                <li><span class="muted">○</span> WI-4 spec: export docs + fixtures <span class="mono muted">spec-071304</span></li>
+              </ul>
+            </div>
+            <div>
+              <div class="sect">Dependencies</div>
+              <ul>
+                <li><span style="color:var(--ok)">✓</span> repo-scan-core (done)</li>
+                <li><span style="color:var(--ok)">✓</span> contrib-graph-api (done)</li>
+              </ul>
+              <div class="sect" style="margin-top:12px">Cost</div>
+              <div class="sec" style="font-size:12px"><b>$2.41</b> spent / $8.00 ceiling — 30%</div>
+              <div class="meter" data-cost-spent-usd="2.41" data-cost-ceiling-usd="8.00"><div></div></div>
+              <div class="muted" style="font-size:10.5px; margin-top:4px">cost shape corpus-grounded (cf. INIT-2026-07-11-cli-sort-flag)</div>
+            </div>
+          </div>
+        </aside>
+
+      </section>
+    </main>
+
+    <!-- callout legend sidebar -->
+    <aside class="panel legend" data-section="callout-legend">
+      <h2>Callouts → roadmap initiatives</h2>
+
+      <div class="item lane-r4"><span class="co r4">1</span>
+        <div><span class="id">R4-11</span> — cross-project aggregate strip (condensed): "which projects need my attention" when several run concurrently.
+          <span class="cite">Q4 · MVUS cross-cutting requirement · ADR-031 retired the old pane</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">2</span>
+        <div><span class="id">R4-11</span> — architect re-run affordance on a stalled architect session row.
+          <span class="cite">known-gaps §4b (architect re-run button, tracked in <span class="lane-badge r5">R5</span>R5-06)</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">3</span>
+        <div><span class="id">R4-05</span> — new <b>MERGED</b> lifecycle state (between in-progress and done): distinct chip, "awaiting reflect"; the reflect trigger point.
+          <span class="cite">Q2-B · reflect rider → R4-09</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">4</span>
+        <div><span class="id">R4-11</span> — initiative detail popover: linked specs + dependencies + cost meter.
+          <span class="cite">cost integrity xref <span class="lane-badge r5">R5</span>R5-03</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">5</span>
+        <div><span class="id">R4-11</span> — recovery folded inline (attempt count, recover/requeue); standalone Recovery tab retired.
+          <span class="cite">known-gaps §4b.4 · failed→plan/reflect riders per Q2-B</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">6</span>
+        <div><span class="id">R4-05</span> — per-initiative spec/WI count once planned (plan agent output = spec work-items).
+          <span class="cite">Q2-B · ADR-037 wi-spec-compiler folds into the plan agent</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">7</span>
+        <div><span class="id">R4-05</span> — "Plan" trigger: standalone per-initiative plan agent (entry path 1 of 2; path 2 auto-runs after architect accept).
+          <span class="cite">Q2-B · architect flow ships alongside — retirement deferred (R4-D1)</span></div>
+      </div>
+
+      <div class="item lane-r4"><span class="co r4">8</span>
+        <div><span class="id">R4-05</span> — blocked-until-WIs lock: develop cannot start on an initiative with no spec work-items.
+          <span class="cite">Q2-B · soft dep recorded both sides: R4-05 ← R4-11 (roadmap-screen states)</span></div>
+      </div>
+
+      <div class="note">
+        All callout capabilities are status <b>planned</b> (this page documents the end state; nothing here is implemented).
+        Post-develop initiative flow behind states 3–4: demo agent + adversarial review agent (Q3-B, unifier retired); the
+        unifier's dual-boundary full-suite gate relocates to orchestrator-owned gate execution (ADR-036 pattern) —
+        <span class="review-flag">for operator review</span>.
+      </div>
+      <div class="note">
+        As-built baseline (status <b>implemented</b>): SerpentineTimeline, 5-state initiative vocabulary, detail popover shell,
+        the standalone /recovery tab this page absorbs — see forge-ui/ + CLAUDE.md §/projects.
+      </div>
+    </aside>
+  </div>
+
+  <!-- DOM-as-metrics garnish: end-state attribute inventory -->
+  <footer class="garnish">
+    <h3>DOM-as-metrics garnish (end-state attribute inventory, mirrors forge-ui convention)</h3>
+    <pre>[data-page="projects"][data-project-id][data-tab-active="roadmap"][data-page-ready]
+[data-aggregate-strip][data-project-count][data-attention-count]        ← new (R4-11, Q4)
+[data-architect-session][data-architect-stalled] + [data-action="rerun-architect"]  ← new (R4-11)
+[data-roadmap-timeline][data-node-count]
+[data-roadmap-node][data-initiative-id][data-initiative-status=
+  "planned-no-wis|pending|in-flight|ready-for-review|merged|done|failed"]  ← vocabulary extended (Q2-B)
+[data-action="plan-initiative"] + [data-blocked-until-wis] + [data-wi-count]         ← new (R4-05)
+[data-recovery-inline][data-recovery-initiative][data-recovery-attempt-count]
+  + [data-action="recover-initiative"|"requeue-initiative"]              ← folded in (R4-11, §4b.4)
+[data-roadmap-popover][data-popover-initiative-id][data-popover-wi-list]
+  + [data-cost-spent-usd][data-cost-ceiling-usd]</pre>
+  </footer>
+
+</div>
+</body>
+</html>

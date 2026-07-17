@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge Studio — Library (end state)</title>
+<style>
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --hairline:rgba(255,255,255,0.10); --gridline:#2c2c2a;
+    --r1:#3987e5; --r2:#008300; --r3:#d55181; --r4:#c98500; --r5:#199e70;
+    --implemented:#0ca30c; --inprogress:#fab219;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5}
+  .banner{background:var(--surface);border-bottom:1px solid var(--hairline);color:var(--ink2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:10px 24px;text-align:center}
+  .crumbs{max-width:1360px;margin:0 auto;padding:14px 24px 0;font-size:12px;color:var(--muted)}
+  .crumbs a{color:var(--ink2);text-decoration:none}
+  .layout{max-width:1360px;margin:0 auto;padding:16px 24px 64px;display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+  h1{font-size:22px;margin:4px 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 18px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);margin:28px 0 10px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;border-radius:999px;padding:1px 9px;white-space:nowrap;vertical-align:middle}
+  .chip-impl{background:rgba(12,163,12,.14);border:1px solid var(--implemented);color:var(--ink)}
+  .chip-plan{background:transparent;border:1px solid rgba(195,194,183,.5);color:var(--ink2)}
+  .chip-def{background:transparent;border:1px dashed rgba(137,135,129,.6);color:var(--muted)}
+  .chip-warn{background:rgba(250,178,25,.12);border:1px solid var(--inprogress);color:var(--ink)}
+  .callout{display:inline-flex;width:20px;height:20px;border-radius:50%;border:2px solid var(--muted);color:var(--ink);background:var(--page);font-size:11px;font-weight:700;align-items:center;justify-content:center;vertical-align:middle;flex:none}
+  .c-r1{border-color:var(--r1)} .c-r2{border-color:var(--r2)} .c-r3{border-color:var(--r3)} .c-r4{border-color:var(--r4)} .c-r5{border-color:var(--r5)}
+  /* attention strip */
+  .strip{background:var(--surface);border:1px solid var(--hairline);border-left:3px solid var(--r4);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+  .striphead{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);margin-bottom:10px}
+  .stripgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  .proj{border:1px solid var(--gridline);border-radius:8px;padding:9px 11px;background:var(--page)}
+  .proj .pname{font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .proj .prow{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+  .badge{font-size:11px;border-radius:999px;padding:1px 8px;border:1px solid var(--gridline);color:var(--ink2)}
+  .badge-gate{border-color:var(--inprogress);background:rgba(250,178,25,.12);color:var(--ink)}
+  .badge-merged{border-color:rgba(195,194,183,.5);color:var(--ink2)}
+  .badge-quiet{color:var(--muted)}
+  /* pillars */
+  .pillars{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+  .pillar{background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:14px 16px}
+  .pillar.acc-r2{border-left:3px solid var(--r2)}
+  .pillar.acc-r3{border-left:3px solid var(--r3)}
+  .pillar.acc-r4{border-left:3px solid var(--r4)}
+  .phead{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .phead h3{margin:0;font-size:15px}
+  .pdesc{color:var(--ink2);font-size:12.5px;margin:2px 0 10px}
+  .item{display:flex;align-items:center;gap:8px;justify-content:space-between;border-top:1px solid var(--gridline);padding:7px 0;font-size:13px}
+  .item .l{display:flex;align-items:center;gap:8px;min-width:0}
+  .item .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .meta{color:var(--muted);font-size:11px;white-space:nowrap}
+  .btn{font-size:11px;border:1px solid rgba(195,194,183,.5);color:var(--ink2);border-radius:6px;padding:2px 9px;background:transparent;white-space:nowrap}
+  .shield{font-size:12px}
+  .flagnote{margin-top:10px;border:1px dashed var(--inprogress);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--ink2)}
+  .flagnote strong{color:var(--ink)}
+  /* legend sidebar */
+  aside{position:sticky;top:16px;background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:14px 16px}
+  aside h2{margin:0 0 10px;font-size:13px}
+  .leg{display:flex;gap:10px;border-top:1px solid var(--gridline);padding:9px 0;font-size:12px;color:var(--ink2)}
+  .leg:first-of-type{border-top:none}
+  .leg .lid{font-family:ui-monospace,Menlo,monospace;color:var(--ink);font-size:12px}
+  .leg .cite{color:var(--muted);display:block;margin-top:2px;font-size:11px}
+  footer{grid-column:1/-1;color:var(--muted);font-size:12px;border-top:1px solid var(--gridline);padding-top:14px}
+</style>
+</head>
+<body data-page="library" data-page-ready="true" data-mockup="endstate">
+  <div class="banner">END-STATE MOCKUP — reference artifact (docs/roadmaps/), not implementation</div>
+  <div class="crumbs"><a href="index.html">← mockup set index</a> · mirrors today's <span class="mono">/</span> route (<span class="mono">data-page="library"</span>, one <span class="mono">data-section</span> per pillar)</div>
+
+  <div class="layout">
+    <main>
+      <h1>Library</h1>
+      <p class="sub">One landing surface: orient, watch every project, and reach every buildable object — agents, flows, KBs, and the new component libraries.</p>
+
+      <!-- ============ ATTENTION STRIP (Q4 / R4-11) ============ -->
+      <section class="strip" data-section="attention-strip" data-attention-count="3">
+        <div class="striphead">
+          <span class="callout c-r4">1</span>
+          <strong style="color:var(--ink)">Attention</strong>
+          <span class="chip chip-plan">◇ planned</span>
+          <span style="margin-left:auto" class="mono" title="documentation garnish">data-attention-count="3"</span>
+        </div>
+        <div class="stripgrid">
+          <div class="proj" data-attention-project="betterado" data-inflight="3" data-gates="1" data-merged-awaiting-reflect="0">
+            <div class="pname">betterado <span class="badge">3 in flight</span></div>
+            <div class="prow"><span class="badge badge-gate">⚠ 1 gate awaiting operator</span></div>
+          </div>
+          <div class="proj" data-attention-project="gitpulse" data-inflight="1" data-gates="0" data-merged-awaiting-reflect="1">
+            <div class="pname">gitpulse <span class="badge">1 in flight</span></div>
+            <div class="prow">
+              <span class="badge badge-merged"><span class="callout c-r4" style="width:16px;height:16px;font-size:10px">2</span>&nbsp;merged → reflect due (1)</span>
+            </div>
+          </div>
+          <div class="proj" data-attention-project="mdtoc" data-inflight="0" data-gates="0" data-merged-awaiting-reflect="0">
+            <div class="pname">mdtoc <span class="badge badge-quiet">idle</span></div>
+            <div class="prow"><span class="badge badge-quiet">nothing needs you</span></div>
+          </div>
+          <div class="proj" data-attention-project="trafficGame" data-inflight="1" data-gates="0" data-merged-awaiting-reflect="0">
+            <div class="pname">trafficGame <span class="badge">1 in flight</span></div>
+            <div class="prow"><span class="badge badge-quiet">running unattended</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ EXISTING PILLARS (as-built baseline) ============ -->
+      <h2>Pillars — as-built baseline</h2>
+      <div class="pillars">
+        <section class="pillar" data-section="orientation">
+          <div class="phead"><h3>Orientation</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="pdesc">What forge is, the operating model, and where to start. Unchanged in the end state.</p>
+          <div class="item"><div class="l"><span class="name">Operator journey</span></div><span class="meta">docs/operator-journey.md</span></div>
+          <div class="item"><div class="l"><span class="name">Architecture &amp; principles</span></div><span class="meta">ARCHITECTURE.md · PRINCIPLES.md</span></div>
+        </section>
+
+        <section class="pillar" data-section="projects">
+          <div class="phead"><h3>Projects</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="pdesc">Managed projects with editor + roadmap tabs. The roadmap tab gains the attention/lifecycle affordances shown in roadmap.html.</p>
+          <div class="item"><div class="l"><span class="name">betterado</span></div><span class="meta">live-ADO tier</span></div>
+          <div class="item"><div class="l"><span class="name">gitpulse</span></div><span class="meta">verify ground</span></div>
+          <div class="item"><div class="l"><span class="name">mdtoc</span></div><span class="meta">reference project</span></div>
+          <div class="item"><div class="l"><span class="name">trafficGame</span></div><span class="meta">managed</span></div>
+        </section>
+
+        <section class="pillar acc-r2" data-section="agents">
+          <div class="phead"><h3>Agents</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="pdesc">Agent definitions (studio/agents). End state: every agent is directly runnable outside a flow, and the OOTB suite grows plan / demo / adversarial-review agents.</p>
+          <div class="item"><div class="l"><span class="name">architect</span> <span class="chip chip-impl">✓ implemented</span></div><button class="btn" data-action="run-standalone" data-agent-ref="architect"><span class="callout c-r2" style="width:16px;height:16px;font-size:10px">3</span>&nbsp;Run standalone</button></div>
+          <div class="item"><div class="l"><span class="name">plan</span> <span class="chip chip-plan">◇ planned</span> <span class="callout c-r4">4</span></div><button class="btn" data-action="run-standalone" data-agent-ref="plan">Run standalone</button></div>
+          <div class="item"><div class="l"><span class="name">develop</span> <span class="chip chip-impl">✓ implemented</span></div><button class="btn" data-action="run-standalone" data-agent-ref="develop">Run standalone</button></div>
+          <div class="item"><div class="l"><span class="name">demo</span> <span class="chip chip-plan">◇ planned</span> <span class="callout c-r4">5</span></div><button class="btn" data-action="run-standalone" data-agent-ref="demo">Run standalone</button></div>
+          <div class="item"><div class="l"><span class="name">adversarial review</span> <span class="chip chip-plan">◇ planned</span> <span class="callout c-r4">6</span></div><button class="btn" data-action="run-standalone" data-agent-ref="adversarial-review">Run standalone</button></div>
+          <div class="item"><div class="l"><span class="name">reflect</span> <span class="chip chip-impl">✓ implemented</span></div><button class="btn" data-action="run-standalone" data-agent-ref="reflect">Run standalone</button></div>
+          <div class="flagnote">⚑ <strong>For operator review</strong> — the retired unifier's dual-boundary full-suite gate (a known-gaps
+            "strength worth preserving") relocates to <em>orchestrator-owned</em> gate execution (ADR-036 pattern: agents judge,
+            orchestrator executes). Q3-B.</div>
+        </section>
+
+        <section class="pillar acc-r4" data-section="flows">
+          <div class="phead"><h3>Flows</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="pdesc">Flow definitions + monitor/build canvas. End state adds the develop-cycle OOTB flow composed from the new agents.</p>
+          <div class="item"><div class="l"><span class="name">forge-architect</span> <span class="chip chip-impl">✓ implemented</span></div><span class="meta">retirement deferred → R4-D1 <span class="chip chip-def">⏸ deferred</span></span></div>
+          <div class="item"><div class="l"><span class="name">forge-develop</span> <span class="chip chip-impl">✓ implemented</span></div><span class="meta">refined by R4-06</span></div>
+          <div class="item"><div class="l"><span class="name">forge-reflect</span> <span class="chip chip-impl">✓ implemented</span></div><span class="meta">refined by R4-09</span></div>
+          <div class="item"><div class="l"><span class="name">develop-cycle (OOTB)</span> <span class="chip chip-plan">◇ planned</span> <span class="callout c-r4">7</span></div><span class="meta">plan → develop → demo → adv-review</span></div>
+        </section>
+
+        <section class="pillar" data-section="kbs">
+          <div class="phead"><h3>Knowledge Bases</h3> <span class="chip chip-impl">✓ implemented</span></div>
+          <p class="pdesc">The knowledge graphs. End state: every KB carries a mandatory scope binding and a contract-obligation row — see the dedicated <a href="kb-library.html" style="text-decoration:underline">KB library mockup</a>.</p>
+          <div class="item"><div class="l"><span class="name">forge-dev</span></div><span class="meta">unique / unbound</span></div>
+          <div class="item"><div class="l"><span class="name">cycles</span></div><span class="meta">rebinds → flow:forge-develop</span></div>
+          <div class="item"><div class="l"><span class="name">4 project brains</span></div><span class="meta">betterado · gitpulse · mdtoc · trafficGame</span></div>
+        </section>
+      </div>
+
+      <!-- ============ NEW LIBRARY PILLARS (R3) ============ -->
+      <h2>New first-class library pillars</h2>
+      <div class="pillars">
+        <section class="pillar acc-r3" data-section="skills">
+          <div class="phead"><span class="callout c-r3">8</span><h3>Skills</h3> <span class="chip chip-plan">◇ planned</span></div>
+          <p class="pdesc">Skills graduate from a builder-palette detail to a managed library object: browse, version, provenance, edit — independent of any one agent.</p>
+          <div class="item"><div class="l"><span class="name">brain-query</span></div><span class="meta">core · used by 3 agents</span></div>
+          <div class="item"><div class="l"><span class="name">forge-onboard-project</span></div><span class="meta">core</span></div>
+          <div class="item"><div class="l"><span class="name">journey-sync</span></div><span class="meta">maintenance contract</span></div>
+          <div class="item"><div class="l"><span class="name">Generate a skill…</span> <span class="callout c-r3">9</span></div><button class="btn" data-action="generate-skill">Skill-generator flow</button></div>
+        </section>
+
+        <section class="pillar acc-r3" data-section="hooks">
+          <div class="phead"><span class="callout c-r3">10</span><h3>Hooks</h3> <span class="chip chip-plan">◇ planned</span></div>
+          <p class="pdesc">Lifecycle hooks as library objects. Hooks execute code on the operator's machine, so every card carries a security-shield review badge — provenance + review state, never color alone.</p>
+          <div class="item"><div class="l"><span class="shield">🛡</span><span class="name">pre-spawn env-pin</span></div><span class="meta">reviewed · ties to R5-02</span></div>
+          <div class="item"><div class="l"><span class="shield">🛡</span><span class="name">post-merge journey-sync nudge</span></div><span class="meta">reviewed</span></div>
+          <div class="item"><div class="l"><span class="shield" title="unreviewed">⚠</span><span class="name">community: notify-on-gate</span></div><span class="meta">unreviewed — blocked from flows</span></div>
+        </section>
+
+        <section class="pillar acc-r3" data-section="tools">
+          <div class="phead"><span class="callout c-r3">11</span><h3>Tools · MCPs · CLIs</h3> <span class="chip chip-plan">◇ planned</span></div>
+          <p class="pdesc">The third capability class from the agent builder's drop zones, promoted to a browsable library with provenance and readiness checks.</p>
+          <div class="item"><div class="l"><span class="name">gh (CLI)</span></div><span class="meta">required by develop</span></div>
+          <div class="item"><div class="l"><span class="name">playwright (tool)</span></div><span class="meta">demo evidence capture</span></div>
+          <div class="item"><div class="l"><span class="name">headroom (MCP)</span></div><span class="meta">optional</span></div>
+        </section>
+
+        <section class="pillar acc-r3" data-section="instructions">
+          <div class="phead"><span class="callout c-r3">12</span><h3>Instructions seeds</h3> <span class="chip chip-plan">◇ planned</span></div>
+          <p class="pdesc">Reusable AGENTS.md / instructions fragments seeded from the instructions interview — the raw material the onboarding and project-creation agents (R4-02/R4-03) compose from.</p>
+          <div class="item"><div class="l"><span class="name">terraform-provider seed</span></div><span class="meta">from betterado onboarding</span></div>
+          <div class="item"><div class="l"><span class="name">node-cli seed</span></div><span class="meta">from mdtoc / gitpulse</span></div>
+          <div class="item"><div class="l"><span class="name">web-app seed</span></div><span class="meta">from trafficGame</span></div>
+        </section>
+      </div>
+
+      <footer>
+        END-STATE MOCKUP · statuses: new capability = <span class="chip chip-plan">◇ planned</span>, baseline chrome = <span class="chip chip-impl">✓ implemented</span> ·
+        route garnish mirrors forge-ui DOM-as-metrics (CLAUDE.md): <span class="mono">[data-page="library"]</span> + per-pillar <span class="mono">data-section</span>.
+      </footer>
+    </main>
+
+    <!-- ============ CALLOUT LEGEND ============ -->
+    <aside data-section="callout-legend" data-callout-count="12">
+      <h2>Callouts → roadmap initiatives</h2>
+      <div class="leg"><span class="callout c-r4">1</span><div><span class="lid">R4-11</span> — cross-project attention strip / notifications blade: in-flight counts, gates awaiting operator.<span class="cite">Q4 · MVUS cross-cutting ("which projects need my attention") · ADR-031 retired the old pane</span></div></div>
+      <div class="leg"><span class="callout c-r4">2</span><div><span class="lid">R4-11</span> — merged-awaiting-reflect chip; surfaces the new <em>merged</em> lifecycle state (between in-progress and done) as the reflect trigger point.<span class="cite">Q2-B · reflect agent = R4-09</span></div></div>
+      <div class="leg"><span class="callout c-r2">3</span><div><span class="lid">R2-01</span> — agent-as-runnable primitive: "Run standalone" on every agent, no flow required.<span class="cite">Q6-A wave 1 · unblocks R4-01</span></div></div>
+      <div class="leg"><span class="callout c-r4">4</span><div><span class="lid">R4-05</span> — plan agent (folds in ADR-037 wi-spec-compiler); ships alongside architect with two entry paths: standalone from the roadmap screen, auto-after-architect-accept.<span class="cite">Q2-B · ADR-037 (the only Proposed ADR) · soft dep R4-11</span></div></div>
+      <div class="leg"><span class="callout c-r4">5</span><div><span class="lid">R4-07</span> — demo agent (initiative-context, post-develop).<span class="cite">Q3-B · dep R1-03 (demo process clause) · "demos must be visual evidence"</span></div></div>
+      <div class="leg"><span class="callout c-r4">6</span><div><span class="lid">R4-08</span> — adversarial review agent (initiative-context, post-develop); replaces the retired unifier's judging role. Gate relocation flagged ⚑ for operator review.<span class="cite">Q3-B · ADR-036 pattern · known-gaps "strengths worth preserving"</span></div></div>
+      <div class="leg"><span class="callout c-r4">7</span><div><span class="lid">R4-10</span> — develop-cycle OOTB flow composed from plan + develop + demo + adversarial-review.<span class="cite">deps R4-05, R4-07, R4-08</span></div></div>
+      <div class="leg"><span class="callout c-r3">8</span><div><span class="lid">R3-01</span> — skills as first-class managed library objects.<span class="cite">known-gaps skills-palette residue (via R5-05 cross-ref) · unblocks R3-02</span></div></div>
+      <div class="leg"><span class="callout c-r3">9</span><div><span class="lid">R3-02</span> — skill-generator flow (author a new skill as a guided flow).<span class="cite">dep R3-01</span></div></div>
+      <div class="leg"><span class="callout c-r3">10</span><div><span class="lid">R3-03</span> — hooks library with security-shield review badges (hooks run operator-machine code).<span class="cite">icon + text, never color alone</span></div></div>
+      <div class="leg"><span class="callout c-r3">11</span><div><span class="lid">R3-04</span> — tools / MCPs / CLIs library with provenance + readiness.<span class="cite">promotes the agent-builder drop-zone classes</span></div></div>
+      <div class="leg"><span class="callout c-r3">12</span><div><span class="lid">R3-05</span> — instructions-seed library.<span class="cite">feeds R4-02 (onboarding agent) + R4-03 (project-creation agent), with R1 clauses</span></div></div>
+    </aside>
+
+  </div>
+</body>
+</html>
