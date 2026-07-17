@@ -27,6 +27,12 @@ session picking up forge-dev work starts here.
   not planned here. The out-of-scope register (§7) names the known Scope-3
   streams so they aren't mistaken for gaps in this set.
 
+> **2026-07-17 note:** the Scope 1 / Scope 2 split above is now forge's north
+> star, not just a contributor map — [ADR 038](../decisions/038-north-star-platform-and-ootb.md)
+> promotes it: Scope 1 is a modular platform for building the ideas machine or
+> any other agentic flow (SWE-focused for now by explicit choice); Scope 2 OOTB
+> is the ideas machine. See §8 decision 4.
+
 **Relation to [docs/known-gaps.md](../known-gaps.md)**: known-gaps remains the
 *defect and observation log* — the place raw findings land as they're noticed.
 These roadmaps are the *planning SSOT*: known-gaps items feed into roadmap
@@ -373,7 +379,8 @@ pass across all five roadmaps plus four operator decisions:
    the ideas machine *or any other agentic flow* (SWE-focused for now by
    explicit choice); Scope 2 OOTB = the ideas machine (MVUS's re-scoped
    home). Lands wave 0 as a north-star ADR + orientation-doc strike-list
-   (R5-07-F8).
+   (R5-07-F8). **Landed 2026-07-17 as [ADR 038](../decisions/038-north-star-platform-and-ootb.md)**
+   — the ADR + the orientation-doc strike-list amendments close R5-07-F8.
 
 ---
 
