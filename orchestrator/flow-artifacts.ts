@@ -135,6 +135,15 @@ export type VerdictRecord = {
   rationale?: string;
   acceptanceCriteria?: unknown[]; // the send-back UWI ACs, as the UI submitted them
   at: string;
+  /**
+   * Task A-finalfix ride-along 3: when this verdict was recorded under
+   * FORGE_DRY_BRIDGE=1 (see cli/dry-bridge.ts), the durable artifact should
+   * say so rather than reading as an ordinary merge — `skipped` names which
+   * real-acting steps (release-finalize / merge-pr / finalize-after-merge)
+   * were stubbed. Omitted entirely outside dry-bridge.
+   */
+  dryBridge?: boolean;
+  skipped?: string[];
 };
 
 export function verdictJsonPath(logsRoot: string, cycleId: string): string {

@@ -3,11 +3,15 @@
  * /api/reflect/:cycleId/answer) — the in-UI moment converting the old
  * `/forge-reflect` slash command's answer-submission into an HTTP route.
  *
- * R5-01-F1: POST .../answer is a `refuse`-classified dry-bridge route (it
- * fires ctx.rerunReflector, which spawns a real reflector agent turn) — see
- * BRIDGE_ROUTE_CLASSIFICATION in cli/dry-bridge.ts. This is the route's
- * first-ever test file; it also pins the normal (non-dry) behaviour so the
- * dry-bridge assertion has a known-good baseline to diff against.
+ * R5-01-F1 (amended by task A-finalfix FIX 1): POST .../answer is a
+ * `stub-actions`-classified dry-bridge route — it does two things, writing
+ * user-feedback.md (bookkeeping) and detached-firing ctx.rerunReflector (the
+ * real agent-turn spawn). Under dry-bridge only the rerun is skipped; the
+ * write proceeds and the route returns its normal 200 with the agent-turn
+ * skip marker attached — see BRIDGE_ROUTE_CLASSIFICATION in
+ * cli/dry-bridge.ts. This is the route's first-ever test file; it also pins
+ * the normal (non-dry) behaviour so the dry-bridge assertion has a
+ * known-good baseline to diff against.
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -123,7 +127,7 @@ test('R5-01-F1 FIX-2: bridge boot with FORGE_DRY_BRIDGE=1 alone suppresses the s
   }
 });
 
-test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses reflect-answer with the typed 409, no write, no rerun', async () => {
+test('R5-01-F1 (FIX 1): FORGE_DRY_BRIDGE=1 still writes user-feedback.md, returns 200 + the agent-turn skip marker, and does NOT fire the reflector rerun', async () => {
   const prior = process.env.FORGE_DRY_BRIDGE;
   process.env.FORGE_DRY_BRIDGE = '1';
   try {
@@ -134,15 +138,19 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses reflect-answer with the typed 409, no
     const res = await fetch(`${url}/api/reflect/${CYCLE_ID}/answer`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ answers: [{ question: 'Was the scope right?', answer: 'Yes.' }] }),
+      body: JSON.stringify({
+        answers: [{ question: 'Was the scope right?', answer: 'Yes.' }],
+        freeform: 'Dry-bridge stub run.',
+      }),
     });
-    assert.equal(res.status, 409);
-    assert.deepEqual(await res.json(), {
-      error: 'dry-bridge', route: '/api/reflect/:cycleId/answer', method: 'POST', action: 'spawn-agent',
-    });
-    assert.ok(!existsSync(feedbackPath), 'dry-bridge must not write user-feedback.md');
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean; dryBridge?: { skipped: string[] } };
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] }, `expected the agent-turn marker, got: ${JSON.stringify(body)}`);
+    assert.ok(existsSync(feedbackPath), 'dry-bridge must still write user-feedback.md (bookkeeping proceeds)');
+    assert.match(readFileSync(feedbackPath, 'utf8'), /Dry-bridge stub run\./);
     await new Promise((r) => setTimeout(r, 20));
-    assert.equal(rerunCallCount, 0, 'dry-bridge must not fire the reflector rerun');
+    assert.equal(rerunCallCount, 0, 'dry-bridge must not fire the reflector rerun (the skipped agent turn)');
   } finally {
     if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
     else process.env.FORGE_DRY_BRIDGE = prior;

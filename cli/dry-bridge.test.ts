@@ -112,9 +112,7 @@ test('verdict routes are stub-actions, not full refuse', () => {
   assert.equal(classify('POST', '/api/runs/:id/gates/verdict')?.classification, 'stub-actions');
 });
 
-test('reflect answer, recovery abandon/requeue, runs resume, save-repo, PUT project are refuse', () => {
-  assert.equal(classify('POST', '/api/reflect/:cycleId/answer')?.classification, 'refuse');
-  assert.equal(classify('POST', '/api/reflect/:cycleId/answer')?.action, 'spawn-agent');
+test('recovery abandon/requeue, runs resume, save-repo, PUT project are refuse', () => {
   assert.equal(classify('POST', '/api/recovery/:id/abandon')?.classification, 'refuse');
   assert.equal(classify('POST', '/api/recovery/:id/abandon')?.action, 'git-remote');
   assert.equal(classify('POST', '/api/recovery/:id/requeue')?.classification, 'refuse');
@@ -122,6 +120,13 @@ test('reflect answer, recovery abandon/requeue, runs resume, save-repo, PUT proj
   assert.equal(classify('POST', '/api/studio/projects/:id/save-repo')?.classification, 'refuse');
   assert.equal(classify('PUT', '/api/studio/projects/:id')?.classification, 'refuse');
   assert.equal(classify('PUT', '/api/studio/projects/:id')?.action, 'git-remote');
+});
+
+test('reflect answer is stub-actions (bookkeeping proceeds; only the reflector rerun is skipped)', () => {
+  const row = classify('POST', '/api/reflect/:cycleId/answer');
+  assert.equal(row?.classification, 'stub-actions');
+  assert.equal(row?.action, 'spawn-agent');
+  assert.equal(row?.guard, undefined, 'suppression is inline (dryBridgeAgentTurnMarker), not a spawn-helper mkdir/spawn pair');
 });
 
 test('KB maintenance op=fix-agent is refuse/spawn-agent; op=lint|fix-auto|index is exempt-local', () => {

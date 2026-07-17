@@ -97,8 +97,6 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawns the detached forge serve daemon (spawnServeDetached)' },
   { method: 'POST', route: '/api/scheduler/stop', classification: 'refuse', action: 'daemon', guard: 'route',
     reason: 'SIGTERMs the live daemon process' },
-  { method: 'POST', route: '/api/reflect/:cycleId/answer', classification: 'refuse', action: 'spawn-agent', guard: 'route',
-    reason: 'rerunReflector spawns a real reflector SDK agent turn' },
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', classification: 'refuse', action: 'spawn-agent', guard: 'route',
     reason: 'spawnBrainFix dispatches a real agent-fix turn' },
   { method: 'POST', route: '/api/recovery/:id/abandon', classification: 'refuse', action: 'git-remote', guard: 'route',
@@ -154,6 +152,15 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'approve path proceeds (state transition + artifact writes) but skips runReleaseFinalize/mergePr/finalizeAfterMerge — the exact incident actions' },
   { method: 'POST', route: '/api/runs/:id/gates/verdict', classification: 'stub-actions',
     reason: 'same handler as /api/verdict (applyReviewVerdict)' },
+
+  // ---- stub-actions: reflect-answer special case -------------------------
+  // Task A-finalfix FIX 1: the handler does two things — writing
+  // user-feedback.md (bookkeeping) and detached-firing rerunReflector (the
+  // agent turn). Only the latter is suppressed, inline via
+  // dryBridgeAgentTurnMarker (no spawn-helper mkdir/spawn pair exists here),
+  // so — like verdict-approve — this row carries no `guard`.
+  { method: 'POST', route: '/api/reflect/:cycleId/answer', classification: 'stub-actions', action: 'spawn-agent',
+    reason: 'feedback bookkeeping proceeds; reflector rerun is the skipped agent turn' },
 
   // ---- exempt-local: mutates only local state ----------------------------
   { method: 'POST', route: '/api/scheduler/pause', classification: 'exempt-local', reason: 'flag file only, no process action' },
@@ -237,7 +244,10 @@ export function refuseDryBridge(res: ServerResponse, origin: string, input: DryB
  * cycle's events.jsonl the rest of that cycle's history lives in (the caller
  * already has a `createLogger`-derived logger for this cycle — reused here,
  * not re-derived). `extra` merges additional metadata (e.g. the route for
- * agent-turn skips, which log into the shared bucket).
+ * agent-turn skips, which log into the shared bucket). Never throws —
+ * best-effort, matching its siblings (`emitDryBridgeRefusal`,
+ * `dryBridgeAgentTurnMarker`): a logging failure must never fail the caller's
+ * response (e.g. a verdict approve/merge already in flight).
  */
 export function emitDryBridgeSkip(
   logger: EventLogger,
@@ -245,16 +255,18 @@ export function emitDryBridgeSkip(
   action: DryBridgeStubAction,
   extra: Record<string, unknown> = {},
 ): void {
-  logger.emit({
-    initiative_id: initiativeId,
-    phase: 'orchestrator',
-    skill: 'dry-bridge',
-    event_type: 'log',
-    input_refs: [],
-    output_refs: [],
-    message: 'dry-bridge.skip',
-    metadata: { action, ...extra },
-  });
+  try {
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'orchestrator',
+      skill: 'dry-bridge',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'dry-bridge.skip',
+      metadata: { action, ...extra },
+    });
+  } catch { /* best-effort — never break the caller on a logging failure */ }
 }
 
 // ---------------------------------------------------------------------------

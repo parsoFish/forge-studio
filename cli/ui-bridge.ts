@@ -1312,6 +1312,7 @@ async function handleArchitect(
         sessionId: typeof body['sessionId'] === 'string' ? body['sessionId'] : '',
         kind: (body['kind'] as 'approve' | 'revise' | 'reject') ?? 'reject',
         rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
+        entryRoute: '/api/plan-verdict',
       });
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -2179,10 +2180,11 @@ async function handleReflect(
   }
 
   if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
-    if (isDryBridge()) {
-      refuseDryBridge(res, origin, { route: '/api/reflect/:cycleId/answer', method, action: 'spawn-agent', logsRoot: ctx.logsRoot });
-      return true;
-    }
+    // R5-01-F1 (task A-finalfix FIX 1): reflect-answer is `stub-actions`, not
+    // `refuse` — it does two things, writing user-feedback.md (bookkeeping)
+    // and detached-firing rerunReflector (the real agent turn). Only the
+    // latter is dry-bridge-gated below; the write always proceeds so the
+    // route's normal 200 stays truthful ("feedback captured").
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
@@ -2194,39 +2196,42 @@ async function handleReflect(
       }
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
-      sendJson(res, 200, { ok: true }, origin);
-      // D — auto-rerun the reflector so the feedback is distilled into retro.md +
-      // brain themes. Detached (don't block the HTTP response on a full reflector
-      // pass), but observable: success AND failure emit an event into the cycle's
-      // events.jsonl (not console), so a lost rerun is visible and the startup
-      // reconcile can recover it. The UI owns reflection without the CLI.
-      const reflectLogger = createLogger(cycleId, ctx.logsRoot);
-      ctx
-        .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
-        .then(() =>
-          reflectLogger.emit({
-            initiative_id: cycleId,
-            phase: 'reflection',
-            skill: 'bridge',
-            event_type: 'log',
-            input_refs: [join(dir, 'user-feedback.md')],
-            output_refs: [],
-            message: 'bridge.reflect-rerun-fired',
-            metadata: { trigger: 'feedback-submit' },
-          }),
-        )
-        .catch((err) =>
-          reflectLogger.emit({
-            initiative_id: cycleId,
-            phase: 'reflection',
-            skill: 'bridge',
-            event_type: 'log',
-            input_refs: [],
-            output_refs: [],
-            message: 'bridge.reflect-rerun-failed',
-            metadata: { error: String(err) },
-          }),
-        );
+      const dryMarker = dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/reflect/:cycleId/answer', cycleId);
+      sendJson(res, 200, { ok: true, ...dryMarker }, origin);
+      if (!isDryBridge()) {
+        // D — auto-rerun the reflector so the feedback is distilled into retro.md +
+        // brain themes. Detached (don't block the HTTP response on a full reflector
+        // pass), but observable: success AND failure emit an event into the cycle's
+        // events.jsonl (not console), so a lost rerun is visible and the startup
+        // reconcile can recover it. The UI owns reflection without the CLI.
+        const reflectLogger = createLogger(cycleId, ctx.logsRoot);
+        ctx
+          .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
+          .then(() =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [join(dir, 'user-feedback.md')],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-fired',
+              metadata: { trigger: 'feedback-submit' },
+            }),
+          )
+          .catch((err) =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-failed',
+              metadata: { error: String(err) },
+            }),
+          );
+      }
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

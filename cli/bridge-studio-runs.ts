@@ -29,7 +29,7 @@ import {
 } from '../orchestrator/unifier-items.ts';
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
 import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
-import { createLogger } from '../orchestrator/logging.ts';
+import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
@@ -206,7 +206,18 @@ export async function applyReviewVerdict(
     const dryBridgeActive = isDryBridge();
     const skipped: DryBridgeStubAction[] = [];
     const approveCycleId = approveManifest.cycle_id ?? initiativeId;
-    const dryBridgeLogger = dryBridgeActive ? createLogger(approveCycleId, ctx.logsRoot) : null;
+    // Task A-finalfix FIX 5: mirror send-back's best-effort logging pattern
+    // (see the try/catch around the reviewer.verdict.send-back emit below) —
+    // createLogger touches the filesystem (creates/opens the cycle's
+    // events.jsonl) and must never block verdict application if that I/O
+    // fails. emitDryBridgeSkip itself already never throws (dry-bridge.ts),
+    // so only the logger's own construction needs guarding here.
+    let dryBridgeLogger: EventLogger | null = null;
+    if (dryBridgeActive) {
+      try {
+        dryBridgeLogger = createLogger(approveCycleId, ctx.logsRoot);
+      } catch { /* best-effort — never block the verdict on dry-bridge logger setup */ }
+    }
     const skip = (action: DryBridgeStubAction): void => {
       skipped.push(action);
       if (dryBridgeLogger) emitDryBridgeSkip(dryBridgeLogger, initiativeId, action);
@@ -253,8 +264,26 @@ export async function applyReviewVerdict(
       }, origin);
       return;
     }
+    // Task A-finalfix ride-along 3: record finalize-after-merge's skip BEFORE
+    // writing verdict.json, so `skipped` below is the complete set for this
+    // verdict rather than missing whichever step comes textually after the
+    // write.
+    if (dryBridgeActive) {
+      skip('finalize-after-merge');
+    } else {
+      // Ride-along 1: fire-and-forget must not become an unhandled rejection
+      // — mirrors the release-finalize block's log-and-continue above.
+      void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }).catch(() => {
+        // Defence in depth: finalizeAfterMerge log-and-continues internally
+        // on its own failures; this only guards against an unhandled
+        // rejection escaping the detached call.
+      });
+    }
     // ADR-027: persist the operator's approve as the durable verdict artifact
     // before finalize/reflection runs (overwrite a prior merge-path fallback).
+    // Ride-along 3: carry the dry-bridge marker into the durable artifact too
+    // — a reflector reading verdict.json later must be able to tell a
+    // dry-bridge-recorded approve apart from a real merge.
     writeVerdictJson(
       ctx.logsRoot,
       {
@@ -264,14 +293,10 @@ export async function applyReviewVerdict(
         decidedBy: 'operator',
         rationale,
         at: new Date().toISOString(),
+        ...(dryBridgeActive ? { dryBridge: true, skipped } : {}),
       },
       { overwrite: true },
     );
-    if (dryBridgeActive) {
-      skip('finalize-after-merge');
-    } else {
-      void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
-    }
     // FIX-3: the note must not claim a real merge/finalization under dry-bridge.
     const responseBody: Record<string, unknown> = {
       ok: true,
@@ -393,10 +418,18 @@ export async function applyPlanVerdict(
     sessionId: string;
     kind: 'approve' | 'revise' | 'reject';
     rationale?: string;
+    /**
+     * Task A-finalfix ride-along 2: the two real HTTP routes that reach this
+     * shared handler — POST /api/plan-verdict and POST
+     * /api/runs/:id/gates/plan — must each report THEIR OWN route on the
+     * dry-bridge marker/event, not a hardcoded '/api/plan-verdict' regardless
+     * of which one the operator actually called.
+     */
+    entryRoute: string;
   },
 ): Promise<void> {
   const origin = allowedOrigin(req);
-  const { project, sessionId, kind, rationale } = body;
+  const { project, sessionId, kind, rationale, entryRoute } = body;
 
   if (!project || !sessionId || !kind) {
     sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
@@ -473,8 +506,9 @@ export async function applyPlanVerdict(
     ctx.broadcastArchitectChanged();
     // R5-01-F1 stub-actions: approve/revise spawn a turn (reject never does),
     // so only those kinds carry the dry-bridge agent-turn marker. Serves both
-    // POST /api/plan-verdict and POST /api/runs/:id/gates/plan (same handler).
-    const dryMarker = kind === 'reject' ? {} : dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/plan-verdict', sessionId);
+    // POST /api/plan-verdict and POST /api/runs/:id/gates/plan (same handler)
+    // — entryRoute (ride-along 2) reports whichever one the caller actually hit.
+    const dryMarker = kind === 'reject' ? {} : dryBridgeAgentTurnMarker(ctx.logsRoot, entryRoute, sessionId);
     sendJson(res, 200, { ok: true, kind, ...dryMarker }, origin);
   } finally {
     if (release) { try { await release(); } catch { /* ignore */ } }
@@ -657,6 +691,7 @@ export async function handleStudioPostRoutes(
           ? verdict
           : (b['kind'] as string | undefined) ?? '') as 'approve' | 'revise' | 'reject',
         rationale: typeof b['rationale'] === 'string' ? b['rationale'] : undefined,
+        entryRoute: '/api/runs/:id/gates/plan',
       });
       return true;
     }
