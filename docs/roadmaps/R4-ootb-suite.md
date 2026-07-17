@@ -20,7 +20,10 @@ into the platform itself, for consistency of implementation and extensibility"*
 **strong ties to each other** (the plan agent designs specs *for* the develop
 agent's ralph loop) rather than being maximally agnostic — and that choice is
 made explicit to operators authoring their own agents, so they can follow or
-diverge deliberately.
+diverge deliberately. The ties are expressed as **versioned artifact
+contracts** (the R4-05-F2 spec schema), never as knowledge of the partner
+agent's internals — the develop agent is the reference consumer of the spec
+schema, not its addressee (adversarial review 2026-07-17, E11).
 
 ## As-built baseline (implemented)
 
@@ -64,8 +67,17 @@ known-gaps "strength worth preserving" that Q3-B's retirement must re-home
 (spec: R1-03-F4; execution home: R4-10-F2).
 
 ### R4-B6 Demo machinery (as-is)
-`demo-builder` agent + `/demo/[sid]` builder UI; `studio/demo-elements/` (6
-element kinds authoring project-side `.forge/skills/demo/<id>/`); schema-validated
+**Four** live mechanisms, with explicit dispositions under this roadmap
+(adversarial review 2026-07-17, A4): (1) `skills/demo` — the demo-contract
+SSOT, whose frontmatter names the developer-unifier as composer → **the
+R4-07 demo agent becomes its composer** (frontmatter consumer updated;
+contract survives); (2) `skills/demo-design` — the save-time generator of
+per-project demo machinery → **stays the save-time generation step, owned by
+R1-03-F2**; (3) `skills/demo-builder` + `/demo/[sid]`
+(`orchestrator/demo-builder-runner.ts`) — the builder UI, **surgery owned
+solely by R1-03-F2**, R4-07-F3 only consumes its output; (4)
+`studio/demo-elements/` (6 element kinds authoring project-side
+`.forge/skills/demo/<id>/`) — composed by the demo agent. Schema-validated
 `demo.json` (ADR-021); orchestrator-owned gate execution + capture nonce
 (ADR-036). Demos must be visual evidence — live REST evidence for live-capable
 projects (verify-cycle betterado tier's 5th gate).
@@ -94,8 +106,11 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
-- **Status:** planned  ·  **Wave:** 4 (first R4 item after wave-1 lands)
-- **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder round-trip)
+- **Status:** planned  ·  **Wave:** 4 — first item of wave 4, before the agent
+  initiatives; **F4 alone runs last**, after R4-10-F2 (not contiguous with F1–F3)
+- **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
+  round-trip); **F4 only:** R4-07, R4-08, R4-10-F2 (retirement cannot start
+  before the successor agents and the relocated gate are live)
 - **Depended on by:** every later OOTB addition (the ships-as-artifact principle governs them)
 - **Context:** Operator doctrine above; ADR-024's north star (skills as the
   single runnable source of phase intent; skills-as-plugins). Also resolves the
@@ -114,20 +129,30 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     the architect runner's spawn path) move off `orchestrator/*-invocation.ts`
     prose + hardcoded `AGENT_KIND` rows onto registry-driven dispatch via
     R2-01. Orchestrator surface shrinks (the capped-surface rule). ACs: no
-    behavioural delta on a frozen-SHA verify:cycle routine run; `AGENT_KIND`
-    table deleted or reduced to a registry shim; invocation prose relocated
-    into the SKILL.md bodies.
+    behavioural delta on a frozen-SHA verify:cycle routine run (this AC runs
+    pre-retirement — the unifier is still live, so the old-shape harness
+    works); the declared kind-mapping R2-01-F2 keeps for the phase slugs is
+    deleted **here** (F2 owns that deletion — R2-01-F2 deliberately does not);
+    invocation prose relocated into the SKILL.md bodies.
   - **R4-01-F3 Round-trip proof.** Each migrated agent is editable in the agent
     builder and re-runnable standalone; journeys synced (journey-sync skill) in
     the same PR. ACs: builder edit → save → run works for one migrated agent
     per journey evidence; `forge studio lint` green.
-  - **R4-01-F4 Unifier retirement mechanics ⚑ FOR OPERATOR REVIEW.** Retire the
-    `developer-unifier` slug/`execUnifier` per Q3-B once R4-07/R4-08 exist;
-    the dual-boundary full-suite gate relocates per R1-03-F4's spec into
-    R4-10-F2's orchestrator-owned merge-boundary gate. ACs: no flow references
-    the retired slug; the relocated gate demonstrably fails a red full-suite
-    baseline that scoped per-WI gates pass.
-- **Session sizing:** ~3 sessions (ADR+one phase; remaining phases; retirement mechanics).
+  - **R4-01-F4 Unifier retirement mechanics ⚑ FOR OPERATOR REVIEW.**
+    Retirement only — building and proving the relocated gate is R4-10-F2's
+    job (single owner), and this feature cannot start before R4-10-F2 is live
+    and green. Scope: retire the `developer-unifier` slug/`execUnifier`;
+    delete the ADR-026 UWI machinery (`orchestrator/unifier-items.ts`,
+    `drain-unifier-items.ts`, `appendReviewUnifierItems`) per R4-08-F2's
+    successor spec; **drain before cutover** — zero pending UWIs across
+    `_queue/ready-for-review/` before the unifier node is removed; migrate the
+    `resume_from: 'unifier'` stamp per R4-10-F6. ACs: no flow/skill references
+    the retired slug; ADR-026 gains a superseded-by note and ADR-028 an
+    amendment in the same PR; send-back demonstrably works on both sides of
+    the cutover (journey + verify evidence); a pre-cutover check proves no
+    stranded UWIs.
+- **Session sizing:** ~3 sessions (ADR + one phase; remaining phases) **plus a
+  separate end-of-wave-4 retirement session for F4** (waits on R4-10-F2).
 - **Out of scope:** the runnable primitive itself (R2-01); new agent behaviour
   (each agent's own initiative below); SSOT doc edits (R5-07).
 
@@ -160,6 +185,12 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     from the R3-05 library (falls back to the instructions-creator interview
     when no seed fits). ACs: onboarded project passes R1-04's instructions
     clause.
+  - **R4-02-F5 profile.md constraint tagging.** Onboarding tags Brain-3
+    `profile.md` constraint clauses with `applies_to:` selectors (the ADR-037
+    load-bearing input R4-05-F3 consumes — this feature is the R4-02-side
+    mirror of that handoff). ACs: an onboarded project's profile carries
+    tagged clauses; an untagged legacy profile still compiles under the
+    ADR-037 as-built default (`all` / `manifest.<field>` globs).
 - **Session sizing:** ~2 sessions (agent + loop; KB/instructions integration).
 - **Out of scope:** greenfield creation (R4-03); the contract clauses
   themselves (R1-03/R1-04/R1-05); Brain-3 content seeding depth
@@ -235,7 +266,9 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 
 ### R4-05 Plan agent
 - **Status:** planned  ·  **Wave:** 2 (with R4-11 — the highest-leverage new capability)
-- **Depends on:** R4-11 *(soft — the standalone entry point lives on the
+- **Depends on:** R2-01 (**hard, for F4** — standalone dispatch = the
+  R2-01-F1 runAgent primitive, spawned behind R5-01's guard; no new bespoke
+  runner or CLI case), R4-11 *(soft — the standalone entry point lives on the
   roadmap screen and needs its states)*, R1-04 *(soft — reads
   instructions/release/build clauses as planning inputs)*
 - **Depended on by:** R4-06 (consumes its specs), R4-10 (first node of the flow)
@@ -257,10 +290,12 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 - **Features:**
   - **R4-05-F1 Non-interactive planner agent def.** `project-manager` evolves:
     surface `unattended`, tailored to the architect's finalised output,
-    **ralph-aware spec design** — specs written for exactly the R4-06 develop
-    agent's loop (strong-ties doctrine, declared in the def so
-    operator-authors see the coupling). ACs: def round-trips through the
-    builder; lint green.
+    **ralph-aware spec design** — the tailoring is expressed entirely inside
+    the R4-05-F2 spec schema (the versioned artifact contract is the coupling's
+    sole expression; no loop-specific content outside it — the develop agent
+    is the reference consumer, per the suite doctrine). ACs: def round-trips
+    through the builder; lint green; spec artifacts validate against the F2
+    schema with no ralph-loop knowledge required to parse them.
   - **R4-05-F2 Spec-WI format + initiative back-references.** Each WI is a
     spec (ADR-015 schema extended as needed); inter-spec `depends_on` mapped;
     the initiative manifest gains `specs:` references once decomposition
@@ -271,22 +306,37 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     risks as explicit specs: `creates:` escape for pure-modification WIs
     (verification_artifact stand-in), `detectHiddenCoupling` reject→compile
     test coverage sized to its quieter-failure risk, `profile.md`
-    `applies_to:` tagging becomes part of onboarding (R4-02). ACs: ADR-037
-    moves Proposed→Accepted (amended to live at the plan-agent seam); tagged
-    brain constraint clauses compile verbatim into matching WIs.
-  - **R4-05-F4 Entry path 1 — standalone per-initiative planning.** Bridge
-    route + roadmap-screen trigger (R4-11-F2); develop blocked until WIs
-    exist. ACs: an unplanned initiative shows the trigger, a planned one
-    doesn't; develop refuses an unplanned initiative with a clear state, and
-    dispatches once planned.
+    `applies_to:` tagging becomes part of onboarding (R4-02-F5 owns the
+    onboarding side). Interim (until R4-02 lands): untagged profile
+    constraints compile under the ADR-037 as-built selector default
+    (`all` / `manifest.<field>` globs). ACs: ADR-037 moves Proposed→Accepted
+    (amended to live at the plan-agent seam); tagged brain constraint clauses
+    compile verbatim into matching WIs.
+  - **R4-05-F4 Entry path 1 — standalone per-initiative planning.**
+    Roadmap-screen trigger (R4-11-F2) dispatching through the R2-01-F1
+    runAgent primitive behind R5-01's guard — explicitly NOT a new bespoke
+    runner/CLI case (the R2-B2 pattern ends here). Develop blocked until WIs
+    exist — the lock itself is R4-11-F2's; completing standalone planning
+    flips the state that lock reads. ACs: an unplanned initiative shows the
+    trigger, a planned one doesn't; develop dispatches once planned; the
+    dispatch appears in R5-01's route-coverage table.
   - **R4-05-F5 Entry path 2 — batch on architect accept.** Accepting the PLAN
     gate queues planning across all registered initiatives (today's
-    behaviour, re-expressed through the same planner). ACs: both paths
-    produce byte-equivalent spec artifacts for the same initiative.
+    behaviour, re-expressed through the same planner). ACs: both entry paths
+    invoke the same planner pipeline (single code path, asserted by test) and
+    produce schema-identical artifacts; a fixture initiative compiled with the
+    deterministic core only (sonnet assist disabled) yields byte-identical
+    output through both paths.
   - **R4-05-F6 Decompose-completeness validator.** A coverage check of specs
     against the initiative's stated scope (the under-planning case the
-    delivery gate can't see). ACs: a seeded under-decomposed initiative is
-    flagged before develop dispatch.
+    delivery gate can't see). **Flag disposition (operator decision
+    2026-07-17): non-blocking** — findings are logged as events and surfaced
+    on the initiative's roadmap node + the R4-11-F4 attention strip; develop
+    dispatch proceeds. No plan-output gate exists (deliberate simplification:
+    the plan node is interior to the develop cycle in the target state, and
+    agent-as-sometimes-gate is functionality forge doesn't need — gates stay
+    flow-node data). ACs: a seeded under-decomposed initiative is flagged
+    before develop dispatch and visibly surfaced; dispatch is not blocked.
   - **R4-05-F7 `domain` population.** Plan agent populates WI `domain`
     (closes known-gaps §4.6) so ADR-037 constraint selectors can match beyond
     `manifest.<field>` globs. ACs: compiled WIs carry domains; a
@@ -341,9 +391,11 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     orchestrator captures). ACs: demo.json validates; betterado-tier live-REST
     gate shape preserved.
   - **R4-07-F2 Fix-iteration loop.** When the demo can't show an AC passing,
-    the agent iterates fixes (bounded budget) before presenting — the
-    demo-side half of the review loop. ACs: a seeded AC-miss produces a fix
-    iteration, not a hand-wave demo.
+    fix work is spawned per R4-10-F1's loop-topology spec (the demo agent
+    judges and scopes; the develop agent executes the fix — one executor for
+    every post-develop fix loop, shared cap). ACs: a seeded AC-miss produces
+    a fix iteration through the shared mechanism, not a hand-wave demo and
+    not demo-agent-authored code edits.
   - **R4-07-F3 Demo-builder simplification + UI tie-in.** The per-project
     demo-design builder (`/demo/[sid]`) simplifies against R1-03's typed demo
     process and links directly from the roadmap/review surfaces. ACs:
@@ -372,16 +424,29 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     risk, contract-fit, convention drift (Brain-3 advisory). ACs: verdict
     artifact with per-finding severity + evidence pointers; runs standalone
     (R2-01) and as the flow's review node.
-  - **R4-08-F2 Continuous send-back loop.** Send-back from the verdict gate
-    spawns scoped fix work, re-demo (R4-07), re-present — visibly looping
-    until approve (replaces ADR-026's unifier-queue mechanics with the
-    initiative-context successors). ACs: journey evidence of send-back →
-    fix → re-presented verdict in one cycle identity.
+  - **R4-08-F2 Continuous send-back loop — the ADR-026 successor spec.**
+    Send-back from the verdict gate compiles the operator's feedback into
+    scoped spec-WIs appended to the initiative's own work-item queue and
+    re-dispatches the **develop agent** (the single fix executor per
+    R4-10-F1's loop topology), then re-demo (R4-07) → re-present — visibly
+    looping until approve. Successor mechanics for what ADR-026's machinery
+    does today: (a) **queue substrate** — the initiative WI queue replaces
+    `.forge/unifier-items/` typed UWIs; (b) **bound** — a review-round /
+    total-fix-WI cap (the `UNIFIER_MAX_TOTAL_ITEMS` analogue, config home
+    `forge.config.json` review section) parks the initiative needs-operator
+    when exhausted; (c) **mutual exclusion** — the finalize-vs-loop
+    arbitration re-implements `finalize-merged`'s pendingUnifierItems check
+    against the new queue (a MERGED PR wins; a pending fix loop defers
+    finalize); (d) **one cycle identity** preserved across rounds. ACs:
+    journey evidence of send-back → fix → re-presented verdict in one cycle
+    identity; cap exhaustion parks loudly; **ADR-026 amended/superseded in
+    the same change**; a concurrent merge + send-back race resolves per (c).
   - **R4-08-F3 Verdict surface fit.** Existing `/artifact` verdict gate
     consumes this agent's output unchanged where possible; deltas journey-synced.
     ACs: approve path IS the merge (ADR-021 invariant untouched; bridge paths
     remain behind R5-01's guard).
-- **Session sizing:** ~2 sessions.
+- **Session sizing:** ~3-4 sessions (F2's ADR-026 successor mechanics are a
+  session of their own — resized per adversarial review 2026-07-17, B1).
 - **Out of scope:** demo generation (R4-07); the dual-boundary gate (
   orchestrator-owned — R4-10-F2); merge mechanics/guards (R5-01).
 
@@ -405,8 +470,18 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   - **R4-09-F1 Standalone on `merged`.** Runs as a standalone agent (R2-01)
     triggered by the initiative reaching `merged` (R4-11-F1) — replacing the
     single-node forge-reflect flow wrapper as the *shipped* shape (the flow
-    form remains authorable). ACs: merge → reflect fires off the state
-    transition; completion moves the initiative `merged → done`.
+    form remains authorable). **Trigger mechanism stays declarative:** the
+    state transition emits an event; routing goes through the R2-04 trigger
+    registry (which gains an agent-target/state-transition extension for
+    this consumer — recorded there), never a bespoke hardcoded dispatch in
+    finalize/scheduler. **Cutover is atomic in this feature:** the
+    forge-develop `on: merged` declaration is removed/inerted in the same
+    change, so exactly one reflect fires per merge at every point in time.
+    ACs: merge → reflect fires off the state transition via the registry;
+    completion moves the initiative `merged → done`; **a lost, stalled, or
+    operator-pending reflect never blocks dependent initiatives**
+    (R4-11-F1's `merged ∪ done` dependency rule); exactly one reflect per
+    merge, asserted across the cutover.
   - **R4-09-F2 Interactive mode.** PR + cycle-log review generates the
     operator questionnaire (right-sizing, cost-vs-effort, semantic judgements,
     decisions to validate — MVUS phase 5). ACs: questionnaire grounded in
@@ -436,26 +511,67 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   demonstrates the capability of flows well."* Q2-B: forge-architect flow
   stays alive alongside; retirement is R4-D1.
 - **Features:**
-  - **R4-10-F1 The flow definition.** `plan → develop (fanout-capable) → demo
-    → adversarial review → verdict gate`, as pure flow data on the R2
-    engine; human moments: architect accept upstream, PR approve at the gate.
-    ACs: `forge studio lint` green; flow runs a real initiative end-to-end on
-    the routine verify tier.
+  - **R4-10-F1 The flow definition + loop topology.** `plan → develop
+    (fanout-capable) → demo → adversarial review → verdict gate`, as pure
+    flow data on the R2 engine; human moments: architect accept upstream, PR
+    approve at the gate. **Loop topology (owned here; R4-07-F2 and R4-08-F2
+    reference it):** every post-develop fix loop — demo AC-miss iteration,
+    verdict send-back, and red merge-boundary remediation (F2) — re-dispatches
+    the **develop agent** with scoped spec-WIs; one executor, one shared
+    round/total cap (config home per R4-08-F2(b)); loops are orchestrator-band
+    re-entry, not flow back-edges (the flow stays a DAG as data). ACs:
+    `forge studio lint` green; flow runs a real initiative end-to-end on the
+    routine verify tier (after F5's harness migration); each loop kind
+    demonstrably routes through the single executor.
   - **R4-10-F2 Orchestrator merge-boundary gate ⚑ FOR OPERATOR REVIEW.** The
     relocated dual-boundary full-suite gate (spec: R1-03-F4) executes as an
     orchestrator-owned band at the flow's merge boundary — not an agent node.
-    ACs: red full-suite baseline blocks merge even when scoped per-WI gates
-    are green; nothing ships red.
+    **Sole build+prove owner** (R4-01-F4 only verifies retirement safety).
+    **Unattended remediation (the capability ADR-026's unifier provided):** a
+    red merge-boundary gate re-dispatches the develop agent with scoped fix
+    WIs compiled from `.forge/last-gate-failure.md`, bounded by the F1 shared
+    cap — integration breaks that aren't AC-misses get fixed without an
+    operator touch. **Precondition:** the operator verdict on the gate
+    relocation is recorded in the ADR-036 amendment (R1-03-F4's AC) before
+    this feature starts. ACs: red full-suite baseline blocks merge even when
+    scoped per-WI gates are green; nothing ships red; a seeded cross-WI
+    integration break (dead-shared-helper fixture, the recurring brain-corpus
+    class) is fixed and reaches merge without operator intervention.
   - **R4-10-F3 Isolation parity.** Every node agent runs standalone with the
     same artifacts (the diagram's ship-both principle). ACs: per-agent
     standalone runs documented in journeys.
   - **R4-10-F4 Succession mechanics.** Decide forge-develop's fate (supersede
-    vs version); reflect triggering moves from flow-level `on: merged` to the
-    `merged` state transition (R4-09-F1) with no orphaned trigger path. ACs:
-    exactly one live reflect trigger mechanism after cutover; stale flow
-    seeds removed or marked.
-- **Session sizing:** ~2 sessions (+1 for cutover/succession).
-- **Out of scope:** node agents (R4-05/06/07/08); trigger kinds (R2-04);
+    vs version) — flow-seed residue only; the reflect-trigger cutover itself
+    is owned atomically by R4-09-F1 (via the R2-04 registry). ACs: stale flow
+    seeds removed or marked (and `forge studio lint` gains whatever
+    deprecated-seed treatment "marked" needs); **the cycles KB
+    `binding.ref` is updated to the successor flow id in the same change** —
+    `forge studio lint` + `forge brain lint` green (R1-01's dangling-ref lint
+    would otherwise go red).
+  - **R4-10-F5 verify:cycle harness migration.** The standing regression
+    harness (ADR-022) structurally encodes the unifier pipeline ("dev →
+    unifier → review" spine, `--send-back adds an extra unifier pass`,
+    unifier-written demo.json + changelog draft). This feature owns its
+    migration: assertion spine moved to the successor shape (demo.json
+    producer → R4-07, send-back path → R4-08-F2 mechanics, dev-loop N/N
+    unchanged), frozen-SHA routine baseline re-cut on the successor flow —
+    sequenced so the old-shape tier stays runnable until the new flow's first
+    green verify run. ACs: verify:cycle green on the successor flow;
+    old-shape tier retired only after that first green run.
+  - **R4-10-F6 Resume semantics re-home (ADR-019 successor).** The
+    all-WIs-complete environment-failure resume (`resume_from: 'unifier'`,
+    `orchestrator/requeue-resume.ts`) re-targets the successor topology:
+    resume from the demo node against the preserved branch (demo node marked
+    `resumable: true` in F1's flow data); requeue-resume stamp vocabulary
+    migrated; ADR-019 amended in the same change. The standing operator
+    requirement holds: unifier-era or successor-era, a post-develop failure
+    never discards per-WI work. ACs: a seeded post-develop environment
+    failure resumes from demo without re-running WIs; ADR-019 amendment
+    merged.
+- **Session sizing:** ~4 sessions (flow+topology; gate F2; succession+KB
+  rebind; harness migration + resume re-home).
+- **Out of scope:** node agents (R4-05/06/07/08); trigger kinds (R2-04, which
+  also owns the registry's agent-target extension R4-09-F1 consumes);
   architect-flow retirement (R4-D1).
 
 ### R4-11 Roadmap & attention surface
@@ -468,12 +584,38 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
   ADR-031 retired the old pane — this is the deliberate slim re-ship). Plus
   the architect re-run affordance (memory: architect is discrete
   file-checkpointed turns — a small `POST /api/architect/rerun` + button on
-  the StuckWarning is all it needs).
+  the StuckWarning is all it needs). **Scope-ownership note (adversarial
+  review 2026-07-17, D6):** the initiative object + lifecycle is SWE-suite
+  domain *hosted in* Scope-1 machinery (queue, scheduler, finalize) — this
+  initiative edits Scope-1 paths on the suite's behalf; R4-01-F1's ADR
+  records the platform-owned vs suite-owned object split, and the state
+  vocabulary extends via one data table (the `status-colors.ts` pattern),
+  never scattered string literals.
 - **Features:**
-  - **R4-11-F1 `merged` lifecycle state.** Manifest schema + scheduler +
-    finalize path emit `in-progress → merged → done` (reflect completion
-    closes it, R4-09); UI chip + DOM attrs; journey synced. ACs: state
-    round-trips through a real merge; no initiative skips it.
+  - **R4-11-F1 `merged` lifecycle state.** The real transition is
+    **`ready-for-review → merged → done`** (`merged` = PR confirmed merged,
+    reflect pending) — NOT the "in-progress → merged" shorthand of the
+    original decision text; the as-built lifecycle is a **directory-rename
+    state machine** (`_queue/pending → in-flight → ready-for-review → done |
+    failed`, `orchestrator/queue.ts`), and `merged` ships as a **sixth queue
+    directory `_queue/merged/`** (consistent with the atomic-rename claim
+    mechanism). Code that must learn the state — enumerate and touch all of
+    it: `queue.ts` (getPaths/counts/QueueState), `finalize-merged.ts`,
+    `enqueue-develop-run.ts` state classification, recovery sweeps,
+    `run-model.ts` `QUEUE_STATE_TO_RUN_STATUS`, `forge-ui/lib/bridge-client.ts`
+    status union + `SerpentineTimeline` vocabulary (via the shared data-table
+    pattern). **Dependency rule (operator decision 2026-07-17): dependent
+    initiatives gate on `merged ∪ done`** — reflect completion is never a
+    prerequisite for downstream work (accepted risk, recorded: brain lessons
+    from a pending reflection may not land before a dependent cycle starts).
+    **Interim closure rule (waves 2-3, until R4-09):** the existing inline
+    finalize→reflector chain transits `merged → done` in the same sweep — the
+    state is observable but never parks; the reflection-lost path ALSO moves
+    `merged → done` (today's deliberate tolerance is preserved). UI chip +
+    DOM attrs; journey synced. ACs: state round-trips through a real merge;
+    no initiative skips it; **exactly one component moves manifests into/out
+    of `merged/`**; a dependent initiative dispatches while its prerequisite
+    sits in `merged`; a reflection-lost run still reaches `done`.
   - **R4-11-F2 Plan trigger + blocked states.** Per-initiative "Plan" action
     for WI-less initiatives (R4-05-F4); `blocked-until-planned` lock badge;
     spec/WI counts once planned. ACs: DOM-as-metrics attrs for each state;
@@ -483,11 +625,15 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     tab removed; redirects preserved. ACs: recovery journey rewritten against
     the roadmap surface; dead-route sweep green.
   - **R4-11-F4 Cross-project attention strip.** Slim aggregate strip /
-    notifications blade on the library surface: per-project in-flight counts,
-    gates-awaiting-operator, merged-awaiting-reflect. Q4 decision; kept
-    deliberately thin (no full portfolio pane). ACs: with ≥2 projects active,
-    one glance answers "what needs me"; strip carries data-* attrs; journey
-    beat added.
+    notifications blade on the library surface: per-project **planned/queued
+    counts** (the MVUS "observe planned work" half), in-flight counts,
+    gates-awaiting-operator, merged-awaiting-reflect, and R4-05-F6
+    completeness flags. Q4 decision; kept deliberately thin (no full
+    portfolio pane) — drill-down is link-through to the owning per-project /
+    per-run surfaces (which already carry per-phase/per-WI cost attrs). ACs:
+    with ≥2 projects active, one glance answers "what needs me"; every strip
+    item links through to its owning surface (asserted in the journey beat);
+    strip carries data-* attrs.
   - **R4-11-F5 Architect re-run affordance.** `POST /api/architect/rerun` +
     button on the stalled-turn warning (spawn path behind R5-01's guard).
     ACs: a stalled seeded session resumes from the UI.
@@ -519,3 +665,18 @@ free R4 ID's features.
   Cross-roadmap edges recorded: R4-01 ← R2-01,R2-02 · R4-05 ← R4-11(soft),R1-04(soft) ·
   R4-06 ← R2-03,R4-05 · R4-07 ← R1-03,R2-05(soft) · R4-09 ← R1-01 ·
   R4-02/R4-03 ← R3-05(+R1 clauses) · R4-10 ← R4-05,R4-07,R4-08.
+- 2026-07-17 — Adversarial-review amendment pass (30 surviving findings + 4
+  operator decisions). Headlines: R4-11-F1 rewritten against the real
+  directory-rename state machine (`ready-for-review → merged → done`,
+  `_queue/merged/`, dependents gate on `merged ∪ done`, reflection-lost never
+  blocks — operator decisions 1); R4-08-F2 expanded into the full ADR-026
+  successor spec (queue substrate/cap/mutex/one-cycle-identity + ADR-026
+  supersede AC); R4-10 gained F5 (verify:cycle harness migration) and F6
+  (ADR-019 resume re-home) + the loop-topology spec in F1 + unattended red-gate
+  remediation in F2; R4-09-F1 trigger cutover made atomic + routed through the
+  R2-04 registry; R4-05 gained the R2-01 hard edge, F6 non-blocking disposition
+  (operator decision 2: no plan-output gate — simplification), F5 testable AC;
+  R4-02 gained F5 (profile.md tagging); R4-01-F4 reduced to retirement
+  mechanics with explicit late sequencing; demo-mechanism dispositions recorded
+  in R4-B6; scope-ownership note on R4-11 (D6); doctrine coupling clarified as
+  artifact-contract (E11).

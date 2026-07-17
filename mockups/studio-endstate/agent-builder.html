@@ -139,14 +139,15 @@
       </div>
     </div>
 
-    <div class="decl-row" data-decl="gate-capable">
+    <div class="decl-row" data-decl="gates-note">
       <span class="co r2">4</span>
-      <div class="decl-name">Gate-capable<small>can this agent's verdict pause a flow?</small></div>
+      <div class="decl-name">Gates<small>flow data, not an agent capability</small></div>
       <div class="decl-body">
-        <span class="toggle on"><span class="track"><span class="knob"></span></span> declared</span>
-        <div class="note">The agent <em>judges</em>; the <em>orchestrator executes</em> the gate (ADR-036 pattern).
-          The retired unifier's dual-boundary full-suite gate relocates to orchestrator-owned execution —
-          <span class="chip review">&#9873; for operator review</span> (Q3-B).</div>
+        <div class="note"><strong>No agent-level gate declaration exists</strong> (operator decision
+          2026-07-17: agent-as-sometimes-gate is deliberately not built — gates are authored on
+          flow nodes; R2-01-F2). The agent <em>judges</em>; the <em>orchestrator executes</em> the
+          gate (ADR-036 pattern). The retired unifier's dual-boundary full-suite gate relocates to
+          orchestrator-owned execution — <span class="chip review">&#9873; for operator review</span> (Q3-B, R4-10-F2).</div>
       </div>
     </div>
 

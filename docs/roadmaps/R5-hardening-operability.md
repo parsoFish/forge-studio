@@ -66,7 +66,8 @@ is stale (R5-07 strikes it).
 - **Depended on by:** R2-01 (new spawn surfaces born inside the seam),
   R2-04-F3 (trigger paths guard-covered), R3-03 *(soft — hook execution leans
   on the same rails)*, R1-04-F2 (anything added to the finalize path sits
-  behind this guard), R4-11-F5 (rerun spawn path)
+  behind this guard), R4-05-F4 (standalone-planner dispatch), R4-11-F5 (rerun
+  spawn path)
 - **Context:** known-gaps §4.10 open platform tail + memory
   `feedback_bridge_real_agent_surfaces`: three bridge surfaces trigger real
   agents/real git with **no env guard** — (1) in-process `runReleaseFinalize`
@@ -157,21 +158,28 @@ is stale (R5-07 strikes it).
 - **Out of scope:** pricing/model catalog upkeep (`studio/catalog.yaml`
   models); budget policy changes (ADR-009: new knobs need ADRs).
 
-### R5-04 Flow edit-lock fix
-- **Status:** planned  ·  **Wave:** opportunistic (first session touching run-model/flows)
-- **Depends on:** —
-- **Context:** known-gaps §1 (latent M4): `orchestrator/run-model.ts` stamps a
-  hardcoded `FLOW_ID`, so edit-lock false-negatives exist for any flow other
-  than the seeded cycle flows — surfaces the moment a second, operator-authored
-  flow actually runs. Rises in priority the moment R4-10 ships a second live
-  flow.
+### R5-04 Flow edit-lock verification (re-scoped 2026-07-17)
+- **Status:** planned  ·  **Wave:** 1 (small; must precede the first second
+  live flow — R3-02's generator flow, R2-03-F4's test flow, and R4-10 all
+  guarantee that condition)
+- **Depends on:** — · **Depended on by:** R3-02 *(soft)*, R4-10 *(soft)* —
+  both ship second live flows (adversarial review E7)
+- **Context:** **The originally-planned fix is already shipped** (adversarial
+  review A3): run-model has derived `flowId` from `manifest.flow_id` since
+  S8/DEC-3 (`orchestrator/run-model.ts` — `FALLBACK_FLOW_ID='unknown'` is a
+  pre-S8 fallback only) and the edit-lock predicate documents it
+  (`cli/bridge-studio-writes.ts:760-765`). known-gaps §1 is stale — struck via
+  R5-07-F1. What's genuinely missing is the proof artifact, and the real
+  residual gap in this area (operator-authored flows have no enqueue path at
+  all) is owned by **R2-04-F1**, cross-referenced there.
 - **Features:**
-  - **R5-04-F1 Stamp the real flowId.** Run-model derives the running flow's
-    actual id; edit-lock keys off it. ACs: an operator-authored flow mid-run
-    locks its definition against edits; seeded flows unchanged; unit test per
-    flow id.
-- **Session sizing:** small — fold into any adjacent session.
-- **Out of scope:** builder UX around locked flows (existing surface).
+  - **R5-04-F1 Verification test.** Unit test proving a run of an
+    operator-authored (non-seed) flow id locks its definition against edits.
+    ACs: test exists and is green; known-gaps §1 struck with the S8/DEC-3
+    citation (rides R5-07-F1).
+- **Session sizing:** trivial — fold into any adjacent session before wave 3.
+- **Out of scope:** operator-authored flow *enqueue* (R2-04-F1); builder UX
+  around locked flows (existing surface).
 
 ### R5-05 Known-gaps residue
 - **Status:** planned  ·  **Wave:** opportunistic
@@ -267,9 +275,10 @@ is stale (R5-07 strikes it).
   fix cites its evidence; `forge brain lint` + link checks stay green.
 - **Features:**
   - **R5-07-F1 Strike resolved known-gaps entries.** §4.3(c) brain-index
-    pre-ADR-035 walk — fixed by PR #26 (`464eabd`); annotate rather than
-    delete (living-doc rule: strike with date + commit). ACs: known-gaps
-    shows it struck with provenance.
+    pre-ADR-035 walk — fixed by PR #26 (`464eabd`); **§1 flow edit-lock —
+    fixed by S8/DEC-3** (run-model stamps `manifest.flow_id`; verification
+    test = R5-04-F1); annotate rather than delete (living-doc rule: strike
+    with date + commit). ACs: known-gaps shows both struck with provenance.
   - **R5-07-F2 ADR-024 completion statement.** Reconcile the double-booking:
     ADR-024's landed notes (five PhaseAgentSpec migrations done, 2026-06-13)
     vs CLAUDE.md ("not yet complete"). Record the agreed definition: spec
@@ -297,6 +306,30 @@ is stale (R5-07 strikes it).
   - **R5-07-F7 MVUS ↔ Q4 note.** Amend MVUS's cross-project observability
     line to point at the Q4 slim-strip decision (R4-11-F4) so the requirement
     and its deliberate thin shape stay linked. ACs: MVUS cites R4-11-F4.
+  - **R5-07-F8 North-star reframe lands (operator decision 4, 2026-07-17 —
+    wave 0, rides the first session).** Mint the **north-star ADR** (next
+    free number): the two-level mission — **Scope 1 = a modular platform for
+    building the ideas machine or any other agentic flow** (SWE-focused for
+    now by explicit operator choice; future = connectors to other kinds of
+    systems, not built in advance), **Scope 2 OOTB = the ideas machine**
+    (where MVUS lives). R4-01-F1's later ships-as-artifact ADR
+    cross-references this one rather than originating the split. Strike-list
+    (adversarial review D1/D2/E9): `CLAUDE.md` line 3 + north-star section
+    rewritten two-level (the instruction layer must stop biasing sessions
+    against Scope-1 generality); `README.md:5` gains the platform/content
+    distinguishing sentence; `ARCHITECTURE.md` header note ("the phases below
+    are the shipped OOTB suite riding the engine/seams" — full rewrite rides
+    R4-01); **MVUS re-scoped in place** — preamble retitled "canonical vision
+    for the shipped OOTB suite (Scope 2)", keep/cull rule bounded to Scope-2
+    content, §3's unifier text replaced with the Q3-B successors (demo agent
+    + adversarial review + orchestrator merge-boundary gate ⚑);
+    `docs/forge-studio-market-and-differentiation.md` dated amendment at §2
+    (the reframe is the internal engineering north star; external positioning
+    keeps the four §3.4 qualifiers until non-SWE connectors exist);
+    `docs/repo-map.md` Scope-1 line names the target as "any agentic flow";
+    roadmap `README.md` §1 + §8 updated with the reframe, dated. ACs: ADR
+    merged; every strike-list doc amended with a dated note; no orientation
+    doc still teaches the single-level vision.
 - **Session sizing:** 1 session (or folded into wave 0's second session).
 - **Out of scope:** any code change (pure docs); roadmap-set upkeep itself
   (index §5 maintenance contract governs that).
@@ -315,3 +348,9 @@ maintenance contract; nothing currently carries a deferral condition.
   precedes new spawn surfaces) · R2-04-F3 ← R5-01 · R3-03 ← R5-01,R5-02
   (soft) · cross-reference-only items pointed at R4-05-F7 / R3-01 / R1-01 /
   R4-11-F3 / R2-05.
+- 2026-07-17 — Adversarial-review amendment pass. R5-04 re-scoped to a
+  verification test — the planned fix already shipped in S8/DEC-3 (A3), moved
+  to wave 1 with edges to R3-02/R4-10 (E7); R5-07-F1 gained the known-gaps §1
+  strike; **R5-07-F8 added** (operator decision 4): the north-star reframe ADR
+  + orientation-doc strike-list incl. the MVUS Scope-2 re-scope (D1/D2/E9);
+  R5-01 dep-by extended with R4-05-F4.

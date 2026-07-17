@@ -101,15 +101,19 @@ in the builder.
   like https://skillsmp.com/ for browse/install."*
 - **Features:**
   - **R3-01-F1 — `skillPath(name)` shared resolver.** One resolution point for
-    every skill lookup. Behavior: `skillPath(name): string` (and a
-    `skillDir(name)` sibling) in a small module importable from both
-    `orchestrator/` and `cli/`; every one of the ~35 hardcoding files
-    (per-phase runners' `deriveAgentSpec(...)` / `resolve(FORGE_ROOT,'skills',...)`
-    sites) and `orchestrator/studio/registry.ts:listAgentDefinitions` route
-    through it. Acceptance: grep for literal `'skills/'` path construction
-    outside the resolver module returns zero production hits; full suite +
-    `ui:journey` green; **no physical move happens in this feature** — the
-    resolver is exactly the §6 revisit condition, the move itself stays a
+    every skill lookup **and enumeration** — a three-function module
+    (adversarial review A6): `skillPath(name): string`, `skillDir(name)`, and
+    `listSkillDirs()` (the discovery walk — `listAgentDefinitions` discovers
+    names via `readdirSync`, it cannot consume a name→path lookup), importable
+    from both `orchestrator/` and `cli/`; every one of the ~35 hardcoding
+    files (per-phase runners' `deriveAgentSpec(...)` /
+    `resolve(FORGE_ROOT,'skills',...)` sites) routes through the lookups and
+    `orchestrator/studio/registry.ts:listAgentDefinitions` consumes
+    `listSkillDirs()`. Acceptance: grep for literal `'skills/'` path
+    construction outside the resolver module returns zero production hits;
+    full suite + `ui:journey` green; **no physical move happens in this
+    feature** — the §6 revisit condition is met only when lookup AND
+    enumeration both route through the module; the move itself stays a
     known-gaps §6 follow-on decided separately.
   - **R3-01-F2 — Unified skill-library registry.** A single library model that
     **unions** live filesystem discovery (`skills/*/SKILL.md` frontmatter) with
@@ -138,18 +142,26 @@ in the builder.
     detailing their view of skill management for a future session — F3's
     surface design must be confirmed against that session's notes before
     implementation; treat this feature's UI shape as provisional.**
-  - **R3-01-F4 — Marketplace browse/install.** Browse/install from community
-    marketplaces (reference: https://skillsmp.com/, plus the upstream repos
-    already cited in `catalog.yaml` — obra/superpowers, anthropics/skills).
-    Install = vendor the skill into `skills/<name>/` with provenance
-    frontmatter (`source`, `provenance`, install date, upstream ref) so
-    installed skills are ordinary library members. A lightweight review-on-
-    install scan (frontmatter sanity, no embedded shell payloads in
-    `SKILL.md`-adjacent scripts) — the *heavy* protections are hooks-specific
-    (R3-03), but skills get a proportional check. Acceptance: an install
-    round-trips into the unified registry (F2) and the palette; provenance
-    renders in the library view (F3); reinstalling shows the already-installed
-    state rather than duplicating.
+  - **R3-01-F4 — Marketplace browse/install (posture hardened 2026-07-17,
+    adversarial review E5 — operator decision 3).** Browse/install from
+    community marketplaces (reference: https://skillsmp.com/, plus the
+    upstream repos already cited in `catalog.yaml` — obra/superpowers,
+    anthropics/skills). Third-party prompt-code gets **at least** the gate
+    forge's own generated skills get (R3-02-F4) — never weaker: install routes
+    through the same **draft → scan → operator-approve** pipeline. On
+    install: the skill lands as a draft with `runtime:`, `allowed-tools`, and
+    `library:` frontmatter **stripped/quarantined pending approval** (a
+    vendored SKILL.md must not become a runnable, self-tool-granting agent
+    before a human reads it — the prose IS the payload, and instruction-level
+    injection is unscannable); the approval gate renders the full SKILL.md
+    body; the upstream **content hash is pinned** in the provenance
+    frontmatter (`source`, `provenance`, `contentHash`, install date,
+    upstream ref); an update or local edit re-enters review (parity with
+    R3-03-F2's edit rule). Acceptance: an approved install round-trips into
+    the unified registry (F2) and the palette; a pre-approval draft is not
+    palette-visible and not runnable; provenance + hash render in the library
+    view (F3); reinstalling shows the already-installed state rather than
+    duplicating; a changed upstream hash forces re-review.
 - **Session sizing:** ~3 operator-run agent sessions — (1) F1 resolver sweep +
   full-gate; (2) F2 registry union + API registration + lint check; (3) F3+F4
   surfaces + journey-sync (F3 gated on the operator's §4b.1 design session).
@@ -162,7 +174,9 @@ in the builder.
 - **Depends on:** R3-01 (landing-place — generated skills need the managed
   library to land in; index dependency table records this edge), R1-01 (soft —
   a generated flow-scoped skill may bind a flow-scoped KB under the KB
-  contract).
+  contract), R5-04 (soft — the generator flow runs through the standard run
+  model, i.e. a second live flow: verify the edit-lock first — adversarial
+  review E7).
 - **Context:** Operator diagram (verbatim intent): *"an agentic flow that
   takes a scope (project, agent, or flow) and a process (described by the
   operator OR referencing a cycle run) and puts it through a skill-generator
@@ -412,3 +426,11 @@ rather than deferred within it:
 ## Change log
 
 - 2026-07-17 — Roadmap created (initial forge-dev roadmap planning session).
+- 2026-07-17 — Adversarial-review amendment pass. R3-01-F1 extended to a
+  three-function module incl. `listSkillDirs()` enumeration (A6 — the §6
+  revisit condition needs lookup AND discovery); R3-01-F4 marketplace-install
+  posture hardened to the draft→scan→operator-approve pipeline with
+  frontmatter quarantine, content-hash pinning, and re-review on update
+  (E5, operator decision 3 — third-party prompt-code never gets a weaker gate
+  than forge's own generated drafts); R3-02 gained the soft R5-04 edge
+  (edit-lock verification precedes a second live flow — E7).

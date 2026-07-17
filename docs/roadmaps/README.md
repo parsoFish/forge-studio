@@ -64,31 +64,44 @@ Canonical initiative skeleton (IDs are fixed and never reused):
 ## 3. Cross-roadmap dependencies
 
 Every edge below is recorded **on both sides** (in the depender's
-"Depends on" field and flagged in the dependency's initiative). "Soft" means
-sequencing preference, not a hard blocker.
+"Depends on" field and the dependency's "Depended on by" field) — and the
+table is **generated from the per-file fields**; when they disagree, the
+files win and this table regenerates. "Soft" means sequencing preference,
+not a hard blocker. (Regenerated 2026-07-17 after the adversarial review —
+previously several file-recorded edges were missing here.)
 
 | Depender | Depends on | Reason |
 |----------|-----------|--------|
-| R4-01 Platform→artifact migration | R2-01 Agent-as-runnable | Platform surfaces migrate onto the runnable primitive; can't migrate onto a seam that doesn't exist. |
-| R4-01 Platform→artifact migration | R2-02 Agent-def-driven builder | Migrated OOTB agents must be round-trippable through the def-driven builder, or migration recreates hardcoding. |
-| R4-05 Plan agent | R4-11 Roadmap & attention surface *(soft)* | The plan agent's standalone per-initiative entry point lives on the roadmap screen and needs its initiative states (incl. the new "merged" state). |
-| R4-06 Develop agent refinement | R2-03 Fanout capability | Refined develop fans WIs out through the generic fanout primitive rather than bespoke worktree plumbing. |
-| R4-06 Develop agent refinement | R4-05 Plan agent | Develop consumes the plan agent's WI specs (ADR-037 wi-spec-compiler folds into the plan agent — Q2-B). |
-| R4-07 Demo agent | R1-03 Demo + test process clauses | The demo agent executes the project contract's demo-process clause; the clause must be typed first. |
-| R4-09 Reflect agent | R1-01 KB contract type | Reflect writes into KBs scoped/typed by the KB contract (Q5-B binding rules). |
-| R4-02 Project onboarding agent | R3-05 Instructions library (+R1 contract clauses) | Onboarding sources AGENTS.md/instructions material from the instructions library and validates against contract clauses. |
-| R4-03 Project creation agent | R3-05 Instructions library (+R1 contract clauses) | Same sourcing/validation pattern as onboarding, for greenfield projects. |
-| R4-10 Develop-cycle OOTB flow | R4-05, R4-07, R4-08 | The shipped flow chains plan → develop → demo → adversarial review; all three new agents must exist to assemble it. |
-| R3-02 Skill-generator flow | R3-01 Skills first-class management | Generated skills need a managed library to land in. |
-| R2-D1 Merge-resolution *(deferred)* | R2-03 evidence | Design is gated on the fanout research spike's survey of parallel-agent/merge practice outside forge (Q3-B). |
+| R2-01 Agent-as-runnable | R5-01, R5-02 | Safety first (Q6-A): new spawn surfaces are born inside the dry-bridge seam with a pinned env. |
+| R2-04 Trigger expansion | R5-01, R2-01 | Every trigger is an unattended-spawn surface; agent-complete events need runnable agents. |
+| R4-01 Platform→artifact migration | R2-01, R2-02 | Platform surfaces migrate onto the runnable primitive and must round-trip through the def-driven builder. |
+| R4-01-**F4** (unifier retirement) | R4-07, R4-08, R4-10-F2 | Retirement cannot start before the successor agents and the relocated, proven merge-boundary gate are live. |
+| R4-02 Project onboarding agent | R3-05, R1-03/R1-04, R1-01, R2-01 | Instructions sourcing; contract clauses to tick; KB binding at onboarding; standalone runnable. |
+| R4-03 Project creation agent | R3-05 (+R1 clauses), R4-02 | Same sourcing/validation pattern; hands off to the onboarding loop post-scaffold. |
+| R4-05 Plan agent | R2-01 (hard, F4), R4-11 *(soft)*, R1-04 *(soft)* | Standalone dispatch = the runAgent primitive behind R5-01's guard (no bespoke runner); roadmap-screen states; planning inputs. |
+| R4-06 Develop agent refinement | R2-03, R4-05 | Declared fanout; consumes the plan agent's spec-WIs (ADR-037 fold, Q2-B). |
+| R4-07 Demo agent | R1-03, R2-05 *(soft)* | Executes the typed demo-process clause; richer surfaces build on the artifact contract. |
+| R4-09 Reflect agent | R1-01, R4-11 | Writes into contract-typed KBs (Q5-B); triggered by R4-11-F1's merged state. |
+| R4-10 Develop-cycle OOTB flow | R4-05, R4-07, R4-08 | The shipped flow chains plan → develop → demo → adversarial review. |
+| R4-10-**F4** (succession) | R1-01 | Succession must rebind the cycles KB `binding.ref` or R1-01's dangling-ref lint goes red. |
+| R3-02 Skill-generator flow | R3-01, R1-01 *(soft)*, R5-04 *(soft)* | Managed library landing place; flow-scoped KB binding; edit-lock verified before a second live flow. |
+| R3-03 Hooks library | R3-01 *(soft)*, R5-01/R5-02 *(soft)* | Reuses the library pattern; leans on the safety rails. |
+| R3-04 Tools/MCPs library | R3-01 *(soft)* | Same library surface pattern. |
+| R1-02 KB seam completion | R1-01 | The seam completes against the contract shape, not the legacy descriptor. |
+| R1-04 / R1-05 | R1-03 | Reuse the typed-process pattern; machine-checks verify the typed processes. |
+| R4-10 / R3-02 | R5-04 *(soft)* | Both ship second live flows; the edit-lock verification precedes them. |
+| R2-D1 Merge-resolution *(deferred)* | R2-03 evidence | Design gated on the fanout research spike (Q3-B). |
 
 ```mermaid
 graph LR
-  subgraph R1
-    R1-01; R1-03
+  subgraph R5
+    R5-01; R5-02; R5-04
   end
   subgraph R2
-    R2-01; R2-02; R2-03; R2-D1
+    R2-01; R2-02; R2-03; R2-04; R2-05; R2-D1
+  end
+  subgraph R1
+    R1-01; R1-02; R1-03; R1-04
   end
   subgraph R3
     R3-01; R3-02; R3-05
@@ -96,19 +109,40 @@ graph LR
   subgraph R4
     R4-01; R4-02; R4-03; R4-05; R4-06; R4-07; R4-08; R4-09; R4-10; R4-11
   end
+  R5-01 --> R2-01
+  R5-02 --> R2-01
+  R5-01 --> R2-04
+  R2-01 --> R2-04
   R2-01 --> R4-01
   R2-02 --> R4-01
+  R2-01 --> R4-02
+  R2-01 --> R4-05
   R4-11 -. soft .-> R4-05
+  R1-04 -. soft .-> R4-05
   R2-03 --> R4-06
   R4-05 --> R4-06
   R1-03 --> R4-07
+  R2-05 -. soft .-> R4-07
   R1-01 --> R4-09
+  R4-11 --> R4-09
+  R1-01 --> R4-02
+  R1-03 --> R4-02
   R3-05 --> R4-02
   R3-05 --> R4-03
+  R4-02 --> R4-03
   R4-05 --> R4-10
   R4-07 --> R4-10
   R4-08 --> R4-10
+  R4-07 --> R4-01
+  R4-08 --> R4-01
+  R4-10 --> R4-01
+  R1-01 --> R4-10
+  R1-01 --> R1-02
+  R1-03 --> R1-04
   R3-01 --> R3-02
+  R1-01 -. soft .-> R3-02
+  R5-04 -. soft .-> R3-02
+  R5-04 -. soft .-> R4-10
   R2-03 -. evidence .-> R2-D1
 ```
 
@@ -122,11 +156,11 @@ initiatives inside a wave can run in parallel where dependencies allow.
 
 | Wave | Initiatives | Rationale |
 |------|-------------|-----------|
-| **0** | R5-01 dry-bridge seam · R5-02 G8 env-pin at spawn seam (+ R5-07 SSOT reconciliation, cheap doc hygiene) | Safety first: close the bridge-acts-with-operator-credentials class (2026-07-16 self-merge incident) and pin the env at the spawn seam before any new agent surfaces multiply the risk. R5-07 is near-free and stops doc drift compounding under the new roadmap set. |
-| **1** | R2-01 agent-as-runnable · R2-02 agent-def-driven builder | The runnable primitive is the foundation everything in R4 migrates onto; land it before building agents that would otherwise hardcode around it. |
-| **2** | R4-05 plan agent · R4-11 roadmap & attention surface | The highest-leverage new capability (plan agent, absorbing ADR-037) plus the operator surface it enters from (soft dep, Q2-B two entry paths). |
+| **0** | R5-01 dry-bridge seam · R5-02 G8 env-pin at spawn seam · R5-07 SSOT reconciliation **incl. F8, the north-star reframe ADR** | Safety first: close the bridge-acts-with-operator-credentials class (2026-07-16 self-merge incident) and pin the env at the spawn seam before any new agent surfaces multiply the risk. R5-07 is near-free, stops doc drift compounding, and F8 fixes the instruction layer before wave-1 sessions design under the stale north star. |
+| **1** | R2-01 agent-as-runnable · R2-02 agent-def-driven builder · R5-04 edit-lock verification (trivial rider) | The runnable primitive is the foundation everything in R4 migrates onto; land it before building agents that would otherwise hardcode around it. R5-04 verifies the edit-lock before any second live flow exists. |
+| **2** | R4-05 plan agent · R4-11 roadmap & attention surface | The highest-leverage new capability (plan agent, absorbing ADR-037) plus the operator surface it enters from (soft dep, Q2-B two entry paths; R4-05-F4 dispatches through R2-01's primitive). |
 | **3** | R1-01 KB contract type · R3-01 skills first-class management — interleaved at dependency points | Contract and library groundwork pulled in exactly when downstream R4 agents need them (R4-09 needs R1-01; R3-02 and the palette residue need R3-01). |
-| **4** | Remaining R4 agents (R4-02/03/04/06/07/08/09) + R4-10 flow assembly, as their deps land | The OOTB suite completes bottom-up; R4-10 assembles last since it chains R4-05/07/08. |
+| **4** | **R4-01 first** (F1–F3), then R4-02/03/04/06/07/08/09 as their deps land, **R4-10 assembles last** (incl. its F5 harness migration + F6 resume re-home), **R4-01-F4 retirement after R4-10-F2 is live and green** | The OOTB suite completes bottom-up; the migration governs the agent initiatives, the flow chains R4-05/07/08, and unifier retirement is the final cutover. |
 | **continuous** | R5-03 cost integrity · R5-04 edit-lock fix · R5-05 known-gaps residue · R5-06 demo/harness backlog | Opportunistic — pick up alongside whatever wave is active when a session touches the relevant seam. |
 
 ---
@@ -248,8 +282,10 @@ entry here plus corresponding roadmap change-log lines.
   per-initiative from the roadmap screen; auto-after-architect-accept).
   Architect-flow retirement is a deferred future initiative (R4-D1). The
   initiative lifecycle gains a **"merged"** state between in-progress and done
-  (the reflect trigger point). ADR-037's wi-spec-compiler folds into the plan
-  agent (ADR-037 is the only Proposed ADR).
+  (the reflect trigger point) — implemented against the real queue vocabulary
+  as `ready-for-review → merged → done` (R4-11-F1; the "in-progress" phrasing
+  here is the decision's original shorthand). ADR-037's wi-spec-compiler folds
+  into the plan agent (ADR-037 is the only Proposed ADR).
 - **Q3-B — unifier retired**: the unifier concept is retired. Post-develop =
   demo agent + adversarial review agent, both initiative-context. Fanout
   (R2-03) gets a research-first spike (survey parallel-agent/merge best
@@ -277,6 +313,42 @@ entry here plus corresponding roadmap change-log lines.
 
 ---
 
+### Adversarial-review decisions (2026-07-17, same day — second session)
+
+An adversarial review of the freshly-authored set (5 finder dimensions +
+per-dimension refutation; 37 findings, 30 surviving) produced an amendment
+pass across all five roadmaps plus four operator decisions:
+
+1. **Dependents gate on `merged ∪ done`** — reflect completion is never a
+   prerequisite for downstream initiatives. Accepted risk, recorded: brain
+   lessons from a pending reflection may not land before a dependent cycle
+   starts. (R4-11-F1, R4-09-F1.)
+2. **No plan-output gate — simplification.** The R4-05-F6 completeness
+   validator is non-blocking (log + surface on roadmap node/attention strip);
+   no `workitems` gate ships, and the agent-as-sometimes-gate capability is
+   deliberately not built (gates stay flow-node data; the `gate-emitting`
+   capability bit was dropped from R2-02-F1). Rationale: shave away rather
+   than add guardrails; plan is an interior node of the develop cycle in the
+   target state.
+3. **Security posture folded in as specified** — marketplace installs route
+   through the draft→scan→operator-approve pipeline with frontmatter
+   quarantine + content-hash pinning (R3-01-F4); external-event triggers get
+   HMAC verification, source allowlists, typed-payload isolation, and an
+   injection fixture (R2-04-F2/F3).
+4. **North-star reframe approved** — Scope 1 = modular platform for building
+   the ideas machine *or any other agentic flow* (SWE-focused for now by
+   explicit choice); Scope 2 OOTB = the ideas machine (MVUS's re-scoped
+   home). Lands wave 0 as a north-star ADR + orientation-doc strike-list
+   (R5-07-F8).
+
+---
+
 ## Change log
 
 - 2026-07-17 — Index created (initial forge-dev roadmap planning session).
+- 2026-07-17 — Adversarial-review amendment pass: §3 dependency table +
+  mermaid regenerated from per-file edges (several file-recorded edges were
+  missing); §4 wave table gains R4-01 ordering, R5-04 (wave 1) and R5-07-F8
+  (wave 0); §8 gains the four review decisions; Q2-B record annotated with
+  the real state vocabulary. Per-roadmap amendments in each file's change
+  log.
