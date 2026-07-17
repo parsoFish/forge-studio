@@ -18,9 +18,9 @@ import {
 } from './lib/post-run-boundary.mjs';
 
 /** `gh pr list` stand-in used everywhere PR-state isn't itself under test. */
-const noPrs = () => null;
+const noPrs = (): null => null;
 
-function initTmpRepo() {
+function initTmpRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), 'post-run-boundary-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
@@ -31,7 +31,7 @@ function initTmpRepo() {
   return dir;
 }
 
-function withTmpRepo(fn) {
+function withTmpRepo(fn: (dir: string) => void): void {
   const dir = initTmpRepo();
   try {
     fn(dir);
@@ -52,8 +52,25 @@ test('captureBoundaryBaseline: captures headSha, empty status, and injected prs'
   });
 });
 
+test('captureBoundaryBaseline: reports untracked files expanded, never collapsed to a directory', () => {
+  withTmpRepo((dir) => {
+    // git's default porcelain collapses a wholly-untracked directory to its
+    // shallowest line (`?? demos/`); --untracked-files=all must expand it so
+    // the ignore-prefix matching always sees real file paths.
+    mkdirSync(join(dir, 'demos', 'e2e'), { recursive: true });
+    writeFileSync(join(dir, 'demos', 'e2e', 'index.html'), '<html></html>');
+    const snapshot = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    assert.match(snapshot.statusPorcelain, /\?\? demos\/e2e\/index\.html/);
+    assert.doesNotMatch(snapshot.statusPorcelain, /\?\? demos\/$/m);
+  });
+});
+
 test('captureBoundaryBaseline: requires repoRoot (fails fast, no silent default)', () => {
-  assert.throws(() => captureBoundaryBaseline({ ghPrList: noPrs }), /repoRoot is required/);
+  assert.throws(
+    // @ts-expect-error — intentional: proving runtime fail-fast on missing repoRoot
+    () => captureBoundaryBaseline({ ghPrList: noPrs }),
+    /repoRoot is required/,
+  );
 });
 
 test('captureBoundaryBaseline: a hard git failure throws (git checks stay hard)', () => {
@@ -106,7 +123,7 @@ test('compareBoundary: tree-dirtied violation on NEW dirt absent from baseline',
 
     assert.equal(result.clean, false);
     const violation = result.violations.find((v) => v.type === 'tree-dirtied');
-    assert.ok(violation, 'expected a tree-dirtied violation');
+    if (!violation || violation.type !== 'tree-dirtied') throw new Error('expected a tree-dirtied violation');
     assert.equal(violation.path, 'stray.txt');
     assert.equal(violation.before, null);
   });
@@ -129,7 +146,7 @@ test('compareBoundary: pre-existing dirt at baseline is tolerated, even if it ch
   });
 });
 
-test('compareBoundary: ignorePathPrefixes exempts a caller-declared output surface', () => {
+test('compareBoundary: ignorePathPrefixes exempts files under a caller-declared surface', () => {
   withTmpRepo((dir) => {
     const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
     mkdirSync(join(dir, 'demos', 'e2e'), { recursive: true });
@@ -154,6 +171,77 @@ test('compareBoundary: ignorePathPrefixes does not exempt paths outside the decl
   });
 });
 
+test('compareBoundary: a rogue write under an excused parent directory is still a violation', () => {
+  withTmpRepo((dir) => {
+    // verify-cycle excuses only ITS OWN demos/verify/<handle>/ output; a rogue
+    // sibling under demos/verify/ must not ride along on the shared parent.
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    mkdirSync(join(dir, 'demos', 'verify', 'handle-a'), { recursive: true });
+    writeFileSync(join(dir, 'demos', 'verify', 'handle-a', 'summary.json'), '{}');
+    mkdirSync(join(dir, 'demos', 'verify', 'other'), { recursive: true });
+    writeFileSync(join(dir, 'demos', 'verify', 'other', 'x'), 'rogue\n');
+    const current = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+
+    const result = compareBoundary(baseline, current, {
+      ignorePathPrefixes: ['demos/verify/handle-a/'],
+    });
+
+    assert.equal(result.clean, false);
+    const paths = result.violations.map((v) => (v.type === 'tree-dirtied' ? v.path : null));
+    assert.deepEqual(paths, ['demos/verify/other/x']);
+  });
+});
+
+test('compareBoundary: no bare string-prefix matches — demos/e is not excused by demos/e2e/', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    mkdirSync(join(dir, 'demos'), { recursive: true });
+    writeFileSync(join(dir, 'demos', 'e'), 'not the same path\n');
+    const current = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+
+    const result = compareBoundary(baseline, current, { ignorePathPrefixes: ['demos/e2e/'] });
+
+    assert.equal(result.clean, false);
+  });
+});
+
+test('compareBoundary: prefixes normalize to a trailing slash (segment-exact, not string-prefix)', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    mkdirSync(join(dir, 'demos', 'e2e'), { recursive: true });
+    writeFileSync(join(dir, 'demos', 'e2e', 'index.html'), '<html></html>');
+    writeFileSync(join(dir, 'demos', 'e2e-extra.txt'), 'sibling, different segment\n');
+    const current = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+
+    // Prefix given WITHOUT a trailing slash still means the directory, and
+    // must not excuse the e2e-extra.txt sibling via bare string-prefixing.
+    const result = compareBoundary(baseline, current, { ignorePathPrefixes: ['demos/e2e'] });
+
+    assert.equal(result.clean, false);
+    const paths = result.violations.map((v) => (v.type === 'tree-dirtied' ? v.path : null));
+    assert.deepEqual(paths, ['demos/e2e-extra.txt']);
+  });
+});
+
+test('compareBoundary: an ignore entry can name one exact file (e.g. brain/INDEX.md)', () => {
+  withTmpRepo((dir) => {
+    mkdirSync(join(dir, 'brain'), { recursive: true });
+    writeFileSync(join(dir, 'brain', 'INDEX.md'), 'index v1\n');
+    execFileSync('git', ['add', '.'], { cwd: dir });
+    execFileSync('git', ['commit', '-q', '-m', 'add index'], { cwd: dir });
+    const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+    writeFileSync(join(dir, 'brain', 'INDEX.md'), 'index v2 (regenerated)\n');
+    writeFileSync(join(dir, 'brain', 'INDEX.md.bak'), 'not the exact file\n');
+    const current = captureBoundaryBaseline({ repoRoot: dir, ghPrList: noPrs });
+
+    const result = compareBoundary(baseline, current, { ignorePathPrefixes: ['brain/INDEX.md'] });
+
+    assert.equal(result.clean, false);
+    const paths = result.violations.map((v) => (v.type === 'tree-dirtied' ? v.path : null));
+    assert.deepEqual(paths, ['brain/INDEX.md.bak']);
+  });
+});
+
 test('compareBoundary: pr-state-changed when an open PR disappears (merged/closed mid-run)', () => {
   withTmpRepo((dir) => {
     const baseline = captureBoundaryBaseline({
@@ -167,9 +255,9 @@ test('compareBoundary: pr-state-changed when an open PR disappears (merged/close
     assert.equal(result.clean, false);
     assert.equal(result.prsSkipped, false);
     const violation = result.violations.find((v) => v.type === 'pr-state-changed');
-    assert.ok(violation, 'expected a pr-state-changed violation');
+    if (!violation || violation.type !== 'pr-state-changed') throw new Error('expected a pr-state-changed violation');
     assert.equal(violation.prNumber, 23);
-    assert.equal(violation.before.state, 'OPEN');
+    assert.equal(violation.before?.state, 'OPEN');
     assert.equal(violation.after, null);
   });
 });
@@ -189,8 +277,9 @@ test('compareBoundary: pr-state-changed when a PR state/branch changes without d
 
     assert.equal(result.clean, false);
     const violation = result.violations.find((v) => v.type === 'pr-state-changed');
-    assert.equal(violation.before.state, 'OPEN');
-    assert.equal(violation.after.state, 'MERGED');
+    if (!violation || violation.type !== 'pr-state-changed') throw new Error('expected a pr-state-changed violation');
+    assert.equal(violation.before?.state, 'OPEN');
+    assert.equal(violation.after?.state, 'MERGED');
   });
 });
 

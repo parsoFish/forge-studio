@@ -23,6 +23,10 @@
  */
 import { spawnSync } from 'node:child_process';
 
+/** Page size for the open-PR capture — far above any realistic open-PR count
+ *  on a single-operator repo, so the snapshot is never silently truncated. */
+const GH_PR_LIST_LIMIT = 200;
+
 /**
  * @typedef {{ number: number, state: string, headRefName: string }} PrRecord
  * @typedef {{ headSha: string, statusPorcelain: string, prs: PrRecord[] | null }} BoundarySnapshot
@@ -62,7 +66,7 @@ function runGit(repoRoot, args) {
 export function defaultGhPrList(repoRoot) {
   const result = spawnSync(
     'gh',
-    ['pr', 'list', '--json', 'number,state,headRefName', '--limit', '200'],
+    ['pr', 'list', '--json', 'number,state,headRefName', '--limit', String(GH_PR_LIST_LIMIT)],
     { cwd: repoRoot, encoding: 'utf8' },
   );
   if (result.error || result.status !== 0) return null;
@@ -85,7 +89,11 @@ export function defaultGhPrList(repoRoot) {
 export function captureBoundaryBaseline({ repoRoot, ghPrList = defaultGhPrList }) {
   if (!repoRoot) throw new Error('post-run-boundary: repoRoot is required');
   const headSha = runGit(repoRoot, ['log', '-1', '--format=%H']).trim();
-  const statusPorcelain = runGit(repoRoot, ['status', '--porcelain']);
+  // --untracked-files=all: git's default porcelain collapses a wholly-untracked
+  // directory to its shallowest line (`?? demos/` even though only
+  // demos/e2e/index.html was written); expanding to per-file paths keeps the
+  // ignore-prefix matching in compareBoundary segment-exact.
+  const statusPorcelain = runGit(repoRoot, ['status', '--porcelain', '--untracked-files=all']);
   const prs = ghPrList(repoRoot);
   return { headSha, statusPorcelain, prs };
 }
@@ -113,7 +121,12 @@ function parsePorcelainPaths(statusPorcelain) {
  * `ignorePathPrefixes` lets a caller declare ITS OWN known/expected write
  * surface (e.g. a demo gallery the harness itself regenerates every run) so
  * that legitimate harness output isn't reported as a stray mutation. Each
- * caller supplies its own list — the module never hardcodes one.
+ * caller supplies its own list — the module never hardcodes one. Matching is
+ * segment-exact: a directory entry (normalized to a trailing '/') excuses
+ * only paths under that exact directory — never a bare string prefix, so
+ * `demos/e2e/` does NOT excuse `demos/e2e-extra.txt` or `demos/e` — and an
+ * entry without a trailing '/' also excuses that one exact file path (e.g.
+ * `brain/INDEX.md`).
  *
  * @param {BoundarySnapshot} baseline
  * @param {BoundarySnapshot} current
@@ -122,13 +135,13 @@ function parsePorcelainPaths(statusPorcelain) {
  */
 export function compareBoundary(baseline, current, options = {}) {
   const { ignorePathPrefixes = [] } = options;
-  // Bidirectional overlap: git collapses a wholly-untracked directory to its
-  // shallowest untracked line (e.g. `?? demos/` even though only
-  // `demos/e2e/index.html` was actually written), so an ignored path can be
-  // reported as a PARENT of the declared prefix, not just a descendant.
-  const isIgnored = (path) => ignorePathPrefixes.some(
-    (prefix) => path.startsWith(prefix) || prefix.startsWith(path),
-  );
+  // One-directional, segment-exact matching (capture uses --untracked-files=all
+  // so reported paths are always real per-file paths, never a collapsed parent
+  // directory): a path is excused iff it equals an entry verbatim (exact-file
+  // exemption) or sits under an entry as a directory (normalized to '/').
+  const dirPrefixes = ignorePathPrefixes.map((p) => (p.endsWith('/') ? p : `${p}/`));
+  const isIgnored = (path) => ignorePathPrefixes.includes(path)
+    || dirPrefixes.some((prefix) => path.startsWith(prefix));
   const violations = [];
 
   if (baseline.headSha !== current.headSha) {

@@ -459,16 +459,23 @@ async function main() {
         // intentional write surface (the gallery it regenerates every run).
         // Everything else — INCLUDING brain/ — must come back clean: this
         // harness sweeps its own brain contamination above, so residual dirt
-        // there after that sweep is itself a real signal, not noise.
-        const boundaryCurrent = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
-        const boundaryResult = compareBoundary(boundaryBaseline, boundaryCurrent, {
-          ignorePathPrefixes: ['demos/e2e/'],
-        });
-        console.log(`\n${formatBoundaryReport(boundaryResult)}`);
-        check(
-          boundaryResult.clean,
-          `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s))`,
-        );
+        // there after that sweep is itself a real signal, not noise. The whole
+        // block is guarded so a git failure HERE degrades to a failed check
+        // instead of throwing from the finally and masking the run's own error.
+        try {
+          const boundaryCurrent = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+          const boundaryResult = compareBoundary(boundaryBaseline, boundaryCurrent, {
+            ignorePathPrefixes: ['demos/e2e/'],
+          });
+          console.log(`\n${formatBoundaryReport(boundaryResult)}`);
+          check(
+            boundaryResult.clean,
+            `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s))`,
+          );
+        } catch (err) {
+          console.error(`\n[e2e] post-run boundary check failed to run: ${err.message}`);
+          check(false, `post-run boundary: check failed to run (${err.message})`);
+        }
   }
 
     // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).
