@@ -30,13 +30,20 @@ cheapest counter.
 
 ## Open items
 
-### 1. M4 flow edit-lock false-negative (latent)
+### 1. M4 flow edit-lock false-negative (latent) — resolved 2026-07-17 (S8/DEC-3)
 
 The M4 flow edit-lock produces false-negatives for flows **other than the seeded
 cycle flows** until the run-model stamps the real `flowId` (`orchestrator/run-model.ts`
 `FLOW_ID`). **Latent** — the lock is fully effective for the shipped seed flows
 (`forge-architect`/`forge-develop`/`forge-reflect`); it surfaces only when a second,
 operator-authored flow is actually run.
+
+**Struck 2026-07-17 (R5-07-F1):** fixed by S8/DEC-3 — the forge-cycle default
+flow id was retired, and every manifest writer (`orchestrator/manifest.ts`,
+`flow-runner.ts`, `architect-runner.ts`, `enqueue-develop-run.ts`) now requires
+a real `flow_id`; `run-model.ts`'s `FALLBACK_FLOW_ID = 'unknown'` applies only
+to pre-S8 manifests, never to a live operator-authored flow. Verification
+test: **R5-04-F1** (`docs/roadmaps/R5-hardening-operability.md`).
 
 ### 2. Architect hex shows `$0.00` cost — correct out-of-cycle accounting, not a gap (clarified 2026-07-16)
 
@@ -78,8 +85,10 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    `kb.yaml`; a legacy local `<artifactRoot>/brain/profile.md` stub is still
    written beside the central seed (superfluous post-seam); `forge brain index
    --write` still walks the pre-ADR-035 LOCAL project-brain layout (seeded
-   projects invisible to `INDEX.md`); new projects get no `kb` binding in
-   `project.json` (ContractReadiness shows unbound).
+   projects invisible to `INDEX.md`) — *resolved 2026-07-17 (R5-07-F1):* PR #26
+   (`464eabd`) walks the ADR-035 central `brain/projects/` layout instead; new
+   projects get no `kb` binding in `project.json` (ContractReadiness shows
+   unbound).
 4. **Architect+PM collapse** (§6 item 4) — still deferred per plan; needs
    post-refinement cycle evidence before committing.
 5. **Watch SIGKILL mystery** — 4 occurrences mid-dev-loop, suspected WSL2
