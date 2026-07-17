@@ -130,7 +130,9 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Release final-loop**: draft changelog → operator approves the release → release-finalize → forge merges → CI tags/publishes (contract C10).
 - **Reflect interview → user feedback → brain tuning** at the relevant level.
 - **Live, drill-down, cross-project observability**: per-phase task/approach, cost, **per-worker token usage**,
-  live hex UI, and **"interaction needed" signalling**.
+  live hex UI, and **"interaction needed" signalling**. Cross-project is a
+  deliberately thin attention strip, not a full portfolio pane — see
+  [Q4/**R4-11-F4**](../roadmaps/R4-ootb-suite.md) (noted 2026-07-17, R5-07-F7).
 
 Capabilities the journey **does not name** → cull unless they demonstrably forward the above:
 
