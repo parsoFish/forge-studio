@@ -245,3 +245,37 @@ test('POST /api/plan-verdict concurrent double-approve → exactly one 200 (stat
     `loser must get a conflict-shaped rejection (got ${codes})`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// R5-01-F1: FORGE_DRY_BRIDGE alone (without FORGE_ARCHITECT_NO_SPAWN) must
+// suppress the already-NO_SPAWN-guarded spawn helper. This module sets
+// FORGE_ARCHITECT_NO_SPAWN=1 at load time (top of file) for every other test
+// here; this one test deliberately unsets it to prove the dry-bridge seam is
+// an orthogonal, independently-sufficient guard — not a rename of NO_SPAWN.
+// Representative for all 6 already-guarded spawn-helper call sites (see
+// BRIDGE_ROUTE_CLASSIFICATION guard:'spawn-helper' rows in dry-bridge.ts);
+// not exhaustively duplicated per-site since the guard line is identical.
+// ---------------------------------------------------------------------------
+
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local state still progresses)', async () => {
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const sid5 = '2026-05-29T16-00-00';
+    const dir5 = seedVerdictSession(sid5);
+    const res = await postApprove(sid5);
+    // The route itself is NOT dry-bridge-classified (only the reflect/scheduler/
+    // recovery/etc. routes refuse outright) — approve still succeeds and local
+    // state still advances; only the spawn underneath is suppressed.
+    assert.equal(res.status, 200);
+    const status = JSON.parse(readFileSync(join(dir5, 'status.json'), 'utf8'));
+    assert.equal(status.phase, 'finalizing', 'local state must still progress under dry-bridge');
+  } finally {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+  }
+});

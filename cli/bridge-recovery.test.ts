@@ -147,6 +147,40 @@ test('handleRecoveryRoutes: an unrelated url returns false (not handled)', async
   });
 });
 
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses recovery abandon/requeue with the typed 409', async () => {
+  await withTmpAsync(async (root, queueRoot) => {
+    const prior = process.env.FORGE_DRY_BRIDGE;
+    process.env.FORGE_DRY_BRIDGE = '1';
+    try {
+      const logsRoot = join(root, '_logs');
+      const abandonRes = mockRes();
+      const abandonHandled = await handleRecoveryRoutes(
+        mockReq('POST', `/api/recovery/${ID}/abandon`), abandonRes.res,
+        { forgeRoot: root, queueRoot, logsRoot }, `/api/recovery/${ID}/abandon`, 'POST',
+      );
+      assert.equal(abandonHandled, true);
+      assert.equal(abandonRes.captured.status, 409);
+      assert.deepEqual(abandonRes.captured.body, {
+        error: 'dry-bridge', route: '/api/recovery/:id/abandon', method: 'POST', action: 'git-remote',
+      });
+
+      const requeueRes = mockRes();
+      const requeueHandled = await handleRecoveryRoutes(
+        mockReq('POST', `/api/recovery/${ID}/requeue`), requeueRes.res,
+        { forgeRoot: root, queueRoot, logsRoot }, `/api/recovery/${ID}/requeue`, 'POST',
+      );
+      assert.equal(requeueHandled, true);
+      assert.equal(requeueRes.captured.status, 409);
+      assert.deepEqual(requeueRes.captured.body, {
+        error: 'dry-bridge', route: '/api/recovery/:id/requeue', method: 'POST', action: 'git-remote',
+      });
+    } finally {
+      if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = prior;
+    }
+  });
+});
+
 async function withTmpAsync(fn: (root: string, queueRoot: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'forge-recovery-'));
   try { await fn(root, join(root, '_queue')); }

@@ -216,6 +216,29 @@ test('POST /api/runs/:id/resume with path-traversal id → 4xx (no 200)', async 
   assert.ok(res.status >= 400, `expected 4xx, got ${res.status}`);
 });
 
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses resume with the typed 409, manifest stays in failed/', async () => {
+  const id = 'INIT-2026-01-01-resume-dry-bridge';
+  writeFileSync(join(forgeRoot, '_queue', 'failed', `${id}.md`), makeManifest('/nonexistent', id));
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const res = await fetch(`${bridgeUrl}/api/runs/${id}/resume`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    });
+    assert.equal(res.status, 409);
+    assert.deepEqual(await res.json(), {
+      error: 'dry-bridge', route: '/api/runs/:id/resume', method: 'POST', action: 'git-remote',
+    });
+    // Dry-bridge must not have moved the manifest at all.
+    assert.ok(existsSync(join(forgeRoot, '_queue', 'failed', `${id}.md`)), 'manifest stays in failed/');
+    assert.ok(!existsSync(join(forgeRoot, '_queue', 'pending', `${id}.md`)), 'manifest not moved to pending/');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // POST /api/runs/:id/gates/verdict
 // ---------------------------------------------------------------------------

@@ -214,6 +214,27 @@ test('op=fix-agent rejects a file outside brain/ (path-guard, 400)', async () =>
   assert.equal(status, 400);
 });
 
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses op=fix-agent with the typed 409, no run dispatched', async () => {
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const { status, json } = await post('/api/studio/kbs/cycles/maintenance', {
+      op: 'fix-agent', file: join(forgeRoot, 'brain', 'cycles', 'themes', 'test-theme.md'),
+      check: 'checkSourceLinks', kind: 'links.broken',
+    });
+    assert.equal(status, 409, JSON.stringify(json));
+    assert.deepEqual(json, {
+      error: 'dry-bridge',
+      route: '/api/studio/kbs/:id/maintenance (op=fix-agent)',
+      method: 'POST',
+      action: 'spawn-agent',
+    });
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
 test('GET fix-agent/:runId for an unknown run → running', async () => {
   const { status, json } = await get('/api/studio/kbs/cycles/fix-agent/nonexistent-run-123');
   assert.equal(status, 200, JSON.stringify(json));
