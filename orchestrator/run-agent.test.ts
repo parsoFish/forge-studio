@@ -51,11 +51,34 @@ function readEvents(logFilePath: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
+/**
+ * Save + delete the spawn-suppression env vars so a test exercises the real
+ * (non-suppressed) spawn path deterministically, regardless of what the
+ * ambient shell/CI has set (CI's `env: FORGE_ARCHITECT_NO_SPAWN: "1"` step
+ * config is inherited by every `node --test` child process). Mirrors the
+ * save/delete/restore idiom the suppression tests below use for their own
+ * var, generalised to both suppression vars; call the returned restore
+ * function from a `finally`.
+ */
+function withoutSpawnSuppressionEnv(): () => void {
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  delete process.env.FORGE_DRY_BRIDGE;
+  return () => {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // AC #2 + AC #3: no project/initiative binding; start+end events with cost_usd
 // ---------------------------------------------------------------------------
 
 test('runAgent: no-binding fixture runs standalone and emits start+end JSONL with cost_usd (AC #2, #3)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-nobind-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -91,6 +114,7 @@ test('runAgent: no-binding fixture runs standalone and emits start+end JSONL wit
     assert.equal(typeof end!.duration_ms, 'number');
   } finally {
     rmSync(scratchRoot, { recursive: true, force: true });
+    restoreEnv();
   }
 });
 
@@ -99,6 +123,7 @@ test('runAgent: no-binding fixture runs standalone and emits start+end JSONL wit
 // ---------------------------------------------------------------------------
 
 test('runAgent: every library roster agent (listAgentDefinitions) runs without throwing (AC #1)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-roster-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -127,6 +152,7 @@ test('runAgent: every library roster agent (listAgentDefinitions) runs without t
     }
   } finally {
     rmSync(scratchRoot, { recursive: true, force: true });
+    restoreEnv();
   }
 });
 
