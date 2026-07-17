@@ -322,6 +322,11 @@ is authoritative for how/when.
   maliciously-crafted `cycle_id` (`../`) would write logs outside `ctx.logsRoot`; today's
   exploitability is low (manifests are forge-authored). Add a `cycle_id` format check to
   `validateManifest()` mirroring `INITIATIVE_ID_PATTERN`. `orchestrator/manifest.ts`. *(R5)*
+  **Update (R2-01-F1, 2026-07-18):** `orchestrator/run-agent.ts`'s `runAgent` — a new
+  `createLogger` call site whose trust boundary widens as F4/R2-04 wire less-trusted
+  callers — now validates `ctx.runId` against a safe-single-path-segment regex and throws
+  before any I/O, closing this gap for that one call site (fixture-tested in
+  `run-agent.test.ts`). The manifest-driven `cycle_id` path above remains open.
 - **F3 boundary check fires outside any beat → absent from `demos/e2e/results.json`**
   (2026-07-18). The post-run boundary `check()` runs in the runner's `finally`, not inside a
   beat, so `journey-runtime.mjs` logs `onCheck fired with no active beat` and drops it from

@@ -19,10 +19,14 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
 
-import { deriveAgentSpec } from './studio/derive.ts';
+// `FORGE_ROOT` (this install's root — `orchestrator/studio/` sits two levels
+// below it): single source is `studio/derive.ts`'s exported const. This
+// module previously defined its own identical local copy, which silently
+// duplicated derive.ts's `..`-depth by hand; import it instead so the two
+// can't drift out of sync.
+import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { createLogger } from './logging.ts';
 import { pinnedSdkQuery, type SdkQueryFn } from './pinned-sdk-query.ts';
@@ -31,13 +35,23 @@ import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
 import type { QueryFn } from '../loops/_adapters/types.ts';
 
 /**
- * This install's forge root — `orchestrator/` sits one level below it.
- * Mirrors the identical local-const convention in `studio/derive.ts`'s own
- * (private, non-exported) `FORGE_ROOT`; this module defines its own rather
- * than reaching across that module boundary for a path constant that isn't
- * exported.
+ * A `runId` is used verbatim as the log directory name — `createLogger`
+ * resolves it against `logsRoot` (`resolve(logsDir, cycleId)`,
+ * `orchestrator/logging.ts`) with no validation of its own. Reject anything
+ * that could escape `logsRoot` (a path separator, `..`, or an absolute
+ * path) before any I/O happens. Single path segment of
+ * `[A-Za-z0-9._-]` — deliberately permits a leading `_` (unlike
+ * `review-comments.ts`'s `SAFE_CYCLE_ID_RE`, which requires an
+ * alnum-first-char and so doesn't fit `runAgent`'s own runId formats,
+ * `_agent-<slug>` / `_agent-<slug>-<n>`, and cycleId-like ids).
  */
-const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SAFE_RUN_ID_RE = /^[A-Za-z0-9._-]+$/;
+
+function assertSafeRunId(runId: string): void {
+  if (!SAFE_RUN_ID_RE.test(runId) || runId.includes('..')) {
+    throw new Error(`runAgent: unsafe runId (path-traversal risk): ${JSON.stringify(runId)}`);
+  }
+}
 
 /**
  * Harness-safety env vars that suppress a real SDK spawn (R5-01 dry-bridge
@@ -68,6 +82,12 @@ export type RunContext = {
   logsRoot?: string;
   bindings?: { project?: ProjectBinding; initiative?: InitiativeBinding };
   artifactRefs?: string[];
+  /**
+   * Test-injection only. Production callers must omit this — the default
+   * is `pinnedSdkQuery`; a real alternate SDK `queryFn` can't exist outside
+   * that wrapper because `pinned-sdk-query.enforce.test.ts` forbids
+   * importing the raw SDK `query` anywhere under orchestrator/, loops/, cli/.
+   */
   queryFn?: SdkQueryFn;
 };
 
@@ -88,6 +108,7 @@ export type RunAgentResult = {
  */
 export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<RunAgentResult> {
   if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');
+  assertSafeRunId(ctx.runId);
   if (!ctx.workdir) throw new Error('runAgent: ctx.workdir is required');
   if (!ctx.prompt) throw new Error('runAgent: ctx.prompt is required');
 

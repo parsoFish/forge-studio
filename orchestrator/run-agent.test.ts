@@ -10,13 +10,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runAgent } from './run-agent.ts';
 import { listAgentDefinitions } from './studio/registry.ts';
 import type { SdkQueryFn } from './pinned-sdk-query.ts';
+import type { AgentDefinition } from './studio/types.ts';
 
 const ROOT = process.cwd();
 
@@ -42,6 +43,15 @@ function fakeQueryFn(costUsd: number): SdkQueryFn {
 const throwingQueryFn: SdkQueryFn = ((() => {
   throw new Error('runAgent must not invoke queryFn under dry-bridge / no-spawn suppression');
 }) as unknown) as SdkQueryFn;
+
+/** Look up a named library fixture from the roster, failing with a clear
+ * message (rather than a bare TypeError on a `!`-asserted `undefined`) if
+ * the fixture is ever renamed or removed from the roster. */
+function getFixtureDef(defs: AgentDefinition[], slug: string): AgentDefinition {
+  const def = defs.find((d) => d.slug === slug);
+  assert.ok(def, `expected the ${slug} library fixture in the roster`);
+  return def;
+}
 
 function readEvents(logFilePath: string): Array<Record<string, unknown>> {
   return readFileSync(logFilePath, 'utf8')
@@ -82,13 +92,12 @@ test('runAgent: no-binding fixture runs standalone and emits start+end JSONL wit
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-nobind-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
-    const def = defs.find((d) => d.slug === 'project-scoped-review');
-    assert.ok(def, 'expected the project-scoped-review library fixture (pure research/report agent) in the roster');
+    const def = getFixtureDef(defs, 'project-scoped-review');
 
     const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
     const logsRoot = join(scratchRoot, '_logs');
 
-    const result = await runAgent(def!, {
+    const result = await runAgent(def, {
       runId: '_agent-test',
       workdir,
       prompt: 'Audit the gitpulse project end state against its roadmap intents.',
@@ -166,7 +175,7 @@ test('runAgent: FORGE_DRY_BRIDGE=1 suppresses the spawn — queryFn never called
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-dry-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
-    const def = defs.find((d) => d.slug === 'project-scoped-review')!;
+    const def = getFixtureDef(defs, 'project-scoped-review');
     const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
     const logsRoot = join(scratchRoot, '_logs');
 
@@ -203,7 +212,7 @@ test('runAgent: FORGE_ARCHITECT_NO_SPAWN=1 suppresses the spawn — queryFn neve
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-nospawn-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
-    const def = defs.find((d) => d.slug === 'project-scoped-review')!;
+    const def = getFixtureDef(defs, 'project-scoped-review');
     const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
     const logsRoot = join(scratchRoot, '_logs');
 
@@ -235,7 +244,7 @@ test('runAgent: FORGE_ARCHITECT_NO_SPAWN=1 suppresses the spawn — queryFn neve
 
 test('runAgent: fails fast on a missing workdir', async () => {
   const defs = listAgentDefinitions(join(ROOT, 'skills'));
-  const def = defs.find((d) => d.slug === 'project-scoped-review')!;
+  const def = getFixtureDef(defs, 'project-scoped-review');
   await assert.rejects(() =>
     runAgent(def, {
       runId: '_agent-badworkdir',
@@ -250,7 +259,7 @@ test('runAgent: fails fast on a missing prompt', async () => {
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-badprompt-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
-    const def = defs.find((d) => d.slug === 'project-scoped-review')!;
+    const def = getFixtureDef(defs, 'project-scoped-review');
     await assert.rejects(() =>
       runAgent(def, {
         runId: '_agent-badprompt',
@@ -259,6 +268,69 @@ test('runAgent: fails fast on a missing prompt', async () => {
         queryFn: fakeQueryFn(0),
       }),
     );
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Security: runId path-traversal guard (fixture test, mirrors
+// review-comments.test.ts's `writeReviewComments: rejects a path-traversal
+// cycleId`) — a malicious/traversing runId must throw before any I/O and
+// must never write anything outside logsRoot.
+// ---------------------------------------------------------------------------
+
+test('runAgent: rejects a path-traversal runId and writes nothing outside logsRoot', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-traversal-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review');
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+
+    await assert.rejects(
+      () =>
+        runAgent(def, {
+          runId: '../../etc/evil',
+          workdir,
+          prompt: 'test',
+          logsRoot,
+          queryFn: throwingQueryFn,
+        }),
+      /unsafe runId/,
+    );
+
+    assert.ok(!existsSync(logsRoot), 'the guard fires before any logsRoot I/O — the logs dir is never created');
+    assert.ok(
+      !existsSync(join(scratchRoot, 'etc', 'evil')) && !existsSync(join(tmpdir(), 'etc', 'evil')),
+      'nothing written outside logsRoot',
+    );
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent: rejects an absolute-path runId', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-abspath-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review');
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+
+    await assert.rejects(
+      () =>
+        runAgent(def, {
+          runId: '/etc/evil',
+          workdir,
+          prompt: 'test',
+          logsRoot,
+          queryFn: throwingQueryFn,
+        }),
+      /unsafe runId/,
+    );
+
+    assert.ok(!existsSync(logsRoot), 'the guard fires before any logsRoot I/O — the logs dir is never created');
   } finally {
     rmSync(scratchRoot, { recursive: true, force: true });
   }

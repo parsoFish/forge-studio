@@ -22,7 +22,7 @@ import { loadAgentDefinition, loadCatalog } from './registry.ts';
  * PROJECT WORKTREE — a cwd default made every such spawn crash on import
  * (2026-07-11, INIT-2026-07-10-framework-auth-parity capture_ok:false).
  */
-const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
   (Object.entries(MODEL_BY_TIER) as [ModelTier, string][]).map(([t, m]) => [m, t]),
