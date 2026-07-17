@@ -169,7 +169,6 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
   { method: 'POST', route: '/api/studio/skills', classification: 'exempt-local', reason: 'writes a local skill definition' },
   { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
-  { method: 'PUT', route: '/api/studio/kbs/:id', classification: 'exempt-local', reason: 'updates local KB metadata' },
   { method: 'POST', route: '/api/studio/kbs/:id (delete)', classification: 'exempt-local', reason: 'removes a local KB directory' },
   { method: 'POST', route: '/api/studio/kbs/:id/guidance', classification: 'exempt-local', reason: 'writes a local guidance markdown file' },
   { method: 'POST', route: '/api/studio/kbs/:id/bootstrap', classification: 'exempt-local', reason: 'seeds local brain scaffolding' },
