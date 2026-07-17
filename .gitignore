@@ -105,3 +105,6 @@ graphify-out/
 # One-shot audit/investigation reports (project-scoped-review output) — working
 # artifacts, not source; durable lessons are extracted to the brain + ADRs.
 docs/investigations/
+
+# local code-graph tool cache (tokensave MCP)
+.tokensave/
