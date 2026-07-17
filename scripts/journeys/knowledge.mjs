@@ -318,20 +318,37 @@ export const journey = defineJourney({
               // guidance rm) — the one place this journey emulates an ingest pass. Ingest
               // is an LLM fold in the real product; here it's a scripted write against a
               // throwaway scratch KB (never brain/cycles, brain/forge-dev, or brain/projects).
-              await recordClip(browser, watch, 'kb-ingest', `/knowledge?id=${SCRATCH_KB_ID}`, async (p) => {
+              await recordClip(browser, watch, 'kb-ingest', '/', async (p) => {
+                // Entry point: the library's KB card for the scratch KB just created — a
+                // real click into /knowledge?id=<scratch>, not a direct goto.
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 8000 },
+                ).catch(() => {});
+                const kbCard = p.locator(`[data-card-type="kb"][data-card-id="${SCRATCH_KB_ID}"]`);
+                await kbCard.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(p, 'Meeting the KB where an operator actually finds it — the library card for the scratch KB just created.');
+                await sleep(THINK);
+                await kbCard.click().catch(() => {});
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 10000 },
+                ).catch(() => {});
                 await p.waitForFunction(() => document.querySelector('[data-layer="guidance"]') !== null, null, { timeout: 10000 }).catch(() => {});
+                await caption(p, 'A raw guidance node — pinned human lesson, not yet folded into a theme.');
                 await sleep(1200);
                 foldScratchGuidanceIntoTheme();
                 await p.reload({ waitUntil: 'domcontentloaded' });
                 await p.waitForFunction(() => document.querySelector('[data-layer="theme"]') !== null, null, { timeout: 10000 }).catch(() => {});
+                await caption(p, 'Ingest folds it: a real theme node replaces the guidance note — the graph itself is the payoff here.');
                 const themeNode = p.locator('[data-layer="theme"]').first();
                 if (await themeNode.count() > 0) {
                   await themeNode.locator('[data-hit]').click({ force: true, timeout: 5000 }).catch(() => {});
                 }
+                await sleep(THINK);
               }, {
-                readySel: '[data-page="knowledge"]',
-                caption: 'ingest fold (emulated): guidance note -> theme file, on the scratch KB',
-                size: { width: 1000, height: 620 },
+                readySel: '[data-page="library"]',
+                caption: 'From the library KB card to a folded theme — guidance becomes a real graph node',
               });
 
               // Assertions run AFTER the clip, against the main page, re-reading the same
@@ -417,13 +434,19 @@ export const journey = defineJourney({
               // Clip: kb-lint + the lint-resolution scan — read-only/idempotent maintenance,
               // safe to re-drive on a fresh context. Fresh context, own navigation.
               await recordClip(browser, watch, 'kb-lint', '/knowledge?id=cycles', async (p) => {
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 12000 },
+                ).catch(() => {});
+                await caption(p, 'The cycles KB — but the story here is maintenance, not the graph.');
+                await sleep(THINK);
                 // The force-graph animates continuously — hide it for this clip so every
-                // recorded frame is near-static (the clip's story is the lint panel).
+                // recorded frame is near-static (the clip's story is the lint panel, not
+                // the graph — kept even at the taller default viewport).
                 await p.addStyleTag({ content: '#kb-svg { visibility: hidden; }' }).catch(() => {});
                 await p.waitForSelector('[data-component="kb-maintenance"] [data-action="kb-lint"]', { timeout: 12000 }).catch(() => {});
-                // Scroll the maintenance panel into view FIRST — the force-graph above it
-                // animates continuously, and while it's in-viewport every recorded frame
-                // differs (this clip hit 1.2M). Off-screen graph = near-static frames.
+                // Scroll the maintenance panel into view — belt-and-braces even at the taller
+                // default viewport, since the (invisible) graph still occupies its layout space.
                 await p.locator('[data-component="kb-maintenance"]').scrollIntoViewIfNeeded().catch(() => {});
                 await sleep(400);
                 await p.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
@@ -431,6 +454,9 @@ export const journey = defineJourney({
                   () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
                   null, { timeout: 15000 },
                 ).catch(() => {});
+                const lintResultText = await p.evaluate(() => document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '');
+                await caption(p, `Lint findings, live: ${lintResultText || 'the maintenance panel\'s own read of the brain'}`);
+                await sleep(THINK);
                 const scanBtn = p.locator('[data-section="lint-resolution"] [data-action="lint-scan"]');
                 if (await scanBtn.count() > 0) {
                   await scanBtn.click().catch(() => {});
@@ -438,14 +464,13 @@ export const journey = defineJourney({
                     () => document.querySelector('[data-section="lint-resolution"]')?.getAttribute('data-lint-scanned') === 'true',
                     null, { timeout: 15000 },
                   ).catch(() => {});
+                  await caption(p, 'The resolution surface — from a finding to a concrete fix, without leaving the panel.');
+                  await sleep(THINK);
                 }
               }, {
                 readySel: '[data-page="knowledge"]',
                 caption: 'KB lint findings triaged from the maintenance surface',
                 holdTailMs: 1500,
-                // Short viewport: the animated force-graph above the maintenance panel
-                // mostly leaves frame, so recorded frames stay near-static (was ~1M).
-                size: { width: 1000, height: 480 },
               });
 
         },

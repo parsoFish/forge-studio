@@ -15,6 +15,18 @@ import { sleep } from '../lib/journey-assertions.mjs';
 let instrSid = null;   // instructions-creator session (Part 1)
 let pbSid = null;      // project-brain-builder session (Part 1)
 
+/** Parse the real instructions session id out of a /instructions/<sid> URL (null if not there). */
+function instrSidFromUrl(url) {
+  const m = /\/instructions\/([^/?#]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Parse the real project-brain session id out of a /project-brain/<sid> URL (null if not there). */
+function pbSidFromUrl(url) {
+  const m = /\/project-brain\/([^/?#]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 // ── CREATE-NEW HELPERS (module-local) ───────────────────────────────────────
 // A brand-new project stood up from absolutely nothing via /projects/new — no
 // existing repo, no contract, no brain — on its own slug, distinct from
@@ -92,8 +104,13 @@ export const journey = defineJourney({
 
               // Clip: a second from-scratch project, created live in its own isolated
               // browser context on its own throwaway slug — proves the create-new path
-              // is real and repeatable, not a one-off fixture.
-              await recordClip(browser, watch, 'project-create', '/projects/new', async (p) => {
+              // is real and repeatable, not a one-off fixture. Starts at the LIBRARY,
+              // the real user-facing entry point, not the /projects/new URL directly.
+              await recordClip(browser, watch, 'project-create', '/', async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — the library's "+ New Project" CTA
+                await p.locator('[data-action="new-project"]').click().catch(() => {});
+                await p.waitForURL('**/projects/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-field="project-name"]').fill(CREATE_CLIP_NAME).catch(() => {});
                 await p.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
@@ -101,7 +118,7 @@ export const journey = defineJourney({
                 await p.locator('[data-action="onboard-project"]').click().catch(() => {});
                 await p.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: '[data-section="project-onboard"]', caption: 'Creating a second project from nothing, live — the same from-scratch path, proven again' });
+              }, { readySel: 'main[data-page="library"]', caption: 'From the library\'s "+ New Project" CTA — creating a second project from nothing, live, through to the failing checklist' });
 
               // Open the real project page — the "open onboarded project" link on the
               // failing checklist, falling back to a direct navigate — contract readiness
@@ -281,17 +298,36 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-component="instructions-verdict"]', { timeout: 15000 }).catch(() => {});
               check(await page.locator('[data-component="instructions-verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
               await frame(page, 'instr-1-draft', 'Part 1 — the generated AGENTS.md draft, awaiting approval');
-              // Clip: a fresh clip-only session shows the FULL generation progression —
-              // briefing → interviewing → drafting → awaiting-verdict — staged with real
-              // dwells between each write, so the clip shows generation actually happening
-              // rather than a single static hold on the finished draft. A dedicated sid
-              // (not the shared instrSid) keeps this clip's writes from racing the outer
-              // page's own 3s poll on instrSid, which is already sitting at
-              // 'awaiting-verdict' by this point in the beat.
-              const instrClipSid = `${instrSid}-clip`;
-              writeInstrStatus(instrClipSid, { phase: 'briefing', round: 1 });
-              await recordClip(browser, watch, 'instr-generate', `/instructions/${encodeURIComponent(instrClipSid)}`, async (p) => {
-                await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 12000 });
+              // Clip: the operator's END-TO-END trigger — dwell on the project page's
+              // real "Generate AGENTS.md with the instructions agent" button, CLICK it
+              // (the bridge opens a genuine session, no spawn — same no-spawn seam as
+              // everywhere else), then adopt THAT session id for the staged generation
+              // progression — briefing → interviewing → drafting → awaiting-verdict —
+              // so the clip shows generation actually happening rather than a single
+              // static hold on the finished draft. Falls back to an honest brief pause
+              // onto a clip-only session only if the real trigger doesn't land.
+              let instrClipSid = null;
+              await recordClip(browser, watch, 'instr-generate', `/projects/${PROJECT}`, async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — the real "Generate AGENTS.md with the instructions agent" button
+                await p.locator('[data-action="launch-instructions"]').click().catch(() => {});
+                await p.waitForURL(/\/instructions\//, { timeout: 10000 }).catch(() => {});
+                instrClipSid = instrSidFromUrl(p.url());
+                if (instrClipSid) {
+                  // The real button: a genuine bridge session at 'briefing' — brief it
+                  // for real too (the flip to 'interviewing' is real; the spawn is not).
+                  await p.waitForSelector('[data-section="session-briefing"]', { timeout: 10000 }).catch(() => {});
+                  await p.locator('[data-field="briefing-notes"]').fill('Keep it short; document the build + test gate.').catch(() => {});
+                  await p.locator('[data-action="submit-brief"]').click().catch(() => {});
+                } else {
+                  // Fallback — the real trigger didn't land this run; an honest brief
+                  // pause onto a clip-only session rather than a silent jump-cut.
+                  instrClipSid = `${instrSid}-clip`;
+                  writeInstrStatus(instrClipSid, { phase: 'briefing', round: 1 });
+                  await sleep(THINK);
+                  await p.goto(watch.uiUrl + `/instructions/${encodeURIComponent(instrClipSid)}`, { waitUntil: 'domcontentloaded' });
+                }
+                await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
                 writeInstrStatus(instrClipSid, { phase: 'interviewing', round: 1 });
                 instrEvent(instrClipSid, 'start', 'instructions turn (phase=interviewing, round=1)');
@@ -313,8 +349,8 @@ export const journey = defineJourney({
                 writeInstrStatus(instrClipSid, { phase: 'awaiting-verdict', round: 2 });
                 await p.waitForSelector('[data-component="instructions-verdict"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: 'main[data-page="instructions-interview"]', caption: 'instructions-creator: briefing → interviewing → drafting → the generated AGENTS.md draft' });
-              cleanInstructionsSession(instrClipSid);
+              }, { readySel: 'main[data-page="projects"]', caption: 'clicking "Generate AGENTS.md with the instructions agent" on the project page — briefing → interviewing → drafting → the generated draft' });
+              if (instrClipSid) cleanInstructionsSession(instrClipSid);
               // approve → committed
               await page.locator('[data-component="instructions-verdict"] [data-action="approve-instructions"]').click().catch(() => {});
               await page.waitForSelector('[data-component="instructions-verdict"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
@@ -351,16 +387,41 @@ export const journey = defineJourney({
               check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
               await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
               await frame(page, 'pbrain-1-review', 'Part 1 — the generated seed brain: themes to review + approve');
-              // Clip: a fresh clip-only session shows the FULL generation progression —
-              // briefing → analyzing → awaiting-review — staged with real dwells between
-              // each write, so the clip shows the analysis actually happening rather than
-              // a single static hold on the finished themes. Dedicated sid (not the shared
-              // pbSid) keeps this clip's writes off the outer page's own 2.5s poll on pbSid,
-              // which is already sitting at 'awaiting-review' by this point in the beat.
-              const pbClipSid = `${pbSid}-clip`;
-              writePbStatus(pbClipSid, 'briefing', '');
-              await recordClip(browser, watch, 'pbrain-generate', `/project-brain/${encodeURIComponent(pbClipSid)}?project=${encodeURIComponent(PROJECT)}`, async (p) => {
-                await p.waitForSelector('main[data-page="project-brain"]', { timeout: 12000 });
+              // Clip: the operator's END-TO-END trigger — dwell on the project page's
+              // real "Build project brain with the agent" button (Knowledge Base panel),
+              // CLICK it, and adopt THAT session id for the staged generation
+              // progression — briefing → analyzing → awaiting-review. mdtoc's fixture
+              // ships with a KB already bound (a project carries a single brain), so the
+              // button is genuinely hidden on a checkout at rest — the fallback covers
+              // that honestly, with a brief pause rather than a silent jump-cut; the
+              // real-button path stays preferred and self-heals if the button reappears.
+              let pbClipSid = null;
+              await recordClip(browser, watch, 'pbrain-generate', `/projects/${PROJECT}`, async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                const buildBtn = p.locator('[data-action="create-project-brain"]');
+                const brainBtnVisible = await buildBtn.count() > 0;
+                await sleep(1400); // dwell — the "Build project brain with the agent" button
+                if (brainBtnVisible) {
+                  await buildBtn.click().catch(() => {});
+                  await p.waitForURL(/\/project-brain\//, { timeout: 10000 }).catch(() => {});
+                  pbClipSid = pbSidFromUrl(p.url());
+                  if (pbClipSid) {
+                    // The real button: a genuine bridge session at 'briefing' — brief it
+                    // for real too (the flip to 'analyzing' is real; the spawn is not).
+                    await p.waitForSelector('[data-section="brain-briefing"]', { timeout: 10000 }).catch(() => {});
+                    await p.locator('[data-component="brain-brief-input"]').fill('emphasise conventions + module layout').catch(() => {});
+                    await p.locator('[data-action="start-brain-analysis"]').click().catch(() => {});
+                  }
+                }
+                if (!pbClipSid) {
+                  // Fallback — the real trigger didn't land this run; an honest brief
+                  // pause onto a clip-only session rather than a silent jump-cut.
+                  pbClipSid = `${pbSid}-clip`;
+                  writePbStatus(pbClipSid, 'briefing', '');
+                  await sleep(THINK);
+                  await p.goto(watch.uiUrl + `/project-brain/${encodeURIComponent(pbClipSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
+                }
+                await p.waitForSelector('main[data-page="project-brain"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
                 writePbStatus(pbClipSid, 'analyzing', 'emphasise conventions + module layout');
                 await p.waitForFunction(
@@ -371,8 +432,8 @@ export const journey = defineJourney({
                 seedStagedBrain(pbClipSid);
                 await p.waitForSelector('main[data-project-brain-phase="awaiting-review"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: 'main[data-page="project-brain"]', caption: 'project-brain-builder: briefing → analyzing → the generated seed themes, awaiting review' });
-              cleanSeededBrain(pbClipSid);
+              }, { readySel: 'main[data-page="projects"]', caption: 'the project page\'s "Build project brain with the agent" — briefing → analyzing → the generated seed themes, awaiting review' });
+              if (pbClipSid) cleanSeededBrain(pbClipSid);
               // approve → committing → committed (flip-only; nothing written under brain/)
               await page.locator('[data-action="approve-brain"]').click().catch(() => {});
               await page.waitForSelector('main[data-project-brain-phase="committing"]', { timeout: 8000 }).catch(() => {});

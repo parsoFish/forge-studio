@@ -108,15 +108,16 @@ export const journey = defineJourney({
               // the time the clip's hold-tail + context close complete).
               await recordClip(browser, watch, 'skill-edit', '/agents/new', async (p) => {
                 await p.waitForSelector('[data-component="catalog-palette"]', { timeout: 12000 }).catch(() => {});
-                await sleep(1800); // dwell — the OOTB chips with provenance/stars
+                await sleep(1800); // dwell — the OOTB chips with provenance/stars (discovery)
                 await p.goto(watch.uiUrl + `/agents/${SK_EDIT_SLUG}`, { waitUntil: 'domcontentloaded' });
                 await p.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                await sleep(1000); // dwell — landed in the editor, the shipped instructions visible before editing
                 const body = await p.locator('#process-input').inputValue().catch(() => '');
                 await p.locator('#process-input').fill(body + '\n\n> ').catch(() => {});
                 await p.locator('#process-input').pressSequentially(EDIT_MARKER, { delay: 14 }).catch(() => {});
                 await p.locator('[data-action="save-agent"]').click().catch(() => {});
                 await sleep(1200); // settle on the saved state (recordClip appends the loop-tail hold)
-              }, { readySel: 'main[data-page="agents"]', caption: `editing a real shipped skill (${SK_EDIT_SLUG}) in place — saved to its own SKILL.md, then restored` });
+              }, { readySel: 'main[data-page="agents"]', caption: `discovering skills in the library, then editing a real shipped skill (${SK_EDIT_SLUG}) in place — saved to its own SKILL.md, then restored` });
               await waitForEditMarker(5000); // the clip's save is real — let it land before restoring
               restoreRealSkill();
               check(!readFileSync(SK_EDIT_PATH, 'utf8').includes(EDIT_MARKER), `SK-2: the shipped ${SK_EDIT_SLUG} SKILL.md is restored byte-for-byte after the beat`);
@@ -167,11 +168,17 @@ export const journey = defineJourney({
               check(skEnabled, 'SK-3: create-skill enables once name + description are filled');
               await frame(page, 'sk-2-create', 'Part 2 (skills) — authoring a brand-new skill', { key: true });
 
-              // CLIP 2 — sk-create: fills the form and CLICKS Create; the hold is the
-              // product's real created-confirmation (the redirect into the agent builder
-              // to compose the new skill). A fresh context creates its OWN slug
-              // (SK_CLIP_SLUG) so it never collides with the main beat's artifact.
-              await recordClip(browser, watch, 'sk-create', '/skills/new', async (p) => {
+              // CLIP 2 — sk-create: the operator's real discovery path — the "+ author
+              // a skill" CTA in a project's Relevant Skills panel (the only real UI entry
+              // to /skills/new) — dwell, CLICK, then fill the form and CLICK Create; the
+              // hold is the product's real created-confirmation (the redirect into the
+              // agent builder to compose the new skill). A fresh context creates its OWN
+              // slug (SK_CLIP_SLUG) so it never collides with the main beat's artifact.
+              await recordClip(browser, watch, 'sk-create', `/projects/${PROJECT}`, async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — discovering "+ author a skill" in the Relevant Skills panel
+                await p.locator('[data-action="author-skill"]').click().catch(() => {});
+                await p.waitForURL('**/skills/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="skill-new"]', { timeout: 12000 });
                 await sleep(1200); // hydration (same recipe as the main page)
                 const nameEl = p.locator('[data-field="skill-name"]');
@@ -191,7 +198,7 @@ export const journey = defineJourney({
                 await p.waitForURL('**/agents/new', { timeout: 12000 }).catch(() => {});
                 await p.waitForSelector('[data-page="agents"]', { timeout: 12000 }).catch(() => {});
                 await sleep(600); // settle on the confirmation before the loop-tail hold
-              }, { readySel: 'main[data-page="skill-builder"]', caption: 'authoring a new skill from scratch — Create writes its SKILL.md and lands in the agent builder to compose it' });
+              }, { readySel: 'main[data-page="projects"]', caption: 'discovering "+ author a skill" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder' });
               const clipLanded = await waitForFile(join(FORGE_ROOT, 'skills', SK_CLIP_SLUG, 'SKILL.md'), 8000);
               check(clipLanded, `SK-3: the clip's Create click writes skills/${SK_CLIP_SLUG}/SKILL.md`);
               try { rmSync(join(FORGE_ROOT, 'skills', SK_CLIP_SLUG), { recursive: true, force: true }); } catch { /* */ }

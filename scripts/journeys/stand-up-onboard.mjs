@@ -115,16 +115,21 @@ export const journey = defineJourney({
               // slug + cleanup — a first-time operator would see this failing checklist
               // land in place on /projects/new (no redirect, since a hard clause still
               // fails on any brand-new onboard). Distinct slug avoids colliding with the
-              // canonical J4_PROJECT above.
+              // canonical J4_PROJECT above. Starts at the LIBRARY, the entry point a user
+              // would actually use, not the /projects/new URL directly.
               const j4ClipSlug = `${J4_PROJECT}-clip`;
-              await recordClip(browser, watch, 'onboard-form', '/projects/new', async (p) => {
+              await recordClip(browser, watch, 'onboard-form', '/', async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — the library's "+ New Project" CTA (same onboarding entry as create-new)
+                await p.locator('[data-action="new-project"]').click().catch(() => {});
+                await p.waitForURL('**/projects/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-field="project-name"]').fill('Journey Demo Project Clip').catch(() => {});
                 await p.locator('[data-field="north-star"]').fill('A second onboarding pass, recorded fresh, showing the readiness checklist land.').catch(() => {});
                 await p.locator('[data-action="onboard-project"]').click().catch(() => {});
                 await p.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: '[data-section="project-onboard"]', caption: 'Onboarding again, fresh — the contract-readiness checklist with failures visible' });
+              }, { readySel: 'main[data-page="library"]', caption: 'From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible' });
               cleanOnboardedProject(j4ClipSlug);
 
               // The project now appears in the library.
@@ -254,7 +259,7 @@ export const journey = defineJourney({
                     null, { timeout: 12000 },
                   ).catch(() => {});
                   await sleep(WORK);
-                }, { readySel: '[data-section="contract-resolution"]', caption: 'Preflight resolution, staged: auto-fix → agent-resolvable → all-green' });
+                }, { readySel: '[data-section="contract-resolution"]', caption: 'A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green' });
                 try {
                   rmSync(clipDir, { recursive: true, force: true });
                   // The re-scan on the clip project seeds a Brain-3 KB for it too.

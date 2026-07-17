@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, OOTB_SKILL_IDS,
+  cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, READ, OOTB_SKILL_IDS,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -284,6 +284,8 @@ export const journey = defineJourney({
                 // Bounded waits: every missed selector here records dead animated
                 // frames (this clip once ballooned to 4.8M on timeout accumulation).
                 await p.waitForSelector('[data-starter-option="blank"]', { timeout: 6000 }).catch(() => {});
+                await caption(p, 'Curated starters, or blank — composing an agent from nothing.');
+                await sleep(THINK);
                 await p.locator('[data-starter-option="blank"]').click().catch(() => {});
                 await p.waitForSelector('#purpose-input', { timeout: 5000 }).catch(() => {});
                 await p.locator('input.agent-name-input').fill(`${SCRATCH_AGENT_NAME} (clip)`).catch(() => {});
@@ -295,6 +297,8 @@ export const journey = defineJourney({
                   () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
                   null, { timeout: 3000 },
                 ).catch(() => {});
+                await caption(p, `Dragging a real catalog skill ("${DND_SKILL_ID}") into the skill zone.`);
+                await sleep(THINK);
                 const dt = await p.evaluateHandle(() => new DataTransfer());
                 const chip = p.locator(`.catalog-chip[data-id="${DND_SKILL_ID}"][data-kind="skill"]`);
                 const zone = p.locator('[data-accepts="skill"]');
@@ -303,10 +307,18 @@ export const journey = defineJourney({
                 await zone.dispatchEvent('drop', { dataTransfer: dt }).catch(() => {});
                 await sleep(THINK);
                 const rangeToggle = p.locator('[data-component="runtime-picker"] [data-strategy="range"]');
-                if (await rangeToggle.count() > 0) { await rangeToggle.click().catch(() => {}); await sleep(THINK); }
+                if (await rangeToggle.count() > 0) {
+                  await rangeToggle.click().catch(() => {});
+                  await sleep(THINK);
+                  await caption(p, 'The range strategy: pick multiple Claude tiers — it routes to the cheapest capable one first.');
+                  await sleep(READ);
+                }
                 const modelChips = p.locator('[data-component="runtime-picker"] [data-model-id]');
-                if (await modelChips.count() > 0) { await modelChips.first().click().catch(() => {}); await sleep(500); }
-              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1200, size: { width: 960, height: 600 }, freezeAnimations: true });
+                if (await modelChips.count() > 0) {
+                  await modelChips.first().click().catch(() => {});
+                  await sleep(500);
+                }
+              }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from scratch — blank, a dropped skill, a picked runtime', holdTailMs: 1200, freezeAnimations: true });
 
               // Cleanup: this beat's own skill dir only (self-contained, mirrors
               // skills-edit / skills-agentic-author cleaning their own artifacts).
@@ -407,8 +419,22 @@ export const journey = defineJourney({
                 }
                 // Clip: composing an agent — open Advanced, edit the purpose field
                 // (dirty), and SAVE. Fresh context, own navigation.
-                await recordClip(browser, watch, 'agent-build', '/agents/project-manager', async (p) => {
+                await recordClip(browser, watch, 'agent-build', '/', async (p) => {
+                  // Entry point: the library's agents section — a real click into
+                  // /agents/project-manager, not a direct goto.
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                    null, { timeout: 8000 },
+                  ).catch(() => {});
+                  const agentsSection = p.locator('[data-section="agents"]');
+                  await agentsSection.scrollIntoViewIfNeeded().catch(() => {});
+                  await caption(p, 'The OOTB agent library — plan, dev, review, project-manager: curated, already shipped.');
+                  await sleep(THINK);
+                  const pmCard = p.locator('[data-card-type="agent"][data-card-id="project-manager"]');
+                  await pmCard.click().catch(() => {});
                   await p.waitForSelector('[data-action="toggle-advanced"]', { timeout: 12000 }).catch(() => {});
+                  await caption(p, 'Reopening project-manager — an agent is data, editable after the fact.');
+                  await sleep(THINK);
                   await p.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
                   await p.waitForFunction(
                     () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
@@ -421,6 +447,7 @@ export const journey = defineJourney({
                     const current = await clipPurposeInput.inputValue().catch(() => '');
                     await clipPurposeInput.fill(`${current} (clip)`).catch(() => {});
                     await sleep(THINK);
+                    await caption(p, 'SAVE persists the edit to the real SKILL.md.');
                     await p.locator('[data-action="save-agent"]').click().catch(() => {});
                     await p.waitForFunction(
                       () => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') === 'false',
@@ -428,7 +455,7 @@ export const journey = defineJourney({
                     ).catch(() => {});
                     await sleep(800);
                   }
-                }, { readySel: '[data-page="agents"]', caption: 'Composing an agent from the starter library — edit and SAVE', holdTailMs: 1500 });
+                }, { readySel: '[data-page="library"]', caption: 'From the library agent card to a saved edit — project-manager, reopened and tuned', holdTailMs: 1500 });
               } finally {
                 // Crash-safe + clip-safe: the clip above also writes to this SAME real
                 // file (its own ephemeral context, same on-disk path) — restore covers both.

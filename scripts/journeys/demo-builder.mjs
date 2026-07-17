@@ -1,6 +1,6 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  ACT, THINK, WORK, caption,
+  ACT, THINK, WORK, caption, PROJECT,
   writeDemoStatus, demoEvent, demoBurst,
   patchDemoProcess, restoreProjectJson, writeDemoArtifacts, writeDemoLock,
   cleanDemoBuilderSession,
@@ -74,14 +74,19 @@ export const journey = defineJourney({
         await countAtLeast(page, '[data-step-element]', 3, 'DB-2: all 3 demo-process steps carry a data-step-element');
         await frame(page, 'demo-2-review', 'The demo agent — composed demo ready for review', { key: true });
 
-        // Clip: a fresh clip-only session shows the FULL generation progression —
-        // briefing → (real submit-brief click, spawn-suppressed) → generating →
-        // awaiting-review — staged with real dwells between each write, so the
-        // clip shows the regenerate actually happening rather than a single
-        // static hold on the finished review surface. A dedicated sid (not the
-        // shared demoSid) keeps this clip's writes off the outer page's own
-        // poll on demoSid, which is already sitting at 'awaiting-review' by
-        // this point in the beat.
+        // Clip: a fresh clip-only session shows the FULL entry-to-generation
+        // progression — starting at the project page's own demo affordance (the
+        // "Build the demo with the agent" button an operator would actually
+        // click), hovering it (never clicking — onLaunchDemoBuilder() is a real
+        // side-effecting API call, and this clip must never trigger a second
+        // spawn against the canonical project) — then transitioning into the
+        // clip-only session: briefing → (real submit-brief click,
+        // spawn-suppressed) → generating → awaiting-review — staged with real
+        // dwells between each write, so the clip shows the regenerate actually
+        // happening rather than a single static hold on the finished review
+        // surface. A dedicated sid (not the shared demoSid) keeps this clip's
+        // writes off the outer page's own poll on demoSid, which is already
+        // sitting at 'awaiting-review' by this point in the beat.
         // SAFETY (S5): cleanDemoBuilderSession() unconditionally wipes the
         // *shared* .forge/demo/ directory (DEMO_FORGE_DIR is NOT sid-scoped,
         // unlike _demo/<sid>/ and _logs/_demo-<sid>/) — cleaning demoClipSid
@@ -92,7 +97,20 @@ export const journey = defineJourney({
         // still needs .forge/demo/.
         demoClipSid = `${demoSid}-clip`;
         writeDemoStatus(demoClipSid, { phase: 'briefing', mode: 'create' });
-        await recordClip(browser, watch, 'demo-generate', `/demo/${encodeURIComponent(demoClipSid)}`, async (p) => {
+        await recordClip(browser, watch, 'demo-generate', `/projects/${PROJECT}`, async (p) => {
+          await p.waitForFunction(
+            () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 15000 },
+          ).catch(() => {});
+          await caption(p, 'From the project page — "Build the demo with the agent" is where a regenerate starts.');
+          const launchBtn = p.locator('[data-action="launch-demo-builder"]').first();
+          await launchBtn.scrollIntoViewIfNeeded().catch(() => {});
+          await launchBtn.hover().catch(() => {});
+          await sleep(THINK);
+          // No click on [data-action="launch-demo-builder"] — onLaunchDemoBuilder()
+          // is a real side-effecting API call. Transition straight to the
+          // clip-only session instead.
+          await p.goto(watch.uiUrl + `/demo/${encodeURIComponent(demoClipSid)}`, { waitUntil: 'domcontentloaded' });
           await p.waitForSelector('main[data-page="demo-builder"]', { timeout: 12000 });
           await p.waitForSelector('[data-section="session-briefing"]', { timeout: 8000 }).catch(() => {});
           await p.locator('[data-field="briefing-notes"]').fill(demoBrief).catch(() => {});
@@ -117,8 +135,8 @@ export const journey = defineJourney({
           await p.waitForSelector('[data-demo-iframe]', { timeout: 10000 }).catch(() => {});
           await sleep(WORK);
         }, {
-          readySel: 'main[data-page="demo-builder"]',
-          caption: 'The demo builder: briefed, then composing the page element by element — capture, verify, present',
+          readySel: '[data-page="projects"]',
+          caption: 'From the project page’s demo affordance into the builder: briefed, then composing the page element by element — capture, verify, present',
         });
       },
     },

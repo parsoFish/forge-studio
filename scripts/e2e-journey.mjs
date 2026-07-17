@@ -181,10 +181,11 @@ async function frame(page, name, altCaption, opts = {}) {
  * Operator pacing mandate: every clip HOLDS on its final state after `interact`
  * returns (opts.holdTailMs, default PACE.holdTail) so a loop never jump-cuts —
  * the viewer gets processing time on whatever the interaction just revealed.
- * A soft size-guard flags any clip that creeps toward the ~400KB gallery ceiling.
+ * Default recording size is 1600x1000 (crisper text than the old 1000x620); a
+ * soft size-guard flags any clip that creeps toward a 4M runaway ceiling.
  */
 async function recordClip(browser, watch, name, route, interact, opts = {}) {
-  const { size = { width: 1000, height: 620 }, readySel = '[data-page-ready="true"]', caption: cap = name } = opts;
+  const { size = { width: 1600, height: 1000 }, readySel = '[data-page-ready="true"]', caption: cap = name } = opts;
   const tmp = join(CLIPS, '_tmp', name);
   let clipCtx = null;
   let clipPage = null;
@@ -222,12 +223,15 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
       const sizeBytes = statSync(dest).size;
       clipMeta.push({ file: `clips/${name}.webm`, caption: cap });
       tracker.recordCapture({ kind: 'clip', file: `clips/${name}.webm`, caption: cap, sizeBytes });
-      // 2M runaway-catch: clips ARE the demo product now (clips-first pivot) —
+      // 4M runaway-catch: clips ARE the demo product now (clips-first pivot) —
       // full staged progressions with viewer-processing dwells legitimately run
-      // 0.7-1.7M. The guard exists to catch a runaway recording, not to fight
-      // the demo's purpose; total clip weight still nets far below the removed
-      // 45M full-session video.
-      check(sizeBytes < 2_000_000, `clip ${name}.webm under 2M (got ${sizeBytes})`);
+      // 0.7-1.7M at the default 1000x620 size; the 2026-07 recording-quality bump
+      // to 1600x1000 (2.56x the pixels) scales bytes ~2-2.5x in the same ratio, so
+      // the guard doubles to 4M alongside it. The guard exists to catch a runaway
+      // recording, not to fight the demo's purpose — the 129s-dead-video class it
+      // exists for (a swallowed 30s locator timeout x N) blows past 4M regardless;
+      // total clip weight still nets far below the removed 45M full-session video.
+      check(sizeBytes < 4_000_000, `clip ${name}.webm under 4M (got ${sizeBytes})`);
       console.log(`  [clip] ${name} — ${cap} (${sizeBytes}B)`);
     }
   } catch (e) {

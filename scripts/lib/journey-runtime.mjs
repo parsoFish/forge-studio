@@ -244,11 +244,24 @@ export function createBeatTracker() {
   return { begin, end, onCheck, recordCapture, journeyMeta, toResults };
 }
 
+/**
+ * Frame captures are recorded with a BARE filename (e.g. "01-name.png" — see
+ * frame() in e2e-journey.mjs) so the "frames/" prefix is applied here, once.
+ * Clip captures are recorded ALREADY prefixed (e.g. "clips/name.webm" — see
+ * recordClip() in e2e-journey.mjs), so the clip src is used AS-IS: prepending
+ * "clips/" again here was the double-prefix bug (src="clips/clips/name.webm"
+ * -> 404 -> MEDIA_ELEMENT_ERROR -> black squares in the gallery). Keeping the
+ * "prefix once, at the point the string is consumed" rule for frames but "use
+ * as recorded" for clips looks asymmetric, but it matches what each recorder
+ * actually stores — the alternative (stripping the prefix back off in
+ * e2e-journey.mjs just to re-add it here) is more moving parts for the same
+ * result.
+ */
 function renderCapture(c) {
   if (c.kind === 'frame') {
-    return `<figure><img loading="lazy" src="frames/${c.file}"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
+    return `<figure><img class="capped-frame" loading="lazy" src="frames/${c.file}" onclick="this.classList.toggle('full')"/><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
   }
-  return `<figure class="clip"><video autoplay loop muted playsinline src="clips/${c.file}"></video><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
+  return `<figure class="clip"><video autoplay loop muted playsinline controls src="${c.file}"></video><figcaption><code>${c.file}</code> — ${c.caption}</figcaption></figure>`;
 }
 
 /**
@@ -272,13 +285,22 @@ function renderJourney(j) {
   const passed = j.checksTotal - j.checksFailed;
   const badgeClass = j.checksFailed > 0 ? 'badge-fail' : 'badge-ok';
   const badge = `<span class="badge ${badgeClass}">${passed}/${j.checksTotal} checks green</span>`;
+  const clipCount = Object.values(j.beats).reduce(
+    (n, b) => n + b.captures.filter((c) => c.kind === 'clip').length, 0,
+  );
   const beats = Object.values(j.beats).map(renderBeat).join('\n');
-  return `<section><h2>${j.title}</h2><p class="story">${j.story}</p>${badge}${beats}</section>`;
+  return `<section><h2>${j.title}</h2><p class="story">${j.story}</p>` +
+    `<p class="journey-meta">${clipCount} clip${clipCount === 1 ? '' : 's'} · ${badge}</p>` +
+    `${beats}</section>`;
 }
 
 /**
- * Render the full walkthrough gallery as an HTML string. Style adapted from
- * e2e-journey.mjs's writeIndex() so the gallery doesn't regress visually.
+ * Render the full walkthrough gallery as an HTML string: a tab bar with one
+ * tab per journey (first active by default) plus a trailing "Finale" tab for
+ * any epilogue captures (only when non-empty), each tab panel holding that
+ * journey's checks badge + story + beats — unchanged content, just moved off
+ * one long scroll into per-pillar panels. Inline vanilla JS/CSS (no external
+ * deps): this is a local file:// artifact.
  *
  * @param {object} results               a toResults() output.
  * @param {object} [opts]
@@ -286,30 +308,59 @@ function renderJourney(j) {
  * @param {string} [opts.subtitle]
  */
 export function renderGallery(results, { title = 'Forge Studio — the operator walkthrough', subtitle = '' } = {}) {
-  const journeysHtml = results.executedJourneys
-    .map((jid) => (results.journeys[jid] ? renderJourney(results.journeys[jid]) : ''))
-    .join('\n');
-
+  const journeyIds = results.executedJourneys.filter((jid) => results.journeys[jid]);
   const epilogueCaptures = results.epilogue?.captures ?? [];
-  const epilogueHtml = epilogueCaptures.length
-    ? `<section><h2>Finale</h2>${epilogueCaptures.map(renderCapture).join('\n')}</section>`
-    : '';
+  const hasEpilogue = epilogueCaptures.length > 0;
+
+  const tabButtons = journeyIds.map((jid, i) => {
+    const j = results.journeys[jid];
+    const dot = j.pass ? '' : '<span class="tab-dot" title="failing checks"></span>';
+    return `<button type="button" class="tab-btn${i === 0 ? ' active' : ''}" data-tab-target="tab-${jid}">${j.title}${dot}</button>`;
+  });
+  const tabPanels = journeyIds.map((jid, i) =>
+    `<div class="tab-panel${i === 0 ? ' active' : ''}" id="tab-${jid}">${renderJourney(results.journeys[jid])}</div>`);
+
+  if (hasEpilogue) {
+    tabButtons.push('<button type="button" class="tab-btn" data-tab-target="tab-epilogue">Finale</button>');
+    tabPanels.push(`<div class="tab-panel" id="tab-epilogue"><section><h2>Finale</h2>` +
+      `${epilogueCaptures.map(renderCapture).join('\n')}</section></div>`);
+  }
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>body{background:#0d1117;color:#e6edf3;font:14px ui-sans-serif,system-ui;margin:32px auto;max-width:1280px;padding:0 24px}
 h1{letter-spacing:.4px}h2{margin-top:8px;border-bottom:1px solid #21262d;padding-bottom:6px}
 video{width:100%;border:1px solid #30363d;border-radius:8px;background:#000}
-section{margin:40px 0}.story{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
+section{margin:0}.story{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
+.journey-meta{color:#8b949e;font-size:12px;margin:0 0 1rem}
 .beat{margin:24px 0}h3{margin-bottom:4px}.narration{color:#8b949e;font-size:13px;margin:.2rem 0 1rem}
-figure{margin:24px 0;padding:0}figure img{width:100%;border:1px solid #30363d;border-radius:8px;display:block}
-figure.clip{max-width:520px}
+figure{margin:24px 0;padding:0}
+figure img.capped-frame{max-height:400px;width:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto;border:1px solid #30363d;border-radius:8px;cursor:zoom-in}
+figure img.capped-frame.full{max-height:none;width:100%;cursor:zoom-out}
+figure.clip{max-width:720px;margin:24px auto}
 figcaption{color:#8b949e;font-size:12px;padding-top:6px}code{color:#d2a8ff}
-.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:12px;margin:6px 0}
-.badge-ok{background:#0d3320;color:#3fb950}.badge-fail{background:#3d0d12;color:#f85149}</style></head>
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:12px}
+.badge-ok{background:#0d3320;color:#3fb950}.badge-fail{background:#3d0d12;color:#f85149}
+.tab-bar{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0;border-bottom:1px solid #21262d;padding-bottom:14px}
+.tab-btn{background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:6px 14px;font:13px ui-sans-serif,system-ui;cursor:pointer}
+.tab-btn.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
+.tab-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#f85149;margin-left:6px;vertical-align:middle}
+.tab-panel{display:none}
+.tab-panel.active{display:block}</style></head>
 <body><h1>${title}</h1>
 ${subtitle ? `<p>${subtitle}</p>` : ''}
-${journeysHtml}
-${epilogueHtml}
+<div class="tab-bar">${tabButtons.join('\n')}</div>
+<div class="tab-panels">${tabPanels.join('\n')}</div>
+<script>
+document.querySelectorAll('.tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var target = btn.getAttribute('data-tab-target');
+    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById(target).classList.add('active');
+  });
+});
+</script>
 </body></html>`;
 }
 

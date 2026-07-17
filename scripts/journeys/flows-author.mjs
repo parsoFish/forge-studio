@@ -17,6 +17,14 @@ import yaml from 'js-yaml';
 // to compare against.
 const SCRATCH_CHAIN = ['developer-ralph', 'developer-unifier', 'project-scoped-review'];
 
+// Drop-coordinate spacing for the three scratch-flow nodes, shared by the main
+// beat AND the clip so both drop hexes the same way. Canvas-fraction based (not
+// pixel-based) so it scales with whatever viewport is recording. Widened from
+// the original 0.22/0.28-step spacing after hexes were observed dropping
+// overlapped at the recorder's wider default canvas.
+const SCRATCH_DROP_X_FRACTIONS = [0.18, 0.42, 0.66];
+const SCRATCH_DROP_Y_FRACTION = 0.45;
+
 // ── HTML5 DnD: AgentPalette agent chip → FlowBuilderCanvas ──────────────────
 // Mirrors AgentPalette's DraggableChip (encodeDragPayload sets text/plain to
 // JSON.stringify({kind:'agent', ref})) → FlowBuilderCanvas.onDrop (decodes it,
@@ -57,10 +65,18 @@ async function wireEdge(page, srcNodeId, tgtNodeId) {
 // the real cursor (mouseup) position — pick the artifact label there. (An
 // Artifact-Reference chip dragged onto an edge is a no-op by design; this
 // post-connect picker is the ONLY UI path that actually labels an edge.)
-async function pickArtifact(page, artifactId, timeout = 6000) {
+// `calloutText`, when passed, turns the pick into a callout moment: the
+// picker is given a beat to be READ (caption + dwell) before the click —
+// used by the clip, where this moment needs to land with the viewer; the
+// main beat calls this with no callout so its own checks stay fast.
+async function pickArtifact(page, artifactId, { timeout = 6000, calloutText } = {}) {
   try {
     await page.waitForSelector('[data-component="artifact-picker"]', { timeout });
   } catch { return false; }
+  if (calloutText) {
+    await caption(page, calloutText);
+    await sleep(READ);
+  }
   const opt = page.locator(`[data-artifact-option="${artifactId}"]`);
   if ((await opt.count()) === 0) return false;
   await opt.click();
@@ -324,8 +340,8 @@ export const journey = defineJourney({
               const canvasBox = await page.locator('[data-component="flow-builder-canvas"]').boundingBox();
               for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
                 const ref = SCRATCH_CHAIN[i];
-                const x = canvasBox.x + canvasBox.width * (0.22 + i * 0.28);
-                const y = canvasBox.y + canvasBox.height * 0.45;
+                const x = canvasBox.x + canvasBox.width * SCRATCH_DROP_X_FRACTIONS[i];
+                const y = canvasBox.y + canvasBox.height * SCRATCH_DROP_Y_FRACTION;
                 await dropAgentNode(page, ref, x, y);
                 await page.waitForFunction(
                   (n) => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= n,
@@ -436,8 +452,17 @@ export const journey = defineJourney({
               // Clip: the whole authoring arc, start to finish — the "money clip".
               // Re-authors the SAME-named flow in a fresh context: an idempotent
               // re-save of the same slug (not a collision), purely so the clip shows
-              // the complete from-nothing arc rather than a partial replay.
-              await recordClip(browser, watch, 'flow-scratch-build', '/flows/new', async (p) => {
+              // the complete from-nothing arc rather than a partial replay. Entry
+              // point is the library's real "+ New Flow" CTA (not a direct goto) —
+              // the same trigger surface an operator actually clicks.
+              await recordClip(browser, watch, 'flow-scratch-build', '/', async (p) => {
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 8000 },
+                ).catch(() => {});
+                await caption(p, 'Starting from the library — the "+ New Flow" CTA is how an operator actually gets here.');
+                await sleep(THINK);
+                await p.locator('[data-action="new-flow"]').click().catch(() => {});
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
                   null, { timeout: 12000 },
@@ -448,47 +473,82 @@ export const journey = defineJourney({
                   () => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= 3,
                   null, { timeout: 12000 },
                 ).catch(() => {});
+                await caption(p, 'Clearing the seeded starter — rebuilding forge-develop genuinely from scratch.');
+                await sleep(THINK);
                 p.once('dialog', (d) => d.accept());
                 await p.locator('[data-action="clear-canvas"]').click().catch(() => {});
                 await p.waitForFunction(
                   () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') === '0',
                   null, { timeout: 6000 },
                 ).catch(() => {});
+
                 const box = await p.locator('[data-component="flow-builder-canvas"]').boundingBox();
                 if (box) {
+                  await caption(p, 'Three agents, dropped one by one from the palette — dev, unifier, review.');
                   for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
                     const ref = SCRATCH_CHAIN[i];
-                    const cx = box.x + box.width * (0.22 + i * 0.28);
-                    const cy = box.y + box.height * 0.45;
+                    const cx = box.x + box.width * SCRATCH_DROP_X_FRACTIONS[i];
+                    const cy = box.y + box.height * SCRATCH_DROP_Y_FRACTION;
                     await dropAgentNode(p, ref, cx, cy).catch(() => {});
-                    await sleep(250);
+                    await p.waitForFunction(
+                      (n) => parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10) >= n,
+                      i + 1, { timeout: 4000 },
+                    ).catch(() => {});
                   }
                 }
+                // CRITICAL settle wait — mirrors the main beat: FitOnChange's
+                // delayed auto-fit must finish before edge-wiring reads stable
+                // handle boxes, or the drag lands on stale coordinates.
                 await sleep(800);
+
                 const clipIdFor = async (ref) => p.evaluate((r) =>
                   document.querySelector(`[data-flow-node][data-agent-ref="${r}"]`)?.getAttribute('data-node-id') ?? null, ref);
                 const [d1, d2, d3] = await Promise.all(SCRATCH_CHAIN.map(clipIdFor));
+
                 if (d1 && d2) {
-                  await wireEdge(p, d1, d2).catch(() => {});
-                  await pickArtifact(p, 'wi-branches').catch(() => {});
+                  const wired = await wireEdge(p, d1, d2).catch(() => false);
+                  if (wired) {
+                    await pickArtifact(p, 'wi-branches', {
+                      calloutText: 'The ArtifactPicker pops — it labels the dev → unifier edge "wi-branches".',
+                    }).catch(() => false);
+                  }
                 }
                 await sleep(300);
                 if (d2 && d3) {
-                  await wireEdge(p, d2, d3).catch(() => {});
-                  await pickArtifact(p, 'pr').catch(() => {});
+                  const wired = await wireEdge(p, d2, d3).catch(() => false);
+                  if (wired) {
+                    await pickArtifact(p, 'pr', {
+                      calloutText: 'And here — the picker labels the unifier → review edge as a PR hand-off.',
+                    }).catch(() => false);
+                  }
                 }
-                await sleep(300);
-                if (d3) {
+
+                // Prove the edges actually landed before continuing — a bounded
+                // wait, not a fixed sleep (the defect this fixes: the clip used
+                // to proceed on stale/half-wired state and lose an edge).
+                let edgesConfirmed = false;
+                try {
+                  await p.waitForFunction(
+                    () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-edge-count') === '2',
+                    null, { timeout: 5000 },
+                  );
+                  edgesConfirmed = true;
+                } catch { /* the clip still holds on whatever state it reached */ }
+
+                if (edgesConfirmed && d3) {
+                  await caption(p, 'Both edges wired — now gate the terminal node: a human verdict before this flow can complete.');
+                  await sleep(THINK);
                   await p.locator(`[data-testid="rf__node-${d3}"]`).click({ force: true }).catch(() => {});
                   await p.locator('[data-action="toggle-gate"]').click().catch(() => {});
                   await p.keyboard.press('Escape').catch(() => {});
+                  await sleep(400);
+                  await caption(p, 'Name it, save it — forge-develop, rebuilt entirely as data.');
+                  await p.locator('[data-field="flow-name"]').fill('Forge Develop Scratch').catch(() => {});
+                  await p.locator('[data-action="save-flow"]').click().catch(() => {});
+                  await p.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 12000 }).catch(() => {});
+                  await sleep(1000);
                 }
-                await sleep(400);
-                await p.locator('[data-field="flow-name"]').fill('Forge Develop Scratch').catch(() => {});
-                await p.locator('[data-action="save-flow"]').click().catch(() => {});
-                await p.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 12000 }).catch(() => {});
-                await sleep(1000);
-              }, { readySel: '[data-page="flow-monitor"]', caption: 'Authoring the forge-develop flow from scratch — drop, wire, gate, save', holdTailMs: 1500 });
+              }, { readySel: '[data-page="library"]', caption: 'From the library "+ New Flow" CTA to a saved, edge-proven flow — dev → unifier → review', holdTailMs: 1500 });
 
         },
       },
