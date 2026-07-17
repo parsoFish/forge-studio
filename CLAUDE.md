@@ -125,9 +125,14 @@ the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
 fills the gap — `verify-cycle.mjs` is forge's standing real-capability regression
 harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached
 PR/merge, dev-loop N/N, project tests green post-merge, cost under ceiling), not
-synthetic rubrics. Default ground is the creds-free **mdtoc** reference project;
-**betterado** is the live-ADO tier. Tiered (frozen-SHA routine / full-greenfield
-release), run as a manual gate before pointing forge at a real project.
+synthetic rubrics. The routine, creds-free ground is **gitpulse**
+(`github.com/parsoFish/gitpulse` — an independent repo; the harness's
+`--project` flag literally defaults to `mdtoc`, but `mdtoc` is uniquely
+committed inside forge's own repo (`projects/mdtoc/`) and must **never**
+actually be the harness ground — always pass `--project gitpulse`);
+**betterado** is the live-ADO tier. Tiered (frozen-SHA routine /
+full-greenfield release), run as a manual gate before pointing forge at a
+real project.
 
 Where to look for as-built detail:
 
@@ -333,8 +338,10 @@ project (auto-approve + closure + reflection capture). This is the standing
 regression harness for forge's actual capabilities (ADR 022): it asserts
 real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
 gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
-**mdtoc** (default — the creds-free neutral reference project) and the
-**betterado terraform provider** (`--project terraform-provider-betterado` —
-the live-ADO tier, higher ceiling, plus a 5th gate asserting the demo carries
-**live REST evidence**, not a test-name table). Tiered (frozen-SHA routine /
+**gitpulse** (`--project gitpulse` — the creds-free, independent reference
+project; see `docs/verify-cycle-ideas/README.md` for the corpus of idea
+files) and the **betterado terraform provider**
+(`--project terraform-provider-betterado` — the live-ADO tier, higher
+ceiling, plus a 5th gate asserting the demo carries **live REST
+evidence**, not a test-name table). Tiered (frozen-SHA routine /
 greenfield release).
