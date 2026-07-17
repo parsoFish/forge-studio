@@ -403,3 +403,9 @@ pass across all five roadmaps plus four operator decisions:
   that fits no row mints the next roadmap. Relocations: iteration-target
   logs/handles R5-06-F5 → R6-02; R4-11's notification-transport pointer →
   R6-D1.
+- 2026-07-17 — R5-07-F8 implementation session: north-star reframe landed
+  as [ADR 038](../decisions/038-north-star-platform-and-ootb.md). §1 gains
+  the dated note promoting the Scope 1/2 split to the north star; §8
+  decision 4 gains its "Landed as ADR 038" closer. The orientation-doc
+  strike-list amendments live in their own files (CLAUDE.md, README.md,
+  ARCHITECTURE.md, MVUS, market-and-differentiation, repo-map).

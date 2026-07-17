@@ -43,7 +43,7 @@ The single most important honest finding: **the commodity primitives are not wea
 ```
 
 - **Positioning line:** *"n8n for autonomous software delivery — with a memory that compounds and gates that can't be skipped."*
-- **Target wedge:** the **single technical operator running a portfolio of projects** (matches the north star: *"idea machine for one human across many side projects"*). Enterprise tools (Factory, Devin, Copilot) optimise for *teams*; Cursor for *in-IDE devs*; Lindy for *non-technical ops*. The solo-polymath-with-many-projects buyer is **under-served**.
+- **Target wedge:** the **single technical operator running a portfolio of projects** — the operator framing the north star has always carried (the north star itself is now two-level per [ADR 038](./decisions/038-north-star-platform-and-ootb.md); see the amendment below — the wedge buyer is unchanged). Enterprise tools (Factory, Devin, Copilot) optimise for *teams*; Cursor for *in-IDE devs*; Lindy for *non-technical ops*. The solo-polymath-with-many-projects buyer is **under-served**.
 
 > **Amendment (2026-07-17, [ADR 038](./decisions/038-north-star-platform-and-ootb.md)):**
 > Internally, forge's engineering north star is now **two-level** — Scope 1 is a modular

@@ -1,6 +1,6 @@
 # ADR 038 — North-star reframe: modular platform (Scope 1) vs. shipped ideas machine (Scope 2 OOTB)
 
-**Status:** Accepted (operator decision 2026-07-17 — [roadmap README §8, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day-second-session)).
+**Status:** Accepted (operator decision 2026-07-17 — [roadmap README §8, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)).
 **Date:** 2026-07-17
 **References:** [docs/repo-map.md](../repo-map.md) (the three-scope contributor map this
 ADR's split rides on), [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md)
@@ -114,7 +114,7 @@ the split. This ADR is the sole origin of the two-scope mission.
 
 ## References
 
-- [Roadmap README §8 — Adversarial-review decisions, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day-second-session)
+- [Roadmap README §8 — Adversarial-review decisions, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)
   — the operator approval this ADR records.
 - [docs/roadmaps/R5-hardening-operability.md](../roadmaps/R5-hardening-operability.md) —
   initiative R5-07, feature F8 — the strike-list this ADR closes.

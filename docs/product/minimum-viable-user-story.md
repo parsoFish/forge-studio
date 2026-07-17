@@ -69,11 +69,18 @@ change is **closed out, merged to main**, and the cycle moves toward release.
 
 ## 4. Release phase — the final loop
 
-For a release-shaped cycle the unifier drafts a **changelog** from the merged work and presents it for a
+For a release-shaped cycle a **changelog** is drafted from the merged work and presented for a
 final human moment. The user reviews and **approves the release** (or sends the draft back for an edit); on
 approval, **release-finalize** runs, **forge merges the release**, and **CI tags and publishes** it
 (contract clause **C10**). The release final-loop is the bridge between an accepted change and a tagged,
 published artifact — the operator confirms the human-readable release notes before anything ships.
+
+> **Amendment (2026-07-17):** this section originally assigned changelog drafting to the
+> unifier, which is retired per Q3-B
+> ([roadmap README §8](../roadmaps/README.md#8-session-decisions-record-2026-07-17)).
+> Changelog drafting has **no decided successor yet** — it is reassigned as part of the
+> R4 successor-suite design ([docs/roadmaps/R4-ootb-suite.md](../roadmaps/R4-ootb-suite.md)).
+> The release final-loop's human moment and the C10 mechanics above are unchanged.
 
 ## 5. Reflect phase
 
@@ -116,7 +123,10 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Architect deep investigation** including **online/web research** and similar-project grounding.
 - **Rich HTML demo** with assessed-intent + evaluated-output + **human-watchable visual demonstration**
   (incl. CLI-behaviour video) for any component shape.
-- **Review feedback → work item → unifier** send-back loop, looping until accept (ADR-026, now built).
+- **Review feedback → work item → send-back into the develop flow**, looping until accept
+  (ADR-026 built the unifier-era mechanism; post-Q3-B the send-back re-enters the demo agent +
+  adversarial review agent stage, with the merge-boundary gate orchestrator-owned ⚑ — see §3,
+  amended 2026-07-17).
 - **Release final-loop**: draft changelog → operator approves the release → release-finalize → forge merges → CI tags/publishes (contract C10).
 - **Reflect interview → user feedback → brain tuning** at the relevant level.
 - **Live, drill-down, cross-project observability**: per-phase task/approach, cost, **per-worker token usage**,
