@@ -246,6 +246,32 @@ test('validateProjectConfig: ci_gate_unset_env must be an argv string[] when pre
   );
 });
 
+// FIX 4 (R5-02, security): ci_gate_unset_env is external input (project.json)
+// at a trust boundary. Declaring PATH/HOME/SHELL would WEAKEN the gate child
+// (PATH loss → wrong-binary resolution), not act as a live-test trigger — so
+// reject those names with a clear error rather than silently self-sabotaging
+// the gate. Validate + fail fast.
+for (const forbidden of ['PATH', 'HOME', 'SHELL']) {
+  test(`validateProjectConfig: ci_gate_unset_env rejects ${forbidden} (would weaken the gate child, not trigger a live test)`, () => {
+    assert.throws(
+      () =>
+        validateProjectConfig({
+          quality_gate_cmd: ['true'],
+          ci_gate_unset_env: ['TF_ACC', forbidden],
+        }),
+      new RegExp(`ci_gate_unset_env.*${forbidden}`),
+    );
+  });
+}
+
+test('validateProjectConfig: ci_gate_unset_env still accepts legitimate live-test trigger vars', () => {
+  const cfg = validateProjectConfig({
+    quality_gate_cmd: ['true'],
+    ci_gate_unset_env: ['TF_ACC', 'RUN_INTEGRATION', 'AZURE_ACC'],
+  });
+  assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC', 'RUN_INTEGRATION', 'AZURE_ACC']);
+});
+
 test('validateProjectConfig: acceptance_gate requires a non-empty match', () => {
   assert.throws(
     () =>

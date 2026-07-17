@@ -224,6 +224,72 @@ test('makeQualityGateFromCmd: process env WINS over secrets.env on conflict', ()
   }
 });
 
+test('makeQualityGateFromCmd: unsetEnv strips a declared var from the gate child (F2, R5-02 — TF_ACC leak, no requiredEnv)', () => {
+  // R5-02 F2: a docs-only cycle's per-WI gate must NOT accidentally run a
+  // live-acceptance suite just because the orchestrator's own process env
+  // happens to carry TF_ACC=1 (an operator's shell, or a sibling live-acc
+  // cycle). Before this fix, `unsetEnv` didn't exist and `runGateCapturing`
+  // only ever built a scrubbed env when `requiredEnv` was non-empty — the
+  // common case (no requiredEnv) inherited process.env completely unscrubbed.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-unset-'));
+  process.env.FORGE_TEST_TF_ACC_XYZ = '1';
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"'],
+      (i) => { info = i; },
+      { unsetEnv: ['FORGE_TEST_TF_ACC_XYZ'] },
+    );
+    assert.equal(gate(), true);
+    assert.ok(info);
+    assert.match(info!.stdoutTail, /TF_ACC=UNSET/, 'the declared ci_gate_unset_env var must not reach the gate child');
+  } finally {
+    delete process.env.FORGE_TEST_TF_ACC_XYZ;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: without unsetEnv declared, an ambient var reaches the gate child unchanged (baseline)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-unset-'));
+  process.env.FORGE_TEST_TF_ACC_XYZ = '1';
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"'],
+      (i) => { info = i; },
+    );
+    assert.equal(gate(), true);
+    assert.match(info!.stdoutTail, /TF_ACC=1/, 'sanity: an undeclared ambient var passes through by default');
+  } finally {
+    delete process.env.FORGE_TEST_TF_ACC_XYZ;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('makeQualityGateFromCmd: unsetEnv strips a declared var even when requiredEnv is also set', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-unset-'));
+  const present = 'FORGE_TEST_PRESENT_ENV_ABC';
+  process.env[present] = '1';
+  process.env.FORGE_TEST_TF_ACC_XYZ = '1';
+  try {
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', 'echo "TF_ACC=${FORGE_TEST_TF_ACC_XYZ:-UNSET}"'],
+      (i) => { info = i; },
+      { requiredEnv: [present], unsetEnv: ['FORGE_TEST_TF_ACC_XYZ'] },
+    );
+    assert.equal(gate(), true);
+    assert.match(info!.stdoutTail, /TF_ACC=UNSET/, 'unsetEnv strips even while a separate requiredEnv guard is active');
+  } finally {
+    delete process.env[present];
+    delete process.env.FORGE_TEST_TF_ACC_XYZ;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('readWorktreeSecretsEnv: parses KEY=VALUE, skips comments/blanks, strips export + quotes', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-secrets-parse-'));
   try {

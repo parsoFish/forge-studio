@@ -2,9 +2,10 @@
  * G8 (2026-07 refinement) enforcement lock for the env-pin seam.
  *
  * Every SDK child spawn must route through `pinnedSdkQuery`
- * (orchestrator/pinned-sdk-query.ts) so `pinnedAgentEnv` (orchestrator/config.ts)
- * always scrubs host-leakage vars (ANTHROPIC_BASE_URL, ANTHROPIC_CUSTOM_HEADERS,
- * CLAUDE_EFFORT, HEADROOM_*) before a spawned child ever sees them.
+ * (orchestrator/pinned-sdk-query.ts) so `buildChildEnv` (orchestrator/spawn-env.ts)
+ * always allowlist-filters the ambient env (stripping ANTHROPIC_BASE_URL,
+ * ANTHROPIC_CUSTOM_HEADERS, CLAUDE_EFFORT, HEADROOM_*, and anything else not
+ * explicitly allowlisted) before a spawned child ever sees it.
  *
  * Rule enforced on every .ts/.tsx/.mts/.cts source file under orchestrator/,
  * loops/, and cli/ (except the wrapper itself): ANY reference to the SDK
@@ -12,7 +13,17 @@
  *   (a) a whole-statement type import/re-export
  *       (`import type {...} from`, `export type {...} from`), or
  *   (b) a named import / named re-export whose specifiers are all
- *       type-prefixed or do not bind the `query` value.
+ *       type-prefixed or bind only SAFE-LIST (non-spawning) values.
+ * This is DEFAULT-DENY on VALUE imports: a named value specifier is flagged
+ * unless it is on `SAFE_SDK_VALUE_IMPORTS` (tool/createSdkMcpServer/AbortError/
+ * HOOK_EVENTS/EXIT_REASONS). That catches every child-spawning export — `query`
+ * AND all three `unstable_v2_*` session/prompt entry points (each spawns its
+ * own Claude Code CLI child computing `{...options.env ?? process.env}`,
+ * bypassing buildChildEnv) — and any FUTURE spawning export the SDK adds,
+ * without anyone having to enumerate it. The earlier detector inverted this
+ * (allow everything, deny only the literal name `query`), so a plain
+ * `import { unstable_v2_prompt }` reported ZERO violations — the exact
+ * leak-recurrence vector this lock closes.
  * Everything else is flagged, including the four verified bypass classes of
  * the earlier, narrower detector:
  *   1. re-exports  — `export { query } from` and `export * from` (the
@@ -131,17 +142,66 @@ function stripComments(source: string): string {
 }
 
 /**
- * True if a named import/export specifier list (the text between the braces)
- * binds the VALUE `query` — i.e. contains a specifier whose imported name is
- * `query` (optionally aliased with `as`) without a per-specifier `type`
- * prefix.
+ * The SDK VALUE exports that DO NOT spawn a Claude Code CLI child and are
+ * therefore safe to import anywhere — they never touch the env-pin seam.
+ * Enumerated from the SDK's runtime export block (the `export { … }` at the
+ * foot of `sdk.mjs`, v0.1.77): the whole set is
+ *   { query, unstable_v2_createSession, unstable_v2_resumeSession,
+ *     unstable_v2_prompt, tool, createSdkMcpServer, AbortError,
+ *     HOOK_EVENTS, EXIT_REASONS }
+ * of which only these five never spawn (tool/createSdkMcpServer define
+ * in-process MCP surface; AbortError is an error class; HOOK_EVENTS /
+ * EXIT_REASONS are const arrays).
+ *
+ * This lock is DEFAULT-DENY: a named value import is flagged unless EVERY
+ * value specifier is on this safe-list. So the four known child-spawning
+ * exports below are caught, AND any FUTURE spawning export the SDK adds
+ * (e.g. a hypothetical `unstable_v3_*`) is caught the instant it is imported
+ * — no one has to remember to enumerate it. That closes the exact
+ * leak-recurrence vector R5-02 exists for: the earlier detector allow-listed
+ * everything and only denied the literal name `query`, so
+ * `import { unstable_v2_prompt }` (which computes its own
+ * `processEnv = { …options.env ?? process.env }` and spawns) sailed through.
  */
-function bindsQueryValue(specifiers: string): boolean {
+const SAFE_SDK_VALUE_IMPORTS: ReadonlySet<string> = new Set([
+  'tool',
+  'createSdkMcpServer',
+  'AbortError',
+  'HOOK_EVENTS',
+  'EXIT_REASONS',
+]);
+
+/**
+ * The child-spawning SDK value exports as of v0.1.77 — documentation for the
+ * reader (and the exact set the fixtures target). Enforcement does NOT read
+ * this list (it is default-deny via SAFE_SDK_VALUE_IMPORTS); it is here so the
+ * report/reviewer can see WHICH known exports the lock exists to stop:
+ *   - query                       → ProcessTransport, `let processEnv = env ?? {…process.env}`
+ *   - unstable_v2_createSession   ─┐ each → createSession → new SessionImpl →
+ *   - unstable_v2_resumeSession    ├─ new ProcessTransport, which computes
+ *   - unstable_v2_prompt          ─┘ `{ …options.env ?? process.env }` and spawns.
+ */
+export const KNOWN_CHILD_SPAWNING_SDK_EXPORTS: readonly string[] = [
+  'query',
+  'unstable_v2_createSession',
+  'unstable_v2_resumeSession',
+  'unstable_v2_prompt',
+] as const;
+
+/**
+ * The imported VALUE names in a named import/export specifier list (the text
+ * between the braces) that are NOT on the safe-list — i.e. the ones whose
+ * presence outside the wrapper is a violation. Per-specifier `type`-prefixed
+ * bindings are ignored (a type never spawns). Returns the offending imported
+ * names (empty ⇒ the whole list is safe).
+ */
+function restrictedValueSpecifiers(specifiers: string): string[] {
   return specifiers
     .split(',')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .some((spec) => !spec.startsWith('type ') && spec.split(/\s+as\s+/)[0].trim() === 'query');
+    .filter((s) => s.length > 0 && !s.startsWith('type '))
+    .map((spec) => spec.split(/\s+as\s+/)[0].trim())
+    .filter((name) => name.length > 0 && !SAFE_SDK_VALUE_IMPORTS.has(name));
 }
 
 const NAMED_IMPORT_RE = new RegExp(
@@ -195,19 +255,28 @@ function findSdkViolations(source: string): SdkViolation[] {
   let text = stripComments(source);
   if (!text.includes(SDK)) return violations;
 
-  // (a)/(b): named imports — allowed unless a specifier binds the query value.
+  // (a)/(b): named imports — allowed unless a specifier binds a value that is
+  // NOT on the safe-list (default-deny: query + every unstable_v2_* + any
+  // future spawning export).
   text = text.replace(NAMED_IMPORT_RE, (full, typeKw: string | undefined, specifiers: string) => {
-    if (!typeKw && bindsQueryValue(specifiers)) {
-      violations.push({ rule: 'named-import-of-query-value', detail: full.trim() });
+    if (!typeKw) {
+      const restricted = restrictedValueSpecifiers(specifiers);
+      if (restricted.length > 0) {
+        violations.push({ rule: 'named-import-of-spawning-value', detail: `${full.trim()} [restricted: ${restricted.join(', ')}]` });
+      }
     }
     return '';
   });
 
-  // Named re-exports — same rule; a value re-export of `query` is the
-  // two-hop bypass (downstream importers never mention the specifier).
+  // Named re-exports — same default-deny rule; a value re-export of a
+  // spawning export is the two-hop bypass (downstream importers never mention
+  // the specifier).
   text = text.replace(NAMED_REEXPORT_RE, (full, typeKw: string | undefined, specifiers: string) => {
-    if (!typeKw && bindsQueryValue(specifiers)) {
-      violations.push({ rule: 're-export-of-query-value', detail: full.trim() });
+    if (!typeKw) {
+      const restricted = restrictedValueSpecifiers(specifiers);
+      if (restricted.length > 0) {
+        violations.push({ rule: 're-export-of-spawning-value', detail: `${full.trim()} [restricted: ${restricted.join(', ')}]` });
+      }
     }
     return '';
   });
@@ -272,9 +341,47 @@ test('sanity: the wrapper file itself trips the detector (proves it is not vacuo
   assert.equal(
     violations.length,
     1,
-    `wrapper should trip exactly the query-value rule, got: ${JSON.stringify(violations)}`,
+    `wrapper should trip exactly the spawning-value rule, got: ${JSON.stringify(violations)}`,
   );
-  assert.equal(violations[0].rule, 'named-import-of-query-value');
+  assert.equal(violations[0].rule, 'named-import-of-spawning-value');
+});
+
+// ---------------------------------------------------------------------------
+// FIX 2 — the two SCRIPT-launched paths (verify-cycle.mjs, e2e-journey.mjs).
+// These are 2 of the 5 spawn launch paths; unlike daemon/bridge/direct-CLI
+// they live in scripts/*.mjs (excluded from SCANNED_DIRS + SOURCE_FILE_RE), so
+// the lock above never covered them. They route through the seam BY
+// CONSTRUCTION — both spawn the `forge` CLI as a fresh OS subprocess and never
+// import the SDK — but that was only a one-time manual grep. Codify it: any
+// direct SDK reference added to ANY scripts/ file (which would spawn agents
+// bypassing buildChildEnv) reds this test.
+// ---------------------------------------------------------------------------
+
+const SCRIPTS_DIR = 'scripts';
+const SCRIPT_FILE_RE = /\.(mjs|cjs|js)$/;
+
+test('FIX 2: no scripts/ file references the SDK directly (verify-cycle + e2e-journey spawn the forge CLI, never the SDK)', () => {
+  const absDir = join(ROOT, SCRIPTS_DIR);
+  const entries = readdirSync(absDir, { withFileTypes: true, recursive: true });
+  const offenders: string[] = [];
+  let checked = 0;
+  for (const e of entries) {
+    if (!e.isFile() || !SCRIPT_FILE_RE.test(e.name)) continue;
+    const abs = join((e as unknown as { parentPath: string }).parentPath, e.name);
+    const relPath = relative(ROOT, abs).split('\\').join('/');
+    checked += 1;
+    const content = readFileSync(abs, 'utf8');
+    if (!content.includes(SDK)) continue; // fast path
+    for (const v of findSdkViolations(content)) {
+      offenders.push(`${relPath} — ${v.rule}: ${v.detail}`);
+    }
+  }
+  assert.ok(checked > 5, `expected to have scanned the scripts/ tree, only saw ${checked} files`);
+  assert.deepEqual(
+    offenders,
+    [],
+    `a scripts/ file references the SDK directly — harness scripts must spawn the forge CLI as an OS subprocess (which routes through ${WRAPPER_RELATIVE_PATH}), never import the SDK:\n${offenders.join('\n')}`,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -283,40 +390,80 @@ test('sanity: the wrapper file itself trips the detector (proves it is not vacuo
 // detector can never regress to missing them.
 // ---------------------------------------------------------------------------
 
-test('fixture: type-only and non-query named imports/re-exports are allowed', () => {
+test('fixture: type-only and safe-list value named imports/re-exports are allowed', () => {
   const allowed = [
     `import type { Options, SDKMessage } from '${SDK}';`,
     `import { type Options, type Query } from '${SDK}';`,
     `import { createSdkMcpServer } from '${SDK}';`,
+    `import { tool, createSdkMcpServer } from '${SDK}';`,
+    `import { AbortError } from '${SDK}';`,
+    `import { HOOK_EVENTS, EXIT_REASONS } from '${SDK}';`,
+    `import { type Options, tool } from '${SDK}';`,
     `export type { Options } from '${SDK}';`,
     `export { type Options } from '${SDK}';`,
+    `export { tool } from '${SDK}';`,
   ];
   for (const src of allowed) {
     assert.deepEqual(findSdkViolations(src), [], `should be allowed: ${src}`);
   }
 });
 
-test('fixture: value imports of query are flagged (plain, aliased, mixed with type specifiers)', () => {
+test('fixture: value imports of query are flagged (plain, aliased, mixed with type/safe specifiers)', () => {
   const flagged = [
     `import { query } from '${SDK}';`,
     `import { query as sdkQuery } from '${SDK}';`,
     `import { type Options, query as q } from '${SDK}';`,
+    `import { tool, query } from '${SDK}';`,
   ];
   for (const src of flagged) {
     const violations = findSdkViolations(src);
     assert.equal(violations.length, 1, `should be flagged: ${src}`);
-    assert.equal(violations[0].rule, 'named-import-of-query-value', src);
+    assert.equal(violations[0].rule, 'named-import-of-spawning-value', src);
+    assert.match(violations[0].detail, /restricted: .*query/, src);
   }
+});
+
+test('FIX 1: value imports of the unstable_v2_* session/prompt entry points are flagged (default-deny)', () => {
+  const flagged: Array<[string, string]> = [
+    [`import { unstable_v2_prompt } from '${SDK}';`, 'unstable_v2_prompt'],
+    [`import { unstable_v2_prompt as oneShot } from '${SDK}';`, 'unstable_v2_prompt'],
+    [`import { unstable_v2_createSession } from '${SDK}';`, 'unstable_v2_createSession'],
+    [`import { unstable_v2_resumeSession } from '${SDK}';`, 'unstable_v2_resumeSession'],
+    [`import { type Options, unstable_v2_prompt } from '${SDK}';`, 'unstable_v2_prompt'],
+  ];
+  for (const [src, name] of flagged) {
+    const violations = findSdkViolations(src);
+    assert.equal(violations.length, 1, `should be flagged (spawns a child bypassing buildChildEnv): ${src}`);
+    assert.equal(violations[0].rule, 'named-import-of-spawning-value', src);
+    assert.match(violations[0].detail, new RegExp(`restricted: .*${name}`), src);
+  }
+  // Every documented spawning export is in fact caught by the default-deny lock.
+  for (const name of KNOWN_CHILD_SPAWNING_SDK_EXPORTS) {
+    const violations = findSdkViolations(`import { ${name} } from '${SDK}';`);
+    assert.equal(violations.length, 1, `known spawning export must be flagged: ${name}`);
+  }
+});
+
+test('FIX 1: a hypothetical FUTURE spawning export is denied by default (not on the safe-list)', () => {
+  const violations = findSdkViolations(`import { unstable_v3_stream } from '${SDK}';`);
+  assert.equal(violations.length, 1, 'default-deny: an unknown value export is a violation without anyone enumerating it');
+  assert.equal(violations[0].rule, 'named-import-of-spawning-value');
+});
+
+test('FIX 1: aliased unstable_v2 re-export bypass is flagged', () => {
+  const violations = findSdkViolations(`export { unstable_v2_prompt as runOneShot } from '${SDK}';`);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].rule, 're-export-of-spawning-value');
 });
 
 test('fixture: re-export bypasses are flagged (named query re-export + star re-export)', () => {
   const named = findSdkViolations(`export { query } from '${SDK}';`);
   assert.equal(named.length, 1);
-  assert.equal(named[0].rule, 're-export-of-query-value');
+  assert.equal(named[0].rule, 're-export-of-spawning-value');
 
   const namedAliased = findSdkViolations(`export { query as runAgent } from '${SDK}';`);
   assert.equal(namedAliased.length, 1);
-  assert.equal(namedAliased[0].rule, 're-export-of-query-value');
+  assert.equal(namedAliased[0].rule, 're-export-of-spawning-value');
 
   const star = findSdkViolations(`export * from '${SDK}';`);
   assert.equal(star.length, 1);

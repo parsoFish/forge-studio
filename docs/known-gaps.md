@@ -322,6 +322,19 @@ is authoritative for how/when.
   maliciously-crafted `cycle_id` (`../`) would write logs outside `ctx.logsRoot`; today's
   exploitability is low (manifests are forge-authored). Add a `cycle_id` format check to
   `validateManifest()` mirroring `INITIATIVE_ID_PATTERN`. `orchestrator/manifest.ts`. *(R5)*
+- **F3 boundary check fires outside any beat → absent from `demos/e2e/results.json`**
+  (2026-07-18). The post-run boundary `check()` runs in the runner's `finally`, not inside a
+  beat, so `journey-runtime.mjs` logs `onCheck fired with no active beat` and drops it from
+  the tracked results/gallery — though it *does* drive the non-zero exit correctly. Route it
+  through a synthetic epilogue beat so a real boundary violation traces to a named check like
+  every other. `scripts/lib/journey-runtime.mjs` / `scripts/e2e-journey.mjs`. *(R7)*
+- **Operational constraint — do NOT perform remote PR/git operations during a `ui:journey`
+  run** (2026-07-18). F3's boundary check compares *global* open-PR state before/after the
+  run, so merging/closing any PR (even an unrelated one) mid-run trips a `pr-state-changed`
+  violation and reds the journey. Same discipline class as "never run against a live daemon"
+  / "commit before running." Not a code bug — the check is working as designed; document in
+  the harness runbook and consider narrowing the PR check to only PRs the harness could have
+  acted on if the false-positive proves annoying in practice. *(R6/R7)*
 
 ---
 

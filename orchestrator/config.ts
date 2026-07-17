@@ -228,49 +228,6 @@ export function assertEnv(mode: EnvAssertionMode = 'warn'): string[] {
 }
 
 /**
- * G8 (2026-07 refinement): env vars that must never reach a spawned Claude
- * Agent SDK child process. Each is a proven host-leakage vector (3 production
- * incidents tracing back to the operator's shell/proxy setup bleeding into
- * agent children) — none of them are forge-managed anywhere in orchestrator/
- * or loops/, so on a spawned child their only possible effect is unintended
- * inheritance. See `pinnedAgentEnv` below, the single scrub point.
- *
- * GIT_* identity vars are explicitly OUT of scope for this denylist — they
- * are not a leakage vector to block, they're an explicit identity overlay.
- * See `pinnedAgentEnvWithGitIdentity` below (G8 wave 2, 2026-07-12 — this WAS
- * "a later wave", now landed).
- */
-export const AGENT_ENV_DENYLIST: readonly string[] = [
-  'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_CUSTOM_HEADERS',
-  'CLAUDE_EFFORT',
-];
-
-/** Prefix denylist: every `HEADROOM_*` var is a host-compression-proxy leakage vector. */
-const HEADROOM_ENV_PREFIX = /^HEADROOM_/;
-
-/**
- * Return a NEW env object (never mutates `base`, never touches global
- * `process.env`) with every `AGENT_ENV_DENYLIST` key and every
- * `HEADROOM_*`-prefixed key removed. Defaults `base` to `process.env`.
- *
- * This is the seam every spawned Claude Agent SDK child's `options.env` must
- * be derived from — see `pinnedSdkQuery` (orchestrator/pinned-sdk-query.ts),
- * the wrapper around the SDK's `query` that every production import site
- * uses instead of importing `query` directly.
- */
-export function pinnedAgentEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const result: NodeJS.ProcessEnv = { ...base };
-  for (const key of AGENT_ENV_DENYLIST) {
-    delete result[key];
-  }
-  for (const key of Object.keys(result)) {
-    if (HEADROOM_ENV_PREFIX.test(key)) delete result[key];
-  }
-  return result;
-}
-
-/**
  * G8 wave 2 (2026-07-12): distinct git identity for forge-authored commits.
  *
  * PROVEN by spike (2026-07-11, $0.25, control-tested against a deliberately
@@ -278,7 +235,7 @@ export function pinnedAgentEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Pr
  * vars reach the Claude Code CLI child's own Bash-tool `git commit` calls and
  * take precedence over local/global gitconfig — no worktree-config plumbing
  * needed. This is the identity policy the rest of forge composes on top of:
- * SDK-spawned agents via `pinnedAgentEnvWithGitIdentity` below, direct
+ * SDK-spawned agents via `gitIdentityEnvOverlay` below, direct
  * orchestrator-issued `git commit` invocations via `gitIdentityConfigArgs`.
  */
 export type GitIdentity = {
@@ -320,19 +277,16 @@ export const ORCHESTRATOR_GIT_IDENTITY: GitIdentity = {
 };
 
 /**
- * Compose `pinnedAgentEnv` with an explicit git author/committer identity
- * overlay for an SDK-spawned agent child. Applied AFTER the denylist/
- * `HEADROOM_*` scrub so the scrub never touches it (GIT_* is not on
- * `AGENT_ENV_DENYLIST` — it's an explicit overlay, not a leakage block).
- * `base` defaults to `process.env` exactly like `pinnedAgentEnv`, so a caller
- * that only needs identity injection (the common case) can omit it.
+ * The GIT_* identity delta for an SDK-spawned agent child (R5-02): NOT a
+ * full env, just the four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` keys for the
+ * given identity. Pass this as `options.env` to a `pinnedSdkQuery` call
+ * (orchestrator/pinned-sdk-query.ts) — the seam treats `options.env` as
+ * deliberate overrides layered on top of the allowlist-filtered ambient
+ * env, so this small delta reaches the child without ever needing to
+ * pre-merge (or re-filter) the rest of the environment itself.
  */
-export function pinnedAgentEnvWithGitIdentity(
-  identity: GitIdentity,
-  base: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv {
+export function gitIdentityEnvOverlay(identity: GitIdentity): NodeJS.ProcessEnv {
   return {
-    ...pinnedAgentEnv(base),
     GIT_AUTHOR_NAME: identity.name,
     GIT_AUTHOR_EMAIL: identity.email,
     GIT_COMMITTER_NAME: identity.name,
@@ -343,7 +297,7 @@ export function pinnedAgentEnvWithGitIdentity(
 /**
  * `-c user.name=... -c user.email=...` flags for a DIRECT (non-SDK) `git
  * commit` / `git merge` invocation the orchestrator process issues itself via
- * `execFileSync`. The SDK path uses `pinnedAgentEnvWithGitIdentity` (env
+ * `execFileSync`. The SDK path uses `gitIdentityEnvOverlay` (env
  * vars) instead because those commits happen inside a spawned Claude Code CLI
  * child, not in this process; a direct `execFileSync('git', ...)` call has no
  * such child env to set, so a per-invocation gitconfig override is the

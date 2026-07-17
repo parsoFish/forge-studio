@@ -282,6 +282,66 @@ test('composedUnifierGate initiative_gate fail: 1 sub-check event, pass:false, n
 });
 
 // ---------------------------------------------------------------------------
+// FIX 3 (R5-02 F2) — the initiative_gate sub-check runs `runShellGate`, the
+// THIRD gate-spawn site the env-strip was threaded through. It needs its own
+// real-child-process regression (the AC's "real child-process test" clause)
+// mirroring the runGateCapturing TF_ACC test: a real gate child spawned with a
+// live-acc trigger (TF_ACC) in the parent env + declared in ci_gate_unset_env
+// must run with it UNSET.
+// ---------------------------------------------------------------------------
+
+test('FIX 3: composedUnifierGate strips a declared ci_gate_unset_env var from the initiative-gate child (runShellGate, real child)', async () => {
+  const h = unifierGateHarness();
+  const CANARY = 'FORGE_TEST_TF_ACC_XYZ';
+  // Pollute the parent env exactly as a leaked live-acc trigger would (an
+  // operator's shell, or a sibling live-acc cycle exporting TF_ACC=1).
+  process.env[CANARY] = '1';
+  try {
+    // The initiative gate command echoes the canary's resolved value into a
+    // worktree file (the gate runs with cwd = worktree).
+    await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['sh', '-c', `echo "TF_ACC=\${${CANARY}:-UNSET}" > gate-env.txt`],
+      unsetEnv: [CANARY],
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    // (later sub-checks fail — irrelevant here; the gate child already ran.)
+    const captured = readFileSync(join(h.worktreePath, 'gate-env.txt'), 'utf8');
+    assert.match(
+      captured,
+      /TF_ACC=UNSET/,
+      'the declared ci_gate_unset_env var must not reach the initiative-gate child (runShellGate)',
+    );
+  } finally {
+    delete process.env[CANARY];
+    h.cleanup();
+  }
+});
+
+test('FIX 3 baseline: without ci_gate_unset_env declared, the ambient trigger reaches the initiative-gate child (non-vacuous)', async () => {
+  const h = unifierGateHarness();
+  const CANARY = 'FORGE_TEST_TF_ACC_XYZ';
+  process.env[CANARY] = '1';
+  try {
+    await composedUnifierGate({
+      ...BASE_INPUT,
+      worktreePath: h.worktreePath,
+      qualityGateCmd: ['sh', '-c', `echo "TF_ACC=\${${CANARY}:-UNSET}" > gate-env.txt`],
+      // no unsetEnv — proves the strip (above) is what removes it, not the harness
+      logger: h.logger,
+      workItemsDir: h.wiDir,
+    });
+    const captured = readFileSync(join(h.worktreePath, 'gate-env.txt'), 'utf8');
+    assert.match(captured, /TF_ACC=1/, 'sanity: an undeclared ambient var passes through the gate child by default');
+  } finally {
+    delete process.env[CANARY];
+    h.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Failure at gate 2 (pr_self_contained): 2 sub-check events
 // ---------------------------------------------------------------------------
 

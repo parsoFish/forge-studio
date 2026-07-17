@@ -17,15 +17,13 @@ import {
   resolvePostMergeCiConfig,
   DEFAULT_POST_MERGE_CI_TIMEOUT_MS,
   DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS,
-  pinnedAgentEnv,
-  AGENT_ENV_DENYLIST,
   resolveDevWiConcurrency,
   DEFAULT_DEV_WI_CONCURRENCY,
   DEV_WI_CONCURRENCY_CEILING,
   ralphGitIdentity,
   UNIFIER_GIT_IDENTITY,
   ORCHESTRATOR_GIT_IDENTITY,
-  pinnedAgentEnvWithGitIdentity,
+  gitIdentityEnvOverlay,
   gitIdentityConfigArgs,
 } from './config.ts';
 
@@ -280,77 +278,9 @@ test('resolvePostMergeCiConfig: config values honoured; env overrides beat confi
 });
 
 // ---------------------------------------------------------------------------
-// G8 (2026-07 refinement): env-pin seam. `pinnedAgentEnv` is the single scrub
-// point every spawned Claude Agent SDK child's `options.env` must be derived
-// from — see orchestrator/pinned-sdk-query.ts.
-// ---------------------------------------------------------------------------
-
-test('AGENT_ENV_DENYLIST: names the known host-leakage vars', () => {
-  assert.deepEqual(
-    [...AGENT_ENV_DENYLIST].sort(),
-    ['ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS', 'CLAUDE_EFFORT'].sort(),
-  );
-});
-
-test('pinnedAgentEnv: scrubs every denylisted var and every HEADROOM_* var, preserves the rest', () => {
-  const poisoned: NodeJS.ProcessEnv = {
-    ANTHROPIC_API_KEY: 'sk-keep-me',
-    ANTHROPIC_BASE_URL: 'https://evil.example.com',
-    ANTHROPIC_CUSTOM_HEADERS: 'X-Injected: 1',
-    CLAUDE_EFFORT: 'max',
-    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
-    HEADROOM_ENABLED: 'true',
-    PATH: '/usr/bin:/bin',
-    HOME: '/home/operator',
-  };
-
-  const result = pinnedAgentEnv(poisoned);
-
-  assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'ANTHROPIC_BASE_URL is scrubbed');
-  assert.equal(result.ANTHROPIC_CUSTOM_HEADERS, undefined, 'ANTHROPIC_CUSTOM_HEADERS is scrubbed');
-  assert.equal(result.CLAUDE_EFFORT, undefined, 'CLAUDE_EFFORT is scrubbed');
-  assert.equal(result.HEADROOM_PROXY_URL, undefined, 'HEADROOM_* is scrubbed');
-  assert.equal(result.HEADROOM_ENABLED, undefined, 'HEADROOM_* is scrubbed');
-
-  assert.equal(result.ANTHROPIC_API_KEY, 'sk-keep-me', 'unrelated vars are preserved');
-  assert.equal(result.PATH, '/usr/bin:/bin', 'unrelated vars are preserved');
-  assert.equal(result.HOME, '/home/operator', 'unrelated vars are preserved');
-});
-
-test('pinnedAgentEnv: does not mutate the base object passed in', () => {
-  const poisoned: NodeJS.ProcessEnv = {
-    ANTHROPIC_BASE_URL: 'https://evil.example.com',
-    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
-    PATH: '/usr/bin:/bin',
-  };
-  const snapshot = { ...poisoned };
-
-  pinnedAgentEnv(poisoned);
-
-  assert.deepEqual(poisoned, snapshot, 'the base argument is untouched — a new object is returned');
-});
-
-test('pinnedAgentEnv: returns a different object identity than the base', () => {
-  const base: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
-  const result = pinnedAgentEnv(base);
-  assert.notEqual(result, base, 'pinnedAgentEnv must return a NEW object, never the input reference');
-});
-
-test('pinnedAgentEnv: defaults to process.env when called with no argument', () => {
-  const original = process.env.ANTHROPIC_BASE_URL;
-  process.env.ANTHROPIC_BASE_URL = 'https://evil.example.com';
-  try {
-    const result = pinnedAgentEnv();
-    assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'defaults to process.env and scrubs it');
-    assert.equal(process.env.ANTHROPIC_BASE_URL, 'https://evil.example.com', 'process.env itself is never mutated');
-  } finally {
-    if (original === undefined) delete process.env.ANTHROPIC_BASE_URL;
-    else process.env.ANTHROPIC_BASE_URL = original;
-  }
-});
-
-// ---------------------------------------------------------------------------
 // G8 wave 2 (2026-07-12): distinct git identity for forge-authored commits.
+// The env-pin allowlist itself (R5-02) now lives in orchestrator/spawn-env.ts
+// (buildChildEnv/AGENT_ENV_ALLOWLIST) — see orchestrator/spawn-env.test.ts.
 // ---------------------------------------------------------------------------
 
 test('ralphGitIdentity: name is forge-ralph, email is tagged with the work item id', () => {
@@ -379,34 +309,18 @@ test('gitIdentityConfigArgs: -c user.name=... -c user.email=... in that order', 
   );
 });
 
-test('pinnedAgentEnvWithGitIdentity: sets GIT_AUTHOR_*/GIT_COMMITTER_* to the given identity', () => {
-  const result = pinnedAgentEnvWithGitIdentity(
-    { name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' },
-    { PATH: '/usr/bin' },
-  );
-  assert.equal(result.GIT_AUTHOR_NAME, 'forge-ralph');
-  assert.equal(result.GIT_AUTHOR_EMAIL, 'forge-ralph+WI-7@forge.local');
-  assert.equal(result.GIT_COMMITTER_NAME, 'forge-ralph');
-  assert.equal(result.GIT_COMMITTER_EMAIL, 'forge-ralph+WI-7@forge.local');
-  assert.equal(result.PATH, '/usr/bin', 'unrelated vars are preserved');
+test('gitIdentityEnvOverlay: returns exactly the GIT_AUTHOR_*/GIT_COMMITTER_* delta for the given identity', () => {
+  const result = gitIdentityEnvOverlay({ name: 'forge-ralph', email: 'forge-ralph+WI-7@forge.local' });
+  assert.deepEqual(result, {
+    GIT_AUTHOR_NAME: 'forge-ralph',
+    GIT_AUTHOR_EMAIL: 'forge-ralph+WI-7@forge.local',
+    GIT_COMMITTER_NAME: 'forge-ralph',
+    GIT_COMMITTER_EMAIL: 'forge-ralph+WI-7@forge.local',
+  });
 });
 
-test('pinnedAgentEnvWithGitIdentity: the denylist/HEADROOM_* scrub still applies underneath the identity overlay', () => {
-  const poisoned: NodeJS.ProcessEnv = {
-    ANTHROPIC_BASE_URL: 'https://evil.example.com',
-    HEADROOM_PROXY_URL: 'http://127.0.0.1:8787',
-    PATH: '/usr/bin',
-  };
-  const result = pinnedAgentEnvWithGitIdentity(UNIFIER_GIT_IDENTITY, poisoned);
-  assert.equal(result.ANTHROPIC_BASE_URL, undefined, 'denylist scrub still applies');
-  assert.equal(result.HEADROOM_PROXY_URL, undefined, 'HEADROOM_* scrub still applies');
-  assert.equal(result.GIT_AUTHOR_EMAIL, 'forge-unifier@forge.local');
-});
-
-test('pinnedAgentEnvWithGitIdentity: defaults to process.env when base is omitted, without mutating it', () => {
-  const original = process.env.PATH;
-  const result = pinnedAgentEnvWithGitIdentity(UNIFIER_GIT_IDENTITY);
-  assert.equal(result.GIT_AUTHOR_NAME, 'forge-unifier');
-  assert.equal(result.PATH, original, 'process.env values still flow through');
-  assert.equal(process.env.GIT_AUTHOR_NAME, undefined, 'process.env itself is never mutated');
+test('gitIdentityEnvOverlay: distinct identities produce distinct overlays (no shared/mutated state)', () => {
+  const a = gitIdentityEnvOverlay(UNIFIER_GIT_IDENTITY);
+  const b = gitIdentityEnvOverlay(ORCHESTRATOR_GIT_IDENTITY);
+  assert.notEqual(a.GIT_AUTHOR_EMAIL, b.GIT_AUTHOR_EMAIL);
 });

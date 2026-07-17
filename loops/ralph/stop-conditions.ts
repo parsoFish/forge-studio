@@ -238,6 +238,18 @@ export type GateTighteningOptions = {
    * on the orchestrator hot path pass `resolveGateTimeoutMs()`).
    */
   timeoutMs?: number;
+  /**
+   * Env var names to strip from the gate child process before it runs
+   * (R5-02 F2). Wired from the project's declared `ci_gate_unset_env` in
+   * `.forge/project.json` — mirrors the final-CI-gate "A3" strip
+   * (`orchestrator/cycle.ts:execCommandVector`'s `unsetEnv`), applied here to
+   * the PER-WI/unifier gate too. Closes the TF_ACC-inheritance leak: an
+   * operator's shell (or a sibling live-acc cycle) exporting `TF_ACC=1`
+   * used to reach every per-WI gate unfiltered whenever `requiredEnv` was
+   * empty (the common case), silently running the live-acceptance suite on
+   * a docs-only cycle. Empty/absent ⇒ no stripping (unchanged behaviour).
+   */
+  unsetEnv?: readonly string[];
 };
 
 /** Default wall-clock bound for orchestrator-run gate commands (30 min). */
@@ -373,11 +385,20 @@ function runGateCapturing(
   // 2026-06-11: the vars are resolved from the process env AND the project's
   // `secrets.env` at the worktree root (process env wins), and the merged env
   // is handed to the gate child process — see GateTighteningOptions.requiredEnv.
+  // R5-02 F2: build gateEnv whenever EITHER requiredEnv OR unsetEnv is
+  // declared — previously this only ran for requiredEnv, so a gate with no
+  // requiredEnv (the common case) inherited process.env completely
+  // unscrubbed and a project's declared `ci_gate_unset_env` (e.g. TF_ACC)
+  // never actually got stripped.
   let gateEnv: NodeJS.ProcessEnv | undefined;
   const requiredEnv = options?.requiredEnv ?? [];
-  if (requiredEnv.length > 0) {
+  const unsetEnv = options?.unsetEnv ?? [];
+  if (requiredEnv.length > 0 || unsetEnv.length > 0) {
     const secrets = readWorktreeSecretsEnv(worktreePath);
     gateEnv = { ...secrets, ...process.env };
+    for (const name of unsetEnv) delete gateEnv[name];
+  }
+  if (requiredEnv.length > 0) {
     const missingEnv = requiredEnv.filter((v) => !gateEnv![v]);
     if (missingEnv.length > 0) {
       onRun?.({
