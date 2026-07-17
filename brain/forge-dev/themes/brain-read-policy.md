@@ -53,18 +53,23 @@ enforced only for PM (throw) and reflector (log-and-continue) and was
 deliberately removed from dev-loop/reviewer.
 
 **Amendment 2026-05-26 (ADR 018 three-brain model).** The dev-loop and
-reviewer **may** read **Brain 3** — the cycle's project brain at
-`projects/<name>/brain/` (present in the worktree). Now that Brain 3 is
+reviewer **may** read **Brain 3** — the project brain. Now that Brain 3 is
 scope-clean (project-only, no forge-theme pollution), the original
 "don't risk an executor reading a forge theme and going off-spec"
 rationale no longer applies. Brain 3 is *supplemental context* (project
 file layout, testing norms); the WI/manifest remains the single source
 of *intent*. Advisory, not mandatory — no runtime gate added.
 
+**Path correction (2026-07-17, R5-07-F6):** at the time of that amendment
+Brain 3 lived inside the managed project's repo at `projects/<name>/brain/`;
+[ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md)
+(2026-06-20) centralised it into the forge repo at
+`brain/projects/<name>/themes/` — the location the dev-loop/reviewer now read.
+
 **How reads are bounded (guardrail).** Every permitted brain read must
 go through the built navigation metadata first — `INDEX.md`, the
 category indexes (`cycles/{patterns,antipatterns,...}.md`), and
-`projects/<name>/brain/profile.md` — and only then drill into a specific theme
+`brain/projects/<name>/profile.md` — and only then drill into a specific theme
 and its raw source. Full-tree scans / grep-the-world are the expensive
 antipattern the index layer exists to prevent. Open implementation
 gap: `brain-index.ts` is module-cached, so a long `forge serve` process

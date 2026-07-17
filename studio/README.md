@@ -6,8 +6,14 @@
 > `forge studio lint`.
 
 Contents: `flows/` (the `forge-architect` / `forge-develop` / `forge-reflect` DAGs),
-`catalog.yaml` (SDKs / models / tools / MCPs / hooks / community skills), `kb/`,
-`starters/`.
+`catalog.yaml` (SDKs / models / tools / MCPs / hooks / community skills),
+`artifact-templates/` (per-artifact-type markdown templates: plan / PR /
+verdict / work-items / WI-branches), `demo-elements/` (reusable demo-page
+element templates: screenshot / CLI-capture / code-diff / API-verify /
+test-evidence / narrative), `demo/` (shared demo-page CSS), `starters/`
+(new-project scaffolds: starter agents/flows + `project.json`/release-workflow
+examples). *(Corrected 2026-07-17, R5-07-F5 — the prior list named a `kb/`
+that doesn't exist and omitted the four directories above.)*
 
 ## Three things called "studio" — don't confuse them
 
