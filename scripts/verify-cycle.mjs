@@ -70,6 +70,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
+import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -903,6 +904,12 @@ let activeWatchProc = null;
 
 async function main() {
   const runStartMs = Date.now();
+
+  // Post-run boundary check baseline (R5-01-F3) — the boundary being protected
+  // is the FORGE repo itself, never the managed project repo (a real run
+  // legitimately merges a PR THERE). Captured before anything moves.
+  const boundaryBaseline = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(VIDEO_DIR, { recursive: true });
   mkdirSync(FRAMES_DIR, { recursive: true });
@@ -1083,6 +1090,29 @@ async function main() {
     pass: totalCost <= COST_CEILING,
     detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}`,
   });
+
+  // Post-run boundary check (R5-01-F3) — always printed, success or failure.
+  // Only this run's own demos/verify/<handle>/ output and brain/ (the real
+  // reflector's legitimate write surface, asserted above by "reflect wrote
+  // central project brain") are exempted; everything else in the FORGE repo
+  // — including projects/<name>/ — must come back clean. That last part is
+  // deliberate: if a project is (mis)configured with no independent .git (the
+  // exact danger this file's own header warns about for mdtoc), a real cycle
+  // would otherwise commit/merge straight into the forge repo's own tree, and
+  // this check is what catches it.
+  const boundaryCurrent = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+  const boundaryResult = compareBoundary(boundaryBaseline, boundaryCurrent, {
+    ignorePathPrefixes: [`demos/verify/${RUN_HANDLE}/`, 'brain/'],
+  });
+  log(`\n${formatBoundaryReport(boundaryResult)}`);
+  checks.push({
+    name: 'post-run boundary: forge repo/PR state unchanged',
+    pass: boundaryResult.clean,
+    detail: boundaryResult.clean
+      ? (boundaryResult.prsSkipped ? 'clean (pr-state skipped: gh unavailable)' : 'clean')
+      : `${boundaryResult.violations.length} violation(s) — see boundary report above`,
+  });
+
   const gatePassed = checks.every((c) => c.pass);
 
   log('--- verdict (3-stage spine) ---');

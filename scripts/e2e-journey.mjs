@@ -101,6 +101,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
+import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import {
@@ -301,6 +302,12 @@ async function main() {
   // REAL cycle.
   await assertNoLiveDaemon(FORGE_ROOT);
 
+  // Post-run boundary check baseline (R5-01-F3) — the 2026-07-16 incident's
+  // backstop: even if a guard fails, the harness must NOTICE the forge repo/PR
+  // state moved underneath it. Captured now (after the daemon guard, before any
+  // mutation) and compared against a second capture at the very end.
+  const boundaryBaseline = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+
   // Neutralise the bridge's release-finalize path for the whole run (incident
   // 2026-07-16): the REAL approve-and-merge click calls the bridge's in-process
   // runReleaseFinalize — a real SDK agent turn — which is NOT covered by
@@ -445,6 +452,23 @@ async function main() {
           execFileSync('git', ['-C', FORGE_ROOT, 'restore', '--staged', '--', `projects/${PROJECT}`]);
           execFileSync('git', ['-C', FORGE_ROOT, 'checkout', '--', `projects/${PROJECT}`]);
         } catch (err) { console.warn(`[e2e] managed-project restore best-effort failed: ${err.message}`); }
+
+        // Post-run boundary check (R5-01-F3) — always printed, success or
+        // failure, same "the video always finishes" philosophy as the rest of
+        // this harness. Only demos/e2e/ is exempted: this harness's own known,
+        // intentional write surface (the gallery it regenerates every run).
+        // Everything else — INCLUDING brain/ — must come back clean: this
+        // harness sweeps its own brain contamination above, so residual dirt
+        // there after that sweep is itself a real signal, not noise.
+        const boundaryCurrent = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+        const boundaryResult = compareBoundary(boundaryBaseline, boundaryCurrent, {
+          ignorePathPrefixes: ['demos/e2e/'],
+        });
+        console.log(`\n${formatBoundaryReport(boundaryResult)}`);
+        check(
+          boundaryResult.clean,
+          `post-run boundary: forge repo/PR state unchanged (${boundaryResult.violations.length} violation(s))`,
+        );
   }
 
     // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).
