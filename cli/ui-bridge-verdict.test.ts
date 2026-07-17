@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -342,6 +342,112 @@ test('approve when release finalisation fails: merge STILL fires (log-and-contin
     assert.equal(s.stubs.mergeCallCount, 1, 'merge STILL fires (the DRAFT changelog is the fallback)');
     assert.equal(s.stubs.finalizeCallCount, 1, 'post-merge finalize still fires');
   } finally {
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R5-01-F1 — dry-bridge stub-actions on verdict-approve
+// ---------------------------------------------------------------------------
+
+test('approve with FORGE_DRY_BRIDGE=1: skips release-finalize/merge/finalize-after-merge, verdict still records, run state still progresses', async () => {
+  const s = makeStubs();
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
+  const initiativeId = 'INIT-2026-01-01-dry-bridge-approve';
+  seedApprovableCycle(forgeRoot, initiativeId);
+
+  let finalizeCallCount = 0;
+  const { url, close } = await startBridge({
+    forgeRoot,
+    port: 0,
+    mergePr: s.mergePr,
+    finalizeAfterMerge: s.finalizeAfterMerge,
+    runReleaseFinalize: async () => {
+      finalizeCallCount++;
+      return { release_status: 'finalized' };
+    },
+  });
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const { status, json } = await postVerdict(url, { initiativeId, kind: 'approve', rationale: 'ship it' });
+    assert.equal(status, 200, 'dry-bridge does not block the verdict state transition');
+    const body = json as Record<string, unknown>;
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.dryBridge, { skipped: ['release-finalize', 'merge-pr', 'finalize-after-merge'] });
+    // FIX-3: the note must not claim a real merge/finalization happened.
+    assert.ok(
+      typeof body.note === 'string' && (body.note as string).includes('dry-bridge'),
+      `note must reflect the dry-bridge skip, got: ${body.note}`,
+    );
+    assert.ok(
+      !(body.note as string).includes('PR merged'),
+      `note must not claim the PR was merged under dry-bridge, got: ${body.note}`,
+    );
+
+    // None of the three real-acting sub-calls actually ran.
+    assert.equal(finalizeCallCount, 0, 'runReleaseFinalize must not be called');
+    assert.equal(s.stubs.mergeCallCount, 0, 'mergePr must not be called');
+    assert.equal(s.stubs.finalizeCallCount, 0, 'finalizeAfterMerge must not be called');
+
+    // But the verdict artifact was still written (run state DID progress).
+    const verdictPath = join(forgeRoot, '_logs', initiativeId, 'artifacts', 'verdict.json');
+    const verdict = JSON.parse(readFileSync(verdictPath, 'utf8')) as Record<string, unknown>;
+    assert.equal(verdict.kind, 'approve');
+    assert.equal(verdict.initiative_id, initiativeId);
+
+    // One dry-bridge.skip JSONL event per skipped action, in the cycle's own log.
+    const events = readFileSync(join(forgeRoot, '_logs', initiativeId, 'events.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    const skipEvents = events.filter((e) => e.message === 'dry-bridge.skip');
+    assert.equal(skipEvents.length, 3);
+    assert.deepEqual(
+      skipEvents.map((e) => (e.metadata as Record<string, unknown>).action).sort(),
+      ['finalize-after-merge', 'merge-pr', 'release-finalize'],
+    );
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('approve with FORGE_DRY_BRIDGE=1 and no runReleaseFinalize override: the default hook is still present, so all three actions are still reported skipped (and the real phase is never reached)', async () => {
+  // startBridge always wires SOME runReleaseFinalize (the real phase, wrapped,
+  // when the caller doesn't inject one) — the project-level opt-in check lives
+  // INSIDE that phase, not at this call site. So `ctx.runReleaseFinalize` is
+  // truthy in every real deployment; dry-bridge's job is to make sure THAT
+  // default never actually runs either.
+  const s = makeStubs();
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'bv-'));
+  const initiativeId = 'INIT-2026-01-01-dry-bridge-default-release-hook';
+  seedApprovableCycle(forgeRoot, initiativeId);
+
+  const { url, close } = await startBridge({
+    forgeRoot,
+    port: 0,
+    mergePr: s.mergePr,
+    finalizeAfterMerge: s.finalizeAfterMerge,
+    // No runReleaseFinalize override — exercises startBridge's own default.
+  });
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const { status, json } = await postVerdict(url, { initiativeId, kind: 'approve', rationale: 'ship it' });
+    assert.equal(status, 200);
+    const body = json as Record<string, unknown>;
+    assert.deepEqual(body.dryBridge, { skipped: ['release-finalize', 'merge-pr', 'finalize-after-merge'] });
+    assert.ok(
+      typeof body.note === 'string' && !(body.note as string).includes('PR merged'),
+      `note must not claim the PR was merged under dry-bridge, got: ${body.note}`,
+    );
+    assert.equal(s.stubs.mergeCallCount, 0, 'mergePr must not be called');
+    assert.equal(s.stubs.finalizeCallCount, 0, 'finalizeAfterMerge must not be called');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
     await close();
     rmSync(forgeRoot, { recursive: true, force: true });
   }

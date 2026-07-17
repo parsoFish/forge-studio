@@ -41,6 +41,7 @@ import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
+import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { listRuns } from '../orchestrator/run-model.ts';
 import {
   sendJson,
@@ -187,7 +188,7 @@ function spawnPreflightFix(
 ): void {
   // Harness guard: tests pin FORGE_ARCHITECT_NO_SPAWN=1 so the route is exercised
   // without launching a real SDK agent.
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   const logDir = join(forgeRoot, '_logs', `_preflight-fix-${p.runId}`);
   mkdirSync(logDir, { recursive: true });
   const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
@@ -217,6 +218,10 @@ export async function handleStudioWriteRoutes(
   // Merge the project's accumulated forge-studio changes into main + push.
   const saveRepoMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/save-repo$/);
   if (saveRepoMatch && method === 'POST') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/studio/projects/:id/save-repo', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     try {
       const projectRoot = resolveManagedProject(ctx, decodeURIComponent(saveRepoMatch[1]), res, origin);
       if (!projectRoot) return true;
@@ -291,7 +296,12 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 500, { error: `failed to dispatch preflight-fix: ${sanitizeError(err)}` }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, resolution: 'user', route: 'preflight-fix', runId }, origin);
+      sendJson(res, 200, {
+        ok: true, resolution: 'user', route: 'preflight-fix', runId,
+        // R5-01-F1 stub-actions: only this user-tier branch spawns; the
+        // auto/agent-tier branches above return without a marker.
+        ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/projects/:id/preflight/fix-agent', runId),
+      }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -531,6 +541,10 @@ export async function handleStudioWriteRoutes(
   // ---- PUT /api/studio/projects/:id ----------------------------------------
   const projectMatch = url.match(/^\/api\/studio\/projects\/([^/]+)$/);
   if (projectMatch) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/studio/projects/:id', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     try {
       const id = decodeURIComponent(projectMatch[1]);
 

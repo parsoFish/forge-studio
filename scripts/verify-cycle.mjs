@@ -70,6 +70,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
+import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -901,8 +902,52 @@ async function waitForReflectorEnd(cycleId, deadlineMs) {
 
 let activeWatchProc = null;
 
+// ---- post-run boundary check (R5-01-F3) ----
+// The boundary being protected is the FORGE repo itself, never the managed
+// project repo (a real run legitimately merges a PR THERE). The exemptions are
+// this run's own demos/verify/<handle>/ output plus exactly the surfaces the
+// REAL reflector writes on a completing cycle (asserted separately by the
+// "reflect wrote central project brain" gate): this project's Brain 3, Brain 2
+// (brain/cycles/ themes + _raw archives), and the regenerated brain/INDEX.md
+// (reflector.ts calls regenerateBrainIndex after theme writes). brain/forge-dev/
+// and every other path — including projects/<name>/ — stay inside the boundary:
+// a project misconfigured with no independent .git (the mdtoc danger this
+// file's usage header warns about) would merge straight into the forge repo's
+// own tree, and this check is what catches it.
+const BOUNDARY_IGNORE_PREFIXES = [
+  `demos/verify/${RUN_HANDLE}/`,
+  `brain/projects/${PROJECT}/`,
+  'brain/cycles/',
+  'brain/INDEX.md',
+];
+let boundaryBaseline = null;
+let boundaryReported = false;
+
+/** Capture current state, compare against the baseline, and print the report.
+ *  Returns the compare result, or null when the check itself could not run
+ *  (degraded — logged, never thrown, so it can't mask a run's own error). */
+function runBoundaryCheck() {
+  try {
+    const current = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+    const result = compareBoundary(boundaryBaseline, current, {
+      ignorePathPrefixes: BOUNDARY_IGNORE_PREFIXES,
+    });
+    boundaryReported = true;
+    log(`\n${formatBoundaryReport(result)}`);
+    return result;
+  } catch (err) {
+    log(`post-run boundary check failed to run: ${err.message}`);
+    return null;
+  }
+}
+
 async function main() {
   const runStartMs = Date.now();
+
+  // Boundary baseline — captured before anything moves. A hard git failure
+  // HERE (forge repo unreadable) is a config error worth crashing on.
+  boundaryBaseline = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(VIDEO_DIR, { recursive: true });
   mkdirSync(FRAMES_DIR, { recursive: true });
@@ -1083,6 +1128,22 @@ async function main() {
     pass: totalCost <= COST_CEILING,
     detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}`,
   });
+
+  // Post-run boundary check (R5-01-F3) — always printed, success or failure
+  // (a fatal crash prints it too, via the main().catch handler below). A
+  // degraded check (null: git failed during the run) fails the gate explicitly
+  // rather than passing silently.
+  const boundaryResult = runBoundaryCheck();
+  checks.push({
+    name: 'post-run boundary: forge repo/PR state unchanged',
+    pass: boundaryResult !== null && boundaryResult.clean,
+    detail: boundaryResult === null
+      ? 'boundary check could not run — see log'
+      : boundaryResult.clean
+        ? (boundaryResult.prsSkipped ? 'clean (pr-state skipped: gh unavailable)' : 'clean')
+        : `${boundaryResult.violations.length} violation(s) — see boundary report above`,
+  });
+
   const gatePassed = checks.every((c) => c.pass);
 
   log('--- verdict (3-stage spine) ---');
@@ -1123,5 +1184,8 @@ main().catch((err) => {
   if (activeWatchProc && !activeWatchProc.killed) {
     try { activeWatchProc.kill('SIGTERM'); } catch { /* best effort */ }
   }
+  // A crashed run still prints the boundary report (R5-01-F3 always-print) —
+  // print-only here; the exit code is already 1.
+  if (boundaryBaseline && !boundaryReported) runBoundaryCheck();
   process.exit(1);
 });

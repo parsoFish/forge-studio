@@ -101,6 +101,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
 import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
+import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import {
@@ -131,7 +132,12 @@ async function startWatch() {
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
       ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open', '--force-takeover'],
-      { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
+      { cwd: FORGE_ROOT,
+        // R5-01-F1: FORGE_DRY_BRIDGE=1 alongside NO_SPAWN — the harness's bridge
+        // child must never spawn/merge/daemon-control for real (2026-07-16
+        // self-merge incident). Task A3/A4 add the drift-guard test + post-run
+        // assertions that consume this; this wiring alone is R5-01-F1's job.
+        env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1', FORGE_DRY_BRIDGE: '1' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let buf = '';
     let settled = false;
@@ -296,6 +302,12 @@ async function main() {
   // REAL cycle.
   await assertNoLiveDaemon(FORGE_ROOT);
 
+  // Post-run boundary check baseline (R5-01-F3) — the 2026-07-16 incident's
+  // backstop: even if a guard fails, the harness must NOTICE the forge repo/PR
+  // state moved underneath it. Captured now (after the daemon guard, before any
+  // mutation) and compared against a second capture at the very end.
+  const boundaryBaseline = captureBoundaryBaseline({ repoRoot: FORGE_ROOT });
+
   // Neutralise the bridge's release-finalize path for the whole run (incident
   // 2026-07-16): the REAL approve-and-merge click calls the bridge's in-process
   // runReleaseFinalize — a real SDK agent turn — which is NOT covered by
@@ -354,8 +366,12 @@ async function main() {
 
         console.log('\n[e2e] journey complete.');
   } finally {
-        await ctx.close();
-        await browser.close();
+        // Guard the playwright teardown like every other cleanup step below:
+        // a throw from ctx/browser close would abort the finally before the
+        // post-run boundary check at its end, silently skipping the F3 backstop
+        // (the exact "check never runs" class this harness must never reopen).
+        try { await ctx.close(); } catch (err) { console.warn(`[e2e] context close failed: ${err.message}`); }
+        try { await browser.close(); } catch (err) { console.warn(`[e2e] browser close failed: ${err.message}`); }
         try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* */ }
         cleanProjectDir();
         cleanSeededSession(journeyCtx.seeded.createdSid);
@@ -440,6 +456,27 @@ async function main() {
           execFileSync('git', ['-C', FORGE_ROOT, 'restore', '--staged', '--', `projects/${PROJECT}`]);
           execFileSync('git', ['-C', FORGE_ROOT, 'checkout', '--', `projects/${PROJECT}`]);
         } catch (err) { console.warn(`[e2e] managed-project restore best-effort failed: ${err.message}`); }
+
+        // Post-run boundary check (R5-01-F3, extracted R5-01-F3fix) — always
+        // printed, success or failure, same "the video always finishes"
+        // philosophy as the rest of this harness. Only demos/e2e/ is
+        // exempted: this harness's own known, intentional write surface (the
+        // gallery it regenerates every run). Everything else — INCLUDING
+        // brain/ — must come back clean: this harness sweeps its own brain
+        // contamination above, so residual dirt there after that sweep is
+        // itself a real signal, not noise. `runBoundaryCheck` never throws —
+        // a failure to even run the check degrades to a failed `check()`
+        // call instead of escaping the finally and masking the run's own
+        // error. Calling the extracted helper here (rather than an inline
+        // try/catch buried among the ~20 cleanup steps above) is itself the
+        // R5-01-F3fix Defect A fix: the wiring reduces to one guaranteed,
+        // unit-tested call.
+        runBoundaryCheck({
+          baseline: boundaryBaseline,
+          repoRoot: FORGE_ROOT,
+          ignorePathPrefixes: ['demos/e2e/'],
+          check,
+        });
   }
 
     // Drop the per-clip temp recording dirs (the renamed clips/*.webm are output + stay).

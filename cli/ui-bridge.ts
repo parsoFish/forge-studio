@@ -69,6 +69,7 @@ import {
   type ReleaseFinalizeHookInput,
 } from './bridge-studio-runs.ts';
 import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
@@ -216,7 +217,11 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // blocks the server coming up. Skipped in no-spawn mode (seeded e2e/journey
   // runs set FORGE_ARCHITECT_NO_SPAWN=1; the reconcile spawns reflectors, so it
   // honours the same guard as spawnArchitectTurn — no surprise agent runs there).
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
+  // R5-01-F1: dry-bridge suppresses this startup spawn path independently too —
+  // there is no HTTP response at boot, so the JSONL event IS the typed refusal.
+  if (isDryBridge()) {
+    emitDryBridgeRefusal({ route: 'startup:reflect-reconcile', method: 'BOOT', action: 'spawn-agent', logsRoot });
+  } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
     void reconcileReflectFeedback({
       logsRoot,
       queueRoot: queuePaths.root,
@@ -889,7 +894,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
-  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot }, url, method)) return;
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -913,6 +918,10 @@ async function handleHttp(
     return;
   }
   if (method === 'POST' && url === '/api/scheduler/start') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/start', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
     try {
       // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
       // the shared helper — the bridge no longer shells out to a `forge start`
@@ -949,6 +958,10 @@ async function handleHttp(
   // don't block the request on the drain — the status poll reflects
   // `running:false` once it's down.
   if (method === 'POST' && url === '/api/scheduler/stop') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/stop', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
     try {
       const pid = readPid(daemonPaths(ctx.forgeRoot).pidFile);
       if (pid === null || !isAlive(pid)) {
@@ -1097,7 +1110,7 @@ async function handleHttp(
  *  `_logs/_architect-<sid>/stderr.log` so stalls are diagnosable via the
  *  existing GET /api/architect/file/<project>/<sid>/stderr.log endpoint. */
 function spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1240,7 +1253,7 @@ async function handleArchitect(
       writeStatus(dir, status);
       spawnArchitectTurn(ctx.forgeRoot, body.project, sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, sessionId }, origin);
+      sendJson(res, 200, { ok: true, sessionId, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/start', sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1273,7 +1286,7 @@ async function handleArchitect(
       writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
       spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
-      sendJson(res, 200, { ok: true, round }, origin);
+      sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1299,6 +1312,7 @@ async function handleArchitect(
         sessionId: typeof body['sessionId'] === 'string' ? body['sessionId'] : '',
         kind: (body['kind'] as 'approve' | 'revise' | 'reject') ?? 'reject',
         rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
+        entryRoute: '/api/plan-verdict',
       });
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -1320,7 +1334,7 @@ async function handleArchitect(
  *  env guard the harness sets. Stderr is captured to
  *  `_logs/_instructions-<sid>/stderr.log` for diagnosability. */
 function spawnInstructionsTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_instructions-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1512,7 +1526,7 @@ async function handleInstructions(
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: 1, prompt: brief });
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/brief', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1545,7 +1559,7 @@ async function handleInstructions(
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: round + 1 });
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true, round }, origin);
+      sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/answer', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1582,7 +1596,7 @@ async function handleInstructions(
       }
       spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/verdict', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -1606,7 +1620,7 @@ async function handleInstructions(
  *  env guard the harness sets. Stderr is captured to
  *  `_logs/_demo-<sid>/stderr.log` for diagnosability. */
 function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_demo-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1623,7 +1637,7 @@ function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: str
 
 /** R1-3b — spawn ONE detached `forge project-brain run` turn (analyze or commit). */
 function spawnProjectBrainTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   try {
     const logDir = join(forgeRoot, '_logs', `_project-brain-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
@@ -1973,7 +1987,7 @@ async function handleDemoBuilder(
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: 'analyzing', prompt: body.brief ?? '' });
       spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
     return true;
   }
@@ -1988,7 +2002,8 @@ async function handleDemoBuilder(
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
       if (approve) spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      // Only approve spawns — abandon is exempt-local and carries no marker.
+      sendJson(res, 200, { ok: true, ...(approve ? dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
     return true;
   }
@@ -2054,7 +2069,7 @@ async function handleDemoBuilder(
       });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2080,7 +2095,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: status.iteration + 1 });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2104,7 +2119,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2128,7 +2143,7 @@ async function handleDemoBuilder(
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'abandoned' });
       spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
       ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true }, origin);
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -2165,6 +2180,11 @@ async function handleReflect(
   }
 
   if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
+    // R5-01-F1 (task A-finalfix FIX 1): reflect-answer is `stub-actions`, not
+    // `refuse` — it does two things, writing user-feedback.md (bookkeeping)
+    // and detached-firing rerunReflector (the real agent turn). Only the
+    // latter is dry-bridge-gated below; the write always proceeds so the
+    // route's normal 200 stays truthful ("feedback captured").
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
@@ -2176,39 +2196,42 @@ async function handleReflect(
       }
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
       writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
-      sendJson(res, 200, { ok: true }, origin);
-      // D — auto-rerun the reflector so the feedback is distilled into retro.md +
-      // brain themes. Detached (don't block the HTTP response on a full reflector
-      // pass), but observable: success AND failure emit an event into the cycle's
-      // events.jsonl (not console), so a lost rerun is visible and the startup
-      // reconcile can recover it. The UI owns reflection without the CLI.
-      const reflectLogger = createLogger(cycleId, ctx.logsRoot);
-      ctx
-        .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
-        .then(() =>
-          reflectLogger.emit({
-            initiative_id: cycleId,
-            phase: 'reflection',
-            skill: 'bridge',
-            event_type: 'log',
-            input_refs: [join(dir, 'user-feedback.md')],
-            output_refs: [],
-            message: 'bridge.reflect-rerun-fired',
-            metadata: { trigger: 'feedback-submit' },
-          }),
-        )
-        .catch((err) =>
-          reflectLogger.emit({
-            initiative_id: cycleId,
-            phase: 'reflection',
-            skill: 'bridge',
-            event_type: 'log',
-            input_refs: [],
-            output_refs: [],
-            message: 'bridge.reflect-rerun-failed',
-            metadata: { error: String(err) },
-          }),
-        );
+      const dryMarker = dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/reflect/:cycleId/answer', cycleId);
+      sendJson(res, 200, { ok: true, ...dryMarker }, origin);
+      if (!isDryBridge()) {
+        // D — auto-rerun the reflector so the feedback is distilled into retro.md +
+        // brain themes. Detached (don't block the HTTP response on a full reflector
+        // pass), but observable: success AND failure emit an event into the cycle's
+        // events.jsonl (not console), so a lost rerun is visible and the startup
+        // reconcile can recover it. The UI owns reflection without the CLI.
+        const reflectLogger = createLogger(cycleId, ctx.logsRoot);
+        ctx
+          .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
+          .then(() =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [join(dir, 'user-feedback.md')],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-fired',
+              metadata: { trigger: 'feedback-submit' },
+            }),
+          )
+          .catch((err) =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-failed',
+              metadata: { error: String(err) },
+            }),
+          );
+      }
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

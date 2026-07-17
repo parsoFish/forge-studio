@@ -630,7 +630,11 @@ export function writeReflectionQuestions() {
  *  — mirroring the shapes a real cycle writes (source: betterado
  *  `_logs/2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity/`). NOTE:
  *  user-feedback.md is deliberately NOT seeded here — ReflectionGate.tsx writes
- *  it live from the operator's submitted answers (pre-seeding would conflict). */
+ *  it live from the operator's submitted answers (pre-seeding would conflict).
+ *  R5-01-FIX2: this holds true under the journey's own FORGE_DRY_BRIDGE=1 run,
+ *  too — reflect-answer is dry-bridge `stub-actions` (bookkeeping proceeds,
+ *  only the detached reflector rerun is skipped), so the live write still
+ *  lands for real; only the agent-turn side effect is suppressed. */
 export function writeReflectionArtifacts() {
   mkdirSync(CYCLE_LOG, { recursive: true });
   writeFileSync(join(CYCLE_LOG, 'recap.md'), [

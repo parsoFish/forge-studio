@@ -29,12 +29,13 @@ import {
 } from '../orchestrator/unifier-items.ts';
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
 import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
-import { createLogger } from '../orchestrator/logging.ts';
+import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -97,7 +98,7 @@ function _writeStatus(dir: string, status: ArchitectStatus): void {
 /** Spawn one architect-runner turn as a detached child.
  *  `FORGE_ARCHITECT_NO_SPAWN=1` disables spawn for test harnesses. */
 function _spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1') return;
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   // M1: defence-in-depth — sessionId must be safe before it enters the log dir path.
   if (!SAFE_ID_RE.test(sessionId)) return;
   try {
@@ -195,27 +196,67 @@ export async function applyReviewVerdict(
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
+    // R5-01-F1: dry-bridge — the incident (2026-07-16, self-merge with the
+    // operator's real gh token) was exactly these three real-acting steps.
+    // In dry mode the verdict application itself (state transition, artifact
+    // writes below) still proceeds, but release-finalize / the real merge /
+    // finalize-after-merge are individually skipped with a typed marker + one
+    // JSONL event each, so the ui:journey approve beat can keep progressing
+    // run state without ever touching a real remote.
+    const dryBridgeActive = isDryBridge();
+    const skipped: DryBridgeStubAction[] = [];
+    const approveCycleId = approveManifest.cycle_id ?? initiativeId;
+    // Task A-finalfix FIX 5: mirror send-back's best-effort logging pattern
+    // (see the try/catch around the reviewer.verdict.send-back emit below) —
+    // createLogger touches the filesystem (creates/opens the cycle's
+    // events.jsonl) and must never block verdict application if that I/O
+    // fails. emitDryBridgeSkip itself already never throws (dry-bridge.ts),
+    // so only the logger's own construction needs guarding here.
+    let dryBridgeLogger: EventLogger | null = null;
+    if (dryBridgeActive) {
+      try {
+        dryBridgeLogger = createLogger(approveCycleId, ctx.logsRoot);
+      } catch { /* best-effort — never block the verdict on dry-bridge logger setup */ }
+    }
+    const skip = (action: DryBridgeStubAction): void => {
+      skipped.push(action);
+      if (dryBridgeLogger) emitDryBridgeSkip(dryBridgeLogger, initiativeId, action);
+    };
+
     // WS-A (release): finalise the release on the PR branch BEFORE merging.
     // Opt-in on the project's `releaseProcess` (skips cleanly otherwise) and
     // log-and-continue on failure — the merge MUST still fire (the in-cycle
     // DRAFT changelog is the fallback), so this is awaited but never gates the
     // merge. Present ⇒ finalise-then-merge; absent ⇒ straight-to-merge.
     if (ctx.runReleaseFinalize) {
-      try {
-        await ctx.runReleaseFinalize({
-          initiativeId,
-          cycleId: approveManifest.cycle_id ?? initiativeId,
-          projectName: approveManifest.project,
-          worktreePath: approveWorktreePath,
-          projectRepoPath: approveManifest.project_repo_path,
-          logsRoot: ctx.logsRoot,
-        });
-      } catch {
-        // Defence in depth: the phase itself log-and-continues, but a hook-level
-        // throw must never block the merge either.
+      if (dryBridgeActive) {
+        skip('release-finalize');
+      } else {
+        try {
+          await ctx.runReleaseFinalize({
+            initiativeId,
+            cycleId: approveCycleId,
+            projectName: approveManifest.project,
+            worktreePath: approveWorktreePath,
+            projectRepoPath: approveManifest.project_repo_path,
+            logsRoot: ctx.logsRoot,
+          });
+        } catch {
+          // Defence in depth: the phase itself log-and-continues, but a hook-level
+          // throw must never block the merge either.
+        }
       }
     }
-    const merged = ctx.mergePr(approveWorktreePath);
+    let merged: boolean;
+    if (dryBridgeActive) {
+      skip('merge-pr');
+      // Treat as succeeded so the verdict state transition below still
+      // proceeds — dry mode must not silently do nothing (that's the whole
+      // point), it must keep the run's state moving without the real gh call.
+      merged = true;
+    } else {
+      merged = ctx.mergePr(approveWorktreePath);
+    }
     if (!merged) {
       sendJson(res, 409, {
         error: 'gh pr merge failed — merge the PR manually on GitHub',
@@ -223,22 +264,54 @@ export async function applyReviewVerdict(
       }, origin);
       return;
     }
+    // Task A-finalfix ride-along 3: record finalize-after-merge's skip BEFORE
+    // writing verdict.json, so `skipped` below is the complete set for this
+    // verdict rather than missing whichever step comes textually after the
+    // write. Safe in the non-dry path ONLY because both this detached-dispatch
+    // and the writeVerdictJson below are synchronous up to their first await:
+    // finalizeMergedReadyForReview's sync prefix writes a merge-path verdict.json
+    // (overwrite:false) then yields, so the operator's overwrite:true write on
+    // the same tick still wins. Do NOT insert an `await` between here and the
+    // write — it would let finalize's fallback verdict race the operator's.
+    if (dryBridgeActive) {
+      skip('finalize-after-merge');
+    } else {
+      // Ride-along 1: fire-and-forget must not become an unhandled rejection
+      // — mirrors the release-finalize block's log-and-continue above.
+      void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }).catch(() => {
+        // Defence in depth: finalizeAfterMerge log-and-continues internally
+        // on its own failures; this only guards against an unhandled
+        // rejection escaping the detached call.
+      });
+    }
     // ADR-027: persist the operator's approve as the durable verdict artifact
     // before finalize/reflection runs (overwrite a prior merge-path fallback).
+    // Ride-along 3: carry the dry-bridge marker into the durable artifact too
+    // — a reflector reading verdict.json later must be able to tell a
+    // dry-bridge-recorded approve apart from a real merge.
     writeVerdictJson(
       ctx.logsRoot,
       {
         kind: 'approve',
         initiative_id: initiativeId,
-        cycleId: approveManifest.cycle_id ?? initiativeId,
+        cycleId: approveCycleId,
         decidedBy: 'operator',
         rationale,
         at: new Date().toISOString(),
+        ...(dryBridgeActive ? { dryBridge: true, skipped } : {}),
       },
       { overwrite: true },
     );
-    void ctx.finalizeAfterMerge({ queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot });
-    sendJson(res, 200, { ok: true, kind, note: 'PR merged and finalization triggered' }, origin);
+    // FIX-3: the note must not claim a real merge/finalization under dry-bridge.
+    const responseBody: Record<string, unknown> = {
+      ok: true,
+      kind,
+      note: dryBridgeActive
+        ? 'dry-bridge: verdict recorded; real-acting steps skipped (see dryBridge.skipped)'
+        : 'PR merged and finalization triggered',
+    };
+    if (skipped.length > 0) responseBody.dryBridge = { skipped };
+    sendJson(res, 200, responseBody, origin);
     return;
   }
 
@@ -350,10 +423,18 @@ export async function applyPlanVerdict(
     sessionId: string;
     kind: 'approve' | 'revise' | 'reject';
     rationale?: string;
+    /**
+     * Task A-finalfix ride-along 2: the two real HTTP routes that reach this
+     * shared handler — POST /api/plan-verdict and POST
+     * /api/runs/:id/gates/plan — must each report THEIR OWN route on the
+     * dry-bridge marker/event, not a hardcoded '/api/plan-verdict' regardless
+     * of which one the operator actually called.
+     */
+    entryRoute: string;
   },
 ): Promise<void> {
   const origin = allowedOrigin(req);
-  const { project, sessionId, kind, rationale } = body;
+  const { project, sessionId, kind, rationale, entryRoute } = body;
 
   if (!project || !sessionId || !kind) {
     sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
@@ -428,7 +509,12 @@ export async function applyPlanVerdict(
       _writeStatus(dir, { ...status, phase: 'rejected' });
     }
     ctx.broadcastArchitectChanged();
-    sendJson(res, 200, { ok: true, kind }, origin);
+    // R5-01-F1 stub-actions: approve/revise spawn a turn (reject never does),
+    // so only those kinds carry the dry-bridge agent-turn marker. Serves both
+    // POST /api/plan-verdict and POST /api/runs/:id/gates/plan (same handler)
+    // — entryRoute (ride-along 2) reports whichever one the caller actually hit.
+    const dryMarker = kind === 'reject' ? {} : dryBridgeAgentTurnMarker(ctx.logsRoot, entryRoute, sessionId);
+    sendJson(res, 200, { ok: true, kind, ...dryMarker }, origin);
   } finally {
     if (release) { try { await release(); } catch { /* ignore */ } }
   }
@@ -542,6 +628,10 @@ export async function handleStudioPostRoutes(
   // ---- POST /api/runs/:id/resume — resume a run ----------------------------
   const resumeMatch = url.match(/^\/api\/runs\/([^/]+)\/resume$/);
   if (resumeMatch) {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/runs/:id/resume', method, action: 'git-remote', logsRoot: ctx.logsRoot });
+      return true;
+    }
     const runId = decodeURIComponent(resumeMatch[1]);
     if (!runId || !SAFE_ID_RE.test(runId)) {
       sendJson(res, 400, { error: 'invalid run id' }, origin);
@@ -606,6 +696,7 @@ export async function handleStudioPostRoutes(
           ? verdict
           : (b['kind'] as string | undefined) ?? '') as 'approve' | 'revise' | 'reject',
         rationale: typeof b['rationale'] === 'string' ? b['rationale'] : undefined,
+        entryRoute: '/api/runs/:id/gates/plan',
       });
       return true;
     }

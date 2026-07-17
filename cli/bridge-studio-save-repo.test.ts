@@ -71,6 +71,39 @@ test('PUT project.json is one durable save — written + merged to main + on mai
   assert.equal(after.pending, false);
 });
 
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses PUT /api/studio/projects/:id and POST .../save-repo with the typed 409', async () => {
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const beforeSha = g(projectDir, ['rev-parse', 'HEAD']);
+
+    const putRes = await fetch(`${bridgeUrl}/api/studio/projects/${PROJECT}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ northStar: 'must not be saved' }),
+    });
+    assert.equal(putRes.status, 409);
+    assert.deepEqual(await putRes.json(), {
+      error: 'dry-bridge', route: '/api/studio/projects/:id', method: 'PUT', action: 'git-remote',
+    });
+
+    const saveRepoRes = await fetch(`${bridgeUrl}/api/studio/projects/${PROJECT}/save-repo`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    });
+    assert.equal(saveRepoRes.status, 409);
+    assert.deepEqual(await saveRepoRes.json(), {
+      error: 'dry-bridge', route: '/api/studio/projects/:id/save-repo', method: 'POST', action: 'git-remote',
+    });
+
+    // Neither refusal touched the repo at all — not even the local commit.
+    assert.equal(g(projectDir, ['rev-parse', 'HEAD']), beforeSha, 'dry-bridge must not commit anything');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
 test('save succeeds when quality_gate_cmd lives in the sidecar, not project.json', async () => {
   // betterado's shape: project.json omits quality_gate_cmd; the gate is in the
   // .forge/quality_gate_cmd sidecar. The save must validate via the sidecar.

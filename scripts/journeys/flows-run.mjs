@@ -1085,6 +1085,15 @@ export const journey = defineJourney({
               await sleep(ACT);
               await page.locator('[data-action="submit-reflection"]').click().catch(() => {});
               await page.waitForSelector('[data-section="reflect-done"]', { timeout: 10000 }).catch(() => {});
+              // R5-01-FIX2: reflect-answer is dry-bridge stub-actions (200 + skipped
+              // agent-turn marker), not refuse (409) — this must actually assert the
+              // feedback-captured DOM state rather than swallow a timeout, or a
+              // regression back to 409 goes unnoticed (the beat used to silently pass
+              // straight through a refusal).
+              check(
+                await page.locator('[data-section="reflect-done"]').count() > 0,
+                'reflect-answer: feedback captured (dry-bridge stub-actions returns 200, not a 409 refusal)',
+              );
               await paced([
                 () => cycleEvent('reflection', 'tool_use', 'reflection.write', { metadata: { tool: 'Write brain theme' } }),
                 () => cycleEvent('reflection', 'end', 'reflection.end', { cost_usd: 0.12 }),

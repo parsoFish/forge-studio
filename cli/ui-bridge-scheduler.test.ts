@@ -87,3 +87,20 @@ test('the daemon pid-file lives at _logs/daemon/forge.pid under forgeRoot', () =
   // Sanity: the route and helper agree on the pid-file location the UI polls.
   assert.equal(daemonPaths(forgeRoot).pidFile, join(forgeRoot, '_logs', 'daemon', 'forge.pid'));
 });
+
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses scheduler start/stop with the typed 409', async () => {
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const startRes = await fetch(`${url}/api/scheduler/start`, { method: 'POST', headers: CSRF });
+    assert.equal(startRes.status, 409);
+    assert.deepEqual(await startRes.json(), { error: 'dry-bridge', route: '/api/scheduler/start', method: 'POST', action: 'daemon' });
+
+    const stopRes = await fetch(`${url}/api/scheduler/stop`, { method: 'POST', headers: CSRF });
+    assert.equal(stopRes.status, 409);
+    assert.deepEqual(await stopRes.json(), { error: 'dry-bridge', route: '/api/scheduler/stop', method: 'POST', action: 'daemon' });
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});

@@ -14,7 +14,7 @@
  * against a throwaway repo.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 
@@ -44,11 +44,23 @@ function branchExists(projectDir: string, branch: string): boolean {
   }
 }
 
+/**
+ * True iff `projectDir` is itself a standalone git repo ROOT — not merely
+ * nested somewhere inside an ancestor repo's working tree. `git rev-parse
+ * --git-dir` alone is NOT sufficient: it succeeds for ANY directory nested
+ * inside a repo (git walks upward to find `.git`), so a managed project with
+ * no `.git` of its own (committed straight into the forge repo/worktree,
+ * e.g. `projects/mdtoc`) would wrongly report `true` — and a caller that then
+ * runs `git checkout <branch>` against it moves the ANCESTOR repo's HEAD
+ * instead (the R5-01 dry-bridge Defect B class). Comparing the realpath of
+ * `--show-toplevel` against the realpath of `projectDir` itself only passes
+ * for a directory that IS its own repo root.
+ */
 export function isGitRepo(projectDir: string): boolean {
   if (!existsSync(projectDir)) return false;
   try {
-    git(projectDir, ['rev-parse', '--git-dir']);
-    return true;
+    const toplevel = git(projectDir, ['rev-parse', '--show-toplevel']);
+    return realpathSync(toplevel) === realpathSync(projectDir);
   } catch {
     return false;
   }

@@ -136,6 +136,72 @@ test('save with no pending forge-studio branch is a no-op', () => {
 });
 
 // ---------------------------------------------------------------------------
+// R5-01 Defect B (2026-07-18): a managed project dir with NO `.git` of its
+// own, nested inside an OUTER git repo (exactly how `projects/<name>` sits
+// inside the forge repo/worktree), must never trigger a branch checkout —
+// `git rev-parse --git-dir` succeeds for such a dir (git walks upward to
+// find `.git`), which previously made `isGitRepo` wrongly report `true` and
+// `ensureStudioBranch` ran `git checkout forge-studio` against the OUTER
+// repo, moving ITS HEAD.
+// ---------------------------------------------------------------------------
+
+/** An outer git repo (with a `main` branch + one commit) containing a
+ *  nested subdirectory that has NO `.git` of its own. */
+function setupNestedNoGitProject(): { outerDir: string; nestedDir: string } {
+  const outerDir = mkdtempSync(join(tmpdir(), 'proj-tx-outer-'));
+  execFileSync('git', ['-C', outerDir, 'init', '-b', 'main'], { stdio: 'ignore' });
+  g(outerDir, ['config', 'user.email', 'test@forge.dev']);
+  g(outerDir, ['config', 'user.name', 'Forge Test']);
+  writeFileSync(join(outerDir, 'README.md'), '# outer\n');
+  g(outerDir, ['add', '-A']);
+  g(outerDir, ['commit', '-m', 'init']);
+
+  const nestedDir = join(outerDir, 'projects', 'nested-no-git');
+  mkdirSync(nestedDir, { recursive: true });
+  writeFileSync(join(nestedDir, 'project.json'), '{}');
+  g(outerDir, ['add', '-A']);
+  g(outerDir, ['commit', '-m', 'add nested project']);
+  return { outerDir, nestedDir };
+}
+
+test('isGitRepo is false for a dir nested inside an outer repo with no .git of its own', () => {
+  const { outerDir, nestedDir } = setupNestedNoGitProject();
+  try {
+    assert.equal(isGitRepo(nestedDir), false);
+  } finally {
+    rmSync(outerDir, { recursive: true, force: true });
+  }
+});
+
+test('ensureStudioBranch/withStudioWrite on a nested no-.git project dir does not move the outer repo HEAD', () => {
+  const { outerDir, nestedDir } = setupNestedNoGitProject();
+  try {
+    const outerHeadBefore = g(outerDir, ['rev-parse', 'HEAD']);
+    const outerBranchBefore = g(outerDir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+
+    ensureStudioBranch(nestedDir); // must no-op, not throw
+    assert.equal(g(outerDir, ['rev-parse', 'HEAD']), outerHeadBefore, 'outer repo HEAD sha unmoved');
+    assert.equal(g(outerDir, ['rev-parse', '--abbrev-ref', 'HEAD']), outerBranchBefore, 'outer repo branch unmoved');
+    // The outer repo must not have gained a forge-studio branch either.
+    try {
+      g(outerDir, ['rev-parse', '--verify', STUDIO_BRANCH]);
+      assert.fail('outer repo should not have a forge-studio branch');
+    } catch { /* expected */ }
+
+    withStudioWrite(nestedDir, 'forge-studio: edit', () => {
+      writeFileSync(join(nestedDir, 'project.json'), '{"touched":true}');
+    }, ['project.json']);
+    assert.equal(g(outerDir, ['rev-parse', 'HEAD']), outerHeadBefore, 'outer repo HEAD still unmoved after withStudioWrite');
+    assert.equal(g(outerDir, ['rev-parse', '--abbrev-ref', 'HEAD']), outerBranchBefore, 'outer repo branch still unmoved');
+
+    const r = saveProjectRepo(nestedDir);
+    assert.deepEqual(r, { merged: false, pushed: false, detail: 'not a git repo' });
+  } finally {
+    rmSync(outerDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // G8 wave 2 (2026-07-12): forge-studio writes are orchestrator-issued (no
 // agent in the loop) — the commit AND the save-merge must carry
 // forge-orchestrator identity via -c flags, not the `test@forge.dev`/

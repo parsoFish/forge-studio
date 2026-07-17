@@ -29,6 +29,7 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
+import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -742,6 +743,12 @@ export async function handleStudioKbRoutes(
         return true;
       }
       if (op === 'fix-agent') {
+        if (isDryBridge()) {
+          refuseDryBridge(res, origin, {
+            route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', method, action: 'spawn-agent', logsRoot: ctx.logsRoot,
+          });
+          return true;
+        }
         // Dispatch ONE agent-tier fix turn. Body carries the finding + (for a
         // user-decided finding) the operator's decision folded into fixHint.
         const b = body as Record<string, unknown>;

@@ -83,7 +83,7 @@ test('recoveryInspect: a manifest with a preserved worktree reports its branch +
     execFileSync('git', ['-C', wt, 'commit', '-q', '-m', 'feat: the work']);
 
     seed(queueRoot, 'ready-for-review', ID, { worktree_path: wt, project_repo_path: repo });
-    const got = recoveryInspect(ID, { forgeRoot: root, queueRoot });
+    const got = recoveryInspect(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') });
     assert.equal(got.found, true);
     assert.equal(got.state, 'ready-for-review');
     assert.equal(got.branch, `forge/${ID}`);
@@ -95,7 +95,7 @@ test('recoveryInspect: a manifest with a preserved worktree reports its branch +
 test('recoveryInspect: an unknown initiative returns found:false', () => {
   withTmp((root, queueRoot) => {
     mkdirSync(join(queueRoot, 'pending'), { recursive: true });
-    assert.deepEqual(recoveryInspect('INIT-2026-06-21-nope', { forgeRoot: root, queueRoot }), {
+    assert.deepEqual(recoveryInspect('INIT-2026-06-21-nope', { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }), {
       found: false, initiativeId: 'INIT-2026-06-21-nope',
     });
   });
@@ -104,7 +104,7 @@ test('recoveryInspect: an unknown initiative returns found:false', () => {
 test('recoveryAbandon: moves the manifest to failed/', () => {
   withTmp((root, queueRoot) => {
     seed(queueRoot, 'ready-for-review', ID);
-    const got = recoveryAbandon(ID, { forgeRoot: root, queueRoot });
+    const got = recoveryAbandon(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') });
     assert.equal(got.ok, true);
     assert.ok(existsSync(join(queueRoot, 'failed', `${ID}.md`)), 'manifest now in failed/');
     assert.ok(!existsSync(join(queueRoot, 'ready-for-review', `${ID}.md`)), 'removed from ready-for-review/');
@@ -114,7 +114,7 @@ test('recoveryAbandon: moves the manifest to failed/', () => {
 test('handleRecoveryRoutes: GET /api/recovery/<traversal> → 400 (id guard, no path escape)', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/recovery/..%2f..%2fetc'), res, { forgeRoot: root, queueRoot }, '/api/recovery/..%2f..%2fetc', 'GET');
+    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/recovery/..%2f..%2fetc'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/recovery/..%2f..%2fetc', 'GET');
     assert.equal(handled, true);
     assert.equal(captured.status, 400);
   });
@@ -123,7 +123,7 @@ test('handleRecoveryRoutes: GET /api/recovery/<traversal> → 400 (id guard, no 
 test('handleRecoveryRoutes: POST /api/initiatives with an invalid manifest → 400', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: 'not a manifest' }), res, { forgeRoot: root, queueRoot }, '/api/initiatives', 'POST');
+    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: 'not a manifest' }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/initiatives', 'POST');
     assert.equal(handled, true);
     assert.equal(captured.status, 400);
   });
@@ -132,7 +132,7 @@ test('handleRecoveryRoutes: POST /api/initiatives with an invalid manifest → 4
 test('handleRecoveryRoutes: POST /api/initiatives with a valid manifest → 201 + writes pending', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: manifestText(ID) }), res, { forgeRoot: root, queueRoot }, '/api/initiatives', 'POST');
+    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: manifestText(ID) }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/initiatives', 'POST');
     assert.equal(handled, true);
     assert.equal(captured.status, 201);
     assert.ok(existsSync(join(queueRoot, 'pending', `${ID}.md`)), 'manifest written to pending/');
@@ -142,8 +142,42 @@ test('handleRecoveryRoutes: POST /api/initiatives with a valid manifest → 201 
 test('handleRecoveryRoutes: an unrelated url returns false (not handled)', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/cycles'), res, { forgeRoot: root, queueRoot }, '/api/cycles', 'GET');
+    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/cycles'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/cycles', 'GET');
     assert.equal(handled, false);
+  });
+});
+
+test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses recovery abandon/requeue with the typed 409', async () => {
+  await withTmpAsync(async (root, queueRoot) => {
+    const prior = process.env.FORGE_DRY_BRIDGE;
+    process.env.FORGE_DRY_BRIDGE = '1';
+    try {
+      const logsRoot = join(root, '_logs');
+      const abandonRes = mockRes();
+      const abandonHandled = await handleRecoveryRoutes(
+        mockReq('POST', `/api/recovery/${ID}/abandon`), abandonRes.res,
+        { forgeRoot: root, queueRoot, logsRoot }, `/api/recovery/${ID}/abandon`, 'POST',
+      );
+      assert.equal(abandonHandled, true);
+      assert.equal(abandonRes.captured.status, 409);
+      assert.deepEqual(abandonRes.captured.body, {
+        error: 'dry-bridge', route: '/api/recovery/:id/abandon', method: 'POST', action: 'git-remote',
+      });
+
+      const requeueRes = mockRes();
+      const requeueHandled = await handleRecoveryRoutes(
+        mockReq('POST', `/api/recovery/${ID}/requeue`), requeueRes.res,
+        { forgeRoot: root, queueRoot, logsRoot }, `/api/recovery/${ID}/requeue`, 'POST',
+      );
+      assert.equal(requeueHandled, true);
+      assert.equal(requeueRes.captured.status, 409);
+      assert.deepEqual(requeueRes.captured.body, {
+        error: 'dry-bridge', route: '/api/recovery/:id/requeue', method: 'POST', action: 'git-remote',
+      });
+    } finally {
+      if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = prior;
+    }
   });
 });
 
