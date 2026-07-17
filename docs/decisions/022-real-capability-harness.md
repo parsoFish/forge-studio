@@ -1,6 +1,7 @@
 # ADR 022 — a neutral reference project as forge's standing real-capability regression harness
 
-- **Status:** accepted
+- **Status:** accepted — amended 2026-07-17 (ground swap: see the dated
+  amendment before Consequences; the routine ground is now gitpulse, not mdtoc)
 - **Date:** 2026-05-30
 - **Supersedes / amends:** amends the 2026-05-25 "benches removed" stance in
   [`CLAUDE.md`](../../CLAUDE.md) (search "bench harnesses were removed") and
@@ -59,7 +60,10 @@ are greppable and reused as regression cases.
 
 **A neutral reference project (`projects/mdtoc`) is forge's standing
 real-capability regression harness; betterado is the live tier.** It is the gate
-forge passes before being pointed at a real operator project.
+forge passes before being pointed at a real operator project. *(The neutral
+ground was swapped to gitpulse on 2026-07-17 — see the dated ground-swap
+amendment before Consequences; the decision's outcome-assertion logic is
+unchanged.)*
 
 **1. It asserts real-cycle OUTCOMES, not synthetic rubrics.** This is the line
 that keeps it out of the 2026-05-25 trap. A harness run asserts only

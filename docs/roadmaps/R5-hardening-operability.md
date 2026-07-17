@@ -64,6 +64,19 @@ SSOT `orchestrator/brain-paths.ts`; brain-index walks the ADR-035 central
 layout as of PR #26 (`464eabd`, 2026-07-17) — which is why known-gaps §4.3(c)
 is stale (R5-07 strikes it).
 
+### R5-B7 SSOT reconciliation shipped (R5-07, 2026-07-17)
+
+ADR 038 (`docs/decisions/038-north-star-platform-and-ootb.md`) records the
+two-level north star; strike-list amendments landed in CLAUDE.md, README.md,
+ARCHITECTURE.md, MVUS (`docs/product/minimum-viable-user-story.md`),
+`docs/forge-studio-market-and-differentiation.md`, `docs/repo-map.md`, and
+the roadmap index. F1–F7 reconciliation: known-gaps §1/§4.3(c) struck with
+provenance, ADR-024 completion statement single-sourced, journey count
+canonicalized to 10 (swap-runtime folded into `agents`), verify-cycle ground
+single-sourced to gitpulse (ADR 022 ground-swap amendment), CLAUDE.md
+`brain/forge-dev/log.md` + `studio/README.md` paths fixed, C7 collision +
+theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
+
 ## Planned initiatives
 
 ### R5-01 Dry-bridge seam
@@ -281,7 +294,7 @@ is stale (R5-07 strikes it).
 
 ### R5-07 SSOT reconciliation
 
-- **Status:** planned  ·  **Wave:** 0 (rides along with R5-01/R5-02 — cheap, stops drift compounding under the new roadmap set)
+- **Status:** implemented (2026-07-17 — as-built facts in R5-B7)  ·  **Wave:** 0 (rides along with R5-01/R5-02 — cheap, stops drift compounding under the new roadmap set)
 - **Depends on:** —
 - **Context:** The stale/contradictory doc statements this planning session's
   review surfaced. Pure doc hygiene: strike, reconcile, single-source. Each
@@ -367,3 +380,7 @@ maintenance contract; nothing currently carries a deferral condition.
   strike; **R5-07-F8 added** (operator decision 4): the north-star reframe ADR
   + orientation-doc strike-list incl. the MVUS Scope-2 re-scope (D1/D2/E9);
   R5-01 dep-by extended with R4-05-F4.
+- 2026-07-17 — **R5-07 implemented** (branch `docs/r5-07-ssot`): ADR 038
+  minted (F8 north-star reframe + strike-list) and the F1–F7 reconciliation
+  sweep landed; status planned → implemented, as-built facts absorbed into
+  R5-B7.
