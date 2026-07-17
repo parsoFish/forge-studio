@@ -10,7 +10,9 @@ function scaffoldBrain(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-index-test-'));
   mkdirSync(join(root, 'brain', 'cycles'), { recursive: true });
   mkdirSync(join(root, 'brain', 'forge-dev'), { recursive: true });
-  mkdirSync(join(root, 'projects', 'sample', 'brain'), { recursive: true });
+  // Brain 3 (per-project) is forge-owned and CENTRAL (ADR 035) at
+  // brain/projects/<name>/ — not inside the managed project's own repo.
+  mkdirSync(join(root, 'brain', 'projects', 'sample'), { recursive: true });
 
   writeFileSync(join(root, 'brain', 'INDEX.md'), '# Brain\n\ntop-level navigation.');
   writeFileSync(join(root, 'brain', 'cycles', 'patterns.md'), '# Patterns\n\n- pattern A\n- pattern B');
@@ -20,8 +22,8 @@ function scaffoldBrain(): string {
   writeFileSync(join(root, 'brain', 'forge-dev', 'decisions.md'), '# Forge Decisions\n');
   writeFileSync(join(root, 'brain', 'forge-dev', 'reference.md'), '# Reference\n');
 
-  writeFileSync(join(root, 'projects', 'sample', 'brain', 'profile.md'), '# Sample profile\n\nhard constraints.');
-  writeFileSync(join(root, 'projects', 'sample', 'brain', 'patterns.md'), '# Sample patterns\n');
+  writeFileSync(join(root, 'brain', 'projects', 'sample', 'profile.md'), '# Sample profile\n\nhard constraints.');
+  writeFileSync(join(root, 'brain', 'projects', 'sample', 'patterns.md'), '# Sample patterns\n');
 
   return root;
 }
@@ -49,8 +51,8 @@ test('loadBrainIndex: scope adds project profile + project category indexes when
   const root = scaffoldBrain();
   const output = loadBrainIndex({ cwd: root, scope: 'sample' });
 
-  assert.ok(output.includes('<!-- BRAIN INDEX: projects/sample/brain/profile.md -->'));
-  assert.ok(output.includes('<!-- BRAIN INDEX: projects/sample/brain/patterns.md -->'));
+  assert.ok(output.includes('<!-- BRAIN INDEX: brain/projects/sample/profile.md -->'));
+  assert.ok(output.includes('<!-- BRAIN INDEX: brain/projects/sample/patterns.md -->'));
   assert.ok(output.includes('hard constraints.'));
 });
 
@@ -59,8 +61,8 @@ test('loadBrainIndex: missing project category files are silently skipped', () =
   const output = loadBrainIndex({ cwd: root, scope: 'sample' });
 
   // antipatterns.md and decisions.md don't exist for `sample` — skipped.
-  assert.ok(!output.includes('projects/sample/brain/antipatterns.md'));
-  assert.ok(!output.includes('projects/sample/brain/decisions.md'));
+  assert.ok(!output.includes('brain/projects/sample/antipatterns.md'));
+  assert.ok(!output.includes('brain/projects/sample/decisions.md'));
 });
 
 test('loadBrainIndex: missing forge category emits a (missing) marker', () => {
@@ -102,9 +104,11 @@ function scaffoldBrainForRegen(): string {
   mkdirSync(join(root, 'brain', 'forge-dev', 'themes'), { recursive: true });
   writeFileSync(join(root, 'brain', 'forge-dev', 'themes', 'd1.md'), '# d1\n');
 
-  mkdirSync(join(root, 'projects', 'alpha', 'brain', 'themes'), { recursive: true });
+  // Brain 3 (per-project) is forge-owned and CENTRAL (ADR 035) at
+  // brain/projects/<name>/ — not inside the managed project's own repo.
+  mkdirSync(join(root, 'brain', 'projects', 'alpha', 'themes'), { recursive: true });
   writeFileSync(
-    join(root, 'projects', 'alpha', 'brain', 'profile.md'),
+    join(root, 'brain', 'projects', 'alpha', 'profile.md'),
     `---
 project: alpha
 status: active
@@ -117,11 +121,11 @@ A simple example project. Stack is TypeScript.
 ## Taste signals
 `,
   );
-  writeFileSync(join(root, 'projects', 'alpha', 'brain', 'themes', 'a1.md'), '# a1\n');
+  writeFileSync(join(root, 'brain', 'projects', 'alpha', 'themes', 'a1.md'), '# a1\n');
 
-  mkdirSync(join(root, 'projects', 'beta', 'brain', 'themes'), { recursive: true });
+  mkdirSync(join(root, 'brain', 'projects', 'beta', 'themes'), { recursive: true });
   writeFileSync(
-    join(root, 'projects', 'beta', 'brain', 'profile.md'),
+    join(root, 'brain', 'projects', 'beta', 'profile.md'),
     `---
 project: beta
 ---
@@ -132,8 +136,13 @@ A second project for testing.
 `,
   );
 
+  // gamma — themes-only, NO profile.md (e.g. brain/projects/demo-project in the
+  // real repo). Must still be counted + listed (linked at its themes/ dir).
+  mkdirSync(join(root, 'brain', 'projects', 'gamma', 'themes'), { recursive: true });
+  writeFileSync(join(root, 'brain', 'projects', 'gamma', 'themes', 'g1.md'), '# g1\n');
+
   // contamination dir — must be EXCLUDED from the regenerated index.
-  mkdirSync(join(root, 'projects', '__chained_test_proj_1', 'brain', 'themes'), {
+  mkdirSync(join(root, 'brain', 'projects', '__chained_test_proj_1', 'themes'), {
     recursive: true,
   });
 
@@ -148,17 +157,20 @@ test('regenerateBrainIndex: counts themes + projects + raw sources from filesyst
   const result = regenerateBrainIndex({ cwd: root });
   assert.equal(result.stats.cyclesThemeCount, 2, 'two cycles themes (README excluded)');
   assert.equal(result.stats.forgeDevThemeCount, 1, 'one forge-dev theme (d1.md)');
-  assert.equal(result.stats.projectThemeCount, 1, 'one project theme (alpha/a1.md)');
-  assert.equal(result.stats.projects.length, 2, 'alpha + beta (contamination excluded)');
+  assert.equal(result.stats.projectThemeCount, 2, 'two project themes (alpha/a1.md + gamma/g1.md)');
+  assert.equal(result.stats.projects.length, 3, 'alpha + beta + gamma (contamination excluded)');
   assert.equal(result.stats.rawCount, 2, 'two raw sources');
 });
 
 test('regenerateBrainIndex: lists projects by name with one-paragraph hook', () => {
   const root = scaffoldBrainForRegen();
   const result = regenerateBrainIndex({ cwd: root });
-  assert.ok(result.content.includes('[alpha](../projects/alpha/brain/profile.md)'));
+  assert.ok(result.content.includes('[alpha](./projects/alpha/profile.md)'));
   assert.ok(result.content.includes('A simple example project.'));
-  assert.ok(result.content.includes('[beta](../projects/beta/brain/profile.md)'));
+  assert.ok(result.content.includes('[beta](./projects/beta/profile.md)'));
+  // Profile-less (themes-only) project still counted + listed, linked at its
+  // themes/ dir rather than a nonexistent profile.md.
+  assert.ok(result.content.includes('[gamma](./projects/gamma/themes)'));
   // Contamination dir must NOT appear in the index.
   assert.ok(!result.content.includes('__chained_test_proj'));
 });
