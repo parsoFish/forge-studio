@@ -10,8 +10,12 @@ import {
 } from '@/lib/studio-client';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
+  fetchCycles, fetchRecovery, recoveryRequeue, recoveryAbandon,
   type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem, type PlanInitiativeResult,
+  type RecoveryInspect,
 } from '@/lib/bridge-client';
+import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
+import { isRecoverableStatus, attemptInfoFor } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SerpentineTimeline, STATUS_COLOURS } from '@/components/studio/SerpentineTimeline';
@@ -47,6 +51,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // S6: Editor|Roadmap tab + the read-only roadmap read model.
   const [tab, setTab] = useState<'editor' | 'roadmap'>('editor');
   const [roadmap, setRoadmap] = useState<ProjectRoadmap | null>(null);
+  // R4-11-T3: cycle groups (one per initiative, attemptCount + priorCycleIds)
+  // back the roadmap's recovery affordances — a different data source than
+  // `roadmap` itself (fetchRoadmap()'s RoadmapInitiative[] has no attemptCount).
+  const [cycleGroups, setCycleGroups] = useState<InitiativeGroup[]>([]);
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -95,19 +103,37 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     if (!signal.cancelled) setRoadmap(result);
   }, [id]);
 
+  // R4-11-T3: recovery affordances need this project's initiatives grouped
+  // by attemptCount — `fetchCycles()` throws when the bridge is offline, so
+  // this is soft: an empty list just means every card falls back to
+  // attemptInfoFor's single-attempt default (still correct, just un-annotated).
+  const loadCycleGroups = useCallback(async (signal: { cancelled: boolean }) => {
+    try {
+      const snap = await fetchCycles();
+      const groups = groupCyclesByInitiative([...(snap?.live ?? []), ...(snap?.recent ?? [])]);
+      if (!signal.cancelled) setCycleGroups(groups);
+    } catch {
+      if (!signal.cancelled) setCycleGroups([]);
+    }
+  }, []);
+
   // plan-everything-before-kickoff: RoadmapView refetches after kickoff so
   // status/ready/blockedBy (and the eligible count) reflect queue reality.
+  // R4-11-T3: also refreshes cycleGroups so a requeue/abandon's new status +
+  // attempt count show up on the next render.
   const refreshRoadmap = useCallback(async () => {
-    await loadRoadmap({ cancelled: false });
-  }, [loadRoadmap]);
+    const signal = { cancelled: false };
+    await Promise.all([loadRoadmap(signal), loadCycleGroups(signal)]);
+  }, [loadRoadmap, loadCycleGroups]);
 
   useEffect(() => {
     const signal = { cancelled: false };
     void loadData(signal);
     void loadPreflight(signal);
     void loadRoadmap(signal);
+    void loadCycleGroups(signal);
     return () => { signal.cancelled = true; };
-  }, [loadData, loadPreflight, loadRoadmap]);
+  }, [loadData, loadPreflight, loadRoadmap, loadCycleGroups]);
 
   // Unified save feedback (X1). The hook owns saving/saved/error state.
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
@@ -308,7 +334,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       )}
 
       {tab === 'roadmap' && (
-        <RoadmapView projectId={id} roadmap={roadmap} onRefresh={refreshRoadmap} />
+        <RoadmapView projectId={id} roadmap={roadmap} cycleGroups={cycleGroups} onRefresh={refreshRoadmap} />
       )}
     </main>
   );
@@ -543,10 +569,12 @@ function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'pl
 function RoadmapView({
   projectId,
   roadmap,
+  cycleGroups,
   onRefresh,
 }: {
   projectId: string;
   roadmap: ProjectRoadmap | null;
+  cycleGroups: InitiativeGroup[];
   onRefresh: () => Promise<void>;
 }) {
   // Node selected in the serpentine timeline → highlight + scroll to its card.
@@ -697,12 +725,15 @@ function RoadmapView({
           onClose={() => setSelectedId(null)}
           renderCard={(init) => (
             <InitiativeCard
+              key={init.initiativeId}
               initiative={init}
               selected
               develop={developByInitiative[init.initiativeId] ?? IDLE_DEVELOP}
               onStart={startOne}
               plan={planByInitiative[init.initiativeId] ?? IDLE_PLAN}
               onPlan={planOne}
+              attempt={attemptInfoFor(init.initiativeId, cycleGroups)}
+              onRecoveryDone={onRefresh}
             />
           )}
         />
@@ -719,6 +750,8 @@ function InitiativeCard({
   onStart,
   plan,
   onPlan,
+  attempt,
+  onRecoveryDone,
 }: {
   initiative: RoadmapInitiative;
   selected?: boolean;
@@ -726,10 +759,42 @@ function InitiativeCard({
   onStart: (initiativeId: string) => void | Promise<void>;
   plan: PlanCardState;
   onPlan: (initiativeId: string) => void | Promise<void>;
+  /** R4-11-T3: attemptCount/priorCycleIds for the recovery affordances. */
+  attempt: { attemptCount: number; priorCycleIds: string[] };
+  /** R4-11-T3: called after a successful requeue/abandon to refetch the roadmap + cycle groups. */
+  onRecoveryDone: () => Promise<void>;
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
   const router = useRouter();
+
+  // R4-11-T3: recovery affordances (inspect/requeue/abandon) fold the retired
+  // standalone /recovery page's per-item state onto this card. `InitiativeCard`
+  // only ever renders inside the roadmap's pop-off popover ([data-roadmap-popover]
+  // — see RoadmapView/SerpentineTimeline's renderCard), so there is no separate
+  // compact card to choose between: the recovery attrs live in this one render
+  // tree, which the popover already hosts.
+  const [recoveryDetail, setRecoveryDetail] = useState<RecoveryInspect | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryNote, setRecoveryNote] = useState('');
+
+  const inspectRecovery = useCallback(async (): Promise<void> => {
+    setRecoveryDetail(await fetchRecovery(initiativeId));
+  }, [initiativeId]);
+
+  const doRecoveryAction = useCallback(async (kind: 'requeue' | 'abandon'): Promise<void> => {
+    setRecoveryBusy(true);
+    setRecoveryNote('');
+    const res = kind === 'requeue'
+      ? await recoveryRequeue(initiativeId, { resetRetries: true })
+      : await recoveryAbandon(initiativeId);
+    setRecoveryBusy(false);
+    setRecoveryNote(res.ok ? `${kind} ok` : `${kind} failed: ${res.error ?? 'unknown'}`);
+    if (res.ok) {
+      setRecoveryDetail(null);
+      await onRecoveryDone();
+    }
+  }, [initiativeId, onRecoveryDone]);
 
   // R4-11-F2: "planned" is the same fact the roadmap-builder computes
   // server-side (`workItems !== undefined` — a WI snapshot exists,
@@ -891,8 +956,59 @@ function InitiativeCard({
           </button>
         </div>
       )}
+
+      {/* R4-11-T3: recovery affordances — folded off the retired standalone
+          /recovery page. Gated on the same "recoverable" set that page used
+          (in-flight / ready-for-review / failed — NOT merged, a deliberately
+          transient pass-through). Attrs mirror that page's exact contract so
+          the (moved) journey beat is drop-in recognisable. */}
+      {isRecoverableStatus(status) && (
+        <div
+          data-recovery-item
+          data-recovery-initiative={initiativeId}
+          data-recovery-status={status}
+          data-recovery-attempt-count={attempt.attemptCount}
+          style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+              Recovery
+              {attempt.attemptCount > 1 && (
+                <span
+                  data-recovery-prior-attempts={attempt.attemptCount - 1}
+                  title={`${attempt.attemptCount - 1} prior attempt(s): ${attempt.priorCycleIds.join(', ')}`}
+                  style={{ marginLeft: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}
+                >
+                  ×{attempt.attemptCount}
+                </span>
+              )}
+            </div>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button data-action="recovery-inspect" onClick={() => void inspectRecovery()} style={recoveryBtn('var(--line)')}>Inspect</button>
+              <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={() => void doRecoveryAction('requeue')} style={recoveryBtn('#1f6feb')}>Requeue</button>
+              <button data-action="recovery-abandon" disabled={recoveryBusy} onClick={() => void doRecoveryAction('abandon')} style={recoveryBtn('#a33')}>Abandon</button>
+            </span>
+          </div>
+
+          {recoveryDetail && (
+            <div data-section="recovery-detail" data-recovery-detail-initiative={initiativeId} style={{ fontSize: 11, color: 'var(--dim)' }}>
+              <div>branch: <code>{recoveryDetail.branch}</code> · worktree: {recoveryDetail.worktreeExists ? 'preserved' : 'gone'} · PR draft: {recoveryDetail.prDraftChars ?? 0} chars</div>
+              {recoveryDetail.commits && recoveryDetail.commits.length > 0 && (
+                <pre data-recovery-commits style={{ background: 'var(--bg)', padding: 6, borderRadius: 4, marginTop: 4, overflowX: 'auto' }}>
+                  {recoveryDetail.commits.join('\n')}
+                </pre>
+              )}
+            </div>
+          )}
+          {recoveryNote && <p data-recovery-note style={{ fontSize: 11, color: 'var(--faint)', margin: 0 }}>{recoveryNote}</p>}
+        </div>
+      )}
     </div>
   );
+}
+
+function recoveryBtn(bg: string): React.CSSProperties {
+  return { fontSize: 10, padding: '2px 8px', background: bg, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' };
 }
 
 function WorkItemBadge({ wi }: { wi: RoadmapWorkItem }) {
