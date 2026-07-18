@@ -214,37 +214,56 @@ test('POST /api/architect/rerun: an unsafe (path-traversal) sessionId is refused
   // session dir (so the route's upstream readStatus check passes) while
   // itself being a `/`-bearing, multi-segment id `isSafeRunId` must reject —
   // mirrors ui-bridge-unsafe-sessionid.test.ts's fixture shape.
-  const realSid = '2026-05-29T19-00-00';
-  const dir5 = sessionDir(realSid);
-  mkdirSync(dir5, { recursive: true });
-  writeFileSync(
-    join(dir5, 'status.json'),
-    JSON.stringify({
-      session_id: realSid,
-      project: 'demo',
-      project_repo_path: dir5,
-      phase: 'drafting',
-      round: 1,
-      idea: 'x',
-      updated_at: new Date(Date.now() - 200_000).toISOString(),
-    }),
-  );
-  const unsafeSessionId = `${realSid}/../${realSid}`;
-  const res = await fetch(`${url}/api/architect/rerun`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-    body: JSON.stringify({ project: 'demo', sessionId: unsafeSessionId }),
-  });
-  const json = await res.json();
-  // Best-effort: session bookkeeping (the 200 + read) still succeeds even
-  // though the spawn itself was refused (spawnAgentTurn's fire-and-forget
-  // contract), mirroring the other spawn routes' documented behaviour.
-  assert.equal(res.status, 200, JSON.stringify(json));
-  const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
-  assert.ok(
-    !logsEntries.some((e) => e.startsWith(`_architect-${realSid}`)),
-    `expected no _architect-${realSid}* dir under _logs/ for an unsafe sessionId, found: ${JSON.stringify(logsEntries)}`,
-  );
+  //
+  // Both FORGE_ARCHITECT_NO_SPAWN (set at module scope, line 19) and
+  // FORGE_DRY_BRIDGE are deliberately unset for the body of this test (saved
+  // + restored below) — spawnAgentTurn's FIRST line short-circuits on either
+  // one BEFORE the isSafeRunId traversal check on the next line is ever
+  // reached, which would make this test's assertion pass vacuously
+  // regardless of whether the guard works. See
+  // ui-bridge-unsafe-sessionid.test.ts for the same reasoning in full.
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  delete process.env.FORGE_DRY_BRIDGE;
+  try {
+    const realSid = '2026-05-29T19-00-00';
+    const dir5 = sessionDir(realSid);
+    mkdirSync(dir5, { recursive: true });
+    writeFileSync(
+      join(dir5, 'status.json'),
+      JSON.stringify({
+        session_id: realSid,
+        project: 'demo',
+        project_repo_path: dir5,
+        phase: 'drafting',
+        round: 1,
+        idea: 'x',
+        updated_at: new Date(Date.now() - 200_000).toISOString(),
+      }),
+    );
+    const unsafeSessionId = `${realSid}/../${realSid}`;
+    const res = await fetch(`${url}/api/architect/rerun`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ project: 'demo', sessionId: unsafeSessionId }),
+    });
+    const json = await res.json();
+    // Best-effort: session bookkeeping (the 200 + read) still succeeds even
+    // though the spawn itself was refused (spawnAgentTurn's fire-and-forget
+    // contract), mirroring the other spawn routes' documented behaviour.
+    assert.equal(res.status, 200, JSON.stringify(json));
+    const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
+    assert.ok(
+      !logsEntries.some((e) => e.startsWith(`_architect-${realSid}`)),
+      `expected no _architect-${realSid}* dir under _logs/ for an unsafe sessionId, found: ${JSON.stringify(logsEntries)}`,
+    );
+  } finally {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+  }
 });
 
 test('GET /api/architect/sessions live-tails the session log → WS event stream (hex bursts)', async () => {
