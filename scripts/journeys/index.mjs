@@ -6,7 +6,7 @@
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
  * interleaving): skills → stand-up-onboard → stand-up-create → knowledge →
- * agents → flows-author → flows-run → roadmap → recovery → demo-builder.
+ * agents → flows-author → flows-run → roadmap → demo-builder.
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -20,12 +20,14 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
- * Every other journey (skills, agents, knowledge, recovery, demo-builder) is
+ * Every other journey (skills, agents, knowledge, demo-builder) is
  * self-contained: skills-edit restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, agents-scratch-build/agents-builder each clean up their own
  * skill-dir/stashed-SKILL.md, flows-author-scratch-build cleans its own
- * authored flow, and demo-builder-lock cleans its own seeded state — each at
+ * authored flow, roadmap-recovery cleans its own seeded failed/in-flight
+ * initiatives (R4-11-T3 — moved off the retired standalone /recovery
+ * journey), and demo-builder-lock cleans its own seeded state — each at
  * the top/end of their own drive(). skills' created slugs never collide with
  * agents' starter slugs, and skills-create's api-contract-review skill is the
  * throughline artifact: it stays on disk until the runner's finally sweeps it.
@@ -38,7 +40,6 @@ import { journey as agents } from './agents.mjs';
 import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
 import { journey as roadmap } from './roadmap.mjs';
-import { journey as recovery } from './recovery.mjs';
 import { journey as demoBuilder } from './demo-builder.mjs';
 
 export const JOURNEYS = [
@@ -50,7 +51,6 @@ export const JOURNEYS = [
   flowsAuthor,
   flowsRun,
   roadmap,
-  recovery,
   demoBuilder,
 ];
 
@@ -112,8 +112,7 @@ export const RUN_ORDER = [
   ['roadmap', 'roadmap-tab'],
   ['roadmap', 'roadmap-plan-trigger'],
   ['roadmap', 'roadmap-start-development'],
-
-  ['recovery', 'recovery-surface'],
+  ['roadmap', 'roadmap-recovery'],
 
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],

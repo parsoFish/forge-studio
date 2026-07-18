@@ -3,7 +3,7 @@ import {
   CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK, FORGE_ROOT,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
-import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 // module-scope cross-beat state for this journey (was hoisted in main())
@@ -11,6 +11,7 @@ let ROADMAP_SEEDED_WI, roadmapSeeded;       // roadmap-tab → roadmap-start-dev
 let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-development
 let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
 let INIT_PLAN;                              // roadmap-tab → roadmap-plan-trigger (R4-11-F2)
+let INIT_RECOVERY;                          // roadmap-recovery only (R4-11-T3, self-contained)
 
 export const journey = defineJourney({
     id: 'roadmap',
@@ -346,6 +347,83 @@ export const journey = defineJourney({
               }
               try { rmSync(join(QDIR('pending'), `${INIT_DEV}.md`), { force: true }); } catch { /* */ }
               try { rmSync(join(FORGE_ROOT, '_logs', DEV_CYCLE_ID), { recursive: true, force: true }); } catch { /* */ }
+
+        },
+      },
+      {
+        id: 'roadmap-recovery',
+        title: 'Recovery affordances on a stuck initiative\'s card (R4-11-T3)',
+        narration: 'A recoverable initiative — in-flight, ready-for-review, or failed (never `merged`, a transient pass-through) — gets inspect/requeue/abandon right on its roadmap card, folded off the retired standalone /recovery page. Inspect reads the preserved worktree; under the harness\'s dry-bridge safety seam, requeue/abandon correctly refuse rather than perform a real git operation — the affordance\'s honest failure path, not a faked success.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              // ── R4-11-T3: recovery affordances on the roadmap card ───────────────────
+              console.log('\n[R4-11-T3] Recovery affordances on a stuck initiative\'s card');
+
+              // Grounded (a real cycle can genuinely land in `_queue/failed/` after
+              // exhausting its retry budget — see orchestrator/queue.ts): seed a
+              // minimal failed manifest for this project, self-contained to this beat.
+              INIT_RECOVERY = `INIT-${DATE}-e2e-recovery-surface`;
+              mkdirSync(QDIR('failed'), { recursive: true });
+              writeFileSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), [
+                '---', `initiative_id: ${INIT_RECOVERY}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
+                'origin: architect',
+                '---', '', '# mdtoc — `--strict` mode (fail on any drift)', '',
+                'Given `mdtoc --strict` runs against a repo with drifted TOCs, when it is invoked, then it exits non-zero listing every drifted file.',
+              ].join('\n'));
+
+              // Reload the roadmap tab fresh so the just-seeded failed/ manifest
+              // is picked up (the earlier beats' fetch already happened).
+              await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              await page.locator('button[data-tab="roadmap"]').click().catch(() => {});
+              await sleep(1500);
+
+              await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_RECOVERY}"]`).first().click().catch(() => {});
+              await sleep(500);
+
+              const recoveryItem = page.locator(`[data-recovery-item][data-recovery-initiative="${INIT_RECOVERY}"]`);
+              if (await recoveryItem.count() > 0) {
+                const status = await recoveryItem.getAttribute('data-recovery-status');
+                check(status === 'failed', `roadmap: the failed initiative's card renders [data-recovery-status="failed"] (got ${status})`);
+                const attemptCount = await recoveryItem.getAttribute('data-recovery-attempt-count');
+                check(!!attemptCount && Number(attemptCount) >= 1, `roadmap: [data-recovery-attempt-count] present (got ${attemptCount})`);
+
+                await recoveryItem.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(page, 'A recoverable (failed) initiative offers Inspect / Requeue / Abandon right on its roadmap card — no separate /recovery page.');
+                await frame(page, 'r4-11-t3-0-recovery-affordances', 'R4-11-T3 — inspect/requeue/abandon on a recoverable initiative\'s roadmap card', { key: true });
+
+                // Inspect — read-only; asserts the detail section renders for this initiative.
+                await recoveryItem.locator('[data-action="recovery-inspect"]').click();
+                await page.waitForSelector(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`, { timeout: 8000 }).catch(() => {});
+                const detailCount = await recoveryItem.locator(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`).count();
+                check(detailCount > 0, 'roadmap: recovery-inspect renders [data-section="recovery-detail"] for the initiative');
+                await frame(page, 'r4-11-t3-1-inspect', 'R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)');
+
+                // Requeue — under the harness's FORGE_DRY_BRIDGE seam this route hard-refuses
+                // (real git ops); assert the HONEST refusal renders, not a faked success, and
+                // that the manifest genuinely never moved off `_queue/failed/`.
+                await recoveryItem.locator('[data-action="recovery-requeue"]').click();
+                await page.waitForSelector(`[data-recovery-initiative="${INIT_RECOVERY}"] [data-recovery-note]`, { timeout: 8000 }).catch(() => {});
+                const requeueNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                check(!!requeueNote && /requeue failed/.test(requeueNote), `roadmap: recovery-requeue honestly reports the dry-bridge refusal (got ${requeueNote})`);
+                check(existsSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`)), 'roadmap: the manifest stays in failed/ — dry-bridge genuinely refused the git ops, not just the UI message');
+                await frame(page, 'r4-11-t3-2-requeue-refused', 'R4-11-T3 — under the harness\'s safety seam, requeue honestly refuses rather than faking success');
+
+                // Abandon — same dry-bridge refusal path.
+                await recoveryItem.locator('[data-action="recovery-abandon"]').click();
+                await sleep(500);
+                const abandonNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                check(!!abandonNote && /abandon failed/.test(abandonNote), `roadmap: recovery-abandon honestly reports the dry-bridge refusal (got ${abandonNote})`);
+              } else {
+                check(false, `roadmap: [data-recovery-item] present on the seeded failed initiative ${INIT_RECOVERY}`);
+              }
+
+              await page.keyboard.press('Escape').catch(() => {});
+              try { rmSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), { force: true }); } catch { /* */ }
 
         },
       },
