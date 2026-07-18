@@ -150,7 +150,10 @@ export const J5_STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 
 export const J5_CYCLE_ID = `${J5_STAMP}_${J5_INIT}`;
 export const J5_CYCLE_LOG = join(FORGE_ROOT, '_logs', J5_CYCLE_ID);
 export function cleanFirstFlowRun() {
-  for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+  // R4-11-F1: sweep `merged/` too — a crash mid-journey could leave the
+  // seeded manifest in the transient pass-through dir (QueueState, not the
+  // unrelated CycleOutcome 'merged' value) rather than its terminal home.
+  for (const q of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
     try { rmSync(join(FORGE_ROOT, '_queue', q, `${J5_INIT}.md`), { force: true }); } catch { /* */ }
   }
   try { rmSync(J5_CYCLE_LOG, { recursive: true, force: true }); } catch { /* */ }
@@ -421,7 +424,10 @@ export function unifierEvent(eventType, message, opts = {}) {
 
 export function moveManifest(from, to) {
   mkdirSync(QDIR(to), { recursive: true });
-  const search = [from, 'pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
+  // R4-11-F1: `merged` is the transient QueueState pass-through dir between
+  // a confirmed PR merge and closure's own merged→done promotion — include
+  // it in the search so a journey beat can move a manifest into/out of it.
+  const search = [from, 'pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed'];
   for (const q of search) {
     const src = join(QDIR(q), `${INIT}.md`);
     if (existsSync(src)) {

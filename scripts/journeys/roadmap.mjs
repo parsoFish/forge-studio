@@ -9,6 +9,7 @@ import { join } from 'node:path';
 // module-scope cross-beat state for this journey (was hoisted in main())
 let ROADMAP_SEEDED_WI, roadmapSeeded;       // roadmap-tab → roadmap-start-development
 let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-development
+let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
 
 export const journey = defineJourney({
     id: 'roadmap',
@@ -117,6 +118,26 @@ export const journey = defineJourney({
                 'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',
               ].join('\n'));
 
+              // R4-11-F1: a THIRD seeded initiative sitting in `_queue/merged/` —
+              // the transient QueueState pass-through dir between a confirmed PR
+              // merge and closure's own same-sweep promotion to `done/` (distinct
+              // from the unrelated CycleOutcome 'merged' status value). In real
+              // production this window is same-sweep and effectively instantaneous,
+              // but the roadmap must still be able to render the state faithfully
+              // (e.g. the rare crash-between-moves case) — seed it directly so the
+              // dot renders `[data-initiative-status="merged"]` without needing a
+              // real merge+closure round-trip (that's covered by the orchestrator
+              // suite: queue.test.ts, closure.test.ts, finalize-merged.test.ts).
+              INIT_MERGED = `INIT-${DATE}-e2e-merged-state`;
+              mkdirSync(QDIR('merged'), { recursive: true });
+              writeFileSync(join(QDIR('merged'), `${INIT_MERGED}.md`), [
+                '---', `initiative_id: ${INIT_MERGED}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12',
+                'origin: architect',
+                '---', '', '# mdtoc — `--json` output mode', '',
+                'Given `mdtoc --json` runs against a repo, when the PR merges, then the roadmap card reflects the merged-but-not-yet-reflected state.',
+              ].join('\n'));
+
               await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
               try {
                 await page.waitForFunction(
@@ -137,6 +158,13 @@ export const journey = defineJourney({
                 const initCount = await page.evaluate(() =>
                   document.querySelectorAll('[data-roadmap-node]').length);
                 check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the timeline (got ${initCount})`);
+                // R4-11-F1: the seeded `merged/` initiative renders its own dot with
+                // the merged status — proves the roadmap surfaces the transient
+                // pass-through state rather than skipping straight to done/failed.
+                const mergedStatus = await page.evaluate((id) =>
+                  document.querySelector(`[data-roadmap-node][data-initiative-id="${id}"]`)?.getAttribute('data-initiative-status') ?? null,
+                  INIT_MERGED);
+                check(mergedStatus === 'merged', `roadmap: seeded merged/ initiative renders [data-initiative-status="merged"] (got ${mergedStatus})`);
                 if (roadmapSeeded) {
                   // The detail card pops OFF the dot now — click the seeded initiative's
                   // node, then assert its card (with WIs) appears in the popover.
@@ -152,6 +180,10 @@ export const journey = defineJourney({
               } else {
                 check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
               }
+
+              // Clean up the seeded merged/ initiative — self-contained to this beat,
+              // unlike INIT_DEV which the next beat still needs.
+              try { rmSync(join(QDIR('merged'), `${INIT_MERGED}.md`), { force: true }); } catch { /* */ }
 
         },
       },
