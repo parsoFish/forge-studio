@@ -264,7 +264,13 @@ inventory rather than one shared page-level contract:
   `[data-tool-burst]` chips) plus
   `[data-section="architect-interview"][data-architect-round][data-questions-answered]`,
   per-question `[data-question-index][data-question-resolved]`, per-option
-  `[data-option-label][data-option-selected]`. The bare
+  `[data-option-label][data-option-selected]`. A stalled session's
+  StuckWarning (P1, `[data-architect-stale="true"][data-architect-stale-ms]`)
+  carries a one-click re-run affordance (F5, R4-11-T5) —
+  `[data-action="architect-rerun"][data-rerun-state="idle"|"rerunning"|"error"]`
+  — that POSTs `/api/architect/rerun` to re-spawn the existing session's turn
+  as-is (no answers/round mutation); the existing 3s session poll picks the
+  resumed session back up. The bare
   `/architect/[sessionId]` route (no `/interview`) is now a permanent
   server-side redirect into `/architect/<sid>/interview` (M7-4, ADR-031) —
   the old standalone screen + its `design-decisions`/`escalation-id` PLAN
