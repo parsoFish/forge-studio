@@ -98,6 +98,7 @@ import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
+import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import {
   readSessionStatus,
   writeSessionStatus,
@@ -1127,9 +1128,21 @@ const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { verb: string; logPrefix: str
  *  R2-01-F3b: collapses the 4 near-byte-identical `spawn<X>Turn` helpers
  *  (architect/instructions/demo-builder/project-brain) that differed only in
  *  the CLI verb and the log-dir prefix — same guard, same detached-spawn
- *  shape, same argv per agent as before the collapse. */
+ *  shape, same argv per agent as before the collapse.
+ *
+ *  R2-01 final-review fix (e): guard `sessionId` against path traversal
+ *  before it's used to build the `_logs/_<logPrefix>-<sessionId>/` dir name
+ *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
+ *  handlers already 404 an unknown sessionId before spawning, plus the
+ *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
+ *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
+ *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
 function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(sessionId)) {
+    console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
+    return;
+  }
   const { verb, logPrefix } = SPAWN_AGENT_SPECS[agentId];
   try {
     const logDir = join(forgeRoot, '_logs', `_${logPrefix}-${sessionId}`);

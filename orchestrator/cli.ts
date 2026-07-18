@@ -23,10 +23,8 @@ import { runStudioLint } from '../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
 import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
-import { runArchitectTurn } from './architect-runner.ts';
-import { runInstructionsTurn } from './instructions-runner.ts';
-import { runDemoBuilderTurn } from './demo-builder-runner.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
+import { cmdAgent, cmdAgentRun } from '../cli/agent-run.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -43,111 +41,13 @@ const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const INVOCATION_CWD = process.cwd();
 process.chdir(FORGE_ROOT);
 
-// ---------------------------------------------------------------------------
-// forge agent run <agent-id> <session-id> [--project <name>]
-//
-// R2-01-F3a: the generic path over the 4 interactive runners below. The
-// registry captures exactly what varies per agent-id (project-required-or-not,
-// forgeRoot-needed-or-not, how its run-turn function is loaded, its
-// phase-specific console summary); `cmdAgentRun` (defined further down, near
-// the legacy `cmd<X>Run` functions it now backs) is the ONE parse/resolve/
-// guard/call/print skeleton every `cmd<X>Run` below delegates into, so the
-// legacy `<verb> run <sid> [--project]` commands keep behaving byte-identically
-// (same error text, same exit codes, same printed summaries) while the
-// boilerplate lives in exactly one place. Declared here, BEFORE the dispatch
-// IIFE below: a top-level `const` is only initialized when its declaration
-// statement executes (unlike a hoisted `function`), and the IIFE dispatches
-// synchronously as soon as the module loads.
-// ---------------------------------------------------------------------------
-
-type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
-type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
-
-interface AgentRunnerEntry {
-  /** The verb string used in error/usage text, e.g. "architect run". */
-  verb: string;
-  /** `--project <name>` is required (errors if absent) vs optional — only
-   *  architect falls back to `findSessionProject` auto-discovery when absent. */
-  requiresProject: boolean;
-  /** Whether the turn function's input needs `forgeRoot` threaded through. */
-  needsForgeRoot?: boolean;
-  /** project-brain's pre-existing quirk: ONE combined "missing arg(s)" check
-   *  that prints just the Usage line, instead of the other 3's two-line
-   *  "missing <session-id>" / "--project is required" sequential checks. */
-  combinedArgCheck?: boolean;
-  /** Resolve the runner's `run<X>Turn` function. project-brain performs a
-   *  dynamic import here (preserving the pre-existing lazy-load); the other
-   *  three just hand back their static top-of-file import. The cast through
-   *  `unknown` is deliberate: each runner has its own, more specific
-   *  input/result type (see the map doc) and the registry needs one common
-   *  shape to store them uniformly — `cmdAgentRun` is the single place that
-   *  builds the correctly-shaped call args per entry, so the underlying call
-   *  stays exactly as typed/behaved as before this refactor. */
-  loadRunTurn: () => Promise<AgentTurnFn>;
-  /** Print the phase-specific console summary (moved out of each legacy
-   *  `cmd<X>Run` body verbatim). */
-  printResult: (result: unknown) => void;
-}
-
-const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
-  architect: {
-    verb: 'architect run',
-    requiresProject: false,
-    loadRunTurn: async () => runArchitectTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runArchitectTurn>>;
-      console.log(`architect turn complete — phase=${result.phase}`);
-      if (result.questions?.length) {
-        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
-      }
-      if (result.planPath) console.log(`  PLAN: ${result.planPath}`);
-      if (result.promotedManifestPaths?.length) {
-        console.log(`  promoted ${result.promotedManifestPaths.length} manifest(s) to _queue/pending/:`);
-        for (const p of result.promotedManifestPaths) console.log(`    ${p}`);
-      }
-    },
-  },
-  instructions: {
-    verb: 'instructions run',
-    requiresProject: true,
-    loadRunTurn: async () => runInstructionsTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runInstructionsTurn>>;
-      console.log(`instructions turn complete — phase=${result.phase}`);
-      if (result.questions?.length) {
-        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
-      }
-      if (result.draftPath) console.log(`  DRAFT: ${result.draftPath}`);
-      if (result.agentsPath) console.log(`  AGENTS.md: ${result.agentsPath}`);
-    },
-  },
-  'demo-builder': {
-    verb: 'demo-builder run',
-    requiresProject: true,
-    needsForgeRoot: true,
-    loadRunTurn: async () => runDemoBuilderTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runDemoBuilderTurn>>;
-      console.log(`demo-builder turn complete — phase=${result.phase}`);
-      if (result.demoPath) console.log(`  DEMO: ${result.demoPath}`);
-      if (result.lockPath) console.log(`  LOCK: ${result.lockPath}`);
-    },
-  },
-  'project-brain': {
-    verb: 'project-brain run',
-    requiresProject: true,
-    needsForgeRoot: true,
-    combinedArgCheck: true,
-    loadRunTurn: async () => {
-      const { runProjectBrainTurn } = await import('./project-brain-builder-runner.ts');
-      return runProjectBrainTurn as unknown as AgentTurnFn;
-    },
-    printResult: (raw) => {
-      const result = raw as { phase: string; themes?: unknown[] };
-      console.log(`project-brain turn complete — phase=${result.phase} (${result.themes?.length ?? 0} theme(s))`);
-    },
-  },
-};
+// R2-01-F3a: `forge agent run <agent-id> <session-id> [--project <name>]` —
+// the generic path over the 4 interactive runners (architect / instructions /
+// demo-builder / project-brain) — and its `AGENT_RUNNERS` registry +
+// `cmdAgent`/`cmdAgentRun` skeleton live in `../cli/agent-run.ts` (moved
+// there in the R2-01 final-review cleanup; cli.ts had grown past the
+// 800-line cap). The 4 legacy `cmd<X>Run` thin delegations further down
+// import `cmdAgent`/`cmdAgentRun` from there.
 
 (async () => {
   // F-10: surface env-setup issues for the SDK-talking verb (warn-only; some
@@ -187,7 +87,7 @@ const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
     case 'demo-builder':
       return await cmdDemoBuilder(args.slice(1));
     case 'agent':
-      return await cmdAgent(args.slice(1));
+      return await cmdAgent(args.slice(1), FORGE_ROOT);
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'demo':
@@ -538,99 +438,6 @@ function cmdStudioLint(): void {
   if (result.errorCount > 0) process.exit(1);
 }
 
-// R2-01-F3a: `AGENT_RUNNERS` (declared near the top of the file, above the
-// dispatch IIFE — a top-level `const` must be initialized before that IIFE's
-// synchronous dispatch reaches it, unlike hoisted function declarations) is
-// the registry `cmdAgentRun` looks up. See that declaration for the shape.
-async function cmdAgent(rest: string[]): Promise<void> {
-  const sub = rest[0];
-  if (sub === 'run') return await cmdAgentRun(rest.slice(1));
-  console.error('forge agent: subcommands: run <agent-id> <session-id>');
-  console.error('  forge agent run <agent-id> <session-id> [--project <name>]');
-  console.error(`  <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
-  process.exit(2);
-}
-
-/**
- * The shared parse/resolve/guard/call/print skeleton for ALL agent-id run
- * verbs — both the new `forge agent run <agent-id> <sid>` path and the 4
- * legacy `<verb> run <sid>` commands, which now delegate here as
- * `cmdAgentRun(['<agent-id>', ...rest])`.
- */
-async function cmdAgentRun(rest: string[]): Promise<void> {
-  const agentId = rest[0];
-  const entry = agentId ? AGENT_RUNNERS[agentId] : undefined;
-  if (!entry) {
-    console.error(`forge agent run: unknown agent-id: ${agentId ?? '(missing)'}`);
-    console.error('Usage: forge agent run <agent-id> <session-id> [--project <name>]');
-    console.error(`  <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
-    process.exit(2);
-    return;
-  }
-
-  const sessionId = rest[1];
-  const flagRest = rest.slice(2);
-  const projectIdx = flagRest.indexOf('--project');
-  const projectArg = projectIdx >= 0 ? flagRest[projectIdx + 1] : undefined;
-
-  if (entry.combinedArgCheck) {
-    if (!sessionId || (entry.requiresProject && !projectArg)) {
-      console.error(
-        `Usage: forge ${entry.verb} <session-id>${entry.requiresProject ? ' --project <name>' : ''}`,
-      );
-      process.exit(2);
-      return;
-    }
-  } else {
-    if (!sessionId) {
-      console.error(`forge ${entry.verb}: missing <session-id>`);
-      console.error(
-        `Usage: forge ${entry.verb} <session-id>${entry.requiresProject ? ' --project <name>' : ' [--project <name>]'}`,
-      );
-      process.exit(2);
-      return;
-    }
-    if (entry.requiresProject && !projectArg) {
-      console.error(`forge ${entry.verb}: --project <name> is required`);
-      console.error(`Usage: forge ${entry.verb} <session-id> --project <name>`);
-      process.exit(2);
-      return;
-    }
-  }
-
-  let projectRoot: string;
-  if (projectArg) {
-    projectRoot = resolve('projects', projectArg);
-  } else {
-    // Only reachable when !requiresProject (architect today) — required-project
-    // entries already returned above when --project was absent.
-    const found = findSessionProject(sessionId);
-    if (!found) {
-      console.error(
-        `forge ${entry.verb}: no project found containing _architect/${sessionId}/. ` +
-          `Pass --project <name> to disambiguate.`,
-      );
-      process.exit(2);
-      return;
-    }
-    projectRoot = found;
-  }
-
-  if (!existsSync(projectRoot)) {
-    console.error(`forge ${entry.verb}: project root not found: ${projectRoot}`);
-    process.exit(2);
-    return;
-  }
-
-  const runTurn = await entry.loadRunTurn();
-  const result = await runTurn({
-    sessionId,
-    projectRoot,
-    ...(entry.needsForgeRoot ? { forgeRoot: FORGE_ROOT } : {}),
-  });
-  entry.printResult(result);
-}
-
 // ---------------------------------------------------------------------------
 // forge architect run <session-id>
 //
@@ -659,7 +466,7 @@ async function cmdArchitect(rest: string[]): Promise<void> {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdArchitectRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['architect', ...rest]);
+  return cmdAgentRun(['architect', ...rest], FORGE_ROOT);
 }
 
 // ---------------------------------------------------------------------------
@@ -687,7 +494,7 @@ async function cmdProjectBrain(rest: string[]): Promise<void> {
 // above) — behavior (the combined-arg-check quirk, error text, exit codes,
 // printed summary) is unchanged.
 async function cmdProjectBrainRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['project-brain', ...rest]);
+  return cmdAgentRun(['project-brain', ...rest], FORGE_ROOT);
 }
 
 async function cmdInstructions(rest: string[]): Promise<void> {
@@ -702,7 +509,7 @@ async function cmdInstructions(rest: string[]): Promise<void> {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdInstructionsRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['instructions', ...rest]);
+  return cmdAgentRun(['instructions', ...rest], FORGE_ROOT);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,38 +538,7 @@ async function cmdDemoBuilder(rest: string[]): Promise<void> {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['demo-builder', ...rest]);
-}
-
-/**
- * Scan `projects/*` for `_architect/<sessionId>/PLAN.md` and return the
- * first match's project root. Used when the operator omits `--project`.
- */
-function findSessionProject(sessionId: string): string | null {
-  const projectsDir = resolve('projects');
-  if (!existsSync(projectsDir)) return null;
-  let entries: string[];
-  try {
-    entries = readdirSync(projectsDir);
-  } catch {
-    return null;
-  }
-  for (const name of entries) {
-    const candidate = join(projectsDir, name);
-    try {
-      const stat = statSync(candidate);
-      if (!stat.isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    // Match on the session dir (status.json appears from the first turn;
-    // PLAN.md only appears once drafting completes).
-    const sessionDir = join(candidate, '_architect', sessionId);
-    if (existsSync(join(sessionDir, 'status.json')) || existsSync(join(sessionDir, 'PLAN.md'))) {
-      return candidate;
-    }
-  }
-  return null;
+  return cmdAgentRun(['demo-builder', ...rest], FORGE_ROOT);
 }
 
 // ── demo + preflight: agent/dev tools, hidden from operator help (S9/DEC-6).

@@ -47,8 +47,19 @@ import type { QueryFn } from '../loops/_adapters/types.ts';
  */
 const SAFE_RUN_ID_RE = /^[A-Za-z0-9._-]+$/;
 
+/**
+ * Exported (mirrors `review-comments.ts`'s `isSafeCycleId`) so other
+ * path-traversal-sensitive call sites that build a `_logs/`-relative dir
+ * name from a caller-supplied id — e.g. `cli/ui-bridge.ts`'s
+ * `spawnAgentTurn` — can reuse this exact predicate as their SSOT instead of
+ * re-deriving the regex.
+ */
+export function isSafeRunId(runId: string): boolean {
+  return SAFE_RUN_ID_RE.test(runId) && !runId.includes('..');
+}
+
 function assertSafeRunId(runId: string): void {
-  if (!SAFE_RUN_ID_RE.test(runId) || runId.includes('..')) {
+  if (!isSafeRunId(runId)) {
     throw new Error(`runAgent: unsafe runId (path-traversal risk): ${JSON.stringify(runId)}`);
   }
 }

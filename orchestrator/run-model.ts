@@ -257,7 +257,7 @@ export function buildAgentSlugToNodeId(root: string): Map<string, string> {
   const mapping = new Map<string, string>();
   try {
     const flowsDir = join(resolve(root), 'studio', 'flows');
-    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir) : [];
+    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
     for (const entry of flowDirs) {
       const flowPath = join(flowsDir, entry, 'flow.yaml');
       if (!existsSync(flowPath)) continue;
