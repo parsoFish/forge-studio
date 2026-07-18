@@ -511,7 +511,7 @@ describe('validateFlow — agent-ref', () => {
   });
 });
 
-describe('validateFlow — node-executor (R2-01-F2)', () => {
+describe('validateFlow — node-executor (R2-01-F2; descriptor-sourced R2-02-F3)', () => {
   it('node references an interactive agent with no declared executor → error node-executor', () => {
     const interactiveAgent = makeAgent({ slug: 'my-agent', surface: 'interactive' });
     const findings = validateFlow(makeFlow(), makeAgentMap(interactiveAgent));
@@ -540,6 +540,12 @@ describe('validateFlow — node-executor (R2-01-F2)', () => {
       edges: [{ from: 'step-a', to: 'gate', artifact: 'result' }],
     });
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+
+  it('node references a surface:"both" agent with no declared executor → no node-executor finding (agentCapabilityDescriptor treats "both" as unattended, per derive.ts)', () => {
+    const bothAgent = makeAgent({ slug: 'my-agent', surface: 'both' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(bothAgent));
     assert.ok(!findings.some((x) => x.check === 'node-executor'));
   });
 });
