@@ -227,6 +227,41 @@ test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto 
   }
 });
 
+test('R4-05-T4: a flagged (under-covered) decomposition still succeeds and emits plan.completeness', async () => {
+  const h = setupHarness({ ...BASE_CONFIG });
+  try {
+    // MANIFEST_BODY states one AC unit ("the resource ... persists in the
+    // external system"); the stub WI's own AC/body vocabulary ("a test",
+    // "the function runs", "it returns a value") shares no significant
+    // tokens with it — a genuinely uncovered stated unit, i.e. the pass
+    // *looks* successful (valid WI set, no gate violations) but under-covers
+    // the stated scope. This must NOT block the pass.
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
+    await runProjectManager(h.input, h.logger, { queryFn }); // no throw — dispatch NOT blocked
+
+    const events = readEvents(h.logger);
+    const completenessEvent = events.find((e) => e.message === 'plan.completeness');
+    assert.ok(completenessEvent, 'expected a plan.completeness event to be emitted');
+    const metadata = completenessEvent!.metadata as {
+      stated_units: number;
+      covered_units: number;
+      uncovered: string[];
+      flagged: boolean;
+    };
+    assert.equal(metadata.stated_units, 1);
+    assert.equal(metadata.covered_units, 0);
+    assert.equal(metadata.uncovered.length, 1);
+    assert.equal(metadata.flagged, true);
+
+    // The end-of-pass event is still a clean success — the completeness flag
+    // never touches the pass outcome or the `failed` boolean.
+    const end = events.find((e) => e.event_type === 'end' || e.event_type === 'error');
+    assert.equal(end?.event_type, 'end', 'pass must still succeed — plan.completeness never flips this to `error`');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
 test('A2a: no acceptance_gate config → no live-acc requirement (other projects unaffected)', async () => {
   const h = setupHarness({ ...BASE_CONFIG });
   try {

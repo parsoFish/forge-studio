@@ -38,6 +38,7 @@ import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
 import { withIdleDeadline } from '../stream-deadline.ts';
 import { compileWorkItemSpecs } from './wi-spec-compile.ts';
+import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 
 /**
  * Injection seam for tests. The live cycle uses `sdkQuery` from the
@@ -606,6 +607,35 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     // overwritten with partial or rejected WI ids). Overwrites on every
     // successful pass (a re-decomposition replaces the list).
     persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
+
+    // R4-05-T4: non-blocking decompose-completeness check (operator decision
+    // 2026-07-17). The delivery gate catches under-*delivery*; this catches
+    // under-*planning* — scope stated in the initiative body but never
+    // decomposed into a WI at all. Runs ONLY here, on the pass's own success
+    // path, AFTER the WI set is final. It NEVER affects `failed`, the pass
+    // outcome, or dispatch — a flagged decomposition still returns
+    // `{ kind: 'success' }` below and proceeds to develop exactly as before.
+    // `plan.completeness`'s `metadata` shape is the R4-11-F4 contract (a
+    // later PR's attention-strip consumer): keep `stated_units`,
+    // `covered_units`, `uncovered: string[]`, `flagged: boolean` stable.
+    const completeness = checkDecomposeCompleteness(manifest.body, items);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'log',
+      input_refs: [input.manifestPath],
+      output_refs: [workItemsDir],
+      message: 'plan.completeness',
+      metadata: {
+        stated_units: completeness.statedUnits,
+        covered_units: completeness.coveredUnits,
+        uncovered: completeness.uncovered,
+        flagged: completeness.flagged,
+      },
+    });
+
     return { kind: 'success' };
   }
 
