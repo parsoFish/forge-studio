@@ -102,6 +102,19 @@ test('enqueuePlanRun: a forge-develop manifest parked in ready-for-review is lef
   });
 });
 
+test('enqueuePlanRun: a merged initiative is left untouched (R4-11-F1: merged is a transient pass-through, not a plan source)', () => {
+  withTmp((queueRoot) => {
+    const p = seed(queueRoot, 'merged', manifest({ flow_id: DEVELOP_FLOW_ID }));
+    const before = readFileSync(p, 'utf8');
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot });
+
+    assert.equal(result.status, 'already-running');
+    assert.equal(readFileSync(p, 'utf8'), before, 'the merged manifest is not mutated');
+    const paths = getPaths(queueRoot);
+    assert.ok(!existsSync(join(paths.pending, 'INIT-2026-06-21-toc.md')), 'no sibling pending manifest created');
+  });
+});
+
 test('enqueuePlanRun: an in-flight initiative is left untouched (already running)', () => {
   withTmp((queueRoot) => {
     const p = seed(queueRoot, 'in-flight', manifest({ flow_id: PLAN_FLOW_ID }));
