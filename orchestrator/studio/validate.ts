@@ -10,6 +10,7 @@ import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SURFACE_KINDS } from './registry.ts';
+import { executionPathForSurface } from './derive.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -232,6 +233,27 @@ export function validateFlow(
     if (node.agent && !agents.has(node.agent)) {
       findings.push(
         err(obj, 'agent-ref', `Node "${node.id}" references unknown agent "${node.agent}"`),
+      );
+    }
+  }
+
+  // node-executor (R2-01-F2, AC #2): a node whose agent resolves to a real
+  // def but that def is INTERACTIVE (executionPathForSurface(def.surface) ===
+  // 'interactive') and carries no declared `executor` (i.e. not one of the
+  // four legacy phase executors) can never be executed by the flow engine —
+  // interactive agents run through the interactive-session runner, not a
+  // flow node. The `!def` case is already covered by agent-ref above.
+  for (const node of flow.nodes) {
+    if (!node.agent) continue;
+    const def = agents.get(node.agent);
+    if (!def) continue;
+    if (executionPathForSurface(def.surface) === 'interactive' && def.executor === undefined) {
+      findings.push(
+        err(
+          obj,
+          'node-executor',
+          `Node "${node.id}" references interactive agent "${node.agent}" — interactive agents run through the interactive-session runner, not a flow node`,
+        ),
       );
     }
   }

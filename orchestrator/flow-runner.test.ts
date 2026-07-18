@@ -16,7 +16,7 @@ import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
 import type { CycleInput } from './cycle-context.ts';
 import type { EventLogger } from './logging.ts';
-import type { AgentBudgets } from './studio/types.ts';
+import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -704,30 +704,36 @@ describe('flow-runner trigger firing', () => {
 // ---------------------------------------------------------------------------
 
 describe('single-node flow with an unknown agent — graceful skip', () => {
-  /** Synthetic disposable single-node flow whose agent is not a phase kind
-   *  (brain-ingest), so resolveNodeKind() → 'unknown' → execUnknown skip. */
+  /** Synthetic disposable single-node flow whose agent has no roster def at
+   *  all — resolveNodeKind() → 'unknown' (the `!def` case) → execUnknown
+   *  emits an ERROR-severity event and continues (R2-01-F2 AC #4: execUnknown
+   *  now survives ONLY for genuinely unresolvable refs, at error severity —
+   *  not a quiet log). A real roster slug with no declared executor (e.g.
+   *  brain-ingest) now resolves to 'agent' instead — see the execAgent test
+   *  below (AC #1). */
   function makeUnknownAgentFlow(): FlowDefinition {
     return {
       id: 'unknown-agent-flow',
       name: 'Unknown Agent Flow',
       version: 1,
-      goal: 'A disposable single-node flow whose agent is not a phase kind.',
+      goal: 'A disposable single-node flow whose agent has no roster definition.',
       project: null,
       kb: null,
       costCeilingUsd: 0,
       origin: 'seed',
       disposable: true,
-      nodes: [{ id: 'ingest', agent: 'brain-ingest' }],
+      nodes: [{ id: 'ingest', agent: 'totally-fake-nonexistent-agent' }],
       edges: [],
       triggers: [],
       path: '/fake/unknown-agent-flow.yaml',
     };
   }
 
-  it('runFlow dispatches the unknown node as a graceful skip + completes', async () => {
+  it('runFlow dispatches the unknown node as an error-severity skip + completes', async () => {
     const flow = makeUnknownAgentFlow();
-    // brain-ingest is not a phase kind → resolveNodeKind() = 'unknown' → execUnknown
-    // logs flow-runner.unknown-node-skipped and continues; runFlow completes without throwing.
+    // No roster def for "totally-fake-nonexistent-agent" → resolveNodeKind() = 'unknown'
+    // → execUnknown logs flow-runner.unknown-node-skipped at error severity and
+    // continues; runFlow completes without throwing.
     const input = makeInput();
     const logger = makeLogger();
     const enqueueCalls: string[] = [];
@@ -747,13 +753,21 @@ describe('single-node flow with an unknown agent — graceful skip', () => {
     // No gate/closure → cycleOutcome stays at its initial 'ready-for-review'.
     assert.strictEqual(result.cycleOutcome, 'ready-for-review');
 
-    const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string; metadata?: Record<string, unknown> }>;
+    const events = (logger as ReturnType<typeof makeLogger>).events as Array<{
+      event_type?: string;
+      message?: string;
+      metadata?: Record<string, unknown>;
+    }>;
     const unknownSkipEvents = events.filter(
       (e) => e.message === 'flow-runner.unknown-node-skipped' && e.metadata?.['node_id'] === 'ingest',
     );
     assert.ok(
       unknownSkipEvents.length >= 1,
-      'an unknown (non-phase) agent node must be a graceful flow-runner.unknown-node-skipped',
+      'a genuinely unresolvable agent node must be a flow-runner.unknown-node-skipped',
+    );
+    assert.ok(
+      unknownSkipEvents.every((e) => e.event_type === 'error'),
+      'AC #4: execUnknown must log at error severity, not a quiet log',
     );
 
     // No triggers → enqueue not called.
@@ -762,18 +776,157 @@ describe('single-node flow with an unknown agent — graceful skip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Test 7b: a single-node flow with a generic (non-legacy, no-executor) agent
+// runs via the generic F1 execAgent path — R2-01-F2 AC #1. Uses a real
+// roster def (brain-ingest — surface:unattended, no declared executor) so
+// resolveNodeKind() resolves it to 'agent' against the REAL skills/ roster
+// runFlow builds internally, proving dispatch reaches execAgent/runAgent
+// instead of the old silent skip.
+// ---------------------------------------------------------------------------
+
+describe('single-node flow with a generic (non-legacy, no-executor) agent — execAgent (R2-01-F2 AC #1)', () => {
+  function makeGenericAgentFlow(): FlowDefinition {
+    return {
+      id: 'generic-agent-flow',
+      name: 'Generic Agent Flow',
+      version: 1,
+      goal: 'A disposable single-node flow whose agent is a real roster def with no declared executor.',
+      project: null,
+      kb: null,
+      costCeilingUsd: 0,
+      origin: 'seed',
+      disposable: true,
+      nodes: [{ id: 'ingest', agent: 'brain-ingest' }],
+      edges: [],
+      triggers: [],
+      path: '/fake/generic-agent-flow.yaml',
+    };
+  }
+
+  it('runFlow dispatches the node via execAgent — NOT a silent skip', async () => {
+    const flow = makeGenericAgentFlow();
+    const input = makeInput();
+    const logger = makeLogger();
+
+    const deps: Partial<FlowRunnerDeps> = {
+      enqueueFlowRun: () => { /* no-op */ },
+      commitDevLoopBoundary: () => { /* no-op */ },
+      enforceDevLoopCloseInvariant: () => { /* no-op */ },
+      assertNonEmptyDelivery: () => { /* no-op */ },
+      enforceFinalCiGate: () => { /* no-op */ },
+      rebaseForResume: () => { /* no-op */ },
+    };
+
+    // Force spawn suppression ON regardless of ambient env (local `npm test`
+    // does not set FORGE_ARCHITECT_NO_SPAWN, CI does — this test must be
+    // deterministic either way, and must never hit a real SDK spawn). Cost
+    // is necessarily 0 under suppression; the non-zero-cost proof of the
+    // ctx.nodeLogger → RunContext.logger cost pipe lives in
+    // run-agent.test.ts's injected-logger test (R2-01-F2 step D), which CAN
+    // inject a fake-cost queryFn because it calls runAgent directly — a
+    // production caller like execAgent must not (queryFn is test-injection
+    // only, enforced by pinned-sdk-query.enforce.test.ts).
+    const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+    process.env.FORGE_DRY_BRIDGE = '1';
+    try {
+      const result = await runFlow({ flow, input, logger, deps });
+
+      assert.strictEqual(result.cycleOutcome, 'ready-for-review');
+
+      const events = (logger as ReturnType<typeof makeLogger>).events as Array<{
+        event_type?: string;
+        skill?: string;
+        message?: string;
+      }>;
+
+      assert.ok(
+        !events.some((e) => e.message === 'flow-runner.unknown-node-skipped'),
+        'a real roster agent with no declared executor must NOT be treated as unknown',
+      );
+
+      const start = events.find((e) => e.event_type === 'start' && e.skill === 'brain-ingest');
+      assert.ok(start, 'expected execAgent to dispatch through runAgent, emitting a start event for brain-ingest');
+
+      const suppressed = events.find((e) => e.message === 'run-agent.spawn-suppressed');
+      assert.ok(
+        suppressed,
+        'expected dispatch to reach the F1 runAgent primitive (spawn-suppressed under FORGE_DRY_BRIDGE)',
+      );
+    } finally {
+      if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Test 8: Node-executor registry seam (ADR-028 — "new flow = no orchestrator edit")
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal AgentDefinition fixture (R2-01-F2) — mirrors studio/validate.test.ts's
+ * makeAgent helper so resolveNodeKind's stub agents map compiles against the
+ * full type without repeating every required field at each call site.
+ */
+function makeAgentDef(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
+  return {
+    slug: 'my-agent',
+    name: 'My Agent',
+    description: 'An agent.',
+    purpose: 'Do things.',
+    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+    brainAccess: 'none',
+    interactivity: 'Fully autonomous.',
+    budgets: {},
+    allowedTools: [],
+    disallowedTools: [],
+    body: 'Process body here.',
+    path: '/skills/my-agent/SKILL.md',
+    ...overrides,
+  };
+}
+
 describe('flow-runner node-executor registry seam (ADR-028)', () => {
-  it('resolveNodeKind maps gate/agent fields to kinds (gate wins over agent)', () => {
-    assert.equal(resolveNodeKind({ id: 'a', agent: 'architect', gate: 'plan' }), 'architect');
-    assert.equal(resolveNodeKind({ id: 'r', gate: 'verdict' }), 'review');
-    assert.equal(resolveNodeKind({ id: 'pm', agent: 'project-manager' }), 'pm');
-    assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }), 'dev');
-    assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }), 'unifier');
-    assert.equal(resolveNodeKind({ id: 'rf', agent: 'reflector' }), 'reflect');
-    assert.equal(resolveNodeKind({ id: 'x', agent: 'brain-ingest' }), 'unknown');
+  it('resolveNodeKind maps gate/agent fields to kinds (gate wins over agent, declared executor drives the rest)', () => {
+    // Stub roster (R2-01-F2): resolution now reads `def.executor` off the
+    // agent definition rather than a hardcoded AGENT_KIND table — build a
+    // small agents map covering the four declared phase executors plus a
+    // generic (no-executor) library agent and an invalid-executor agent.
+    const agents = new Map<string, AgentDefinition>([
+      ['architect', makeAgentDef({ slug: 'architect', name: 'Architect' })],
+      ['project-manager', makeAgentDef({ slug: 'project-manager', name: 'PM', executor: 'pm' })],
+      ['developer-ralph', makeAgentDef({ slug: 'developer-ralph', name: 'Dev', executor: 'dev' })],
+      ['developer-unifier', makeAgentDef({ slug: 'developer-unifier', name: 'Unifier', executor: 'unifier' })],
+      ['reflector', makeAgentDef({ slug: 'reflector', name: 'Reflector', executor: 'reflect' })],
+      ['generic-lib-agent', makeAgentDef({ slug: 'generic-lib-agent', name: 'Generic Lib Agent' })],
+      [
+        'bad-executor-agent',
+        makeAgentDef({ slug: 'bad-executor-agent', name: 'Bad Executor Agent', executor: 'not-a-kind' }),
+      ],
+    ]);
+
+    assert.equal(resolveNodeKind({ id: 'a', agent: 'architect', gate: 'plan' }, agents), 'architect');
+    assert.equal(resolveNodeKind({ id: 'r', gate: 'verdict' }, agents), 'review');
+    assert.equal(resolveNodeKind({ id: 'pm', agent: 'project-manager' }, agents), 'pm');
+    assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents), 'dev');
+    assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents), 'unifier');
+    assert.equal(resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents), 'reflect');
+    assert.equal(
+      resolveNodeKind({ id: 'x', agent: 'totally-fake-nonexistent-agent' }, agents),
+      'unknown',
+      'no roster def at all ⇒ unknown',
+    );
+    assert.equal(
+      resolveNodeKind({ id: 'g', agent: 'generic-lib-agent' }, agents),
+      'agent',
+      'a real roster def with no declared executor ⇒ the generic F1 execAgent path',
+    );
+    assert.equal(
+      resolveNodeKind({ id: 'bad', agent: 'bad-executor-agent' }, agents),
+      'unknown',
+      'a declared executor outside PHASE_EXECUTOR_KINDS ⇒ unknown (also caught by lint)',
+    );
   });
 
   it('FlowRunArgs.nodeExecutors overrides the default executor for a kind (no orchestrator edit)', async () => {

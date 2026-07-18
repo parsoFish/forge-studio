@@ -210,6 +210,21 @@ describe('loadAgentDefinition', () => {
     const def = loadAgentDefinition(p);
     assert.equal(def.path, p);
   });
+
+  it('parses executor when present', () => {
+    const p = writeAgentFixture(
+      'executor-agent',
+      AGENT_FIXTURE.replace('phase: tester', 'phase: tester\nexecutor: pm'),
+    );
+    const def = loadAgentDefinition(p);
+    assert.equal(def.executor, 'pm');
+  });
+
+  it('executor absent → undefined', () => {
+    const p = writeAgentFixture('no-executor-agent', AGENT_FIXTURE);
+    const def = loadAgentDefinition(p);
+    assert.equal(def.executor, undefined);
+  });
 });
 
 // ---------------------------------------------------------------------------

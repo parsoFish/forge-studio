@@ -478,6 +478,39 @@ describe('validateFlow — agent-ref', () => {
   });
 });
 
+describe('validateFlow — node-executor (R2-01-F2)', () => {
+  it('node references an interactive agent with no declared executor → error node-executor', () => {
+    const interactiveAgent = makeAgent({ slug: 'my-agent', surface: 'interactive' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(interactiveAgent));
+    const f = findings.find((x) => x.check === 'node-executor');
+    assert.ok(f, 'expected node-executor finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('my-agent'));
+    assert.ok(f.message.includes('interactive'));
+  });
+
+  it('node references an unattended agent with no declared executor → no node-executor finding', () => {
+    const unattendedAgent = makeAgent({ slug: 'my-agent', surface: 'unattended' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(unattendedAgent));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+
+  it('node references an interactive agent that DOES declare an executor (a phase agent) → no node-executor finding', () => {
+    const phaseAgent = makeAgent({ slug: 'my-agent', surface: 'interactive', executor: 'pm' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(phaseAgent));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+
+  it('node references an unknown agent slug → no node-executor finding (agent-ref already covers it)', () => {
+    const flow = makeFlow({
+      nodes: [{ id: 'step-a', agent: 'ghost-agent' }, { id: 'gate', gate: 'verdict' }],
+      edges: [{ from: 'step-a', to: 'gate', artifact: 'result' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+});
+
 describe('validateFlow — edge-ref', () => {
   it('edge.from referencing unknown node id → error edge-ref', () => {
     const flow = makeFlow({

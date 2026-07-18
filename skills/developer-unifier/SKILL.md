@@ -3,6 +3,7 @@ name: developer-unifier
 description: Treat the initiative as one PR. Prove every acceptance criterion against branch tip. Author the demo. Author the PR body. Refactor incidentally if it unifies the change. NEVER add scope beyond what the work-item ACs require.
 phase: unifier
 surface: unattended
+executor: unifier
 purpose: Treat the initiative as one PR — prove every AC against branch tip, author the demo and PR body, never add scope.
 composition:
   skills: [demo]

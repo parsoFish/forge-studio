@@ -28,7 +28,7 @@ import { join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
-import { createLogger } from './logging.ts';
+import { createLogger, type EventLogger } from './logging.ts';
 import { pinnedSdkQuery, type SdkQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
@@ -80,6 +80,16 @@ export type RunContext = {
   workdir: string;
   prompt: string;
   logsRoot?: string;
+  /**
+   * Inject an existing logger instead of creating a fresh one from
+   * `runId`/`logsRoot` (R2-01-F2). Lets a caller (e.g. flow-runner's
+   * execAgent) route this run's events through an already cost/wedge-wrapped
+   * logger so cost_usd flows into the caller's own CostTracker with no
+   * double emission — runAgent remains the only emitter either way. Absent
+   * ⇒ unchanged standalone behaviour: a fresh logger under
+   * `_logs/<runId>/`.
+   */
+  logger?: EventLogger;
   bindings?: { project?: ProjectBinding; initiative?: InitiativeBinding };
   artifactRefs?: string[];
   /**
@@ -112,7 +122,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   if (!ctx.workdir) throw new Error('runAgent: ctx.workdir is required');
   if (!ctx.prompt) throw new Error('runAgent: ctx.prompt is required');
 
-  const logger = createLogger(ctx.runId, ctx.logsRoot ?? '_logs');
+  const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs');
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
 

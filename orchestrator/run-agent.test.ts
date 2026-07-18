@@ -18,6 +18,7 @@ import { runAgent } from './run-agent.ts';
 import { listAgentDefinitions } from './studio/registry.ts';
 import type { SdkQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from './studio/types.ts';
+import type { EventLogger, EventLogEntry } from './logging.ts';
 
 const ROOT = process.cwd();
 
@@ -159,6 +160,95 @@ test('runAgent: every library roster agent (listAgentDefinitions) runs without t
         `${def.slug}: expected a start event`,
       );
     }
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+    restoreEnv();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R2-01-F2 step D: RunContext.logger — injected-logger cost integration
+// ---------------------------------------------------------------------------
+
+/** A minimal spy EventLogger — records every emitted entry, echoing event_id
+ * back like the real createLogger does, without touching the filesystem. */
+function makeSpyLogger(cycleId: string): EventLogger & { events: EventLogEntry[] } {
+  const events: EventLogEntry[] = [];
+  return {
+    cycleId,
+    logFilePath: '<spy>',
+    events,
+    emit(entry) {
+      const full: EventLogEntry = {
+        event_id: entry.event_id ?? `evt-${events.length}`,
+        cycle_id: cycleId,
+        started_at: entry.started_at ?? new Date().toISOString(),
+        ...entry,
+      } as EventLogEntry;
+      events.push(full);
+      return full;
+    },
+  };
+}
+
+test('runAgent: an injected ctx.logger receives start/end(cost) events and no _logs dir is created (R2-01-F2 step D)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-injectedlogger-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review');
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+    const spy = makeSpyLogger('_agent-injected');
+
+    const result = await runAgent(def, {
+      runId: '_agent-injected',
+      workdir,
+      prompt: 'test',
+      logsRoot,
+      logger: spy,
+      queryFn: fakeQueryFn(0.17),
+    });
+
+    assert.equal(result.costUsd, 0.17);
+
+    const start = spy.events.find((e) => e.event_type === 'start');
+    const end = spy.events.find((e) => e.event_type === 'end');
+    assert.ok(start, 'expected the injected logger to receive a start event');
+    assert.ok(end, 'expected the injected logger to receive an end event');
+    assert.equal(end!.cost_usd, 0.17, "the injected logger's end event must carry the real cost_usd");
+
+    // No standalone log file was ever created — runAgent used ctx.logger
+    // verbatim rather than also calling createLogger (no double emission).
+    assert.ok(
+      !existsSync(join(logsRoot, '_agent-injected', 'events.jsonl')),
+      'runAgent must not create a standalone log file when ctx.logger is injected',
+    );
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+    restoreEnv();
+  }
+});
+
+test('runAgent: standalone path (no injected logger) still writes to _logs/<runId>/ (R2-01-F2 step D regression guard)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-standalonelogger-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review');
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+
+    await runAgent(def, {
+      runId: '_agent-standalone',
+      workdir,
+      prompt: 'test',
+      logsRoot,
+      // Deliberately NO `logger` — the standalone path must still work.
+      queryFn: fakeQueryFn(0.05),
+    });
+
+    assert.ok(existsSync(join(logsRoot, '_agent-standalone', 'events.jsonl')));
   } finally {
     rmSync(scratchRoot, { recursive: true, force: true });
     restoreEnv();

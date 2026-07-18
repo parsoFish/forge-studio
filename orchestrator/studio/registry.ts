@@ -177,6 +177,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const description = reqString(d, 'description', skillMdPath);
   const phase = optString(d, 'phase');
   const surface = optString(d, 'surface');
+  const executor = optString(d, 'executor');
   const purpose = reqString(d, 'purpose', skillMdPath);
   const brainAccess = oneOf(reqString(d, 'brainAccess', skillMdPath), BRAIN_ACCESS, skillMdPath, 'brainAccess');
   const interactivity = reqString(d, 'interactivity', skillMdPath);
@@ -225,6 +226,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     description,
     phase,
     surface,
+    executor,
     purpose,
     composition,
     runtime,
@@ -240,13 +242,15 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, phase?, surface?, purpose, composition,
-  // runtime, brainAccess, interactivity, allowed-tools, disallowed-tools, budgets
+  // Fixed key order: name, description, phase?, surface?, executor?, purpose,
+  // composition, runtime, brainAccess, interactivity, allowed-tools,
+  // disallowed-tools, budgets
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
   if (def.phase !== undefined) data['phase'] = def.phase;
   if (def.surface !== undefined) data['surface'] = def.surface;
+  if (def.executor !== undefined) data['executor'] = def.executor;
   data['purpose'] = def.purpose;
   data['composition'] = def.composition;
 

@@ -3,6 +3,7 @@ name: reflector
 description: Run a deep structured retrospective at the end of a merged initiative — repeated actions, roadblocks hit, and operator notes (agentic self-reflection + agent-prompted user questions + pure user feedback) — and write the findings into the central forge-owned brain.
 phase: reflector
 surface: both
+executor: reflect
 purpose: Run the end-of-cycle retrospective and write durable findings into the brain.
 composition:
   skills: [brain-query, brain-ingest]

@@ -42,7 +42,7 @@
  *   8. enforceFinalCiGate before openPrInline
  */
 
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
@@ -50,7 +50,7 @@ import type { EventLogger } from './logging.ts';
 import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
-import type { FlowDefinition, FlowNode, AgentBudgets } from './studio/types.ts';
+import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flow-budgets.ts';
 
 import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
@@ -66,11 +66,12 @@ import {
   enforceFinalCiGate,
   preservingForgeScratch,
 } from './cycle-helpers.ts';
-import { listArtifactTemplates } from './studio/registry.ts';
+import { listArtifactTemplates, listAgentDefinitions } from './studio/registry.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
+import { runAgent } from './run-agent.ts';
 
 /** Forge repo root — `<root>/orchestrator/flow-runner.ts` resolves to `<root>`. */
 const FLOW_RUNNER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -206,12 +207,13 @@ function topoSort(flow: FlowDefinition): string[] {
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
-  | 'pm'          // agent:'project-manager'
-  | 'dev'         // agent:'developer-ralph' with fanOut:'work-items'
-  | 'unifier'     // agent:'developer-unifier' — real executor (runUnifierPhase + close-contract gates)
+  | 'pm'          // agent def declares executor:'pm' (project-manager)
+  | 'dev'         // agent def declares executor:'dev' (developer-ralph, fanOut:'work-items')
+  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'reflect'     // agent:'reflector'
-  | 'unknown';    // defensive fallback
+  | 'reflect'     // agent def declares executor:'reflect' (reflector)
+  | 'agent'       // agent def exists, no executor declared — generic F1 runAgent path (R2-01-F2)
+  | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
  * Gate id → node kind. A gate ALWAYS wins over the agent field (the architect
@@ -224,24 +226,39 @@ const GATE_KIND: Readonly<Record<string, NodeKind>> = {
 };
 
 /**
- * Agent slug → node kind. Adding a new agent that reuses an existing executor
- * kind is a one-line row here; a brand-new kind also registers an executor in
- * DEFAULT_NODE_EXECUTORS (or is injected via FlowRunArgs.nodeExecutors). Either
- * way the dispatch loop below is never touched — this closes the ADR-028
- * "new flow = no orchestrator change" promise for the common cases.
+ * The declared phase-executor allowlist (R2-01-F2). These are the ONLY
+ * `AgentDefinition.executor` values the flow engine recognises as a
+ * phase-specific `NodeKind` — the DECLARED replacement for the old hardcoded
+ * `AGENT_KIND` object literal. Set via `executor:` frontmatter on the four
+ * phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
+ * reflector); an agent def with no `executor` resolves to the generic
+ * 'agent' kind instead.
  */
-const AGENT_KIND: Readonly<Record<string, NodeKind>> = {
-  'project-manager': 'pm',
-  'developer-ralph': 'dev',
-  'developer-unifier': 'unifier',
-  reflector: 'reflect',
-};
+export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
+type PhaseExecutorKind = (typeof PHASE_EXECUTOR_KINDS)[number];
 
-/** Resolve a node's executor kind from its gate/agent fields via the data tables. */
-export function resolveNodeKind(node: FlowNode): NodeKind {
+function isPhaseExecutorKind(value: string): value is PhaseExecutorKind {
+  return (PHASE_EXECUTOR_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Resolve a node's executor kind from its gate/agent fields. Gates resolve
+ * via the GATE_KIND table (unchanged). Agent nodes resolve from the AGENT
+ * DEFINITION (R2-01-F2) instead of a hardcoded slug table:
+ *   - no def for `node.agent` → 'unknown' (genuinely unresolvable ref).
+ *   - def declares a valid `executor` (one of PHASE_EXECUTOR_KINDS) → that kind.
+ *   - def declares an `executor` NOT in PHASE_EXECUTOR_KINDS → 'unknown'
+ *     (invalid declared executor; also caught by lint's node-executor check).
+ *   - def exists with no `executor` → 'agent' (generic library agent, runs
+ *     via the F1 execAgent path).
+ */
+export function resolveNodeKind(node: FlowNode, agents: ReadonlyMap<string, AgentDefinition>): NodeKind {
   if (node.gate && GATE_KIND[node.gate]) return GATE_KIND[node.gate];
-  if (node.agent && AGENT_KIND[node.agent]) return AGENT_KIND[node.agent];
-  return 'unknown';
+  if (!node.agent) return 'unknown';
+  const def = agents.get(node.agent);
+  if (!def) return 'unknown';
+  if (def.executor !== undefined) return isPhaseExecutorKind(def.executor) ? def.executor : 'unknown';
+  return 'agent';
 }
 
 // ---------------------------------------------------------------------------
@@ -561,6 +578,10 @@ type NodeExecContext = {
   wedgeDetector: WedgeDetector;
   nodeBudget: AgentBudgets | undefined;
   state: NodeRunState;
+  /** The run's agent roster (R2-01-F2), slug → definition. Built once per run. */
+  agents: ReadonlyMap<string, AgentDefinition>;
+  /** Artifact names produced by this node's inbound edges (R2-01-F2, execAgent's prompt context). */
+  inboundArtifacts: string[];
 };
 
 export type NodeExecutor = (ctx: NodeExecContext) => Promise<void>;
@@ -698,17 +719,75 @@ const execReflect: NodeExecutor = async (ctx) => {
   }
 };
 
-/** unknown: graceful skip — record the node as visited and continue. */
+/**
+ * unknown: a genuinely unresolvable node — no agent def for `node.agent`, or
+ * an invalid declared `executor` (R2-01-F2). This is now an ERROR, not a
+ * quiet skip (AC #4): the flow proceeds (the DAG walk itself is not aborted
+ * here — the node just performs no work), but the event is loud so a
+ * misconfigured flow surfaces instead of silently doing nothing.
+ */
 const execUnknown: NodeExecutor = async (ctx) => {
   ctx.nodeLogger.emit({
     initiative_id: ctx.input.initiativeId,
     phase: 'orchestrator',
     skill: 'flow-runner',
-    event_type: 'log',
+    event_type: 'error',
     input_refs: [],
     output_refs: [],
     message: 'flow-runner.unknown-node-skipped',
     metadata: { node_id: ctx.nodeId, agent: ctx.node.agent, gate: ctx.node.gate },
+  });
+};
+
+/**
+ * Assemble a minimal prompt for a generic execAgent run: the agent's own
+ * SKILL.md process intent (`def.body`) followed by a small "## Run context"
+ * section naming the project, initiative, and any inbound artifact refs.
+ * Richer assembly (composition.tools/mcps/hooks, artifact bodies) is later
+ * work (R2-05/R4) — kept deliberately small here.
+ */
+function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
+  const { input, inboundArtifacts } = ctx;
+  const projectName = basename(input.projectRepoPath);
+  const lines = [
+    def.body.trim(),
+    '',
+    '## Run context',
+    `- Project: ${projectName} (${input.projectRepoPath})`,
+    `- Initiative: ${input.initiativeId}`,
+    `- Inbound artifacts: ${inboundArtifacts.length > 0 ? inboundArtifacts.join(', ') : 'none'}`,
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * agent: the generic F1 runAgent path (R2-01-F2, AC #1). Resolves ONLY when
+ * `resolveNodeKind` picked 'agent' — a real roster def with no declared
+ * `executor` (i.e. not one of the four legacy phase executors). No gate, no
+ * runWithWedge (runAgent takes no AbortSignal — abort-chaining is R2-03-F4's
+ * job; wedge budgets are inert in production regardless, ADR-036 forbids the
+ * primitive running its own gate).
+ */
+const execAgent: NodeExecutor = async (ctx) => {
+  const { node, input, nodeLogger, agents } = ctx;
+  const def = agents.get(node.agent ?? '');
+  if (!def) {
+    // Defensive: resolution only ever picks 'agent' when the def exists.
+    throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
+  }
+
+  const prompt = buildAgentPrompt(def, ctx);
+
+  await runAgent(def, {
+    runId: input.cycleId ?? input.initiativeId,
+    logger: nodeLogger,
+    workdir: input.worktreePath,
+    prompt,
+    bindings: {
+      project: { name: basename(input.projectRepoPath), repoPath: input.projectRepoPath },
+      initiative: { id: input.initiativeId, manifestPath: input.manifestPath },
+    },
+    artifactRefs: ctx.inboundArtifacts,
   });
 };
 
@@ -725,6 +804,7 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   unifier: execUnifier,
   review: execReview,
   reflect: execReflect,
+  agent: execAgent,
   unknown: execUnknown,
 };
 
@@ -819,11 +899,18 @@ export async function runFlow({
     listArtifactTemplates(FLOW_RUNNER_ROOT).map((t) => [t.id, { id: t.id, kind: t.kind, schema: t.schema }]),
   );
 
+  // R2-01-F2: the run's agent roster, built once per run (cheap — a handful
+  // of skill dirs). Node-kind resolution reads `AgentDefinition.executor` off
+  // this map instead of a hardcoded slug table.
+  const agents = new Map<string, AgentDefinition>(
+    listAgentDefinitions(resolve(FLOW_RUNNER_ROOT, 'skills')).map((a) => [a.slug, a]),
+  );
+
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
     if (!node) continue; // defensive
 
-    const kind = resolveNodeKind(node);
+    const kind = resolveNodeKind(node, agents);
 
     // M3-3: Rate-limit gate — before every node spawn, wait if a prior
     // rate-limit recorded a resetsAt. No-op when nothing is recorded.
@@ -844,6 +931,8 @@ export async function runFlow({
     // Wrap costLogger with wedge tracking for this node's execution.
     const nodeLogger = wrapLoggerForWedge(costLogger, wedgeDetector, () => Date.now());
 
+    const inboundArtifacts = flow.edges.filter((e) => e.to === nodeId).map((e) => e.artifact);
+
     const ctx: NodeExecContext = {
       node,
       nodeId,
@@ -854,6 +943,8 @@ export async function runFlow({
       wedgeDetector,
       nodeBudget,
       state,
+      agents,
+      inboundArtifacts,
     };
 
     // ADR-027: assert the node's inbound artifacts exist before it runs. The

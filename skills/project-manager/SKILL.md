@@ -3,6 +3,7 @@ name: project-manager
 description: Decomposes an initiative into atomic, dependency-ordered work items with explicit acceptance criteria the developer loop can verify.
 phase: project-manager
 surface: unattended
+executor: pm
 purpose: Decompose an approved initiative into atomic, dependency-ordered work items with verifiable acceptance criteria.
 composition:
   skills: [brain-query]
