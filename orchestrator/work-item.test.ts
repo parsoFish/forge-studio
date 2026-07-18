@@ -352,6 +352,24 @@ test('verification_artifact: path not in files_in_scope is rejected', () => {
   assert.ok(errors.some((e) => e.includes('verification_artifact')), `got ${JSON.stringify(errors)}`);
 });
 
+test('domain (R4-05-F7): round-trips when set, omitted when unset', () => {
+  const w = fixture({ domain: 'auth' });
+  const md = serializeWorkItem(w);
+  assert.match(md, /domain:/);
+  const parsed = parseWorkItem(md);
+  assert.equal(parsed.domain, 'auth');
+  assert.deepEqual(validateWorkItem(parsed), []);
+
+  const plain = serializeWorkItem(fixture({ domain: undefined }));
+  assert.ok(!plain.includes('domain:'), 'domain must not appear when undefined');
+  assert.equal(parseWorkItem(plain).domain, undefined);
+});
+
+test('domain: empty string is rejected by validateWorkItem', () => {
+  const errors = validateWorkItem(fixture({ domain: '' }));
+  assert.ok(errors.some((e) => e.includes('domain')), `got ${JSON.stringify(errors)}`);
+});
+
 test('creates: subset of files_in_scope round-trips', () => {
   const w = fixture({
     files_in_scope: ['src/handler.ts', 'tests/x.test.ts'],

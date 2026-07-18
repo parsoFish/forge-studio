@@ -21,6 +21,7 @@ import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
 import { PM_BRAIN_ACCESS } from './pm-invocation.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
+import { parseManifest } from './manifest.ts';
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-06-06-pm-contract-test
@@ -186,6 +187,76 @@ test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeed
     const events = readEvents(h.logger);
     const end = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
     assert.ok(end, 'expected a successful pm.end event');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids) onto the manifest', async () => {
+  const h = setupHarness({
+    ...BASE_CONFIG,
+    acceptance_gate: { match: 'acceptancetests', required: true },
+  });
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [
+      { wiId: 'WI-1' },
+      { wiId: 'WI-2', filename: 'azuredevops/internal/acceptancetests/resource_foo_test.go', gate: ACC_GATE },
+    ]);
+    await runProjectManager(h.input, h.logger, { queryFn });
+    const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
+    assert.deepEqual(manifest.specs, ['WI-1', 'WI-2']);
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto the manifest', async () => {
+  const h = setupHarness({
+    ...BASE_CONFIG,
+    acceptance_gate: { match: 'acceptancetests', required: true },
+  });
+  try {
+    // Neither WI's gate matches "acceptancetests" — same fixture as the
+    // "no live-acc WI → PM pass fails" test above.
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await assert.rejects(() => runProjectManager(h.input, h.logger, { queryFn }));
+    const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
+    assert.equal(manifest.specs, undefined, 'a failed pass must leave the manifest specs list untouched');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('R4-05-T4: a flagged (under-covered) decomposition still succeeds and emits plan.completeness', async () => {
+  const h = setupHarness({ ...BASE_CONFIG });
+  try {
+    // MANIFEST_BODY states one AC unit ("the resource ... persists in the
+    // external system"); the stub WI's own AC/body vocabulary ("a test",
+    // "the function runs", "it returns a value") shares no significant
+    // tokens with it — a genuinely uncovered stated unit, i.e. the pass
+    // *looks* successful (valid WI set, no gate violations) but under-covers
+    // the stated scope. This must NOT block the pass.
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
+    await runProjectManager(h.input, h.logger, { queryFn }); // no throw — dispatch NOT blocked
+
+    const events = readEvents(h.logger);
+    const completenessEvent = events.find((e) => e.message === 'plan.completeness');
+    assert.ok(completenessEvent, 'expected a plan.completeness event to be emitted');
+    const metadata = completenessEvent!.metadata as {
+      stated_units: number;
+      covered_units: number;
+      uncovered: string[];
+      flagged: boolean;
+    };
+    assert.equal(metadata.stated_units, 1);
+    assert.equal(metadata.covered_units, 0);
+    assert.equal(metadata.uncovered.length, 1);
+    assert.equal(metadata.flagged, true);
+
+    // The end-of-pass event is still a clean success — the completeness flag
+    // never touches the pass outcome or the `failed` boolean.
+    const end = events.find((e) => e.event_type === 'end' || e.event_type === 'error');
+    assert.equal(end?.event_type, 'end', 'pass must still succeed — plan.completeness never flips this to `error`');
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }

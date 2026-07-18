@@ -20,6 +20,7 @@ import {
   readManifestFlowId,
   persistManifestCycleId,
   persistManifestResumeFromUnifier,
+  persistManifestSpecs,
   type InitiativeManifest,
 } from './manifest.ts';
 
@@ -388,4 +389,66 @@ test('P4: architect_cost_usd of 0 round-trips (zero is a valid measurement)', ()
   const parsed = parseManifest(serializeManifest(m));
   assert.equal(parsed.architect_cost_usd, 0);
   assert.equal(parsed.architect_duration_ms, 0);
+});
+
+// ---------- R4-05-F2: specs (initiative → spec-WI back-references) ----------
+
+test('R4-05-F2: specs round-trips through parse -> serialize (present multi-entry)', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', 'WI-2', 'WI-3'] };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /specs:/);
+  const parsed = parseManifest(serialised);
+  assert.deepEqual(parsed.specs, ['WI-1', 'WI-2', 'WI-3']);
+});
+
+test('R4-05-F2: specs is absent by default and omitted on serialize', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /specs:/);
+  assert.equal(parseManifest(plain).specs, undefined);
+});
+
+test('R4-05-F2: an empty specs array is omitted on serialize (mirrors depends_on_initiatives)', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: [] };
+  const serialised = serializeManifest(m);
+  assert.doesNotMatch(serialised, /specs:/);
+  assert.equal(parseManifest(serialised).specs, undefined);
+});
+
+test('validateManifest: rejects a non-string specs entry', () => {
+  const m = { ...fixture(), specs: ['WI-1', 123] as unknown as string[] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /specs/i.test(e)), errors.join('; '));
+});
+
+test('validateManifest: rejects an empty-string specs entry', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', ''] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /specs/i.test(e)), errors.join('; '));
+});
+
+test('validateManifest: accepts a well-formed specs list', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', 'WI-2'] };
+  const errors = validateManifest(m);
+  assert.equal(errors.length, 0, `unexpected errors: ${errors.join('; ')}`);
+});
+
+test('R4-05-F2: persistManifestSpecs writes then re-reads the list, overwrites on second call, and never throws on a missing file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-specs-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).specs, undefined);
+
+    persistManifestSpecs(p, ['WI-1', 'WI-2']);
+    assert.deepEqual(parseManifest(readFileSync(p, 'utf8')).specs, ['WI-1', 'WI-2']);
+
+    // NOT one-shot: a second call overwrites the list (unlike cycle_id).
+    persistManifestSpecs(p, ['WI-1', 'WI-2', 'WI-3']);
+    assert.deepEqual(parseManifest(readFileSync(p, 'utf8')).specs, ['WI-1', 'WI-2', 'WI-3']);
+
+    // Missing file → no-op, must not throw.
+    persistManifestSpecs(join(dir, 'nope.md'), ['WI-1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

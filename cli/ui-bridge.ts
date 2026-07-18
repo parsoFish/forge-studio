@@ -40,6 +40,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
+import { enqueuePlanRun } from '../orchestrator/enqueue-plan-run.ts';
 import {
   readReviewComments,
   writeReviewComments,
@@ -1017,6 +1018,34 @@ async function handleHttp(
       });
       const ok = results.every((r) => r.ok);
       sendJson(res, 200, { ok, results }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Plan (R4-05 / F4) — the roadmap's per-initiative "Plan" trigger. Repoints
+  // ONE WI-less initiative's manifest at the forge-architect flow (decompose
+  // only) and makes it claimable — the same manifest-move queue-state
+  // transition as "start development" above, just single-id: unlike the batch
+  // develop/start route, there is exactly one outcome per request here, so it
+  // maps directly onto real HTTP statuses instead of a per-id results array.
+  // No in-request spawn — the scheduler claims it later and runs
+  // execPm -> runProjectManager.
+  if (method === 'POST' && url.startsWith('/api/initiatives/') && url.endsWith('/plan')) {
+    const initiativeId = decodeURIComponent(url.slice('/api/initiatives/'.length, url.length - '/plan'.length));
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    try {
+      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot });
+      const httpStatus =
+        result.status === 'enqueued' ? 200 :
+        result.status === 'not-found' ? 404 :
+        result.status === 'already-running' ? 409 :
+        500;
+      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

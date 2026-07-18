@@ -422,3 +422,11 @@ pass across all five roadmaps plus four operator decisions:
   agents/starters wire, F3 BUILD-tab interactive-placement gating, F4
   descriptor-sourced readiness. F2 remains split to R2-07. **Wave 1 (R5-04 +
   R2-01 + R2-02) complete.**
+- 2026-07-18 — **Wave 2 opened: R4-05 implemented** (branch `feat/r4-05-plan-agent`; R4 gains baseline **R4-B10** —
+  see `R4-ootb-suite.md`). The plan agent = the evolved `project-manager` in place; F1/F2 `specs:` back-refs, F3
+  ADR-037 accepted (**item-3 sonnet-assist DEFERRED**), F7 `domain`, F4/F5 one shared `execPm`→`runProjectManager`
+  pipeline, F6 non-blocking `plan.completeness`. **Two operator-reviewed scope decisions (2026-07-18):** the F3
+  sonnet-assist deferral (re-entry condition recorded) and — resolving an F4 spec-vs-repo mismatch — **F4 built as
+  a flow-path manifest-move (Option A), NOT the runAgent primitive** (the plan agent is still the specialized PM
+  phase runner runAgent can't drive without degradation; literal runAgent-consumption deferred to R4-01-F2, wave
+  4). R4-11 is wave-2's other half.

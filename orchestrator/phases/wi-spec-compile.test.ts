@@ -165,6 +165,35 @@ test('injectConstraintClauses: non-matching selector is excluded', () => {
   }
 });
 
+test('injectConstraintClauses: R4-05-F7 — wi.domain selector injects only into the matching-domain WI', () => {
+  const dir = mkTmp('forge-wi-inject-');
+  try {
+    const items = [
+      fixture({ work_item_id: 'WI-1', domain: 'auth' }),
+      fixture({ work_item_id: 'WI-2', domain: 'ui' }),
+      fixture({ work_item_id: 'WI-3' }), // no domain set
+    ];
+    const b = block({
+      id: 'auth-only',
+      selector: { kind: 'and', terms: [{ namespace: 'wi', field: 'domain', glob: 'auth' }] },
+      content: 'Auth-domain constraint.',
+    });
+    const { items: updated, injected, writeErrors } = injectConstraintClauses(dir, items, manifestFixture(), [b]);
+    assert.deepEqual(writeErrors, []);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0]!.workItemId, 'WI-1');
+
+    const wi1 = updated.find((i) => i.work_item_id === 'WI-1')!;
+    const wi2 = updated.find((i) => i.work_item_id === 'WI-2')!;
+    const wi3 = updated.find((i) => i.work_item_id === 'WI-3')!;
+    assert.match(wi1.body, /Auth-domain constraint\./);
+    assert.equal(wi2.body, items[1]!.body);
+    assert.equal(wi3.body, items[2]!.body);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('injectConstraintClauses: idempotent — re-running with the same id + content injects nothing new', () => {
   const dir = mkTmp('forge-wi-inject-');
   try {

@@ -112,6 +112,30 @@ trigger, no blocked-until-WIs concept; stuck-cycle recovery is a standalone
 `/recovery` tab (known-gaps §4b.4 flags it for folding); no cross-project
 aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 
+### R4-B10 Plan agent (implemented)
+
+R4-05 landed 2026-07-18 (wave 2, branch `feat/r4-05-plan-agent`). The `project-manager` skill IS forge's plan
+agent — evolved **in place** (`executor: pm`, seed flows untouched; the PM→generic-agent migration remains
+R4-01-F2, wave 4):
+
+- **Spec back-refs (F2):** `InitiativeManifest.specs?: string[]` + `persistManifestSpecs`
+  (`orchestrator/manifest.ts`), written on the PM pass success path (`orchestrator/phases/project-manager.ts`);
+  ADR-015 amended (`docs/decisions/015-work-item-format.md`).
+- **ADR-037 (F3):** Accepted at the plan-agent seam (`docs/decisions/037-compiled-wi-contracts.md`). Deterministic
+  core (items 1+2 — `orchestrator/phases/wi-spec-compile.ts` + `orchestrator/constraint-blocks.ts`) + ralph-spec-lint
+  (item 4) are as-built; **item 3 (the sonnet-assist skill) DEFERRED** (see R4-05 implemented-notes). `WorkItem.domain?`
+  added (F7 — `orchestrator/work-item.ts`) so `applies_to: wi.domain=…` selectors match.
+- **Entry paths (F4/F5):** both dispatch decomposition through ONE pipeline — `execPm` → `runProjectManager`
+  (`orchestrator/flow-runner.ts` / `orchestrator/phases/project-manager.ts`). F5 = architect-accept promote
+  (existing). F4 = `orchestrator/enqueue-plan-run.ts` (`enqueuePlanRun`, a manifest-move mirror of
+  `enqueue-develop-run.ts` repointing to `flow_id: forge-architect`) + `POST /api/initiatives/:id/plan`
+  (`cli/ui-bridge.ts`; `exempt-local` in `cli/dry-bridge.ts`'s route-coverage table). Byte-identical single-pipeline
+  proof: `orchestrator/project-manager-shared-pipeline.test.ts`. **F4 is a flow-path manifest-move, NOT runAgent**
+  (implemented-notes; runAgent-consumption deferred to R4-01-F2).
+- **Completeness (F6):** non-blocking `orchestrator/phases/decompose-completeness.ts` emitting the
+  `plan.completeness` event `{ stated_units, covered_units, uncovered, flagged }` (the R4-11-F4 attention-strip
+  contract) on the PM success path — never affects the pass outcome or dispatch.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -279,7 +303,19 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
 
 ### R4-05 Plan agent
 
-- **Status:** planned  ·  **Wave:** 2 (with R4-11 — the highest-leverage new capability)
+- **Status:** **implemented** (2026-07-18, wave 2 — as-built baseline R4-B10)  ·  **Wave:** 2 (with R4-11 — the highest-leverage new capability)
+- **Implemented-notes (2026-07-18, branch `feat/r4-05-plan-agent`):** F1/F2/F5/F6/F7 landed as specced. **Two
+  operator-reviewed scope decisions:** (a) **F3** — ADR-037 accepted at the plan-agent seam, but decision **item 3
+  (the bounded sonnet-assist skill) is DEFERRED** — the deterministic core (items 1+2) + ralph-spec-lint (item 4)
+  already close the proven failure mode; the assist targets an unproven narrow judgment case (ambiguous
+  `applies_to` / novel port-checklist synthesis); building a speculative LLM spawn contradicts the
+  simplest-thing/shave-guardrails north star. Re-entry: a real cycle needs a constraint the deterministic selector
+  can't express. (b) **F4** — the standalone dispatch was built as a **flow-path manifest-move**
+  (`enqueuePlanRun` → the scheduler runs `execPm`→`runProjectManager`, the SAME code path as F5), **NOT** via the
+  `runAgent` primitive: the plan agent is still the specialized PM phase runner (a load-bearing budget cap,
+  brain-nav system prompt, per-turn telemetry, brain-gate) that the single-shot `runAgent` cannot drive without
+  degradation. The literal `runAgent`-consumption is deferred to **R4-01-F2** (the PM→runAgent migration, wave 4).
+  **Operator chose this (2026-07-18, Option A).**
 - **Depends on:** R2-01 (**hard, for F4** — standalone dispatch = the
   R2-01-F1 runAgent primitive, spawned behind R5-01's guard; no new bespoke
   runner or CLI case), R4-11 *(soft — the standalone entry point lives on the
@@ -316,7 +352,7 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     completes. ACs: schema documented; a decomposed initiative's manifest
     lists its specs; scheduler honours spec dependencies.
   - **R4-05-F3 wi-spec-compiler fold-in (ADR-037).** Deterministic core stays;
-    build the bounded sonnet assist (known-gaps §4.1); carry ADR-037's named
+    build the bounded sonnet assist (known-gaps §4.1) **[DEFERRED 2026-07-18 — see R4-05 implemented-notes]**; carry ADR-037's named
     risks as explicit specs: `creates:` escape for pure-modification WIs
     (verification_artifact stand-in), `detectHiddenCoupling` reject→compile
     test coverage sized to its quieter-failure risk, `profile.md`
@@ -333,7 +369,10 @@ aggregate view (ADR-031 retired the old pane; MVUS still requires one).
     exist — the lock itself is R4-11-F2's; completing standalone planning
     flips the state that lock reads. ACs: an unplanned initiative shows the
     trigger, a planned one doesn't; develop dispatches once planned; the
-    dispatch appears in R5-01's route-coverage table.
+    dispatch appears in R5-01's route-coverage table. **[implemented flow-path
+    per operator Option A 2026-07-18 — a manifest-move (`enqueuePlanRun`) reusing
+    `execPm`→`runProjectManager`, NOT the runAgent primitive; see R4-05
+    implemented-notes. The R4-11-F2 UI-facing lock/trigger ACs land with R4-11.]**
   - **R4-05-F5 Entry path 2 — batch on architect accept.** Accepting the PLAN
     gate queues planning across all registered initiatives (today's
     behaviour, re-expressed through the same planner). ACs: both entry paths
@@ -701,3 +740,9 @@ free R4 ID's features.
   mechanics with explicit late sequencing; demo-mechanism dispositions recorded
   in R4-B6; scope-ownership note on R4-11 (D6); doctrine coupling clarified as
   artifact-contract (E11).
+- 2026-07-18 — **R4-05 implemented** (wave 2, branch `feat/r4-05-plan-agent`; R4 gains baseline **R4-B10**). Plan
+  agent = the evolved `project-manager` in place. F1/F2 (`specs:` back-ref) + F3 (ADR-037 accepted at the
+  plan-agent seam; **item-3 sonnet-assist DEFERRED** with re-entry condition) + F7 (`domain`) + F4/F5 (both entry
+  paths converge on one `execPm`→`runProjectManager` pipeline; **F4 built as a flow-path manifest-move per operator
+  Option A 2026-07-18, NOT the runAgent primitive — literal runAgent-consumption deferred to R4-01-F2**) + F6
+  (non-blocking `plan.completeness` event). Wave-2's R4-05 half; R4-11 is the other half.

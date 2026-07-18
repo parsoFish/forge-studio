@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
-import { parseManifest, type InitiativeManifest } from '../manifest.ts';
+import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
 import {
   PM_ALLOWED_TOOLS,
   PM_DISALLOWED_TOOLS,
@@ -38,6 +38,7 @@ import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
 import { withIdleDeadline } from '../stream-deadline.ts';
 import { compileWorkItemSpecs } from './wi-spec-compile.ts';
+import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 
 /**
  * Injection seam for tests. The live cycle uses `sdkQuery` from the
@@ -596,7 +597,58 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     },
   });
 
-  if (!failed) return { kind: 'success' };
+  if (!failed) {
+    // R4-05-F2: persist the initiative→specs back-reference now that
+    // decomposition has actually COMPLETED — this is the pass's own
+    // success path (the same `!failed` check that returns `kind: 'success'`
+    // below), i.e. a clean WI set with no parse/set/per-item/coupling/gate
+    // errors and no incomplete checkpoint. A failed or invalid pass never
+    // reaches here, so the manifest's specs list is left untouched (never
+    // overwritten with partial or rejected WI ids). Overwrites on every
+    // successful pass (a re-decomposition replaces the list).
+    persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
+
+    // R4-05-T4: non-blocking decompose-completeness check (operator decision
+    // 2026-07-17). The delivery gate catches under-*delivery*; this catches
+    // under-*planning* — scope stated in the initiative body but never
+    // decomposed into a WI at all. Runs ONLY here, on the pass's own success
+    // path, AFTER the WI set is final. It NEVER affects `failed`, the pass
+    // outcome, or dispatch — a flagged decomposition still returns
+    // `{ kind: 'success' }` below and proceeds to develop exactly as before.
+    // `plan.completeness`'s `metadata` shape is the R4-11-F4 contract (a
+    // later PR's attention-strip consumer): keep `stated_units`,
+    // `covered_units`, `uncovered: string[]`, `flagged: boolean` stable.
+    // Best-effort: F6 is advisory telemetry — a completeness-check or emit
+    // failure must NEVER reach the `return { kind: 'success' }` below, so the
+    // non-blocking guarantee is structural (matching persistManifestSpecs and
+    // the other success-path telemetry writers here). checkDecomposeCompleteness
+    // is a total pure function on the validated success path, so this guard
+    // never fires in practice — it just makes "never affects dispatch"
+    // unconditional rather than incidental.
+    try {
+      const completeness = checkDecomposeCompleteness(manifest.body, items);
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: parentEventId,
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'log',
+        input_refs: [input.manifestPath],
+        output_refs: [workItemsDir],
+        message: 'plan.completeness',
+        metadata: {
+          stated_units: completeness.statedUnits,
+          covered_units: completeness.coveredUnits,
+          uncovered: completeness.uncovered,
+          flagged: completeness.flagged,
+        },
+      });
+    } catch {
+      /* advisory only — swallow so F6 can never affect the pass outcome */
+    }
+
+    return { kind: 'success' };
+  }
 
   const summary = [
     items.length === 0 ? 'no work items emitted' : null,
