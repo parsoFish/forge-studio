@@ -315,11 +315,18 @@ export const journey = defineJourney({
               console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
               cleanScratchFlow(); // defensive — a prior run's leftover, if any
 
-              // R2-02-F3: register the one-shot capability fixture BEFORE the
-              // navigation below so its resulting GET /api/studio/agents is the
-              // one that gets intercepted — flips CAPABILITY_FIXTURE_AGENT's
-              // capability.interactive to true for exactly one response, then
-              // self-unroutes (see CAPABILITY_FIXTURE_AGENT comment up top).
+              // R2-02-F3: register the capability fixture BEFORE the navigation
+              // below so /flows/new's GET /api/studio/agents traffic is
+              // intercepted — flips CAPABILITY_FIXTURE_AGENT's
+              // capability.interactive to true (see CAPABILITY_FIXTURE_AGENT
+              // comment up top). /flows/new fires TWO independent fetches to
+              // this endpoint on mount (loadBuildData's agents prop and
+              // AgentPalette's own load), so the handler mutates EVERY
+              // intercepted response for the beat's duration — idempotently,
+              // it only ever rewrites the one agent's field — rather than
+              // unrouting after the first hit, which left the fetch that lost
+              // the race unmutated. Cleanup is the existing end-of-beat
+              // page.unroute below, once both fetches are safely done with.
               await page.route('**/api/studio/agents', async (route) => {
                 const response = await route.fetch();
                 const body = await response.json();
@@ -328,7 +335,6 @@ export const journey = defineJourney({
                       ? { ...a, capability: { interactive: true, runtimeSdks: a.capability?.runtimeSdks ?? [] } }
                       : a))
                   : body.agents;
-                await page.unroute('**/api/studio/agents');
                 await route.fulfill({ response, json: { ...body, agents } });
               });
 

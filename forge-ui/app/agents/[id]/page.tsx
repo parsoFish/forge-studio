@@ -60,8 +60,10 @@ type AgentState = {
   disallowedTools: string[];
   phase: string;
   // R2-02-F4: server-computed F1 capability descriptor, carried through
-  // as-is (never re-derived client-side) — undefined only before the first
-  // load/save round-trip (a brand-new blank/starter-picked agent).
+  // as-is (never re-derived client-side) — undefined only for a genuinely
+  // blank agent, before the first load/save round-trip. A starter-picked
+  // agent DOES carry a capability (applyStarter → parseAgent(starter),
+  // fed by the /api/studio/starters threading).
   capability?: AgentCapabilityDescriptor;
 };
 

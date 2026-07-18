@@ -392,8 +392,10 @@ export function parseRun(raw: unknown): Run {
  * `AgentCapabilityDescriptor` type. Carries the server-computed value
  * through verbatim — no capability fact is derived here. Returns undefined
  * if the field is absent or malformed (e.g. an older bridge payload).
+ * Exported for direct unit testing (AC3: the value is carried, not
+ * re-derived — see `studio-client.test.ts`).
  */
-function parseCapability(raw: unknown): AgentCapabilityDescriptor | undefined {
+export function parseCapability(raw: unknown): AgentCapabilityDescriptor | undefined {
   const c = raw as Partial<AgentCapabilityDescriptor> | undefined;
   if (!c || typeof c.interactive !== 'boolean' || !Array.isArray(c.runtimeSdks)) return undefined;
   return { interactive: c.interactive, runtimeSdks: c.runtimeSdks as string[] };

@@ -174,7 +174,14 @@ inventory rather than one shared page-level contract:
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
-  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`.
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. The palette's
+  agent chips (`AgentPalette.tsx`) carry
+  `[data-palette-chip][data-chip-ref][data-chip-placeable]` — an interactive
+  agent (per the F1 capability descriptor) renders greyed-out and
+  `data-chip-placeable="false"`, disabling its own dragstart. A raw drop
+  naming an interactive agent is rejected too (belt-and-suspenders, in
+  `FlowBuilderCanvas.onDrop`), rendering
+  `[data-component="canvas-drop-reject"][data-drop-reject-message]`.
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
   root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`

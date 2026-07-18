@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import type { AgentDefinition } from './types.ts';
 import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from './registry.ts';
 import { validateAgent, validateFlow } from './validate.ts';
+import { agentCapabilityDescriptor } from './derive.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');
@@ -51,6 +52,21 @@ describe('studio starter library', () => {
 
   it('listStarterAgents degrades to [] when the starters dir is absent', () => {
     assert.deepEqual(listStarterAgents('/nonexistent/forge/root'), []);
+  });
+
+  // R2-02-F1: GET /api/studio/starters threads the same server-computed
+  // capability descriptor onto starter agents as GET /api/studio/agents
+  // (cli/bridge-studio.ts). Guard the source it's built from: the descriptor
+  // must compute cleanly (no throw, well-formed shape) for every real
+  // starter agent the New-Agent picker offers.
+  it('agentCapabilityDescriptor computes for every starter agent (threaded onto GET /api/studio/starters)', () => {
+    const starters = listStarterAgents(ROOT);
+    assert.deepEqual(starters.map((a) => a.slug).sort(), [...AGENT_SLUGS].sort());
+    for (const def of starters) {
+      const descriptor = agentCapabilityDescriptor(def);
+      assert.equal(typeof descriptor.interactive, 'boolean', `${def.slug}: interactive must be boolean`);
+      assert.ok(Array.isArray(descriptor.runtimeSdks), `${def.slug}: runtimeSdks must be an array`);
+    }
   });
 
   it('loadStarterFlow returns the basic plan→dev→review flow (New-Flow canvas seed)', () => {
