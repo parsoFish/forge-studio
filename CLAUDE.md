@@ -234,7 +234,19 @@ inventory rather than one shared page-level contract:
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
-  The recovery page groups by initiative too (see `/recovery` below).
+  A recoverable initiative (`in-flight | ready-for-review | failed` —
+  deliberately excluding `merged`, a transient pass-through, and terminal
+  `pending`/`done`) gets recovery affordances right on its `InitiativeCard`
+  inside the popover (R4-11-T3, folded off the retired standalone
+  `/recovery` page — see below): `[data-recovery-item][data-recovery-initiative]
+  [data-recovery-status][data-recovery-attempt-count]` (+
+  `[data-recovery-prior-attempts]` when a prior attempt exists) with
+  `[data-action="recovery-inspect"|"recovery-requeue"|"recovery-abandon"]`
+  buttons; inspecting expands
+  `[data-section="recovery-detail"][data-recovery-detail-initiative]`
+  (+ `[data-recovery-commits]` when the worktree has commits, and a
+  `[data-recovery-note]` result line after requeue/abandon). The recovery
+  API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
 - **`/architect/new` + `/architect/[sid]/interview`.** `/architect/new` is
   the native "start a run" entry that replaced the retired `/dashboard`
   launcher — `[data-page="architect-new"][data-page-ready]` wrapping the
@@ -273,12 +285,11 @@ inventory rather than one shared page-level contract:
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
   (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`).
-- **`/recovery`** — the stuck-initiative operator surface, grouped by
-  initiative: `[data-page="recovery"][data-page-ready][data-recovery-count]`
-  with per-item
-  `[data-recovery-item][data-recovery-initiative][data-recovery-status][data-recovery-attempt-count]`
-  (+ `[data-recovery-prior-attempts]`) and an expandable
-  `[data-section="recovery-detail"][data-recovery-detail-initiative]`.
+- **`/recovery`** — retired as a standalone page (R4-11-T3): the
+  stuck-initiative inspect/requeue/abandon affordances folded onto the
+  per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
+  route is now a permanent client-side redirect stub into `/` (bookmarks
+  keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
 - **`/skills`** — no standalone catalog route; the OOTB
   community-sourced skill library (`studio/catalog.yaml`, with provenance +
   stars) surfaces inside the agent builder's palette (`/agents/new`,
@@ -313,10 +324,10 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 10 user-story journeys in
+is a thin runner over 9 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
 `flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
-`knowledge`, `recovery`, `demo-builder` — one file per journey (plus
+`knowledge`, `demo-builder` — one file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
 linear cycle. The standalone `swap-runtime` journey was retired
