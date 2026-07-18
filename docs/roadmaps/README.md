@@ -409,3 +409,10 @@ pass across all five roadmaps plus four operator decisions:
   decision 4 gains its "Landed as ADR 038" closer. The orientation-doc
   strike-list amendments live in their own files (CLAUDE.md, README.md,
   ARCHITECTURE.md, MVUS, market-and-differentiation, repo-map).
+- 2026-07-18 — Wave-1 execution: R5-04 (#31) + R2-01 (#32) implemented +
+  merged (R2 gains baseline R2-B8). **R2-02 re-scoped + R2-07 minted**
+  (`R2-runnable-componentry.md`): the R2-02 understand pass found
+  `composition.tools` and `allowed-tools` are disjoint vocabularies, so
+  R2-02-F2 (composition-single-source) splits out to **R2-07** with an
+  ADR-027 amendment as its first step; wave-1 R2-02 is F1+F3+F4. R2-07 is
+  post-wave-1 (unwaved), sequenced after R2-02 lands.
