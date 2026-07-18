@@ -13,6 +13,7 @@
  *   GET /api/studio/agents                  → { agents: (AgentDefinition & { capability: AgentCapabilityDescriptor })[] }
  *   GET /api/studio/flows                   → { flows: FlowDefinition[] }
  *   GET /api/studio/projects                → { projects }
+ *   GET /api/studio/projects/attention      → { attention: ProjectAttentionItem[] } (R4-11-F4)
  *   GET /api/studio/catalog                 → catalog content
  *
  * KB routes (GET + POST) live in bridge-studio-kbs.ts.
@@ -628,6 +629,21 @@ export async function handleStudioRoutes(
     return true;
   }
 
+  // ---- /api/studio/projects/attention (R4-11-F4) --------------------------
+  // Cross-project "which projects need my attention" aggregate for the
+  // library landing strip. One best-effort entry per registered project —
+  // a single project's read failure never sinks the whole aggregate.
+  if (url === '/api/studio/projects/attention') {
+    try {
+      const projects = loadProjectsWithMeta(ctx.forgeRoot);
+      const attention = projects.map((p) => buildProjectAttention(p.id, p.name, ctx.forgeRoot, ctx.logsRoot));
+      sendJson(res, 200, { attention }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- /api/studio/catalog ------------------------------------------------
   if (url === '/api/studio/catalog') {
     try {
@@ -807,18 +823,23 @@ export type ProjectRoadmap = {
   initiatives: RoadmapInitiative[];
 };
 
+/** One manifest owned by a project, resolved during a queue-wide scan. */
+type ScannedManifestEntry = {
+  initId: string;
+  status: QueueState;
+  /** Bare filename (e.g. `INIT-1.md`) — what `checkInitiativeDeps` expects. */
+  file: string;
+  manifest: ReturnType<typeof parseManifest>;
+};
+
 /**
- * Build a read-only roadmap for a project by scanning all queue dirs for
- * manifests owned by this project. For each initiative, `workItems` reads
- * WI-*.md from the work-items-snapshot in `_logs/` (or the live worktree)
- * regardless of queue status — decomposition is a fact about the WI
- * snapshot, not a function of which queue dir the manifest sits in
- * (R4-11-F2: a pending initiative can already be planned; the roadmap's
- * Plan-trigger lock reads `workItems === undefined` as "unplanned").
- *
- * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
+ * Scan every queue-state dir for manifests owned by `projectId`, in the same
+ * first-match-wins precedence ui-bridge/roadmap have always used (in-flight →
+ * ready-for-review → merged → done → failed → pending). Shared by
+ * `buildProjectRoadmap` and `buildProjectAttention` (R4-11-F4) so there is
+ * exactly one manifest-ownership scan, not two.
  */
-function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
+function scanProjectManifests(projectId: string, forgeRoot: string): ScannedManifestEntry[] {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const stateDirs: Array<[string, QueueState]> = [
     [queuePaths.inFlight, 'in-flight'],
@@ -831,10 +852,8 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     [queuePaths.pending, 'pending'],
   ];
 
-  // Collect all manifests for this project across all queue dirs. The first
-  // matching state wins (inFlight checked before pending) — same precedence as ui-bridge.
   const seen = new Set<string>();
-  const initiatives: RoadmapInitiative[] = [];
+  const entries: ScannedManifestEntry[] = [];
 
   for (const [dir, status] of stateDirs) {
     if (!existsSync(dir)) continue;
@@ -848,7 +867,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       const initId = file.replace(/\.md$/, '');
       if (seen.has(initId)) continue;
       const fp = join(dir, file);
-      let manifest;
+      let manifest: ReturnType<typeof parseManifest>;
       try {
         manifest = parseManifest(readFileSync(fp, 'utf8'));
       } catch {
@@ -856,29 +875,161 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       }
       if (manifest.project !== projectId) continue;
       seen.add(initId);
-
-      // Extract title from manifest body: first non-empty heading line, or fall back to id.
-      const titleMatch = manifest.body.match(/^##?\s+(.+)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : initId;
-
-      const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
-      const workItems = items.length > 0 ? items : undefined;
-
-      const blockedBy = checkInitiativeDeps(file, queuePaths);
-
-      initiatives.push({
-        initiativeId: initId,
-        title,
-        status,
-        dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
-        ready: blockedBy.length === 0,
-        blockedBy,
-        ...(workItems !== undefined ? { workItems } : {}),
-      });
+      entries.push({ initId, status, file, manifest });
     }
   }
 
+  return entries;
+}
+
+/**
+ * Build a read-only roadmap for a project by scanning all queue dirs for
+ * manifests owned by this project. For each initiative, `workItems` reads
+ * WI-*.md from the work-items-snapshot in `_logs/` (or the live worktree)
+ * regardless of queue status — decomposition is a fact about the WI
+ * snapshot, not a function of which queue dir the manifest sits in
+ * (R4-11-F2: a pending initiative can already be planned; the roadmap's
+ * Plan-trigger lock reads `workItems === undefined` as "unplanned").
+ *
+ * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
+ */
+function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
+  const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
+  const entries = scanProjectManifests(projectId, forgeRoot);
+
+  const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
+    // Extract title from manifest body: first non-empty heading line, or fall back to id.
+    const titleMatch = manifest.body.match(/^##?\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1].trim() : initId;
+
+    const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
+    const workItems = items.length > 0 ? items : undefined;
+
+    const blockedBy = checkInitiativeDeps(file, queuePaths);
+
+    return {
+      initiativeId: initId,
+      title,
+      status,
+      dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
+      ready: blockedBy.length === 0,
+      blockedBy,
+      ...(workItems !== undefined ? { workItems } : {}),
+    };
+  });
+
   return { projectId, initiatives };
+}
+
+// ---------------------------------------------------------------------------
+// Cross-project attention aggregate (R4-11-F4)
+// ---------------------------------------------------------------------------
+
+export type ProjectAttentionItem = {
+  projectId: string;
+  name: string;
+  /** Link target for the strip item — the project's roadmap tab. */
+  link: string;
+  /** Count of this project's manifests in `_queue/pending/`. */
+  planned: number;
+  /** Count in `_queue/in-flight/`. */
+  inFlight: number;
+  /** Count in `_queue/ready-for-review/` — the `gated` RunStatus (an
+   *  operator verdict is pending). */
+  gated: number;
+  /** Count in `_queue/merged/` (R4-11-F1 transient state). */
+  merged: number;
+  /** Count of initiatives whose latest `plan.completeness` event (R4-05-F6)
+   *  has `flagged: true`. */
+  flagged: number;
+};
+
+/** Queue states an attention strip cares about — done/failed are terminal
+ *  and carry nothing left for the operator to act on. */
+const ATTENTION_BEARING_STATES: ReadonlySet<QueueState> = new Set([
+  'pending',
+  'in-flight',
+  'ready-for-review',
+  'merged',
+]);
+
+/**
+ * Build the cross-project attention summary for one project. Reuses the same
+ * manifest-ownership scan as `buildProjectRoadmap` — no second queue scan.
+ * Best-effort throughout: an unreadable manifest or missing event log never
+ * throws, it just doesn't count toward that initiative.
+ */
+function buildProjectAttention(
+  projectId: string,
+  name: string,
+  forgeRoot: string,
+  logsRoot: string,
+): ProjectAttentionItem {
+  const entries = scanProjectManifests(projectId, forgeRoot);
+
+  let planned = 0;
+  let inFlight = 0;
+  let gated = 0;
+  let merged = 0;
+  let flagged = 0;
+
+  for (const { initId, status, manifest } of entries) {
+    if (!ATTENTION_BEARING_STATES.has(status)) continue;
+
+    if (status === 'pending') planned += 1;
+    else if (status === 'in-flight') inFlight += 1;
+    else if (status === 'ready-for-review') gated += 1;
+    else if (status === 'merged') merged += 1;
+
+    if (isCompletenessFlagged(initId, manifest.cycle_id ?? null, logsRoot)) {
+      flagged += 1;
+    }
+  }
+
+  return { projectId, name, link: `/projects/${projectId}`, planned, inFlight, gated, merged, flagged };
+}
+
+/**
+ * Whether an initiative's LATEST `plan.completeness` event (R4-05-F6, emitted
+ * by orchestrator/phases/project-manager.ts on the PM pass's success path)
+ * has `metadata.flagged === true`.
+ *
+ * Bound: exactly ONE file read per initiative — `_logs/<cycleId>/events.jsonl`
+ * — scanned line-by-line from the end (mirrors readPreflightFixState's
+ * reverse-scan-for-latest-event pattern above) so a re-decomposition's newer
+ * event is the one that counts, without needing a second full-file pass.
+ * Best-effort: any missing cycle/file/malformed line is treated as
+ * "not flagged" rather than thrown — never sinks the whole aggregate.
+ */
+function isCompletenessFlagged(
+  initId: string,
+  cycleIdFromManifest: string | null,
+  logsRoot: string,
+): boolean {
+  const logsRootAbs = resolve(logsRoot);
+  const cycleId = cycleIdFromManifest ?? discoverCycleIdFromLogs(logsRootAbs, initId);
+  if (!cycleId) return false;
+  const evPath = join(logsRootAbs, cycleId, 'events.jsonl');
+  if (!existsSync(evPath)) return false;
+  let raw: string;
+  try {
+    raw = readFileSync(evPath, 'utf8');
+  } catch {
+    return false;
+  }
+  for (const line of raw.split('\n').reverse()) {
+    if (!line.trim()) continue;
+    let ev: { message?: string; metadata?: { flagged?: boolean } };
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (ev.message === 'plan.completeness') {
+      return ev.metadata?.flagged === true;
+    }
+  }
+  return false;
 }
 
 /**
