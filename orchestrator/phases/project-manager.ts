@@ -618,23 +618,34 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     // `plan.completeness`'s `metadata` shape is the R4-11-F4 contract (a
     // later PR's attention-strip consumer): keep `stated_units`,
     // `covered_units`, `uncovered: string[]`, `flagged: boolean` stable.
-    const completeness = checkDecomposeCompleteness(manifest.body, items);
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: parentEventId,
-      phase: 'project-manager',
-      skill: 'project-manager',
-      event_type: 'log',
-      input_refs: [input.manifestPath],
-      output_refs: [workItemsDir],
-      message: 'plan.completeness',
-      metadata: {
-        stated_units: completeness.statedUnits,
-        covered_units: completeness.coveredUnits,
-        uncovered: completeness.uncovered,
-        flagged: completeness.flagged,
-      },
-    });
+    // Best-effort: F6 is advisory telemetry — a completeness-check or emit
+    // failure must NEVER reach the `return { kind: 'success' }` below, so the
+    // non-blocking guarantee is structural (matching persistManifestSpecs and
+    // the other success-path telemetry writers here). checkDecomposeCompleteness
+    // is a total pure function on the validated success path, so this guard
+    // never fires in practice — it just makes "never affects dispatch"
+    // unconditional rather than incidental.
+    try {
+      const completeness = checkDecomposeCompleteness(manifest.body, items);
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: parentEventId,
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'log',
+        input_refs: [input.manifestPath],
+        output_refs: [workItemsDir],
+        message: 'plan.completeness',
+        metadata: {
+          stated_units: completeness.statedUnits,
+          covered_units: completeness.coveredUnits,
+          uncovered: completeness.uncovered,
+          flagged: completeness.flagged,
+        },
+      });
+    } catch {
+      /* advisory only — swallow so F6 can never affect the pass outcome */
+    }
 
     return { kind: 'success' };
   }
