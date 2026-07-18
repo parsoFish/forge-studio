@@ -485,12 +485,19 @@ test('GET /api/runs/<bad-id>/phases/architect/log returns 404', async () => {
 test('GET /api/studio/agents returns agents array', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/agents`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { agents: Array<{ slug: string; name: string }> };
+  const body = (await res.json()) as {
+    agents: Array<{ slug: string; name: string; capability?: { interactive: boolean; runtimeSdks: string[] } }>;
+  };
   assert.ok(Array.isArray(body.agents), 'agents must be array');
   assert.ok(body.agents.length >= 1, 'at least 1 agent from fixture');
   const agent = body.agents.find((a) => a.slug === 'test-agent');
   assert.ok(agent, 'test-agent must appear');
   assert.equal(agent!.name, 'Test Agent');
+  // R2-02-F1: server-computed capability descriptor threaded onto the wire —
+  // no capability fact may exist only in UI code.
+  assert.ok(agent!.capability, 'capability descriptor must be present');
+  assert.equal(agent!.capability!.interactive, false, 'fixture has no surface field → unattended → interactive:false');
+  assert.deepEqual(agent!.capability!.runtimeSdks, ['claude-code'], 'runtimeSdks mirrors fixture runtime.sdk');
 });
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
 import { loadAgentDefinition, loadCatalog } from './registry.ts';
+import type { AgentDefinition } from './types.ts';
 
 /**
  * The forge install root (this file lives at orchestrator/studio/). Used as
@@ -100,4 +101,32 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
  */
 export function executionPathForSurface(surface: string | undefined): 'interactive' | 'unattended' {
   return surface === 'interactive' ? 'interactive' : 'unattended';
+}
+
+/**
+ * Server-computed per-agent capability descriptor (R2-02-F1). A pure,
+ * no-I/O projection of `AgentDefinition` — the single source for capability
+ * FACTS the studio wire threads to the builder UI, so no capability fact is
+ * ever re-derived client-side.
+ */
+export type AgentCapabilityDescriptor = {
+  /** true iff the agent runs through the interactive-session runner (not a flow node). */
+  interactive: boolean;
+  /**
+   * The runtime SDK(s) the agent declares — today a one-element set from
+   * `runtime.sdk` (a single required string); extension point for R2-06
+   * multi-adapter. A surfaced FACT, not a constraint.
+   */
+  runtimeSdks: string[];
+  // Extension points (documented; NOT computed in wave 1 — added where their
+  // authoring source lands):
+  //   fanoutCapable — R2-03-F2 ;  artifactOutputs — R2-05-F2.
+};
+
+/** Compute the wave-1 capability descriptor for an agent definition. Pure — no I/O. */
+export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapabilityDescriptor {
+  return {
+    interactive: executionPathForSurface(def.surface) === 'interactive',
+    runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
+  };
 }

@@ -12,7 +12,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { deriveAgentSpec, executionPathForSurface } from './derive.ts';
+import { deriveAgentSpec, executionPathForSurface, agentCapabilityDescriptor, FORGE_ROOT } from './derive.ts';
+import { listAgentDefinitions } from './registry.ts';
+import type { AgentDefinition } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Explicit expected-literal assertions (frontmatter-regression lock, M2-3)
@@ -213,4 +215,80 @@ test('executionPathForSurface(undefined) → \'unattended\' (absent surface, e.g
 
 test("executionPathForSurface('some-unknown-value') → 'unattended' (unknown default)", () => {
   assert.equal(executionPathForSurface('some-unknown-value'), 'unattended');
+});
+
+// ---------------------------------------------------------------------------
+// agentCapabilityDescriptor (R2-02-F1) — pure mapping, no I/O
+// ---------------------------------------------------------------------------
+
+/** Minimal AgentDefinition fixture; override only what a given test cares about. */
+function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
+  return {
+    slug: 'fixture-agent',
+    name: 'Fixture Agent',
+    description: 'A fixture agent for descriptor tests.',
+    purpose: 'Testing descriptor computation.',
+    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+    brainAccess: 'none',
+    interactivity: 'Fully autonomous.',
+    budgets: {},
+    allowedTools: [],
+    disallowedTools: [],
+    body: '# Fixture\n',
+    path: '/fixture/skills/fixture-agent/SKILL.md',
+    ...overrides,
+  };
+}
+
+test('agentCapabilityDescriptor: surface unattended → interactive:false', () => {
+  const def = baseAgentDefFixture({ surface: 'unattended' });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'] });
+});
+
+test('agentCapabilityDescriptor: surface interactive → interactive:true', () => {
+  const def = baseAgentDefFixture({ surface: 'interactive' });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'] });
+});
+
+test('agentCapabilityDescriptor: surface operator-triggered → interactive:false', () => {
+  const def = baseAgentDefFixture({ surface: 'operator-triggered' });
+  assert.equal(agentCapabilityDescriptor(def).interactive, false);
+});
+
+test('agentCapabilityDescriptor: surface both → interactive:false', () => {
+  const def = baseAgentDefFixture({ surface: 'both' });
+  assert.equal(agentCapabilityDescriptor(def).interactive, false);
+});
+
+test('agentCapabilityDescriptor: absent surface → interactive:false', () => {
+  const def = baseAgentDefFixture({ surface: undefined });
+  assert.equal(agentCapabilityDescriptor(def).interactive, false);
+});
+
+test('agentCapabilityDescriptor: runtimeSdks is a one-element set from runtime.sdk', () => {
+  const def = baseAgentDefFixture({ runtime: { sdk: 'codex', strategy: 'fixed', model: 'gpt' } });
+  assert.deepEqual(agentCapabilityDescriptor(def).runtimeSdks, ['codex']);
+});
+
+test('agentCapabilityDescriptor: empty-string runtime.sdk yields empty runtimeSdks (defensive)', () => {
+  const def = baseAgentDefFixture({ runtime: { sdk: '', strategy: 'fixed', model: 'x' } });
+  assert.deepEqual(agentCapabilityDescriptor(def).runtimeSdks, []);
+});
+
+// Real-roster guard: every in-tree studio agent computes without throwing, and
+// `interactive` always agrees with executionPathForSurface — the descriptor
+// must never diverge from the reused mapper it's built on.
+test('agentCapabilityDescriptor: computes for every real roster agent, interactive matches executionPathForSurface', () => {
+  const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
+  assert.ok(defs.length > 0, 'roster must be non-empty');
+  for (const def of defs) {
+    const descriptor = agentCapabilityDescriptor(def);
+    assert.equal(
+      descriptor.interactive,
+      executionPathForSurface(def.surface) === 'interactive',
+      `${def.slug}: interactive must match executionPathForSurface(surface)`,
+    );
+    assert.ok(Array.isArray(descriptor.runtimeSdks), `${def.slug}: runtimeSdks must be an array`);
+  }
 });

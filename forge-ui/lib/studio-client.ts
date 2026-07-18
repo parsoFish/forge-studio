@@ -73,6 +73,20 @@ export type AgentRuntime = {
   loopStrategy?: string; // A7: 'ralph' | 'one-shot' (dev-loop strategy)
 };
 
+/**
+ * Server-computed per-agent capability descriptor (R2-02-F1,
+ * orchestrator/studio/derive.ts `agentCapabilityDescriptor`). Re-declared
+ * client-side per this file's header convention — threaded onto the wire by
+ * the bridge (GET /api/studio/agents, GET /api/studio/starters) and carried
+ * through as-is by `parseAgentDefinition`; NEVER re-derived here (a
+ * capability fact computed only in UI code is the exact thing R2-02-F1
+ * forbids).
+ */
+export type AgentCapabilityDescriptor = {
+  interactive: boolean;
+  runtimeSdks: string[];
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -88,6 +102,7 @@ export type Agent = {
   phase?: string;
   allowedTools?: string[];
   disallowedTools?: string[];
+  capability?: AgentCapabilityDescriptor;
 };
 
 export type FlowNode = {
@@ -373,11 +388,23 @@ export function parseRun(raw: unknown): Run {
 }
 
 /**
+ * Parse a raw `capability` field (server shape, R2-02-F1) into the client
+ * `AgentCapabilityDescriptor` type. Carries the server-computed value
+ * through verbatim — no capability fact is derived here. Returns undefined
+ * if the field is absent or malformed (e.g. an older bridge payload).
+ */
+function parseCapability(raw: unknown): AgentCapabilityDescriptor | undefined {
+  const c = raw as Partial<AgentCapabilityDescriptor> | undefined;
+  if (!c || typeof c.interactive !== 'boolean' || !Array.isArray(c.runtimeSdks)) return undefined;
+  return { interactive: c.interactive, runtimeSdks: c.runtimeSdks as string[] };
+}
+
+/**
  * Map a raw AgentDefinition (server shape) to the client Agent type.
  * Server: slug, composition.{skills,tools,mcps,hooks}, body, name, purpose,
- *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools
+ *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools, capability
  * Client: id, skills, tools, mcps, hooks, process, name, purpose,
- *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools
+ *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools, capability
  */
 function parseAgentDefinition(raw: unknown): Agent {
   const r = (raw ?? {}) as Record<string, unknown>;
@@ -397,6 +424,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     phase:          typeof r['phase']         === 'string' ? r['phase']         : undefined,
     allowedTools:   Array.isArray(r['allowedTools'])    ? (r['allowedTools']    as string[]) : [],
     disallowedTools:Array.isArray(r['disallowedTools']) ? (r['disallowedTools'] as string[]) : [],
+    capability:     parseCapability(r['capability']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
