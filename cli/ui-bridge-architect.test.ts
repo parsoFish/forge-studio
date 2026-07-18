@@ -8,7 +8,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -123,6 +123,128 @@ test('POST /api/architect/answer appends an interview round', async () => {
   const status = JSON.parse(readFileSync(join(dir2, 'status.json'), 'utf8'));
   assert.equal(status.phase, 'interviewing');
   assert.equal(status.round, 2);
+});
+
+// ---------------------------------------------------------------------------
+// R4-11-T5: POST /api/architect/rerun — the StuckWarning one-click re-spawn.
+// Unlike /api/architect/answer, this never appends a round or writes
+// answers.json — it re-invokes the existing session's turn as-is.
+// ---------------------------------------------------------------------------
+
+test('POST /api/architect/rerun re-spawns the existing session WITHOUT mutating round/answers', async () => {
+  const sid3 = '2026-05-29T17-00-00';
+  const dir3 = sessionDir(sid3);
+  mkdirSync(dir3, { recursive: true });
+  writeFileSync(
+    join(dir3, 'status.json'),
+    JSON.stringify({
+      session_id: sid3,
+      project: 'demo',
+      project_repo_path: dir3,
+      phase: 'drafting',
+      round: 2,
+      idea: 'stalled idea',
+      updated_at: new Date(Date.now() - 200_000).toISOString(),
+    }),
+  );
+  const res = await fetch(`${url}/api/architect/rerun`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: sid3 }),
+  });
+  assert.equal(res.status, 200);
+  assert.ok(!existsSync(join(dir3, 'answers.json')), 'rerun must NOT write answers.json');
+  const status = JSON.parse(readFileSync(join(dir3, 'status.json'), 'utf8'));
+  assert.equal(status.phase, 'drafting', 'rerun must not mutate phase');
+  assert.equal(status.round, 2, 'rerun must not mutate round');
+});
+
+test('POST /api/architect/rerun on an unknown session → 404', async () => {
+  const res = await fetch(`${url}/api/architect/rerun`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: 'no-such-session' }),
+  });
+  assert.equal(res.status, 404);
+});
+
+test('POST /api/architect/rerun: FORGE_DRY_BRIDGE=1 alone suppresses the spawn (explicit marker, no log dir)', async () => {
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const sid4 = '2026-05-29T18-00-00';
+    const dir4 = sessionDir(sid4);
+    mkdirSync(dir4, { recursive: true });
+    writeFileSync(
+      join(dir4, 'status.json'),
+      JSON.stringify({
+        session_id: sid4,
+        project: 'demo',
+        project_repo_path: dir4,
+        phase: 'drafting',
+        round: 1,
+        idea: 'x',
+        updated_at: new Date(Date.now() - 200_000).toISOString(),
+      }),
+    );
+    const res = await fetch(`${url}/api/architect/rerun`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ project: 'demo', sessionId: sid4 }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as Record<string, unknown>;
+    assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] }, 'the skipped agent turn must be explicit in the response');
+    assert.ok(
+      !existsSync(join(forgeRoot, '_logs', `_architect-${sid4}`)),
+      'dry-bridge must not create the architect spawn log dir',
+    );
+  } finally {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+  }
+});
+
+test('POST /api/architect/rerun: an unsafe (path-traversal) sessionId is refused by spawnAgentTurn (no spawn log dir)', async () => {
+  // Collapses via path.join's string-level `..` resolution to the SAME real
+  // session dir (so the route's upstream readStatus check passes) while
+  // itself being a `/`-bearing, multi-segment id `isSafeRunId` must reject —
+  // mirrors ui-bridge-unsafe-sessionid.test.ts's fixture shape.
+  const realSid = '2026-05-29T19-00-00';
+  const dir5 = sessionDir(realSid);
+  mkdirSync(dir5, { recursive: true });
+  writeFileSync(
+    join(dir5, 'status.json'),
+    JSON.stringify({
+      session_id: realSid,
+      project: 'demo',
+      project_repo_path: dir5,
+      phase: 'drafting',
+      round: 1,
+      idea: 'x',
+      updated_at: new Date(Date.now() - 200_000).toISOString(),
+    }),
+  );
+  const unsafeSessionId = `${realSid}/../${realSid}`;
+  const res = await fetch(`${url}/api/architect/rerun`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', sessionId: unsafeSessionId }),
+  });
+  const json = await res.json();
+  // Best-effort: session bookkeeping (the 200 + read) still succeeds even
+  // though the spawn itself was refused (spawnAgentTurn's fire-and-forget
+  // contract), mirroring the other spawn routes' documented behaviour.
+  assert.equal(res.status, 200, JSON.stringify(json));
+  const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
+  assert.ok(
+    !logsEntries.some((e) => e.startsWith(`_architect-${realSid}`)),
+    `expected no _architect-${realSid}* dir under _logs/ for an unsafe sessionId, found: ${JSON.stringify(logsEntries)}`,
+  );
 });
 
 test('GET /api/architect/sessions live-tails the session log → WS event stream (hex bursts)', async () => {
