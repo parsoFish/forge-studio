@@ -457,12 +457,6 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     }
   }
 
-  // R4-05-F2: persist the initiative→specs back-reference now that decomposition
-  // has produced (and compiled) its final WI list, so downstream tooling can read
-  // "this initiative has been planned, here are its N specs" straight off the
-  // manifest. Overwrites every pass (a re-decomposition replaces the list).
-  persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
-
   const { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,
   });
@@ -602,7 +596,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     },
   });
 
-  if (!failed) return { kind: 'success' };
+  if (!failed) {
+    // R4-05-F2: persist the initiative→specs back-reference now that
+    // decomposition has actually COMPLETED — this is the pass's own
+    // success path (the same `!failed` check that returns `kind: 'success'`
+    // below), i.e. a clean WI set with no parse/set/per-item/coupling/gate
+    // errors and no incomplete checkpoint. A failed or invalid pass never
+    // reaches here, so the manifest's specs list is left untouched (never
+    // overwritten with partial or rejected WI ids). Overwrites on every
+    // successful pass (a re-decomposition replaces the list).
+    persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
+    return { kind: 'success' };
+  }
 
   const summary = [
     items.length === 0 ? 'no work items emitted' : null,

@@ -210,6 +210,23 @@ test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids)
   }
 });
 
+test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto the manifest', async () => {
+  const h = setupHarness({
+    ...BASE_CONFIG,
+    acceptance_gate: { match: 'acceptancetests', required: true },
+  });
+  try {
+    // Neither WI's gate matches "acceptancetests" — same fixture as the
+    // "no live-acc WI → PM pass fails" test above.
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await assert.rejects(() => runProjectManager(h.input, h.logger, { queryFn }));
+    const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
+    assert.equal(manifest.specs, undefined, 'a failed pass must leave the manifest specs list untouched');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
 test('A2a: no acceptance_gate config → no live-acc requirement (other projects unaffected)', async () => {
   const h = setupHarness({ ...BASE_CONFIG });
   try {
