@@ -80,6 +80,12 @@ export type InitiativeManifest = {
    * stops in `failed/` regardless of the mode's nominal `recoverable: true`.
    */
   previous_failure_modes?: string[];
+  /**
+   * R4-05-F2: work_item_ids produced by the plan agent's decomposition,
+   * written back once decomposition completes. Distinct from a WI's own
+   * depends_on (which orders WIs within the initiative).
+   */
+  specs?: string[];
   body: string;                // markdown initiative spec
   /**
    * Optional per-project quality-gate command. Used by both the dev-loop
@@ -226,6 +232,10 @@ export function parseManifest(content: string): InitiativeManifest {
     const modes = (data.previous_failure_modes as unknown[]).filter((s): s is string => typeof s === 'string');
     if (modes.length > 0) manifest.previous_failure_modes = modes;
   }
+  if (Array.isArray(data.specs)) {
+    const specs = (data.specs as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (specs.length > 0) manifest.specs = specs;
+  }
   return manifest;
 }
 
@@ -272,6 +282,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.previous_failure_modes && m.previous_failure_modes.length > 0) {
     data.previous_failure_modes = m.previous_failure_modes;
   }
+  if (m.specs && m.specs.length > 0) {
+    data.specs = m.specs;
+  }
   return matter.stringify('\n' + m.body.replace(/^\n+/, ''), data);
 }
 
@@ -298,6 +311,13 @@ export function validateManifest(m: InitiativeManifest): string[] {
       errors.push('quality_gate_cmd must be a non-empty array of strings when set');
     } else if (!m.quality_gate_cmd.every((s) => typeof s === 'string' && s.length > 0)) {
       errors.push('quality_gate_cmd entries must be non-empty strings');
+    }
+  }
+  if (m.specs !== undefined) {
+    if (!Array.isArray(m.specs) || m.specs.length === 0) {
+      errors.push('specs must be a non-empty array of strings when set');
+    } else if (!m.specs.every((s) => typeof s === 'string' && s.length > 0)) {
+      errors.push('specs entries must be non-empty strings');
     }
   }
   if (m.depends_on_initiatives !== undefined) {
@@ -448,6 +468,24 @@ export function persistManifestCycleId(manifestPath: string, cycleId: string): v
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
     if (m.cycle_id && m.cycle_id.length > 0) return; // already anchored — never re-stamp
     writeFileSync(manifestPath, serializeManifest({ ...m, cycle_id: cycleId }));
+  } catch {
+    /* best-effort — a manifest write failure must not fail the cycle */
+  }
+}
+
+/**
+ * R4-05-F2: persist the initiative→specs back-reference onto the manifest's
+ * frontmatter once the plan agent's decomposition completes — the
+ * work_item_ids it produced. Unlike `persistManifestCycleId` this is NOT
+ * one-shot: a re-decomposition overwrites the list on every call (the
+ * initiative's spec set is whatever the latest pass produced). Best-effort:
+ * if the manifest is missing/unparseable this is a no-op and never throws.
+ */
+export function persistManifestSpecs(manifestPath: string, specs: string[]): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    writeFileSync(manifestPath, serializeManifest({ ...m, specs }));
   } catch {
     /* best-effort — a manifest write failure must not fail the cycle */
   }

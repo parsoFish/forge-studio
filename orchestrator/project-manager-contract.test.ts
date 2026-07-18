@@ -21,6 +21,7 @@ import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
 import { PM_BRAIN_ACCESS } from './pm-invocation.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
+import { parseManifest } from './manifest.ts';
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-06-06-pm-contract-test
@@ -186,6 +187,24 @@ test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeed
     const events = readEvents(h.logger);
     const end = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
     assert.ok(end, 'expected a successful pm.end event');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids) onto the manifest', async () => {
+  const h = setupHarness({
+    ...BASE_CONFIG,
+    acceptance_gate: { match: 'acceptancetests', required: true },
+  });
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [
+      { wiId: 'WI-1' },
+      { wiId: 'WI-2', filename: 'azuredevops/internal/acceptancetests/resource_foo_test.go', gate: ACC_GATE },
+    ]);
+    await runProjectManager(h.input, h.logger, { queryFn });
+    const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
+    assert.deepEqual(manifest.specs, ['WI-1', 'WI-2']);
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }

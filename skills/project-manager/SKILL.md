@@ -1,6 +1,6 @@
 ---
 name: project-manager
-description: Decomposes an initiative into atomic, dependency-ordered work items with explicit acceptance criteria the developer loop can verify.
+description: forge's plan agent — decomposes the architect's finalised initiative into atomic, dependency-ordered spec-work-items (ADR-015's versioned artifact contract) for the develop agent's ralph loop to consume.
 phase: project-manager
 surface: unattended
 executor: pm
@@ -25,7 +25,9 @@ budgets: {}
 
 ## Single responsibility
 
-The PM is the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria; the PM decomposes those ACs **directly** into atomic outcome-sized work items. The initiative body is the single source of intent. The PM owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
+The PM is forge's **plan agent** — the **sole decomposer and sizer**. The architect emits initiatives whose body carries vision + GWT acceptance criteria, tailored to the architect's finalised output; the plan agent decomposes those ACs **directly** into atomic outcome-sized **spec-work-items**. Each work item IS a spec — the versioned artifact contract locked in [ADR-015](../../docs/decisions/015-work-item-format.md) — authored for the develop agent's ralph loop to consume. The initiative body is the single source of intent. The plan agent owns ALL work-item sizing and per-WI `quality_gate_cmd` selection — the architect may not pre-size or pre-gate.
+
+The coupling between planning and development is expressed **only** through the spec-work-item artifact itself — no ralph-loop knowledge leaks into this skill. A spec-work-item must be parseable and valid with **zero knowledge of the ralph loop**: the WI schema (ADR-015) is the whole contract.
 
 Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 

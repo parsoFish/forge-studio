@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
-import { parseManifest, type InitiativeManifest } from '../manifest.ts';
+import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
 import {
   PM_ALLOWED_TOOLS,
   PM_DISALLOWED_TOOLS,
@@ -456,6 +456,12 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       compileErrors = [`wi-spec-compile: ${(err as Error).message}`];
     }
   }
+
+  // R4-05-F2: persist the initiative→specs back-reference now that decomposition
+  // has produced (and compiled) its final WI list, so downstream tooling can read
+  // "this initiative has been planned, here are its N specs" straight off the
+  // manifest. Overwrites every pass (a re-decomposition replaces the list).
+  persistManifestSpecs(input.manifestPath, items.map((item) => item.work_item_id));
 
   const { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,

@@ -167,3 +167,7 @@ creates: [tests/x.test.ts]                                   # files this WI cre
 - Reference implementation: `orchestrator/work-item.ts` (parser, validator, omit-on-undefined serialiser); `orchestrator/work-item.test.ts` (round-trip test). (The former `benchmarks/project-manager/scoring.ts` deterministic `files_real_or_explicitly_new` / `one_creator_per_file` criteria were removed with the benchmarks 2026-05-25.)
 
 The schema fields locked in §1-3 (`work_item_id`, `feature_id`, `initiative_id`, `status`, `depends_on`, `acceptance_criteria`, `files_in_scope`, `estimated_iterations`) remain required. The four new fields in §3a remain optional indefinitely — they tighten signal without breaking any WI that doesn't need them.
+
+## 2026-07-18 (R4-05-F2): initiative manifest gains a `specs:` back-reference
+
+The initiative manifest gains a `specs: string[]` back-reference listing the work_item_ids the plan agent produced. The WI IS the spec; this is the initiative→specs linkage.
