@@ -528,8 +528,13 @@ function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
  * always wins once it lands: a refetch that surfaces `workItems` flips the
  * card to `planned` even if the client never itself observed the enqueue.
  */
-function planStateAttr(planned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'unplanned' {
-  if (planned) return 'planned';
+function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'unplanned' {
+  // Only a WI-less *pending* card is "unplanned" (the sole state that renders
+  // the Plan trigger + lock). Any non-pending card — even one whose WI
+  // snapshot can't be found right now — went through decomposition, so it is
+  // reported "planned", never mislabelled "unplanned" (DOM-as-metrics must
+  // mirror the actual UI state per the CLAUDE.md convention).
+  if (!unplanned) return 'planned';
   if (plan.status === 'error') return 'error';
   if (plan.status === 'planning' || plan.status === 'started') return 'planning';
   return 'unplanned';
@@ -753,7 +758,7 @@ function InitiativeCard({
       data-initiative-id={initiativeId}
       data-initiative-status={status}
       data-develop-state={develop.status}
-      data-plan-state={planStateAttr(planned, plan)}
+      data-plan-state={planStateAttr(unplanned, plan)}
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')}
       style={{
