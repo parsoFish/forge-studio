@@ -86,6 +86,9 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
       tracker.calls.push('runReflector');
       return { reflection_status: 'complete', lint_status: 'ok' };
     },
+    promoteMergedToDone: (_input, _logger) => {
+      tracker.calls.push('promoteMergedToDone');
+    },
     // Dev-loop close contract helpers — no-ops in tests (no real git/fs)
     commitDevLoopBoundary: (_wt, _logger, _id) => { /* no-op */ },
     enforceDevLoopCloseInvariant: (_wt, _logger, _id) => { /* no-op */ },
@@ -170,6 +173,7 @@ describe('flow-runner full run', () => {
       'openPrInline',
       'runClosure',
       'runReflector',
+      'promoteMergedToDone',
     ]);
     assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep — it is runCycle\'s job');
 
@@ -240,6 +244,7 @@ describe('flow-runner resumeFrom=unifier', () => {
     assert.ok(tracker.calls.includes('openPrInline'));
     assert.ok(tracker.calls.includes('runClosure'));
     assert.ok(tracker.calls.includes('runReflector'));
+    assert.ok(tracker.calls.includes('promoteMergedToDone'));
   });
 });
 
@@ -265,6 +270,10 @@ describe('flow-runner reflect skipped when not merged', () => {
     const result = await runFlow({ flow, input, logger, deps });
 
     assert.ok(!tracker.calls.includes('runReflector'), 'runReflector must NOT be called when merged:false');
+    assert.ok(
+      !tracker.calls.includes('promoteMergedToDone'),
+      'promoteMergedToDone must NOT be called when merged:false — nothing landed in merged/ to promote',
+    );
     assert.strictEqual(result.cycleOutcome, 'ready-for-review');
     assert.strictEqual(result.reflectionStatus, 'skipped');
     assert.strictEqual(result.lintStatus, 'skipped');
@@ -303,6 +312,15 @@ describe('flow-runner reflect throw → cycle.reflection-lost (2.10)', () => {
     assert.equal(lost!.event_type, 'error');
     assert.equal(lost!.metadata?.cause, 'crash');
     assert.equal(lost!.metadata?.crash_kind, 'transient', 'ECONNRESET classifies as environment pressure');
+
+    // R4-11-F1: the reflection-lost path must ALSO still reach done/ — closure
+    // already moved the manifest to merged/ before reflect ran, and
+    // finalize-merged.ts (the other caller) only scans ready-for-review/, so
+    // this node's own `finally` is the only thing that can promote it on.
+    assert.ok(
+      tracker.calls.includes('promoteMergedToDone'),
+      'promoteMergedToDone must still be called even though reflect threw',
+    );
   });
 });
 
@@ -950,6 +968,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     assert.ok(tracker.calls.includes('runDeveloperLoop'));
     assert.ok(tracker.calls.includes('runUnifier'), 'default unifier executor must run (real node, not a marker)');
     assert.ok(tracker.calls.includes('runReflector'));
+    assert.ok(tracker.calls.includes('promoteMergedToDone'));
     assert.strictEqual(result.cycleOutcome, 'merged');
   });
 });

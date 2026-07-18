@@ -122,6 +122,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnArchitectTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/architect/answer', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnArchitectTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
+  { method: 'POST', route: '/api/architect/rerun', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnArchitectTurn — StuckWarning re-run; re-spawns the existing session as-is (no round/answers mutation), the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/plan-verdict', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'applyPlanVerdict → spawnArchitectTurn — marker on approve/revise (reject never spawns)' },
   { method: 'POST', route: '/api/runs/:id/gates/plan', classification: 'stub-actions', guard: 'spawn-helper',

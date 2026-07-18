@@ -33,7 +33,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runClosure } from './closure.ts';
+import { runClosure, promoteMergedToDone } from './closure.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
@@ -53,16 +53,18 @@ type Harness = {
   manifestPath: string;
   logger: ReturnType<typeof createLogger>;
   events: () => EventLogEntry[];
-  paths: { inFlight: string; done: string; readyForReview: string };
+  paths: { inFlight: string; merged: string; done: string; readyForReview: string };
   cleanup: () => void;
 };
 
 /**
  * A tempdir laid out as forge expects: a git project on `initiative-x`
- * with a bare origin, `_queue/{in-flight,ready-for-review,done}` dirs, and
- * the manifest staged in ready-for-review/ (where the reviewer left it).
- * `process.chdir` into the tempdir so `moveTo`'s cwd-relative `_queue`
- * resolves here (restored by cleanup()).
+ * with a bare origin, `_queue/{in-flight,ready-for-review,merged,done}` dirs
+ * (R4-11-F1 adds `merged/`, the transient pass-through a confirmed merge
+ * lands in before the caller promotes it on to `done/`), and the manifest
+ * staged in ready-for-review/ (where the reviewer left it). `process.chdir`
+ * into the tempdir so `moveTo`'s cwd-relative `_queue` resolves here
+ * (restored by cleanup()).
  */
 function setup(): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'forge-closure-test-'));
@@ -86,9 +88,10 @@ function setup(): Harness {
 
   const queue = join(dir, '_queue');
   const inFlight = join(queue, 'in-flight');
+  const merged = join(queue, 'merged');
   const done = join(queue, 'done');
   const readyForReview = join(queue, 'ready-for-review');
-  for (const p of [inFlight, done, readyForReview, join(queue, 'pending'), join(queue, 'failed')]) {
+  for (const p of [inFlight, merged, done, readyForReview, join(queue, 'pending'), join(queue, 'failed')]) {
     mkdirSync(p, { recursive: true });
   }
   // Phase 6 contract: the reviewer does NOT move the manifest — it stays
@@ -116,7 +119,7 @@ function setup(): Harness {
       const txt = readFileSync(logger.logFilePath, 'utf8');
       return txt.split('\n').filter(Boolean).map((l) => JSON.parse(l) as EventLogEntry);
     },
-    paths: { inFlight, done, readyForReview },
+    paths: { inFlight, merged, done, readyForReview },
     cleanup: () => {
       process.chdir(MODULE_CWD);
       rmSync(dir, { recursive: true, force: true });
@@ -134,24 +137,25 @@ function input(h: Harness, confirm: (wt: string) => boolean | Promise<boolean>):
   };
 }
 
-test('runClosure: pr-open + NOT merged → outcome pr-open, no done/ move, manifest stays ready-for-review (G9/G1)', async () => {
+test('runClosure: pr-open + NOT merged → outcome pr-open, no merged/ move, manifest stays ready-for-review (G9/G1)', async () => {
   const h = setup();
   try {
     const r = await runClosure(input(h, () => false), h.logger, 'pr-open');
     assert.equal(r.outcome, 'pr-open');
     assert.equal(r.merged, false);
-    // Manifest NOT promoted to done/ — no auto-merge, no premature done/.
+    // Manifest NOT promoted to merged/ — no auto-merge, no premature merged/.
     assert.ok(existsSync(join(h.paths.readyForReview, 'INIT-x.md')));
+    assert.ok(!existsSync(join(h.paths.merged, 'INIT-x.md')));
     assert.ok(!existsSync(join(h.paths.done, 'INIT-x.md')));
     const msgs = h.events().map((e) => e.message);
     assert.ok(msgs.includes('closure.pr-open-awaiting-operator'));
-    assert.ok(!msgs.includes('closure.manifest-moved-to-done'));
+    assert.ok(!msgs.includes('closure.manifest-moved-to-merged'));
   } finally {
     h.cleanup();
   }
 });
 
-test('runClosure: pr-open + CONFIRMED merge → outcome merged, manifest moved to done/ (G1), local aligned', async () => {
+test('runClosure: pr-open + CONFIRMED merge → outcome merged, manifest moved to merged/ (R4-11-F1/G1), local aligned', async () => {
   const h = setup();
   try {
     // Model the operator having merged the PR on the remote: ff origin/main
@@ -169,12 +173,15 @@ test('runClosure: pr-open + CONFIRMED merge → outcome merged, manifest moved t
     const r = await runClosure(input(h, () => true), h.logger, 'pr-open');
     assert.equal(r.outcome, 'merged');
     assert.equal(r.merged, true);
-    // G1: done/ ⇒ confirmed merge.
-    assert.ok(existsSync(join(h.paths.done, 'INIT-x.md')));
+    // R4-11-F1 / G1: closure's own move lands the manifest in merged/ — the
+    // second move (merged/ → done/) is the caller's job (promoteMergedToDone),
+    // exercised separately below.
+    assert.ok(existsSync(join(h.paths.merged, 'INIT-x.md')));
+    assert.ok(!existsSync(join(h.paths.done, 'INIT-x.md')));
     assert.ok(!existsSync(join(h.paths.readyForReview, 'INIT-x.md')));
     const msgs = h.events().map((e) => e.message);
     assert.ok(msgs.includes('closure.local-aligned-to-remote'));
-    assert.ok(msgs.includes('closure.manifest-moved-to-done'));
+    assert.ok(msgs.includes('closure.manifest-moved-to-merged'));
   } finally {
     h.cleanup();
   }
@@ -190,7 +197,7 @@ test('runClosure: confirmMerge async resolving true is honoured', async () => {
     );
     assert.equal(r.merged, true);
     assert.equal(r.outcome, 'merged');
-    assert.ok(existsSync(join(h.paths.done, 'INIT-x.md')));
+    assert.ok(existsSync(join(h.paths.merged, 'INIT-x.md')));
   } finally {
     h.cleanup();
   }
@@ -208,6 +215,7 @@ test('runClosure: confirmMerge throwing → treated as NOT merged (partial/uncon
     );
     assert.equal(r.merged, false);
     assert.equal(r.outcome, 'pr-open');
+    assert.ok(!existsSync(join(h.paths.merged, 'INIT-x.md')));
     assert.ok(!existsSync(join(h.paths.done, 'INIT-x.md')));
     assert.ok(h.events().some((e) => e.message === 'closure.confirm-merge-threw'));
   } finally {
@@ -231,10 +239,48 @@ test('runClosure: non-pr-open reviewer outcome is passed through, never merged, 
       assert.equal(r.outcome, ro);
       assert.equal(r.merged, false);
       assert.equal(confirmCalled, false, 'no merge confirmation for a non-pr-open outcome');
+      assert.ok(!existsSync(join(h.paths.merged, 'INIT-x.md')));
       assert.ok(!existsSync(join(h.paths.done, 'INIT-x.md')));
     } finally {
       h.cleanup();
     }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R4-11-F1: promoteMergedToDone — the SECOND terminal move, invoked by the
+// caller (finalize-merged.ts) AFTER reflection fires, in the same sweep.
+// ---------------------------------------------------------------------------
+
+test('promoteMergedToDone: moves a manifest already in merged/ on to done/', () => {
+  const h = setup();
+  try {
+    // Simulate closure's first move having already happened.
+    const mergedPath = join(h.paths.merged, 'INIT-x.md');
+    writeFileSync(mergedPath, '---\ninitiative_id: INIT-x\n---\n');
+
+    promoteMergedToDone({ ...input(h, () => true), manifestPath: mergedPath }, h.logger, undefined);
+
+    assert.ok(existsSync(join(h.paths.done, 'INIT-x.md')));
+    assert.ok(!existsSync(mergedPath));
+    const msgs = h.events().map((e) => e.message);
+    assert.ok(msgs.includes('closure.manifest-promoted-to-done'));
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('promoteMergedToDone: a missing source manifest is best-effort (logged, never throws)', () => {
+  const h = setup();
+  try {
+    // Nothing in merged/ — the rename must fail internally without throwing.
+    assert.doesNotThrow(() => {
+      promoteMergedToDone(input(h, () => true), h.logger, undefined);
+    });
+    const msgs = h.events().map((e) => e.message);
+    assert.ok(msgs.includes('closure.manifest-promote-noop'));
+  } finally {
+    h.cleanup();
   }
 });
 
@@ -336,7 +382,7 @@ test('runClosure N6: the CI watch throwing never breaks closure (merged stands; 
     };
     const r = await runClosure(inp, h.logger, 'pr-open');
     assert.equal(r.merged, true);
-    assert.equal(existsSync(join(h.paths.done, 'INIT-x.md')), true, 'done/ move must survive a watch throw');
+    assert.equal(existsSync(join(h.paths.merged, 'INIT-x.md')), true, 'the merged/ move must survive a watch throw');
     const ev = h.events().find((e) => e.message === 'cycle.post-merge-ci');
     assert.ok(ev);
     assert.equal((ev!.metadata as Record<string, unknown>).status, 'unavailable');

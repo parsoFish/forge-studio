@@ -19,9 +19,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { RoadmapInitiative } from '@/lib/bridge-client';
 
-const STATUS_COLOURS: Record<string, string> = {
+// R4-11: single source of truth for the roadmap initiative-status palette —
+// was duplicated here AND in forge-ui/app/projects/[id]/page.tsx; that file
+// now imports this export instead of keeping its own copy. `merged` (R4-11-F1,
+// the brief pass-through between a confirmed merge and its promotion to
+// `done/` in the same sweep) reuses the `done` colour since an operator
+// glancing at the roadmap should read it as "finished", not a distinct state.
+export const STATUS_COLOURS: Record<string, string> = {
   'in-flight': 'var(--c-active, #3b82f6)',
   'ready-for-review': 'var(--c-review, #f0a500)',
+  'merged': 'var(--c-complete, #4ade80)',
   'done': 'var(--c-complete, #4ade80)',
   'failed': 'var(--c-failed, #e05454)',
   'pending': 'var(--faint, #8b949e)',

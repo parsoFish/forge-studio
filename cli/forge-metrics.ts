@@ -120,6 +120,11 @@ function loadManifest(forgeRoot: string, initiativeId: string): InitiativeManife
   const filename = `${initiativeId}.md`;
   const candidates = [
     resolve(forgeRoot, '_queue', 'done', filename),
+    // R4-11-F1: `merged` — the brief pass-through between a confirmed merge
+    // and its promotion to `done/` in the same sweep. Distinct from the
+    // `args.status === 'merged'` CycleOutcome VALUE check below (statusEmoji)
+    // — that's an unrelated event-outcome string, left untouched.
+    resolve(forgeRoot, '_queue', 'merged', filename),
     resolve(forgeRoot, '_queue', 'ready-for-review', filename),
     resolve(forgeRoot, '_queue', 'failed', filename),
     resolve(forgeRoot, '_queue', 'in-flight', filename),

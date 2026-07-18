@@ -136,6 +136,30 @@ R4-01-F2, wave 4):
   `plan.completeness` event `{ stated_units, covered_units, uncovered, flagged }` (the R4-11-F4 attention-strip
   contract) on the PM success path — never affects the pass outcome or dispatch.
 
+### R4-B11 Roadmap & attention surface (implemented)
+
+R4-11 landed 2026-07-19 (wave 2, branch `feat/r4-11-roadmap-attention`). The operator roadmap/attention surface:
+
+- **`merged` lifecycle state (F1):** a sixth queue directory `_queue/merged/` — a **transient pass-through** between
+  `ready-for-review` and `done`. Closure (`orchestrator/phases/closure.ts`) lands confirmed-merge there via
+  `terminalMove`; the finalize sweep (`finalize-merged.ts`) + the flow-runner reflect node promote `merged → done`
+  in the SAME sweep (never parks; reflection-lost still reaches `done`). **Closure is the single terminal-move
+  authority** (`promoteMergedToDone`). ~17 queue-state sites learned it. Dep gate accepts **`merged ∪ done`**
+  (`scheduler.ts:checkInitiativeDeps`). Distinct from the pre-existing `CycleOutcome` value `'merged'`.
+- **Plan trigger + blocked-until-planned lock (F2):** `InitiativeCard` (`forge-ui/app/projects/[id]/page.tsx`)
+  gains `data-action="plan-initiative"` + `data-plan-state` + a blocked-until-planned lock (gates
+  `start-development` until planned), wiring R4-05's `POST /api/initiatives/:id/plan`; `buildProjectRoadmap`
+  computes `workItems` status-independent (= the planned signal). (Server-side develop gate = deferred
+  defense-in-depth follow-up, known-gaps.)
+- **Recovery folded in (F3):** inspect/requeue/abandon affordances (API unchanged) on the roadmap card via
+  `forge-ui/lib/recovery-attrs.ts`; `/recovery` → redirect stub (`data-page="recovery-redirect"`); nav item removed.
+- **Cross-project attention strip (F4):** `GET /api/studio/projects/attention` (`cli/bridge-studio.ts`, shared
+  `scanProjectManifests`) + a slim `data-section="attention-strip"` on `/` with per-project counts
+  (planned/in-flight/gated/merged/completeness-flagged) linking through to `/projects/<id>`.
+- **Architect re-run (F5):** `POST /api/architect/rerun` (`cli/ui-bridge.ts`, re-spawns the stalled session via
+  `spawnAgentTurn`, `isSafeRunId`-guarded, dry-bridge `stub-actions`) + a `data-action="architect-rerun"` button on
+  `StuckWarning`.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -634,7 +658,7 @@ R4-01-F2, wave 4):
 
 ### R4-11 Roadmap & attention surface
 
-- **Status:** planned  ·  **Wave:** 2 (with R4-05)
+- **Status:** **implemented** (2026-07-19, wave 2 — as-built baseline R4-B11)  ·  **Wave:** 2 (with R4-05)
 - **Depends on:** — · **Depended on by:** R4-05 *(soft)*, R4-09 (merged-state trigger)
 - **Context:** The operator surface work the suite needs: Q2-B's `merged`
   lifecycle state, the standalone plan trigger, blocked-until-planned, folding
@@ -746,3 +770,11 @@ free R4 ID's features.
   paths converge on one `execPm`→`runProjectManager` pipeline; **F4 built as a flow-path manifest-move per operator
   Option A 2026-07-18, NOT the runAgent primitive — literal runAgent-consumption deferred to R4-01-F2**) + F6
   (non-blocking `plan.completeness` event). Wave-2's R4-05 half; R4-11 is the other half.
+- 2026-07-19 — **R4-11 implemented** (wave 2, branch `feat/r4-11-roadmap-attention`; R4 gains baseline **R4-B11**).
+  The roadmap/attention surface: F1 `merged` transient queue state (`_queue/merged/`; single move-authority in
+  `closure.ts`; dep gate `merged ∪ done`; ~17 sites; distinct from the `CycleOutcome` value) + F2 plan trigger +
+  blocked-until-planned lock (wires R4-05's plan endpoint) + F3 recovery folded onto the roadmap card (`/recovery`
+  → redirect stub) + F4 cross-project attention strip (`GET /api/studio/projects/attention`) + F5 architect re-run
+  (`POST /api/architect/rerun`, guarded spawn). Deferred (known-gaps): a server-side `planned` gate on
+  `/api/develop/start` (UI lock only — ADR-031 makes the UI the sole surface); the orphan-in-merged SIGKILL edge
+  (R4-09). **Wave 2 (R4-05 + R4-11) COMPLETE.**

@@ -2,9 +2,17 @@
  * File-based initiative queue (per ADR 011).
  *
  * State machine via directory rename:
- *   _queue/pending → in-flight → ready-for-review → done
+ *   _queue/pending → in-flight → ready-for-review → merged → done
  *                      ↓
  *                   failed
+ *
+ * `merged` (R4-11-F1) is a transient pass-through, NOT a parking state: a
+ * confirmed PR merge lands an initiative in `merged/`, then the existing
+ * finalize→reflector chain transits it to `done/` in the SAME sweep (see
+ * `orchestrator/finalize-merged.ts`). It is never left sitting in `merged/`
+ * across ticks. NOTE: the string `'merged'` is also an unrelated
+ * `CycleOutcome`/`CycleResult.status` *value* (`orchestrator/cycle-context.ts`)
+ * — that's an event outcome, not this queue directory. Don't conflate them.
  *
  * Atomicity: `rename` on a single filesystem is atomic. That is the entire
  * claim mechanism.
@@ -25,13 +33,20 @@ import {
 import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
 
-export type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
+export type QueueState =
+  | 'pending'
+  | 'in-flight'
+  | 'ready-for-review'
+  | 'merged'
+  | 'done'
+  | 'failed';
 
 export type QueuePaths = {
   root: string;
   pending: string;
   inFlight: string;
   readyForReview: string;
+  merged: string;
   done: string;
   failed: string;
 };
@@ -43,6 +58,7 @@ export function getPaths(queueRoot = '_queue'): QueuePaths {
     pending: join(root, 'pending'),
     inFlight: join(root, 'in-flight'),
     readyForReview: join(root, 'ready-for-review'),
+    merged: join(root, 'merged'),
     done: join(root, 'done'),
     failed: join(root, 'failed'),
   };
@@ -65,6 +81,7 @@ export function counts(paths = getPaths()): Record<QueueState, number> {
     pending: safeCount(paths.pending),
     'in-flight': safeCount(paths.inFlight),
     'ready-for-review': safeCount(paths.readyForReview),
+    merged: safeCount(paths.merged),
     done: safeCount(paths.done),
     failed: safeCount(paths.failed),
   };
@@ -114,12 +131,30 @@ export function moveTo(
   return to;
 }
 
+/**
+ * Promote a manifest already sitting in `_queue/merged/` on to `_queue/done/`.
+ * R4-11-F1: `merged` is a transient pass-through, never a parking state —
+ * `orchestrator/phases/closure.ts` (the single terminal-move authority) is the
+ * only caller, invoked in the SAME sweep as the `→merged` move (right after
+ * firing reflection, success or lost). Distinct from `moveTo` (which always
+ * sources from `in-flight/` and clears a heartbeat) because this move sources
+ * from `merged/`, where no heartbeat ever lived.
+ */
+export function promoteMergedToDone(filename: string, paths = getPaths()): string {
+  const from = join(paths.merged, filename);
+  const to = join(paths.done, filename);
+  renameSync(from, to);
+  return to;
+}
+
 function toStateKey(state: Exclude<QueueState, 'in-flight'>): keyof QueuePaths {
   switch (state) {
     case 'pending':
       return 'pending';
     case 'ready-for-review':
       return 'readyForReview';
+    case 'merged':
+      return 'merged';
     case 'done':
       return 'done';
     case 'failed':

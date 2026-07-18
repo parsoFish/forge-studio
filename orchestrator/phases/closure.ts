@@ -14,9 +14,11 @@
  *      every product path.
  *   2. On a CONFIRMED merge: aligns local↔remote — fast-forwards local
  *      `main`, prunes the initiative branch (`alignLocalToRemote`) — and
- *      moves the manifest `in-flight/ → done/`. Reflection then fires
- *      (cycle.ts) on this confirmed-merge signal only (G10), so
- *      `_queue/done/` ⇒ the PR is MERGED (G1).
+ *      moves the manifest `in-flight/ → merged/` (R4-11-F1: `merged` is a
+ *      transient pass-through, reflect pending). Reflection then fires on
+ *      this confirmed-merge signal only (G10); the caller promotes the
+ *      manifest `merged/ → done/` in the SAME sweep afterwards, so
+ *      `_queue/done/` ⇒ the PR is MERGED AND reflected (G1).
  *   3. On an UNconfirmed merge (open PR — the expected unattended state
  *      until the operator merges, or a partial/failed state): moves the
  *      manifest `in-flight/ → ready-for-review/`, flagged; reflection is
@@ -33,6 +35,19 @@
  * flight). Keeping one mover matches queue.ts:moveTo's `from = in-flight`
  * contract and removes the double-move defect.
  *
+ * R4-11-F1: `merged` is a transient pass-through queue DIRECTORY, NOT a
+ * parking state — do not confuse it with the unrelated `CycleOutcome`/
+ * `CycleResult.status` VALUE `'merged'` (cycle-context.ts), which is an
+ * event outcome and is unchanged by this. On a confirmed remote merge,
+ * `terminalMove` below now lands the manifest in `_queue/merged/` (not
+ * `_queue/done/` directly); the SECOND move, `merged/ → done/`, happens via
+ * `promoteMergedToDone` (also exported here), invoked by the caller AFTER
+ * firing reflection (success or lost) in the SAME sweep — no new periodic
+ * sweep ever promotes it. Closure remains the single terminal-move authority
+ * for BOTH moves even though `promoteMergedToDone` is invoked externally
+ * (finalize-merged.ts's finalize chain / flow-runner's reflect node): this
+ * file is the only place either rename happens.
+ *
  * No SDK calls — closure is pure orchestration over git + gh + the queue.
  */
 
@@ -41,7 +56,7 @@ import { writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 import type { EventLogger } from '../logging.ts';
-import { moveTo as moveQueueItem } from '../queue.ts';
+import { moveTo as moveQueueItem, promoteMergedToDone as promoteMergedQueueItem } from '../queue.ts';
 import {
   alignLocalToRemote,
   confirmPrMerged,
@@ -86,7 +101,7 @@ function terminalMove(
   input: CycleInput,
   logger: EventLogger,
   parentEventId: string,
-  to: 'done' | 'ready-for-review',
+  to: 'merged' | 'ready-for-review',
 ): void {
   try {
     const dest = moveQueueItem(basename(input.manifestPath), to);
@@ -98,8 +113,8 @@ function terminalMove(
       event_type: 'log',
       input_refs: [input.manifestPath],
       output_refs: [dest],
-      message: to === 'done' ? 'closure.manifest-moved-to-done' : 'closure.manifest-moved-to-ready-for-review',
-      metadata: { confirmed_merge: to === 'done' },
+      message: to === 'merged' ? 'closure.manifest-moved-to-merged' : 'closure.manifest-moved-to-ready-for-review',
+      metadata: { confirmed_merge: to === 'merged' },
     });
   } catch (err) {
     logger.emit({
@@ -112,6 +127,50 @@ function terminalMove(
       output_refs: [],
       message: 'closure.manifest-move-noop',
       metadata: { target: to, detail: err instanceof Error ? err.message : String(err) },
+    });
+  }
+}
+
+/**
+ * R4-11-F1 — the SECOND terminal move of a confirmed merge: promotes the
+ * manifest from `_queue/merged/` on to `_queue/done/`. Closure remains the
+ * single terminal-move authority (this is the only place `merged/ → done/`
+ * happens), even though the CALLER (finalize-merged.ts's finalize chain, or
+ * flow-runner's reflect node) invokes it — always AFTER firing reflection
+ * (success or lost), in the SAME sweep, never from a new periodic sweep.
+ * `parentEventId` is optional: the caller runs after closure's own `start`
+ * event has already ended, so there is often no single in-flight parent to
+ * thread. Best-effort + logged, matching `terminalMove`'s contract.
+ */
+export function promoteMergedToDone(
+  input: CycleInput,
+  logger: EventLogger,
+  parentEventId?: string,
+): void {
+  try {
+    const dest = promoteMergedQueueItem(basename(input.manifestPath));
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'closure',
+      skill: 'cycle',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [dest],
+      message: 'closure.manifest-promoted-to-done',
+      metadata: {},
+    });
+  } catch (err) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'closure',
+      skill: 'cycle',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'closure.manifest-promote-noop',
+      metadata: { detail: err instanceof Error ? err.message : String(err) },
     });
   }
 }
@@ -266,10 +325,13 @@ export async function runClosure(
     });
   }
 
-  // G1: `_queue/done/` ⇒ the PR is MERGED. The single terminal move to
-  // done/ happens ONLY here (after a confirmed remote merge), never from
-  // an orchestrator-internal flag and never from the reviewer.
-  terminalMove(input, logger, start.event_id, 'done');
+  // G1 (R4-11-F1 amendment): `_queue/merged/` ⇒ the PR is MERGED, reflect
+  // pending. The single terminal move to merged/ happens ONLY here (after a
+  // confirmed remote merge), never from an orchestrator-internal flag and
+  // never from the reviewer. `merged` is a transient pass-through — the
+  // caller promotes it on to `done/` (via `promoteMergedToDone` below) in
+  // the SAME sweep, after firing reflection.
+  terminalMove(input, logger, start.event_id, 'merged');
 
   // N6 (plan 2.8): bounded post-merge CI watch. Runs AFTER the terminal
   // move so a watch defect can never corrupt queue state, and only on a

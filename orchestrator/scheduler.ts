@@ -424,8 +424,13 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
   }
   if (deps.length === 0) return [];
   return deps.filter((depId) => {
+    // R4-11-F1: `merged` is a transient pass-through of the SAME finished
+    // dependency (it's promoted to `done/` in the same sweep) — a dependent
+    // must not stay blocked for the brief window a prerequisite sits in
+    // `merged/` before that promotion runs, so the gate accepts merged ∪ done.
     const donePath = join(paths.done, `${depId}.md`);
-    return !existsSync(donePath);
+    const mergedPath = join(paths.merged, `${depId}.md`);
+    return !existsSync(donePath) && !existsSync(mergedPath);
   });
 }
 
@@ -922,7 +927,7 @@ function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }): void {
     if (!existsSync(resolve(p))) mkdirSync(resolve(p), { recursive: true });
   }
   const paths = getPaths(cfg.queueRoot);
-  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.done, paths.failed]) {
+  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.merged, paths.done, paths.failed]) {
     if (!existsSync(p)) mkdirSync(p, { recursive: true });
   }
 }

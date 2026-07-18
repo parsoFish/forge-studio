@@ -392,7 +392,10 @@ async function main() {
         rmSync(CYCLE_LOG, { recursive: true, force: true });
         // S7: the seeded review worktree + the develop-trigger initiative (INIT_DEV).
         try { rmSync(join(FORGE_ROOT, '_worktrees', INIT), { recursive: true, force: true }); } catch { /* */ }
-        for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+        // R4-11-F1: sweep `merged/` too (transient QueueState pass-through dir,
+        // not the unrelated CycleOutcome 'merged' value) so a crash mid-run
+        // can't leave residue there.
+        for (const q of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
           try { rmSync(join(QDIR(q), `${INIT}.md`), { force: true }); } catch { /* */ }
           try { rmSync(join(QDIR(q), `${INIT}.verdict-response.md`), { force: true }); } catch { /* */ }
           try { rmSync(join(QDIR(q), `${INIT}-e2e-develop-trigger.md`), { force: true }); } catch { /* */ }
@@ -404,7 +407,7 @@ async function main() {
             ? readdirSync(join(FORGE_ROOT, '_logs')).filter((d) => d.includes('e2e-studio-demo'))
             : [];
           for (const d of studioLogDirs) rmSync(join(FORGE_ROOT, '_logs', d), { recursive: true, force: true });
-          for (const q of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+          for (const q of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
             const entries = existsSync(QDIR(q))
               ? readdirSync(QDIR(q)).filter((f) => f.includes('e2e-studio-demo'))
               : [];

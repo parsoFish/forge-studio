@@ -21,13 +21,14 @@ const PROJECT_ID = 'test-project';
 
 function makeManifest(
   id: string,
-  opts: { flowId?: string; deps?: string[] } = {},
+  opts: { flowId?: string; deps?: string[]; cycleId?: string } = {},
 ): string {
-  const { flowId = 'forge-develop', deps = [] } = opts;
+  const { flowId = 'forge-develop', deps = [], cycleId } = opts;
   const depsBlock =
     deps.length > 0
       ? `depends_on_initiatives:\n${deps.map((d) => `  - ${d}`).join('\n')}\n`
       : '';
+  const cycleBlock = cycleId ? `cycle_id: ${cycleId}\n` : '';
   return `---
 initiative_id: ${id}
 project: ${PROJECT_ID}
@@ -37,9 +38,19 @@ iteration_budget: 5
 cost_budget_usd: 2.0
 phase: pending
 flow_id: ${flowId}
-${depsBlock}---
+${depsBlock}${cycleBlock}---
 
 # ${id}
+`;
+}
+
+function makeWorkItem(id: string, initiativeId: string): string {
+  return `---
+work_item_id: ${id}
+initiative_id: ${initiativeId}
+---
+
+## ${id}
 `;
 }
 
@@ -64,6 +75,18 @@ before(async () => {
     join(forgeRoot, '_queue', 'pending', 'INIT-C.md'),
     makeManifest('INIT-C', { flowId: 'forge-architect', deps: ['INIT-A'] }),
   );
+  // R4-11-F2: a pending initiative that HAS been decomposed (a WI snapshot
+  // exists under its cycle_id) — the "planned" fixture for the roadmap's
+  // plan-trigger lock.
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', 'INIT-D.md'),
+    makeManifest('INIT-D', { cycleId: 'cycle-init-d' }),
+  );
+  mkdirSync(join(forgeRoot, '_logs', 'cycle-init-d', 'work-items-snapshot'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_logs', 'cycle-init-d', 'work-items-snapshot', 'WI-1.md'),
+    makeWorkItem('WI-1', 'INIT-D'),
+  );
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -79,7 +102,13 @@ after(async () => {
 type RoadmapBody = {
   roadmap: {
     projectId: string;
-    initiatives: Array<{ initiativeId: string; ready: boolean; blockedBy: string[] }>;
+    initiatives: Array<{
+      initiativeId: string;
+      status: string;
+      ready: boolean;
+      blockedBy: string[];
+      workItems?: Array<{ id: string }>;
+    }>;
   };
 };
 
@@ -128,6 +157,26 @@ test('roadmap: malformed frontmatter in pending/ → skipped by the builder, nev
   } finally {
     rmSync(badPath, { force: true });
   }
+});
+
+test('roadmap: pending initiative with no WI snapshot → workItems undefined (unplanned)', async () => {
+  const roadmap = await fetchRoadmap();
+  const a = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-A');
+  assert.ok(a, 'INIT-A present in roadmap');
+  assert.equal(a!.status, 'pending');
+  assert.equal(a!.workItems, undefined, 'no WI snapshot exists yet — reads as unplanned');
+});
+
+test('roadmap: pending initiative with cycle_id + WI snapshot → workItems defined (planned)', async () => {
+  const roadmap = await fetchRoadmap();
+  const d = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-D');
+  assert.ok(d, 'INIT-D present in roadmap');
+  assert.equal(d!.status, 'pending', 'still queue-pending — decomposition is independent of queue state');
+  assert.ok(d!.workItems, 'a WI snapshot exists — reads as planned even while pending');
+  assert.deepEqual(
+    d!.workItems!.map((w) => w.id),
+    ['WI-1'],
+  );
 });
 
 test('roadmap: dep moves to done/ → dependent initiative flips to ready', async () => {

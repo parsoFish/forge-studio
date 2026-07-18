@@ -159,7 +159,14 @@ inventory rather than one shared page-level contract:
 
 - **Library `/`** — the landing/browse surface: `[data-page="library"][data-page-ready]`,
   one `data-section` per pillar (`orientation`, `projects`, `agents`,
-  `flows`, `kbs`).
+  `flows`, `kbs`). Right after the hero's Operator Pulse panel sits the
+  cross-project **attention strip** (R4-11-F4, present once ≥1 project is
+  registered) — `[data-section="attention-strip"]` wrapping one
+  `[data-attention-item][data-attention-project]` link per project (a real
+  `<a href="/projects/<id>">`, every item links through to its project's
+  roadmap) carrying `data-attention-planned`, `data-attention-in-flight`,
+  `data-attention-gated`, `data-attention-merged`, `data-attention-flagged`
+  counts.
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
@@ -219,13 +226,34 @@ inventory rather than one shared page-level contract:
   Roadmap renders `SerpentineTimeline.tsx`:
   `[data-roadmap-timeline][data-node-count]` with per-initiative
   `[data-roadmap-node][data-initiative-id][data-initiative-status]` and a
-  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`. A
-  brand-new project renders `ProjectOnboardForm` instead:
+  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`.
+  Each pending initiative card also carries `[data-plan-state="unplanned"
+  |"planning"|"planned"|"error"]` (`unplanned` = the R4-05
+  `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
+  has run yet): unplanned renders the `[data-action="plan-initiative"]`
+  button plus a blocked-until-planned lock badge
+  (`[data-section="initiative-blocked-until-planned"]`) that hides
+  `[data-action="start-development"]` until the card flips to `planned`;
+  dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
+  the `forge-architect` flow monitor. A brand-new project renders
+  `ProjectOnboardForm` instead:
   `[data-section="project-onboard"]`, collapsible
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
-  The recovery page groups by initiative too (see `/recovery` below).
+  A recoverable initiative (`in-flight | ready-for-review | failed` —
+  deliberately excluding `merged`, a transient pass-through, and terminal
+  `pending`/`done`) gets recovery affordances right on its `InitiativeCard`
+  inside the popover (R4-11-T3, folded off the retired standalone
+  `/recovery` page — see below): `[data-recovery-item][data-recovery-initiative]
+  [data-recovery-status][data-recovery-attempt-count]` (+
+  `[data-recovery-prior-attempts]` when a prior attempt exists) with
+  `[data-action="recovery-inspect"|"recovery-requeue"|"recovery-abandon"]`
+  buttons; inspecting expands
+  `[data-section="recovery-detail"][data-recovery-detail-initiative]`
+  (+ `[data-recovery-commits]` when the worktree has commits, and a
+  `[data-recovery-note]` result line after requeue/abandon). The recovery
+  API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
 - **`/architect/new` + `/architect/[sid]/interview`.** `/architect/new` is
   the native "start a run" entry that replaced the retired `/dashboard`
   launcher — `[data-page="architect-new"][data-page-ready]` wrapping the
@@ -236,7 +264,13 @@ inventory rather than one shared page-level contract:
   `[data-tool-burst]` chips) plus
   `[data-section="architect-interview"][data-architect-round][data-questions-answered]`,
   per-question `[data-question-index][data-question-resolved]`, per-option
-  `[data-option-label][data-option-selected]`. The bare
+  `[data-option-label][data-option-selected]`. A stalled session's
+  StuckWarning (P1, `[data-architect-stale="true"][data-architect-stale-ms]`)
+  carries a one-click re-run affordance (F5, R4-11-T5) —
+  `[data-action="architect-rerun"][data-rerun-state="idle"|"rerunning"|"error"]`
+  — that POSTs `/api/architect/rerun` to re-spawn the existing session's turn
+  as-is (no answers/round mutation); the existing 3s session poll picks the
+  resumed session back up. The bare
   `/architect/[sessionId]` route (no `/interview`) is now a permanent
   server-side redirect into `/architect/<sid>/interview` (M7-4, ADR-031) —
   the old standalone screen + its `design-decisions`/`escalation-id` PLAN
@@ -264,12 +298,11 @@ inventory rather than one shared page-level contract:
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
   (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`).
-- **`/recovery`** — the stuck-initiative operator surface, grouped by
-  initiative: `[data-page="recovery"][data-page-ready][data-recovery-count]`
-  with per-item
-  `[data-recovery-item][data-recovery-initiative][data-recovery-status][data-recovery-attempt-count]`
-  (+ `[data-recovery-prior-attempts]`) and an expandable
-  `[data-section="recovery-detail"][data-recovery-detail-initiative]`.
+- **`/recovery`** — retired as a standalone page (R4-11-T3): the
+  stuck-initiative inspect/requeue/abandon affordances folded onto the
+  per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
+  route is now a permanent client-side redirect stub into `/` (bookmarks
+  keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
 - **`/skills`** — no standalone catalog route; the OOTB
   community-sourced skill library (`studio/catalog.yaml`, with provenance +
   stars) surfaces inside the agent builder's palette (`/agents/new`,
@@ -291,7 +324,9 @@ The shared status vocabularies:
 - **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
 - **Roadmap initiative status** (`SerpentineTimeline.tsx`) — `pending |
-  in-flight | ready-for-review | done | failed`.
+  in-flight | ready-for-review | merged | done | failed` (R4-11-F1: `merged`
+  = PR confirmed merged, reflect pending — a transient `_queue/merged/`
+  pass-through promoted to `done` in the same finalize sweep).
 - **`HexKind`** ([`forge-ui/lib/monitor-layout.ts`](./forge-ui/lib/monitor-layout.ts)) —
   `phase | wi`, the phase-vs-WI distinction every monitor hex carries.
 
@@ -304,10 +339,10 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 10 user-story journeys in
+is a thin runner over 9 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
 `flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
-`knowledge`, `recovery`, `demo-builder` — one file per journey (plus
+`knowledge`, `demo-builder` — one file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
 linear cycle. The standalone `swap-runtime` journey was retired

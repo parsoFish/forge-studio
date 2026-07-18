@@ -209,6 +209,15 @@ export const journey = defineJourney({
                   [...document.querySelectorAll('[data-card-type="flow"]')].some((el) => (el.getAttribute('href') ?? '').includes(id))),
                 ootbFlowIds);
               check(ootbCardsPresent, `library: the OOTB flows (${ootbFlowIds.join(', ')}) render as cards (registered as data)`);
+              // ── A1.2: cross-project attention strip (R4-11-F4) ────────────────────────
+              // mdtoc is a standing, always-registered fixture (checked into the repo,
+              // not created/cleaned by any beat) so the strip always has ≥1 item here.
+              await countAtLeast(page, '[data-section="attention-strip"]', 1, 'library: [data-section="attention-strip"] present');
+              await countAtLeast(page, '[data-attention-item]', 1, 'library: ≥1 [data-attention-item] in the attention strip');
+              const attentionLink = await page.evaluate(() =>
+                document.querySelector('[data-attention-item]')?.getAttribute('href') ?? '');
+              check(/^\/projects\/[^/]+$/.test(attentionLink),
+                `library: attention item links through to its owning project surface (got "${attentionLink}")`);
 
         },
       },

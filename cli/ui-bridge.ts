@@ -120,7 +120,11 @@ type Cycle = {
   cycleId: string;
   initiativeId: string;
   project?: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` is the transient pass-through state a confirmed-merge
+  // manifest briefly occupies between closure's two terminal moves (→merged,
+  // then merged→done in the same sweep) — distinct from the unrelated
+  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
   /** Feature #10: cross-initiative dependency edges (manifest
@@ -282,6 +286,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       const lookups: Array<[string, Cycle['status']]> = [
         [queuePaths.inFlight, 'in-flight'],
         [queuePaths.readyForReview, 'ready-for-review'],
+        // R4-11-F1: `merged` — the brief pass-through window between a
+        // confirmed merge and its promotion to `done/` in the same sweep.
+        [queuePaths.merged, 'merged'],
         [queuePaths.done, 'done'],
         [queuePaths.failed, 'failed'],
         [queuePaths.pending, 'pending'],
@@ -338,6 +345,12 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
     candidates.sort((a, b) => b.mtime - a.mtime);
     for (const { cycle } of candidates) {
+      // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
+      // the tail end of a finished cycle finalizing (merged → done, same
+      // finalize sweep), not an actively-running one. That sweep spans the
+      // post-merge CI watch plus the reflector run, so a manifest legitimately
+      // sits in `merged/` for minutes on every normal finalize, not
+      // instantaneously.
       if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
         live.push(cycle);
       } else if (recent.length < RECENT_CYCLES_MAX) {
@@ -402,7 +415,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   };
 
   const watchQueue = (): void => {
-    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.done, queuePaths.failed];
+    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed];
     for (const d of dirs) {
       if (!existsSync(d)) continue;
       try {
@@ -1349,6 +1362,34 @@ async function handleArchitect(
       spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/architect/rerun {project, sessionId} — StuckWarning's one-click
+  // re-run affordance (R4-11-T5). Re-invokes the EXISTING session's turn
+  // as-is: unlike /api/architect/answer, no round is appended and no
+  // answers.json write happens — the runner re-reads status.json fresh at
+  // turn start and resumes wherever it left off, so there's nothing to
+  // rewrite here beyond confirming the session exists before spawning.
+  if (method === 'POST' && url === '/api/architect/rerun') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      const status = readStatus(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
+      ctx.broadcastArchitectChanged();
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/rerun', body.sessionId) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }

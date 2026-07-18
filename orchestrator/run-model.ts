@@ -117,11 +117,19 @@ const FALLBACK_FLOW_ID = 'unknown';
 /** Valid origin values for a Run — anything else defaults to 'architect'. */
 const VALID_ORIGINS = new Set(['architect', 'human-directed']);
 
-/** Queue dir name → RunStatus */
+/**
+ * Queue dir name → RunStatus.
+ *
+ * `merged` (R4-11-F1) maps to `'complete'`: a PR-confirmed merge means the
+ * run itself is effectively done (reflection is tracked separately, not as
+ * run activity) — same bucket as `done`. `RunStatus` itself gains no new
+ * value for this.
+ */
 const QUEUE_STATE_TO_RUN_STATUS: Record<QueueState, RunStatus> = {
   'pending': 'planned',
   'in-flight': 'active',
   'ready-for-review': 'gated',
+  'merged': 'complete',
   'done': 'complete',
   'failed': 'failed',
 };
@@ -362,7 +370,14 @@ export function aggregateRun(args: {
 
 export function listRuns(root: string, nowMs: number): Run[] {
   const runs: Run[] = [];
-  const allStates: QueueState[] = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'];
+  const allStates: QueueState[] = [
+    'pending',
+    'in-flight',
+    'ready-for-review',
+    'merged',
+    'done',
+    'failed',
+  ];
   // Build mapping + flow-node-sets once for the entire list pass
   const nodeMapping = buildNodeMapping(root);
   const flowNodeSets = buildFlowNodeSets(root);

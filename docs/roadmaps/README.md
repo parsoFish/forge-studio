@@ -430,3 +430,10 @@ pass across all five roadmaps plus four operator decisions:
   a flow-path manifest-move (Option A), NOT the runAgent primitive** (the plan agent is still the specialized PM
   phase runner runAgent can't drive without degradation; literal runAgent-consumption deferred to R4-01-F2, wave
   4). R4-11 is wave-2's other half.
+- 2026-07-19 — **R4-11 implemented → WAVE 2 COMPLETE** (branch `feat/r4-11-roadmap-attention`; R4 gains baseline
+  **R4-B11**). The roadmap/attention surface: F1 `merged` transient queue state (`_queue/merged/`, single
+  move-authority, dep gate `merged ∪ done`, ~17 sites) + F2 plan trigger + blocked-until-planned lock (wires R4-05's
+  plan endpoint) + F3 recovery folded onto the roadmap card + F4 cross-project attention strip + F5 architect
+  re-run. Deferred to known-gaps §9: a server-side `planned` gate on `/api/develop/start` (UI-only lock; ADR-031
+  makes the UI the sole surface) + the orphan-in-merged SIGKILL edge (R4-09). **Waves 0+1+2 all complete;** next per
+  the wave plan (§4) = wave 3 (R1-01 + R3-01 interleaved) or the operator's pick.

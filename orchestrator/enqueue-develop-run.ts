@@ -85,9 +85,16 @@ export function enqueueDevelopRun(
   if (existsSync(reviewParkedPath) && manifestFlowId(reviewParkedPath) === DEVELOP_FLOW_ID) {
     return { status: 'already-developing', initiativeId, detail: 'a develop cycle is awaiting review' };
   }
+  // R4-11-F1: `merged` is a transient pass-through (promoted to `done/` in the
+  // same sweep) — a manifest sitting there is between a confirmed merge and its
+  // reflection, never a develop *source*; don't race the finalize sweep.
+  if (existsSync(join(paths.merged, file))) {
+    return { status: 'already-developing', initiativeId, detail: 'a merged cycle is finalizing (merged → done)' };
+  }
 
   // Claim it from whichever develop-able state it sits in (pending, the architect
   // hand-off in ready-for-review, or a finished/failed run being re-developed).
+  // `merged` is deliberately excluded — never a develop source (see above).
   const sourcePath = firstExisting(
     [paths.pending, paths.readyForReview, paths.done, paths.failed].map((d) => join(d, file)),
   );

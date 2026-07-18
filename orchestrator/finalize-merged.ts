@@ -14,8 +14,11 @@
  * This module IS that re-trigger. The scheduler calls it on a timer (and at
  * startup): for each `ready-for-review/` manifest whose PR is now MERGED, it
  * re-claims the manifest and runs closure → (on confirmed merge) the reflector,
- * so the initiative lands in `done/`, local↔remote is aligned, the merged branch
- * is deleted, and reflection becomes available in the UI.
+ * so the initiative lands in `merged/` (closure), fires reflection, then this
+ * module promotes it on to `done/` — all in the SAME sweep (R4-11-F1: `merged`
+ * is a transient pass-through, never a parking state; no new periodic sweep
+ * does the second move) — local↔remote is aligned, the merged branch is
+ * deleted, and reflection becomes available in the UI.
  */
 import { existsSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -24,7 +27,7 @@ import { parseManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { pendingUnifierItems } from './unifier-items.ts';
-import { runClosure } from './phases/closure.ts';
+import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
@@ -59,6 +62,13 @@ export type FinalizeDeps = {
   runClosure?: (input: CycleInput, logger: EventLogger, reviewerOutcome: ReviewerOutcome) => Promise<ClosureResult>;
   /** Reflector action a `forge-reflect` merge-trigger dispatches to. Injectable. */
   runReflector?: (input: CycleInput, logger: EventLogger) => Promise<void>;
+  /**
+   * R4-11-F1 — the second terminal move of a confirmed merge: promotes the
+   * manifest `merged/ → done/`, invoked AFTER the reflect trigger fires
+   * (success or lost) in the SAME sweep. Closure (`phases/closure.ts`) is the
+   * single terminal-move authority; injectable so tests needn't touch the fs.
+   */
+  promoteMergedToDone?: (input: CycleInput, logger: EventLogger) => void;
   /** Resolve a flow's declared triggers by id. Default loads the flow.yaml. */
   loadFlowTriggers?: (flowId: string) => FlowTrigger[];
   notify?: (msg: string) => void;
@@ -111,6 +121,7 @@ function makeDefaultFinalizeOne(
   const runClosureFn = deps.runClosure ?? runClosure;
   const runReflectorFn = deps.runReflector ?? runReflector;
   const loadFlowTriggers = deps.loadFlowTriggers ?? defaultLoadFlowTriggers;
+  const promoteMergedToDoneFn = deps.promoteMergedToDone ?? promoteMergedToDone;
 
   return async (input, logger) => {
     const closure = await runClosureFn(input, logger, 'pr-open');
@@ -176,6 +187,14 @@ function makeDefaultFinalizeOne(
       },
     );
 
+    // R4-11-F1: `merged` is a transient pass-through, never a parking state —
+    // promote merged/ → done/ NOW, in this SAME sweep, regardless of whether
+    // a reflect trigger was declared or whether reflection succeeded or was
+    // lost (handled above via cycle.reflection-lost). Closure remains the
+    // single terminal-move authority for both the →merged and merged→done
+    // moves; this is the ONLY caller of the second move in production.
+    promoteMergedToDoneFn(input, logger);
+
     // report.md was written once at cycle.end (pr-open). Now that the merge is
     // confirmed + finalized, regenerate it so the report reflects the MERGED
     // state (baseline/diff render against the merge commit) instead of staying
@@ -227,9 +246,10 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
           `${initiativeId} · merged with ${pendingUwis.length} pending review work-item(s) unrun (${pendingUwis.map((p) => p.work_item_id).join(', ')}) — the operator's merge overrides them`,
         );
       }
-      // Re-claim to in-flight/ so closure's terminal move (in-flight → done)
-      // has a source. If closure decides NOT merged after all it moves the
-      // manifest back to ready-for-review/, so this round-trip is safe.
+      // Re-claim to in-flight/ so closure's terminal move (in-flight → merged,
+      // R4-11-F1) has a source. If closure decides NOT merged after all it
+      // moves the manifest back to ready-for-review/, so this round-trip is
+      // safe.
       const inFlightPath = join(paths.inFlight, file);
       renameSync(manifestPath, inFlightPath);
 

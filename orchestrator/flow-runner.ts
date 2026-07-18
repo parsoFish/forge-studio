@@ -55,7 +55,7 @@ import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flo
 
 import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, runUnifierPhase as realRunUnifierPhase } from './phases/developer-loop.ts';
-import { runClosure } from './phases/closure.ts';
+import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from './pr.ts';
 import {
@@ -118,6 +118,20 @@ export type FlowRunnerDeps = {
     input: CycleInput,
     logger: EventLogger,
   ) => Promise<{ reflection_status: string; lint_status: string }>;
+
+  /**
+   * R4-11-F1 — the second terminal move of a confirmed merge: promotes the
+   * manifest `merged/ → done/`. `orchestrator/finalize-merged.ts` is the
+   * production caller for the normal (deferred) merge-confirmation path; a
+   * flow that combines a review node with a downstream reflect node in ONE
+   * DAG pass (the retired forge-cycle monolith shape, kept as a generic
+   * DAG-engine fixture) needs this call too — finalize-merged.ts only scans
+   * `ready-for-review/`, and closure's own terminal move already left this
+   * manifest sitting in `merged/`, not there. `phases/closure.ts` remains
+   * the single terminal-move authority (this is that same function, not a
+   * duplicate); injectable so tests needn't touch the fs.
+   */
+  promoteMergedToDone: (input: CycleInput, logger: EventLogger, parentEventId?: string) => void;
 
   /**
    * Dev-loop close contract helpers. Injected for testability (tests supply
@@ -320,6 +334,7 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
   openPrInline,
   runClosure,
   runReflector,
+  promoteMergedToDone,
   commitDevLoopBoundary,
   enforceDevLoopCloseInvariant,
   assertNonEmptyDelivery,
@@ -680,7 +695,8 @@ const execReview: NodeExecutor = async (ctx) => {
 /** reflect: only when the closure confirmed a merge (G10). */
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
-  if (state.closure?.merged) {
+  if (!state.closure?.merged) return;
+  try {
     try {
       const reflectorResult = await deps.runReflector(input, nodeLogger);
       state.reflectionStatus = reflectorResult.reflection_status;
@@ -706,6 +722,14 @@ const execReflect: NodeExecutor = async (ctx) => {
       });
       throw err;
     }
+  } finally {
+    // R4-11-F1: `merged` is a transient pass-through, never a parking state —
+    // promote merged/ → done/ NOW, in this SAME node, regardless of whether
+    // reflection succeeded or was lost (recorded above via
+    // cycle.reflection-lost, then rethrown). Mirrors finalize-merged.ts's
+    // unconditional promote-after-reflect-dispatch: the reflection-lost path
+    // must ALSO still reach done/.
+    deps.promoteMergedToDone(input, nodeLogger);
   }
 };
 

@@ -16,7 +16,11 @@ export type Cycle = {
   cycleId: string;
   initiativeId: string;
   project?: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` is the transient pass-through a confirmed-merge
+  // manifest briefly occupies between closure's two terminal moves (→merged,
+  // then merged→done in the same sweep) — distinct from the unrelated
+  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
   /**
@@ -195,7 +199,9 @@ export type RoadmapWorkItem = {
 export type RoadmapInitiative = {
   initiativeId: string;
   title: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` — brief pass-through between a confirmed merge and its
+  // promotion to `done/` in the same sweep.
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   dependsOnInitiatives: string[];
   /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
   ready: boolean;
@@ -221,6 +227,36 @@ export async function fetchRoadmap(projectId: string): Promise<ProjectRoadmap | 
   return body?.roadmap ?? null;
 }
 
+// ---- Cross-project attention strip (R4-11-F4) --------------------------------
+
+export type ProjectAttentionItem = {
+  projectId: string;
+  name: string;
+  /** Link target for the strip item — the project's roadmap tab. */
+  link: string;
+  /** Count of this project's manifests in `_queue/pending/`. */
+  planned: number;
+  /** Count in `_queue/in-flight/`. */
+  inFlight: number;
+  /** Count in `_queue/ready-for-review/` — the `gated` RunStatus (awaiting an operator verdict). */
+  gated: number;
+  /** Count in `_queue/merged/` (R4-11-F1 transient state). */
+  merged: number;
+  /** Count of initiatives whose latest `plan.completeness` event (R4-05-F6) is flagged. */
+  flagged: number;
+};
+
+/**
+ * Fetch the cross-project attention aggregate (R4-11-F4) — one best-effort
+ * entry per registered project — for the library landing strip. Returns `[]`
+ * (never null) when the bridge is offline, so callers can render an empty
+ * strip rather than special-case a missing fetch.
+ */
+export async function fetchProjectAttention(): Promise<ProjectAttentionItem[]> {
+  const body = await bridgeGet<{ attention: ProjectAttentionItem[] } | null>('/api/studio/projects/attention', null);
+  return body?.attention ?? [];
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;
@@ -237,7 +273,10 @@ export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
 export type RecoveryInspect = {
   found: boolean;
   initiativeId: string;
-  state?: 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
+  // R4-11-F1: `merged` included defensively — a crash between closure's
+  // →merged move and the merged→done promotion would otherwise strand a
+  // manifest somewhere recovery can't represent.
+  state?: 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
   worktree?: string | null;
   worktreeExists?: boolean;
   branch?: string;
@@ -350,6 +389,52 @@ export async function startDevelopment(initiativeIds: string[]): Promise<StartDe
     error: r.error,
     results: r.data?.results as DevelopStartItemResult[] | undefined,
   };
+}
+
+// ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
+
+export type PlanInitiativeResult = {
+  status: 'enqueued' | 'not-found' | 'already-running' | 'error';
+  initiativeId: string;
+  cycleId?: string;
+  flowId?: string;
+  detail?: string;
+};
+
+/**
+ * Trigger the forge-architect (decompose) flow for a WI-less initiative (the
+ * roadmap's per-initiative "Plan" trigger, R4-11-F2). Repoints the manifest
+ * at forge-architect + threads its cycle_id, then the scheduler claims it.
+ *
+ * Unlike `startDevelopment`'s batch envelope, `POST /api/initiatives/:id/plan`
+ * maps its single outcome onto a real HTTP status (200 enqueued / 404
+ * not-found / 409 already-running / 500 error) with every field (status,
+ * detail, cycleId, flowId) meaningful on every outcome — `bridgePost`'s
+ * generic non-2xx handling only preserves a bare `error` string, so this
+ * reads the JSON body directly instead of going through that envelope.
+ */
+export async function planInitiative(initiativeId: string): Promise<PlanInitiativeResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { status: 'error', initiativeId, detail: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
+      method: 'POST',
+      headers: { 'x-forge-csrf': '1' },
+    });
+    const body = (await res.json()) as Partial<PlanInitiativeResult> & { error?: string };
+    if (body.status) {
+      return {
+        status: body.status,
+        initiativeId,
+        cycleId: body.cycleId,
+        flowId: body.flowId,
+        detail: body.detail,
+      };
+    }
+    return { status: 'error', initiativeId, detail: body.error ?? `HTTP ${res.status}` };
+  } catch (err) {
+    return { status: 'error', initiativeId, detail: String(err) };
+  }
 }
 
 // ---- Structured demo (ADR 021) ------------------------------------------
@@ -521,6 +606,16 @@ export async function postArchitectAnswers(input: {
   answers: { question: string; answer: string }[];
 }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/architect/answer', input);
+}
+
+/** R4-11-T5 — StuckWarning's one-click re-run: re-spawns the existing
+ *  session's turn as-is (no answers/round mutation). Mirrors
+ *  `postArchitectAnswers`'s bridgePost shape. */
+export async function rerunArchitectSession(
+  project: string,
+  sessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/architect/rerun', { project, sessionId });
 }
 
 export type PlanVerdict = {

@@ -1,14 +1,17 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK,
+  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK, FORGE_ROOT,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
-import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 // module-scope cross-beat state for this journey (was hoisted in main())
 let ROADMAP_SEEDED_WI, roadmapSeeded;       // roadmap-tab → roadmap-start-development
 let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-development
+let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
+let INIT_PLAN;                              // roadmap-tab → roadmap-plan-trigger (R4-11-F2)
+let INIT_RECOVERY;                          // roadmap-recovery only (R4-11-T3, self-contained)
 
 export const journey = defineJourney({
     id: 'roadmap',
@@ -116,6 +119,53 @@ export const journey = defineJourney({
                 '---', '', '# mdtoc — `--check` mode (CI drift guard)', '',
                 'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',
               ].join('\n'));
+              // R4-11-F2: this initiative must already be PLANNED (a WI snapshot
+              // exists under its threaded cycle_id) — the roadmap-builder now reads
+              // decomposition off the WI snapshot regardless of queue status, so a
+              // WI-less pending manifest would otherwise render the Plan lock and
+              // withhold "start development" (the very trigger this beat needs).
+              const devWiSnapshotDir = join(FORGE_ROOT, '_logs', DEV_CYCLE_ID, 'work-items-snapshot');
+              mkdirSync(devWiSnapshotDir, { recursive: true });
+              writeFileSync(join(devWiSnapshotDir, 'WI-1.md'), [
+                '---', 'work_item_id: WI-1', `initiative_id: ${INIT_DEV}`, 'status: pending', 'depends_on: []',
+                '---', '', '## Add --check mode', '',
+                'Implement the CI drift guard.',
+              ].join('\n'));
+
+              // R4-11-F2: a THIRD seeded initiative — pending, no cycle_id, no WI
+              // snapshot — the "unplanned" fixture for the Plan trigger + the
+              // blocked-until-planned lock (asserted in the roadmap-plan-trigger beat).
+              INIT_PLAN = `INIT-${DATE}-e2e-plan-trigger`;
+              writeFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), [
+                '---', `initiative_id: ${INIT_PLAN}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
+                'origin: architect',
+                '---', '', '# mdtoc — `--fix` mode (auto-repair drift)', '',
+                'Given a doc whose embedded TOC has drifted, when `mdtoc --fix` runs, then the TOC is rewritten in place.',
+              ].join('\n'));
+
+              // R4-11-F1: a FOURTH seeded initiative sitting in `_queue/merged/` —
+              // the transient QueueState pass-through dir between a confirmed PR
+              // merge and closure's own same-sweep promotion to `done/` (distinct
+              // from the unrelated CycleOutcome 'merged' status value). `merged`
+              // is a same-sweep pass-through, but that sweep spans the post-merge
+              // CI watch plus the reflector run, so a manifest legitimately sits
+              // here for minutes on every normal finalize, not instantaneously —
+              // the roadmap must be able to render the state faithfully for that
+              // whole window (not just the rare crash-between-moves case) — seed
+              // it directly so the dot renders
+              // `[data-initiative-status="merged"]` without needing a real
+              // merge+closure round-trip (that's covered by the orchestrator
+              // suite: queue.test.ts, closure.test.ts, finalize-merged.test.ts).
+              INIT_MERGED = `INIT-${DATE}-e2e-merged-state`;
+              mkdirSync(QDIR('merged'), { recursive: true });
+              writeFileSync(join(QDIR('merged'), `${INIT_MERGED}.md`), [
+                '---', `initiative_id: ${INIT_MERGED}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12',
+                'origin: architect',
+                '---', '', '# mdtoc — `--json` output mode', '',
+                'Given `mdtoc --json` runs against a repo, when the PR merges, then the roadmap card reflects the merged-but-not-yet-reflected state.',
+              ].join('\n'));
 
               await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
               try {
@@ -137,6 +187,13 @@ export const journey = defineJourney({
                 const initCount = await page.evaluate(() =>
                   document.querySelectorAll('[data-roadmap-node]').length);
                 check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the timeline (got ${initCount})`);
+                // R4-11-F1: the seeded `merged/` initiative renders its own dot with
+                // the merged status — proves the roadmap surfaces the transient
+                // pass-through state rather than skipping straight to done/failed.
+                const mergedStatus = await page.evaluate((id) =>
+                  document.querySelector(`[data-roadmap-node][data-initiative-id="${id}"]`)?.getAttribute('data-initiative-status') ?? null,
+                  INIT_MERGED);
+                check(mergedStatus === 'merged', `roadmap: seeded merged/ initiative renders [data-initiative-status="merged"] (got ${mergedStatus})`);
                 if (roadmapSeeded) {
                   // The detail card pops OFF the dot now — click the seeded initiative's
                   // node, then assert its card (with WIs) appears in the popover.
@@ -152,6 +209,59 @@ export const journey = defineJourney({
               } else {
                 check(false, 'roadmap: Roadmap tab button [data-tab="roadmap"] present on project page');
               }
+
+              // Clean up the seeded merged/ initiative — self-contained to this beat,
+              // unlike INIT_DEV which the next beat still needs.
+              try { rmSync(join(QDIR('merged'), `${INIT_MERGED}.md`), { force: true }); } catch { /* */ }
+
+        },
+      },
+      {
+        id: 'roadmap-plan-trigger',
+        title: 'Plan trigger + blocked-until-planned lock (R4-11-F2)',
+        narration: 'A WI-less pending initiative shows a "Plan" trigger instead of "Start development" — a blocked-until-planned lock withholds development until it\'s actually decomposed. Clicking Plan repoints the manifest at the forge-architect flow so a real PM pass can produce work items.',
+        drive: async (ctx) => {
+              const { page, check, frame } = ctx;
+              // ── R4-11-F2: Plan trigger + blocked-until-planned lock ──────────────────
+              console.log('\n[R4-11-F2] Plan trigger + blocked-until-planned lock');
+
+              // The card pops off the dot — click the WI-less initiative's node to reveal it.
+              await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_PLAN}"]`).first().click().catch(() => {});
+              await sleep(500);
+              // The card div is uniquely identified by data-plan-state (the Plan button
+              // also carries data-initiative-id, so select the div explicitly).
+              const planCard = page.locator(`[data-initiative-id="${INIT_PLAN}"][data-plan-state]`);
+              const planBtn = planCard.locator('[data-action="plan-initiative"]');
+              if (await planBtn.count() > 0) {
+                const initialState = await planCard.getAttribute('data-plan-state');
+                check(initialState === 'unplanned', `roadmap: a WI-less pending initiative renders [data-plan-state="unplanned"] (got ${initialState})`);
+
+                const lockCount = await planCard.locator('[data-section="initiative-blocked-until-planned"]').count();
+                check(lockCount > 0, 'roadmap: the blocked-until-planned lock badge is present on a WI-less initiative');
+
+                const developCount = await planCard.locator('[data-action="start-development"]').count();
+                check(developCount === 0, 'roadmap: "start development" is withheld until the initiative is planned');
+
+                await planCard.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(page, 'A WI-less initiative offers "Plan" instead of "Start development" — the blocked-until-planned lock withholds development until it is decomposed.');
+                await frame(page, 'r4-11-2-plan-trigger', 'R4-11-F2 — the Plan trigger + blocked-until-planned lock on a WI-less initiative', { key: true });
+
+                await planBtn.click();
+                await page.waitForSelector(`[data-initiative-id="${INIT_PLAN}"][data-plan-state="planning"]`, { timeout: 12000 }).catch(() => {});
+                const afterState = await planCard.getAttribute('data-plan-state');
+                check(afterState === 'planning', `plan-initiative transitions to [data-plan-state="planning"] (got ${afterState})`);
+                await frame(page, 'r4-11-2b-planning-started', 'R4-11-F2 — planning started: the initiative will be decomposed into work items', { key: true });
+
+                // The manifest is now claimable on the forge-architect flow.
+                const planManifest = readFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), 'utf8');
+                check(/^flow_id:\s*forge-architect\s*$/m.test(planManifest), 'plan-initiative repoints the manifest at the forge-architect flow');
+              } else {
+                check(false, `roadmap: [data-action="plan-initiative"] present on the WI-less initiative ${INIT_PLAN}`);
+              }
+
+              // Self-contained to this beat — dismiss the popover and clean up the fixture.
+              await page.keyboard.press('Escape').catch(() => {});
+              try { rmSync(join(QDIR('pending'), `${INIT_PLAN}.md`), { force: true }); } catch { /* */ }
 
         },
       },
@@ -236,6 +346,84 @@ export const journey = defineJourney({
                 try { rmSync(ROADMAP_SEEDED_WI, { force: true }); } catch { /* */ }
               }
               try { rmSync(join(QDIR('pending'), `${INIT_DEV}.md`), { force: true }); } catch { /* */ }
+              try { rmSync(join(FORGE_ROOT, '_logs', DEV_CYCLE_ID), { recursive: true, force: true }); } catch { /* */ }
+
+        },
+      },
+      {
+        id: 'roadmap-recovery',
+        title: 'Recovery affordances on a stuck initiative\'s card (R4-11-T3)',
+        narration: 'A recoverable initiative — in-flight, ready-for-review, or failed (never `merged`, a transient pass-through) — gets inspect/requeue/abandon right on its roadmap card, folded off the retired standalone /recovery page. Inspect reads the preserved worktree; under the harness\'s dry-bridge safety seam, requeue/abandon correctly refuse rather than perform a real git operation — the affordance\'s honest failure path, not a faked success.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              // ── R4-11-T3: recovery affordances on the roadmap card ───────────────────
+              console.log('\n[R4-11-T3] Recovery affordances on a stuck initiative\'s card');
+
+              // Grounded (a real cycle can genuinely land in `_queue/failed/` after
+              // exhausting its retry budget — see orchestrator/queue.ts): seed a
+              // minimal failed manifest for this project, self-contained to this beat.
+              INIT_RECOVERY = `INIT-${DATE}-e2e-recovery-surface`;
+              mkdirSync(QDIR('failed'), { recursive: true });
+              writeFileSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), [
+                '---', `initiative_id: ${INIT_RECOVERY}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
+                'origin: architect',
+                '---', '', '# mdtoc — `--strict` mode (fail on any drift)', '',
+                'Given `mdtoc --strict` runs against a repo with drifted TOCs, when it is invoked, then it exits non-zero listing every drifted file.',
+              ].join('\n'));
+
+              // Reload the roadmap tab fresh so the just-seeded failed/ manifest
+              // is picked up (the earlier beats' fetch already happened).
+              await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              await page.locator('button[data-tab="roadmap"]').click().catch(() => {});
+              await sleep(1500);
+
+              await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_RECOVERY}"]`).first().click().catch(() => {});
+              await sleep(500);
+
+              const recoveryItem = page.locator(`[data-recovery-item][data-recovery-initiative="${INIT_RECOVERY}"]`);
+              if (await recoveryItem.count() > 0) {
+                const status = await recoveryItem.getAttribute('data-recovery-status');
+                check(status === 'failed', `roadmap: the failed initiative's card renders [data-recovery-status="failed"] (got ${status})`);
+                const attemptCount = await recoveryItem.getAttribute('data-recovery-attempt-count');
+                check(!!attemptCount && Number(attemptCount) >= 1, `roadmap: [data-recovery-attempt-count] present (got ${attemptCount})`);
+
+                await recoveryItem.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(page, 'A recoverable (failed) initiative offers Inspect / Requeue / Abandon right on its roadmap card — no separate /recovery page.');
+                await frame(page, 'r4-11-t3-0-recovery-affordances', 'R4-11-T3 — inspect/requeue/abandon on a recoverable initiative\'s roadmap card', { key: true });
+
+                // Inspect — read-only; asserts the detail section renders for this initiative.
+                await recoveryItem.locator('[data-action="recovery-inspect"]').click();
+                await page.waitForSelector(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`, { timeout: 8000 }).catch(() => {});
+                const detailCount = await recoveryItem.locator(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`).count();
+                check(detailCount > 0, 'roadmap: recovery-inspect renders [data-section="recovery-detail"] for the initiative');
+                await frame(page, 'r4-11-t3-1-inspect', 'R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)');
+
+                // Requeue — under the harness's FORGE_DRY_BRIDGE seam this route hard-refuses
+                // (real git ops); assert the HONEST refusal renders, not a faked success, and
+                // that the manifest genuinely never moved off `_queue/failed/`.
+                await recoveryItem.locator('[data-action="recovery-requeue"]').click();
+                await page.waitForSelector(`[data-recovery-initiative="${INIT_RECOVERY}"] [data-recovery-note]`, { timeout: 8000 }).catch(() => {});
+                const requeueNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                check(!!requeueNote && /requeue failed/.test(requeueNote), `roadmap: recovery-requeue honestly reports the dry-bridge refusal (got ${requeueNote})`);
+                check(existsSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`)), 'roadmap: the manifest stays in failed/ — dry-bridge genuinely refused the git ops, not just the UI message');
+                await frame(page, 'r4-11-t3-2-requeue-refused', 'R4-11-T3 — under the harness\'s safety seam, requeue honestly refuses rather than faking success');
+
+                // Abandon — same dry-bridge refusal path.
+                await recoveryItem.locator('[data-action="recovery-abandon"]').click();
+                await sleep(500);
+                const abandonNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                check(!!abandonNote && /abandon failed/.test(abandonNote), `roadmap: recovery-abandon honestly reports the dry-bridge refusal (got ${abandonNote})`);
+              } else {
+                check(false, `roadmap: [data-recovery-item] present on the seeded failed initiative ${INIT_RECOVERY}`);
+              }
+
+              await page.keyboard.press('Escape').catch(() => {});
+              try { rmSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), { force: true }); } catch { /* */ }
 
         },
       },
