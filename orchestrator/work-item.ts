@@ -44,6 +44,12 @@ export type WorkItem = {
   non_goals?: string[];
   /** Path (must appear in files_in_scope) the dev-loop must produce that the gate exercises. */
   verification_artifact?: string;
+  /**
+   * R4-05-F7: coarse subsystem/feature-area tag the plan agent populates so
+   * ADR-037 constraint selectors can match on wi.domain (beyond
+   * manifest.<field> globs). Optional.
+   */
+  domain?: string;
   /** Structured marker — files this WI creates from scratch. Subset of files_in_scope. */
   creates?: string[];
   /**
@@ -123,6 +129,9 @@ export function parseWorkItem(content: string): WorkItem {
   if (typeof data.verification_artifact === 'string' && data.verification_artifact.length > 0) {
     w.verification_artifact = data.verification_artifact;
   }
+  if (typeof data.domain === 'string' && data.domain.length > 0) {
+    w.domain = data.domain;
+  }
   if (Array.isArray(data.creates)) {
     const c = (data.creates as unknown[]).filter((s): s is string => typeof s === 'string');
     if (c.length > 0) w.creates = c;
@@ -162,6 +171,9 @@ export function serializeWorkItem(w: WorkItem): string {
   }
   if (w.verification_artifact !== undefined && w.verification_artifact.length > 0) {
     data.verification_artifact = w.verification_artifact;
+  }
+  if (w.domain !== undefined && w.domain.length > 0) {
+    data.domain = w.domain;
   }
   if (w.creates !== undefined && w.creates.length > 0) {
     data.creates = w.creates;
@@ -326,6 +338,11 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
       errors.push(
         `verification_artifact ${w.verification_artifact} must appear in files_in_scope`,
       );
+    }
+  }
+  if (w.domain !== undefined) {
+    if (typeof w.domain !== 'string' || w.domain.length === 0) {
+      errors.push('domain must be a non-empty string when set');
     }
   }
   if (w.creates !== undefined) {
