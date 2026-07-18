@@ -227,6 +227,36 @@ export async function fetchRoadmap(projectId: string): Promise<ProjectRoadmap | 
   return body?.roadmap ?? null;
 }
 
+// ---- Cross-project attention strip (R4-11-F4) --------------------------------
+
+export type ProjectAttentionItem = {
+  projectId: string;
+  name: string;
+  /** Link target for the strip item — the project's roadmap tab. */
+  link: string;
+  /** Count of this project's manifests in `_queue/pending/`. */
+  planned: number;
+  /** Count in `_queue/in-flight/`. */
+  inFlight: number;
+  /** Count in `_queue/ready-for-review/` — the `gated` RunStatus (awaiting an operator verdict). */
+  gated: number;
+  /** Count in `_queue/merged/` (R4-11-F1 transient state). */
+  merged: number;
+  /** Count of initiatives whose latest `plan.completeness` event (R4-05-F6) is flagged. */
+  flagged: number;
+};
+
+/**
+ * Fetch the cross-project attention aggregate (R4-11-F4) — one best-effort
+ * entry per registered project — for the library landing strip. Returns `[]`
+ * (never null) when the bridge is offline, so callers can render an empty
+ * strip rather than special-case a missing fetch.
+ */
+export async function fetchProjectAttention(): Promise<ProjectAttentionItem[]> {
+  const body = await bridgeGet<{ attention: ProjectAttentionItem[] } | null>('/api/studio/projects/attention', null);
+  return body?.attention ?? [];
+}
+
 export type CostSummary = {
   cycleId: string;
   totalUsd: number;

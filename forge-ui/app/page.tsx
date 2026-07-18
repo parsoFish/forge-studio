@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscribe } from '@/lib/bridge-client';
+import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from '@/lib/bridge-client';
 import {
   fetchRuns,
   fetchStudioAgents,
@@ -32,17 +32,19 @@ export default function LibraryPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [attention, setAttention] = useState<ProjectAttentionItem[]>([]);
   const [ready, setReady] = useState(false);
 
   // ---- data loading ----
   async function loadAll(signal: { cancelled: boolean }): Promise<void> {
     try {
-      const [a, f, p, k, r] = await Promise.all([
+      const [a, f, p, k, r, at] = await Promise.all([
         fetchStudioAgents(),
         fetchStudioFlows(),
         fetchStudioProjects(),
         fetchStudioKbs(),
         fetchRuns(),
+        fetchProjectAttention(),
       ]);
       if (signal.cancelled) return;
       setAgents(a);
@@ -50,6 +52,7 @@ export default function LibraryPage() {
       setProjects(p);
       setKbs(k);
       setRuns(r);
+      setAttention(at);
     } finally {
       if (!signal.cancelled) setReady(true);
     }
@@ -184,6 +187,62 @@ export default function LibraryPage() {
             </div>
           </div>
         </section>
+
+        {/* ===== ATTENTION STRIP (R4-11-F4) =====
+            Slim cross-project "which projects need my attention" strip — one
+            line per project, no dashboard. Every item links through to its
+            owning surface (the project's roadmap tab). Absent when there are
+            no registered projects yet. */}
+        {attention.length > 0 && (
+          <section
+            data-section="attention-strip"
+            aria-label="Projects needing attention"
+            style={{ marginBottom: 40, display: 'flex', flexDirection: 'column', gap: 6 }}
+          >
+            {attention.map((a) => {
+              const needsYou = a.gated > 0 || a.flagged > 0;
+              const needsParts = [
+                a.gated > 0 ? `${a.gated} awaiting review` : null,
+                a.flagged > 0 ? `${a.flagged} flagged` : null,
+              ].filter((s): s is string => s !== null);
+              return (
+                <a
+                  key={a.projectId}
+                  href={a.link}
+                  data-attention-item
+                  data-attention-project={a.projectId}
+                  data-attention-planned={a.planned}
+                  data-attention-in-flight={a.inFlight}
+                  data-attention-gated={a.gated}
+                  data-attention-merged={a.merged}
+                  data-attention-flagged={a.flagged}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '9px 14px',
+                    background: 'var(--panel)',
+                    border: `1px solid ${needsYou ? 'var(--ember)' : 'var(--line)'}`,
+                    borderRadius: 'var(--radius)',
+                    textDecoration: 'none',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{a.name}</span>
+                  <span style={{ flex: 1 }} />
+                  {needsParts.length > 0 && (
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ember)' }}>
+                      {needsParts.join(' · ')}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+                    {a.planned} planned · {a.inFlight} in-flight · {a.merged} merged
+                  </span>
+                </a>
+              );
+            })}
+          </section>
+        )}
 
         {/* ===== FIRST-RUN ORIENTATION ===== */}
         {isFirstRun && (
