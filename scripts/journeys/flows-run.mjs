@@ -273,6 +273,23 @@ export const journey = defineJourney({
               }
               if (staleRendered) {
                 await frame(page, 'r1-4-stale-warning', 'R1 — P1: StuckWarning renders when the architect goes quiet for >2 min');
+                // F5 (R4-11-T5): the StuckWarning's one-click re-run affordance —
+                // asserted present, then driven, without disturbing the
+                // resume-clears-staleness assertion right below (rerun never
+                // mutates status.json; the dry-bridge/NO_SPAWN seam suppresses
+                // the actual spawn under this harness).
+                const rerunBtn = page.locator('[data-action="architect-rerun"]');
+                const rerunPresent = (await rerunBtn.count()) > 0;
+                check(rerunPresent, 'F5: [data-action="architect-rerun"] one-click re-run button present on StuckWarning');
+                if (rerunPresent) {
+                  await rerunBtn.click();
+                  try {
+                    await page.waitForSelector('[data-rerun-state="idle"], [data-rerun-state="error"]', { timeout: 5000 });
+                    check(true, 'F5: architect-rerun click resolves the request state (dry-bridge/NO_SPAWN spawn suppressed)');
+                  } catch {
+                    check(false, 'F5: architect-rerun click resolves the request state (dry-bridge/NO_SPAWN spawn suppressed)');
+                  }
+                }
               }
               writeStatus(sid, { phase: 'drafting', round: 2, idea: IDEA });
               archEvent(sid, 'log', 'architect resumed');
