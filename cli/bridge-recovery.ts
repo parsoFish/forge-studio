@@ -32,15 +32,22 @@ import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 
 export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 
-type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
+type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
 
-/** Locate a manifest by id across all queue states. */
+/**
+ * Locate a manifest by id across all queue states. `merged` is included
+ * defensively (R4-11-F1): it's a transient pass-through promoted to `done/`
+ * in the same sweep as closure's confirmed-merge move, but a crash between
+ * that move and the promotion would otherwise strand the manifest somewhere
+ * recovery can't find it.
+ */
 function locate(initiativeId: string, queueRoot: string): { path: string; state: QueueState } | null {
   const paths = getPaths(queueRoot);
   const states: Array<{ dir: string; state: QueueState }> = [
     { dir: paths.pending, state: 'pending' },
     { dir: paths.inFlight, state: 'in-flight' },
     { dir: paths.readyForReview, state: 'ready-for-review' },
+    { dir: paths.merged, state: 'merged' },
     { dir: paths.done, state: 'done' },
     { dir: paths.failed, state: 'failed' },
   ];

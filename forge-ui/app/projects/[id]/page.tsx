@@ -11,7 +11,7 @@ import {
 import { fetchRoadmap, startDevelopment, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
-import { SerpentineTimeline } from '@/components/studio/SerpentineTimeline';
+import { SerpentineTimeline, STATUS_COLOURS } from '@/components/studio/SerpentineTimeline';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -488,14 +488,6 @@ function ProjectOnboardForm() {
 // ---------------------------------------------------------------------------
 // RoadmapView — read-only per-project roadmap (S6 DEC-3)
 // ---------------------------------------------------------------------------
-
-const STATUS_COLOURS: Record<string, string> = {
-  'in-flight': 'var(--c-active)',
-  'ready-for-review': 'var(--c-review, #f0a500)',
-  'done': 'var(--c-complete)',
-  'failed': 'var(--c-failed, #e05454)',
-  'pending': 'var(--faint)',
-};
 
 // plan-everything-before-kickoff: per-card develop state, lifted to RoadmapView
 // so the batch "start eligible" button and individual card buttons share one

@@ -17,6 +17,7 @@ import {
   getPaths,
   listPending,
   moveTo,
+  promoteMergedToDone,
   recover,
   writeHeartbeat,
 } from './queue.ts';
@@ -24,7 +25,7 @@ import {
 function mkQueue(): { dir: string; paths: ReturnType<typeof getPaths> } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-queue-'));
   const paths = getPaths(join(dir, '_queue'));
-  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.done, paths.failed]) {
+  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.merged, paths.done, paths.failed]) {
     mkdirSync(p, { recursive: true });
   }
   return { dir, paths };
@@ -58,6 +59,7 @@ test('queue: counts reflect each subdirectory', () => {
       pending: 2,
       'in-flight': 0,
       'ready-for-review': 0,
+      merged: 0,
       done: 1,
       failed: 0,
     });
@@ -75,6 +77,34 @@ test('queue: moveTo advances state and removes from in-flight', () => {
     moveTo(filename, 'ready-for-review', paths);
     assert.ok(existsSync(join(paths.readyForReview, filename)));
     assert.ok(!existsSync(join(paths.inFlight, filename)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queue: moveTo advances in-flight → merged (R4-11-F1 confirmed-merge move)', () => {
+  const { dir, paths } = mkQueue();
+  try {
+    const filename = 'INIT-y.md';
+    writeFileSync(join(paths.pending, filename), '---\ninitiative_id: INIT-y\n---\n');
+    claim(filename, paths);
+    moveTo(filename, 'merged', paths);
+    assert.ok(existsSync(join(paths.merged, filename)));
+    assert.ok(!existsSync(join(paths.inFlight, filename)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queue: promoteMergedToDone moves merged/ → done/ (the second terminal move, same sweep)', () => {
+  const { dir, paths } = mkQueue();
+  try {
+    const filename = 'INIT-z.md';
+    writeFileSync(join(paths.merged, filename), '---\ninitiative_id: INIT-z\n---\n');
+    const to = promoteMergedToDone(filename, paths);
+    assert.ok(existsSync(join(paths.done, filename)));
+    assert.ok(!existsSync(join(paths.merged, filename)));
+    assert.equal(to, join(paths.done, filename));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

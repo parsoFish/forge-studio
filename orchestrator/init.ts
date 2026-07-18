@@ -17,8 +17,8 @@ import { join, resolve } from 'node:path';
 
 import { collectEnvIssues } from './config.ts';
 
-/** The five queue states (mirrors orchestrator/queue.ts getPaths). */
-export const QUEUE_SUBDIRS = ['pending', 'in-flight', 'ready-for-review', 'done', 'failed'] as const;
+/** The six queue states (mirrors orchestrator/queue.ts getPaths). */
+export const QUEUE_SUBDIRS = ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed'] as const;
 
 /**
  * The absolute directory set `forge init` (and the studio/serve preflight)

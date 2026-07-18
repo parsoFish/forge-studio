@@ -17,6 +17,15 @@ import {
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
 
+// R4-11-F1: `merged` is deliberately EXCLUDED here. It's a transient
+// pass-through — closure promotes it on to `done/` in the SAME sweep that
+// lands it in `merged/`, never a parking state an operator needs to act on —
+// so it doesn't belong in the "needs attention" recovery list the way a
+// genuinely stuck in-flight/ready-for-review/failed cycle does. (The bridge's
+// `bridge-recovery.ts` locate() + `forge-requeue.ts` candidates DO still
+// search `merged/` defensively, for the rare crash-between-the-two-moves
+// case — but that's a manual escape hatch, not something this list surfaces
+// routinely.)
 const RECOVERABLE = new Set(['in-flight', 'ready-for-review', 'failed']);
 
 export default function RecoveryPage() {

@@ -16,7 +16,11 @@ export type Cycle = {
   cycleId: string;
   initiativeId: string;
   project?: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` is the transient pass-through a confirmed-merge
+  // manifest briefly occupies between closure's two terminal moves (→merged,
+  // then merged→done in the same sweep) — distinct from the unrelated
+  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
   /**
@@ -195,7 +199,9 @@ export type RoadmapWorkItem = {
 export type RoadmapInitiative = {
   initiativeId: string;
   title: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` — brief pass-through between a confirmed merge and its
+  // promotion to `done/` in the same sweep.
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   dependsOnInitiatives: string[];
   /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
   ready: boolean;
@@ -237,7 +243,10 @@ export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
 export type RecoveryInspect = {
   found: boolean;
   initiativeId: string;
-  state?: 'pending' | 'in-flight' | 'ready-for-review' | 'done' | 'failed';
+  // R4-11-F1: `merged` included defensively — a crash between closure's
+  // →merged move and the merged→done promotion would otherwise strand a
+  // manifest somewhere recovery can't represent.
+  state?: 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
   worktree?: string | null;
   worktreeExists?: boolean;
   branch?: string;

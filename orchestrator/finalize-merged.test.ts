@@ -10,13 +10,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
+import { runClosure as realRunClosure } from './phases/closure.ts';
 import { seedStaticUnifierItem, appendReviewUnifierItems } from './unifier-items.ts';
 import { writeWorkItemStatus } from './work-item.ts';
+
+// Captured ONCE at module load — the stable cwd to restore to after the
+// real-runClosure integration test's chdir (real `runClosure`/
+// `promoteMergedToDone` default to a cwd-relative `_queue`, same convention
+// as closure.test.ts).
+const MODULE_CWD = process.cwd();
 
 function setup(): { root: string; queueRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'finalize-'));
   const queueRoot = join(root, '_queue');
-  for (const d of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+  // R4-11-F1 adds `merged/`, the transient pass-through a confirmed merge
+  // lands in before this sweep promotes it on to `done/` in the same call.
+  for (const d of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
     mkdirSync(join(queueRoot, d), { recursive: true });
   }
   return { root, queueRoot };
@@ -274,6 +283,60 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
     assert.equal(lost!.event_type, 'error');
     assert.equal(lost!.metadata?.cause, 'crash');
     assert.equal(lost!.metadata?.crash_kind, 'transient', 'rate-limit classifies as environment pressure');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// R4-11-F1 — every other test above injects `runClosure`/`promoteMergedToDone`
+// to stay git/SDK-free (per the file-top comment: "the real chain is
+// exercised end-to-end by a live cycle"). This test closes that gap for the
+// NEW merged/ hop specifically: it calls the REAL `runClosure` +
+// `promoteMergedToDone` from ./phases/closure.ts (not stubs), so the
+// ready-for-review → in-flight (re-claim) → merged (real closure terminal
+// move) → done (real promoteMergedToDone, same sweep) round-trip is
+// exercised for real, not asserted only through mocked call-count spies.
+// `runClosure` is wrapped (not stubbed) purely to hand it a synthetic
+// `confirmMerge` on the CycleInput it builds internally — the production
+// `makeDefaultFinalizeOne` never threads the outer `deps.confirmMerge`
+// through to closure's own `input.confirmMerge` (that's deliberate: closure
+// independently re-confirms the merge itself, see the file-top doc comment),
+// so without this the real closure would shell out to `gh pr view` and fail
+// in a hermetic test. The worktree is deliberately NOT a git repo, so
+// closure's `initiativeBranch` throws/returns null and `alignLocalToRemote`
+// (real git fetch/prune against a remote) is skipped — no git or gh
+// plumbing is exercised, only the queue-directory state machine.
+test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-review → merged → done in one sweep (integration, no closure/queue mocks)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    const id = 'INIT-2026-05-30-real-closure';
+    writeManifest(queueRoot, 'ready-for-review', id, wt);
+
+    // Real runClosure/promoteMergedToDone default to a cwd-relative `_queue`.
+    process.chdir(root);
+    try {
+      const results = await finalizeMergedReadyForReview({
+        queueRoot,
+        logsRoot: join(root, '_logs'),
+        confirmMerge: () => true, // outer gate: treat the PR as merged, re-claim
+        runClosure: (input, logger, reviewerOutcome) =>
+          realRunClosure({ ...input, confirmMerge: () => true }, logger, reviewerOutcome),
+        // No declared merge trigger → reflect does not fire (that path is
+        // covered by the earlier declaration-driven tests); isolates this
+        // test to the closure/queue round-trip.
+        loadFlowTriggers: () => [],
+      });
+      assert.deepEqual(results.map((r) => r.status), ['finalized']);
+    } finally {
+      process.chdir(MODULE_CWD);
+    }
+
+    assert.equal(existsSync(join(queueRoot, 'ready-for-review', `${id}.md`)), false, 'left ready-for-review');
+    assert.equal(existsSync(join(queueRoot, 'in-flight', `${id}.md`)), false, 'left in-flight (closure moved it on)');
+    assert.equal(existsSync(join(queueRoot, 'merged', `${id}.md`)), false, 'merged/ is a pass-through — promoted on to done/ in the same sweep');
+    assert.equal(existsSync(join(queueRoot, 'done', `${id}.md`)), true, 'landed in done/ via the real merged→done promotion');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

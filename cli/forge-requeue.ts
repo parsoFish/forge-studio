@@ -92,11 +92,16 @@ export function runRequeue(
   const initiativeId = resolved.canonical;
   const filename = `${initiativeId}.md`;
 
-  // 1. Locate manifest in any queue dir.
+  // 1. Locate manifest in any queue dir. `merged` is included defensively
+  //    (R4-11-F1): it's a transient pass-through promoted to `done/` in the
+  //    same sweep as closure's confirmed-merge move, but a crash between that
+  //    move and the promotion would otherwise strand the manifest somewhere
+  //    requeue can't find it.
   const candidates: Array<{ dir: string; label: string }> = [
     { dir: queuePaths.pending, label: 'pending' },
     { dir: queuePaths.inFlight, label: 'in-flight' },
     { dir: queuePaths.readyForReview, label: 'ready-for-review' },
+    { dir: queuePaths.merged, label: 'merged' },
     { dir: queuePaths.done, label: 'done' },
     { dir: queuePaths.failed, label: 'failed' },
   ];

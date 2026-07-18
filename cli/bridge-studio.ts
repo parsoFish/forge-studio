@@ -814,6 +814,9 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
   const stateDirs: Array<[string, QueueState]> = [
     [queuePaths.inFlight, 'in-flight'],
     [queuePaths.readyForReview, 'ready-for-review'],
+    // R4-11-F1: `merged` — the brief pass-through between a confirmed merge
+    // and its promotion to `done/` in the same sweep.
+    [queuePaths.merged, 'merged'],
     [queuePaths.done, 'done'],
     [queuePaths.failed, 'failed'],
     [queuePaths.pending, 'pending'],

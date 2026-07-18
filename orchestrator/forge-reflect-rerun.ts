@@ -8,9 +8,11 @@
  *
  * Resolution rules for the manifest:
  *   1. `_queue/done/<id>.md`
- *   2. `_queue/ready-for-review/<id>.md`
- *   3. `_queue/in-flight/<id>.md`
- *   4. `_queue/failed/<id>.md`
+ *   2. `_queue/merged/<id>.md` (R4-11-F1 — a confirmed-merge manifest briefly
+ *      parked between closure's two terminal moves, same sweep)
+ *   3. `_queue/ready-for-review/<id>.md`
+ *   4. `_queue/in-flight/<id>.md`
+ *   5. `_queue/failed/<id>.md`
  *
  * If none exist we throw with a clear message — rerun on a cycle whose
  * manifest is gone has nothing to reflect on.
@@ -33,7 +35,7 @@ export type RerunInput = {
   queueRoot?: string;
 };
 
-const QUEUE_STATES = ['done', 'ready-for-review', 'in-flight', 'failed'] as const;
+const QUEUE_STATES = ['done', 'merged', 'ready-for-review', 'in-flight', 'failed'] as const;
 
 /**
  * The manifest is named by INITIATIVE id, but a cycleId is usually the timestamped

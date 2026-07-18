@@ -41,7 +41,7 @@ import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 function setupQueue(): { dir: string; paths: ReturnType<typeof getPaths> } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sched-disp-'));
   const paths = getPaths(join(dir, '_queue'));
-  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.done, paths.failed]) {
+  for (const p of [paths.pending, paths.inFlight, paths.readyForReview, paths.merged, paths.done, paths.failed]) {
     mkdirSync(p, { recursive: true });
   }
   return { dir, paths };
@@ -236,6 +236,23 @@ test('checkInitiativeDeps: dep in done/ → unblocked (empty result)', () => {
       manifestWithDeps('INIT-2026-05-10-b', ['INIT-2026-05-10-a']),
     );
     writeFileSync(join(paths.done, 'INIT-2026-05-10-a.md'), manifestWithDeps('INIT-2026-05-10-a', []));
+    assert.deepEqual(checkInitiativeDeps('INIT-2026-05-10-b.md', paths), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checkInitiativeDeps: dep in merged/ → unblocked (R4-11-F1, merged ∪ done)', () => {
+  // A prerequisite briefly sits in `merged/` between closure's two terminal
+  // moves (→merged, then merged→done in the same sweep) — a dependent must
+  // not stay blocked for that window, so the gate accepts merged ∪ done.
+  const { dir, paths } = setupQueue();
+  try {
+    writeFileSync(
+      join(paths.pending, 'INIT-2026-05-10-b.md'),
+      manifestWithDeps('INIT-2026-05-10-b', ['INIT-2026-05-10-a']),
+    );
+    writeFileSync(join(paths.merged, 'INIT-2026-05-10-a.md'), manifestWithDeps('INIT-2026-05-10-a', []));
     assert.deepEqual(checkInitiativeDeps('INIT-2026-05-10-b.md', paths), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });

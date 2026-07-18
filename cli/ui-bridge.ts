@@ -120,7 +120,11 @@ type Cycle = {
   cycleId: string;
   initiativeId: string;
   project?: string;
-  status: 'in-flight' | 'ready-for-review' | 'done' | 'failed' | 'pending';
+  // R4-11-F1: `merged` is the transient pass-through state a confirmed-merge
+  // manifest briefly occupies between closure's two terminal moves (→merged,
+  // then merged→done in the same sweep) — distinct from the unrelated
+  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   startedAt?: string;
   endedAt?: string;
   /** Feature #10: cross-initiative dependency edges (manifest
@@ -282,6 +286,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       const lookups: Array<[string, Cycle['status']]> = [
         [queuePaths.inFlight, 'in-flight'],
         [queuePaths.readyForReview, 'ready-for-review'],
+        // R4-11-F1: `merged` — the brief pass-through window between a
+        // confirmed merge and its promotion to `done/` in the same sweep.
+        [queuePaths.merged, 'merged'],
         [queuePaths.done, 'done'],
         [queuePaths.failed, 'failed'],
         [queuePaths.pending, 'pending'],
@@ -338,6 +345,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
     candidates.sort((a, b) => b.mtime - a.mtime);
     for (const { cycle } of candidates) {
+      // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
+      // the tail end of a finished cycle finalizing (merged → done, same
+      // sweep), not an actively-running one. In practice the window is so
+      // brief the UI is unlikely to ever observe it mid-transition.
       if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
         live.push(cycle);
       } else if (recent.length < RECENT_CYCLES_MAX) {
@@ -402,7 +413,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   };
 
   const watchQueue = (): void => {
-    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.done, queuePaths.failed];
+    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed];
     for (const d of dirs) {
       if (!existsSync(d)) continue;
       try {

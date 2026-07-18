@@ -571,9 +571,13 @@ export function deriveArtifacts(
   }
 
   // verdict: <initiativeId>.verdict-response.md in any queue dir (walk up)
+  // R4-11-F1: `merged` included — a confirmed-merge manifest sits there
+  // briefly between closure's two terminal moves (→merged, then merged→done
+  // in the same sweep), and the verdict response written at approval time
+  // still needs to resolve during that window.
   const verdictFile = `${initiativeId}.verdict-response.md`;
   const queueRoot = join(resolve(root), '_queue');
-  for (const state of ['done', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
+  for (const state of ['done', 'merged', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
     if (existsSync(join(queueRoot, state, verdictFile))) {
       artifacts['verdict'] = 'view';
       break;
