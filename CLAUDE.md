@@ -324,7 +324,9 @@ The shared status vocabularies:
 - **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
 - **Roadmap initiative status** (`SerpentineTimeline.tsx`) — `pending |
-  in-flight | ready-for-review | done | failed`.
+  in-flight | ready-for-review | merged | done | failed` (R4-11-F1: `merged`
+  = PR confirmed merged, reflect pending — a transient `_queue/merged/`
+  pass-through promoted to `done` in the same finalize sweep).
 - **`HexKind`** ([`forge-ui/lib/monitor-layout.ts`](./forge-ui/lib/monitor-layout.ts)) —
   `phase | wi`, the phase-vs-WI distinction every monitor hex carries.
 

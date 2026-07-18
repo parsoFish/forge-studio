@@ -374,6 +374,23 @@ gated/canonical-executor nodes), each owned by a downstream initiative:
   boundary before they reach the prompt. *Owner **R2-04*** (already carries the content-trust posture:
   HMAC, source allowlists, typed-payload isolation, injection fixture).
 
+### 9. R4-11 roadmap & attention — as-built follow-ups (2026-07-19)
+
+- **Server-side develop-dispatch `planned` gate (defense-in-depth).** R4-11-F2's blocked-until-planned lock is
+  enforced in the UI only — `enqueueDevelopRun` / `POST /api/develop/start` never checks whether the initiative
+  has been decomposed, so a stale UI or a direct API call could still start development on a WI-less initiative.
+  Not a regression (pre-existing; T2 only added the UI gate), and ADR-031 makes the UI the sole sanctioned surface,
+  so the operator-facing AC is met — but the dispatch boundary should re-check `workItems` presence for
+  defense-in-depth (forge's "validate at boundaries" rule). *Follow-up: add a WI-presence gate at the
+  develop-start route.*
+- **Orphan-parks-in-`merged/` on hard-kill.** R4-11-F1 makes `merged` a same-sweep transient with **no new
+  periodic sweep** (invariant #1). If the process is SIGKILL/OOM-killed in the window between closure's
+  `→merged` move and the `merged→done` promote, the manifest strands in `_queue/merged/` (finalize scans only
+  `ready-for-review/`; recovery excludes `merged`; it renders as `complete`). Accepted-design; mitigated —
+  `forge requeue` and `forge reflect --rerun` both search `merged/`. *Re-entry with **R4-09** (standalone reflect
+  on `merged`), which is the natural owner of a `merged/` re-scan.* Related: `brain-lint checkReflectorLoss` scans
+  `done/` only (observability, tied to this edge).
+
 ---
 
 ## Strengths worth preserving (don't regress these)
