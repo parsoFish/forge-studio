@@ -196,9 +196,14 @@ inventory rather than one shared page-level contract:
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
   the capability drop zones `[data-accepts="skill"|"tool"|"mcp"|"hook"]`, a
-  `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel.
-  `/agents/new` shows the curated starter picker first
-  (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
+  `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel (6
+  checks — purpose/skill/hook/process/interactivity content-completeness plus
+  a `runtime` check sourced from the server-computed F1 capability descriptor,
+  never re-derived client-side). The descriptor's `interactive` fact also
+  surfaces as its own informational (non-gating) chip,
+  `[data-capability-interactive]`. `/agents/new` shows the curated starter
+  picker first (`[data-section="starter-picker"]`, per-option
+  `[data-starter-option]`).
 - **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
   just redirects to the first registered project
   (`[data-page="projects-index"]` while empty/loading). The project page is

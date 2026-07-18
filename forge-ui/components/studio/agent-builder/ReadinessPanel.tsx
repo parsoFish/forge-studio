@@ -1,34 +1,23 @@
 'use client';
 
+import { computeReadinessChecks, capabilityInteractive, type ReadinessInput } from '@/lib/agent-readiness';
+
 // ---------------------------------------------------------------------------
-// ReadinessPanel — 6-check list + ready badge when all pass
+// ReadinessPanel — 6-check list (R2-02-F4: the `runtime` check is sourced
+// from the server-computed F1 capability descriptor, not a client
+// heuristic) + a ready badge when all pass, plus an informational
+// `[data-capability-interactive]` chip that visibly reflects the descriptor's
+// `interactive` fact (not a pass/fail gate — see agent-readiness.ts).
 // ---------------------------------------------------------------------------
 
-type AgentState = {
-  purpose: string;
-  skills: string[];
-  hooks: string[];
-  process: string;
-  interactivity: string;
-  runtimeConfigured: boolean;
-};
-
-type Props = { state: AgentState };
-
-type Check = { key: string; label: string; ok: boolean };
+type Props = { state: ReadinessInput };
 
 export function ReadinessPanel({ state }: Props) {
-  const checks: Check[] = [
-    { key: 'purpose',       label: 'Purpose defined',               ok: state.purpose.trim().length > 0 },
-    { key: 'skill',         label: 'At least one skill',            ok: state.skills.length > 0 },
-    { key: 'hook',          label: 'Observability hook attached',   ok: state.hooks.length > 0 },
-    { key: 'process',       label: 'Process described',             ok: state.process.trim().length > 0 },
-    { key: 'interactivity', label: 'Interactivity described',       ok: state.interactivity.trim().length > 0 },
-    { key: 'runtime',       label: 'Runtime configured (SDK + model)', ok: state.runtimeConfigured },
-  ];
+  const checks = computeReadinessChecks(state);
+  const interactive = capabilityInteractive(state.capability);
 
   const readyCount = checks.filter((c) => c.ok).length;
-  const allReady = readyCount === 6;
+  const allReady = readyCount === checks.length;
 
   return (
     <div className="readiness-panel panel" style={{ padding: '12px 12px 14px' }} data-component="readiness-panel">
@@ -45,6 +34,14 @@ export function ReadinessPanel({ state }: Props) {
           </li>
         ))}
       </ul>
+      <div
+        className={`capability-chip${interactive ? ' interactive' : ''}`}
+        data-capability-interactive={interactive ? 'true' : 'false'}
+        title="Derived from the agent's surface (F1 capability descriptor) — informational, not a readiness gate."
+      >
+        <span className="ri-dot" />
+        {interactive ? 'Interactive agent (interactive-session runner)' : 'Unattended agent (runs in flow nodes)'}
+      </div>
       <div
         className={`ready-badge${allReady ? ' visible' : ''}`}
         id="ready-badge"

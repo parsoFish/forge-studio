@@ -331,7 +331,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
@@ -379,10 +379,25 @@ export const journey = defineJourney({
                   });
                   check(readyCount !== null, `agent-builder: [data-ready-count] attribute present (got ${readyCount})`);
                   if (readyCount !== null) {
-                    check(parseInt(readyCount, 10) >= 4, `agent-builder: readiness ≥4 checks pass for project-manager (got ${readyCount})`);
+                    // R2-02-F4: 6 checks total (purpose/skill/hook/process/interactivity
+                    // content-completeness + a `runtime` check now sourced from the
+                    // server-computed F1 capability descriptor, not a client heuristic).
+                    // project-manager's shipped SKILL.md fills every field and carries a
+                    // `runtime.sdk: claude`, so its descriptor's runtimeSdks is non-empty
+                    // — all 6 pass.
+                    check(parseInt(readyCount, 10) === 6, `agent-builder: all 6 readiness checks pass for project-manager (got ${readyCount})`);
                   }
                   const sdk = await page.evaluate(() => document.querySelector('[data-sdk]')?.getAttribute('data-sdk') ?? '');
                   check(sdk.length > 0, `agent-builder: [data-sdk] attribute present (got "${sdk}")`);
+                  // R2-02-F4: the informational interactive chip visibly reflects the
+                  // F1 capability descriptor (never a pass/fail readiness gate) —
+                  // project-manager is `surface: unattended`, so it reads "false".
+                  const capabilityInteractive = await page.evaluate(() =>
+                    document.querySelector('[data-capability-interactive]')?.getAttribute('data-capability-interactive') ?? null);
+                  check(
+                    capabilityInteractive === 'false',
+                    `agent-builder: [data-capability-interactive] reflects the descriptor's interactive fact — project-manager is unattended (got "${capabilityInteractive}")`,
+                  );
                   await frame(page, 'a3-0-agent-builder', 'A3 — agent builder: catalog, drop zones, runtime, readiness panel');
                   // Dirty-flag → SAVE (not discard): edit the purpose field, save, and
                   // prove the edit round-trips onto the REAL SKILL.md on disk.
